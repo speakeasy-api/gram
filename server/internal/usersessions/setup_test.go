@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -36,8 +37,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
+
+const (
+	// testServerURL is the test service's server URL, which its shared
+	// authorization servers are served on.
+	testServerURL = "http://0.0.0.0"
+
+	// testAuthenticationHostURL is the test service's authentication host.
+	testAuthenticationHostURL = "https://auth.example.test"
+)
+
+// testHosts are the hosts the test service serves authorization servers on.
+var testHosts = authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: testAuthenticationHostURL, PlatformHosts: nil}
 
 var infra *testenv.Environment
 
@@ -61,6 +75,7 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
+	codeModeEnabled     *atomic.Bool
 	service             *usersessions.Service
 	conn                *pgxpool.Pool
 	sessionManager      *sessions.Manager
@@ -84,6 +99,14 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 // e.g. guardian.WithTLSRootCAs so refresh tests can trust an httptest TLS
 // document server.
 func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestServiceWithHosts(t, testHosts, revoker, guardianOpts...)
+}
+
+// newTestServiceWithHosts builds the service on a deployment with the given
+// hosts, such as one without an authentication host.
+func newTestServiceWithHosts(t *testing.T, hosts authserver.Hosts, revoker usersessions.TokenRevoker, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -111,6 +134,8 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		tokenRevoker = revoker
 	}
 
+	codeModeEnabled := &atomic.Bool{}
+	codeModeSelection := func(context.Context, string) bool { return codeModeEnabled.Load() }
 	svc := usersessions.NewService(
 		logger,
 		tracerProvider,
@@ -124,11 +149,14 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		nil,
 		testenv.NewEncryptionClient(t),
 		usersessions.NewSigner("test-jwt-secret"),
-		"http://0.0.0.0",
+		testServerURL,
+		hosts,
 		ratelimit.NewRedisStore(redisClient),
+		codeModeSelection,
 	)
 
 	return ctx, &testInstance{
+		codeModeEnabled:     codeModeEnabled,
 		service:             svc,
 		conn:                conn,
 		sessionManager:      sessionManager,
@@ -355,6 +383,7 @@ func seedUserSessionFull(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 		RefreshTokenHash:    conv.ToPGText("hash-" + uuid.NewString()),
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: refreshExpiresAt, InfinityModifier: 0, Valid: true},
 		ExpiresAt:           pgtype.Timestamptz{Time: expiresAt, InfinityModifier: 0, Valid: true},
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return repo.UserSession{}, fmt.Errorf("seed user session: %w", err)

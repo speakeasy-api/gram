@@ -407,7 +407,7 @@ describe("API key scope options", () => {
     );
     expect(
       cardFor("Agent").getByText(
-        "Store it in managed.json as org_token, or hand it to a developer for speakeasy enroll.",
+        "Store it in managed.json as org_token, or have a developer run the enroll command from Device Agent setup.",
       ),
     ).toBeTruthy();
     expect(

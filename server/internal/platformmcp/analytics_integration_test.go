@@ -87,7 +87,7 @@ func TestAnalyticsToolsAnswerFromClickHouse(t *testing.T) {
 	flags.SetFlag(feature.FlagExplore, principal.OrganizationID, true)
 	authzEngine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(authzEngine)
-	service := NewAnalyticsService(testenv.NewLogger(t), engine, flags, NewPostgresOrganizationSlugResolver(conn), reader, OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}})
+	service := NewAnalyticsService(testenv.NewLogger(t), engine, flags, NewPostgresOrganizationSlugResolver(conn), reader, OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}, nil)
 	require.NotNil(t, service)
 	reg := newRegistrar(newTestMCPServer())
 	registerAnalyticsTools(reg, service)
@@ -121,8 +121,9 @@ func TestAnalyticsToolsAnswerFromClickHouse(t *testing.T) {
 		for _, ds := range output.Datasets {
 			names = append(names, ds.Name)
 		}
-		require.Contains(t, names, "sessions")
 		require.Contains(t, names, "tool_calls")
+		require.Contains(t, names, "skills")
+		require.NotContains(t, names, "sessions")
 	})
 
 	t.Run("values lists what the dimension holds, most frequent first", func(t *testing.T) {
@@ -208,7 +209,7 @@ func TestAnalyticsToolsFollowTheExploreFlag(t *testing.T) {
 	authzEngine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(authzEngine)
 	reg := newRegistrar(newTestMCPServer())
-	registerAnalyticsTools(reg, NewAnalyticsService(testenv.NewLogger(t), engine, flags, NewPostgresOrganizationSlugResolver(conn), reader, OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}))
+	registerAnalyticsTools(reg, NewAnalyticsService(testenv.NewLogger(t), engine, flags, NewPostgresOrganizationSlugResolver(conn), reader, OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}, nil))
 
 	actor := contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	actor = contextvalues.SetActingSurface(actor, contextvalues.ActingSurfacePlatformMCP)
@@ -219,7 +220,7 @@ func TestAnalyticsToolsFollowTheExploreFlag(t *testing.T) {
 	_, err = descriptorByName(t, reg, describeAnalyticsCatalogToolName).Invoke(granted, arguments)
 	refusal := requireAnalyticsRefusal(t, err)
 	require.Equal(t, analyticsNotEnabledCode, refusal.Code)
-	require.Contains(t, refusal.Message, "not switched on")
+	require.Contains(t, refusal.Message, "not enabled")
 
 	flags.SetFlag(feature.FlagExplore, principal.OrganizationID, false)
 	_, err = descriptorByName(t, reg, describeAnalyticsCatalogToolName).Invoke(granted, arguments)

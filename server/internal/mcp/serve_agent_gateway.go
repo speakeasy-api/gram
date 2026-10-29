@@ -1,6 +1,6 @@
 // The agent gateway MCP surface: one URL per agent, whose members are derived
 // from the agent's own grants rather than from stored membership rows. It
-// reuses the meta-server runtime wholesale — same four-tool contract, same
+// reuses the meta-server runtime wholesale — same tool contract, same
 // member dispatch — so the only thing particular to it is how the request is
 // authenticated and how membership is resolved.
 
@@ -24,9 +24,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -67,7 +69,7 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 	r = r.WithContext(authedCtx)
 	ctx = authedCtx
 
-	// The same lockdown ServeMCPEndpoint applies, at the only scope this
+	// The same lockdown ServePublic applies, at the only scope this
 	// surface has. enforceCustomDomainLockdown takes a project id purely to
 	// read the owning organization off it, and the policy it then applies is
 	// the organization's; an agent gateway has no single project, but its
@@ -91,6 +93,7 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 		Name:                "Agent gateway",
 		// NULL serves Speakeasy's built-in gateway instructions.
 		Instructions:      pgtype.Text{String: "", Valid: false},
+		DiscoveryMode:     "progressive",
 		Visibility:        visibility.Private,
 		NetworkAccessMode: pgtype.Text{String: "", Valid: false},
 		CreatedAt:         pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -102,7 +105,7 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 		ProjectID: uuid.Nil,
 	}
 
-	if err := s.serveResolvedMetaMCPEndpoint(w, r, logger, endpoint, metaServer, agentID); err != nil {
+	if err := s.serveResolvedMetaMCPEndpoint(w, r, logger, endpoint, metaServer, metaMembership{agentID: agentID, organization: false}, nil); err != nil {
 		return fmt.Errorf("serve agent gateway: %w", err)
 	}
 	return nil
@@ -175,4 +178,25 @@ func (s *Service) authenticateAgentGatewayKey(
 		return ctx, nil, oops.C(oops.CodeUnauthorized)
 	}
 	return s.identityValidator.StampAgent(keyCtx, agentID), authCtx, nil
+}
+
+// resolveMemberTokens resolves agent attachments against the member's own
+// issuer. Agent gateways have no issuer of their own; using the gateway's
+// empty token map would silently drop every owner-assigned connection.
+func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	if gate.agentID == uuid.Nil {
+		return gate.memberTokens(ctx, member)
+	}
+	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: member.serverID, ProjectID: member.projectID})
+	if err != nil {
+		return nil, fmt.Errorf("load agent member issuer: %w", err)
+	}
+	if !server.UserSessionIssuerID.Valid {
+		return nil, nil
+	}
+	tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID))
+	if err != nil {
+		return nil, fmt.Errorf("resolve agent member attachments: %w", err)
+	}
+	return tokens, nil
 }

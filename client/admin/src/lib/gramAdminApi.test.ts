@@ -20,7 +20,6 @@ import {
   createOrganization,
   errorMessage,
   getStripeCustomer,
-  getInferenceKeys,
   getInferenceSpendHistory,
   getPaygBillingSummary,
   getStripeSubscription,
@@ -36,6 +35,7 @@ import {
   MIN_TRIAL_REARM_DAYS,
   MIN_TRIAL_START_DAYS,
   resumeStripeSubscription,
+  setAdoptionDashboardUrl,
   setInferenceKeyMonthlyLimit,
   setStripeCustomer,
   toSearchParams,
@@ -331,56 +331,20 @@ describe("organization billing endpoints", () => {
     return fetch;
   }
 
-  it("preserves classified empty and legacy unclassified cause semantics", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify([
-            {
-              key_type: "chat",
-              credits_used: 0,
-              monthly_credits: 100,
-              disabled: false,
-              disable_causes_classified: true,
-            },
-            {
-              key_type: "internal",
-              credits_used: 0,
-              monthly_credits: 50,
-              disabled: true,
-              disable_causes_classified: false,
-            },
-          ]),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
-      ),
-    );
-
-    await expect(getInferenceKeys("org one")).resolves.toMatchObject([
-      { disable_causes: [], disable_causes_classified: true },
-      { disable_causes: null, disable_causes_classified: false },
-    ]);
-  });
-
   it("reads billing state from explicit admin organization endpoints", async () => {
     const fetch = stubFetch();
 
-    await getInferenceKeys("org one");
     await getInferenceSpendHistory("org one");
     await getPaygBillingSummary("org one");
     await getStripeSubscription("org one");
 
     expect(fetch.mock.calls[0]?.[0]).toBe(
-      "/admin/organization.inferenceKeys?organization_id=org+one",
-    );
-    expect(fetch.mock.calls[1]?.[0]).toBe(
       "/admin/organization.inferenceSpendHistory?organization_id=org+one",
     );
-    expect(fetch.mock.calls[2]?.[0]).toBe(
+    expect(fetch.mock.calls[1]?.[0]).toBe(
       "/admin/organization.paygBillingSummary?organization_id=org+one",
     );
-    expect(fetch.mock.calls[3]?.[0]).toBe(
+    expect(fetch.mock.calls[2]?.[0]).toBe(
       "/admin/organization.stripeSubscription?organization_id=org+one",
     );
   });
@@ -413,6 +377,26 @@ describe("organization billing endpoints", () => {
           organization_id: "org_1",
           key_type: "internal",
           monthly_credits: 750,
+        }),
+      }),
+    );
+  });
+
+  it("posts the adoption dashboard link to the organization endpoint", async () => {
+    const fetch = stubFetch();
+
+    await setAdoptionDashboardUrl({
+      organization_id: "org_1",
+      adoption_dashboard_url: "https://example.com/adoption",
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/admin/organization.setAdoptionDashboardUrl",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          organization_id: "org_1",
+          adoption_dashboard_url: "https://example.com/adoption",
         }),
       }),
     );
@@ -592,7 +576,7 @@ describe("the organization write endpoints", () => {
     vi.unstubAllGlobals();
   });
 
-  it("serializes the URL and explicit ownership confirmation without a name", async () => {
+  it("serializes the URL, editable identity and ownership confirmation", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(ORG), {
         status: 200,
@@ -603,6 +587,8 @@ describe("the organization write endpoints", () => {
     await expect(
       createOrganization({
         url: "https://example.com/path",
+        name: "Example Customer",
+        slug: "example-customer",
         ownership_confirmed: true,
       }),
     ).resolves.toEqual(ORG);
@@ -610,7 +596,12 @@ describe("the organization write endpoints", () => {
       path: "/admin/organization.create",
       method: "POST",
       contentType: "application/json",
-      body: { url: "https://example.com/path", ownership_confirmed: true },
+      body: {
+        url: "https://example.com/path",
+        name: "Example Customer",
+        slug: "example-customer",
+        ownership_confirmed: true,
+      },
     });
   });
 

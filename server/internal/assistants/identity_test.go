@@ -62,7 +62,7 @@ func TestCreateAssistantProvisionsDedicatedAgent(t *testing.T) {
 	project := newProvisioningProject(t, db, "identity-create")
 	core := newProvisioningCore(t, db)
 
-	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Identity assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true)
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Identity assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
 	require.NoError(t, err)
 	require.Equal(t, string(assistantidentity.Active), record.IdentityState)
 	require.NotNil(t, record.AgentID)
@@ -177,7 +177,7 @@ func TestUserAgentEditsDoNotBlockAssistantManagement(t *testing.T) {
 	require.NoError(t, err)
 	project := newProvisioningProject(t, db, "identity-agent-edits")
 	core := newProvisioningCore(t, db)
-	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Edited agent", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true)
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Edited agent", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
 	require.NoError(t, err)
 	agents := agentrepo.New(db)
 	agentID := uuid.MustParse(*record.AgentID)
@@ -197,7 +197,7 @@ func TestUserAgentEditsDoNotBlockAssistantManagement(t *testing.T) {
 	require.Equal(t, string(assistantidentity.Unavailable), got.IdentityState)
 
 	paused := StatusPaused
-	_, err = core.UpdateAssistant(t.Context(), project, record.ID, nil, nil, nil, nil, nil, nil, nil, &paused)
+	_, err = core.UpdateAssistant(t.Context(), project, record.ID, nil, nil, nil, nil, nil, nil, nil, &paused, nil)
 	require.NoError(t, err)
 	_, err = core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: project, AssistantID: record.ID, ActorUserID: "user-1", AgentID: uuid.Nil, AgentName: ""})
 	require.NoError(t, err)
@@ -253,7 +253,7 @@ func TestIdentityProvisioningIsAlwaysOn(t *testing.T) {
 	require.Equal(t, string(assistantidentity.Active), *upgraded.IdentityState)
 }
 
-func TestSnapshotCeilingCarriesAssistantSelfAdministration(t *testing.T) {
+func TestDerivedWorkloadCeilingCarriesAssistantSelfAdministration(t *testing.T) {
 	t.Parallel()
 	db, err := assistantsInfra.CloneTestDatabase(t, "identity_ceiling")
 	require.NoError(t, err)
@@ -267,12 +267,10 @@ func TestSnapshotCeilingCarriesAssistantSelfAdministration(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Active, resolution.State)
 
-	ceiling, err := testIdentityService.SnapshotCeiling(t.Context(), db, *resolution.Identity)
+	agentPolicy, err := runtimepolicy.LoadAgentPolicy(t.Context(), db, "org-test", urn.NewPrincipal(urn.PrincipalTypeAgent, resolution.Identity.AgentID.String()))
 	require.NoError(t, err)
-	require.Equal(t, runtimepolicy.CurrentDelegatedPolicyVersion, ceiling.EncodingVersion)
-	policy, err := runtimepolicy.DecodeDelegatedPolicy(ceiling.EncodingVersion, ceiling.Policy)
+	grants, err := runtimepolicy.DelegatedRuntimeGrants(agentPolicy, agentPolicy, agentPolicy)
 	require.NoError(t, err)
-	grants := policy.RuntimeGrants()
 	allowed, err := authz.GrantsAuthorize(grants, authz.AssistantCheck(authz.ScopeAssistantWrite, record.ID.String(), project.String()))
 	require.NoError(t, err)
 	require.True(t, allowed, "the ceiling keeps the agent's own-assistant administration")

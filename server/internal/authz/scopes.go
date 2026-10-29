@@ -30,6 +30,8 @@ const (
 	ScopeMCPBlockedWrite         Scope = "mcp:blocked_write"
 	ScopeMCPConnect              Scope = "mcp:connect"
 	ScopeMCPBlockedConnect       Scope = "mcp:blocked_connect"
+	ScopeMCPAuth                 Scope = "mcp:auth"
+	ScopeMCPBlockedAuth          Scope = "mcp:blocked_auth"
 	ScopeEnvironmentRead         Scope = "environment:read"
 	ScopeEnvironmentBlockedRead  Scope = "environment:blocked_read"
 	ScopeEnvironmentWrite        Scope = "environment:write"
@@ -49,6 +51,8 @@ const (
 	ScopeRiskPolicyBlock         Scope = "risk_policy:block"
 	ScopeChatRead                Scope = "chat:read"
 	ScopeChatWrite               Scope = "chat:write"
+	ScopeInferenceExecute        Scope = "inference:execute"
+	ScopeLogRead                 Scope = "log:read"
 	ScopeAgentRead               Scope = "agent:read"
 	ScopeAgentWrite              Scope = "agent:write"
 	ScopeAgentAuthorize          Scope = "agent:authorize"
@@ -121,6 +125,15 @@ var adminScopes = []Scope{
 	// handlers regardless. chat:write satisfies chat:read via scopeExpansions,
 	// so a session reviewer who should not be able to delete gets chat:read
 	// alone.
+	//
+	// mcp:auth is NOT a default for any system role either: administering an
+	// organization implies no use of its auth clients, so use is granted
+	// explicitly per client, type, or personal connection.
+	//
+	// log:read is likewise NOT a default for any system role: raw tool-call
+	// logs carry tool arguments, results, prompt text, and hook payloads from
+	// every member of a project, so viewing them must be granted explicitly per
+	// project. Neither project:* nor org:admin implies it.
 }
 
 // scopeVisibilityByScope is the source of truth for whether a scope is exposed
@@ -142,6 +155,8 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeMCPBlockedWrite:         scopeVisibilityInternal,
 	ScopeMCPConnect:              scopeVisibilityUserVisible,
 	ScopeMCPBlockedConnect:       scopeVisibilityInternal,
+	ScopeMCPAuth:                 scopeVisibilityUserVisible,
+	ScopeMCPBlockedAuth:          scopeVisibilityInternal,
 	ScopeEnvironmentRead:         scopeVisibilityUserVisible,
 	ScopeEnvironmentBlockedRead:  scopeVisibilityInternal,
 	ScopeEnvironmentWrite:        scopeVisibilityUserVisible,
@@ -161,6 +176,8 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
 	ScopeChatRead:                scopeVisibilityUserVisible,
 	ScopeChatWrite:               scopeVisibilityUserVisible,
+	ScopeInferenceExecute:        scopeVisibilityUserVisible,
+	ScopeLogRead:                 scopeVisibilityUserVisible,
 	ScopeAgentRead:               scopeVisibilityUserVisible,
 	ScopeAgentWrite:              scopeVisibilityUserVisible,
 	ScopeAgentAuthorize:          scopeVisibilityUserVisible,
@@ -247,6 +264,9 @@ func ScopeVisibilityFor(scope Scope) (string, bool) {
 // have to manage it — so "cannot connect" has to be expressible without also
 // meaning "cannot see or manage". Anything that takes a principal off a
 // server entirely writes all three.
+//
+// mcp:auth is independent of every other scope: server access, authoring and
+// administration imply no use of an auth client.
 var scopeExpansions = map[Scope][]Scope{
 	ScopeRoot:                    nil,
 	ScopeOrgRead:                 {ScopeOrgAdmin},
@@ -263,6 +283,8 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeMCPBlockedWrite:         nil,
 	ScopeMCPConnect:              {ScopeMCPRead, ScopeMCPWrite},
 	ScopeMCPBlockedConnect:       nil,
+	ScopeMCPAuth:                 nil,
+	ScopeMCPBlockedAuth:          nil,
 	ScopeEnvironmentRead:         {ScopeEnvironmentWrite},
 	ScopeEnvironmentBlockedRead:  nil,
 	ScopeEnvironmentWrite:        nil,
@@ -282,6 +304,8 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeRiskPolicyBlock:         nil,
 	ScopeChatRead:                {ScopeChatWrite},
 	ScopeChatWrite:               nil,
+	ScopeInferenceExecute:        nil,
+	ScopeLogRead:                 nil,
 	ScopeAgentRead:               nil,
 	ScopeAgentWrite:              nil,
 	ScopeAgentAuthorize:          nil,
@@ -313,6 +337,8 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeMCPBlockedWrite:         "",
 	ScopeMCPConnect:              ScopeMCPBlockedConnect,
 	ScopeMCPBlockedConnect:       "",
+	ScopeMCPAuth:                 ScopeMCPBlockedAuth,
+	ScopeMCPBlockedAuth:          "",
 	ScopeEnvironmentRead:         ScopeEnvironmentBlockedRead,
 	ScopeEnvironmentBlockedRead:  "",
 	ScopeEnvironmentWrite:        ScopeEnvironmentBlockedWrite,
@@ -332,6 +358,8 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeRiskPolicyBlock:         "",
 	ScopeChatRead:                "",
 	ScopeChatWrite:               "",
+	ScopeInferenceExecute:        "",
+	ScopeLogRead:                 "",
 	ScopeAgentRead:               "",
 	ScopeAgentWrite:              "",
 	ScopeAgentAuthorize:          "",

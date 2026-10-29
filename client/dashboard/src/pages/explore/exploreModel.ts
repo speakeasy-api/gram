@@ -25,7 +25,7 @@ export type ChartType =
  * builder and the page around them speak one vocabulary.
  */
 export type WindowPreset = DateRangePreset;
-export type Grain = NonNullable<AnalyticsQueryPayload["grain"]>;
+export type Grain = "none" | "minute" | "hour" | "day" | "week" | "month";
 export type MeasureOp = AnalyticsMeasure["op"];
 export type FilterOperator = AnalyticsFilter["operator"];
 export type ResultRow = AnalyticsQueryResult["rows"][number];
@@ -465,6 +465,7 @@ function defaultChartForKind(kind: AnalyticsDataset["kind"]): ChartType {
     case "metric":
       return "bar";
   }
+  return "line";
 }
 
 /**
@@ -513,6 +514,15 @@ export function specProblem(
 ): string {
   const dataset = findDataset(datasets, spec.dataset);
   if (!dataset) return `dataset "${spec.dataset}" does not exist`;
+  // A metric dataset answers in aggregate only. A measure still waiting for
+  // its field measures nothing yet, and a question with nothing measured
+  // would ask for rows.
+  if (
+    dataset.kind === "metric" &&
+    completeMeasures(spec.measures).length === 0
+  ) {
+    return `${spec.dataset} answers counts and other aggregates, never its rows`;
+  }
 
   const ops = opsForDataset(dataset);
   for (const measure of spec.measures) {

@@ -3,6 +3,7 @@ package evaluation
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -22,6 +23,12 @@ type Sensor struct {
 
 	// Mode determines how signals are compiled and interpreted.
 	Mode string
+
+	// InputStrategy selects target-only content or a conversation window.
+	InputStrategy string
+
+	// WindowSize counts all messages including the target when using a window.
+	WindowSize int
 
 	// MatchExpression selects source messages using the typed matching contract.
 	MatchExpression string
@@ -72,7 +79,7 @@ func (r *Repository) Load(ctx context.Context, org string, project uuid.UUID, ki
 			if row.Instructions.Valid {
 				instructions = &row.Instructions.String
 			}
-			sensors = append(sensors, Sensor{ID: id, Slug: row.SensorSlug, Mode: row.Mode, MatchExpression: row.MatchExpression, Instructions: instructions, Signals: nil, SignalSlugs: make(map[classifier.OptionKey]string)})
+			sensors = append(sensors, Sensor{ID: id, Slug: row.SensorSlug, Mode: row.Mode, InputStrategy: row.InputStrategy, WindowSize: int(row.WindowSize), MatchExpression: row.MatchExpression, Instructions: instructions, Signals: nil, SignalSlugs: make(map[classifier.OptionKey]string)})
 		}
 		if !row.SignalID.Valid {
 			continue
@@ -83,6 +90,21 @@ func (r *Repository) Load(ctx context.Context, org string, project uuid.UUID, ki
 		}
 		sensors[len(sensors)-1].Signals = append(sensors[len(sensors)-1].Signals, classifier.NewOption(classifier.OptionKey(row.SignalID.UUID.String()), description))
 		sensors[len(sensors)-1].SignalSlugs[classifier.OptionKey(row.SignalID.UUID.String())] = row.SignalSlug.String
+	}
+	snapshots := make([]DefinitionSnapshot, 0, len(sensors))
+	for _, sensor := range sensors {
+		if snapshot, ready := Snapshot(sensor); ready {
+			snapshots = append(snapshots, snapshot)
+		}
+	}
+	if len(snapshots) > 0 {
+		data, err := json.Marshal(snapshots)
+		if err != nil {
+			return nil, fmt.Errorf("encode evaluation definitions: %w", err)
+		}
+		if err := repo.New(r.db).SaveDefinitionSnapshots(ctx, repo.SaveDefinitionSnapshotsParams{ProjectID: project, OrganizationID: org, Snapshots: data}); err != nil {
+			return nil, fmt.Errorf("preserve evaluation definitions: %w", err)
+		}
 	}
 	return sensors, nil
 }

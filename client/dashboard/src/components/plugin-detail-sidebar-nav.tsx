@@ -20,7 +20,6 @@ import {
   pluginSectionHref,
   PLUGIN_ASSIGNMENTS_SECTION_ID,
   PLUGIN_OVERVIEW_SECTION_ID,
-  PLUGIN_SERVERS_SECTION_ID,
   PLUGIN_SETTINGS_SECTION_ID,
   PLUGIN_SKILLS_SECTION_ID,
   type PluginSection,
@@ -43,9 +42,8 @@ import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { useRoles } from "@gram/client/react-query/roles";
 import {
   LayoutDashboard,
-  Network,
   Settings as SettingsIcon,
-  Sparkles,
+  Terminal,
   Users,
 } from "lucide-react";
 import * as React from "react";
@@ -80,7 +78,7 @@ function DistributionPluginSidebarNav(): React.JSX.Element | null {
         {
           key: PLUGIN_SKILLS_SECTION_ID,
           title: "Skills",
-          Icon: Sparkles,
+          Icon: Terminal,
           href: `${pluginSectionHref(routes, pluginId, PLUGIN_SKILLS_SECTION_ID)}${location.search}`,
           active: true,
         },
@@ -177,8 +175,7 @@ function PluginSidebarContent({
 
   const items: DetailSidebarNavItem[] = [
     sectionItem(PLUGIN_OVERVIEW_SECTION_ID, "Overview", LayoutDashboard),
-    sectionItem(PLUGIN_SERVERS_SECTION_ID, "MCP Servers", Network),
-    sectionItem(PLUGIN_SKILLS_SECTION_ID, "Skills", Sparkles),
+    sectionItem(PLUGIN_SKILLS_SECTION_ID, "Skills", Terminal),
     ...(showAssignments
       ? [sectionItem(PLUGIN_ASSIGNMENTS_SECTION_ID, "Assignments", Users)]
       : []),

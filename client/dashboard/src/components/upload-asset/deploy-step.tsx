@@ -1,3 +1,4 @@
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import {
   Collapsible,
   CollapsibleContent,
@@ -381,7 +382,7 @@ export default function DeployStep({
       <Stack direction="horizontal" gap={1} align="center">
         <Spinner />
         <Text>
-          The platform is generating tools for your API. This may take a few
+          Deploying a virtual MCP endpoint for your API. This may take a few
           seconds.
         </Text>
       </Stack>
@@ -575,6 +576,8 @@ const useCreateDeployment = (
       invalidateAllListTools(queryClient),
       // MCP usage on the shelf and source pages is read from the toolsets.
       invalidateAllListToolsets(queryClient),
+      // Hosted servers' tool counts on the MCP list.
+      invalidateAllMcpServers(queryClient),
     ]);
 
     return deployment;

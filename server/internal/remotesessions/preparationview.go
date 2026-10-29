@@ -10,7 +10,7 @@ import (
 )
 
 func preparationDiagnostic(state string) *PreparationResult {
-	r := &PreparationResult{State: state, Stage: PreparationStageSelection, GrantSource: PreparationGrantSourceUnknown, Remediation: "", Retryable: false, BindingID: uuid.Nil, Generation: 0, ClientID: uuid.Nil, ExternalClientID: "", Issuer: "", Resource: "", GrantTypes: nil, Scopes: nil}
+	r := &PreparationResult{State: state, Stage: PreparationStageSelection, GrantSource: PreparationGrantSourceUnknown, Remediation: "", Retryable: false, BindingID: uuid.Nil, Generation: 0, ClientID: uuid.Nil, ExternalClientID: "", Issuer: "", Resource: "", GrantTypes: nil, Scopes: nil, ConnectionScopes: nil, ScopesOutOfDate: false}
 	switch state {
 	case PreparationStateUnsupportedProfile:
 		r.Stage = PreparationStageEligibility

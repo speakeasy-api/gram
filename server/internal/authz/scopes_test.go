@@ -170,6 +170,29 @@ func TestSystemRoleAdminExcludesChatRead(t *testing.T) {
 	}
 }
 
+// log:read is not a default for any system role. Raw tool-call logs carry every
+// member's tool arguments, results, and prompts, so a project's logs must be
+// granted explicitly; neither project access nor org:admin implies it.
+func TestSystemRolesExcludeLogRead(t *testing.T) {
+	t.Parallel()
+
+	for _, grant := range SystemRoleGrants[SystemRoleAdmin] {
+		require.NotEqual(t, string(ScopeLogRead), grant.Scope)
+	}
+	for _, grant := range SystemRoleGrants[SystemRoleMember] {
+		require.NotEqual(t, string(ScopeLogRead), grant.Scope)
+	}
+}
+
+func TestLogReadNotImpliedByProjectOrOrgScopes(t *testing.T) {
+	t.Parallel()
+
+	for _, scope := range []Scope{ScopeProjectRead, ScopeProjectWrite, ScopeOrgRead, ScopeOrgAdmin} {
+		require.NotContains(t, ScopeImplicationClosure(scope), ScopeLogRead, scope)
+	}
+	require.Equal(t, ResourceKindProject, ResourceKindForScope(ScopeLogRead))
+}
+
 // environment:read is not a member default: environment values include secrets,
 // so viewing them must be granted explicitly via a custom role. Admins retain
 // environment:read/write via adminScopes.
@@ -480,8 +503,8 @@ func TestScopeExpansions_isDAG(t *testing.T) {
 	t.Parallel()
 
 	for start := range scopeExpansions {
-		inStack := map[Scope]bool{}
-		visited := map[Scope]bool{}
+		inStack := make(map[Scope]bool)
+		visited := make(map[Scope]bool)
 		var hasCycle func(s Scope) bool
 		hasCycle = func(s Scope) bool {
 			if inStack[s] {

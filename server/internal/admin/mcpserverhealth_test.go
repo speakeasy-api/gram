@@ -21,6 +21,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -111,7 +113,7 @@ func requireNoLeaks(t *testing.T, body any) {
 
 	rendered, err := json.Marshal(body)
 	require.NoError(t, err)
-	for _, leaked := range []string{"secret-ciphertext", "token-ciphertext", "upstream said no", "alice", "user:"} {
+	for _, leaked := range []string{"secret-ciphertext", "token-ciphertext", "never-returned", "upstream said no", "alice", "user:"} {
 		require.NotContains(t, string(rendered), leaked)
 	}
 }
@@ -297,6 +299,7 @@ func (f healthFixture) seedUserSession(t *testing.T, userIssuerID uuid.UUID, sub
 		ExpiresAt:              conv.ToPGTimestamptz(refreshExpiresAt),
 		ToolSelection:          nil,
 		UserSessionIssuerID:    userIssuerID,
+		SignInID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 	return session.ID
@@ -311,15 +314,15 @@ func (f healthFixture) backdateUserSession(t *testing.T, sessionID uuid.UUID, cr
 	require.NoError(t, err)
 }
 
-func (f healthFixture) setToolsetIssuer(t *testing.T, slug string, issuerID uuid.UUID) {
+func (f healthFixture) setToolsetIssuer(t *testing.T, toolsetID uuid.UUID, issuerID uuid.UUID) {
 	t.Helper()
 
-	_, err := toolsetsRepo.New(f.conn).UpdateToolsetUserSessionIssuer(t.Context(), toolsetsRepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
-		Slug:                slug,
-		ProjectID:           f.projectID,
+	testenv.SetHostedMCP(t, t.Context(), f.conn, f.projectID, toolsetID, testenv.HostedMCP{
+		Visibility:          "",
+		UserSessionIssuerID: &uuid.NullUUID{UUID: issuerID, Valid: true},
+		Slug:                "",
+		CustomDomainID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
-	require.NoError(t, err)
 }
 
 func requireHealthCode(t *testing.T, err error, code oops.Code) {
@@ -374,6 +377,8 @@ func TestDescribeMcpServerHealth_IssuerWithTwoClients(t *testing.T) {
 	require.Equal(t, int64(720), issuer.SessionDurationHours)
 	require.Equal(t, "project", issuer.AttachmentScope)
 	require.Equal(t, "open", *issuer.ClientIDMetadataAdmissionMode, "new issuers are written with the resting policy")
+	require.Equal(t, "endpoint", issuer.AuthorizationServerMode)
+	require.False(t, issuer.IssuerURLPinned)
 	require.Nil(t, issuer.TrustedRemoteSession)
 	require.Empty(t, issuer.OtherServersUsingIssuer)
 
@@ -445,7 +450,7 @@ func TestDescribeMcpServerHealth_SharedIssuerAndToolset(t *testing.T) {
 	first := f.seedServerWithIssuer(t, toolsetID, issuerID, "first")
 	second := f.seedServerWithIssuer(t, toolsetID, issuerID, "second")
 	legacyToolset := seedToolset(t, ctx, f.conn, f.orgID, f.projectID, "legacy", true)
-	f.setToolsetIssuer(t, "legacy", issuerID)
+	f.setToolsetIssuer(t, legacyToolset, issuerID)
 
 	got, err := f.describe(t, first, 30)
 	require.NoError(t, err)
@@ -481,7 +486,18 @@ func TestDescribeMcpServerHealth_CanonicalWrapperOwnsToolsetSlug(t *testing.T) {
 	require.Nil(t, got.Correlation.ToolsetSlug, "another server over the toolset must not claim its legacy calls")
 }
 
-func TestDescribeMcpServerHealth_LegacyModes(t *testing.T) {
+// A toolset without a hosted MCP server is not a server.
+func TestDescribeMcpServerHealth_ToolsetWithoutServerNotFound(t *testing.T) {
+	t.Parallel()
+
+	f := newHealthFixture(t, true)
+	toolsetID := seedToolset(t, t.Context(), f.conn, f.orgID, f.projectID, "unhosted", false)
+	_, err := f.describe(t, toolsetID, 30)
+	requireHealthCode(t, err, oops.CodeNotFound)
+}
+
+// A canonical wrapper without an issuer reports the authentication its toolset relies on.
+func TestDescribeMcpServerHealth_CanonicalWrapperLegacyModes(t *testing.T) {
 	t.Parallel()
 
 	f := newHealthFixture(t, true)
@@ -502,42 +518,27 @@ func TestDescribeMcpServerHealth_LegacyModes(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	proxied := seedToolset(t, ctx, f.conn, f.orgID, f.projectID, "proxied", true)
-	//nolint:glint // notestingrawsql: oauth_proxy_servers is retired and has no writer left; this models an existing legacy toolset.
-	_, err = f.conn.Exec(ctx, `
-		WITH proxy AS (INSERT INTO oauth_proxy_servers (project_id, slug) VALUES ($1, 'proxy') RETURNING id)
-		UPDATE toolsets SET oauth_proxy_server_id = (SELECT id FROM proxy) WHERE id = $2`, f.projectID, proxied)
-	require.NoError(t, err)
-
 	private := seedToolset(t, ctx, f.conn, f.orgID, f.projectID, "private", true)
 	public := seedToolset(t, ctx, f.conn, f.orgID, f.projectID, "public", true)
-	_, err = toolsetsRepo.New(f.conn).UpdateToolset(ctx, toolsetsRepo.UpdateToolsetParams{
-		Name:                   "public",
-		Description:            pgtype.Text{String: "", Valid: false},
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "public", Valid: true},
-		McpIsPublic:            true,
-		CustomDomainID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpEnabled:             true,
-		ToolSelectionMode:      "static",
-		Slug:                   "public",
-		ProjectID:              f.projectID,
+	testenv.SetHostedMCP(t, ctx, f.conn, f.projectID, public, testenv.HostedMCP{
+		Visibility:          "public",
+		UserSessionIssuerID: nil,
+		Slug:                "",
+		CustomDomainID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
-	require.NoError(t, err)
 
 	cases := map[uuid.UUID]*string{
 		external: new("external_oauth"),
-		proxied:  new("oauth_proxy"),
 		private:  new("gram_private"),
 		public:   nil,
 	}
 	for serverID, want := range cases {
 		got, err := f.describe(t, serverID, 14)
 		require.NoError(t, err)
-		require.Equal(t, "toolset_only", got.Server.Source)
+		require.Equal(t, "toolset", got.Server.Source)
 		require.Nil(t, got.UserSessionIssuer)
 		require.Equal(t, want, got.LegacyAuth, "server %s", got.Server.Name)
-		require.Nil(t, got.Correlation.McpServerID)
+		require.Equal(t, serverID.String(), *got.Correlation.McpServerID)
 		require.Equal(t, got.Server.Name, *got.Correlation.ToolsetSlug)
 	}
 }
@@ -606,11 +607,11 @@ func TestDescribeMcpServerHealth_ServerInAnotherProjectIsNotFound(t *testing.T) 
 	otherProject := seedProject(t, t.Context(), f.conn, f.orgID, "other-"+uuid.NewString()[:8])
 	toolsetID := seedToolset(t, t.Context(), f.conn, f.orgID, otherProject, "elsewhere", false)
 	serverID := seedMCPServer(t, t.Context(), f.conn, otherProject, toolsetID, "elsewhere")
-	toolsetOnly := seedToolset(t, t.Context(), f.conn, f.orgID, otherProject, "elsewhere-only", true)
+	hosted := seedToolset(t, t.Context(), f.conn, f.orgID, otherProject, "elsewhere-hosted", true)
 
 	_, err := f.describe(t, serverID, 14)
 	requireHealthCode(t, err, oops.CodeNotFound)
-	_, err = f.describe(t, toolsetOnly, 14)
+	_, err = f.describe(t, hosted, 14)
 	requireHealthCode(t, err, oops.CodeNotFound)
 	_, err = f.describe(t, uuid.New(), 14)
 	requireHealthCode(t, err, oops.CodeNotFound)
@@ -657,8 +658,6 @@ func TestDescribeMcpServerHealth_OmitsURLSlugWhenServerHasNone(t *testing.T) {
 		Slug:                   "unslugged",
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 	serverID := f.seedServerWithIssuer(t, toolset.ID, uuid.Nil, "")
@@ -755,4 +754,63 @@ func TestDescribeMcpServerHealth_SharedClientCountsSessionsFromEitherIssuer(t *t
 	require.Equal(t, int64(1), sessions.LinkedSubjects)
 	require.Equal(t, int64(1), sessions.Reauthorizations)
 	require.Equal(t, map[string]int64{"valid": 1}, sessions.ValidationStatusCounts)
+}
+
+func TestDescribeMcpServerHealth_SharedAuthorizationServer(t *testing.T) {
+	t.Parallel()
+
+	f := newHealthFixture(t, true)
+	ctx := t.Context()
+	toolsetID := seedToolset(t, ctx, f.conn, f.orgID, f.projectID, "shared-backing", false)
+	issuerID := f.seedUserSessionIssuer(t, "shared-mode-issuer")
+	serverID := f.seedServerWithIssuer(t, toolsetID, issuerID, "shared-served")
+	updated, err := testrepo.New(f.conn).SetUserSessionIssuerAuthorizationServerModeFixture(ctx, testrepo.SetUserSessionIssuerAuthorizationServerModeFixtureParams{
+		AuthorizationServerMode: "shared",
+		PinnedIssuerUrl:         conv.ToPGText("https://app.example.com/oauth/usi/" + issuerID.String()),
+		IssuerID:                issuerID,
+		OrganizationID:          f.orgID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), updated)
+
+	got, err := f.describe(t, serverID, 14)
+	require.NoError(t, err)
+	require.Equal(t, "shared", got.UserSessionIssuer.AuthorizationServerMode)
+	require.True(t, got.UserSessionIssuer.IssuerURLPinned)
+}
+
+func TestDescribeMcpServerHealth_ReportsUpstreamAuthClients(t *testing.T) {
+	t.Parallel()
+
+	f := newHealthFixture(t, true)
+	toolsetID := seedToolset(t, t.Context(), f.conn, f.orgID, f.projectID, "upstream-auth", false)
+	serverID := f.seedServerWithIssuer(t, toolsetID, uuid.Nil, "upstream-auth")
+
+	got, err := f.describe(t, serverID, 14)
+	require.NoError(t, err)
+	require.NotNil(t, got.UpstreamAuth)
+	require.Equal(t, "undecided", got.UpstreamAuth.Status)
+	require.Empty(t, got.UpstreamAuth.AuthClients)
+
+	fixtures := testrepo.New(f.conn)
+	clientID, err := fixtures.CreateAuthClientFixture(t.Context(), testrepo.CreateAuthClientFixtureParams{
+		OrganizationID: f.orgID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ClientType: "static_credential", Name: "Shared credential",
+	})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.CreateAuthClientHeaderFixture(t.Context(), testrepo.CreateAuthClientHeaderFixtureParams{
+		AuthClientID: clientID, OrganizationID: f.orgID, Name: "Authorization", IsSecret: true, Value: conv.ToPGText("Bearer never-returned"),
+	}))
+	require.NoError(t, fixtures.AssociateAuthClientFixture(t.Context(), testrepo.AssociateAuthClientFixtureParams{
+		ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: serverID, AuthClientID: clientID,
+	}))
+
+	got, err = f.describe(t, serverID, 14)
+	require.NoError(t, err)
+	require.Len(t, got.UpstreamAuth.AuthClients, 1)
+	client := got.UpstreamAuth.AuthClients[0]
+	require.Equal(t, clientID.String(), client.ID)
+	require.Equal(t, "static_credential", client.ClientType)
+	require.Equal(t, 1, client.ServerCount)
+	require.Equal(t, 1, client.HeaderCount)
+	requireNoLeaks(t, got)
 }

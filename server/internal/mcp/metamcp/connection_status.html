@@ -1,0 +1,137 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: light dark; --fg: #111; --muted: #666; --line: #e5e5e5; --ok: #15803d; --warn: #b45309; --btn: #111; --btn-fg: #fff; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #eee; --muted: #999; --line: #333; --ok: #4ade80; --warn: #fbbf24; --btn: #eee; --btn-fg: #111; } }
+  body { margin: 0; padding: 12px 16px; font: 14px/1.4 system-ui, sans-serif; color: var(--fg); background: transparent; }
+  h1 { font-size: 14px; font-weight: 600; margin: 0 0 8px; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .name { flex: 1; min-width: 0; }
+  .detail { color: var(--muted); font-size: 12px; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); }
+  button { font: inherit; padding: 4px 12px; border-radius: 6px; border: 0; background: var(--btn); color: var(--btn-fg); cursor: pointer; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h1 id="title">Gateway sign-in</h1>
+<ul id="list"><li class="detail">Loading…</li></ul>
+<p class="hint" id="hint" hidden>After signing in, ask again to refresh this list.</p>
+<script>
+(() => {
+  let nextId = 1;
+  const pending = new Map();
+  const send = (msg) => window.parent.postMessage({ jsonrpc: "2.0", ...msg }, "*");
+  const request = (method, params) => new Promise((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    send({ id, method, params });
+  });
+
+  const reportSize = () => send({ method: "ui/notifications/size-changed", params: { width: document.body.scrollWidth, height: document.body.scrollHeight } });
+
+  const render = (result) => {
+    const data = result && result.structuredContent;
+    const list = document.getElementById("list");
+    list.replaceChildren();
+    if (!data || !Array.isArray(data.servers)) {
+      list.innerHTML = '<li class="detail">No status available.</li>';
+      reportSize();
+      return;
+    }
+    let ready = 0, needs = 0, hidden = 0, consented = false, needsConsent = false;
+    for (const s of data.servers) {
+      const li = document.createElement("li");
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = s.name || s.slug;
+      const state = document.createElement("div");
+      state.className = "detail";
+      li.append(name);
+      if (s.status === "verified_at_consent") {
+        consented = true;
+        ready++;
+        state.textContent = "Verified at consent · " + (s.detail || "Current sign-in has not been checked");
+        li.append(state);
+      } else if (s.status === "needs_consent") {
+        consented = true;
+        needsConsent = true;
+        state.className = "warn";
+        state.textContent = s.detail || "Give consent again to review access";
+        li.append(state);
+      } else if (s.status === "hidden") {
+        hidden++;
+        state.textContent = "Hidden by you";
+        li.append(state);
+        if (data.connectUrl) {
+          const btn = document.createElement("button");
+          btn.textContent = "Show";
+          btn.onclick = () => request("ui/open-link", { url: data.connectUrl }).catch(() => {
+            state.textContent = "Open " + data.connectUrl + " in your browser";
+          });
+          li.append(btn);
+        }
+      } else if (s.status === "connected" || s.status === "not_required") {
+        ready++;
+        state.className = "ok";
+        state.textContent = s.status === "connected" ? "Signed in" : "No sign-in needed";
+        li.append(state);
+      } else {
+        needs++;
+        state.className = "warn";
+        state.textContent = s.status === "not_connected" ? "Not signed in" : (s.detail || "Needs attention");
+        li.append(state);
+        if (data.connectUrl) {
+          const btn = document.createElement("button");
+          btn.textContent = "Connect";
+          btn.onclick = () => request("ui/open-link", { url: data.connectUrl }).catch(() => {
+            state.textContent = "Open " + data.connectUrl + " in your browser";
+          });
+          li.append(btn);
+        }
+      }
+      list.append(li);
+    }
+    document.getElementById("title").textContent = consented
+      ? `Gateway access · ${ready} of ${data.servers.length - hidden} verified at consent`
+      : `Gateway sign-in · ${ready} of ${data.servers.length - hidden} ready`;
+    const hint = document.getElementById("hint");
+    hint.textContent = needsConsent ? "Start authorization again in your AI client to review access."
+      : consented ? "Current sign-in has not been checked. Tool calls check authorization."
+      : "After signing in, ask again to refresh this list.";
+    hint.hidden = !consented && needs === 0;
+    reportSize();
+  };
+
+  window.addEventListener("message", (event) => {
+    if (event.source !== window.parent) return;
+    const msg = event.data;
+    if (!msg || msg.jsonrpc !== "2.0") return;
+    if (msg.id !== undefined && pending.has(msg.id)) {
+      const { resolve, reject } = pending.get(msg.id);
+      pending.delete(msg.id);
+      msg.error ? reject(msg.error) : resolve(msg.result);
+      return;
+    }
+    if (msg.method === "ui/notifications/tool-result") render(msg.params);
+  });
+
+  request("ui/initialize", {
+    protocolVersion: "2026-01-26",
+    appCapabilities: {},
+    appInfo: { name: "gateway-connection-status", version: "0.0.1" },
+  }).then(() => {
+    send({ method: "ui/notifications/initialized", params: {} });
+    reportSize();
+  }).catch((err) => {
+    document.getElementById("list").innerHTML = '<li class="detail"></li>';
+    document.querySelector("#list li").textContent = "Host rejected initialize: " + JSON.stringify(err);
+  });
+})();
+</script>
+</body>
+</html>

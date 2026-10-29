@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -51,16 +52,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
@@ -79,28 +80,34 @@ import (
 // upstream token exchange instead of bouncing back to
 // /<RouteBase>/{slug}/connect.
 //
-// RouteBase is "mcp" or "x/mcp" — the surface the parent challenge was
-// minted under. Drives both the upstream provider's redirect_uri
-// (/<RouteBase>/remote_login_callback) and the post-callback bounce to
-// /<RouteBase>/{slug}/connect. Empty values fall back to "mcp" so
-// in-flight states minted before this field landed still resume on the
-// original surface.
+// RouteBase is the surface the parent challenge was minted under. Drives
+// the post-callback bounce to /<RouteBase>/{slug}/connect.
 type ParentChallenge struct {
+	// ConnectionPopup opts this leg into the dashboard’s explicit reconnect completion.
+	ConnectionPopup     bool
 	ID                  string
 	ProjectID           uuid.UUID
 	OrganizationID      string
 	UserSessionIssuerID uuid.UUID
 	Subject             *urn.SessionSubject
 	McpSlug             string
-	RouteBase           string
+	RouteBase           mcproute.Base
 	McpServerID         uuid.NullUUID
 	MetaMcpServerID     uuid.NullUUID
+	// ResourceMcpServerID is the gateway member whose protected resource
+	// decides the login's scopes, as McpServerID does for a server login. Set
+	// only once the gateway has qualified the client to that member.
+	ResourceMcpServerID uuid.NullUUID
 	FinalRedirectURI    string
 	// ConsentURL is the consent page the callback returns to when it cannot
 	// be rebuilt from RouteBase and McpSlug, as on a shared authorization
 	// server. Unlike FinalRedirectURI it changes only where the browser goes:
 	// the login keeps its consent parent and that parent's browser binding.
 	ConsentURL string
+	// ConsentServer is the gateway server whose connect page started the
+	// login, so the callback returns to that page rather than to the
+	// gateway's own. Empty for every other login.
+	ConsentServer string
 	// Resource is the RFC 8707 resource indicator sent on the authorize
 	// redirect and code exchange. Empty omits the parameter.
 	Resource string
@@ -122,6 +129,8 @@ type ParentChallenge struct {
 // `state` parameter sent to the upstream provider. ~10 minute TTL — same
 // budget as the parent AuthnChallengeState.
 type RemoteLoginState struct {
+	// ConnectionPopup preserves the server-owned opt-in through upstream redirects and retries.
+	ConnectionPopup   bool      `json:"connection_popup,omitempty"`
 	ID                string    `json:"id"`
 	ParentChallengeID string    `json:"parent_challenge_id"`
 	ProjectID         uuid.UUID `json:"project_id"`
@@ -141,10 +150,10 @@ type RemoteLoginState struct {
 	Resource        string              `json:"resource,omitempty"`
 	Subject         *urn.SessionSubject `json:"subject,omitempty"`
 	McpSlug         string              `json:"mcp_slug"`
-	// RouteBase is "mcp" or "x/mcp" — drives the post-callback redirect
-	// to /<RouteBase>/{slug}/connect. Empty values fall back to "mcp"
-	// for in-flight states minted before this field landed.
-	RouteBase       string        `json:"route_base,omitempty"`
+	// RouteBase drives the post-callback redirect to
+	// /<RouteBase>/{slug}/connect. Read it through Resolve: empty means
+	// mcproute.MCP, and an unserved value fails the callback closed.
+	RouteBase       mcproute.Base `json:"route_base,omitempty"`
 	McpServerID     uuid.NullUUID `json:"mcp_server_id,omitzero"`
 	MetaMcpServerID uuid.NullUUID `json:"meta_mcp_server_id,omitzero"`
 	// FinalRedirectURI overrides the default post-callback redirect to
@@ -156,6 +165,8 @@ type RemoteLoginState struct {
 	// for a consent parent whose page is not at /<RouteBase>/{slug}/connect.
 	// Empty for every other login, including states minted before it existed.
 	ConsentURL string `json:"consent_url,omitempty"`
+	// ConsentServer is the gateway server page the callback returns to.
+	ConsentServer string `json:"consent_server,omitempty"`
 	// AutoRefresh is the subject's consent-screen auto-refresh choice. Nil
 	// (including in-flight states minted before this field) defers to the
 	// client capability's default at persist time.
@@ -187,6 +198,7 @@ type RemoteLoginState struct {
 // callback can mint a sibling leg for the same login.
 func (s RemoteLoginState) parent() ParentChallenge {
 	return ParentChallenge{
+		ConnectionPopup:     s.ConnectionPopup,
 		ID:                  s.ParentChallengeID,
 		ProjectID:           s.ProjectID,
 		OrganizationID:      s.OrganizationID,
@@ -196,9 +208,12 @@ func (s RemoteLoginState) parent() ParentChallenge {
 		RouteBase:           s.RouteBase,
 		FinalRedirectURI:    s.FinalRedirectURI,
 		ConsentURL:          s.ConsentURL,
+		ConsentServer:       s.ConsentServer,
 		Resource:            s.Resource,
 		McpServerID:         s.McpServerID,
 		MetaMcpServerID:     s.MetaMcpServerID,
+		// The retry leg reuses the first leg's scopes, so it reads no resource.
+		ResourceMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		AutoRefresh:         s.AutoRefresh,
 		Authority:           s.Authority,
 		BrowserCookieID:     s.BrowserCookieID,
@@ -248,9 +263,6 @@ type ChallengeManager struct {
 	// it within a short budget; nil skips the resource steps of scope resolution.
 	protectedResources *protectedresource.Prober
 
-	// features gates resource-first scope discovery per organization; nil reads as off.
-	features feature.Provider
-
 	registrationTelemetry registration.Recorder
 
 	// privateAuthorityValidator is injected at construction. The callback package
@@ -288,6 +300,8 @@ type ChallengeManager struct {
 // RemoteGrant is a grant the remote login callback committed, keyed to the
 // consent challenge it belongs to.
 type RemoteGrant struct {
+	// ConnectionPopup opts the callback into exact dashboard reconnect handling.
+	ConnectionPopup bool
 	// ParentChallengeID is the consent challenge the login was started from.
 	ParentChallengeID string
 	// UserSessionIssuerID is the issuer that challenge was minted for.
@@ -299,12 +313,14 @@ type RemoteGrant struct {
 	// RemoteSessionID and RemoteSessionUpdatedAt identify the exact stored credential committed by the callback.
 	RemoteSessionID        uuid.UUID
 	RemoteSessionUpdatedAt time.Time
+	// GrantGeneration pins the authorization decision even if the same row is reauthorized later.
+	GrantGeneration int64
 }
 
 // RemoteLoginResult is where the callback sends the browser next.
 type RemoteLoginResult struct {
 	RedirectURL string
-	// Grant is the committed grant, nil while the login is being retried upstream.
+	// Grant is the committed grant, nil on cancellation or an upstream retry.
 	Grant *RemoteGrant
 }
 
@@ -360,11 +376,6 @@ func WithProtectedResourceProber(prober *protectedresource.Prober) ChallengeMana
 	return func(m *ChallengeManager) { m.protectedResources = prober }
 }
 
-// WithFeatureFlags evaluates the resource-first scope discovery rollout flag.
-func WithFeatureFlags(features feature.Provider) ChallengeManagerOption {
-	return func(m *ChallengeManager) { m.features = features }
-}
-
 func NewChallengeManager(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -401,7 +412,6 @@ func NewChallengeManager(
 		metrics:                   remotesessionmetrics.NewAuthorize(logger, meterProvider),
 		scopeMetrics:              remotesessionmetrics.NewScopeResolution(logger, meterProvider),
 		protectedResources:        nil,
-		features:                  nil,
 		registrationTelemetry:     registration.NewMetrics(logger, meterProvider),
 		privateAuthorityValidator: nil,
 		idTokens:                  NoIDTokenVerifier(),
@@ -434,7 +444,12 @@ func NewChallengeManager(
 // renderer. Kept as a package value type so mcp/ can pass it back to us
 // without re-querying.
 type Client struct {
-	ID                    uuid.UUID
+	ID uuid.UUID
+
+	// ProjectID is the project that owns the client, invalid for an
+	// organization-level or catalog client.
+	ProjectID uuid.NullUUID
+
 	RemoteSessionIssuerID uuid.UUID
 	ExternalClientID      string
 	ClientSecretEncrypted *string
@@ -560,8 +575,8 @@ func (c Client) needsRegistrationRotation(now time.Time) (RotationTrigger, bool)
 	}
 }
 
-// standardScopes are appended when advertised: openid, email, profile for
-// identity; offline_access for a refresh token.
+// standardScopes are added to a challenge when the resource advertises them:
+// openid, email, profile for identity; offline_access for a refresh token.
 var standardScopes = []string{"openid", "email", "profile", "offline_access"}
 
 // ResourceScopes is what the protected resource a login is for says about
@@ -591,7 +606,7 @@ type ScopeResolution struct {
 	// Scopes is the scope parameter to send; empty sends none.
 	Scopes []string
 
-	// Widened lists the standard scopes appended to the chosen base.
+	// Widened lists the standard scopes appended to a challenge base.
 	Widened []string
 
 	// Source is the precedence step that supplied the base.
@@ -604,42 +619,44 @@ type ScopeResolution struct {
 
 // RequestedScopes resolves the authorize scope set, in order: the client's
 // scope, the resource's challenge scopes, the resource pin, the resource's
-// scopes_supported, the issuer's override (verbatim), the issuer's
-// scopes_supported. Every base but the issuer override gains the standard
-// scopes the issuer advertises. Without resource discovery the issuer's
-// override still beats the client's scope, as before the rollout flag.
+// scopes_supported, the issuer's override, the issuer's scopes_supported.
+// Operator-set scopes (client scope, pin, override) are sent exactly as set.
+// A challenge gains the standard scopes the resource itself advertises; the
+// advertised lists already carry whichever their own server offers. Without
+// resource discovery (no prober) the issuer's override still beats the
+// client's scope.
 func (c Client) RequestedScopes(resource ResourceScopes) ScopeResolution {
-	var base []string
-	var source remotesessionmetrics.ScopeSource
-	var unadvertised []string
+	asSet := func(scopes []string, source remotesessionmetrics.ScopeSource) ScopeResolution {
+		return ScopeResolution{Scopes: slices.Clone(scopes), Widened: nil, Source: source, Unadvertised: nil}
+	}
 	switch {
 	case !resource.UseDiscovered && len(c.IssuerScopeOverride) > 0:
-		return ScopeResolution{Scopes: slices.Clone(c.IssuerScopeOverride), Widened: nil, Source: remotesessionmetrics.ScopeSourceIssuerOverride, Unadvertised: nil}
+		return asSet(c.IssuerScopeOverride, remotesessionmetrics.ScopeSourceIssuerOverride)
 	case len(c.ClientScope) > 0:
-		base, source = c.ClientScope, remotesessionmetrics.ScopeSourceClientScope
+		return asSet(c.ClientScope, remotesessionmetrics.ScopeSourceClientScope)
 	case resource.UseDiscovered && len(resource.ChallengeScopes) > 0:
-		base, source = resource.ChallengeScopes, remotesessionmetrics.ScopeSourceChallengeScope
+		scopes, widened := withStandardScopes(resource.ChallengeScopes, resource.ScopesSupported)
+		return ScopeResolution{Scopes: scopes, Widened: widened, Source: remotesessionmetrics.ScopeSourceChallengeScope, Unadvertised: nil}
 	case resource.UseDiscovered && len(resource.Pin) > 0:
-		base, source = resource.Pin, remotesessionmetrics.ScopeSourceResourcePin
+		out := asSet(resource.Pin, remotesessionmetrics.ScopeSourceResourcePin)
 		if resource.ScopesSupported != nil {
 			for _, scope := range resource.Pin {
 				if !slices.Contains(resource.ScopesSupported, scope) {
-					unadvertised = append(unadvertised, scope)
+					out.Unadvertised = append(out.Unadvertised, scope)
 				}
 			}
 		}
+		return out
 	case resource.UseDiscovered && len(resource.ScopesSupported) > 0:
-		base, source = resource.ScopesSupported, remotesessionmetrics.ScopeSourceCachedResource
 		if resource.Live {
-			source = remotesessionmetrics.ScopeSourceLiveResource
+			return asSet(resource.ScopesSupported, remotesessionmetrics.ScopeSourceLiveResource)
 		}
+		return asSet(resource.ScopesSupported, remotesessionmetrics.ScopeSourceCachedResource)
 	case len(c.IssuerScopeOverride) > 0:
-		return ScopeResolution{Scopes: slices.Clone(c.IssuerScopeOverride), Widened: nil, Source: remotesessionmetrics.ScopeSourceIssuerOverride, Unadvertised: nil}
+		return asSet(c.IssuerScopeOverride, remotesessionmetrics.ScopeSourceIssuerOverride)
 	default:
 		return c.issuerCatalogueScopes()
 	}
-	scopes, widened := c.withStandardScopes(base)
-	return ScopeResolution{Scopes: scopes, Widened: widened, Source: source, Unadvertised: unadvertised}
 }
 
 // issuerCatalogueScopes is the last resort: the issuer's whole
@@ -651,16 +668,15 @@ func (c Client) issuerCatalogueScopes() ScopeResolution {
 	if len(c.IssuerScopesSupported) == 0 {
 		return ScopeResolution{Scopes: nil, Widened: nil, Source: remotesessionmetrics.ScopeSourceNone, Unadvertised: nil}
 	}
-	scopes, widened := c.withStandardScopes(c.IssuerScopesSupported)
-	return ScopeResolution{Scopes: scopes, Widened: widened, Source: remotesessionmetrics.ScopeSourceIssuerCatalogue, Unadvertised: nil}
+	return ScopeResolution{Scopes: slices.Clone(c.IssuerScopesSupported), Widened: nil, Source: remotesessionmetrics.ScopeSourceIssuerCatalogue, Unadvertised: nil}
 }
 
-// withStandardScopes copies base and appends each standard scope the issuer
-// advertises that base lacks, returning what was appended.
-func (c Client) withStandardScopes(base []string) (scopes []string, widened []string) {
+// withStandardScopes copies base and appends each standard scope in offered
+// that base lacks, returning what was appended.
+func withStandardScopes(base, offered []string) (scopes []string, widened []string) {
 	scopes = slices.Clone(base)
 	for _, scope := range standardScopes {
-		if slices.Contains(scopes, scope) || !slices.Contains(c.IssuerScopesSupported, scope) {
+		if slices.Contains(scopes, scope) || !slices.Contains(offered, scope) {
 			continue
 		}
 		scopes = append(scopes, scope)
@@ -669,36 +685,12 @@ func (c Client) withStandardScopes(base []string) (scopes []string, widened []st
 	return scopes, widened
 }
 
-// ResourceScopeDiscoveryEnabled reports whether the organization's logins
-// consult the protected resource row (its challenge scopes, pin, and
-// advertised list) when deciding their scope request. A manager without a
-// prober, an unreadable organization, or an unreadable flag reads as off, so
-// the consent card and the login always agree.
-func (m *ChallengeManager) ResourceScopeDiscoveryEnabled(ctx context.Context, organizationID string) bool {
-	if m.features == nil || m.protectedResources == nil {
-		return false
-	}
-	org, err := orgrepo.New(m.db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		m.logger.WarnContext(ctx, "read organization for scope discovery flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return false
-	}
-	return ResourceScopeDiscoveryEnabled(ctx, m.logger, m.features, organizationID, org.Slug)
-}
-
-// ResourceScopeDiscoveryEnabled evaluates the resource-first scope discovery
-// rollout flag for an organization whose slug the caller already holds. A
-// nil provider or an unreadable flag reads as off.
-func ResourceScopeDiscoveryEnabled(ctx context.Context, logger *slog.Logger, features feature.Provider, organizationID, organizationSlug string) bool {
-	if features == nil {
-		return false
-	}
-	enabled, err := features.IsFlagEnabledLocal(ctx, feature.FlagRemoteSessionLiveResourceScopes, organizationID, feature.OrgProjectGroups(organizationSlug, ""), nil)
-	if err != nil {
-		logger.WarnContext(ctx, "evaluate scope discovery flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return false
-	}
-	return enabled
+// ResourceScopeDiscoveryEnabled reports whether logins consult the protected
+// resource row (its challenge scopes, pin, and advertised list) when deciding
+// their scope request. Only a manager without a prober reads as off, so the
+// consent card and the login always agree.
+func (m *ChallengeManager) ResourceScopeDiscoveryEnabled() bool {
+	return m.protectedResources != nil
 }
 
 // CachedResourceScopesForServer is the protected resource row of a
@@ -786,13 +778,14 @@ func (m *ChallengeManager) ResourceAppliesToClients(ctx context.Context, organiz
 
 // loginResourceScopes resolves the protected resource row of the MCP server
 // the login is for, probing it within the login budget, and returns the
-// resource URL it consulted. An organization not enrolled (discover false), a
-// client whose own scope decides, a login with no remote-backed server, or a
+// resource URL it consulted. A gateway login reads the member it qualified the
+// client to. A manager without a prober (discover false), a client whose own
+// scope decides, a login with no remote-backed server or member, or a
 // server whose resource the selected client's grant is not qualified to has
 // no row.
 func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent ParentChallenge, client Client, discover bool) (ResourceScopes, protectedresource.LoginResolution, string) {
-	// UseDiscovered carries the flag alone, so an enrolled login that skips
-	// the resource still ranks the client's scope above the issuer override.
+	// UseDiscovered carries discover alone, so a login that skips the
+	// resource still ranks the client's scope above the issuer override.
 	none := ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: discover}
 	skipped := protectedresource.LoginResolution{Row: nil, ScopesSupported: nil, Live: false, Outcome: protectedresource.ProbeOutcomeNotApplicable, ProbeDuration: 0}
 	switch {
@@ -802,11 +795,16 @@ func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent Paren
 	case len(client.ClientScope) > 0:
 		skipped.Outcome = protectedresource.ProbeOutcomeSkippedClientScope
 		return none, skipped, ""
-	case !parent.McpServerID.Valid:
+	}
+	serverID, viaMember := parent.McpServerID, false
+	if !serverID.Valid && parent.ResourceMcpServerID.Valid {
+		serverID, viaMember = parent.ResourceMcpServerID, true
+	}
+	if !serverID.Valid {
 		return none, skipped, ""
 	}
 	q := remotesessions_repo.New(m.db)
-	resourceURL, err := q.GetRemoteURLForMcpServer(ctx, remotesessions_repo.GetRemoteURLForMcpServerParams{McpServerID: parent.McpServerID.UUID, ProjectID: parent.ProjectID})
+	resourceURL, err := q.GetRemoteURLForMcpServer(ctx, remotesessions_repo.GetRemoteURLForMcpServerParams{McpServerID: serverID.UUID, ProjectID: parent.ProjectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return none, skipped, ""
@@ -815,21 +813,26 @@ func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent Paren
 		skipped.Outcome = protectedresource.ProbeOutcomeDBError
 		return none, skipped, ""
 	}
-	siblingIDs, err := q.ListRemoteSessionClientIDsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientIDsForUserSessionIssuerParams{
-		UserSessionIssuerID: parent.UserSessionIssuerID,
-		ProjectID:           parent.ProjectID,
-		OrganizationID:      parent.OrganizationID,
-	})
-	if err != nil {
-		m.logger.ErrorContext(ctx, "list sibling clients for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()))
-		skipped.Outcome = protectedresource.ProbeOutcomeDBError
-		return none, skipped, resourceURL
-	}
-	applies, err := m.ResourceAppliesToClient(ctx, parent.OrganizationID, client.ID, siblingIDs, resourceURL)
-	if err != nil {
-		m.logger.ErrorContext(ctx, "decide resource ownership for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()), attr.SlogRemoteSessionClientID(client.ID.String()))
-		skipped.Outcome = protectedresource.ProbeOutcomeDBError
-		return none, skipped, resourceURL
+	// The gateway qualified the client to its member before the login, so
+	// only the member's URL must still be the resource the grant names.
+	applies := viaMember && sameUpstream(resourceURL, parent.Resource)
+	if !viaMember {
+		siblingIDs, err := q.ListRemoteSessionClientIDsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientIDsForUserSessionIssuerParams{
+			UserSessionIssuerID: parent.UserSessionIssuerID,
+			ProjectID:           parent.ProjectID,
+			OrganizationID:      parent.OrganizationID,
+		})
+		if err != nil {
+			m.logger.ErrorContext(ctx, "list sibling clients for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()))
+			skipped.Outcome = protectedresource.ProbeOutcomeDBError
+			return none, skipped, resourceURL
+		}
+		applies, err = m.ResourceAppliesToClient(ctx, parent.OrganizationID, client.ID, siblingIDs, resourceURL)
+		if err != nil {
+			m.logger.ErrorContext(ctx, "decide resource ownership for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()), attr.SlogRemoteSessionClientID(client.ID.String()))
+			skipped.Outcome = protectedresource.ProbeOutcomeDBError
+			return none, skipped, resourceURL
+		}
 	}
 	if !applies {
 		skipped.Outcome = protectedresource.ProbeOutcomeNotOwned
@@ -865,7 +868,34 @@ func (m *ChallengeManager) ListClients(
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 ) ([]Client, error) {
-	rows, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
+	return m.listClients(ctx, projectID, organizationID, userSessionIssuerID, false)
+}
+
+// ListOrganizationClients is ListClients for a caller that belongs to no
+// project, the organization gateway: it returns the clients of every live
+// project in the organization, plus organization-level and catalog clients,
+// that are linked to the organization-level userSessionIssuerID. Each
+// client's ProjectID names the project whose tenancy operations on it run
+// under.
+//
+// Unlike a single project's, this set may hold two clients for one remote
+// session issuer, one per project, so it must not be keyed by remote issuer.
+func (m *ChallengeManager) ListOrganizationClients(
+	ctx context.Context,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+) ([]Client, error) {
+	return m.listClients(ctx, uuid.Nil, organizationID, userSessionIssuerID, true)
+}
+
+func (m *ChallengeManager) listClients(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	organizationWide bool,
+) ([]Client, error) {
+	rows, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, organizationWide)
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
@@ -876,45 +906,50 @@ func (m *ChallengeManager) ListClients(
 			noted[r.RemoteSessionIssuerID] = true
 			m.issuerMetadata.NoteUse(ctx, issuerUseFromClientListRow(r))
 		}
-		out = append(out, Client{
-			ID:                               r.ClientID,
-			RemoteSessionIssuerID:            r.RemoteSessionIssuerID,
-			ExternalClientID:                 r.ExternalClientID,
-			ClientSecretEncrypted:            conv.FromPGText[string](r.ClientSecretEncrypted),
-			IssuerSlug:                       r.IssuerSlug,
-			IssuerName:                       conv.FromPGText[string](r.IssuerName),
-			IssuerLogoAssetID:                r.IssuerLogoAssetID,
-			IssuerDocumentationURL:           conv.FromPGTextOrEmpty[string](r.IssuerServiceDocumentation),
-			IssuerPolicyURL:                  conv.FromPGTextOrEmpty[string](r.IssuerOpPolicyUri),
-			IssuerTosURL:                     conv.FromPGTextOrEmpty[string](r.IssuerOpTosUri),
-			ResourceIdentifier:               conv.FromPGTextOrEmpty[string](r.ResourceIdentifier),
-			ResourceName:                     conv.FromPGTextOrEmpty[string](r.ResourceName),
-			ResourceDocumentationURL:         conv.FromPGTextOrEmpty[string](r.ResourceDocumentation),
-			ResourcePolicyURL:                conv.FromPGTextOrEmpty[string](r.ResourcePolicyUri),
-			ResourceTosURL:                   conv.FromPGTextOrEmpty[string](r.ResourceTosUri),
-			IssuerURL:                        r.IssuerUrl,
-			IssuerIdentifier:                 issuerIdentifier(r.IssuerMetadata, r.IssuerUrl),
-			ClientAssertionIssuer:            clientAssertionIssuer(r.IssuerMetadata, r.IssuerUrl),
-			AuthorizationEndpoint:            conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
-			TokenEndpoint:                    conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
-			ClientScope:                      r.ClientScope,
-			IssuerScopesSupported:            r.ScopesSupported,
-			IssuerScopeOverride:              r.ScopeOverride,
-			IssuerOmitScopeFallback:          r.OmitScopeFallback.Valid && r.OmitScopeFallback.Bool,
-			IssuerResourceIndicatorSupported: conv.FromPGBool[bool](r.ResourceIndicatorSupported),
-			IssuerAuthorizationResponseIssParameterSupported: r.AuthorizationResponseIssParameterSupported.Valid && r.AuthorizationResponseIssParameterSupported.Bool,
-			IssuerCodeChallengeMethodsSupported:              r.CodeChallengeMethodsSupported,
-			Audience:                                         conv.FromPGTextOrEmpty[string](r.ClientAudience),
-			Passthrough:                                      r.Passthrough,
-			LegacyCallbackUrl:                                r.LegacyCallbackUrl,
-			CallbackBaseURL:                                  r.CallbackBaseUrl,
-			IssuerRegistrationEndpoint:                       conv.FromPGTextOrEmpty[string](r.IssuerRegistrationEndpoint),
-			ClientSecretExpiresAt:                            timestampPtr(r.ClientSecretExpiresAt),
-			UpstreamRejectedAt:                               timestampPtr(r.UpstreamRejectedAt),
-			CredentialOwner:                                  CredentialOwner(r.CredentialOwner),
-		})
+		out = append(out, clientFromRow(r))
 	}
 	return out, nil
+}
+
+func clientFromRow(r remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) Client {
+	return Client{
+		ID:                               r.ClientID,
+		ProjectID:                        r.ClientProjectID,
+		RemoteSessionIssuerID:            r.RemoteSessionIssuerID,
+		ExternalClientID:                 r.ExternalClientID,
+		ClientSecretEncrypted:            conv.FromPGText[string](r.ClientSecretEncrypted),
+		IssuerSlug:                       r.IssuerSlug,
+		IssuerName:                       conv.FromPGText[string](r.IssuerName),
+		IssuerLogoAssetID:                r.IssuerLogoAssetID,
+		IssuerDocumentationURL:           conv.FromPGTextOrEmpty[string](r.IssuerServiceDocumentation),
+		IssuerPolicyURL:                  conv.FromPGTextOrEmpty[string](r.IssuerOpPolicyUri),
+		IssuerTosURL:                     conv.FromPGTextOrEmpty[string](r.IssuerOpTosUri),
+		ResourceIdentifier:               conv.FromPGTextOrEmpty[string](r.ResourceIdentifier),
+		ResourceName:                     conv.FromPGTextOrEmpty[string](r.ResourceName),
+		ResourceDocumentationURL:         conv.FromPGTextOrEmpty[string](r.ResourceDocumentation),
+		ResourcePolicyURL:                conv.FromPGTextOrEmpty[string](r.ResourcePolicyUri),
+		ResourceTosURL:                   conv.FromPGTextOrEmpty[string](r.ResourceTosUri),
+		IssuerURL:                        r.IssuerUrl,
+		IssuerIdentifier:                 issuerIdentifier(r.IssuerMetadata, r.IssuerUrl),
+		ClientAssertionIssuer:            clientAssertionIssuer(r.IssuerMetadata, r.IssuerUrl),
+		AuthorizationEndpoint:            conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
+		TokenEndpoint:                    conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
+		ClientScope:                      r.ClientScope,
+		IssuerScopesSupported:            r.ScopesSupported,
+		IssuerScopeOverride:              r.ScopeOverride,
+		IssuerOmitScopeFallback:          r.OmitScopeFallback.Valid && r.OmitScopeFallback.Bool,
+		IssuerResourceIndicatorSupported: conv.FromPGBool[bool](r.ResourceIndicatorSupported),
+		IssuerAuthorizationResponseIssParameterSupported: r.AuthorizationResponseIssParameterSupported.Valid && r.AuthorizationResponseIssParameterSupported.Bool,
+		IssuerCodeChallengeMethodsSupported:              r.CodeChallengeMethodsSupported,
+		Audience:                                         conv.FromPGTextOrEmpty[string](r.ClientAudience),
+		Passthrough:                                      r.Passthrough,
+		LegacyCallbackUrl:                                r.LegacyCallbackUrl,
+		CallbackBaseURL:                                  r.CallbackBaseUrl,
+		IssuerRegistrationEndpoint:                       conv.FromPGTextOrEmpty[string](r.IssuerRegistrationEndpoint),
+		ClientSecretExpiresAt:                            timestampPtr(r.ClientSecretExpiresAt),
+		UpstreamRejectedAt:                               timestampPtr(r.UpstreamRejectedAt),
+		CredentialOwner:                                  CredentialOwner(r.CredentialOwner),
+	}
 }
 
 // RemoteSessionStatus is the usability of a subject's stored remote_session
@@ -993,6 +1028,28 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 ) (map[uuid.UUID]RemoteSessionState, error) {
+	return m.remoteSessionStatuses(ctx, subject, projectID, organizationID, userSessionIssuerID, false)
+}
+
+// OrganizationRemoteSessionStatuses is RemoteSessionStatuses over the clients
+// ListOrganizationClients returns.
+func (m *ChallengeManager) OrganizationRemoteSessionStatuses(
+	ctx context.Context,
+	subject urn.SessionSubject,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+) (map[uuid.UUID]RemoteSessionState, error) {
+	return m.remoteSessionStatuses(ctx, subject, uuid.Nil, organizationID, userSessionIssuerID, true)
+}
+
+func (m *ChallengeManager) remoteSessionStatuses(
+	ctx context.Context,
+	subject urn.SessionSubject,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	organizationWide bool,
+) (map[uuid.UUID]RemoteSessionState, error) {
 	if subject.IsZero() {
 		return map[uuid.UUID]RemoteSessionState{}, nil
 	}
@@ -1001,10 +1058,16 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           projectID,
 		OrganizationID:      organizationID,
+		OrganizationWide:    organizationWide,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list remote session statuses: %w", err)
 	}
+	return remoteSessionStates(rows), nil
+}
+
+// remoteSessionStates keys each status row by its client.
+func remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) map[uuid.UUID]RemoteSessionState {
 	statuses := make(map[uuid.UUID]RemoteSessionState, len(rows))
 	for _, row := range rows {
 		var accessExpiresAt *time.Time
@@ -1053,7 +1116,7 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 			ValidationReason:       row.ValidationReason.String,
 		}
 	}
-	return statuses, nil
+	return statuses
 }
 
 var ErrRemoteSessionNotRefreshable = errors.New("remote session has no usable refresh token")
@@ -1186,14 +1249,14 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		return "", ErrSelfCredentialClient
 	}
 	// Evaluated once per login; the retry leg reuses the scopes it chose.
-	discover := m.ResourceScopeDiscoveryEnabled(ctx, parent.OrganizationID)
+	discover := m.ResourceScopeDiscoveryEnabled()
 	return m.mintAuthorization(ctx, parent, client, nil, discover)
 }
 
 // mintAuthorization is BuildAuthorizationUrl; retryOf is the state of the
 // first leg when this is the single resource-less leg minted after
-// invalid_target, and discover is the resource-first scope discovery flag as
-// the login evaluated it.
+// invalid_target, and discover reports whether the login consults the
+// protected resource row.
 func (m *ChallengeManager) mintAuthorization(
 	ctx context.Context,
 	parent ParentChallenge,
@@ -1210,16 +1273,78 @@ func (m *ChallengeManager) mintAuthorization(
 	}
 
 	if client.AuthorizationEndpoint == "" {
-		return "", fmt.Errorf("remote_session_issuer %s missing authorization_endpoint", client.IssuerSlug)
+		return "", fmt.Errorf("remote_session_issuer %s: %w", client.IssuerSlug, ErrIssuerNoAuthorizationEndpoint)
 	}
 	if client.TokenEndpoint == "" {
 		return "", fmt.Errorf("remote_session_issuer %s missing token_endpoint", client.IssuerSlug)
 	}
 
+	var (
+		scopes      []string
+		omitScope   bool
+		resolution  ScopeResolution
+		resource    ResourceScopes
+		resolved    protectedresource.LoginResolution
+		resourceURL string
+	)
+	if retry {
+		// The retry leg is the same login: it asks for what the first leg did.
+		scopes = slices.Clone(retryOf.Scopes)
+		omitScope = retryOf.OmitScope
+	} else {
+		resource, resolved, resourceURL = m.loginResourceScopes(ctx, parent, client, discover)
+		resolution = client.RequestedScopes(resource)
+		scopes = resolution.Scopes
+		omitScope = resolution.Source == remotesessionmetrics.ScopeSourceIssuerOmitted
+		trace.SpanFromContext(ctx).SetAttributes(attr.OAuthScopeSource(resolution.Source), attr.OAuthResourceProbeOutcome(resolved.Outcome))
+		m.scopeMetrics.Record(ctx, resolution.Source, resolved.Outcome)
+		if resolved.ProbeDuration > 0 {
+			m.scopeMetrics.RecordProbe(ctx, resolved.Outcome, resolved.ProbeDuration)
+		}
+		logAttrs := []any{
+			attr.SlogProjectID(parent.ProjectID.String()),
+			attr.SlogOrganizationID(parent.OrganizationID),
+			attr.SlogOAuthIssuer(client.IssuerURL),
+			attr.SlogRemoteSessionClientID(client.ID.String()),
+			attr.SlogOAuthResource(resourceURL),
+			attr.SlogOAuthScopeSource(resolution.Source),
+			attr.SlogOAuthResourceProbeOutcome(resolved.Outcome),
+			attr.SlogOAuthScope(strings.Join(scopes, " ")),
+			attr.SlogOAuthResourceProbeDuration(resolved.ProbeDuration),
+		}
+		if parent.MetaMcpServerID.Valid {
+			logAttrs = append(logAttrs, attr.SlogMetaMcpServerID(parent.MetaMcpServerID.UUID.String()))
+		}
+		m.logger.InfoContext(ctx, "resolved login scope", logAttrs...)
+	}
+	if len(resolution.Unadvertised) > 0 {
+		m.logger.InfoContext(ctx, "resource scope pin requests scopes the resource does not advertise",
+			attr.SlogProjectID(parent.ProjectID.String()),
+			attr.SlogOrganizationID(parent.OrganizationID),
+			attr.SlogOAuthIssuer(client.IssuerURL),
+			attr.SlogRemoteSessionClientID(client.ID.String()),
+			attr.SlogOAuthScope(strings.Join(scopes, " ")),
+			attr.SlogOAuthScopeUnadvertised(resolution.Unadvertised),
+			attr.SlogOAuthResourceScopesSupported(resource.ScopesSupported),
+			attr.SlogOAuthResourceProbeOutcome(resolved.Outcome),
+		)
+	}
+	if len(resolution.Widened) > 0 {
+		m.logger.DebugContext(ctx, "requested scope widens the chosen scope base",
+			attr.SlogProjectID(parent.ProjectID.String()),
+			attr.SlogOrganizationID(parent.OrganizationID),
+			attr.SlogOAuthIssuer(client.IssuerURL),
+			attr.SlogRemoteSessionClientID(client.ID.String()),
+			attr.SlogOAuthScopeSource(resolution.Source),
+			attr.SlogOAuthScope(strings.Join(scopes, " ")),
+			attr.SlogOAuthScopeAdded(strings.Join(resolution.Widened, " ")),
+		)
+	}
+
 	// A registration the issuer has stopped recognizing would send the user to
 	// an authorize page that errors without ever redirecting back. Replace it
 	// first, so the login proceeds under a client_id the issuer knows.
-	client = m.rotateRejectedRegistration(ctx, parent.OrganizationID, client)
+	client = m.rotateRejectedRegistration(ctx, parent.OrganizationID, client, scopes)
 
 	stateID, err := randomToken(32)
 	if err != nil {
@@ -1257,68 +1382,6 @@ func (m *ChallengeManager) mintAuthorization(
 		return "", fmt.Errorf("parse authorization_endpoint: %w", err)
 	}
 
-	var (
-		scopes      []string
-		omitScope   bool
-		resolution  ScopeResolution
-		resource    ResourceScopes
-		resolved    protectedresource.LoginResolution
-		resourceURL string
-	)
-	if retry {
-		// The retry leg is the same login: it asks for what the first leg did.
-		scopes = slices.Clone(retryOf.Scopes)
-		omitScope = retryOf.OmitScope
-	} else {
-		resource, resolved, resourceURL = m.loginResourceScopes(ctx, parent, client, discover)
-		resolution = client.RequestedScopes(resource)
-		scopes = resolution.Scopes
-		omitScope = resolution.Source == remotesessionmetrics.ScopeSourceIssuerOmitted
-		trace.SpanFromContext(ctx).SetAttributes(attr.OAuthScopeSource(resolution.Source), attr.OAuthResourceProbeOutcome(resolved.Outcome))
-		m.scopeMetrics.Record(ctx, resolution.Source, resolved.Outcome)
-		if resolved.ProbeDuration > 0 {
-			m.scopeMetrics.RecordProbe(ctx, resolved.Outcome, resolved.ProbeDuration)
-		}
-		m.logger.InfoContext(ctx, "resolved login scope",
-			attr.SlogProjectID(parent.ProjectID.String()),
-			attr.SlogOrganizationID(parent.OrganizationID),
-			attr.SlogOAuthIssuer(client.IssuerURL),
-			attr.SlogRemoteSessionClientID(client.ID.String()),
-			attr.SlogOAuthResource(resourceURL),
-			attr.SlogOAuthScopeSource(resolution.Source),
-			attr.SlogOAuthResourceProbeOutcome(resolved.Outcome),
-			attr.SlogOAuthScope(strings.Join(scopes, " ")),
-			attr.SlogOAuthResourceProbeDuration(resolved.ProbeDuration),
-		)
-	}
-	if len(resolution.Unadvertised) > 0 {
-		m.logger.InfoContext(ctx, "resource scope pin requests scopes the resource does not advertise",
-			attr.SlogProjectID(parent.ProjectID.String()),
-			attr.SlogOrganizationID(parent.OrganizationID),
-			attr.SlogOAuthIssuer(client.IssuerURL),
-			attr.SlogRemoteSessionClientID(client.ID.String()),
-			attr.SlogOAuthScope(strings.Join(scopes, " ")),
-			attr.SlogOAuthScopeUnadvertised(resolution.Unadvertised),
-			attr.SlogOAuthResourceScopesSupported(resource.ScopesSupported),
-			attr.SlogOAuthResourceProbeOutcome(resolved.Outcome),
-		)
-	}
-	if len(resolution.Widened) > 0 {
-		// Widening an operator's pin is worth seeing; widening a discovered base is routine.
-		logWidened := m.logger.DebugContext
-		if resolution.Source == remotesessionmetrics.ScopeSourceResourcePin {
-			logWidened = m.logger.InfoContext
-		}
-		logWidened(ctx, "requested scope widens the chosen scope base",
-			attr.SlogProjectID(parent.ProjectID.String()),
-			attr.SlogOrganizationID(parent.OrganizationID),
-			attr.SlogOAuthIssuer(client.IssuerURL),
-			attr.SlogRemoteSessionClientID(client.ID.String()),
-			attr.SlogOAuthScopeSource(resolution.Source),
-			attr.SlogOAuthScope(strings.Join(scopes, " ")),
-			attr.SlogOAuthScopeAdded(strings.Join(resolution.Widened, " ")),
-		)
-	}
 	// The resource stays on the session: a grant without one is unroutable.
 	omitResource := parent.Resource != "" && client.IssuerResourceIndicatorSupported != nil && !*client.IssuerResourceIndicatorSupported
 	expectedIssuer := ""
@@ -1327,6 +1390,7 @@ func (m *ChallengeManager) mintAuthorization(
 	}
 
 	state := RemoteLoginState{
+		ConnectionPopup:       parent.ConnectionPopup,
 		ID:                    stateID,
 		ParentChallengeID:     parent.ID,
 		ProjectID:             parent.ProjectID,
@@ -1345,6 +1409,7 @@ func (m *ChallengeManager) mintAuthorization(
 		MetaMcpServerID:       parent.MetaMcpServerID,
 		FinalRedirectURI:      parent.FinalRedirectURI,
 		ConsentURL:            parent.ConsentURL,
+		ConsentServer:         parent.ConsentServer,
 		AutoRefresh:           parent.AutoRefresh,
 		Authority:             parent.Authority,
 		Scopes:                scopes,
@@ -1394,6 +1459,34 @@ func (m *ChallengeManager) mintAuthorization(
 	return u.String(), nil
 }
 
+// errRemoteLoginWithoutOrganization rejects a login state minted before it
+// carried an organization; without one the write could overwrite another
+// organization's grant.
+var errRemoteLoginWithoutOrganization = errors.New("remote login state has no organization")
+
+// storeRemoteSessionGrant records a consent for (subject, client). A live
+// grant consented through another organization's sign-in is tombstoned first,
+// so the new row records the organization the consent was made in; otherwise
+// the grant is updated in place. q must be the caller's transaction, holding
+// the sign-in and client locks.
+func storeRemoteSessionGrant(ctx context.Context, q *remotesessions_repo.Queries, organizationID string, params remotesessions_repo.UpsertRemoteSessionParams) (remotesessions_repo.RemoteSession, error) {
+	if organizationID == "" {
+		return remotesessions_repo.RemoteSession{}, errRemoteLoginWithoutOrganization
+	}
+	if _, err := q.SoftDeleteRemoteSessionConsentedInOtherOrganization(ctx, remotesessions_repo.SoftDeleteRemoteSessionConsentedInOtherOrganizationParams{
+		SubjectUrn:            params.SubjectUrn,
+		RemoteSessionClientID: params.RemoteSessionClientID,
+		OrganizationID:        organizationID,
+	}); err != nil {
+		return remotesessions_repo.RemoteSession{}, fmt.Errorf("tombstone grant from another organization: %w", err)
+	}
+	sess, err := q.UpsertRemoteSession(ctx, params)
+	if err != nil {
+		return sess, fmt.Errorf("upsert remote session: %w", err)
+	}
+	return sess, nil
+}
+
 // HandleRemoteLoginCallback is the GET handler for
 // /mcp/remote_login_callback. Bound by mcp/ at route-mount time. The legacy
 // /mcp/{mcpSlug}/remote_login_callback route is still accepted, but the MCP
@@ -1441,10 +1534,10 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	// is consumed, so the issuer that answered it is known.
 	state, err := m.cache.GetAndDelete(ctx, "remoteLogin:"+stateID)
 	if err != nil {
-		if errCode != "" {
-			return none, denied(ctx, logger, q)
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			return none, fmt.Errorf("complete remote login: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "remote login state not found or expired").LogWarn(ctx, logger), oauthui.ReasonExpired))
 		}
-		return none, oops.E(oops.CodeUnauthorized, err, "remote login state not found or expired").LogError(ctx, logger)
+		return none, fmt.Errorf("complete remote login: %w", oops.WithBrowserReason(oops.E(oops.CodeUnavailable, err, "remote login state is temporarily unavailable").LogError(ctx, logger), oauthui.ReasonUnavailable))
 	}
 	mcpSlug := state.McpSlug
 	if mcpSlug == "" {
@@ -1477,6 +1570,18 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}
 
 	if errCode != "" {
+		if errCode == oautherr.CodeAccessDenied {
+			// Final destinations acknowledge a completed connection, so a canceled
+			// flow must stay on the callback page instead of claiming success.
+			if state.FinalRedirectURI != "" {
+				return none, fmt.Errorf("complete remote login: %w", oops.WithBrowserReason(oops.E(oops.CodeForbidden, nil, "sign-in was canceled"), oauthui.ReasonCanceled))
+			}
+			redirect, err := m.remoteLoginDestination(ctx, state, mcpSlug)
+			if err != nil {
+				return none, err
+			}
+			return RemoteLoginResult{RedirectURL: redirect, Grant: nil}, nil
+		}
 		if errCode == oautherr.CodeInvalidTarget {
 			cause := oautherr.RFC6749Error{
 				Code:        errCode,
@@ -1487,6 +1592,15 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		}
 		m.recordCIMDAuthorizationFailure(ctx, state, errCode, q.Get("error_description"))
 		return none, denied(ctx, logger, q)
+	}
+
+	// Only the default consent bounce is built from the route base; one no
+	// longer served fails before the code is exchanged.
+	if state.ConsentURL == "" && state.FinalRedirectURI == "" {
+		_, ok := state.RouteBase.Resolve()
+		if !ok {
+			return none, oops.E(oops.CodeUnauthorized, nil, "remote login state not found or expired").LogWarn(ctx, logger)
+		}
 	}
 
 	// Hoisted above the DB lookup + upstream code exchange so a state with a
@@ -1569,12 +1683,11 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		AssertionSigner:       m.assertions,
 	}, audience, code)
 	if err != nil {
-		var oauthErr oautherr.RFC6749Error
-		if errors.As(err, &oauthErr) && oauthErr.Code == oautherr.CodeInvalidTarget {
+		if oauthErr, ok := errors.AsType[oautherr.RFC6749Error](err); ok && oauthErr.Code == oautherr.CodeInvalidTarget {
 			return m.retryWithoutResource(ctx, logger, state, err)
 		}
 		m.noteExchangeTokenEndpointMissing(ctx, logger, client.ID, err)
-		return none, oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
+		return none, exchangeFailure(ctx, logger, err, clientRow.TunneledMcpServerID.Valid)
 	}
 	// The pair is live upstream from this line on, and every path out of here
 	// that does not store it strands it: unreachable through Speakeasy, and outside
@@ -1716,7 +1829,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
 	}
 
-	storedSession, err := txQueries.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	storedSession, err := storeRemoteSessionGrant(ctx, txQueries, state.OrganizationID, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:            *state.Subject,
 		UserSessionIssuerID:   state.UserSessionIssuerID,
 		RemoteSessionClientID: state.RemoteSessionClientID,
@@ -1737,6 +1850,9 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		Enrichment:          enrichment,
 	})
 	if err != nil {
+		if errors.Is(err, errRemoteLoginWithoutOrganization) {
+			return none, oops.E(oops.CodeUnauthorized, err, "this login expired, start it again").LogWarn(ctx, logger)
+		}
 		return none, oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
 	}
 
@@ -1745,9 +1861,41 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}
 	stranded = false
 
-	routeBase := state.RouteBase
-	if routeBase == "" {
-		routeBase = "mcp"
+	redirect, err := m.remoteLoginDestination(ctx, state, mcpSlug)
+	if err != nil {
+		return none, err
+	}
+	return RemoteLoginResult{
+		RedirectURL: redirect,
+		Grant: &RemoteGrant{
+			ConnectionPopup:        state.ConnectionPopup,
+			GrantGeneration:        storedSession.GrantGeneration,
+			ParentChallengeID:      state.ParentChallengeID,
+			UserSessionIssuerID:    state.UserSessionIssuerID,
+			RemoteSessionClientID:  client.ID,
+			Subject:                *state.Subject,
+			RemoteSessionID:        storedSession.ID,
+			RemoteSessionUpdatedAt: storedSession.UpdatedAt.Time,
+		},
+	}, nil
+}
+
+// remoteLoginDestination uses only the server-owned destination stored when the
+// flow started. Consent revalidates the parent challenge when the browser returns.
+func (m *ChallengeManager) remoteLoginDestination(ctx context.Context, state RemoteLoginState, mcpSlug string) (string, error) {
+	if state.FinalRedirectURI != "" {
+		return state.FinalRedirectURI, nil
+	}
+	if state.ConsentURL != "" {
+		redirect := state.ConsentURL
+		if state.ConsentServer != "" {
+			redirect += "&server=" + url.QueryEscape(state.ConsentServer)
+		}
+		return redirect, nil
+	}
+	routeBase, ok := state.RouteBase.Resolve()
+	if !ok {
+		return "", fmt.Errorf("complete remote login: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "remote login state not found or expired"), oauthui.ReasonExpired))
 	}
 	redirectBaseURL := m.serverURL.String()
 	if state.Authority.IsPrivate() {
@@ -1767,23 +1915,10 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		}
 	}
 	redirect := fmt.Sprintf("%s/%s/%s/connect?state=%s", strings.TrimRight(redirectBaseURL, "/"), routeBase, mcpSlug, url.QueryEscape(state.ParentChallengeID))
-	if state.ConsentURL != "" {
-		redirect = state.ConsentURL
+	if state.ConsentServer != "" {
+		redirect += "&server=" + url.QueryEscape(state.ConsentServer)
 	}
-	if state.FinalRedirectURI != "" {
-		redirect = state.FinalRedirectURI
-	}
-	return RemoteLoginResult{
-		RedirectURL: redirect,
-		Grant: &RemoteGrant{
-			ParentChallengeID:      state.ParentChallengeID,
-			UserSessionIssuerID:    state.UserSessionIssuerID,
-			RemoteSessionClientID:  client.ID,
-			Subject:                *state.Subject,
-			RemoteSessionID:        storedSession.ID,
-			RemoteSessionUpdatedAt: storedSession.UpdatedAt.Time,
-		},
-	}, nil
+	return redirect, nil
 }
 
 func (m *ChallengeManager) recordCIMDAuthorizationFailure(ctx context.Context, state RemoteLoginState, code, description string) {
@@ -1832,7 +1967,11 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 	var none RemoteLoginResult
 	logger = logger.With(attr.SlogOAuthError(oautherr.CodeInvalidTarget))
 	if state.Resource == "" || state.OmitResource || state.ResourceRetried {
-		return none, oops.E(oops.CodeUnauthorized, cause, "the identity provider rejected the requested resource").LogWarn(ctx, logger)
+		var attrs []slog.Attr
+		if endpointErr, ok := errors.AsType[*tokenEndpointError](cause); ok {
+			attrs = append(attrs, attr.SlogHTTPResponseStatusCode(endpointErr.statusCode))
+		}
+		return none, oops.E(oops.CodeUnauthorized, cause, "the identity provider rejected the requested resource").LogWarn(ctx, logger, attrs...)
 	}
 
 	clients, err := m.ListClients(ctx, state.ProjectID, state.OrganizationID, state.UserSessionIssuerID)
@@ -1861,13 +2000,12 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 }
 
 // canonicalCallbackRouteBase is the route base the outbound remote-login
-// redirect_uri uses. remote_login_callback is mounted slug-less under both /mcp
-// and /x/mcp and recovers the originating slug from the cached login state, so
-// one canonical base serves either surface. A single stable redirect_uri also
+// redirect_uri uses. remote_login_callback is mounted slug-less under /mcp and
+// recovers the originating slug from the cached login state. A single stable redirect_uri also
 // matches the lone redirect_uri a CIMD client publishes in its metadata
 // document; the originating surface lives in the login state's RouteBase for
 // the post-callback bounce.
-const canonicalCallbackRouteBase = "mcp"
+const canonicalCallbackRouteBase = mcproute.MCP
 
 // HandleLegacyProxyCallback is the shim behind `GET /oauth/callback`, the
 // oauth_proxy_servers-era redirect_uri that clients flagged LegacyCallbackUrl
@@ -1922,23 +2060,34 @@ func (m *ChallengeManager) exchangeCode(
 		return tokenResponse{}, &tokenExchangeUnavailableError{err: fmt.Errorf("read token response body: %w", err)}
 	}
 	if resp.StatusCode/100 != 2 {
-		return tokenResponse{}, newTokenEndpointError(resp.StatusCode, resp.Status, body)
+		endpointErr := newTokenEndpointError(resp.StatusCode, resp.Status, body)
+		endpointErr.tunnelError = resp.Header.Get(tunnelrouting.ErrorHeader)
+		return tokenResponse{}, endpointErr
 	}
 	var tok tokenResponse
-	if err := json.Unmarshal(body, &tok); err != nil {
-		return tokenResponse{}, fmt.Errorf("decode token response: %w", err)
-	}
-	if tok.AccessToken == "" {
-		return tokenResponse{}, errors.New("token endpoint returned no access_token")
+	decodeErr := json.Unmarshal(body, &tok)
+	if decodeErr != nil || tok.AccessToken == "" {
+		// An OAuth error body under 2xx is checked first: it may not decode as a token response at all.
+		if _, ok := oautherr.ParseTokenError(body); ok {
+			return tokenResponse{}, newTokenEndpointError(resp.StatusCode, resp.Status, body)
+		}
+		if decodeErr != nil {
+			return tokenResponse{}, &tokenEndpointError{statusCode: resp.StatusCode, tunnelError: "", err: fmt.Errorf("decode token response: %w", decodeErr)}
+		}
+		return tokenResponse{}, &tokenEndpointError{statusCode: resp.StatusCode, tunnelError: "", err: errors.New("token endpoint returned no access_token")}
 	}
 	tok.raw = body
 	return tok, nil
 }
 
-// tokenEndpointError is a non-2xx code exchange; the status is kept for the reactive metadata refresh, the text is unchanged.
+// tokenEndpointError is a code exchange the token endpoint answered without a usable token; the status is kept for the reactive metadata refresh, the text is unchanged.
 type tokenEndpointError struct {
 	statusCode int
-	err        error
+
+	// tunnelError is the tunnel gateway's error status when the gateway, not the provider, produced the response.
+	tunnelError string
+
+	err error
 }
 
 func (e *tokenEndpointError) Error() string { return e.err.Error() }
@@ -1950,9 +2099,73 @@ func newTokenEndpointError(statusCode int, status string, body []byte) *tokenEnd
 	if parsed, ok := oautherr.ParseTokenError(body); ok {
 		parsed.Description = truncateForMessage(parsed.Description)
 		parsed.URI = truncateForMessage(parsed.URI)
-		return &tokenEndpointError{statusCode: statusCode, err: fmt.Errorf("token endpoint %s: %w", status, parsed)}
+		return &tokenEndpointError{statusCode: statusCode, tunnelError: "", err: fmt.Errorf("token endpoint %s: %w", status, parsed)}
 	}
-	return &tokenEndpointError{statusCode: statusCode, err: fmt.Errorf("token endpoint %s: %s", status, truncateForMessage(string(body)))}
+	return &tokenEndpointError{statusCode: statusCode, tunnelError: "", err: fmt.Errorf("token endpoint %s: %s", status, truncateForMessage(string(body)))}
+}
+
+// exchangeFailure names why the code exchange failed with fixed text only: an
+// IETF-registered OAuth error code, the token endpoint's non-2xx status, or a
+// fixed reason for transport, tunnel and signing failures. The provider's
+// description and vendor codes reach logs only. invalid_grant stays at error
+// level: a PKCE verifier or redirect_uri regression on our side answers it too.
+func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunneled bool) *oops.ShareableError {
+	const message = "token exchange with the identity provider failed"
+	if _, ok := errors.AsType[*tokenEndpointSigningError](err); ok {
+		code := oops.CodeUnexpected
+		if errors.Is(err, errTokenEndpointSigningUnavailable) {
+			code = oops.CodeUnavailable
+		}
+		return oops.E(code, err, "%s: the client assertion could not be signed", message).LogError(ctx, logger)
+	}
+	if _, ok := errors.AsType[*tokenExchangeUnavailableError](err); ok {
+		reason := "the identity provider could not be reached"
+		if errors.Is(err, tunnelrouting.ErrNoTunnelRoute) {
+			reason = "the MCP tunnel is not connected"
+		}
+		return oops.E(oops.CodeGatewayError, err, "%s: %s", message, reason).LogError(ctx, logger)
+	}
+	endpointErr, ok := errors.AsType[*tokenEndpointError](err)
+	if !ok {
+		return oops.E(oops.CodeUnauthorized, err, message).LogError(ctx, logger)
+	}
+
+	attrs := []slog.Attr{attr.SlogHTTPResponseStatusCode(endpointErr.statusCode)}
+	if tunneled && endpointErr.tunnelError != "" {
+		return oops.E(oops.CodeGatewayError, err, "%s: the MCP tunnel could not reach the identity provider", message).LogError(ctx, logger, attrs...)
+	}
+	code := ""
+	if oauthErr, ok := errors.AsType[oautherr.RFC6749Error](err); ok {
+		code = tokenEndpointErrorCode(oauthErr.Code)
+		if code != "" {
+			attrs = append(attrs, attr.SlogOAuthError(code))
+		}
+		attrs = append(attrs, attr.SlogOAuthErrorDescription(ProviderErrorDescription(oauthErr.Description)))
+	}
+	status := exchangeFailureCode(endpointErr.statusCode, code)
+	switch {
+	case oautherr.IsIETFRegisteredCode(code):
+		return oops.E(status, err, "%s: %s", message, code).LogError(ctx, logger, attrs...)
+	case endpointErr.statusCode/100 == 2:
+		return oops.E(status, err, message).LogError(ctx, logger, attrs...)
+	case tunneled && endpointErr.statusCode == http.StatusBadGateway:
+		// The tunnel agent answers a bare 502 when it cannot reach the provider, indistinguishable from the provider's own.
+		return oops.E(status, err, "%s: HTTP 502 from the identity provider or the MCP tunnel agent", message).LogError(ctx, logger, attrs...)
+	default:
+		return oops.E(status, err, "%s: HTTP %d", message, endpointErr.statusCode).LogError(ctx, logger, attrs...)
+	}
+}
+
+// exchangeFailureCode answers a provider outage with 503 or 502 rather than blaming the user's credentials with 401.
+func exchangeFailureCode(status int, oauthCode string) oops.Code {
+	switch {
+	case oauthCode == oautherr.CodeTemporarilyUnavailable, status == http.StatusServiceUnavailable:
+		return oops.CodeUnavailable
+	case oauthCode == oautherr.CodeServerError, status >= http.StatusInternalServerError:
+		return oops.CodeGatewayError
+	default:
+		return oops.CodeUnauthorized
+	}
 }
 
 // exchangeIssuerReadBudget bounds the detached issuer read a withdrawn token endpoint triggers.

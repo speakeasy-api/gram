@@ -77,9 +77,9 @@ func TestAgentBackedTurnsRunWithPrincipalCredentials(t *testing.T) {
 	seedProjectRead(t, db, "user-2", project)
 	seedMCPConnect(t, db, "user-1", project)
 	core := newProvisioningCore(t, db)
-	assistant, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Execution", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true)
+	assistant, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Execution", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
 	require.NoError(t, err)
-	toolset, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{OrganizationID: "org-test", ProjectID: project, Name: "Business", Slug: "business", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: pgtype.Text{}, McpEnabled: true})
+	toolset, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{OrganizationID: "org-test", ProjectID: project, Name: "Business", Slug: "business", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}})
 	require.NoError(t, err)
 	thread := seedThreadWithEvent(t, db, assistant.ID, "execution-authorization", "execution-authorization", eventStatusPending)
 
@@ -89,7 +89,7 @@ func TestAgentBackedTurnsRunWithPrincipalCredentials(t *testing.T) {
 	manager := assistanttokens.New("test-secret", db, engine, newTestPrincipalCredentials(t, db), cache.NewRedisCacheAdapter(redisClient))
 	core.assistantTokens = manager
 	var dispatched atomic.Pointer[string]
-	core.runtime = testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnToken: &dispatched}
+	core.runtime = testRuntimeBackend{backend: runtimeBackendGKE, runTurnToken: &dispatched}
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), project.String())
 
 	turn := func(source, payload string) string {
@@ -122,6 +122,9 @@ func TestAgentBackedTurnsRunWithPrincipalCredentials(t *testing.T) {
 	credential, ok := contextvalues.PrincipalCredentialAuthorization(ctx)
 	require.True(t, ok)
 	require.Equal(t, "user-2", credential.AuthorizerUserID)
+	humanBinding, ok := principalcredential.FromContext(ctx)
+	require.True(t, ok)
+	require.True(t, humanBinding.Credential.SelectionProfileVersionID.Valid, "a turn binds its execution-selection profile version")
 	admitted, err = engine.PrepareContext(ctx)
 	require.NoError(t, err)
 	require.NoError(t, engine.Require(admitted, connect), "the agent's starting access covers project MCP servers")
@@ -133,9 +136,41 @@ func TestAgentBackedTurnsRunWithPrincipalCredentials(t *testing.T) {
 	actor, ok = contextvalues.AuthenticatedActor(ctx)
 	require.True(t, ok)
 	require.Equal(t, urn.PrincipalTypeWorkload, actor.Type)
+	autonomousBinding, ok := principalcredential.FromContext(ctx)
+	require.True(t, ok)
+	require.True(t, autonomousBinding.Credential.SelectionProfileVersionID.Valid)
+	require.NotEqual(t, humanBinding.Credential.SelectionProfileVersionID, autonomousBinding.Credential.SelectionProfileVersionID, "turns with and without a user bind separate profiles")
 	admitted, err = engine.PrepareContext(ctx)
 	require.NoError(t, err)
 	require.NoError(t, engine.Require(admitted, connect))
+
+	ownerSelector := authz.NewSelector(authz.ScopeMCPConnect, authz.WildcardResource)
+	ownerSelector[authz.SelectorKeyProjectID] = project.String()
+	ownerSelectors, err := ownerSelector.MarshalJSON()
+	require.NoError(t, err)
+	removed, err := accessrepo.New(db).DeletePrincipalGrantByIdentity(t.Context(), accessrepo.DeletePrincipalGrantByIdentityParams{
+		OrganizationID: "org-test", PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"),
+		Scope: string(authz.ScopeMCPConnect), Selectors: ownerSelectors,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), removed)
+	for _, token := range []string{human, autonomous} {
+		ctx, _, err := manager.AuthorizeRuntime(t.Context(), token)
+		require.NoError(t, err, "business permission loss does not invalidate trigger authentication")
+		admitted, err := engine.PrepareContext(ctx)
+		require.NoError(t, err)
+		var denied *oops.ShareableError
+		require.ErrorAs(t, engine.Require(admitted, connect), &denied)
+		require.Equal(t, oops.CodeForbidden, denied.Code, "human and autonomous turns both follow the current owner")
+	}
+	seedMCPConnect(t, db, "user-1", project)
+	for _, token := range []string{human, autonomous} {
+		ctx, _, err := manager.AuthorizeRuntime(t.Context(), token)
+		require.NoError(t, err)
+		admitted, err := engine.PrepareContext(ctx)
+		require.NoError(t, err)
+		require.NoError(t, engine.Require(admitted, connect), "restoration permits already approved business access")
+	}
 
 	deleteAgentScope(t, db, *assistant.AgentID, authz.ScopeMCPConnect)
 	deleteAgentScope(t, db, *assistant.AgentID, authz.ScopeMCPRead)
@@ -169,7 +204,7 @@ func TestUnmigratedAssistantDispatchKeepsOriginalToken(t *testing.T) {
 	manager := assistanttokens.New("legacy-test-secret", db, nil, nil, nil)
 	core.assistantTokens = manager
 	var dispatched atomic.Pointer[string]
-	core.runtime = testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnToken: &dispatched}
+	core.runtime = testRuntimeBackend{backend: runtimeBackendGKE, runTurnToken: &dispatched}
 	_, err = core.processEventTurn(t.Context(), assistantThreadRecord{ID: thread, ProjectID: project, AssistantID: id, SourceKind: sourceKindCron}, assistant, assistantRuntimeRecord{}, assistantThreadEventRecord{ID: uuid.New(), EventID: "legacy-token", NormalizedPayloadJSON: []byte(`{}`)})
 	require.NoError(t, err)
 	require.False(t, assistanttokens.IsRuntimeCredential(*dispatched.Load()))

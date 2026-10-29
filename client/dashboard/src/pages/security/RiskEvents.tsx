@@ -1,4 +1,5 @@
 import { RiskSetupEmptyState } from "@/components/setup-empty-state";
+import { customDateRangeBounds } from "@/components/filters/filter-schema";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { IdentityLink } from "@/components/identity-link";
 import { identityRefForUserKey } from "@/lib/identity-urn";
@@ -56,6 +57,7 @@ import {
 } from "./mcp-finding-context";
 import { useDismissFinding } from "./useDismissFinding";
 import { useSetupExclusionRule } from "./useSetupExclusionRule";
+import { riskCategoryFilterOptions } from "./risk-category-options";
 import {
   CategoryLabel,
   EventMatchDialog,
@@ -128,6 +130,9 @@ const RISK_FILTERS = defineFilters([
   { id: "policy_id", label: "Policy", kind: "select", pinned: true },
   { id: "date", label: "Date range", kind: "daterange", pinned: true },
   { id: "mcp_server_id", label: "MCP server", kind: "select", pinned: true },
+  // The category the finding was classified into at ingest (Secrets, Shadow
+  // AI, ...): the one axis that cuts across policies and rules.
+  { id: "category", label: "Category", kind: "select", pinned: true },
   {
     id: "rule_id",
     label: "Rule ID",
@@ -185,6 +190,7 @@ export default function RiskEvents(): JSX.Element {
     useFilterState(RISK_FILTERS);
   const policyFilter = values.policy_id ?? "";
   const mcpServerFilter = values.mcp_server_id ?? "";
+  const categoryFilter = values.category ?? "";
   const ruleFilter = values.rule_id;
   const userFilter = values.user_id;
   const identifierFilter = values.identifier;
@@ -205,7 +211,8 @@ export default function RiskEvents(): JSX.Element {
   // range means "all time" (no from/to sent) — Risk Events' previous behavior.
   const { from, to } = useMemo(() => {
     const d = values.date;
-    if (d.customRange) return d.customRange;
+    const customRange = customDateRangeBounds(d);
+    if (customRange) return customRange;
     if (d.preset) return getPresetRange(d.preset);
     return { from: undefined, to: undefined };
   }, [values.date]);
@@ -406,6 +413,7 @@ export default function RiskEvents(): JSX.Element {
           value: toolset.id,
         })),
       ],
+      category: riskCategoryFilterOptions(),
       rule_id: ruleSuggestions.map((r) => ({ label: r, value: r })),
       identifier: identifierFilter.map((id) => ({ label: id, value: id })),
       assistant: [
@@ -435,6 +443,7 @@ export default function RiskEvents(): JSX.Element {
   }, [
     policyFilter,
     mcpServerFilter,
+    categoryFilter,
     ruleFilter,
     userFilter,
     identifierKey,
@@ -451,6 +460,7 @@ export default function RiskEvents(): JSX.Element {
       "list",
       policyFilter,
       mcpServerFilter,
+      categoryFilter,
       ruleFilter,
       userFilter,
       identifierKey,
@@ -465,6 +475,7 @@ export default function RiskEvents(): JSX.Element {
         limit: 50,
         policyId: policyFilter || undefined,
         mcpServerId: mcpServerFilter || undefined,
+        category: categoryFilter || undefined,
         ruleId: ruleFilter || undefined,
         userId: userFilter || undefined,
         externalUserIds:

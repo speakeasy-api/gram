@@ -266,6 +266,65 @@ describe("Overview", () => {
     expect(screen.queryByRole("link", { name: "Open in WorkOS" })).toBeNull();
   });
 
+  it("links the Stripe customer and subscription IDs to the Stripe dashboard in a new tab", async () => {
+    const customerLink =
+      "https://dashboard.stripe.com/test/customers/cus_placeholder";
+    const subscriptionLink =
+      "https://dashboard.stripe.com/test/subscriptions/sub_placeholder";
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      account_type: "payg",
+      stripe_customer_id: "cus_placeholder",
+      stripe_subscription_id: "sub_placeholder",
+      stripe_customer_dashboard_url: customerLink,
+      stripe_subscription_dashboard_url: subscriptionLink,
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    for (const [rowLabel, linkName, href, copyName] of [
+      [
+        "Stripe customer ID",
+        "Open customer in Stripe",
+        customerLink,
+        "Copy Stripe customer ID",
+      ],
+      [
+        "Stripe subscription ID",
+        "Open subscription in Stripe",
+        subscriptionLink,
+        "Copy Stripe subscription ID",
+      ],
+    ] as const) {
+      const open = await screen.findByRole("link", { name: linkName });
+      expect(open.getAttribute("href")).toBe(href);
+      expect(open.getAttribute("target")).toBe("_blank");
+      expect(open.getAttribute("rel")).toBe("noopener noreferrer");
+      const row = valueBeside(rowLabel);
+      expect(row.contains(open)).toBe(true);
+      expect(within(row).getByRole("button", { name: copyName })).toBeTruthy();
+    }
+  });
+
+  it("keeps the Stripe IDs copyable without Stripe links", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      account_type: "payg",
+      stripe_customer_id: "cus_placeholder",
+      stripe_subscription_id: "sub_placeholder",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("button", { name: "Copy Stripe customer ID" });
+    expect(
+      screen.getByRole("button", { name: "Copy Stripe subscription ID" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /in Stripe$/ })).toBeNull();
+  });
+
   it("holds the playbook as a details row and the stack between the details and the danger zone", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,

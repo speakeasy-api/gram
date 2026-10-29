@@ -3444,6 +3444,43 @@ func DecodeDeleteRemoteSessionClientResponse(decoder func(*http.Response) goahtt
 	}
 }
 
+// unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder builds a value
+// of type *types.EMAProviderOrder from a value of type
+// *EMAProviderOrderResponseBody.
+func unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(v *EMAProviderOrderResponseBody) *types.EMAProviderOrder {
+	if v == nil {
+		return nil
+	}
+	res := &types.EMAProviderOrder{
+		VendorIssuer: *v.VendorIssuer,
+		IsDefault:    *v.IsDefault,
+	}
+	res.Providers = make([]*types.EMAProvider, len(v.Providers))
+	for i, val := range v.Providers {
+		if val == nil {
+			res.Providers[i] = nil
+			continue
+		}
+		res.Providers[i] = unmarshalEMAProviderResponseBodyToTypesEMAProvider(val)
+	}
+
+	return res
+}
+
+// unmarshalEMAProviderResponseBodyToTypesEMAProvider builds a value of type
+// *types.EMAProvider from a value of type *EMAProviderResponseBody.
+func unmarshalEMAProviderResponseBodyToTypesEMAProvider(v *EMAProviderResponseBody) *types.EMAProvider {
+	res := &types.EMAProvider{
+		Kind:                    *v.Kind,
+		RemoteSessionIssuerID:   v.RemoteSessionIssuerID,
+		InternalSessionIssuerID: v.InternalSessionIssuerID,
+		UnavailableReason:       v.UnavailableReason,
+		LastAcceptedAt:          v.LastAcceptedAt,
+	}
+
+	return res
+}
+
 // unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient builds a
 // value of type *types.RemoteSessionClient from a value of type
 // *RemoteSessionClientResponseBody.
@@ -3454,6 +3491,7 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		OrganizationID:                  *v.OrganizationID,
 		RemoteSessionIssuerID:           *v.RemoteSessionIssuerID,
 		ClientID:                        *v.ClientID,
+		DisplayName:                     v.DisplayName,
 		ClientIDMetadataURI:             v.ClientIDMetadataURI,
 		ClientIDIssuedAt:                v.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           v.ClientSecretExpiresAt,

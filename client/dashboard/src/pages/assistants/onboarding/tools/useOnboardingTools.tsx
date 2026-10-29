@@ -337,7 +337,8 @@ type AttachToolsetArgs = {
 };
 type DetachToolsetArgs = { toolset_slug: string };
 type AttachMCPServerArgs = {
-  mcp_server_slug: string;
+  mcp_server_slug?: string;
+  toolset_slug?: string;
   environment_slug?: string;
 };
 type DetachMCPServerArgs = { mcp_server_slug: string };
@@ -820,10 +821,51 @@ function buildAssistantTools(deps: ToolDeps) {
     "set_tasks",
   );
 
+  // Attaches a toolset's hosted MCP server; the server stores it by server id.
+  const attachToolset = ({
+    toolset_slug,
+    environment_slug,
+  }: AttachToolsetArgs) =>
+    serialize(async () => {
+      try {
+        const a = await ensureAssistant(deps, {}, live.id);
+        trackLive(a);
+        const notes: string[] = [];
+        let boundSlug = environment_slug;
+        if (!boundSlug) {
+          const envResult = await ensureAssistantEnv(deps, a.name);
+          boundSlug = envResult.env.slug;
+          if (envResult.note) notes.push(envResult.note);
+        }
+        const next = a.toolsets
+          .filter((t) => t.toolsetSlug !== toolset_slug)
+          .concat([
+            {
+              toolsetSlug: toolset_slug,
+              environmentSlug: boundSlug,
+            },
+          ]);
+        const updated = await sdk.assistants.update({
+          updateAssistantForm: { id: a.id, toolsets: next },
+        });
+        draft.setAssistant(updated);
+        trackLive(updated);
+        draft.invalidateAll();
+        await recomputeBehaviorSection(deps, updated);
+        return okResult({
+          toolsets: updated.toolsets,
+          environment_slug: boundSlug,
+          ...(notes.length > 0 ? { notes } : {}),
+        });
+      } catch (e) {
+        return errResult(e instanceof Error ? e.message : "attach failed");
+      }
+    });
+
   const attach_toolset = defineFrontendTool<AttachToolsetArgs, ToolResult>(
     {
       description:
-        "Attach an existing toolset to the assistant so it can call those tools at runtime. By default the toolset is bound to the assistant's shared environment; pass environment_slug only to override. Replaces any prior reference to the same toolset_slug.",
+        "Alias of attach_mcp_server with toolset_slug: attach a toolset's MCP server to the assistant. By default it is bound to the assistant's shared environment; pass environment_slug only to override. Replaces any prior reference to the same toolset_slug.",
       parameters: z.object({
         toolset_slug: z.string(),
         environment_slug: z
@@ -833,43 +875,7 @@ function buildAssistantTools(deps: ToolDeps) {
             "Override the assistant's shared environment for this toolset. Omit in almost all cases — the assistant's env is used by default.",
           ),
       }),
-      execute: async (args) =>
-        serialize(async () => {
-          const { toolset_slug, environment_slug } = args as AttachToolsetArgs;
-          try {
-            const a = await ensureAssistant(deps, {}, live.id);
-            trackLive(a);
-            const notes: string[] = [];
-            let boundSlug = environment_slug;
-            if (!boundSlug) {
-              const envResult = await ensureAssistantEnv(deps, a.name);
-              boundSlug = envResult.env.slug;
-              if (envResult.note) notes.push(envResult.note);
-            }
-            const next = a.toolsets
-              .filter((t) => t.toolsetSlug !== toolset_slug)
-              .concat([
-                {
-                  toolsetSlug: toolset_slug,
-                  environmentSlug: boundSlug,
-                },
-              ]);
-            const updated = await sdk.assistants.update({
-              updateAssistantForm: { id: a.id, toolsets: next },
-            });
-            draft.setAssistant(updated);
-            trackLive(updated);
-            draft.invalidateAll();
-            await recomputeBehaviorSection(deps, updated);
-            return okResult({
-              toolsets: updated.toolsets,
-              environment_slug: boundSlug,
-              ...(notes.length > 0 ? { notes } : {}),
-            });
-          } catch (e) {
-            return errResult(e instanceof Error ? e.message : "attach failed");
-          }
-        }),
+      execute: async (args) => attachToolset(args as AttachToolsetArgs),
     },
     "attach_toolset",
   );
@@ -908,9 +914,10 @@ function buildAssistantTools(deps: ToolDeps) {
   const attach_mcp_server = defineFrontendTool<AttachMCPServerArgs, ToolResult>(
     {
       description:
-        "Attach an MCP server registered in this project (a remote external-SaaS MCP server) to the assistant so it can call those tools at runtime. Use this for MCP servers that are NOT backed by a Speakeasy toolset — attach_toolset covers toolset-backed ones. Find the slug with list_mcp_servers; tunnelled or disabled servers are rejected. Pass environment_slug only when the server needs a specific environment's variables; most remote servers carry their own connection auth and need none. Replaces any prior reference to the same mcp_server_slug.",
+        "Attach an MCP server to the assistant so it can call those tools at runtime. Pass exactly one of mcp_server_slug (any server from list_mcp_servers; tunnelled, disabled, or servers without a Speakeasy-hosted MCP endpoint are rejected) or toolset_slug (a toolset's MCP server, turned on if needed and bound to the assistant's shared environment by default). For mcp_server_slug, pass environment_slug only when the server needs a specific environment's variables; most remote servers carry their own connection auth and need none. Replaces any prior reference to the same server.",
       parameters: z.object({
-        mcp_server_slug: z.string(),
+        mcp_server_slug: z.string().optional(),
+        toolset_slug: z.string().optional(),
         environment_slug: z
           .string()
           .optional()
@@ -918,18 +925,28 @@ function buildAssistantTools(deps: ToolDeps) {
             "Bind a specific environment for this server. Omit for remote servers that authenticate through their own connection.",
           ),
       }),
-      execute: async (args) =>
-        serialize(async () => {
-          const { mcp_server_slug, environment_slug } =
-            args as AttachMCPServerArgs;
+      execute: async (args) => {
+        const { mcp_server_slug, toolset_slug, environment_slug } =
+          args as AttachMCPServerArgs;
+        if (!mcp_server_slug === !toolset_slug) {
+          return errResult(
+            "Pass exactly one of mcp_server_slug or toolset_slug.",
+          );
+        }
+        if (toolset_slug) {
+          return attachToolset({ toolset_slug, environment_slug });
+        }
+        const serverSlug = mcp_server_slug ?? "";
+        return serialize(async () => {
           try {
             const a = await ensureAssistant(deps, {}, live.id);
             trackLive(a);
+            // Hosted servers are listed under toolsets and stay attached.
             const next = (a.mcpServers ?? [])
-              .filter((m) => m.mcpServerSlug !== mcp_server_slug)
+              .filter((m) => m.mcpServerSlug !== serverSlug)
               .concat([
                 {
-                  mcpServerSlug: mcp_server_slug,
+                  mcpServerSlug: serverSlug,
                   environmentSlug: environment_slug,
                 },
               ]);
@@ -939,17 +956,30 @@ function buildAssistantTools(deps: ToolDeps) {
             draft.setAssistant(updated);
             trackLive(updated);
             draft.invalidateAll();
+            await recomputeBehaviorSection(deps, updated);
             return okResult({
               mcp_servers: updated.mcpServers,
+              toolsets: updated.toolsets,
               ...(environment_slug ? { environment_slug } : {}),
             });
           } catch (e) {
             return errResult(e instanceof Error ? e.message : "attach failed");
           }
-        }),
+        });
+      },
     },
     "attach_mcp_server",
   );
+
+  const hostedToolsetSlug = async (
+    serverSlug: string,
+  ): Promise<string | undefined> => {
+    const servers = await sdk.mcpServers.list();
+    const server = servers.mcpServers.find((m) => m.slug === serverSlug);
+    if (!server?.toolsetId || server.toolsetId !== server.id) return undefined;
+    const toolsets = await sdk.toolsets.list();
+    return toolsets.toolsets.find((t) => t.id === server.toolsetId)?.slug;
+  };
 
   const detach_mcp_server = defineFrontendTool<DetachMCPServerArgs, ToolResult>(
     {
@@ -963,16 +993,46 @@ function buildAssistantTools(deps: ToolDeps) {
             if (!live.id) {
               return errResult("No assistant exists yet. Create one first.");
             }
-            const next = live.mcpServers.filter(
-              (m) => m.mcpServerSlug !== mcp_server_slug,
+            trackLive(await ensureAssistant(deps, {}, live.id));
+            const direct = live.mcpServers.some(
+              (m) => m.mcpServerSlug === mcp_server_slug,
             );
+            // Hosted servers are listed under toolsets; detach through the backing toolset.
+            const hostedSlug = direct
+              ? undefined
+              : await hostedToolsetSlug(mcp_server_slug);
+            if (
+              !direct &&
+              !live.toolsets.some((t) => t.toolsetSlug === hostedSlug)
+            ) {
+              return errResult(
+                `MCP server "${mcp_server_slug}" is not attached to this assistant.`,
+              );
+            }
             const updated = await sdk.assistants.update({
-              updateAssistantForm: { id: live.id, mcpServers: next },
+              updateAssistantForm:
+                hostedSlug !== undefined
+                  ? {
+                      id: live.id,
+                      toolsets: live.toolsets.filter(
+                        (t) => t.toolsetSlug !== hostedSlug,
+                      ),
+                    }
+                  : {
+                      id: live.id,
+                      mcpServers: live.mcpServers.filter(
+                        (m) => m.mcpServerSlug !== mcp_server_slug,
+                      ),
+                    },
             });
             draft.setAssistant(updated);
             trackLive(updated);
             draft.invalidateAll();
-            return okResult({ mcp_servers: updated.mcpServers });
+            await recomputeBehaviorSection(deps, updated);
+            return okResult({
+              mcp_servers: updated.mcpServers,
+              toolsets: updated.toolsets,
+            });
           } catch (e) {
             return errResult(e instanceof Error ? e.message : "detach failed");
           }
@@ -1152,7 +1212,7 @@ function buildAssistantTools(deps: ToolDeps) {
   >(
     {
       description:
-        "List MCP servers registered in the current project — remote (external SaaS) and tunnelled servers as well as toolset-backed ones. Use this to find the slug for attach_mcp_server when the user asks to add an MCP server that is not a Speakeasy toolset. Only enabled, non-tunnelled servers are attachable.",
+        "List MCP servers registered in the current project — remote (external SaaS) and tunnelled servers as well as toolset-backed ones. Use this to find the slug for attach_mcp_server when the user asks to add an MCP server that is not a Speakeasy toolset. Only enabled, non-tunnelled servers with a Speakeasy-hosted MCP endpoint are attachable.",
       parameters: z.object({}),
       execute: async () => {
         try {

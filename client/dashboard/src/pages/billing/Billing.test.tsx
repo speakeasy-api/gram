@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +21,9 @@ const mocks = vi.hoisted(() => ({
   periodUsage: vi.fn(),
   inferenceCaps: vi.fn(),
   usageTiers: vi.fn(),
+  sdk: { usage: { createCheckout: vi.fn() } },
+  telemetry: { capture: vi.fn() },
+  polarInit: vi.fn(),
 }));
 
 vi.mock("@/hooks/useProductTier", () => ({
@@ -37,9 +46,13 @@ vi.mock("@/contexts/Auth", () => ({
   }),
 }));
 
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({ usage: {} }) }));
+vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => mocks.sdk }));
 vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetry: () => ({ capture: vi.fn() }),
+  useTelemetry: () => mocks.telemetry,
+}));
+
+vi.mock("@polar-sh/checkout/embed", () => ({
+  PolarEmbedCheckout: { init: mocks.polarInit },
 }));
 
 vi.mock("@gram/client/react-query/createStripeCheckout.js", () => ({
@@ -201,18 +214,23 @@ function renderBilling() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const view = () => (
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/example/billing"]}>
         <Billing />
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const result = render(view());
+  return { ...result, refresh: () => result.rerender(view()) };
 }
 
 describe("Billing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.sdk.usage.createCheckout.mockResolvedValue(
+      "https://checkout.example.com/session",
+    );
     mocks.productTier.mockReturnValue("base");
     mocks.flagResult.mockReturnValue({ status: "enabled" });
     mocks.hasScope.mockReturnValue(true);
@@ -285,7 +303,59 @@ describe("Billing", () => {
     expect(cta()).not.toBeNull();
     // The rates for the plan the CTA starts sit on this branch too.
     expect(screen.getByText("Pay as you go pricing")).toBeTruthy();
+    expect(mocks.sdk.usage.createCheckout).not.toHaveBeenCalled();
+    expect(mocks.polarInit).not.toHaveBeenCalled();
   });
+
+  it.each(["success", "404"])(
+    "recovers a Base subscription lookup failure with %s without premature checkout",
+    (outcome) => {
+      mocks.session.mockReturnValue({ trial: undefined });
+      const refetch = vi.fn();
+      const failed = {
+        data: undefined,
+        error: { statusCode: 503 },
+        isError: true,
+        isFetching: false,
+        refetch,
+      };
+      mocks.subscription.mockReturnValue(failed);
+      const { refresh } = renderBilling();
+      expect(paymentSection()).not.toBeNull();
+      expect(screen.getByRole("alert").textContent).toContain(
+        "Couldn't load your subscription.",
+      );
+      expect(cta()).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "RETRY" }));
+      expect(refetch).toHaveBeenCalledOnce();
+
+      mocks.subscription.mockReturnValue({ ...failed, isFetching: true });
+      refresh();
+      expect(
+        screen
+          .getByRole("button", { name: "RETRYING..." })
+          .hasAttribute("disabled"),
+      ).toBe(true);
+      expect(cta()).toBeNull();
+
+      mocks.subscription.mockReturnValue(
+        outcome === "404"
+          ? { ...failed, error: { statusCode: 404 } }
+          : {
+              ...failed,
+              data: { status: "active", paymentFailed: false },
+              error: null,
+              isError: false,
+            },
+      );
+      refresh();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(cta() !== null).toBe(outcome === "404");
+      expect(paymentSection() !== null).toBe(outcome === "404");
+      expect(mocks.sdk.usage.createCheckout).not.toHaveBeenCalled();
+      expect(mocks.polarInit).not.toHaveBeenCalled();
+    },
+  );
 
   // Trials on the enterprise tier must retain the checkout CTA.
   it("offers pay as you go on the enterprise billing view", () => {
@@ -321,6 +391,8 @@ describe("Billing", () => {
     // The pricing section states rates; the plan's product features are not
     // one of them.
     expect(screen.queryByText("Enterprise feature set")).toBeNull();
+    expect(mocks.sdk.usage.createCheckout).not.toHaveBeenCalled();
+    expect(mocks.polarInit).not.toHaveBeenCalled();
   });
 
   it("shows no checkout CTA to a member", () => {
@@ -336,6 +408,51 @@ describe("Billing", () => {
         screen.getByRole("heading", { name: "Pay as you go pricing" }),
       ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it.each([undefined, "tailscale_partner_gateway"])(
+    "offers Free/Base payment setup without a trial (%s)",
+    (flow) => {
+      mocks.productTier.mockReturnValue("base");
+      mocks.session.mockReturnValue({
+        trial: null,
+        rawGramAccountType: "free",
+        hasActiveSubscription: false,
+        acceptedSignupOfferFlow: flow,
+      });
+      mocks.subscription.mockReturnValue({
+        data: undefined,
+        error: { statusCode: 404 },
+        isError: true,
+        isFetching: false,
+      });
+      renderBilling();
+      expect(paymentSection()).not.toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Add payment method" }),
+      ).toBeTruthy();
+      expect(
+        Boolean(screen.queryByText(/accepted Tailscale partner promotion/)),
+      ).toBe(flow === "tailscale_partner_gateway");
+      expect(screen.queryByText(/when your trial ends/)).toBeNull();
+    },
+  );
+
+  it("does not offer Free/Base setup while subscription status is unknown", () => {
+    mocks.session.mockReturnValue({
+      trial: null,
+      rawGramAccountType: "free",
+      hasActiveSubscription: false,
+    });
+    mocks.subscription.mockReturnValue({
+      isError: true,
+      error: new Error("unavailable"),
+      isFetching: false,
+    });
+    renderBilling();
+    expect(paymentSection()).not.toBeNull();
+    expect(cta()).toBeNull();
+    expect(screen.getByRole("button", { name: "RETRY" })).toBeTruthy();
   });
 
   // Billing notifications are a pay-as-you-go concern: enterprise orgs are
@@ -496,6 +613,8 @@ describe("Billing", () => {
     expect(screen.getByText("meter usage")).toBeTruthy();
     expect(inferenceCapsSection()).toBeNull();
     expect(mocks.inferenceCaps).not.toHaveBeenCalled();
+    expect(mocks.sdk.usage.createCheckout).not.toHaveBeenCalled();
+    expect(mocks.polarInit).not.toHaveBeenCalled();
   });
 
   it.each<ProductTier>(["base", "base_PAID", "__deprecated__pro"])(
@@ -510,6 +629,27 @@ describe("Billing", () => {
       expect(meterUsageSection()).toBeNull();
       expect(spendBreakdownSection()).toBeNull();
       expect(mocks.inferenceCaps).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each<ProductTier>(["base_PAID", "__deprecated__pro"])(
+    "initializes Polar checkout for the legacy %s billing view",
+    async (tier) => {
+      mocks.productTier.mockReturnValue(tier);
+      renderBilling();
+
+      await waitFor(() =>
+        expect(mocks.polarInit).toHaveBeenCalledExactlyOnceWith(),
+      );
+      expect(mocks.sdk.usage.createCheckout).toHaveBeenCalledExactlyOnceWith();
+      expect(
+        screen.getByRole("button", { name: "MANAGE BILLING" }),
+      ).toBeTruthy();
+      expect(screen.queryByRole("link", { name: "ADD CARD" })).toBeNull();
+      expect(mocks.telemetry.capture).not.toHaveBeenCalledWith(
+        "checkout_link_error",
+        expect.anything(),
+      );
     },
   );
 
@@ -539,5 +679,7 @@ describe("Billing", () => {
 
     expect(cta()).toBeNull();
     expect(screen.queryByText("Pay as you go pricing")).toBeNull();
+    expect(mocks.sdk.usage.createCheckout).not.toHaveBeenCalled();
+    expect(mocks.polarInit).not.toHaveBeenCalled();
   });
 });

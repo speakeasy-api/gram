@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,11 +51,6 @@ func TestGetUserMetricsSummary_FoldsEmailOnlyUsageIntoEmployee(t *testing.T) {
 	// Someone else's usage must stay out of this employee's totals.
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), strangerEmail, 9000, 9000, 99)
 
-	// Telemetry writes use ClickHouse async inserts; drain the queue synchronously
-	// so the rows are deterministically visible (no polling — see the telemetry
-	// README).
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	m := userMetrics(t, ctx, ti, employeeID)
 
 	// Directory email row (100/50) + personal account row (400/200).
@@ -90,8 +84,6 @@ func TestGetUserMetricsSummary_EmailIdentifierFoldsIDCarryingRows(t *testing.T) 
 	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), "tools:http:petstore:listPets", 200, 0.5, employeeID, "")
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), employeeEmail, 100, 50, 2.5)
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	m := userMetrics(t, ctx, ti, employeeEmail)
 
 	require.Equal(t, int64(100), m.TotalInputTokens)
@@ -115,8 +107,6 @@ func TestGetUserMetricsSummary_EmailIdentifierWithNoDirectoryRow(t *testing.T) {
 
 	now := time.Now().UTC()
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), unknownEmail, 100, 50, 2.5)
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	m := userMetrics(t, ctx, ti, unknownEmail)
 
@@ -143,8 +133,6 @@ func TestGetUserMetricsSummary_IgnoresEmailRowsOwnedByAnotherUser(t *testing.T) 
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), employeeEmail, 100, 50, 2.5)
 	// Same email, but the row already names a different owner.
 	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), otherID, employeeEmail, 700, 300, 42)
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	m := userMetrics(t, ctx, ti, employeeID)
 
@@ -173,7 +161,6 @@ func TestCostAnalytics_FoldsLinkedAccountEmailFilters(t *testing.T) {
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), workChatID, 1, 100, 50, 0, 0, "opus", employeeEmail, "Engineering", nil, "main", "", "", "", "")
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-9*time.Minute), personalChatID, 2, 200, 100, 0, 0, "opus", strings.ToUpper(personalEmail), "", nil, "main", "", "", "", "")
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-8*time.Minute), uuid.NewString(), 9, 900, 900, 0, 0, "opus", "stranger@example.com", "Engineering", nil, "main", "", "", "", "")
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	from := now.Add(-time.Hour).Format(time.RFC3339)
 	to := now.Add(time.Hour).Format(time.RFC3339)
@@ -203,7 +190,7 @@ func TestCostAnalytics_FoldsLinkedAccountEmailFilters(t *testing.T) {
 		require.Equal(t, workChatID, sessions.Sessions[1].GramChatID)
 
 		wideFrom, wideTo := summaryWindow(now)
-		wideSessions := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+		wideSessions := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 			From:    wideFrom,
 			To:      wideTo,
 			Filters: []*gen.QueryFilter{{Dimension: "email", Values: []string{email}}},
@@ -238,7 +225,6 @@ func TestCostAnalytics_DoesNotExpandAmbiguousAccountEmail(t *testing.T) {
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), uuid.NewString(), 1, 100, 0, 0, 0, "opus", sharedEmail, "", nil, "main", "", "", "", "")
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-9*time.Minute), uuid.NewString(), 2, 200, 0, 0, 0, "opus", firstEmail, "", nil, "main", "", "", "", "")
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-8*time.Minute), uuid.NewString(), 4, 400, 0, 0, 0, "opus", secondEmail, "", nil, "main", "", "", "", "")
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.Query(ctx, &gen.QueryPayload{
 		From:    now.Add(-time.Hour).Format(time.RFC3339),

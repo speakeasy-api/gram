@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -21,7 +22,7 @@ import (
 func newProvisioningCore(t *testing.T, conn *pgxpool.Pool) *ServiceCore {
 	t.Helper()
 	logger := testenv.NewLogger(t)
-	return NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	return NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 }
 
 func newProvisioningProject(t *testing.T, conn *pgxpool.Pool, slug string) uuid.UUID {
@@ -97,23 +98,22 @@ func TestEnableManagedAssistantAttachesNoToolsets(t *testing.T) {
 		Slug:                   "billing",
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "org-test-billing-xyz", Valid: true},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
+	createCanonicalWrapper(t, conn, reachable, "org-test-billing-xyz", "disabled")
 
 	record, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1", true)
 	require.NoError(t, err)
 
-	require.Empty(t, record.Toolsets, "managed assistant must not attach project toolsets by default")
+	hydrated, err := core.GetManagedAssistant(ctx, projectID)
+	require.NoError(t, err)
+	require.Equal(t, record.ID, hydrated.ID)
+	require.Empty(t, hydrated.MCPServers, "managed assistant must not attach project toolsets by default")
 
 	// Provisioning must not touch the project's toolsets — MCP stays as it was.
-	reloaded, err := toolsetsQ.GetToolset(ctx, toolsetsrepo.GetToolsetParams{
-		Slug:      reachable.Slug,
-		ProjectID: projectID,
-	})
+	wrapper, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: reachable.ID, ProjectID: projectID})
 	require.NoError(t, err)
-	require.False(t, reloaded.McpEnabled, "provisioning must not auto-enable MCP on project toolsets")
+	require.Equal(t, "disabled", wrapper.Visibility, "provisioning must not auto-enable MCP on project toolsets")
 }
 
 func TestDisableManagedAssistantTearsDown(t *testing.T) {
@@ -182,7 +182,7 @@ func TestEnableManagedAssistantFailsWhenNameTaken(t *testing.T) {
 	// A user creates an assistant that happens to occupy the managed name.
 	_, err = core.CreateAssistant(ctx, "org-test", projectID, "user-1",
 		managedAssistantName("managed-taken"), managedAssistantModel, "hi", nil, nil,
-		int(managedAssistantWarmTTLSeconds), int(managedAssistantMaxConcurrency), StatusActive, true)
+		int(managedAssistantWarmTTLSeconds), int(managedAssistantMaxConcurrency), StatusActive, true, nil)
 	require.NoError(t, err)
 
 	_, err = core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1", true)

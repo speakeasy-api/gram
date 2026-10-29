@@ -23,8 +23,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
-	"github.com/speakeasy-api/gram/server/internal/managedrows"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -196,13 +196,14 @@ func (s *Service) CreateSet(ctx context.Context, payload *gensvc.CreateSetPayloa
 	}
 
 	if err := s.audit.LogJsonWebKeySetCreate(ctx, dbtx, audit.LogJsonWebKeySetCreateEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ProjectID:        uuid.NullUUID{UUID: uuid.UUID{}, Valid: false},
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		SetURN:           urn.NewJsonWebKeySet(set.ID),
-		SetName:          set.Name,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		ProjectID:             uuid.NullUUID{UUID: uuid.UUID{}, Valid: false},
+		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:      authCtx.Email,
+		ActorSlug:             nil,
+		SetURN:                urn.NewJsonWebKeySet(set.ID),
+		SetName:               set.Name,
+		InternalSessionIssuer: false,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording key set creation").LogError(ctx, logger)
 	}
@@ -260,7 +261,7 @@ func (s *Service) UpdateSet(ctx context.Context, payload *gensvc.UpdateSetPayloa
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading key set").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(current.IdentityProviderConnectionID, "this key set"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(current.IdentityProviderConnectionID, "this key set"); err != nil {
 		return nil, err
 	}
 
@@ -297,6 +298,7 @@ func (s *Service) UpdateSet(ctx context.Context, payload *gensvc.UpdateSetPayloa
 			Name:          set.Name,
 			ExternalKeyID: set.ExternalKeyID.String(),
 		},
+		InternalSessionIssuer: false,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording key set update").LogError(ctx, logger)
 	}
@@ -420,7 +422,7 @@ func (s *Service) DeleteSet(ctx context.Context, payload *gensvc.DeleteSetPayloa
 		return oops.E(oops.CodeUnexpected, err, "error deleting key set").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, locked.IdentityProviderConnectionID, "this key set"); err != nil {
+	if err := idpmanagedresources.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, locked.IdentityProviderConnectionID, "this key set"); err != nil {
 		return err
 	}
 
@@ -548,7 +550,11 @@ func (s *Service) lockBackingKey(ctx context.Context, logger *slog.Logger, q *re
 		return oops.E(oops.CodeBadRequest, nil, "AWS KMS keys cannot back a JSON Web Key Set yet; choose a GCP KMS key").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(key.IdentityProviderConnectionID, "this external key"); err != nil {
+	if key.EmaIssuerManaged {
+		return oops.E(oops.CodeForbidden, nil, "enterprise authorization issuer keys are managed by Speakeasy")
+	}
+
+	if err := idpmanagedresources.RequireUnmanaged(key.IdentityProviderConnectionID, "this external key"); err != nil {
 		return err
 	}
 

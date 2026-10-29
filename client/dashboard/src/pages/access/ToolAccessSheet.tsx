@@ -29,7 +29,8 @@ import { ServerMark } from "./McpAccessParts";
 import { LIST_FRAME, LIST_ROW, LIST_ROW_SELECTED } from "./mcpAccessStyles";
 import {
   convertToolLimit,
-  DISPOSITION_COPY,
+  dispositionCopy,
+  toggleDisposition,
   fuzzyMatch,
   DISPOSITIONS,
   toolDisposition,
@@ -135,20 +136,35 @@ function ToolAccessSheetBody({
   const readyTools = source.status === "ready" ? source.tools : undefined;
   const tools = useMemo(() => readyTools ?? [], [readyTools]);
   const specific = granted && limit.kind !== "all";
+  const unsupportedLimit =
+    limit.kind === "annotations" &&
+    limit.dispositions.some(
+      (value) => !DISPOSITIONS.some((known) => known === value),
+    );
 
   // A remote server's tools arrive after the sheet opens, and converting
   // before then would carry nothing over.
   const toolsKnown = source.status === "ready" || isAllServers;
   const [pendingApply, setPendingApply] = useState(applyTab);
   useEffect(() => {
-    if (!pendingApply || source.status === "loading") return;
+    if (!pendingApply || source.status === "loading" || unsupportedLimit)
+      return;
     // A conversion that reads the tool list waits until the list is known;
     // converting before then would narrow the server to no tools. A remote
     // server that needs connecting converts once it lists.
     if (!toolsKnown && (tab === "tools" || limit.kind === "tools")) return;
     setPendingApply(false);
     onChange(convertToolLimit(limit, tab, tools));
-  }, [pendingApply, source.status, toolsKnown, limit, tab, tools, onChange]);
+  }, [
+    pendingApply,
+    source.status,
+    toolsKnown,
+    limit,
+    tab,
+    tools,
+    onChange,
+    unsupportedLimit,
+  ]);
 
   // Choosing Specific tools before a remote server's tools have loaded grants
   // an empty list at once, and fills it with every tool when they arrive, so
@@ -161,6 +177,23 @@ function ToolAccessSheetBody({
       onChange({ kind: "tools", tools: tools.map((tool) => tool.name) });
     }
   }, [pendingFill, source.status, limit, tools, onChange]);
+
+  if (unsupportedLimit) {
+    return (
+      <>
+        <SheetHeader>
+          <SheetTitle>Tool access</SheetTitle>
+          <SheetDescription>
+            This role uses annotations that this version cannot edit. Refresh
+            the page before changing tool access.
+          </SheetDescription>
+        </SheetHeader>
+        <SheetFooter>
+          <Button onClick={onClose}>Close</Button>
+        </SheetFooter>
+      </>
+    );
+  }
 
   const chooseSpecific = () => {
     if (tab === "tools" && !toolsKnown) {
@@ -291,7 +324,7 @@ function ToolChecklist({
       );
     case "error":
       return (
-        <Alert variant="error" alignTop className="text-sm">
+        <Alert variant="error" className="text-sm">
           <span className="flex flex-wrap items-center gap-2">
             Couldn&rsquo;t load this server&rsquo;s tools.
             <Button variant="tertiary" size="xs" onClick={source.retry}>
@@ -303,7 +336,7 @@ function ToolChecklist({
     case "dynamic":
     case "none":
       return (
-        <Alert variant="default" alignTop className="text-sm">
+        <Alert variant="default" className="text-sm">
           This server resolves its tools when they&rsquo;re called, so it
           can&rsquo;t be limited by tool. Limit it by annotation instead.
         </Alert>
@@ -323,12 +356,14 @@ function ToolChecklist({
   }
 
   const chosen = new Set(selected);
-  const { tools } = source;
+  const tools = [...source.tools].sort((a, b) => a.name.localeCompare(b.name));
   const picked = tools.filter((tool) => chosen.has(tool.name)).length;
-  // Servers carry a hundred tools or more, so the list searches. Select all
-  // and Clear act on what the search shows.
+  // Servers carry a hundred tools or more, so the list searches. Toggle all
+  // acts on what the search shows.
   const shown = tools.filter((tool) => fuzzyMatch(query, tool.name));
   const shownNames = new Set(shown.map((tool) => tool.name));
+  const allShownPicked =
+    shown.length > 0 && shown.every((tool) => chosen.has(tool.name));
   const toggle = (name: string, on: boolean) =>
     onChange(
       on ? [...selected, name] : selected.filter((tool) => tool !== name),
@@ -343,23 +378,16 @@ function ToolChecklist({
         <Button
           variant="tertiary"
           size="xs"
-          onClick={() =>
-            onChange([
-              ...selected.filter((name) => !shownNames.has(name)),
-              ...shown.map((tool) => tool.name),
-            ])
-          }
+          onClick={() => {
+            const rest = selected.filter((name) => !shownNames.has(name));
+            onChange(
+              allShownPicked
+                ? rest
+                : [...rest, ...shown.map((tool) => tool.name)],
+            );
+          }}
         >
-          <Button.Text>Select all</Button.Text>
-        </Button>
-        <Button
-          variant="tertiary"
-          size="xs"
-          onClick={() =>
-            onChange(selected.filter((name) => !shownNames.has(name)))
-          }
-        >
-          <Button.Text>Clear</Button.Text>
+          <Button.Text>Toggle all</Button.Text>
         </Button>
       </div>
       <SearchBar
@@ -394,7 +422,7 @@ function ToolChecklist({
               </Text>
               {disposition && (
                 <Badge variant="neutral" size="sm">
-                  {DISPOSITION_COPY[disposition].label}
+                  {dispositionCopy(disposition).label}
                 </Badge>
               )}
             </label>
@@ -416,15 +444,11 @@ function AnnotationChecklist({
   onChange: (dispositions: Disposition[]) => void;
 }): JSX.Element {
   const toggle = (disposition: Disposition, on: boolean) =>
-    onChange(
-      DISPOSITIONS.filter((d) =>
-        d === disposition ? on : selected.includes(d),
-      ),
-    );
+    onChange(toggleDisposition(selected, disposition, on));
   return (
     <div className={LIST_FRAME}>
       {DISPOSITIONS.map((disposition) => {
-        const copy = DISPOSITION_COPY[disposition];
+        const copy = dispositionCopy(disposition);
         const count = tools?.filter(
           (tool) => toolDisposition(tool) === disposition,
         ).length;
@@ -501,7 +525,7 @@ function ConnectPrompt({
       action={
         <Button variant="secondary" size="sm" asChild>
           <Link
-            to={routes.mcp.x.settings.href(
+            to={routes.mcp.details.settings.href(
               mcpServerRouteParam({
                 id: entry.server.id,
                 slug: entry.server.slug,

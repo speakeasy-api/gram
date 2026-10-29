@@ -9,7 +9,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // outcomeCounts folds a breakdown into outcome -> count so assertions do not
@@ -37,8 +36,6 @@ func TestGetMCPOutcomeBreakdown_Empty(t *testing.T) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	now := time.Now().UTC()
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: []string{authCtx.ProjectID.String()},
 		TimeStart:      now.Add(-time.Hour).UnixNano(),
@@ -55,8 +52,6 @@ func TestGetMCPOutcomeBreakdown_NoProjectsIsNotAnUnscopedRead(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 	now := time.Now().UTC()
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: nil,
@@ -99,8 +94,6 @@ func TestGetMCPOutcomeBreakdown_ClassifiesDirectCallsByStatus(t *testing.T) {
 		statusCode:  500,
 	})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: []string{projectID},
 		ToolsetSlugs:   []string{"billing"},
@@ -129,6 +122,68 @@ func TestGetMCPOutcomeBreakdown_ClassifiesDirectCallsByStatus(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, uint64(3), outcomeCounts(all)[telemetryRepo.MCPOutcomeServerError])
+}
+
+func TestGetMCPOutcomeBreakdown_ClassifiesIsErrorInside200AsFailed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	for _, p := range []struct {
+		email   string
+		status  int
+		outcome string
+	}{
+		{email: "ok@example.com", status: 200, outcome: "ok"},
+		{email: "ok@example.com", status: 200, outcome: ""},
+		{email: "tool-error@example.com", status: 200, outcome: "error"},
+		{email: "tool-error@example.com", status: 200, outcome: "error"},
+		// A redirect answered as isError is a tool error too.
+		{email: "tool-error@example.com", status: 302, outcome: "error"},
+		// Transport failures stay classified by their status.
+		{email: "ok@example.com", status: 500, outcome: "error"},
+		{email: "ok@example.com", status: 401, outcome: "error"},
+		{email: "ok@example.com", status: 404, outcome: "error"},
+	} {
+		insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+			projectID:   projectID,
+			timestamp:   now.Add(-10 * time.Minute),
+			toolsetSlug: "docs",
+			toolName:    "read_doc",
+			userEmail:   p.email,
+			statusCode:  p.status,
+			outcome:     p.outcome,
+		})
+	}
+
+	params := telemetryRepo.GetMCPOutcomeBreakdownParams{
+		GramProjectIDs: []string{projectID},
+		ToolsetSlugs:   []string{"docs"},
+		TimeStart:      now.Add(-time.Hour).UnixNano(),
+		TimeEnd:        now.UnixNano(),
+	}
+	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, map[string]uint64{
+		telemetryRepo.MCPOutcomeSuccess:      2,
+		telemetryRepo.MCPOutcomeFailed:       3,
+		telemetryRepo.MCPOutcomeServerError:  1,
+		telemetryRepo.MCPOutcomeUnauthorized: 1,
+		telemetryRepo.MCPOutcomeClientError:  1,
+	}, outcomeCounts(rows))
+
+	users, err := ti.chClient.ListMCPUsageUsers(ctx, params)
+	require.NoError(t, err)
+	byEmail := map[string]telemetryRepo.MCPUsageUserRow{}
+	for _, u := range users {
+		byEmail[u.Identifier] = u
+	}
+	require.Contains(t, byEmail, "tool-error@example.com")
+	require.True(t, byEmail["tool-error@example.com"].HasError)
+	require.False(t, byEmail["tool-error@example.com"].HasSuccess)
 }
 
 func TestGetMCPOutcomeBreakdown_AttributesHookObservedCallsToTheirClient(t *testing.T) {
@@ -175,8 +230,6 @@ func TestGetMCPOutcomeBreakdown_AttributesHookObservedCallsToTheirClient(t *test
 		mcpServerURL: "https://api.getgram.ai/mcp/shipping",
 	})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs:       []string{projectID},
 		MCPServerURLSuffixes: []string{"/mcp/billing"},
@@ -216,8 +269,6 @@ func TestGetMCPOutcomeBreakdown_ExcludesCallsOutsideTheWindow(t *testing.T) {
 		userEmail:   "alice@example.com",
 		statusCode:  500,
 	})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: []string{projectID},
@@ -262,8 +313,6 @@ func TestGetTelemetryWatermark_ReportsNewestObservation(t *testing.T) {
 		userEmail:   "alice@example.com",
 		statusCode:  200,
 	})
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	watermark, err = ti.chClient.GetTelemetryWatermark(ctx, telemetryRepo.GetTelemetryWatermarkParams{
 		GramProjectIDs: []string{projectID},

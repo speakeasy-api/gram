@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -44,7 +45,12 @@ func EncodeCallbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 			return goahttp.ErrInvalidType("auth", "callback", "*auth.CallbackPayload", v)
 		}
 		values := req.URL.Query()
-		values.Add("code", p.Code)
+		if p.Code != nil {
+			values.Add("code", *p.Code)
+		}
+		if p.Error != nil {
+			values.Add("error", *p.Error)
+		}
 		if p.State != nil {
 			values.Add("state", *p.State)
 		}
@@ -303,6 +309,9 @@ func EncodeLoginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.
 		}
 		if p.OrgName != nil {
 			values.Add("org_name", *p.OrgName)
+		}
+		if p.PartnerCode != nil {
+			values.Add("partner_code", *p.PartnerCode)
 		}
 		if p.Email != nil {
 			values.Add("email", *p.Email)
@@ -1252,6 +1261,255 @@ func DecodeLogoutResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 	}
 }
 
+// BuildLogoutEverywhereRequest instantiates a HTTP request object with method
+// and path set to call the "auth" service "logoutEverywhere" endpoint
+func (c *Client) BuildLogoutEverywhereRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: LogoutEverywhereAuthPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("auth", "logoutEverywhere", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeLogoutEverywhereRequest returns an encoder for requests sent to the
+// auth logoutEverywhere server.
+func EncodeLogoutEverywhereRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*auth.LogoutEverywherePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("auth", "logoutEverywhere", "*auth.LogoutEverywherePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeLogoutEverywhereResponse returns a decoder for responses returned by
+// the auth logoutEverywhere endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeLogoutEverywhereResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeLogoutEverywhereResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body LogoutEverywhereResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logoutEverywhere", err)
+			}
+			err = ValidateLogoutEverywhereResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutEverywhere", err)
+			}
+			var (
+				sessionCookie    string
+				sessionCookieRaw string
+
+				cookies = resp.Cookies()
+			)
+			for _, c := range cookies {
+				switch c.Name {
+				case "gram_session":
+					sessionCookieRaw = c.Value
+				}
+			}
+			if sessionCookieRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("session_cookie", "cookie"))
+			}
+			sessionCookie = sessionCookieRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutEverywhere", err)
+			}
+			res := NewLogoutEverywhereResultOK(&body, sessionCookie)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body LogoutEverywhereUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logoutEverywhere", err)
+			}
+			err = ValidateLogoutEverywhereUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutEverywhere", err)
+			}
+			return nil, NewLogoutEverywhereUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body LogoutEverywhereForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logoutEverywhere", err)
+			}
+			err = ValidateLogoutEverywhereForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutEverywhere", err)
+			}
+			return nil, NewLogoutEverywhereForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body LogoutEverywhereBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logoutEverywhere", err)
+			}
+			err = ValidateLogoutEverywhereBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutEverywhere", err)
+			}
+			return nil, NewLogoutEverywhereBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body LogoutEverywhereNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logoutEverywhere", err)
+			}
+			err = ValidateLogoutEverywhereNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutEverywhere", err)
+			}
+			return nil, NewLogoutEverywhereNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body LogoutEverywhereConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logoutEverywhere", err)
+			}
+			err = ValidateLogoutEverywhereConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutEverywhere", err)
+			}
+			return nil, NewLogoutEverywhereConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body LogoutEverywhereUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logoutEverywhere", err)
+			}
+			err = ValidateLogoutEverywhereUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutEverywhere", err)
+			}
+			return nil, NewLogoutEverywhereUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body LogoutEverywhereInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logoutEverywhere", err)
+			}
+			err = ValidateLogoutEverywhereInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutEverywhere", err)
+			}
+			return nil, NewLogoutEverywhereInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body LogoutEverywhereInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "logoutEverywhere", err)
+				}
+				err = ValidateLogoutEverywhereInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "logoutEverywhere", err)
+				}
+				return nil, NewLogoutEverywhereInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body LogoutEverywhereUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "logoutEverywhere", err)
+				}
+				err = ValidateLogoutEverywhereUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "logoutEverywhere", err)
+				}
+				return nil, NewLogoutEverywhereUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("auth", "logoutEverywhere", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body LogoutEverywhereGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "logoutEverywhere", err)
+			}
+			err = ValidateLogoutEverywhereGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "logoutEverywhere", err)
+			}
+			return nil, NewLogoutEverywhereGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("auth", "logoutEverywhere", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRegisterRequest instantiates a HTTP request object with method and path
 // set to call the "auth" service "register" endpoint
 func (c *Client) BuildRegisterRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2003,6 +2261,9 @@ func EncodeTransferInRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 		}
 		if p.Redirect != nil {
 			values.Add("redirect", *p.Redirect)
+		}
+		if p.ReplaceSession != nil {
+			values.Add("replace_session", fmt.Sprintf("%v", *p.ReplaceSession))
 		}
 		req.URL.RawQuery = values.Encode()
 		return nil

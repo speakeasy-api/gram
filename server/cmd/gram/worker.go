@@ -27,8 +27,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
-	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/control"
@@ -39,6 +39,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
@@ -56,11 +58,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
-	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
-	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
@@ -143,6 +142,11 @@ func newWorkerCommand() *cli.Command {
 		&cli.StringFlag{Name: "authz-issuer-url", EnvVars: []string{"GRAM_AUTHZ_ISSUER_URL"}, Usage: "Speakeasy platform signing issuer origin"},
 		&cli.StringFlag{Name: "authz-private-key", EnvVars: []string{"GRAM_AUTHZ_PRIVATE_KEY"}, Usage: "Speakeasy platform signing key for principal credentials"},
 		&cli.StringFlag{Name: "authz-public-keys", EnvVars: []string{"GRAM_AUTHZ_PUBLIC_KEYS"}, Usage: "Speakeasy platform verification keys for principal credentials"},
+		&cli.StringFlag{
+			Name:    "authentication-host-url",
+			Usage:   "Alternate MCP OAuth authentication host used by Kit workload issuer validation.",
+			EnvVars: []string{"GRAM_AUTHENTICATION_HOST_URL"},
+		},
 		&cli.StringFlag{
 			Name:     "server-url",
 			Usage:    "The public URL of the server",
@@ -327,11 +331,6 @@ func newWorkerCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:    "presidio-analyzer-url",
-			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
-			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},
-		},
-		&cli.StringFlag{
 			Name:     "loops-api-key",
 			Usage:    "Loops API key for transactional emails (billing usage alerts). Empty or 'unset' disables email sending.",
 			EnvVars:  []string{"LOOPS_API_KEY"},
@@ -345,6 +344,7 @@ func newWorkerCommand() *cli.Command {
 		},
 	)
 
+	flags = append(flags, catalogPromotionFlags()...)
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, customDomainFlags()...)
 	flags = append(flags, redisFlags()...)
@@ -361,6 +361,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, riskLLMFlags()...)
 	flags = append(flags, gcpFlags()...)
 	flags = append(flags, platformHostsCLIFlag())
+	flags = append(flags, callbackOriginFlags()...)
 	flags = append(flags, orgDefaultHostFlags()...)
 
 	return &cli.Command{
@@ -479,10 +480,8 @@ func newWorkerCommand() *cli.Command {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: using local fixture publisher")
 			}
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
-			var featureFlags feature.Provider = posthogClient
-			if c.String("environment") == "local" {
-				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
-			}
+			featureFlags := newFeatureFlags(ctx, c, logger, posthogClient)
+			authz.SetUpstreamSelectorWriteGate(feature.UpstreamSelectorWrites(featureFlags))
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			var pluginPublisher *plugins.Service
@@ -618,6 +617,7 @@ func newWorkerCommand() *cli.Command {
 					AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 					AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
 					AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
+					AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 					DevMode:                          c.String("environment") == "local",
 				})
 
@@ -749,6 +749,7 @@ func newWorkerCommand() *cli.Command {
 			)
 
 			sessionManager := sessions.NewManager(logger, tracerProvider, db, redisClient, cache.SuffixNone, idpClient, billingRepo, identityResolver)
+			sessionManager.SetFlags(featureFlags)
 
 			// The worker never serves webhook ingress (ProcessWebhook lives in
 			// the HTTP server), so the dashboard site URL used for Slack link
@@ -761,8 +762,6 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("configure principal credential signer: %w", err)
 			}
 			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine, principalcredential.New(platformSigner, db), cache.NewRedisCacheAdapter(redisClient))
-
-			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), serverURL)
 
 			chatClient := chat.NewAgenticChatClient(completionsClient)
 
@@ -796,6 +795,9 @@ func newWorkerCommand() *cli.Command {
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
+			if err := installKitLocalRuntimeFromCLI(c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
+				return err
+			}
 			assistantsCore.SetAssetStorage(assetStorage)
 			assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
 			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
@@ -807,23 +809,7 @@ func newWorkerCommand() *cli.Command {
 			 * END -- Agent client
 			 */
 
-			var piiScanner risk_analysis.PIIScanner = &risk_analysis.StubPIIScanner{}
-			if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
-				piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
-				logger.InfoContext(ctx, "presidio PII scanner enabled", attr.SlogURL(presidioURL))
-			}
-
 			piScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, db).Classify)
-
-			customRuleScanner, err := customruleanalyzer.NewScanner(db)
-			if err != nil {
-				return fmt.Errorf("create custom rules scanner: %w", err)
-			}
-
-			builtinPresets, err := presetlib.New()
-			if err != nil {
-				return fmt.Errorf("load built-in exclusion library: %w", err)
-			}
 
 			var siteURL *url.URL
 			if raw := c.String("site-url"); raw != "" {
@@ -841,6 +827,7 @@ func newWorkerCommand() *cli.Command {
 				return err
 			}
 			identityResolver.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
+			pluginPublisher.WithOrganizationHosts(orgHosts)
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, orgHosts)
 
@@ -853,6 +840,26 @@ func newWorkerCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
+			// Issuer URLs are pinned to the outbound origin, as on the server.
+			// The worker only sweeps issuer keys, so a bad issuer setting turns
+			// the sweep off with an error log instead of stopping every
+			// workflow; issuers fail closed meanwhile.
+			outboundOrigin, err := outboundCallbackOriginFromCLI(c, serverURL, c.String("environment"), platformHosts)
+			var issuerProvisioner *identityproviderconnections.Provisioner
+			if err != nil {
+				logger.ErrorContext(ctx, "invalid outbound callback origin; internal session issuer key sweep is off", attr.SlogError(err))
+			} else if issuerProvisioner, err = newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, outboundOrigin); err != nil {
+				// Nil where KMS provisioning is unconfigured, too.
+				logger.ErrorContext(ctx, "identity provider provisioner unavailable; internal session issuer key sweep is off", attr.SlogError(err))
+				issuerProvisioner = nil
+			}
+			// No signer authority without a valid outbound origin.
+			if issuerProvisioner != nil {
+				issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, true)
+				issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, outboundOrigin))
+				issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)
+				enableIssuerKeyAutoActivation(issuerProvisioner, issuerSigner)
+			}
 
 			var slackDirectoryRefresher slackdirectoryconnections.TokenRefresher
 			if id, secret := c.String("slack-client-id"), c.String("slack-client-secret"); id != "" && id != "unset" && secret != "" && secret != "unset" {
@@ -860,62 +867,62 @@ func newWorkerCommand() *cli.Command {
 			}
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-				GuardianPolicy:               guardianPolicy,
-				TunnelHTTPClient:             tunnelHTTPClient,
-				DB:                           db,
-				EncryptionClient:             encryptionClient,
-				FeatureProvider:              featureFlags,
-				AssetStorage:                 assetStorage,
-				SlackClient:                  slackClient,
-				SlackDirectoryTokenRefresher: slackDirectoryRefresher,
-				ChatMessageWriter:            chatWriter,
-				ChatClient:                   chatClient,
-				OpenRouter:                   openRouter,
-				OpenRouterSpend:              openRouter,
-				K8sClient:                    k8sClient,
-				ExpectedTargetCNAME:          c.String("custom-domain-cname"),
-				ExpectedARecords:             customDomainARecords,
-				GitHubEvidenceToken:          c.String("github-evidence-token"),
-				SiteURL:                      siteURL,
-				OrgHosts:                     orgHosts,
-				BillingTracker:               billingTracker,
-				BillingRepository:            billingRepo,
-				StripeClient:                 stripeClient,
-				RedisClient:                  redisClient,
-				PosthogClient:                posthogClient,
-				EmailService:                 emailService,
-				FunctionsDeployer:            functionsOrchestrator,
-				FunctionsVersion:             runnerVersion,
-				RagService:                   ragService,
-				MCPRegistryClient:            mcpRegistryClient,
-				MCPCatalog:                   mcpCatalog,
-				TelemetryLogger:              telemetryLogger,
-				ClickhouseConn:               chDB,
-				MeterReadConn:                meterReadConn,
-				TelemetryRepo:                telemetryrepo.New(chDB),
-				TriggersApp:                  triggerApp,
-				CacheAdapter:                 remoteSessionsCache,
-				IssuerMetadataRefresher:      issuerMetadataRefresher,
-				RemoteSessionAssertionSigner: clientAssertionSigner,
-				StartupSeeds:                 startupSeeds(logger, db),
-				AssistantsCore:               assistantsCore,
-				TemporalEnv:                  temporalEnv,
-				PIIScanner:                   piiScanner,
-				PIScanner:                    piScanner,
-				CustomRuleScanner:            customRuleScanner,
-				BuiltinPresets:               builtinPresets,
-				ShadowMCPClient:              shadowMCPClient,
-				AuditLogger:                  auditLogger,
-				WorkOSClient:                 backgroundWorkOSClient,
-				ProductFeatures:              productFeatures,
-				PluginPublisher:              pluginPublisher,
-				PublicationRequests:          plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)},
-				Publishers:                   publishers,
-				TrialEmailsService:           trialEmailsService,
-				TrialFixtureHandler:          newTrialFixtureHandler(c.String("environment"), db, productFeatures),
-				RiskFingerprinter:            riskFingerprinter,
-				DisableRiskRetroReconcile:    c.Bool("disable-clickhouse-risk-retro-reconcile"),
-				LLMAnalyzerEnabled:           llmAnalyzerConfigFromCLI(c).Enabled(),
+				CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, catalogValidator), productFeatures, telemetry.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
+				CatalogPromotionDeliveryPaused: c.Bool("catalog-promotion-delivery-paused"),
+				GuardianPolicy:                 guardianPolicy,
+				TunnelHTTPClient:               tunnelHTTPClient,
+				DB:                             db,
+				EncryptionClient:               encryptionClient,
+				FeatureProvider:                featureFlags,
+				AssetStorage:                   assetStorage,
+				SlackClient:                    slackClient,
+				SlackDirectoryTokenRefresher:   slackDirectoryRefresher,
+				ChatMessageWriter:              chatWriter,
+				ChatClient:                     chatClient,
+				OpenRouter:                     openRouter,
+				OpenRouterSpend:                openRouter,
+				K8sClient:                      k8sClient,
+				ExpectedTargetCNAME:            c.String("custom-domain-cname"),
+				ExpectedARecords:               customDomainARecords,
+				GitHubEvidenceToken:            c.String("github-evidence-token"),
+				SiteURL:                        siteURL,
+				ServerURL:                      serverURL,
+				OrgHosts:                       orgHosts,
+				BillingTracker:                 billingTracker,
+				BillingRepository:              billingRepo,
+				StripeClient:                   stripeClient,
+				RedisClient:                    redisClient,
+				PosthogClient:                  posthogClient,
+				EmailService:                   emailService,
+				FunctionsDeployer:              functionsOrchestrator,
+				FunctionsVersion:               runnerVersion,
+				RagService:                     ragService,
+				MCPRegistryClient:              mcpRegistryClient,
+				MCPCatalog:                     mcpCatalog,
+				TelemetryLogger:                telemetryLogger,
+				ClickhouseConn:                 chDB,
+				MeterReadConn:                  meterReadConn,
+				TelemetryRepo:                  telemetryrepo.New(chDB),
+				TriggersApp:                    triggerApp,
+				CacheAdapter:                   remoteSessionsCache,
+				IssuerMetadataRefresher:        issuerMetadataRefresher,
+				RemoteSessionAssertionSigner:   clientAssertionSigner,
+				IssuerKeySweeper:               issuerKeySweeper(issuerProvisioner),
+				StartupSeeds:                   startupSeeds(logger, db),
+				AssistantsCore:                 assistantsCore,
+				TemporalEnv:                    temporalEnv,
+				PIScanner:                      piScanner,
+				AuditLogger:                    auditLogger,
+				WorkOSClient:                   backgroundWorkOSClient,
+				ProductFeatures:                productFeatures,
+				PluginPublisher:                pluginPublisher,
+				PublicationRequests:            plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)},
+				Publishers:                     publishers,
+				TrialEmailsService:             trialEmailsService,
+				TrialFixtureHandler:            newTrialFixtureHandler(c.String("environment"), db, productFeatures),
+				RiskFingerprinter:              riskFingerprinter,
+				DisableRiskRetroReconcile:      c.Bool("disable-clickhouse-risk-retro-reconcile"),
+				LLMAnalyzerEnabled:             llmAnalyzerConfigFromCLI(c).Enabled(),
 			})
 
 			// Flush the throttle's queued trailing risk signals before this Action

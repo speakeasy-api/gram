@@ -26,12 +26,6 @@ func BuildCreateIssuerPayload(organizationUserSessionIssuersCreateIssuerBody str
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\",\n      \"trusted_remote_session_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"trusted_remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
-		if body.TrustedRemoteSessionIssuerID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_issuer_id", *body.TrustedRemoteSessionIssuerID, goa.FormatUUID))
-		}
-		if body.TrustedRemoteSessionClientID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
-		}
 		if !(body.AuthnChallengeMode == "chain" || body.AuthnChallengeMode == "interactive") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", body.AuthnChallengeMode, []any{"chain", "interactive"}))
 		}
@@ -40,6 +34,12 @@ func BuildCreateIssuerPayload(organizationUserSessionIssuersCreateIssuerBody str
 		}
 		if body.SessionDurationHours > 2.562047e+06 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", body.SessionDurationHours, 2.562047e+06, false))
+		}
+		if body.TrustedRemoteSessionIssuerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_issuer_id", *body.TrustedRemoteSessionIssuerID, goa.FormatUUID))
+		}
+		if body.TrustedRemoteSessionClientID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -52,11 +52,11 @@ func BuildCreateIssuerPayload(organizationUserSessionIssuersCreateIssuerBody str
 		}
 	}
 	v := &organizationusersessionissuers.CreateIssuerPayload{
-		TrustedRemoteSessionIssuerID: body.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID: body.TrustedRemoteSessionClientID,
 		Slug:                         body.Slug,
 		AuthnChallengeMode:           body.AuthnChallengeMode,
 		SessionDurationHours:         body.SessionDurationHours,
+		TrustedRemoteSessionIssuerID: body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID: body.TrustedRemoteSessionClientID,
 	}
 	v.SessionToken = sessionToken
 
@@ -65,7 +65,7 @@ func BuildCreateIssuerPayload(organizationUserSessionIssuersCreateIssuerBody str
 
 // BuildListIssuersPayload builds the payload for the
 // organizationUserSessionIssuers listIssuers endpoint from CLI flags.
-func BuildListIssuersPayload(organizationUserSessionIssuersListIssuersCursor string, organizationUserSessionIssuersListIssuersLimit string, organizationUserSessionIssuersListIssuersSessionToken string) (*organizationusersessionissuers.ListIssuersPayload, error) {
+func BuildListIssuersPayload(organizationUserSessionIssuersListIssuersCursor string, organizationUserSessionIssuersListIssuersLimit string, organizationUserSessionIssuersListIssuersTier string, organizationUserSessionIssuersListIssuersSessionToken string) (*organizationusersessionissuers.ListIssuersPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -89,6 +89,18 @@ func BuildListIssuersPayload(organizationUserSessionIssuersListIssuersCursor str
 			}
 		}
 	}
+	var tier *string
+	{
+		if organizationUserSessionIssuersListIssuersTier != "" {
+			tier = &organizationUserSessionIssuersListIssuersTier
+			if !(*tier == "organization" || *tier == "project") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("tier", *tier, []any{"organization", "project"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if organizationUserSessionIssuersListIssuersSessionToken != "" {
@@ -98,6 +110,7 @@ func BuildListIssuersPayload(organizationUserSessionIssuersListIssuersCursor str
 	v := &organizationusersessionissuers.ListIssuersPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Tier = tier
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -177,6 +190,119 @@ func BuildUpdateIssuerPayload(organizationUserSessionIssuersUpdateIssuerBody str
 		AuthnChallengeMode:            body.AuthnChallengeMode,
 		SessionDurationHours:          body.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: body.ClientIDMetadataAdmissionMode,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListMcpServersPayload builds the payload for the
+// organizationUserSessionIssuers listMcpServers endpoint from CLI flags.
+func BuildListMcpServersPayload(organizationUserSessionIssuersListMcpServersUserSessionIssuerID string, organizationUserSessionIssuersListMcpServersCursor string, organizationUserSessionIssuersListMcpServersLimit string, organizationUserSessionIssuersListMcpServersSessionToken string) (*organizationusersessionissuers.ListMcpServersPayload, error) {
+	var err error
+	var userSessionIssuerID string
+	{
+		userSessionIssuerID = organizationUserSessionIssuersListMcpServersUserSessionIssuerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("user_session_issuer_id", userSessionIssuerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cursor *string
+	{
+		if organizationUserSessionIssuersListMcpServersCursor != "" {
+			cursor = &organizationUserSessionIssuersListMcpServersCursor
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit *int
+	{
+		if organizationUserSessionIssuersListMcpServersLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(organizationUserSessionIssuersListMcpServersLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationUserSessionIssuersListMcpServersSessionToken != "" {
+			sessionToken = &organizationUserSessionIssuersListMcpServersSessionToken
+		}
+	}
+	v := &organizationusersessionissuers.ListMcpServersPayload{}
+	v.UserSessionIssuerID = userSessionIssuerID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetAuthenticationHostImpactPayload builds the payload for the
+// organizationUserSessionIssuers getAuthenticationHostImpact endpoint from CLI
+// flags.
+func BuildGetAuthenticationHostImpactPayload(organizationUserSessionIssuersGetAuthenticationHostImpactID string, organizationUserSessionIssuersGetAuthenticationHostImpactUseAuthenticationHost string, organizationUserSessionIssuersGetAuthenticationHostImpactSessionToken string) (*organizationusersessionissuers.GetAuthenticationHostImpactPayload, error) {
+	var err error
+	var id string
+	{
+		id = organizationUserSessionIssuersGetAuthenticationHostImpactID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var useAuthenticationHost bool
+	{
+		useAuthenticationHost, err = strconv.ParseBool(organizationUserSessionIssuersGetAuthenticationHostImpactUseAuthenticationHost)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for useAuthenticationHost, must be BOOL")
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationUserSessionIssuersGetAuthenticationHostImpactSessionToken != "" {
+			sessionToken = &organizationUserSessionIssuersGetAuthenticationHostImpactSessionToken
+		}
+	}
+	v := &organizationusersessionissuers.GetAuthenticationHostImpactPayload{}
+	v.ID = id
+	v.UseAuthenticationHost = useAuthenticationHost
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetAuthenticationHostPayload builds the payload for the
+// organizationUserSessionIssuers setAuthenticationHost endpoint from CLI flags.
+func BuildSetAuthenticationHostPayload(organizationUserSessionIssuersSetAuthenticationHostBody string, organizationUserSessionIssuersSetAuthenticationHostSessionToken string) (*organizationusersessionissuers.SetAuthenticationHostPayload, error) {
+	var err error
+	var body SetAuthenticationHostRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationUserSessionIssuersSetAuthenticationHostBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"use_authentication_host\": false\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationUserSessionIssuersSetAuthenticationHostSessionToken != "" {
+			sessionToken = &organizationUserSessionIssuersSetAuthenticationHostSessionToken
+		}
+	}
+	v := &organizationusersessionissuers.SetAuthenticationHostPayload{
+		ID:                    body.ID,
+		UseAuthenticationHost: body.UseAuthenticationHost,
 	}
 	v.SessionToken = sessionToken
 

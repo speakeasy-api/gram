@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 )
@@ -23,7 +22,6 @@ import (
 func TestList_ReadsCachedResourceScopesWithoutProbing(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
-	si.flags.SetFlag(feature.FlagRemoteSessionLiveResourceScopes, si.orgID, true)
 	recordAgent(t, ctx, si, "wlp1")
 
 	hits := new(atomic.Int32)
@@ -85,9 +83,6 @@ func TestList_ReadsCachedResourceScopesWithoutProbing(t *testing.T) {
 	require.Equal(t, []string{"legacy:all"}, pinned.ScopeOverride)
 	require.Equal(t, []string{"legacy:all"}, rowFor(t, list(t, ctx, si, true), serverID).Scopes)
 
-	// Not enrolled: the row is ignored again.
-	si.flags.SetFlag(feature.FlagRemoteSessionLiveResourceScopes, si.orgID, false)
-	require.Equal(t, []string{"okta.users.read"}, rowFor(t, list(t, ctx, si, true), serverID).Scopes)
 	require.EqualValues(t, 0, hits.Load(), "readiness never probes the resource")
 }
 
@@ -96,7 +91,6 @@ func TestList_ReadsCachedResourceScopesWithoutProbing(t *testing.T) {
 // counts every request the upstream receives.
 func scopelessRemoteServer(t *testing.T, ctx context.Context, si *instance) (projectID, serverID uuid.UUID, upstreamURL string, hits *atomic.Int32) {
 	t.Helper()
-	si.flags.SetFlag(feature.FlagRemoteSessionLiveResourceScopes, si.orgID, true)
 	recordAgent(t, ctx, si, "wlp-"+uuid.NewString()[:8])
 
 	hits = new(atomic.Int32)

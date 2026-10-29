@@ -13,7 +13,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/endpointaddr"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -49,12 +49,7 @@ func (s *Service) ListProjectMcpServers(ctx context.Context, payload *gen.ListPr
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list project mcp servers").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
 	}
-	toolsetRows, err := queries.AdminListProjectToolsetOnlyMcpServers(ctx, projectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list project toolset mcp servers").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
-	}
-
-	servers := make([]adminMCPServer, 0, len(serverRows)+len(toolsetRows))
+	servers := make([]adminMCPServer, 0, len(serverRows))
 
 	// The query returns a row per endpoint, with each server's rows adjacent.
 	for start := 0; start < len(serverRows); {
@@ -75,20 +70,6 @@ func (s *Service) ListProjectMcpServers(ctx context.Context, payload *gen.ListPr
 			createdAt: row.CreatedAt.Time,
 		})
 		start = end
-	}
-
-	for _, row := range toolsetRows {
-		servers = append(servers, adminMCPServer{
-			server: &gen.AdminMcpServer{
-				ID:         row.ID.String(),
-				Name:       row.Name,
-				URL:        s.toolsetMCPURL(row),
-				Visibility: toolsetVisibility(row.McpIsPublic),
-				Source:     "toolset_only",
-				CreatedAt:  row.CreatedAt.Time.Format(time.RFC3339),
-			},
-			createdAt: row.CreatedAt.Time,
-		})
 	}
 
 	slices.SortStableFunc(servers, func(a, b adminMCPServer) int {
@@ -130,7 +111,7 @@ func (s *Service) primaryEndpointURL(rows []repo.AdminListProjectMcpServerRowsRo
 		}
 	}
 
-	primary := mcpendpoints.PrimaryEndpoint(endpoints)
+	primary := endpointaddr.PrimaryEndpoint(endpoints)
 	if primary == nil {
 		return nil
 	}
@@ -142,7 +123,7 @@ func (s *Service) primaryEndpointURL(rows []repo.AdminListProjectMcpServerRowsRo
 	case domain == "":
 		return nil
 	}
-	u, err := mcpendpoints.EndpointURL(primary, domain, serverURL)
+	u, err := endpointaddr.EndpointURL(primary, domain, serverURL)
 	if err != nil {
 		return nil
 	}
@@ -160,36 +141,4 @@ func mcpServerSource(row repo.AdminListProjectMcpServerRowsRow) string {
 	default:
 		return "unproxied"
 	}
-}
-
-func toolsetVisibility(public bool) string {
-	if public {
-		return "public"
-	}
-	return "private"
-}
-
-// The dashboard's rule for a toolset: its custom domain applies only with an
-// mcp_slug, and without one the address is the project, toolset and default
-// environment slugs, which does not exist without that environment.
-func (s *Service) toolsetMCPURL(row repo.AdminListProjectToolsetOnlyMcpServersRow) *string {
-	if row.McpSlug.Valid {
-		return s.mcpURL(row.CustomDomain, row.McpSlug.String)
-	}
-	if !row.DefaultEnvironmentSlug.Valid {
-		return nil
-	}
-	return s.mcpURL(pgtype.Text{String: "", Valid: false}, row.ProjectSlug, row.Slug, row.DefaultEnvironmentSlug.String)
-}
-
-func (s *Service) mcpURL(customDomain pgtype.Text, path ...string) *string {
-	base := s.mcpServerURL
-	if customDomain.Valid {
-		base = &url.URL{Scheme: "https", Host: customDomain.String}
-	}
-	if base == nil {
-		return nil
-	}
-	joined := base.JoinPath(append([]string{"mcp"}, path...)...).String()
-	return &joined
 }

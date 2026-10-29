@@ -198,6 +198,18 @@ func setFeatureEnabled(ctx context.Context, queries *repo.Queries, organizationI
 		return nil
 	}
 
+	if feature == FeatureOrganizationGatewayDisabled {
+		current, err := queries.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: organizationID, FeatureName: string(feature)})
+		if err != nil {
+			return fmt.Errorf("read gateway opt-in: %w", err)
+		}
+		if !current {
+			return nil
+		}
+		if _, err := queries.EnableFeature(ctx, repo.EnableFeatureParams{OrganizationID: organizationID, FeatureName: string(feature)}); err != nil {
+			return fmt.Errorf("record gateway opt-in: %w", err)
+		}
+	}
 	_, err := queries.DeleteFeature(ctx, repo.DeleteFeatureParams{OrganizationID: organizationID, FeatureName: string(feature)})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("disable feature: %w", err)
@@ -226,6 +238,12 @@ func (c *Client) AcquireFeatureCacheLocks(ctx context.Context, organizationID st
 }
 
 func (c *Client) acquireFeatureCacheLocks(ctx context.Context, organizationID string, features []Feature) (*pgxpool.Conn, func(), error) {
+	return c.AcquireOrganizationFeatureCacheLocks(ctx, []string{organizationID}, features)
+}
+
+// AcquireOrganizationFeatureCacheLocks holds a sorted batch on one connection,
+// so bulk transactions cannot exhaust the pool waiting on their own locks.
+func (c *Client) AcquireOrganizationFeatureCacheLocks(ctx context.Context, organizationIDs []string, features []Feature) (*pgxpool.Conn, func(), error) {
 	conn, err := c.db.Acquire(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("acquire feature cache lock connection: %w", err)
@@ -244,7 +262,7 @@ func (c *Client) acquireFeatureCacheLocks(ctx context.Context, organizationID st
 			if unlockErr != nil || !unlocked {
 				c.logger.ErrorContext(unlockCtx, "failed to release feature cache lock",
 					attr.SlogError(unlockErr),
-					attr.SlogOrganizationID(organizationID),
+					attr.SlogOrganizationID(params.OrganizationID),
 					attr.SlogProductFeatureName(params.FeatureName),
 				)
 				_ = conn.Hijack().Close(unlockCtx)
@@ -254,15 +272,20 @@ func (c *Client) acquireFeatureCacheLocks(ctx context.Context, organizationID st
 		conn.Release()
 	}
 
-	for _, feature := range features {
-		params := repo.AcquireFeatureCacheLockParams{OrganizationID: organizationID, FeatureName: string(feature)}
-		if err := queries.AcquireFeatureCacheLock(ctx, params); err != nil {
-			release()
-			return nil, nil, fmt.Errorf("acquire feature cache lock: %w", err)
+	organizationIDs = slices.Clone(organizationIDs)
+	slices.Sort(organizationIDs)
+	organizationIDs = slices.Compact(organizationIDs)
+	for _, organizationID := range organizationIDs {
+		for _, feature := range features {
+			params := repo.AcquireFeatureCacheLockParams{OrganizationID: organizationID, FeatureName: string(feature)}
+			if err := queries.AcquireFeatureCacheLock(ctx, params); err != nil {
+				release()
+				return nil, nil, fmt.Errorf("acquire feature cache lock: %w", err)
+			}
+			acquired = append(acquired, params)
 		}
-		acquired = append(acquired, params)
-	}
 
+	}
 	return conn, release, nil
 }
 
@@ -303,14 +326,13 @@ var OrganizationDefaultFeatures = []Feature{
 	FeatureHooksFailOpen,
 }
 
-// SeedOrganizationDefaultsTx enables baseline entitlements for a newly
-// provisioned organization. Call it only on create: EnableFeature inserts a
-// new enabled row after a soft-delete, so replaying this on an existing org
-// would undo an administrator disable.
+// SeedOrganizationDefaultsTx enables baseline entitlements the organization has
+// never had a row for. A soft-deleted row is an administrator choice and stays
+// disabled, so repeating the call does not turn a feature back on.
 func SeedOrganizationDefaultsTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
 	q := repo.New(tx)
 	for _, feature := range OrganizationDefaultFeatures {
-		if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+		if _, err := q.EnableFeatureIfNeverConfigured(ctx, repo.EnableFeatureIfNeverConfiguredParams{
 			OrganizationID: organizationID,
 			FeatureName:    string(feature),
 		}); err != nil {
@@ -377,14 +399,17 @@ func SetTrialRuntimeFeaturesTx(ctx context.Context, tx pgx.Tx, organizationID st
 }
 
 // SeedEnterpriseTrialBundleTx enables the enterprise trial entitlements in the
-// caller's transaction. Idempotent, so a replayed signup is safe. The feature
-// cache is left untouched: the organization is created in the same transaction,
-// so no reader can have cached a state for it yet.
+// caller's transaction. A soft-deleted row stays disabled, so an administrator
+// choice survives a later trial on an organization that already exists. A new
+// organization has no rows, so it still receives the bundle. Idempotent, so a
+// replayed signup is safe. The feature cache is left untouched. A brand-new
+// organization cannot have a cached state yet; an organization that already
+// exists can, and that cache expires on its own.
 func SeedEnterpriseTrialBundleTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
 	q := repo.New(tx)
 
 	for _, feature := range EnterpriseAccessBundle {
-		if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+		if _, err := q.EnableFeatureIfNeverConfigured(ctx, repo.EnableFeatureIfNeverConfiguredParams{
 			OrganizationID: organizationID,
 			FeatureName:    string(feature),
 		}); err != nil {

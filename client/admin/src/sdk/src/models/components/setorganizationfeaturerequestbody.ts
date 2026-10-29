@@ -23,10 +23,11 @@ export const FeatureName = {
   CustomerManagedEncryptionKeys: "customer_managed_encryption_keys",
   RemoteSessionAutoRefresh: "remote_session_auto_refresh",
   RemoteSessionAutoRefreshEnforced: "remote_session_auto_refresh_enforced",
-  ConsentToolFiltering: "consent_tool_filtering",
   SessionPortability: "session_portability",
   NetworkIngress: "network_ingress",
   SignalsIntelligence: "signals_intelligence",
+  OrganizationGatewayDisabled: "organization_gateway_disabled",
+  CodeMode: "code_mode",
 } as const;
 export type FeatureName = ClosedEnum<typeof FeatureName>;
 

@@ -8,7 +8,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 )
 
 // Every plugin mutation must enqueue a republish for its own project. Before
@@ -41,9 +41,7 @@ func TestPluginsService_MutationsSignalRepublish(t *testing.T) {
 	assertSignalled(t, 2, "renaming a plugin")
 
 	toolset := createTestToolset(t, ctx, ti.conn, "signalled-server")
-	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID,
-	}))
+	setTestToolsetVisibility(t, ctx, ti.conn, toolset, mcpservers.VisibilityPublic)
 
 	server, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(toolset.ID.String()), Policy: "required", SortOrder: 0,

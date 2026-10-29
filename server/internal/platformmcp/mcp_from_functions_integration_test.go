@@ -26,6 +26,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -302,9 +304,7 @@ func TestCreateMCPFromFunctionsReportsTheFirstServerJoiningTheDefaultPlugin(t *t
 	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_create_from_functions_first_server")
 	ctx = fixture.createFromFunctionsContext(ctx)
 	// Leave the organization with no enabled server, so the next is its first.
-	require.NoError(t, toolsetsrepo.New(fixture.conn).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
-		McpEnabled: false, ID: fixture.toolsetID, ProjectID: fixture.project.ID,
-	}))
+	disableFixtureServer(t, ctx, fixture)
 
 	input := fixture.createInput("First Desk", fixture.tools[0])
 	input.Confirmed = false
@@ -335,7 +335,7 @@ func TestCreateMCPFromFunctionsReportsTheFirstServerJoiningTheDefaultPlugin(t *t
 	toolsetID := uuid.MustParse(created.Exposure.ToolsetID)
 	joined := false
 	for _, member := range members {
-		joined = joined || member.ToolsetID == uuid.NullUUID{UUID: toolsetID, Valid: true}
+		joined = joined || member.McpServerID == uuid.NullUUID{UUID: toolsetID, Valid: true}
 	}
 	require.True(t, joined, "the new tool list is in the Default plugin")
 
@@ -345,6 +345,12 @@ func TestCreateMCPFromFunctionsReportsTheFirstServerJoiningTheDefaultPlugin(t *t
 	require.False(t, second.AddedToDefaultPlugin)
 	require.False(t, second.PublicationRequested)
 	require.Equal(t, "not_requested", second.PublicationRequest)
+}
+
+// disableFixtureServer disables the fixture's canonical hosted server, as the dashboard does.
+func disableFixtureServer(t *testing.T, ctx context.Context, fixture toolExposureFixture) {
+	t.Helper()
+	testenv.SetHostedMCP(t, ctx, fixture.conn, fixture.project.ID, fixture.toolsetID, testenv.HostedMCP{Visibility: "disabled"})
 }
 
 type recordingPublishSignaler struct{ projects []uuid.UUID }
@@ -362,9 +368,7 @@ func TestCreateMCPFromFunctionsRequestsTheFirstPublishWithoutAMarketplaceConnect
 	t.Parallel()
 	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_create_from_functions_first_publish")
 	ctx = fixture.createFromFunctionsContext(ctx)
-	require.NoError(t, toolsetsrepo.New(fixture.conn).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
-		McpEnabled: false, ID: fixture.toolsetID, ProjectID: fixture.project.ID,
-	}))
+	disableFixtureServer(t, ctx, fixture)
 	signaler := &recordingPublishSignaler{}
 	fixture.service.publication = plugins.PublicationRequests{Enabled: true}
 	fixture.service.publisher = signaler
@@ -558,11 +562,21 @@ func TestCreateMCPFromFunctionsMatchesTheDashboardSequence(t *testing.T) {
 	require.NoError(t, err)
 	dashboardToolset, err := toolsetRows.GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: dashboardToolsetID, ProjectID: fixture.project.ID})
 	require.NoError(t, err)
-	require.Equal(t, dashboardToolset.McpEnabled, toolToolset.McpEnabled)
+	toolCanonical, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolToolset.ID, ProjectID: fixture.project.ID})
+	require.NoError(t, err)
+	dashboardCanonical, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: dashboardToolset.ID, ProjectID: fixture.project.ID})
+	require.NoError(t, err)
+	require.Equal(t, dashboardCanonical.Visibility, toolCanonical.Visibility, "the toolsets' canonical servers are hosted alike")
 	require.Equal(t, dashboardToolset.DefaultEnvironmentSlug, toolToolset.DefaultEnvironmentSlug)
 	require.Equal(t, dashboardToolset.Description, toolToolset.Description)
 	require.Equal(t, dashboardToolset.ToolSelectionMode, toolToolset.ToolSelectionMode)
-	require.Regexp(t, "^"+orgSlug+"-", toolToolset.McpSlug.String)
+	toolAlias, err := legacyalias.Get(ctx, fixture.conn, fixture.project.ID, toolToolset.ID)
+	require.NoError(t, err)
+	require.Equal(t, legacyalias.None(), toolAlias, "the toolset has no legacy alias")
+	toolEndpoints, err := mcpendpointsrepo.New(fixture.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: fixture.project.ID, McpServerID: toolToolset.ID})
+	require.NoError(t, err)
+	require.Len(t, toolEndpoints, 1, "the canonical server gets one platform endpoint")
+	require.Regexp(t, "^"+orgSlug+"-", toolEndpoints[0].Slug)
 
 	toolExposure, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, toolRow.ID)
 	require.NoError(t, err)

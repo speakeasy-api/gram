@@ -45,33 +45,27 @@ type sharedAuthorizationServerRoute struct {
 
 	// handler serves the route.
 	handler func(http.ResponseWriter, *http.Request) error
-
-	// onAuthenticationHost reports whether the authentication host serves the
-	// route as well.
-	//
-	// TODO(AIM-418): serve the authorization, consent, and registration routes
-	// on the authentication host.
-	onAuthenticationHost bool
 }
 
 // sharedAuthorizationServerRoutes is every route a shared authorization server
 // serves. RFC 8414 metadata is served at both the path-insertion location
 // §3.1 defines and the path-appended location some clients request instead.
 // The IdP and remote login callbacks are deployment-global and stay where they
-// are.
+// are. Every route is mounted on both the main mux and the authentication
+// host; each answers only on the host its issuer names.
 func (s *Service) sharedAuthorizationServerRoutes() []sharedAuthorizationServerRoute {
 	return []sharedAuthorizationServerRoute{
-		{method: http.MethodGet, path: wellknown.OAuthAuthorizationServerPath + sharedAuthorizationServerPattern, handler: s.HandleSharedAuthorizationServerMetadata, onAuthenticationHost: true},
-		{method: http.MethodGet, path: sharedAuthorizationServerPattern + wellknown.OAuthAuthorizationServerPath, handler: s.HandleSharedAuthorizationServerMetadata, onAuthenticationHost: true},
-		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/register", handler: s.HandleSharedRegister, onAuthenticationHost: false},
-		{method: http.MethodGet, path: sharedAuthorizationServerPattern + "/authorize", handler: s.HandleSharedAuthorize, onAuthenticationHost: false},
-		{method: http.MethodGet, path: sharedAuthorizationServerPattern + "/connect", handler: s.HandleSharedConsent, onAuthenticationHost: false},
-		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/connect", handler: s.HandleSharedConsent, onAuthenticationHost: false},
-		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/connect/remote-session", handler: s.HandleSharedConsentAction, onAuthenticationHost: false},
-		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/connect/mcp", handler: s.HandleSharedConsentMCP, onAuthenticationHost: false},
-		{method: http.MethodDelete, path: sharedAuthorizationServerPattern + "/connect/mcp", handler: s.HandleSharedConsentMCP, onAuthenticationHost: false},
-		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/token", handler: s.HandleSharedToken, onAuthenticationHost: true},
-		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/revoke", handler: s.HandleSharedRevoke, onAuthenticationHost: true},
+		{method: http.MethodGet, path: wellknown.OAuthAuthorizationServerPath + sharedAuthorizationServerPattern, handler: s.HandleSharedAuthorizationServerMetadata},
+		{method: http.MethodGet, path: sharedAuthorizationServerPattern + wellknown.OAuthAuthorizationServerPath, handler: s.HandleSharedAuthorizationServerMetadata},
+		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/register", handler: s.HandleSharedRegister},
+		{method: http.MethodGet, path: sharedAuthorizationServerPattern + "/authorize", handler: s.HandleSharedAuthorize},
+		{method: http.MethodGet, path: sharedAuthorizationServerPattern + "/connect", handler: s.HandleSharedConsent},
+		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/connect", handler: s.HandleSharedConsent},
+		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/connect/remote-session", handler: s.HandleSharedConsentAction},
+		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/connect/mcp", handler: s.HandleSharedConsentMCP},
+		{method: http.MethodDelete, path: sharedAuthorizationServerPattern + "/connect/mcp", handler: s.HandleSharedConsentMCP},
+		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/token", handler: s.HandleSharedToken},
+		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/revoke", handler: s.HandleSharedRevoke},
 	}
 }
 
@@ -79,7 +73,7 @@ func (s *Service) sharedAuthorizationServerRoutes() []sharedAuthorizationServerR
 // routes on mux.
 func attachSharedAuthorizationServers(mux goahttp.Muxer, service *Service) {
 	for _, route := range service.sharedAuthorizationServerRoutes() {
-		o11y.AttachHandler(mux, route.method, route.path, oops.ErrHandle(service.logger, route.handler).ServeHTTP)
+		o11y.AttachHandler(mux, route.method, route.path, oauthRouteHandler(service.logger, route.method, route.path, route.handler).ServeHTTP)
 	}
 }
 
@@ -97,10 +91,10 @@ func (s *Service) HandleSharedAuthorizationServerMetadata(w http.ResponseWriter,
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").LogError(ctx, issuer.logger)
 	}
-	if issuer.authorizationServer.onAuthenticationHost {
-		return writeJSONMetadata(ctx, w, r, issuer.logger, workloadAuthorizationServerMetadata(urls, s.workloadGrant != nil))
-	}
 	grantTypes := []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}
+	if s.assistantWorkloadTokens != nil {
+		grantTypes = append(grantTypes, "client_credentials")
+	}
 	var grantProfiles []string
 	if issuer.idJAGConfigured {
 		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
@@ -123,45 +117,6 @@ func (s *Service) HandleSharedAuthorizationServerMetadata(w http.ResponseWriter,
 	return writeJSONMetadata(ctx, w, r, issuer.logger, s.authorizationServerMetadata(ctx, urls, issuer.cimdAdmissionModeRaw, grantTypes, grantProfiles))
 }
 
-// workloadAuthorizationServerMetadata is the RFC 8414 metadata of a shared
-// authorization server on the authentication host. It advertises only what
-// that host serves: the token endpoint, which accepts only the workload grant,
-// and the revocation endpoint. With no authorization or registration endpoint,
-// the authorization-code fields are omitted, and response_types_supported,
-// which RFC 8414 requires, is empty. The workload grant presents no client,
-// and a token request that does present one is the ID-JAG exchange this host
-// refuses, so `none` is the only token endpoint authentication method.
-//
-// The workload grant is advertised when the deployment serves it
-// (workloadGrantServed), whether or not any of the issuer's MCP servers can
-// carry a workload session: it is the only grant this document can describe,
-// and the token endpoint refuses resources that cannot. Otherwise
-// grant_types_supported is empty rather than omitted, which RFC 8414 would
-// read as the authorization-code and implicit grants.
-func workloadAuthorizationServerMetadata(urls AuthorizationServerURLs, workloadGrantServed bool) oauthAuthorizationServerMetadata {
-	grantTypes := []string{}
-	if workloadGrantServed {
-		grantTypes = []string{oauthwire.GrantTypeJWTBearer}
-	}
-	return oauthAuthorizationServerMetadata{
-		Issuer:                                     urls.Issuer,
-		AuthorizationEndpoint:                      "",
-		TokenEndpoint:                              urls.Token,
-		RegistrationEndpoint:                       "",
-		RevocationEndpoint:                         urls.Revoke,
-		ScopesSupported:                            nil,
-		ResponseTypesSupported:                     []string{},
-		GrantTypesSupported:                        grantTypes,
-		AuthorizationGrantProfilesSupported:        nil,
-		TokenEndpointAuthMethodsSupported:          []string{oauthwire.AuthMethodNone},
-		TokenEndpointAuthSigningAlgValuesSupported: nil,
-		CodeChallengeMethodsSupported:              nil,
-		RefreshTokenExpirationTypesSupported:       nil,
-		AuthorizationResponseIssParameterSupported: false,
-		ClientIDMetadataDocumentSupported:          nil,
-	}
-}
-
 // HandleSharedRegister serves RFC 7591 dynamic client registration on a
 // shared authorization server. Clients belong to the issuer, so a client
 // registered here, or at any of the issuer's per-endpoint authorization
@@ -180,7 +135,7 @@ func (s *Service) HandleSharedRevoke(w http.ResponseWriter, r *http.Request) err
 	ctx := r.Context()
 	issuer, err := s.sharedIssuerForRequest(r)
 	if err != nil {
-		return err
+		return tokenEndpointResolutionError(err)
 	}
 	urls, err := issuer.authorizationServer.urls()
 	if err != nil {
@@ -213,9 +168,8 @@ func (s *Service) HandleSharedAuthorize(w http.ResponseWriter, r *http.Request) 
 
 // rejectSharedAuthorizeResource answers an authorization request whose
 // resource indicator was refused with invalid_target (RFC 8707 §2). It is
-// redirected to the client only when the client and its redirect_uri check out
-// against the issuer's registrations, the same condition the per-endpoint
-// authorization endpoint redirects under; otherwise it is rendered inline.
+// Eligible callbacks must match the issuer's registrations; automatic redirects
+// additionally require a loopback destination before authentication.
 func (s *Service) rejectSharedAuthorizeResource(w http.ResponseWriter, r *http.Request, issuer *sharedIssuer, rejection sharedResourceRejection) error {
 	ctx := r.Context()
 	logger := issuer.logger
@@ -224,7 +178,7 @@ func (s *Service) rejectSharedAuthorizeResource(w http.ResponseWriter, r *http.R
 	req := usersessions.AuthorizationRequestFromQuery(r.URL.Query())
 	req.SetDefaults()
 	if err := req.ValidateRedirectableFields(); err != nil {
-		return writeAuthorizeOAuthError(ctx, w, logger, http.StatusBadRequest, err)
+		return writeAuthorizeOAuthError(ctx, w, logger, http.StatusBadRequest, authorizationErrorPage(nil, req.ClientID, ""), err)
 	}
 	// A client_id this issuer has not registered, including a CIMD client on
 	// first contact, has no redirect_uri that can be trusted yet.
@@ -234,15 +188,17 @@ func (s *Service) rejectSharedAuthorizeResource(w http.ResponseWriter, r *http.R
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, description)
+		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, authorizationErrorPage(nil, req.ClientID, ""), oautherr.CodeInvalidTarget, description)
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
 	if !redirectURIMatches(&client, req.RedirectURI) {
-		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, description)
+		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, authorizationErrorPage(nil, req.ClientID, ""), oautherr.CodeInvalidTarget, description)
 	}
-	return redirectAuthorizeOAuthError(ctx, w, r, logger, issuer.authorizationServer.issuer, req.RedirectURI, req.State, string(rejection),
-		&oauthwire.Error{Code: oautherr.CodeInvalidTarget, Description: description})
+	// The rejected resource names no server this issuer will identify, so the
+	// page names only the client.
+	return writePreAuthenticationAuthorizeError(ctx, w, r, logger, issuer.authorizationServer.issuer, req.RedirectURI, req.State, string(rejection),
+		authorizationErrorPage(&client, req.ClientID, ""), &oauthwire.Error{Code: oautherr.CodeInvalidTarget, Description: description})
 }
 
 // sharedResourceDescription is the error_description for a refused resource
@@ -294,8 +250,7 @@ func (s *Service) HandleSharedConsentAction(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		return err
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, consentActionFormMaxBytes)
-	if err := r.ParseForm(); err != nil {
+	if err := parseConsentActionForm(w, r); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to parse form").LogError(ctx, issuer.logger)
 	}
 	endpoint, err := s.sharedChallengeEndpoint(ctx, issuer, r.PostForm.Get("state"))
@@ -331,10 +286,10 @@ func (s *Service) sharedChallengeEndpoint(ctx context.Context, issuer *sharedIss
 	}
 	challenge, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, issuer.logger)
+		return nil, consentChallengeCacheError(ctx, issuer.logger, err)
 	}
 	if challenge.UserSessionIssuerID != issuer.authorizationServer.issuerID || !challenge.Endpoint.SharedAuthorizationServer {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this authorization server").LogError(ctx, issuer.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "authn challenge state does not match this authorization server").LogWarn(ctx, issuer.logger)
 	}
 	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, challenge.Endpoint)
 	if errors.Is(err, errToolsetEndpointMismatch) {
@@ -350,14 +305,11 @@ func (s *Service) sharedChallengeEndpoint(ctx context.Context, issuer *sharedIss
 // client-authenticated ID-JAG or clientless workload handler. A clientless
 // workload grant naming no resource is served for all of the issuer's MCP
 // servers; an ID-JAG exchange must still name one.
-// On the authentication host, which serves no authorization endpoint, only
-// assertion grants are accepted, and the ID-JAG exchange is refused there by
-// the dispatch it shares with per-endpoint token endpoints.
 func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	issuer, err := s.sharedIssuerForRequest(r)
 	if err != nil {
-		return err
+		return tokenEndpointResolutionError(err)
 	}
 	logger := issuer.logger
 
@@ -366,17 +318,30 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "failed to parse form")
 	}
 
+	if code := oauthwire.ClientAuthenticationError(r); code == oautherr.CodeInvalidRequest {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", "", "", r.PostForm.Get(oauthwire.ParamGrantType), code)
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, code, "invalid client authentication request")
+	}
+
 	var endpoint *ResolvedMcpEndpoint
 	grantType := r.PostForm.Get(oauthwire.ParamGrantType)
-	browserGrants := !issuer.authorizationServer.onAuthenticationHost
-	switch {
-	case grantType == oauthwire.GrantTypeAuthorizationCode && browserGrants:
+	if grantType == "" {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "grant_type is required")
+	}
+	switch grantType {
+	case oauthwire.GrantTypeAuthorizationCode:
 		endpoint, err = s.sharedAuthorizationCodeEndpoint(ctx, w, logger, issuer.authorizationServer.issuerID, r.PostForm.Get(oauthwire.ParamCode))
-	case grantType == oauthwire.GrantTypeRefreshToken && browserGrants:
+	case oauthwire.GrantTypeRefreshToken:
 		endpoint, err = s.sharedRefreshTokenEndpoint(ctx, w, logger, issuer.authorizationServer, r.PostForm.Get(oauthwire.ParamRefreshToken))
-	case grantType == oauthwire.GrantTypeJWTBearer:
+	case "client_credentials", oauthwire.GrantTypeJWTBearer:
+		if grantType == "client_credentials" && s.assistantWorkloadTokens == nil {
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "unsupported grant_type")
+		}
 		resources := r.PostForm[oauthwire.ParamResource]
-		if len(resources) == 0 && extractClientCredentials(r).clientless(r) {
+		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 1 && resources[0] == InferenceResource && extractClientCredentials(r).clientless(r) {
+			return s.handleInferenceWorkloadGrant(ctx, w, r, issuer)
+		}
+		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 0 && extractClientCredentials(r).clientless(r) {
 			return s.handleIssuerWorkloadAssertionGrant(ctx, w, r, issuer)
 		}
 		var rejection sharedResourceRejection

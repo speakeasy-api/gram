@@ -8,9 +8,10 @@ import type { RemoteSessionIssuer } from "@gram/client/models/components/remotes
 import { useState } from "react";
 import { remoteSessionClientDisplayName } from "../../clientDisplay";
 import { DeleteClientDialog, RotateClientDialog } from "../../clientDialogs";
+import { DuplicateClientFlow } from "../../DuplicateClient";
 
-// ClientLifecycleSections holds the Registration and Danger Zone sections below
-// the client card.
+// ClientLifecycleSections holds the Registration, Duplicate, and Danger Zone
+// sections below the client card.
 export function ClientLifecycleSections({
   client,
   issuer,
@@ -23,6 +24,7 @@ export function ClientLifecycleSections({
   const routes = useRoutes();
   const [showDelete, setShowDelete] = useState(false);
   const [showRotate, setShowRotate] = useState(false);
+  const [showDuplicate, setShowDuplicate] = useState(false);
   // A rotation re-registers the client at the issuer's published registration
   // endpoint, so the issuer decides whether one is possible at all.
   const issuerRegistrationEndpoint = issuer?.registrationEndpoint ?? null;
@@ -53,6 +55,29 @@ export function ClientLifecycleSections({
         </Card.Content>
       </Card>
 
+      <RequireScope scope="org:admin" level="component">
+        <Card>
+          <Card.Header>Duplicate</Card.Header>
+          <Card.Content>
+            <div className="flex flex-col gap-3">
+              <Text small muted>
+                Create a new client with this client&apos;s settings, to change
+                some of them without affecting the MCP servers that use this
+                one.
+              </Text>
+              <div>
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowDuplicate(true)}
+                >
+                  <Button.Text>Duplicate client</Button.Text>
+                </Button>
+              </div>
+            </div>
+          </Card.Content>
+        </Card>
+      </RequireScope>
+
       <Card className="border-destructive/30">
         <Card.Header className="text-destructive">Danger zone</Card.Header>
         <Card.Content>
@@ -79,6 +104,15 @@ export function ClientLifecycleSections({
           clientId={client.id}
           clientLabel={remoteSessionClientDisplayName(client)}
           onClose={() => setShowRotate(false)}
+        />
+      )}
+
+      {showDuplicate && (
+        <DuplicateClientFlow
+          client={client}
+          issuer={issuer}
+          issuerId={issuerId}
+          onClose={() => setShowDuplicate(false)}
         />
       )}
 
@@ -111,7 +145,7 @@ function RegistrationStatus({
     return (
       <Text small muted>
         {client.clientIdMetadataUri
-          ? "This client uses a client ID metadata document hosted by Speakeasy. It is never registered with the identity provider, so it cannot expire and has nothing to rotate."
+          ? "This client uses a client ID metadata document hosted by Speakeasy. It is never registered with the authorization server, so it cannot expire and has nothing to rotate."
           : "This client authenticates with a signed assertion bound to a key set, which dynamic registration cannot reproduce. Manage its key set instead of rotating it."}
       </Text>
     );
@@ -119,11 +153,11 @@ function RegistrationStatus({
   if (client.upstreamRejectedAt) {
     return (
       <Text small className="text-destructive">
-        The identity provider stopped recognizing this client on{" "}
+        The authorization server stopped recognizing this client on{" "}
         {client.upstreamRejectedAt.toLocaleString()}.{" "}
         {issuerRegistrationEndpoint
           ? "Rotate it to register a replacement; users reconnect once afterwards."
-          : "The provider publishes no registration endpoint, so replace the client ID and secret by hand."}
+          : "The authorization server publishes no registration endpoint, so replace the client ID and secret by hand."}
       </Text>
     );
   }
@@ -134,16 +168,16 @@ function RegistrationStatus({
     return (
       <Text small muted>
         Speakeasy re-registers this client at {issuerRegistrationEndpoint} if
-        the identity provider stops recognizing it or its secret expires; rotate
-        now to replace it ahead of time.{expiryNote}
+        the authorization server stops recognizing it or its secret expires;
+        rotate now to replace it ahead of time.{expiryNote}
       </Text>
     );
   }
   return (
     <Text small muted>
-      The identity provider publishes no registration endpoint, so Speakeasy
+      The authorization server publishes no registration endpoint, so Speakeasy
       cannot re-register this client; replace its credentials by hand if the
-      provider stops recognizing them.{expiryNote}
+      authorization server stops recognizing them.{expiryNote}
     </Text>
   );
 }

@@ -1,7 +1,9 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, expect, it } from "vitest";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import {
+  accessSummary,
   buildAccessRows,
   complementTools,
   inheritedGrants,
@@ -224,15 +226,67 @@ describe("a person and the roles they are in", () => {
     expect(scopeState(row, "view", catalog).note).toBe("included in Manage");
   });
 
-  it("reads a row's own block for every server as plain no access", () => {
+  it("reads a row's own block for every server as blocked", () => {
     const row = rowFor([role("Collaborator", { level: "blocked_manage" })]);
     const state = scopeState(row, "manage", catalog);
 
-    expect(state.value).toBe("No access");
+    expect(state.value).toBe("Blocked");
     expect(state.granted).toBe(false);
+    expect(state.blocked).toBe(true);
     expect(state.via).toBeUndefined();
     expect(state.note).toBeUndefined();
     expect(state.capped).toBe(true);
+  });
+
+  it("reads a row's own block on this server as blocked", () => {
+    const row = rowFor([
+      role("Collaborator", { appliesTo: "resource", level: "blocked" }),
+    ]);
+    const state = scopeState(row, "use", catalog);
+
+    expect(state.value).toBe("Blocked");
+    expect(state.blocked).toBe(true);
+    // The row's own block can be lifted here, so the line stays editable.
+    expect(state.capped).toBe(false);
+  });
+
+  it("does not call a line blocked when only another principal blocks it", () => {
+    const person = personIn([
+      role("Admin", { level: "blocked_view" }),
+      entry({ principalUrn: "user:u1", appliesTo: "all_resources" }),
+    ]);
+    const state = scopeState(person, "view", catalog);
+
+    expect(state.blocked).toBe(false);
+    expect(state.value).toBe("No access");
+  });
+
+  it("calls a narrowed own block blocked when it covers every granted tool", () => {
+    const row = rowFor([
+      role("Collaborator", { level: "use" }),
+      role("Collaborator", {
+        appliesTo: "resource",
+        level: "blocked",
+        tools: ["a", "b", "c", "d", "e"],
+      }),
+    ]);
+    const state = scopeState(row, "use", catalog);
+
+    expect(state.value).toBe("Blocked");
+    expect(state.blocked).toBe(true);
+  });
+
+  it("does not call a narrowed own block blocked", () => {
+    const row = rowFor([
+      role("Collaborator", { level: "use" }),
+      role("Collaborator", {
+        appliesTo: "resource",
+        level: "blocked",
+        dispositions: ["destructive"],
+      }),
+    ]);
+
+    expect(scopeState(row, "use", catalog).blocked).toBe(false);
   });
 
   it("names another principal over the row's own wider rule", () => {
@@ -515,5 +569,86 @@ describe("keptIndividually", () => {
       "Hana Sato",
       "Outside Staff",
     ]);
+  });
+});
+
+it.each(["future_level", "constructor", "__proto__"])(
+  "keeps an unknown own level %s readable without claiming access",
+  (level) => {
+    const rows = buildAccessRows([
+      entry({}),
+      entry({ level: unrecognized(level) }),
+    ]);
+    expect(accessSummary(rows[0]!)).toBe("Access unknown");
+    expect(scopeState(rows[0]!, "use").value).toBe("Access unknown");
+  },
+);
+
+it("does not claim known access survives an unknown inherited block", () => {
+  const row = personIn([
+    entry({}),
+    role("Engineering", { level: unrecognized("future_block") }),
+  ]);
+  expect(accessSummary(row)).toBe("Access unknown");
+});
+
+it("treats unknown applicability as unknown reach", () => {
+  const row = rowFor([
+    entry({ appliesTo: unrecognized("future_applicability") }),
+  ]);
+  expect(accessSummary(row)).toBe("Access unknown");
+  expect(scopeState(row, "use").value).toBe("Access unknown");
+});
+
+it.each(["future_kind", "constructor", "__proto__"])(
+  "does not infer reach for principal kind %s",
+  (kind) => {
+    const row = rowFor([entry({ kind: unrecognized(kind) })]);
+    expect(accessSummary(row)).toBe("Access unknown");
+    expect(scopeState(row, "use").value).toBe("Access unknown");
+  },
+);
+
+it("marks members reached by an unknown principal kind as unknown without changing unrelated rows", () => {
+  const rows = buildAccessRows([
+    role("Future group", {
+      kind: unrecognized("future_group"),
+      memberIds: ["u1"],
+    }),
+    entry({}),
+    entry({ principalUrn: "user:unrelated" }),
+  ]);
+  expect(
+    accessSummary(rows.find((row) => row.principalUrn === "user:u1")!),
+  ).toBe("Access unknown");
+  expect(
+    accessSummary(rows.find((row) => row.principalUrn === "user:unrelated")!),
+  ).toBe("All tools");
+});
+
+describe("a blocking row at a glance", () => {
+  it("reads a role blocked on every scope as blocked", () => {
+    const row = rowFor([
+      role("Contractors", { appliesTo: "resource", level: "blocked" }),
+      role("Contractors", { appliesTo: "resource", level: "blocked_view" }),
+      role("Contractors", { appliesTo: "resource", level: "blocked_manage" }),
+    ]);
+
+    expect(accessSummary(row, catalog)).toBe("Blocked");
+  });
+
+  it("names the blocked scopes after what the role still has", () => {
+    const row = rowFor([
+      role("Contractors", { level: "view" }),
+      role("Contractors", { appliesTo: "resource", level: "blocked" }),
+    ]);
+
+    expect(accessSummary(row, catalog)).toBe("View · Connect blocked");
+  });
+
+  it("names a partial block even when nothing is granted", () => {
+    const row = rowFor([role("Contractors", { level: "blocked_manage" })]);
+
+    expect(accessSummary(row, catalog)).toBe("Manage blocked");
   });
 });

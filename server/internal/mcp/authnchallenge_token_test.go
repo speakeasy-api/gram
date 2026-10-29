@@ -5,13 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -22,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -82,7 +83,7 @@ func TestHandleTokenCode_AgentAuthorizationUsesIsolatedGrantNamespace(t *testing
 	require.True(t, session.AuthorizerUserID.Valid)
 	require.Equal(t, fx.userID, session.AuthorizerUserID.String)
 	require.True(t, session.DelegatedGrantsVersion.Valid)
-	require.Equal(t, int32(runtimepolicy.CurrentDelegatedPolicyVersion), session.DelegatedGrantsVersion.Int32)
+	require.Equal(t, int32(runtimepolicy.IssuedDelegatedPolicyVersion), session.DelegatedGrantsVersion.Int32)
 	policy, err := runtimepolicy.DecodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion(session.DelegatedGrantsVersion.Int32), session.DelegatedGrants)
 	require.NoError(t, err)
 	require.Len(t, policy.Requested, 1)
@@ -98,7 +99,7 @@ func TestHandleTokenCode_AgentAuthorizationUsesIsolatedGrantNamespace(t *testing
 		AudienceURN:         urn.NewToolset(fx.toolset.ID).String(),
 		OrganizationID:      fx.orgID,
 		ProjectID:           fx.target.ProjectID,
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 		Slug:                fx.toolset.McpSlug.String,
 		ToolsetID:           uuid.NullUUID{UUID: fx.toolset.ID, Valid: true},
 		UserSessionIssuerID: fx.target.UserSessionIssuerID,
@@ -186,8 +187,7 @@ func TestHandleTokenCode_ResourceIndicator(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	require.Contains(t, w.Body.String(), "invalid_target")
 
-	// Same server, wrong route base: /mcp and /x/mcp mint different audiences,
-	// so they are never interchangeable resource identifiers.
+	// The retired /x/mcp form is not an accepted resource identifier.
 	w = redeem(strings.Replace(advertisedResource, "/mcp/", "/x/mcp/", 1))
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	require.Contains(t, w.Body.String(), "invalid_target")
@@ -228,11 +228,8 @@ func TestHandleTokenWrongEndpointDoesNotBurnAuthorizationCode(t *testing.T) {
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	other := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "sibling-"+uuid.NewString()[:8])
-	other, err = toolsets_repo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, Slug: other.Slug, ProjectID: other.ProjectID,
-	})
-	require.NoError(t, err)
+	other := createPublicMCPToolset(t, ctx, ti, authCtx, "sibling-"+uuid.NewString()[:8])
+	other = setToolsetIssuer(t, ctx, ti.conn, other.ProjectID, other, issuer.ID)
 
 	verifier := "verifier-" + uuid.NewString()
 	sum := sha256.Sum256([]byte(verifier))

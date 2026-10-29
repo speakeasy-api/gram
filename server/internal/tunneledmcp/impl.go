@@ -21,7 +21,6 @@ import (
 	"goa.design/goa/v3/security"
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/tunneled_mcp/server"
-
 	gen "github.com/speakeasy-api/gram/server/gen/tunneled_mcp"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -33,15 +32,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/tunnelmetrics"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 type Service struct {
+	Metrics       *tunnelmetrics.Store
 	tracer        trace.Tracer
 	logger        *slog.Logger
 	db            *pgxpool.Pool
@@ -71,6 +73,7 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("tunneledmcp"))
 
 	return &Service{
+		Metrics:       nil,
 		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/tunneledmcp"),
 		logger:        logger,
 		db:            db,
@@ -537,6 +540,14 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 			return nil
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete tunneled mcp server").LogError(ctx, logger)
+	}
+
+	// Retire the typed auth clients, server links and header copies derived
+	// from the deleted source's credential headers. Nothing else does: the
+	// headers stay on the tombstoned source, so only its liveness says they
+	// are gone.
+	if err := authclientbackfill.SyncTunneledSource(ctx, dbtx, authCtx.ActiveOrganizationID, deleted.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync tunneled mcp server auth clients").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogTunneledMcpServerDelete(ctx, dbtx, audit.LogTunneledMcpServerDeleteEvent{

@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -16,6 +17,7 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
@@ -37,12 +39,17 @@ const workloadGrantJWTBearer = "urn:ietf:params:oauth:grant-type:jwt-bearer"
 // workload issuer at the organization tier, an admitted subject, and an agent
 // assigned to it that may connect to the server.
 type workloadGrantFixture struct {
+	// ctx is authenticated as the organization member who owns the agent.
+	ctx      context.Context //nolint:containedctx // immutable request authentication fixture
 	ti       *testInstance
 	fx       agentConsentFixture
 	issuer   *devidptest.Instance
 	issuerID uuid.UUID
 	agentID  uuid.UUID
 	subject  string
+
+	// assignmentID is the subject's agent assignment.
+	assignmentID uuid.UUID
 
 	// resource is the server's canonical URL on the MCP host.
 	resource string
@@ -61,17 +68,30 @@ func newWorkloadGrantFixture(t *testing.T) workloadGrantFixture {
 func newWorkloadGrantFixtureWithLogger(t *testing.T, logger *slog.Logger) workloadGrantFixture {
 	t.Helper()
 
+	return newWorkloadGrantFixtureOn(t, logger, "")
+}
+
+// newWorkloadGrantFixtureOn builds the fixture on a service whose server URL
+// is serverURL, or the harness default when empty.
+func newWorkloadGrantFixtureOn(t *testing.T, logger *slog.Logger, serverURL string) workloadGrantFixture {
+	t.Helper()
+	return newWorkloadGrantFixtureWithPool(t, logger, serverURL, nil)
+}
+
+func newWorkloadGrantFixtureWithPool(t *testing.T, logger *slog.Logger, serverURL string, configurePool func(*pgxpool.Config)) workloadGrantFixture {
+	t.Helper()
+
 	issuer := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: false, Key: nil, TLS: true})
 	jwksURI := oauthtest.DiscoverWorkloadJWKSURI(t, issuer)
 
-	ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, logger, testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
+	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, logger, testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
 		SessionTTL:         0,
 		LiveSessionCap:     0,
 		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 		MaxRequestLifetime: 0,
-	}, nil, guardian.WithTLSRootCAs(issuer.RootCAs()))
-	fx := newAgentConsentFixture(t, ctx, ti)
+	}, nil, configurePool, true, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0}, testenv.NewTracerProvider(t), nil, nil, serverURL, guardian.WithTLSRootCAs(issuer.RootCAs()))
+	fx := newWorkloadConsentFixture(t, ctx, ti)
 
 	agent := createConsentAgent(t, ctx, ti, fx, "Workload deploy agent")
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
@@ -92,17 +112,19 @@ func newWorkloadGrantFixtureWithLogger(t *testing.T, logger *slog.Logger) worklo
 		WorkloadIssuerID: issuerID,
 		Subject:          subject,
 	}))
-	assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, subject, agent.ID)
+	assignmentID := assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, subject, agent.ID)
 
 	slug := fx.toolset.McpSlug.String
 	advertisedIssuer, _ := fetchAdvertisedIssuer(t, ctx, ti, slug)
 
 	return workloadGrantFixture{
+		ctx:              ctx,
 		ti:               ti,
 		fx:               fx,
 		issuer:           issuer,
 		issuerID:         issuerID,
 		agentID:          agent.ID,
+		assignmentID:     assignmentID,
 		subject:          subject,
 		resource:         strings.TrimSuffix(ti.serverURL.String(), "/") + "/mcp/" + slug,
 		advertisedIssuer: advertisedIssuer,

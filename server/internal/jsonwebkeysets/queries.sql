@@ -17,6 +17,7 @@
 SELECT
   sqlc.embed(ek),
   gcp.resource_name,
+  is_internal_session_issuer_external_key(ek.organization_id, ek.id) AS ema_issuer_managed,
   ec.id AS credential_id,
   gic.impersonate_service_account,
   gic.wif_pool_id,
@@ -29,7 +30,7 @@ LEFT JOIN external_credentials AS ec
        ON ec.id = ek.external_credential_id
       AND (
         ec.organization_id = ek.organization_id
-        OR (ek.identity_provider_connection_id IS NOT NULL AND ec.organization_id IS NULL)
+        OR (ec.organization_id IS NULL AND (ek.identity_provider_connection_id IS NOT NULL OR is_internal_session_issuer_external_key(ek.organization_id, ek.id)))
       )
       AND ec.project_id IS NULL
       AND ec.provider = 'gcp_iam'
@@ -54,13 +55,14 @@ WHERE ek.id = @id
 -- set reference a project-scoped key would entangle project deletion with
 -- org-level state.
 -- name: LockExternalKeyForJwksWrite :one
-SELECT id, provider, algorithm, identity_provider_connection_id
-FROM external_keys
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND project_id IS NULL
-  AND deleted IS FALSE
-FOR SHARE;
+SELECT ek.id, ek.provider, ek.algorithm, ek.identity_provider_connection_id,
+  is_internal_session_issuer_external_key(ek.organization_id, ek.id) AS ema_issuer_managed
+FROM external_keys AS ek
+WHERE ek.id = @id
+  AND ek.organization_id = @organization_id
+  AND ek.project_id IS NULL
+  AND ek.deleted IS FALSE
+FOR SHARE OF ek;
 
 -- name: CreateJsonWebKeySet :one
 INSERT INTO json_web_key_sets (organization_id, external_key_id, name, identity_provider_connection_id)
@@ -70,10 +72,11 @@ RETURNING *;
 -- name: GetJsonWebKeySet :one
 SELECT *
 FROM json_web_key_sets
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND project_id IS NULL
-  AND deleted IS FALSE;
+WHERE json_web_key_sets.id = @id
+  AND json_web_key_sets.organization_id = @organization_id
+  AND json_web_key_sets.project_id IS NULL
+  AND NOT is_internal_session_issuer_key_set(json_web_key_sets.organization_id, json_web_key_sets.id)
+  AND json_web_key_sets.deleted IS FALSE;
 
 -- Sets left behind by a tombstoned identity provider connection are hidden;
 -- they stay reachable by id so the organization can delete them.
@@ -82,6 +85,7 @@ SELECT *
 FROM json_web_key_sets AS s
 WHERE s.organization_id = @organization_id
   AND s.project_id IS NULL
+  AND NOT is_internal_session_issuer_key_set(s.organization_id, s.id)
   AND s.deleted IS FALSE
   AND NOT EXISTS (
     SELECT 1
@@ -97,10 +101,11 @@ UPDATE json_web_key_sets
 SET name = @name,
     external_key_id = @external_key_id,
     updated_at = clock_timestamp()
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND project_id IS NULL
-  AND deleted IS FALSE
+WHERE json_web_key_sets.id = @id
+  AND json_web_key_sets.organization_id = @organization_id
+  AND json_web_key_sets.project_id IS NULL
+  AND NOT is_internal_session_issuer_key_set(json_web_key_sets.organization_id, json_web_key_sets.id)
+  AND json_web_key_sets.deleted IS FALSE
 RETURNING *;
 
 -- Locks the set row to serialize every key write against every other and
@@ -114,19 +119,21 @@ RETURNING *;
 -- name: LockJsonWebKeySetForKeyWrite :one
 SELECT *
 FROM json_web_key_sets
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND project_id IS NULL
-  AND deleted IS FALSE
-FOR UPDATE;
+WHERE json_web_key_sets.id = @id
+  AND json_web_key_sets.organization_id = @organization_id
+  AND json_web_key_sets.project_id IS NULL
+  AND NOT is_internal_session_issuer_key_set(json_web_key_sets.organization_id, json_web_key_sets.id)
+  AND json_web_key_sets.deleted IS FALSE
+FOR UPDATE OF json_web_key_sets;
 
 -- name: SoftDeleteJsonWebKeySet :one
 UPDATE json_web_key_sets
 SET deleted_at = clock_timestamp()
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND project_id IS NULL
-  AND deleted IS FALSE
+WHERE json_web_key_sets.id = @id
+  AND json_web_key_sets.organization_id = @organization_id
+  AND json_web_key_sets.project_id IS NULL
+  AND NOT is_internal_session_issuer_key_set(json_web_key_sets.organization_id, json_web_key_sets.id)
+  AND json_web_key_sets.deleted IS FALSE
 RETURNING *;
 
 -- Soft-deletes every live key in a set alongside the set itself. The foreign
@@ -308,3 +315,219 @@ FROM remote_session_clients
 WHERE organization_id = @organization_id::text
   AND json_web_key_set_id = @json_web_key_set_id::uuid
   AND deleted IS FALSE;
+
+-- The organization's live issuer row, enabled or disabled. A disabled
+-- organization has none.
+-- name: GetOrganizationInternalSessionIssuer :one
+SELECT isi.*
+FROM internal_session_issuers AS isi
+JOIN organization_metadata AS o ON o.id = isi.organization_id AND o.disabled_at IS NULL
+WHERE isi.organization_id = @organization_id
+  AND isi.deleted IS FALSE;
+
+-- Serializes issuer creation per organization. NO KEY UPDATE leaves the
+-- organization's foreign-key-checked inserts unblocked.
+-- name: LockOrganizationForEMAIssuer :one
+SELECT id
+FROM organization_metadata
+WHERE id = @organization_id
+  AND disabled_at IS NULL
+FOR NO KEY UPDATE;
+
+-- The issuer URL is pinned here and never recomputed from configuration.
+-- name: CreateInternalSessionIssuer :one
+INSERT INTO internal_session_issuers (organization_id, json_web_key_set_id, issuer)
+VALUES (@organization_id, @json_web_key_set_id, @issuer)
+RETURNING *;
+
+-- Enables or disables signing; discovery keeps serving either way.
+-- name: SetInternalSessionIssuerDisabled :one
+UPDATE internal_session_issuers
+SET disabled_at = CASE WHEN @disabled::boolean THEN COALESCE(disabled_at, clock_timestamp()) ELSE NULL END,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- Serializes every key write on the issuer's key set, like
+-- LockJsonWebKeySetForKeyWrite does for customer sets.
+-- name: LockOrganizationEMAIssuerForKeyWrite :one
+SELECT s.*
+FROM json_web_key_sets AS s
+JOIN internal_session_issuers AS isi
+  ON isi.organization_id = s.organization_id
+ AND isi.json_web_key_set_id = s.id
+ AND isi.deleted IS FALSE
+WHERE s.organization_id = @organization_id
+  AND s.project_id IS NULL
+  AND s.deleted IS FALSE
+FOR UPDATE OF s;
+
+-- name: SetOrganizationEMAIssuerBackingKey :one
+UPDATE json_web_key_sets
+SET external_key_id = @external_key_id,
+    updated_at = clock_timestamp()
+WHERE json_web_key_sets.id = @id
+  AND json_web_key_sets.organization_id = @organization_id
+  AND EXISTS (SELECT 1 FROM internal_session_issuers AS isi
+    WHERE isi.organization_id = json_web_key_sets.organization_id
+      AND isi.json_web_key_set_id = json_web_key_sets.id AND isi.deleted IS FALSE)
+  AND json_web_key_sets.deleted IS FALSE
+RETURNING *;
+
+-- The organization's pinned issuer URL and its public verification keys,
+-- served whether or not signing is disabled. Pending keys are published before
+-- activation; a retired key stays only for the overlap window, then drops out
+-- even before it is revoked. Ordered by immutable key id so the document and
+-- its ETag are stable.
+-- name: GetOrganizationEMAIssuerKeys :one
+SELECT isi.issuer, COALESCE(jsonb_agg(k.public_jwk ORDER BY k.id) FILTER (WHERE k.id IS NOT NULL), '[]'::jsonb)::jsonb AS keys
+FROM internal_session_issuers AS isi
+JOIN organization_metadata AS o ON o.id = isi.organization_id AND o.disabled_at IS NULL
+JOIN json_web_key_sets AS s
+  ON s.organization_id = isi.organization_id
+ AND s.id = isi.json_web_key_set_id
+ AND s.deleted IS FALSE
+LEFT JOIN json_web_keys AS k
+  ON k.organization_id = s.organization_id
+ AND k.json_web_key_set_id = s.id
+ AND k.deleted IS FALSE
+ AND (k.state IN ('pending', 'active')
+   OR (k.state = 'retired' AND k.retired_at > clock_timestamp() - make_interval(secs => @retired_overlap_seconds::integer)))
+WHERE isi.organization_id = @organization_id::text
+  AND isi.deleted IS FALSE
+GROUP BY isi.id, isi.issuer;
+
+-- A cheap fingerprint of the issuer's key rows, revoked ones included, so a
+-- cached JWKS notices any key write without reading the keys. Every row's id,
+-- state, deletion and updated_at feed the digest, so a change to any row
+-- changes it. A disabled organization has no fingerprint, as it has no keys.
+-- name: GetOrganizationEMAIssuerKeysVersion :one
+SELECT isi.json_web_key_set_id,
+  md5(COALESCE(string_agg(k.id::text || ':' || k.state || ':' || k.deleted::text || ':' || k.updated_at::text, ',' ORDER BY k.id), ''))::text AS keys_digest
+FROM internal_session_issuers AS isi
+JOIN organization_metadata AS o ON o.id = isi.organization_id AND o.disabled_at IS NULL
+LEFT JOIN json_web_keys AS k
+  ON k.organization_id = isi.organization_id
+ AND k.json_web_key_set_id = isi.json_web_key_set_id
+WHERE isi.organization_id = @organization_id::text
+  AND isi.deleted IS FALSE
+GROUP BY isi.id, isi.json_web_key_set_id;
+
+-- Retired issuer keys stop being published once nothing they signed can still
+-- verify. Uses the database clock.
+-- name: RevokeExpiredEMAIssuerKeys :many
+UPDATE json_web_keys
+SET state = 'revoked',
+    revoked_at = clock_timestamp(),
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE json_web_key_set_id = @json_web_key_set_id
+  AND organization_id = @organization_id
+  AND state = 'retired'
+  AND deleted IS FALSE
+  AND retired_at <= clock_timestamp() - make_interval(secs => @overlap_seconds::integer)
+RETURNING *;
+
+-- Cheap check before the sweep takes the issuer lock.
+-- name: HasExpiredEMAIssuerKeys :one
+SELECT EXISTS (
+  SELECT 1
+  FROM internal_session_issuers AS isi
+  JOIN json_web_keys AS k
+    ON k.organization_id = isi.organization_id
+   AND k.json_web_key_set_id = isi.json_web_key_set_id
+  WHERE isi.organization_id = @organization_id
+    AND isi.deleted IS FALSE
+    AND k.state = 'retired'
+    AND k.deleted IS FALSE
+    AND k.retired_at <= clock_timestamp() - make_interval(secs => @overlap_seconds::integer)
+);
+
+-- System sweep: organizations whose live issuer has retired keys past the
+-- overlap, revoked keys from any issuer row whose KMS cleanup is still
+-- pending, or an enabled issuer with a pending key past the activation delay. Paged by organization id so every organization is reached each
+-- run. Returns only organization ids; each is then swept org-qualified.
+-- name: ListOrganizationsWithPendingEMAIssuerWork :many
+SELECT DISTINCT isi.organization_id
+FROM internal_session_issuers AS isi
+JOIN json_web_keys AS k
+  ON k.organization_id = isi.organization_id
+ AND k.json_web_key_set_id = isi.json_web_key_set_id
+WHERE isi.organization_id > @after_organization_id::text
+  AND ((isi.deleted IS FALSE
+      AND k.state = 'retired'
+      AND k.deleted IS FALSE
+      AND k.retired_at <= clock_timestamp() - make_interval(secs => @overlap_seconds::integer))
+    OR (k.state = 'revoked' AND k.kms_disabled_at IS NULL)
+    OR (isi.deleted IS FALSE
+      AND isi.disabled_at IS NULL
+      AND EXISTS (SELECT 1 FROM organization_metadata AS o WHERE o.id = isi.organization_id AND o.disabled_at IS NULL)
+      AND k.state = 'pending'
+      AND k.deleted IS FALSE
+      -- 'infinity' is a publication that committed but was never observed;
+      -- the sweep observes it and activates it a full delay later.
+      AND (k.updated_at = 'infinity' OR k.updated_at <= clock_timestamp() - make_interval(secs => @activation_seconds::integer))))
+ORDER BY isi.organization_id
+LIMIT @max_organizations;
+
+-- System metric: revoked issuer keys still awaiting KMS cleanup, fleet-wide.
+-- Returns a count only.
+-- name: CountPendingEMAIssuerKMSCleanup :one
+SELECT count(*)::bigint
+FROM internal_session_issuers AS isi
+JOIN json_web_keys AS k
+  ON k.organization_id = isi.organization_id
+ AND k.json_web_key_set_id = isi.json_web_key_set_id
+WHERE k.state = 'revoked'
+  AND k.kms_disabled_at IS NULL;
+
+-- Revoked issuer keys whose KMS version is not yet confirmed disabled, from
+-- any issuer row the organization ever had. Least recently attempted first:
+-- a failed attempt bumps updated_at, so keys that keep failing can't hold
+-- back the rest.
+-- name: ListPendingEMAIssuerKMSCleanup :many
+SELECT k.*
+FROM internal_session_issuers AS isi
+JOIN json_web_keys AS k
+  ON k.organization_id = isi.organization_id
+ AND k.json_web_key_set_id = isi.json_web_key_set_id
+WHERE isi.organization_id = @organization_id
+  AND k.state = 'revoked'
+  AND k.kms_disabled_at IS NULL
+ORDER BY k.updated_at, k.id;
+
+-- Records a failed KMS cleanup attempt so the next run tries other keys first.
+-- name: TouchJsonWebKeyKMSCleanupAttempt :exec
+UPDATE json_web_keys
+SET updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND state = 'revoked'
+  AND kms_disabled_at IS NULL;
+
+-- Records that a revoked issuer key's KMS version is disabled and its signer
+-- grant removed.
+-- name: MarkJsonWebKeyKMSDisabled :exec
+UPDATE json_web_keys
+SET kms_disabled_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND state = 'revoked'
+  AND kms_disabled_at IS NULL;
+
+-- name: GetOrganizationInternalSessionIssuerURL :one
+SELECT isi.issuer
+FROM internal_session_issuers AS isi
+JOIN organization_metadata AS o ON o.id = isi.organization_id AND o.disabled_at IS NULL
+WHERE isi.organization_id = @organization_id
+  AND isi.deleted IS FALSE;
+
+-- Cleanup must verify deployment ownership even after an issuer is tombstoned
+-- or its organization disabled. Such rows may still own KMS cleanup work.
+-- name: GetInternalSessionIssuerForOwnership :one
+SELECT issuer
+FROM internal_session_issuers
+WHERE organization_id = @organization_id
+  AND json_web_key_set_id = @json_web_key_set_id;

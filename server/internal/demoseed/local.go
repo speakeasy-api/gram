@@ -56,16 +56,22 @@ type LocalFixturesOptions struct {
 	// ObservedEnv holds the current values of StaleOverrideVars, so the
 	// fixtures can warn when mise.local.toml is shadowing them.
 	ObservedEnv map[string]string
+	// Slack connects the org to the developer's Slack test app, when set.
+	Slack LocalSlackOptions
 }
 
 // RunLocalFixtures adds everything the local development organization needs on
 // top of the seeded data, none of which belongs in the shared demo org:
 //
 //   - you, as a real member with the Admin role and platform super-admin;
-//   - the system roles and their grants, plus a direct chat:read grant so the
-//     Agent Sessions list shows the seeded chats rather than only your own;
-//   - a fixed API key and default environment, both with well-known ids so
-//     mise.toml can hardcode them;
+//   - the system roles and their grants, plus direct chat:read and log:read
+//     grants so Agent Sessions shows the seeded chats rather than only your
+//     own, and Tool Logs opens at all;
+//   - the personal auth client default, which provisioning only grants new
+//     organizations;
+//   - a fixed API key, with a policy reaching every server in the project, and
+//     a default environment, both with well-known ids so mise.toml can
+//     hardcode them;
 //   - the global MCP registry row, which is not tenant-scoped and so cannot
 //     live in the seed proper.
 //
@@ -86,6 +92,11 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	// duplicating the grant lists.
 	if err := authz.SeedSystemRoleGrants(ctx, db, spec.OrgID); err != nil {
 		return fmt.Errorf("seed system role grants: %w", err)
+	}
+	// Provisioning only grants this to new organizations; a reseeded local
+	// org already has its roles.
+	if err := authz.SeedPersonalAuthClientDefaultTx(ctx, db, spec.OrgID); err != nil {
+		return fmt.Errorf("seed personal auth client default: %w", err)
 	}
 
 	env := opts.Environment
@@ -132,11 +143,17 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"link org to the dev-idp", localLinkWorkOSOrgSQL, []any{spec.OrgID, spec.WorkOSOrgID}},
 		{"adopt developer", localAdoptDeveloperSQL, []any{spec.OrgID, dev.ID, workosID}},
 		{"grant session visibility", localSessionVisibilitySQL, []any{spec.OrgID, dev.ID}},
+		{"grant tool log visibility", localToolLogVisibilitySQL, []any{spec.OrgID, dev.ID}},
 		{"enable platform mcp", localPlatformMCPFeatureSQL, []any{spec.OrgID}},
 		{"enable sso and directory sync", localIdentityFeaturesSQL, []any{spec.OrgID}},
+		{"approve tool calls", localToolApproverSQL, []any{spec.OrgID, spec.FixedUUID(approvalPolicyFixedID), "user:" + dev.ID}},
+		{"verify developer email domain", localVerifiedDomainSQL, []any{spec.OrgID, emailDomain(dev.Email)}},
 		{"api key", localAPIKeySQL, []any{spec.OrgID, spec.ProjectID(), dev.ID, localAPIKeyID(), LocalAPIKeyName, apiKeyHash, apiKey[:len(auth.APIKeyPrefix(env))+5]}},
+		{"api key policy", localAPIKeyPolicySQL, []any{spec.OrgID, localAPIKeyID(), spec.ProjectID()}},
 		{"default environment", localEnvironmentSQL, []any{spec.OrgID, spec.ProjectID(), localEnvironmentID()}},
 		{"mcp registry", localMCPRegistrySQL, nil},
+		{"enable code mode", localCodeModeFeatureSQL, []any{spec.OrgID}},
+		{"code mode gateway", localCodeModeGatewaySQL, []any{spec.OrgID, spec.ProjectID()}},
 		{"mcp app asset", localMCPAppAssetSQL, []any{
 			localMCPAppAssetID(), spec.ProjectID(), spec.OrgID, app.url, app.size, app.sha256,
 		}},
@@ -160,7 +177,8 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 
 	warnOnStaleOverrides(ctx, logger, opts.ObservedEnv, apiKey)
 	bustLocalCaches(ctx, logger, cache, spec.OrgID, dev.ID)
-	return nil
+
+	return connectLocalSlack(ctx, logger, db, spec.OrgID, dev, opts.Slack)
 }
 
 // warnOnStaleOverrides catches the one way this seed can leave a developer
@@ -254,6 +272,7 @@ func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache *redis.Clie
 		productfeatures.FeatureSessionCapture,
 		productfeatures.FeatureSkills,
 		productfeatures.FeaturePlatformMCP,
+		productfeatures.FeatureCodeMode,
 		productfeatures.FeatureSSO,
 		productfeatures.FeatureSCIM,
 	} {
@@ -337,6 +356,15 @@ VALUES ($1, 'user:' || $2, 'chat:read',
 ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
 `
 
+// log:read is likewise held by no system role, so without it the Tool Logs page
+// and the session Tool calls view would be closed to the local admin.
+const localToolLogVisibilitySQL = `
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+VALUES ($1, 'user:' || $2, 'log:read', NULL,
+        jsonb_build_object('resource_kind', 'project', 'resource_id', '*'))
+ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors) DO NOTHING
+`
+
 // platform_mcp is the default-on organization entitlement locally; the shared
 // demo org deliberately does not enable it (its Plugins pages stay empty).
 const localPlatformMCPFeatureSQL = `
@@ -345,12 +373,43 @@ VALUES ($1, 'platform_mcp')
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 `
 
+// Code Mode is a staff-managed entitlement; enabled locally so the seeded Code
+// Mode gateway runs against the local runtime. The shared demo org never gets
+// it: once a deployment runs the code runtime, Code Mode spends runner
+// capacity on whoever explores the demo.
+const localCodeModeFeatureSQL = `
+INSERT INTO organization_features (organization_id, feature_name)
+VALUES ($1, 'code_mode')
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+`
+
+// The developer approves the seeded tool approval policy too, so the Tool
+// approvals tab offers Approve once and Deny locally. The shared demo org keeps
+// its demo approvers only.
+const localToolApproverSQL = `
+UPDATE risk_policies
+SET approval_config = jsonb_set(approval_config, '{approvers}', (approval_config -> 'approvers') || to_jsonb($3::text))
+WHERE organization_id = $1 AND id = $2::uuid AND NOT (approval_config -> 'approvers') ? $3::text
+`
+
 // SSO and directory sync (scim) are paid entitlements that gate the WorkOS
 // admin portal; enabled locally so the identity setup flow works end to end.
 const localIdentityFeaturesSQL = `
 INSERT INTO organization_features (organization_id, feature_name)
 VALUES ($1, 'sso'), ($1, 'scim')
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+`
+
+// The developer's email domain is verified locally so a dev-idp SSO sign-in
+// passes the SSO identity check end to end.
+const localVerifiedDomainSQL = `
+UPDATE organization_metadata
+SET verified_domains = array_append(COALESCE(verified_domains, '{}'), $2::text)
+WHERE id = $1
+  AND $2::text <> ''
+  AND NOT EXISTS (
+      SELECT 1 FROM unnest(COALESCE(verified_domains, '{}')) AS d WHERE lower(d) = lower($2::text)
+  )
 `
 
 // A key with a well-known hash. The plaintext is never stored, so the row is
@@ -365,11 +424,27 @@ ON CONFLICT (id) DO UPDATE
       scopes = EXCLUDED.scopes, deleted_at = NULL, updated_at = clock_timestamp()
 `
 
+// localAPIKeyPolicySQL gives the fixed key what its scopes reach today, so the
+// mandatory server check allows it.
+const localAPIKeyPolicySQL = `
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES ($1, 'api_key:' || $2::text, 'mcp:connect',
+        jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*', 'project_id', $3::text))
+ON CONFLICT DO NOTHING
+`
+
 const localEnvironmentSQL = `
 INSERT INTO environments (id, organization_id, project_id, name, slug)
 VALUES ($3, $1, $2, 'Default', 'default')
 ON CONFLICT (project_id, slug) WHERE deleted IS FALSE
 DO UPDATE SET name = EXCLUDED.name, updated_at = clock_timestamp()
+`
+
+// The shared seed stores this gateway as Progressive because the demo org has
+// no code runtime; local stacks can run one, so the gateway shows Code Mode.
+const localCodeModeGatewaySQL = `
+UPDATE meta_mcp_servers SET discovery_mode = 'code_mode', updated_at = clock_timestamp()
+WHERE organization_id = $1 AND project_id = $2 AND name = 'Python Code Gateway' AND deleted IS FALSE
 `
 
 // The default registry backing the Catalog page. Global, not tenant-scoped,
@@ -379,3 +454,11 @@ INSERT INTO mcp_registries (name, url)
 VALUES ('Speakeasy Recommended', 'https://api.pulsemcp.com')
 ON CONFLICT (url) WHERE deleted IS FALSE DO NOTHING
 `
+
+func emailDomain(email string) string {
+	at := strings.LastIndexByte(email, '@')
+	if at < 0 {
+		return ""
+	}
+	return strings.ToLower(email[at+1:])
+}

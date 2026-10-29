@@ -7,77 +7,7 @@ package repo
 import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
-
-type ChatMessage struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	Seq int64
-	// @access: confidential
-	ChatID uuid.UUID
-	// @access: confidential
-	ProjectID uuid.NullUUID
-	// @access: confidential
-	Role string
-	// @access: opaque-restricted
-	Content string
-	// @access: opaque-restricted
-	ContentRaw []byte
-	// @access: confidential
-	ContentAssetUrl pgtype.Text
-	// @access: confidential
-	Model pgtype.Text
-	// @access: confidential
-	MessageID pgtype.Text
-	// @access: confidential
-	FinishReason pgtype.Text
-	// @access: opaque-restricted
-	ToolCalls []byte
-	// @access: confidential
-	PromptTokens int64
-	// @access: confidential
-	CompletionTokens int64
-	// @access: confidential
-	TotalTokens int64
-	// @access: opaque-restricted
-	StorageError pgtype.Text
-	// @access: confidential
-	UserID pgtype.Text
-	// @access: confidential-pii
-	ExternalUserID pgtype.Text
-	// @access: confidential
-	ExternalMessageID pgtype.Text
-	// @access: opaque-restricted
-	Origin pgtype.Text
-	// @access: confidential-pii
-	UserAgent pgtype.Text
-	// @access: confidential-pii
-	IpAddress pgtype.Text
-	// @access: confidential
-	Source pgtype.Text
-	// @access: confidential
-	ToolCallID pgtype.Text
-	// @access: confidential
-	ToolUrn urn.Tool
-	// @access: confidential
-	ToolOutcome pgtype.Text
-	// @access: opaque-restricted
-	ToolOutcomeNotes pgtype.Text
-	// @access: opaque-restricted
-	ToolCallSummaries []byte
-	// @access: confidential
-	ContentHash []byte
-	// @access: confidential
-	Generation int32
-	// @access: confidential
-	Replayed bool
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	RiskAnalyzedAt pgtype.Timestamptz
-}
 
 type SigintCustomSignal struct {
 	// @access: confidential
@@ -121,6 +51,12 @@ type SigintSensor struct {
 	MatchExpression string
 	// @access: confidential
 	Enabled bool
+	// Absent means single_message; sliding_window supplies preceding conversation context.
+	// @access: confidential
+	InputStrategy pgtype.Text
+	// Total messages including the target; absent means five for sliding windows.
+	// @access: confidential
+	WindowSize pgtype.Int4
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

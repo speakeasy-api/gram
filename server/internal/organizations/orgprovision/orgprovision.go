@@ -25,13 +25,16 @@ import (
 )
 
 // Creation sources name the flow that created an organization. They are stored
-// verbatim in organization_metadata.creation_source and are informational: no
-// trial, entitlement or onboarding decision reads them.
+// verbatim in organization_metadata.creation_source.
 //
 // A row with no source is not a fourth value. It means nothing recorded one —
 // every organization created before the column existed, and every row first
 // written by WorkOS organization sync, which learns about an organization
 // without knowing what asked for it.
+//
+// Login reads SourcePlatformAdmin and only that value: a prospect stays behind
+// the book-a-demo gate. The source decides whether a trial can start. Feature
+// entitlement calculation does not read it.
 const (
 	// SourceSignup is a self-serve signup: someone named a company and Speakeasy
 	// created the organization around them.
@@ -44,6 +47,11 @@ const (
 	// SourcePlatformAdmin is an organization a platform admin created from the
 	// admin app, which is how the prospect flow starts.
 	SourcePlatformAdmin = "platform_admin"
+
+	// SourcePlatformMCP is a self-serve signup that started from an MCP client
+	// connecting the Platform MCP: someone with no organization named one
+	// during the OAuth flow.
+	SourcePlatformMCP = "platform_mcp"
 )
 
 // WorkOSOrganizationCreator is the WorkOS surface CreateInWorkOS needs. It

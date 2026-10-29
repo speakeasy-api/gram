@@ -29,13 +29,6 @@ func buildWorkloadPlatformView(p catalog.Platform) *gen.WorkloadPlatform {
 		})
 	}
 
-	steps := []*gen.WorkloadPlatformStep{}
-	if p.Setup != nil {
-		for _, step := range p.Setup.Steps {
-			steps = append(steps, buildWorkloadPlatformStepView(step))
-		}
-	}
-
 	return &gen.WorkloadPlatform{
 		Key:         p.Key,
 		DisplayName: p.DisplayName,
@@ -49,7 +42,6 @@ func buildWorkloadPlatformView(p catalog.Platform) *gen.WorkloadPlatform {
 			Template: p.Subject.Template,
 			Wildcard: p.Subject.Wildcard,
 		},
-		Steps: steps,
 	}
 }
 
@@ -57,29 +49,5 @@ func buildWorkloadPlatformConstantView(c catalog.Constant) *gen.WorkloadPlatform
 	return &gen.WorkloadPlatformConstant{
 		Value:      c.Value,
 		Visibility: string(c.Visibility),
-	}
-}
-
-func buildWorkloadPlatformStepView(step catalog.Step) *gen.WorkloadPlatformStep {
-	blocks := make([]*gen.WorkloadPlatformBlock, 0, len(step.Blocks))
-	for _, b := range step.Blocks {
-		blocks = append(blocks, &gen.WorkloadPlatformBlock{
-			Type:     string(b.Type),
-			Markdown: b.Markdown,
-			Src:      b.Src,
-			Alt:      b.Alt,
-			Caption:  b.Caption,
-			Href:     b.Href,
-			Label:    b.Label,
-			Variable: b.Variable,
-			Value:    b.Value,
-			Help:     b.Help,
-		})
-	}
-	return &gen.WorkloadPlatformStep{
-		ID:     step.ID,
-		Title:  step.Title,
-		Phase:  string(step.Phase),
-		Blocks: blocks,
 	}
 }

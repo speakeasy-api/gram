@@ -71,7 +71,6 @@ import { useRoles } from "@gram/client/react-query/roles.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { SessionQuarantine } from "@gram/client/models/components/sessionquarantine.js";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
-import type { Role } from "@gram/client/models/components/role.js";
 import {
   RULE_CATEGORY_META,
   DETECTION_RULES,
@@ -81,10 +80,13 @@ import {
   type RuleCategory,
   type PolicyAction,
 } from "./policy-data";
+import { POLICY_TYPE_LABEL, policyTypeOf } from "./policy-type";
 import { cn } from "@/lib/utils";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useDetectionRulesStore } from "./detection-rules-data";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import { Outlet } from "react-router";
 import {
@@ -99,7 +101,22 @@ import {
   getPolicyRuleGroupNamesForDeleteDialog,
 } from "./policy-delete-dialog";
 import { DetectionRulesTab } from "./DetectionRules";
-import { BUILTIN_RULE_ID_LIST } from "./detection-rules-data";
+import {
+  POLICY_CENTER_TABS,
+  policyCenterTabLabel,
+  policyCenterTabs,
+  resolvePolicyCenterTab,
+  type PolicyCenterTab,
+} from "./policy-center-tabs";
+import { MCPApprovalsTab } from "./MCPApprovalsTab";
+import {
+  compareMembersByName,
+  compareRolesByName,
+  memberDisplayName,
+} from "./audience-principals";
+import { ToolApprovalsTab } from "./tool-approvals/ToolApprovalsTab";
+import { ShadowAITargetsTab } from "./ShadowAITargetsTab";
+import { detectionRulesTabRuleIds } from "./detection-rules-data";
 import { SeverityBadge } from "./risk-ui";
 import { policySummary } from "./policy-summary";
 import { policyEnabledActionLabel } from "./policy-enabled";
@@ -377,6 +394,15 @@ type PolicyRow = { kind: PolicyKind; policy: RiskPolicy };
 const USER_SEARCH_RESULT_LIMIT = 10;
 
 function policyAudienceSummary(row: PolicyRow): string {
+  const audience = policyAudienceTargets(row);
+  if (row.policy.action !== "require_approval") {
+    return audience;
+  }
+  const approvers = row.policy.approvalConfig?.approvers.length ?? 0;
+  return `${audience} · ${approvers} ${approvers === 1 ? "approver" : "approvers"}`;
+}
+
+function policyAudienceTargets(row: PolicyRow): string {
   if (row.kind === "prompt") {
     return "Everyone";
   }
@@ -420,10 +446,6 @@ function filterAudiencePrincipalsForChoice(
   return new Set([...principalUrns].filter((urn) => urn.startsWith(prefix)));
 }
 
-function memberDisplayName(member: AccessMember): string {
-  return member.name || member.email;
-}
-
 function memberInitials(member: Pick<AccessMember, "email" | "name">): string {
   const source = member.name.trim() || member.email.trim();
   const initials = source
@@ -446,14 +468,6 @@ function memberMatchesSearch(member: AccessMember, search: string): boolean {
     member.name.toLowerCase().includes(normalizedSearch) ||
     member.email.toLowerCase().includes(normalizedSearch)
   );
-}
-
-function compareMembersByName(a: AccessMember, b: AccessMember): number {
-  return memberDisplayName(a).localeCompare(memberDisplayName(b));
-}
-
-function compareRolesByName(a: Role, b: Role): number {
-  return a.name.localeCompare(b.name);
 }
 
 function isPromptPolicy(policy: RiskPolicy): boolean {
@@ -503,6 +517,29 @@ function PolicyNameCell({ row }: { row: PolicyRow }): JSX.Element {
   );
 }
 
+/** How the policy decides, for the Type column: Built-in, Prompt-based or
+ *  Shadow AI. */
+function PolicyTypeBadge({ policy }: { policy: RiskPolicy }): JSX.Element {
+  return (
+    <Badge variant="neutral">
+      <Badge.Text>{POLICY_TYPE_LABEL[policyTypeOf(policy)]}</Badge.Text>
+    </Badge>
+  );
+}
+
+const POLICY_TYPE_COLUMN: Column<PolicyRow> = {
+  key: "type",
+  header: "Type",
+  // Wide enough for the longest badge ("SHADOW AI") at the table's
+  // narrowest supported width; the Action column already clips at 0.7fr.
+  width: "1fr",
+  render: (row) => (
+    <span className="inline-flex">
+      <PolicyTypeBadge policy={row.policy} />
+    </span>
+  ),
+};
+
 /** Compact relative date for the policy table's Created/Updated columns, with
  *  the exact timestamp on hover. */
 function PolicyDateCell({ date }: { date: Date }): JSX.Element {
@@ -520,32 +557,23 @@ function truncateSessionID(sessionID: string): string {
   return `${sessionID.slice(0, 8)}...${sessionID.slice(-6)}`;
 }
 
-// Suppressed findings used to be a third tab here; they now live in the
-// Watchdog page's Suppressed section. `tab` is parsed as a string literal
-// union, so a stale `?tab=dismissed` link falls back to "policies" rather
-// than rendering an empty page.
-const POLICY_CENTER_TABS = [
-  "policies",
-  "detection-rules",
-  "exclusions",
-  "quarantines",
-] as const;
-
 /** Assistant context for the Detection Rules tab: assembled from the static
  *  client-side rule catalog so the other tabs pay no extra queries for it.
  *  Rule-activity questions route through the finding-level tools. */
-const DETECTION_RULES_INSIGHTS_CONTEXT = [
-  "Page: Guardrails, Detection Rules tab — the catalog of built-in and custom detection rules that policies compose.",
-  `Built-in rule ids: ${BUILTIN_RULE_ID_LIST.join(", ")}.`,
-  "Custom rules are organization-defined CEL expressions with ids prefixed 'custom.'; list them with listCustomDetectionRules.",
-  "For rule activity, query findings by rule_id via listRiskResultsForAgent (match content is redacted).",
-  "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
-].join(" ");
+function detectionRulesInsightsContext(): string {
+  return [
+    "Page: Guardrails, Detection Rules tab — the catalog of built-in and custom detection rules that policies compose.",
+    `Built-in rule ids: ${detectionRulesTabRuleIds().join(", ")}.`,
+    "Custom rules are organization-defined CEL expressions with ids prefixed 'custom.'; list them with listCustomDetectionRules.",
+    "For rule activity, query findings by rule_id via listRiskResultsForAgent (match content is redacted).",
+    "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
+  ].join(" ");
+}
 
 /** The page-level primary action follows the active tab: each tab creates its
  *  own kind of resource. */
 function policyCenterHeaderAction(
-  activeTab: (typeof POLICY_CENTER_TABS)[number],
+  activeTab: PolicyCenterTab,
   actions: {
     newPolicy: () => void;
     newDetectionRule: () => void;
@@ -560,6 +588,17 @@ function policyCenterHeaderAction(
         label: "Custom Detection Rule",
         onClick: actions.newDetectionRule,
       };
+    // The targets library carries its own add button in its toolbar.
+    case "shadow-ai-targets":
+      return null;
+    // Access is decided per server, on the row or the server page; the queue
+    // itself is fed by requests and observed traffic.
+    case "mcp-approvals":
+      return null;
+    // Requests come from held calls; approval policies are created from the
+    // Policies tab.
+    case "tool-approvals":
+      return null;
     case "exclusions":
       return { label: "Set up Exclusion Rule", onClick: actions.newExclusion };
     // Quarantines are event-driven; the tab has no creation affordance.
@@ -612,10 +651,19 @@ function PolicyCenterContent() {
 
   const [policyToDelete, setPolicyToDelete] = useState<PolicyRow | null>(null);
 
-  const [activeTab] = useQueryState(
+  const [requestedTab] = useQueryState(
     "tab",
     parseAsStringLiteral(POLICY_CENTER_TABS).withDefault("policies"),
   );
+  const toolApprovalsFlag = useFeatureFlag(FEATURE_FLAGS.toolApprovals).status;
+  const toolApprovalsEnabled = toolApprovalsFlag === "enabled";
+  // A hidden tab's link lands on Policies once the flags have loaded.
+  const activeTab =
+    toolApprovalsFlag === "loading"
+      ? requestedTab
+      : resolvePolicyCenterTab(requestedTab, {
+          toolApprovals: toolApprovalsEnabled,
+        });
   const [exclusionSheet, setExclusionSheet] =
     useState<ExclusionSheetState | null>(null);
   // The Detection Rules tab's create sheet is owned here so the page-level
@@ -779,7 +827,7 @@ function PolicyCenterContent() {
   );
 
   const insightsContext = [
-    `Page: Guardrails, ${activeTab === "exclusions" ? "Exclusion Rules" : "Policies"} tab.`,
+    `Page: Guardrails, ${policyCenterTabLabel(activeTab)} tab.`,
     `Total policies: ${policyRows.length}.`,
     `Active policies: ${policyRows.filter((r) => r.policy.enabled).length}.`,
     `Policy actions: ${policyRows.map((r) => `${r.policy.name} (${r.policy.action}${r.policy.enabled ? "" : ", inactive"})`).join(", ") || "none"}.`,
@@ -794,6 +842,7 @@ function PolicyCenterContent() {
       width: "3fr",
       render: (row) => <PolicyNameCell row={row} />,
     },
+    POLICY_TYPE_COLUMN,
     {
       key: "action",
       header: "Action",
@@ -1102,35 +1151,22 @@ function PolicyCenterContent() {
       description="Configure the policies, detection rules, and exclusion rules that govern risk detection in agent session interactions."
       primaryAction={primaryAction}
       activeTab={activeTab}
-      tabs={[
-        { value: "policies", label: "Policies", href: "?tab=policies" },
-        {
-          value: "detection-rules",
-          label: "Detection Rules",
-          href: "?tab=detection-rules",
-        },
-        {
-          value: "exclusions",
-          label: "Exclusion Rules",
-          href: "?tab=exclusions",
-        },
-        {
-          value: "quarantines",
-          label: "Quarantines",
-          href: "?tab=quarantines",
-        },
-      ]}
+      tabs={policyCenterTabs({ toolApprovals: toolApprovalsEnabled })}
     >
       {/* The dock follows the active tab: the Detection Rules tab took over
-          the standalone page whose URL used to select these suggestions. */}
+          the standalone page whose URL used to select these suggestions, and
+          the Shadow AI targets and MCP approvals tabs mount their own config
+          from their own data. */}
       {activeTab === "detection-rules" ? (
         <InsightsConfig
-          contextInfo={DETECTION_RULES_INSIGHTS_CONTEXT}
+          contextInfo={detectionRulesInsightsContext()}
           suggestions={INSIGHTS_SUGGESTIONS["detection-rules"]}
           title="Detection rule insights"
           subtitle="Ask about rule activity, noisy rules, and coverage gaps. Match content is redacted before it reaches the assistant."
         />
-      ) : (
+      ) : activeTab === "shadow-ai-targets" ||
+        activeTab === "mcp-approvals" ||
+        activeTab === "tool-approvals" ? null : (
         <InsightsConfig
           contextInfo={insightsContext}
           suggestions={INSIGHTS_SUGGESTIONS["risk-policies"]}
@@ -1144,6 +1180,11 @@ function PolicyCenterContent() {
           createOpen={ruleCreateOpen}
           onCreateOpenChange={setRuleCreateOpen}
         />
+      )}
+      {activeTab === "shadow-ai-targets" && <ShadowAITargetsTab />}
+      {activeTab === "mcp-approvals" && <MCPApprovalsTab />}
+      {activeTab === "tool-approvals" && toolApprovalsEnabled && (
+        <ToolApprovalsTab />
       )}
       {activeTab === "exclusions" && (
         <ExclusionsTab
@@ -1363,19 +1404,25 @@ export function PolicyAudiencePicker({
   );
 }
 
-function SpecificUsersAudienceSection({
+export function SpecificUsersAudienceSection({
   members,
   userSearch,
   setUserSearch,
   selectedAudiencePrincipalUrns,
   onTogglePrincipal,
+  emptyHint = "Select at least one user to save a targeted policy.",
+  idPrefix = "audience",
 }: {
   members: AccessMember[];
   userSearch: string;
   setUserSearch: (value: string) => void;
   selectedAudiencePrincipalUrns: Set<string>;
   onTogglePrincipal: (principalUrn: string, checked: boolean) => void;
-}) {
+  /** Shown while no user is selected; null shows nothing. */
+  emptyHint?: string | null;
+  /** Keeps checkbox ids unique when two user pickers share a page. */
+  idPrefix?: string;
+}): JSX.Element {
   const memberByPrincipalUrn = useMemo(
     () => new Map(members.map((member) => [member.principalUrn, member])),
     [members],
@@ -1438,7 +1485,7 @@ function SpecificUsersAudienceSection({
               {selectedUserOptions.map((option) => (
                 <AudiencePrincipalRow
                   key={option.principalUrn}
-                  id={`audience-selected-${option.principalUrn}`}
+                  id={`${idPrefix}-selected-${option.principalUrn}`}
                   checked
                   title={option.title}
                   subtitle={option.subtitle}
@@ -1464,12 +1511,13 @@ function SpecificUsersAudienceSection({
           results={visibleSearchResults}
           selectedAudiencePrincipalUrns={selectedAudiencePrincipalUrns}
           onTogglePrincipal={onTogglePrincipal}
+          idPrefix={idPrefix}
         />
       </div>
 
-      {selectedUserPrincipalUrns.length === 0 && (
+      {selectedUserPrincipalUrns.length === 0 && emptyHint !== null && (
         <p className="text-muted-foreground border-border border-t px-4 py-3 text-xs">
-          Select at least one user to save a targeted policy.
+          {emptyHint}
         </p>
       )}
     </div>
@@ -1482,12 +1530,14 @@ function UserSearchResults({
   results,
   selectedAudiencePrincipalUrns,
   onTogglePrincipal,
+  idPrefix,
 }: {
   hasSearch: boolean;
   hiddenResultCount: number;
   results: AccessMember[];
   selectedAudiencePrincipalUrns: Set<string>;
   onTogglePrincipal: (principalUrn: string, checked: boolean) => void;
+  idPrefix: string;
 }) {
   if (!hasSearch) {
     return (
@@ -1514,7 +1564,7 @@ function UserSearchResults({
           return (
             <AudiencePrincipalRow
               key={principalUrn}
-              id={`audience-result-${principalUrn}`}
+              id={`${idPrefix}-result-${principalUrn}`}
               checked={selectedAudiencePrincipalUrns.has(principalUrn)}
               title={memberDisplayName(member)}
               subtitle={member.email}
@@ -1588,13 +1638,13 @@ function PolicyAudienceChoiceRow({
   );
 }
 
-function AudiencePrincipalSection({
+export function AudiencePrincipalSection({
   title,
   children,
 }: {
   title: string;
   children: ReactNode;
-}) {
+}): JSX.Element {
   return (
     <div className="border-border border-b last:border-b-0">
       <div className="bg-muted/30 border-border border-b px-4 py-2 text-xs font-medium">
@@ -1605,7 +1655,7 @@ function AudiencePrincipalSection({
   );
 }
 
-function AudiencePrincipalRow({
+export function AudiencePrincipalRow({
   id,
   checked,
   title,
@@ -1619,7 +1669,7 @@ function AudiencePrincipalRow({
   subtitle: string;
   leading?: ReactNode;
   onCheckedChange: (checked: boolean) => void;
-}) {
+}): JSX.Element {
   return (
     <label
       htmlFor={id}
@@ -1654,6 +1704,7 @@ const ACTION_BADGE_CONFIG: Record<
   warn: { label: "Warn", variant: "warning" },
   block: { label: "Block", variant: "destructive" },
   quarantine: { label: "Quarantine", variant: "destructive" },
+  require_approval: { label: "Require approval", variant: "information" },
 };
 
 function ActionBadge({ action }: { action: PolicyAction }): JSX.Element {

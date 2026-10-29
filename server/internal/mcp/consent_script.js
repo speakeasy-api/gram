@@ -42,6 +42,125 @@
     }, 2000);
   }
 
+  // A gateway's server list keeps the open state the person left it in, so
+  // a Connect from the list, which leaves for the provider and comes back,
+  // returns to the list rather than to its collapsed summary.
+  var gatewayList = document.querySelector("details[data-gateway-list]");
+  if (gatewayList) {
+    var listKey =
+      "consent-gateway-list:" + gatewayList.getAttribute("data-state");
+    try {
+      var remembered = window.sessionStorage.getItem(listKey);
+      if (remembered === "open") {
+        gatewayList.open = true;
+      } else if (remembered === "closed") {
+        gatewayList.open = false;
+      }
+    } catch (_) {
+      // Storage can be unavailable; the server's default stands.
+    }
+    gatewayList.addEventListener("toggle", function () {
+      try {
+        window.sessionStorage.setItem(
+          listKey,
+          gatewayList.open ? "open" : "closed",
+        );
+      } catch (_) {
+        // Storage can be unavailable; nothing to remember then.
+      }
+    });
+  }
+
+  // Hide and Show update in place; without the script the forms post and redirect.
+  var visibleServers = document.querySelector("[data-gateway-visible-list]");
+  var hiddenServers = document.querySelector("[data-gateway-hidden-list]");
+  if (visibleServers && hiddenServers) {
+    var hiddenSection = document.querySelector("[data-gateway-hidden-section]");
+    var allHidden = document.querySelector("[data-gateway-all-hidden]");
+    var gatewaySummary = document.querySelector("[data-gateway-summary]");
+    var hiddenCount = document.querySelector("[data-gateway-hidden-count]");
+    var visibilityError = document.querySelector(
+      "[data-gateway-visibility-error]",
+    );
+
+    var refreshGatewayCounts = function () {
+      var visibleRows = visibleServers.querySelectorAll(
+        "[data-gateway-server]",
+      );
+      var hiddenRows = hiddenServers.querySelectorAll("[data-gateway-server]");
+      var ready = Array.prototype.filter.call(visibleRows, function (row) {
+        return row.getAttribute("data-gateway-server-ready") === "true";
+      }).length;
+      var summary =
+        ready +
+        " of " +
+        visibleRows.length +
+        (visibleRows.length === 1 ? " server" : " servers") +
+        " connected";
+      if (hiddenRows.length) summary += " · " + hiddenRows.length + " hidden";
+      gatewaySummary.textContent = summary;
+      hiddenCount.textContent = String(hiddenRows.length);
+      visibleServers.hidden = visibleRows.length === 0;
+      allHidden.hidden = visibleRows.length !== 0;
+      hiddenSection.hidden = hiddenRows.length === 0;
+    };
+
+    var moveGatewayRow = function (row, hide) {
+      Array.prototype.forEach.call(
+        row.querySelectorAll(
+          "[data-gateway-server-status], [data-gateway-server-actions]",
+        ),
+        function (el) {
+          el.hidden = hide;
+        },
+      );
+      // The row attribute swaps the hide icon for the Show label (see the
+      // gatewayServerRow template).
+      row.toggleAttribute("data-gateway-server-hidden", hide);
+      var toggle = row.querySelector("[data-gateway-visibility-toggle]");
+      toggle.value = hide ? "show_server" : "hide_server";
+      toggle.title = hide
+        ? "Make this server available to your tools again"
+        : "Hide this server, preventing your agent from attempting to access it.";
+      (hide ? hiddenServers : visibleServers).appendChild(row);
+    };
+
+    document.addEventListener("submit", async function (event) {
+      var visibilityForm = event.target;
+      if (!visibilityForm.matches("[data-gateway-visibility-form]")) return;
+      event.preventDefault();
+      var toggle = visibilityForm.querySelector(
+        "[data-gateway-visibility-toggle]",
+      );
+      if (toggle.disabled) return;
+      var hide = toggle.value === "hide_server";
+      var body = new URLSearchParams(new FormData(visibilityForm));
+      body.set("action", toggle.value);
+      toggle.disabled = true;
+      visibilityError.hidden = true;
+      var moved = false;
+      try {
+        var response = await fetch(visibilityForm.getAttribute("action"), {
+          method: "POST",
+          credentials: "same-origin",
+          body: body,
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) throw new Error(String(response.status));
+        moveGatewayRow(visibilityForm.closest("[data-gateway-server]"), hide);
+        moved = true;
+        refreshGatewayCounts();
+      } catch (_) {
+        visibilityError.textContent =
+          "Couldn't update that server. Reload the page and try again.";
+        visibilityError.hidden = false;
+      } finally {
+        toggle.disabled = false;
+        if (moved) toggle.focus();
+      }
+    });
+  }
+
   // Replace an element's contents with a spinner + label.
   function showPending(el, label) {
     el.textContent = "";
@@ -83,6 +202,33 @@
     var connectionRevision = 0;
     var activeConnectionAgent = "";
     var savedAgentKey = "gram-consent-agent-v1:" + form.elements.state.value;
+    var discoverySelect = document.querySelector(
+      'select[name="discovery_mode"]',
+    );
+    var discoveryKey = "gram-consent-discovery-v1:" + form.elements.state.value;
+    if (discoverySelect) {
+      try {
+        var savedMode = sessionStorage.getItem(discoveryKey);
+        if (
+          savedMode === "" ||
+          savedMode === "direct" ||
+          savedMode === "progressive" ||
+          (savedMode === "code_mode" &&
+            discoverySelect.querySelector('option[value="code_mode"]'))
+        ) {
+          discoverySelect.value = savedMode;
+        }
+      } catch (_) {
+        /* Storage can be unavailable. */
+      }
+      discoverySelect.addEventListener("change", function () {
+        try {
+          sessionStorage.setItem(discoveryKey, discoverySelect.value);
+        } catch (_) {
+          /* The current form still submits the selected mode. */
+        }
+      });
+    }
     // This is UI state only. The server reauthorizes every selection and write.
     // sessionStorage survives a full-page upstream OAuth round trip in this tab.
     try {
@@ -200,6 +346,19 @@
           showError(error);
         }
       }
+      function connectionUsable(session) {
+        if (!session) return false;
+        if (
+          session.HasRefreshToken &&
+          (!session.RefreshExpiresAt ||
+            new Date(session.RefreshExpiresAt).getTime() > Date.now())
+        )
+          return true;
+        return (
+          !session.AccessExpiresAt ||
+          new Date(session.AccessExpiresAt).getTime() > Date.now()
+        );
+      }
       function accountLabel(session) {
         return (
           [session.UpstreamDisplayName, session.UpstreamEmail]
@@ -234,10 +393,7 @@
               return (
                 binding.RemoteSessionClientID ===
                   provider.getAttribute("data-remote-client") &&
-                binding.RemoteSession &&
-                (data.candidates || []).some(function (session) {
-                  return session.ID === binding.RemoteSessionID;
-                })
+                connectionUsable(binding.RemoteSession)
               );
             });
           });
@@ -254,11 +410,7 @@
             var attached = document.createElement("span");
             attached.className = "text-muted-foreground text-xs";
             var account = binding.RemoteSession;
-            var eligible =
-              account &&
-              (data.candidates || []).some(function (candidate) {
-                return candidate.ID === binding.RemoteSessionID;
-              });
+            var eligible = connectionUsable(account);
             var connectedAs = provider.getAttribute("data-connected-as");
             var sameAccount =
               account &&
@@ -271,6 +423,13 @@
                 (sameAccount ? "" : " · " + accountLabel(account))
               : "Agent access unavailable. Detach it before choosing an account. Your service connection has not been changed.";
             row.appendChild(attached);
+            if (!data.canManageConnections) {
+              var readonly = document.createElement("span");
+              readonly.textContent =
+                "Only agent editors can change this assignment.";
+              row.appendChild(readonly);
+              return;
+            }
             var detach = document.createElement("button");
             detach.type = "button";
             detach.className =
@@ -281,6 +440,10 @@
             });
             row.appendChild(detach);
           } else {
+            if (!data.canManageConnections) {
+              row.textContent = "Ask an agent editor to assign a connection.";
+              return;
+            }
             var candidates = (data.candidates || []).filter(function (item) {
               return item.RemoteSessionClientID === clientId;
             });
@@ -365,6 +528,12 @@
         Array.prototype.forEach.call(selfOnlySections, function (section) {
           section.hidden = authorizingAgent;
         });
+        var discoveryMode = document.querySelector(
+          'select[name="discovery_mode"]',
+        );
+        if (discoveryMode) {
+          discoveryMode.disabled = authorizingAgent;
+        }
         if (subjectDisplay) {
           subjectDisplay.textContent = selectedDisplay || "Choose an agent";
         }
@@ -487,7 +656,7 @@
     status.setAttribute("data-chain-check", state);
     if (state === "connected") {
       status.className = "text-xs text-default-success";
-      status.textContent = "Connected through your identity provider";
+      status.textContent = "Service connected through your identity provider";
       if (connectedSummary) {
         var count =
           Number(connectedSummary.getAttribute("data-connected-count")) + 1;
@@ -512,10 +681,25 @@
         fallback.removeAttribute("data-connect-fallback");
         fallback.textContent = "Connect";
       }
+      signalChainRejected();
       return;
     }
     status.className = "text-xs text-muted-foreground";
     status.textContent = "Managed by your identity provider";
+  }
+
+  // Tells the tool access island that a chained service was refused. The
+  // island defers its inventory only when every service is chain-only, and
+  // on such a page each chained card serves the upstream the inventory
+  // needs, so one refusal means the tools can't load after approval either.
+  // Signing in separately reloads the page with that service connected,
+  // which the server no longer renders as deferred.
+  function signalChainRejected() {
+    document.documentElement.setAttribute(
+      "data-consent-chain-rejected",
+      "true",
+    );
+    document.dispatchEvent(new CustomEvent("gram:consent-chain-rejected"));
   }
 
   var chainChecks = document.querySelectorAll('[data-chain-check="pending"]');

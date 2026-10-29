@@ -31,6 +31,25 @@ func (q *Queries) BackdatePendingRotationPublication(ctx context.Context, arg Ba
 	return err
 }
 
+const backdateRetiredJsonWebKeys = `-- name: BackdateRetiredJsonWebKeys :exec
+UPDATE json_web_keys
+SET retired_at = clock_timestamp() - make_interval(secs => $1::integer)
+WHERE json_web_key_set_id = $2
+  AND organization_id = $3 AND state = 'retired' AND deleted IS FALSE
+`
+
+type BackdateRetiredJsonWebKeysParams struct {
+	AgeSeconds      int32
+	JsonWebKeySetID uuid.UUID
+	OrganizationID  string
+}
+
+// Test fixture: age retired keys relative to the database clock.
+func (q *Queries) BackdateRetiredJsonWebKeys(ctx context.Context, arg BackdateRetiredJsonWebKeysParams) error {
+	_, err := q.db.Exec(ctx, backdateRetiredJsonWebKeys, arg.AgeSeconds, arg.JsonWebKeySetID, arg.OrganizationID)
+	return err
+}
+
 const clearManagedClientSecret = `-- name: ClearManagedClientSecret :one
 UPDATE remote_session_clients
 SET client_secret_encrypted = NULL,
@@ -42,7 +61,7 @@ WHERE id = $1
   AND identity_provider_connection_id = $3
   AND token_endpoint_auth_method = 'client_secret_basic'
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, created_at, updated_at, deleted_at, deleted
 `
 
 type ClearManagedClientSecretParams struct {
@@ -82,6 +101,7 @@ func (q *Queries) ClearManagedClientSecret(ctx context.Context, arg ClearManaged
 		&i.UpstreamRejectedAt,
 		&i.IdentityProviderConnectionID,
 		&i.CredentialOwner,
+		&i.DisplayName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -166,7 +186,7 @@ VALUES (
   $6,
   $7
 )
-RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOktaIdentityProviderConnectionParams struct {
@@ -197,7 +217,6 @@ func (q *Queries) CreateOktaIdentityProviderConnection(ctx context.Context, arg 
 		&i.AttachmentScope,
 		&i.OrgUrl,
 		&i.IssuerUrl,
-		&i.IssuerUrlOverrideReason,
 		&i.OwnershipClaimed,
 		&i.RemoteSessionIssuerID,
 		&i.RemoteSessionClientID,
@@ -371,7 +390,7 @@ func (q *Queries) GetLiveOktaIdentityProviderConnectionForOrganization(ctx conte
 
 const getManagedClient = `-- name: GetManagedClient :one
 SELECT
-  c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+  c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
   s.id AS json_web_key_set_id,
   s.external_key_id,
   k.id AS json_web_key_id,
@@ -450,6 +469,7 @@ func (q *Queries) GetManagedClient(ctx context.Context, arg GetManagedClientPara
 		&i.RemoteSessionClient.UpstreamRejectedAt,
 		&i.RemoteSessionClient.IdentityProviderConnectionID,
 		&i.RemoteSessionClient.CredentialOwner,
+		&i.RemoteSessionClient.DisplayName,
 		&i.RemoteSessionClient.CreatedAt,
 		&i.RemoteSessionClient.UpdatedAt,
 		&i.RemoteSessionClient.DeletedAt,
@@ -463,8 +483,36 @@ func (q *Queries) GetManagedClient(ctx context.Context, arg GetManagedClientPara
 	return i, err
 }
 
+const getManagedKeyResource = `-- name: GetManagedKeyResource :one
+SELECT gcp.resource_name, ek.external_credential_id
+FROM external_keys AS ek
+JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
+WHERE ek.id = $1
+  AND ek.organization_id = $2
+  AND ek.deleted IS FALSE
+`
+
+type GetManagedKeyResourceParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+type GetManagedKeyResourceRow struct {
+	ResourceName         string
+	ExternalCredentialID uuid.UUID
+}
+
+// KMS resource behind any managed key, including enterprise issuer keys that
+// customer key APIs never see. Used only to disable revoked key versions.
+func (q *Queries) GetManagedKeyResource(ctx context.Context, arg GetManagedKeyResourceParams) (GetManagedKeyResourceRow, error) {
+	row := q.db.QueryRow(ctx, getManagedKeyResource, arg.ID, arg.OrganizationID)
+	var i GetManagedKeyResourceRow
+	err := row.Scan(&i.ResourceName, &i.ExternalCredentialID)
+	return i, err
+}
+
 const getOktaIdentityProviderConnection = `-- name: GetOktaIdentityProviderConnection :one
-SELECT c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted, o.identity_provider_connection_id, o.identity_provider_connections_provider, o.organization_id, o.attachment_scope, o.org_url, o.issuer_url, o.issuer_url_override_reason, o.ownership_claimed, o.remote_session_issuer_id, o.remote_session_client_id, o.dpop_required, o.granted_scopes, o.observed_admin_roles, o.listing_mode, o.agent_id, o.agent_app_id, o.applications_synced_at, o.applications_sync_requested_at, o.created_at, o.updated_at, o.deleted_at, o.deleted
+SELECT c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted, o.identity_provider_connection_id, o.identity_provider_connections_provider, o.organization_id, o.attachment_scope, o.org_url, o.issuer_url, o.ownership_claimed, o.remote_session_issuer_id, o.remote_session_client_id, o.dpop_required, o.granted_scopes, o.observed_admin_roles, o.listing_mode, o.agent_id, o.agent_app_id, o.applications_synced_at, o.applications_sync_requested_at, o.created_at, o.updated_at, o.deleted_at, o.deleted
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
@@ -508,7 +556,6 @@ func (q *Queries) GetOktaIdentityProviderConnection(ctx context.Context, arg Get
 		&i.OktaIdentityProviderConnection.AttachmentScope,
 		&i.OktaIdentityProviderConnection.OrgUrl,
 		&i.OktaIdentityProviderConnection.IssuerUrl,
-		&i.OktaIdentityProviderConnection.IssuerUrlOverrideReason,
 		&i.OktaIdentityProviderConnection.OwnershipClaimed,
 		&i.OktaIdentityProviderConnection.RemoteSessionIssuerID,
 		&i.OktaIdentityProviderConnection.RemoteSessionClientID,
@@ -529,7 +576,7 @@ func (q *Queries) GetOktaIdentityProviderConnection(ctx context.Context, arg Get
 }
 
 const getOktaIdentityProviderConnectionIncludingDeleted = `-- name: GetOktaIdentityProviderConnectionIncludingDeleted :one
-SELECT c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted, o.identity_provider_connection_id, o.identity_provider_connections_provider, o.organization_id, o.attachment_scope, o.org_url, o.issuer_url, o.issuer_url_override_reason, o.ownership_claimed, o.remote_session_issuer_id, o.remote_session_client_id, o.dpop_required, o.granted_scopes, o.observed_admin_roles, o.listing_mode, o.agent_id, o.agent_app_id, o.applications_synced_at, o.applications_sync_requested_at, o.created_at, o.updated_at, o.deleted_at, o.deleted
+SELECT c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted, o.identity_provider_connection_id, o.identity_provider_connections_provider, o.organization_id, o.attachment_scope, o.org_url, o.issuer_url, o.ownership_claimed, o.remote_session_issuer_id, o.remote_session_client_id, o.dpop_required, o.granted_scopes, o.observed_admin_roles, o.listing_mode, o.agent_id, o.agent_app_id, o.applications_synced_at, o.applications_sync_requested_at, o.created_at, o.updated_at, o.deleted_at, o.deleted
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
@@ -571,7 +618,6 @@ func (q *Queries) GetOktaIdentityProviderConnectionIncludingDeleted(ctx context.
 		&i.OktaIdentityProviderConnection.AttachmentScope,
 		&i.OktaIdentityProviderConnection.OrgUrl,
 		&i.OktaIdentityProviderConnection.IssuerUrl,
-		&i.OktaIdentityProviderConnection.IssuerUrlOverrideReason,
 		&i.OktaIdentityProviderConnection.OwnershipClaimed,
 		&i.OktaIdentityProviderConnection.RemoteSessionIssuerID,
 		&i.OktaIdentityProviderConnection.RemoteSessionClientID,
@@ -708,6 +754,25 @@ func (q *Queries) GetPlatformGcpIamCredentialForProvisioning(ctx context.Context
 		&i.GcpIamCredential.UpdatedAt,
 	)
 	return i, err
+}
+
+const getPlatformGcpIamCredentialServiceAccount = `-- name: GetPlatformGcpIamCredentialServiceAccount :one
+SELECT gic.impersonate_service_account
+FROM external_credentials AS ec
+JOIN gcp_iam_credentials AS gic ON gic.external_credential_id = ec.id
+WHERE ec.id = $1
+  AND ec.organization_id IS NULL
+  AND ec.project_id IS NULL
+  AND ec.provider = 'gcp_iam'
+`
+
+// The service account a platform credential impersonates, tombstones
+// included: the signer grant made with it outlives the credential.
+func (q *Queries) GetPlatformGcpIamCredentialServiceAccount(ctx context.Context, id uuid.UUID) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getPlatformGcpIamCredentialServiceAccount, id)
+	var impersonate_service_account pgtype.Text
+	err := row.Scan(&impersonate_service_account)
+	return impersonate_service_account, err
 }
 
 const keySetAttached = `-- name: KeySetAttached :one
@@ -962,7 +1027,7 @@ func (q *Queries) LockIdentityProviderConnectionForProvisioning(ctx context.Cont
 }
 
 const lockOktaIdentityProviderConnection = `-- name: LockOktaIdentityProviderConnection :one
-SELECT c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted, o.identity_provider_connection_id, o.identity_provider_connections_provider, o.organization_id, o.attachment_scope, o.org_url, o.issuer_url, o.issuer_url_override_reason, o.ownership_claimed, o.remote_session_issuer_id, o.remote_session_client_id, o.dpop_required, o.granted_scopes, o.observed_admin_roles, o.listing_mode, o.agent_id, o.agent_app_id, o.applications_synced_at, o.applications_sync_requested_at, o.created_at, o.updated_at, o.deleted_at, o.deleted
+SELECT c.id, c.organization_id, c.provider, c.status, c.last_verified_at, c.last_error, c.created_at, c.updated_at, c.deleted_at, c.deleted, o.identity_provider_connection_id, o.identity_provider_connections_provider, o.organization_id, o.attachment_scope, o.org_url, o.issuer_url, o.ownership_claimed, o.remote_session_issuer_id, o.remote_session_client_id, o.dpop_required, o.granted_scopes, o.observed_admin_roles, o.listing_mode, o.agent_id, o.agent_app_id, o.applications_synced_at, o.applications_sync_requested_at, o.created_at, o.updated_at, o.deleted_at, o.deleted
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
@@ -1006,7 +1071,6 @@ func (q *Queries) LockOktaIdentityProviderConnection(ctx context.Context, arg Lo
 		&i.OktaIdentityProviderConnection.AttachmentScope,
 		&i.OktaIdentityProviderConnection.OrgUrl,
 		&i.OktaIdentityProviderConnection.IssuerUrl,
-		&i.OktaIdentityProviderConnection.IssuerUrlOverrideReason,
 		&i.OktaIdentityProviderConnection.OwnershipClaimed,
 		&i.OktaIdentityProviderConnection.RemoteSessionIssuerID,
 		&i.OktaIdentityProviderConnection.RemoteSessionClientID,
@@ -1090,15 +1154,24 @@ func (q *Queries) ManagedClientIDInUse(ctx context.Context, arg ManagedClientIDI
 
 const managedKeyResourceExists = `-- name: ManagedKeyResourceExists :one
 SELECT EXISTS (
- SELECT 1 FROM gcp_kms_keys AS k
+ SELECT 1
+ FROM gcp_kms_keys AS k
+ JOIN external_keys AS ek ON ek.id = k.external_key_id AND ek.provider = k.external_keys_provider
  WHERE k.resource_name = $1
+   AND ek.organization_id = $2::text
 )
 `
 
-// Include tombstones and every organization: resource names are random and
-// global, so a reference anywhere means the key must never be disabled.
-func (q *Queries) ManagedKeyResourceExists(ctx context.Context, resourceName string) (bool, error) {
-	row := q.db.QueryRow(ctx, managedKeyResourceExists, resourceName)
+type ManagedKeyResourceExistsParams struct {
+	ResourceName   string
+	OrganizationID string
+}
+
+// Whether the organization has an external key row for this KMS resource,
+// tombstones included: a reference the organization still holds means the
+// key must never be disabled. References from other organizations don't count.
+func (q *Queries) ManagedKeyResourceExists(ctx context.Context, arg ManagedKeyResourceExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, managedKeyResourceExists, arg.ResourceName, arg.OrganizationID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -1225,7 +1298,7 @@ SET applications_sync_requested_at = clock_timestamp(),
 WHERE identity_provider_connection_id = $1
   AND organization_id = $2
   AND deleted IS FALSE
-RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
 `
 
 type RequestOktaApplicationsSyncParams struct {
@@ -1245,7 +1318,6 @@ func (q *Queries) RequestOktaApplicationsSync(ctx context.Context, arg RequestOk
 		&i.AttachmentScope,
 		&i.OrgUrl,
 		&i.IssuerUrl,
-		&i.IssuerUrlOverrideReason,
 		&i.OwnershipClaimed,
 		&i.RemoteSessionIssuerID,
 		&i.RemoteSessionClientID,
@@ -1334,7 +1406,7 @@ WHERE id = $3
   AND identity_provider_connection_id = $5
   AND client_id = $6
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, created_at, updated_at, deleted_at, deleted
 `
 
 type SetManagedClientIDParams struct {
@@ -1386,6 +1458,7 @@ func (q *Queries) SetManagedClientID(ctx context.Context, arg SetManagedClientID
 		&i.UpstreamRejectedAt,
 		&i.IdentityProviderConnectionID,
 		&i.CredentialOwner,
+		&i.DisplayName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1405,7 +1478,7 @@ WHERE id = $2
   AND identity_provider_connection_id = $4
   AND token_endpoint_auth_method = 'client_secret_basic'
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, created_at, updated_at, deleted_at, deleted
 `
 
 type SetManagedClientSecretParams struct {
@@ -1450,6 +1523,7 @@ func (q *Queries) SetManagedClientSecret(ctx context.Context, arg SetManagedClie
 		&i.UpstreamRejectedAt,
 		&i.IdentityProviderConnectionID,
 		&i.CredentialOwner,
+		&i.DisplayName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1465,7 +1539,7 @@ SET listing_mode = $1,
 WHERE identity_provider_connection_id = $2
   AND organization_id = $3
   AND deleted IS FALSE
-RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
 `
 
 type SetOktaListingModeParams struct {
@@ -1484,7 +1558,6 @@ func (q *Queries) SetOktaListingMode(ctx context.Context, arg SetOktaListingMode
 		&i.AttachmentScope,
 		&i.OrgUrl,
 		&i.IssuerUrl,
-		&i.IssuerUrlOverrideReason,
 		&i.OwnershipClaimed,
 		&i.RemoteSessionIssuerID,
 		&i.RemoteSessionClientID,
@@ -1544,7 +1617,7 @@ SET deleted_at = clock_timestamp(),
 WHERE identity_provider_connection_id = $1
   AND organization_id = $2
   AND deleted IS FALSE
-RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
 `
 
 type SoftDeleteOktaIdentityProviderConnectionParams struct {
@@ -1562,7 +1635,6 @@ func (q *Queries) SoftDeleteOktaIdentityProviderConnection(ctx context.Context, 
 		&i.AttachmentScope,
 		&i.OrgUrl,
 		&i.IssuerUrl,
-		&i.IssuerUrlOverrideReason,
 		&i.OwnershipClaimed,
 		&i.RemoteSessionIssuerID,
 		&i.RemoteSessionClientID,
@@ -1596,7 +1668,7 @@ WHERE id = $2
   AND token_endpoint_auth_method = 'client_secret_basic'
   AND json_web_key_set_id IS NULL
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, created_at, updated_at, deleted_at, deleted
 `
 
 type SwitchManagedClientToKeySetParams struct {
@@ -1643,6 +1715,7 @@ func (q *Queries) SwitchManagedClientToKeySet(ctx context.Context, arg SwitchMan
 		&i.UpstreamRejectedAt,
 		&i.IdentityProviderConnectionID,
 		&i.CredentialOwner,
+		&i.DisplayName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1664,7 +1737,7 @@ WHERE id = $1
   AND client_id = $4
   AND token_endpoint_auth_method = 'private_key_jwt'
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, created_at, updated_at, deleted_at, deleted
 `
 
 type SwitchManagedClientToSecretParams struct {
@@ -1710,6 +1783,7 @@ func (q *Queries) SwitchManagedClientToSecret(ctx context.Context, arg SwitchMan
 		&i.UpstreamRejectedAt,
 		&i.IdentityProviderConnectionID,
 		&i.CredentialOwner,
+		&i.DisplayName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1770,7 +1844,7 @@ SET agent_id = $1,
 WHERE identity_provider_connection_id = $3
   AND organization_id = $4
   AND deleted IS FALSE
-RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOktaIdentityProviderConnectionAgentParams struct {
@@ -1795,7 +1869,6 @@ func (q *Queries) UpdateOktaIdentityProviderConnectionAgent(ctx context.Context,
 		&i.AttachmentScope,
 		&i.OrgUrl,
 		&i.IssuerUrl,
-		&i.IssuerUrlOverrideReason,
 		&i.OwnershipClaimed,
 		&i.RemoteSessionIssuerID,
 		&i.RemoteSessionClientID,
@@ -1824,7 +1897,7 @@ SET ownership_claimed = ownership_claimed OR $1::boolean,
 WHERE identity_provider_connection_id = $5
   AND organization_id = $6
   AND deleted IS FALSE
-RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOktaIdentityProviderConnectionVerificationParams struct {
@@ -1855,7 +1928,6 @@ func (q *Queries) UpdateOktaIdentityProviderConnectionVerification(ctx context.C
 		&i.AttachmentScope,
 		&i.OrgUrl,
 		&i.IssuerUrl,
-		&i.IssuerUrlOverrideReason,
 		&i.OwnershipClaimed,
 		&i.RemoteSessionIssuerID,
 		&i.RemoteSessionClientID,

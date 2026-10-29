@@ -237,10 +237,10 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 		"get_platform_context", "list_projects", "find_mcp", "get_mcp",
 		"request_mcp_review", "get_my_mcp_review_request",
 		"get_project_overview", "get_mcp_diagnostics", "get_tool_usage_summary", "list_recent_tool_calls", "list_attribute_keys",
-		"search_gram_docs", "list_skills", "get_skill", "list_skill_versions",
+		"search_speakeasy_docs", "list_skills", "get_skill", "list_skill_versions",
 		"list_skill_feedback", "list_skill_suggestions", "list_skill_suggestion_feedback",
 		"create_skill", "add_skill_version", "update_skill_metadata", "list_skill_distributions",
-		"list_my_sessions", "continue_session",
+		"list_my_sessions", "continue_session", searchChatsToolName, readChatToolName,
 		// The analytics reads hold the caller to project:read in the handler.
 		describeAnalyticsCatalogToolName, listAnalyticsDimensionValuesToolName, runAnalyticsQueryToolName,
 		// The widget tools hold the caller to project:read in the handler; the
@@ -255,12 +255,17 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	}
 	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["distribute_skill"])
 	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["undistribute_skill"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["link_skill_to_mcp"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["unlink_skill_from_mcp"])
 	for _, name := range []string{"list_skill_insights", "compare_skill_versions"} {
 		require.Equal(t, ExternalAuthorizationOrgAdmin, byName[name], "session cost is organization spend: %s", name)
 	}
-	// search_tool_calls returns masked identities and person references, so it
-	// stays admin-gated like the drill-downs that do the same.
-	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["search_tool_calls"])
+	// The individual-call tools hold the caller to log:read on the project in
+	// the handler, matching the dashboard Tool Logs list. log:read is never a
+	// system-role default, so membership alone admits nobody to the rows.
+	for _, name := range []string{"search_tool_calls", "query_mcp_traces"} {
+		require.Equal(t, ExternalAuthorizationMember, byName[name], name)
+	}
 	for _, resource := range registrar.resources {
 		if resource.Meta.servesAudience(AudienceExternal) {
 			require.Equal(t, ExternalAuthorizationMember, resource.Meta.Authorization, resource.URI)
@@ -432,6 +437,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		operationRepublishPlugin,
 		"list_my_sessions",
 		"continue_session",
+		searchChatsToolName, readChatToolName,
 		"list_data_exports",
 		"create_data_export",
 		pauseDataExportToolName,
@@ -444,6 +450,10 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		// Authoring a new server from a project's functions is the same kind
 		// of administrator decision.
 		createMCPFromFunctionsToolName,
+		// Gateways decide which servers people reach through one endpoint,
+		// the same kind of administrator decision.
+		createGatewayToolName,
+		setGatewayMembersToolName,
 		// An assistant is bound to its own project: creating another is
 		// outside its reach, and renaming its own is a decision for a person
 		// with write access to it, not for the assistant.
@@ -680,7 +690,7 @@ func TestAdvertisedInventoryBackendKindIsClosed(t *testing.T) {
 	require.NotNil(t, mcps.Items)
 	backendKind := mcps.Items.Properties["backend_kind"]
 	require.NotNil(t, backendKind)
-	require.Equal(t, []any{"hosted", "remote", "tunneled", "unproxied", "legacy"}, backendKind.Enum)
+	require.Equal(t, []any{"hosted", "remote", "tunneled", "unproxied", "built_in", "legacy"}, backendKind.Enum)
 }
 
 func TestClientAdmissionToolInputsInferSchemas(t *testing.T) {
@@ -692,4 +702,12 @@ func TestClientAdmissionToolInputsInferSchemas(t *testing.T) {
 	schema, err := jsonschema.For[SetMCPClientAdmissionToolInput](nil)
 	require.NoError(t, err)
 	require.Contains(t, schema.Properties["mode"].Description, "presets, open, or disabled")
+}
+
+func TestPlatformOverviewExplainsAssertionReuseSafeguards(t *testing.T) {
+	t.Parallel()
+	require.Contains(t, platformOverview, "use set_workload_assertion_reuse only after explicit confirmation of the exact issuer, desired policy, and organization-wide impact")
+	require.Contains(t, platformOverview, "Reuse of assertions with jti or uti identifiers defaults to disabled")
+	require.Contains(t, platformOverview, "authorized workload administrator must explicitly opt in")
+	require.Contains(t, platformOverview, "Tokens without replay identifiers retain existing exact-token compatibility")
 }

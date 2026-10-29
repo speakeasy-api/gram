@@ -70,7 +70,7 @@ Working with no user to choose? Pick your recommended direction, put the other t
 | One row per grant, so roles repeat             | One row per role                                       |
 | Widgets get their own tab next to Dashboards   | Widgets are a step inside building a dashboard         |
 
-A primary feature gets a sidebar item, not a sub-tab of another page.
+A primary feature gets a sidebar item, not a sub-tab of another page. Also assess Command K page actions and individual named-resource candidates separately using `.agents/skills/maintaining-command-palette/SKILL.md`. A sidebar item or overview route does not make resources searchable by name; add/update coverage or record a justified exclusion with focused test evidence.
 
 **3. Reuse what we have; borrow what we don't.** Use the [reference shelf](#reference-shelf) and [Building a page](#building-a-page). A fourth drawer slightly different from the other three is a defect, as are a page-level `.css` file, a custom breakpoint, a hand-rolled card, or a bespoke heading. For anything we lack, copy a named detail from a named product.
 

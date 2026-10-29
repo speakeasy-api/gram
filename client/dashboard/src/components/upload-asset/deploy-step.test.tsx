@@ -637,7 +637,7 @@ it("evolves the original document slug and invalidates source caches before comp
       ],
     },
   });
-  expect(invalidate).toHaveBeenCalledTimes(6);
+  expect(invalidate).toHaveBeenCalledTimes(7);
   expect(state.create).not.toHaveBeenCalled();
 });
 it.each([{ mcpServers: [] }, { mcpServers: [{ id: "one" }, { id: "two" }] }])(

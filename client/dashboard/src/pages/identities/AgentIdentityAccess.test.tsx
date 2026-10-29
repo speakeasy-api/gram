@@ -1,4 +1,10 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,7 +13,11 @@ import { AgentIdentityPermissions } from "./AgentIdentityAccess";
 import { invalidateAgentPolicy } from "@/pages/agents/agent-policy-grants";
 
 const mocks = vi.hoisted(() => ({ list: vi.fn() }));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasScope: () => true, isLoading: false, error: null }),
+}));
 vi.mock("@/contexts/Auth", () => ({
+  useSession: () => ({ user: { id: "owner_example" } }),
   useOrganization: () => ({
     id: "org_example",
     projects: [{ id: "project_example", name: "Example project" }],
@@ -15,15 +25,24 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ agents: { listPolicyGrants: mocks.list } }),
+  useSlugs: () => ({ orgSlug: "org" }),
 }));
-vi.mock("@/pages/access/useOrgMcpServers", () => ({
-  useOrgMcpServers: () => ({
-    groups: [
-      {
-        projectName: "Example project",
-        servers: [{ id: "server_example", name: "Example server" }],
-      },
-    ],
+vi.mock("@/pages/access/useResourceLinkMaps", () => ({
+  useResourceLinkMaps: () => ({
+    projectMap: new Map([
+      ["project_example", { slug: "example", name: "Example project" }],
+    ]),
+    toolsetMap: new Map([
+      [
+        "server_example",
+        {
+          slug: "example-server",
+          name: "Example server",
+          projectId: "project_example",
+        },
+      ],
+    ]),
+    mcpServerMap: new Map(),
   }),
 }));
 vi.mock("@/routes", () => ({
@@ -59,6 +78,28 @@ beforeEach(() => {
   mocks.list.mockResolvedValue([]);
 });
 describe("Agent profile permissions", () => {
+  it("opens the shared permission editor without a separate inference card", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "inference_grant",
+        scope: "inference:execute",
+        selector: {
+          resourceKind: "inference",
+          resourceId: "*",
+          projectId: "project_example",
+        },
+      },
+    ]);
+    setup();
+    await screen.findByText("inference:execute");
+    expect(screen.getAllByText("Agent permissions")).toHaveLength(1);
+    expect(screen.queryByText("Inference access")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Edit permissions" }));
+    expect(
+      screen.getByRole("dialog", { name: "Edit permissions" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Platform access/ })).toBeTruthy();
+  });
   it("shows configured permissions and every selector constraint", async () => {
     mocks.list.mockResolvedValue([
       {
@@ -78,14 +119,62 @@ describe("Agent profile permissions", () => {
     setup();
     expect(await screen.findByText("mcp:connect")).toBeTruthy();
     expect(
+      screen.getByRole("link", { name: /Example server/ }).getAttribute("href"),
+    ).toBe("/org/projects/example/toolsets/example-server");
+    expect(
       screen.getByText(
-        /Example server \(Example project\).*Tool: search.*Disposition: read_only.*Server identity: example.*Server URL: https:\/\/example.test\/mcp/,
+        /Project: Example project.*Tool: search.*Disposition: read_only.*Server identity: example.*Server URL: https:\/\/example.test\/mcp/,
       ),
     ).toBeTruthy();
     expect(mocks.list).toHaveBeenCalledWith({ agentId: agent.id }, undefined, {
       signal: expect.any(AbortSignal),
     });
   });
+  it("shows an org permission as the whole organization unless narrowed to a project", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "grant_sync",
+        scope: "org:device_agent_sync",
+        selector: { resourceKind: "org", resourceId: "*" },
+      },
+      {
+        id: "grant_hooks",
+        scope: "org:hooks_ingest",
+        selector: {
+          resourceKind: "org",
+          resourceId: "*",
+          projectId: "project_example",
+        },
+      },
+    ]);
+    setup();
+    expect(await screen.findByText("org:device_agent_sync")).toBeTruthy();
+    expect(screen.getAllByText("Whole organization")).toHaveLength(1);
+    expect(screen.getByText("All resources")).toBeTruthy();
+    expect(screen.getByText("Project: Example project")).toBeTruthy();
+  });
+  // A wildcard project constrains nothing; an empty one still narrows.
+  it.each([
+    ["*", "Whole organization", "All resources", 0],
+    ["", "All resources", "Whole organization", 1],
+  ])(
+    "labels an org permission on project %j as %s",
+    async (projectId, shown, hidden, projectConstraints) => {
+      mocks.list.mockResolvedValue([
+        {
+          id: "grant_hooks",
+          scope: "org:hooks_ingest",
+          selector: { resourceKind: "org", resourceId: "*", projectId },
+        },
+      ]);
+      setup();
+      expect(await screen.findByText(shown)).toBeTruthy();
+      expect(screen.queryByText(hidden)).toBeNull();
+      expect(screen.queryAllByText(/^Project:/)).toHaveLength(
+        projectConstraints,
+      );
+    },
+  );
   it("updates after saving permissions in Agent Identity", async () => {
     const client = setup();
     await screen.findByText("No permissions configured for this agent.");
@@ -103,7 +192,9 @@ describe("Agent profile permissions", () => {
       agent.id,
     );
     expect(await screen.findByText("project:read")).toBeTruthy();
-    expect(screen.getByText("Example project")).toBeTruthy();
+    expect(
+      screen.getByText("Example project", { selector: "span" }),
+    ).toBeTruthy();
     expect(
       screen.queryByText("No permissions configured for this agent."),
     ).toBeNull();

@@ -13,8 +13,10 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	srv "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	idpc "github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/stretchr/testify/require"
 )
 
@@ -200,7 +202,7 @@ func TestXAAReadinessReportsIdentityChainingAndFederatedCallback(t *testing.T) {
 	reader := &xaaReaderStub{result: &srv.ListOktaResourceConnectionsResult{Servers: []*srv.OktaResourceConnectionServer{
 		{ProjectID: xaaProjectID, McpServerID: xaaServerID, State: "connected", IssuerID: &issuerID, ResourceIndicator: "https://upstream.example.test/mcp"},
 	}}}
-	identity := &xaaIdentityStub{callback: &callback, chaining: XAAIdentityChaining{Served: false, Bindings: []XAAIdentityChainingBinding{
+	identity := &xaaIdentityStub{callback: &callback, chaining: XAAIdentityChaining{Served: false, NotServedReason: nil, Providers: nil, Bindings: []XAAIdentityChainingBinding{
 		{State: "unknown_grants", Stage: "registration", Remediation: "An administrator must confirm effective registration grants.", GrantSource: "unknown", RequestedScopes: []string{"read"}},
 	}}}
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
@@ -412,4 +414,127 @@ func TestXAAReadinessOktaSignInGuidanceCoversEveryStep(t *testing.T) {
 		return reg.Descriptors()[0]
 	}()
 	require.Contains(t, descriptor.Description, "send the administrator to the dashboard")
+	require.Contains(t, descriptor.Description, "the organization's Speakeasy issuer when the endpoint trusts none")
+	require.Contains(t, descriptor.Description, "setEMAProviders management API")
+	require.NotContains(t, descriptor.Description, "appends")
+	require.Contains(t, platformOverview, "default EMA providers are derived")
+	require.Contains(t, platformOverview, "the list acts as the set of accepted providers")
+}
+
+type xaaServerStub struct {
+	server xaaServer
+	found  bool
+	calls  int
+}
+
+func (s *xaaServerStub) Server(context.Context, string, uuid.UUID, uuid.UUID) (xaaServer, bool, error) {
+	s.calls++
+	return s.server, s.found, nil
+}
+
+func xaaOutput(t *testing.T, result *mcp.CallToolResult) GetXAAReadinessOutput {
+	t.Helper()
+	require.False(t, result.IsError)
+	var output GetXAAReadinessOutput
+	wire, err := json.Marshal(result.StructuredContent)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(wire, &output))
+	return output
+}
+
+func TestXAAReadinessReportsProvidersWithoutOkta(t *testing.T) {
+	t.Parallel()
+	on := func(context.Context, string) (bool, error) { return true, nil }
+	off := func(context.Context, string) (bool, error) { return false, nil }
+	issuer := uuid.New()
+	speakeasy := []XAAEMAProvider{{Kind: string(remotesessions.EMAProviderSpeakeasy)}, {Kind: string(remotesessions.EMAProviderExternal)}}
+	served := XAAIdentityChaining{Served: true, Providers: speakeasy, Bindings: []XAAIdentityChainingBinding{{State: "ready"}}}
+	server := xaaServer{issuerID: issuer, resource: "https://upstream.example.test/mcp", advertisesIDJAG: true, speakeasy: true}
+	for _, tc := range []struct {
+		name   string
+		okta   FeatureChecker
+		reader *xaaReaderStub
+	}{
+		{name: "no Okta connection", okta: on, reader: &xaaReaderStub{err: oops.C(oops.CodeFailedPrecondition)}},
+		{name: "Okta rollout off", okta: off, reader: &xaaReaderStub{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			identity := &xaaIdentityStub{chaining: served}
+			servers := &xaaServerStub{server: server, found: true}
+			signIn := &signInReaderStub{}
+			session := xaaTestSession(t, &xaaReadinessService{connections: tc.reader, signIn: signIn, enabled: tc.okta, identity: identity, emaEnabled: on, servers: servers}, false)
+			output := xaaOutput(t, xaaCall(t, session, xaaProjectID, xaaServerID))
+			require.Equal(t, xaaStateReady, output.State)
+			require.False(t, output.Pending)
+			require.Equal(t, served, *output.IdentityChaining)
+			require.Nil(t, output.OktaSignIn)
+			require.Empty(t, signIn.orgs, "Okta sign-in is not read for another provider")
+			require.Equal(t, issuer, identity.issuer)
+			require.Equal(t, server.resource, identity.resource)
+
+			identity.chaining = XAAIdentityChaining{Served: false, NotServedReason: new("provider_unavailable"), Providers: speakeasy, Bindings: []XAAIdentityChainingBinding{}}
+			output = xaaOutput(t, xaaCall(t, session, xaaProjectID, xaaServerID))
+			require.Equal(t, xaaStateNotReady, output.State)
+			require.True(t, output.Pending)
+
+			servers.server.advertisesIDJAG = false
+			output = xaaOutput(t, xaaCall(t, session, xaaProjectID, xaaServerID))
+			require.Equal(t, xaaStateNotApplicable, output.State)
+			require.Equal(t, "no_idjag", conv.PtrValOr(output.NotApplicableReason, ""))
+
+			servers.found = false
+			missing := xaaCall(t, session, xaaProjectID, xaaServerID)
+			require.True(t, missing.IsError)
+			content, ok := missing.Content[0].(*mcp.TextContent)
+			require.True(t, ok)
+			require.Contains(t, content.Text, `"code":"not_found"`)
+		})
+	}
+}
+
+func TestXAAReadinessOktaVendorsKeepOktaDetails(t *testing.T) {
+	t.Parallel()
+	on := func(context.Context, string) (bool, error) { return true, nil }
+	issuerID := uuid.NewString()
+	reader := &xaaReaderStub{result: &srv.ListOktaResourceConnectionsResult{Servers: []*srv.OktaResourceConnectionServer{
+		{ProjectID: xaaProjectID, McpServerID: xaaServerID, State: "needs_connection", Pending: true, IssuerID: &issuerID, ResourceIndicator: "https://upstream.example.test/mcp"},
+	}}}
+	external := XAAIdentityChaining{Served: false, NotServedReason: new("binding_not_ready"), Bindings: []XAAIdentityChainingBinding{}}
+	identity := &xaaIdentityStub{chaining: external}
+	servers := &xaaServerStub{server: xaaServer{issuerID: uuid.New(), resource: "https://upstream.example.test/mcp", advertisesIDJAG: true, speakeasy: false}, found: true}
+	signIn := &signInReaderStub{setup: &idpc.SignInSetup{NextStep: idpc.SignInStepRegisterInOkta}}
+	session := xaaTestSession(t, &xaaReadinessService{connections: reader, signIn: signIn, enabled: on, identity: identity, emaEnabled: on, servers: servers}, false)
+
+	output := xaaOutput(t, xaaCall(t, session, xaaProjectID, xaaServerID))
+	require.Equal(t, "needs_connection", output.State, "an external vendor in an Okta organization is unchanged")
+	require.True(t, output.Pending)
+	require.NotNil(t, output.OktaSignIn)
+	require.Equal(t, issuerID, identity.issuer.String(), "the Okta row names the issuer")
+
+	servers.server.speakeasy = true
+	identity.chaining = XAAIdentityChaining{Served: true, Providers: []XAAEMAProvider{{Kind: string(remotesessions.EMAProviderExternal)}, {Kind: string(remotesessions.EMAProviderSpeakeasy)}}, Bindings: []XAAIdentityChainingBinding{}}
+	output = xaaOutput(t, xaaCall(t, session, xaaProjectID, xaaServerID))
+	require.Equal(t, xaaStateReady, output.State, "the Okta connection does not describe a vendor whose order names Speakeasy")
+	require.Nil(t, output.OktaSignIn)
+	require.Equal(t, servers.server.issuerID, identity.issuer)
+}
+
+func TestXAAReadinessSpeakeasySelectionNeedsEMAProvidersRollout(t *testing.T) {
+	t.Parallel()
+	on := func(context.Context, string) (bool, error) { return true, nil }
+	off := func(context.Context, string) (bool, error) { return false, nil }
+	issuerID := uuid.NewString()
+	reader := &xaaReaderStub{result: &srv.ListOktaResourceConnectionsResult{Servers: []*srv.OktaResourceConnectionServer{
+		{ProjectID: xaaProjectID, McpServerID: xaaServerID, State: "connected", IssuerID: &issuerID, ResourceIndicator: "https://upstream.example.test/mcp"},
+	}}}
+	identity := &xaaIdentityStub{chaining: XAAIdentityChaining{Served: false, NotServedReason: new("binding_not_ready"), Bindings: []XAAIdentityChainingBinding{}}}
+	servers := &xaaServerStub{server: xaaServer{issuerID: uuid.New(), resource: "https://upstream.example.test/mcp", advertisesIDJAG: true, speakeasy: true}, found: true}
+	signIn := &signInReaderStub{setup: &idpc.SignInSetup{NextStep: idpc.SignInStepRegisterInOkta}}
+	session := xaaTestSession(t, &xaaReadinessService{connections: reader, signIn: signIn, enabled: on, identity: identity, emaEnabled: off, servers: servers}, false)
+	output := xaaOutput(t, xaaCall(t, session, xaaProjectID, xaaServerID))
+	require.Equal(t, "connected", output.State, "with the rollout off the Okta output is unchanged")
+	require.NotNil(t, output.OktaSignIn)
+	require.Zero(t, servers.calls, "the vendor's selection is not read with the rollout off")
+	require.Equal(t, issuerID, identity.issuer.String())
 }

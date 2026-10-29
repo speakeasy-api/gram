@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -63,29 +64,22 @@ func (f workloadGrantFixture) seedToolsetOnUserSessionIssuer(t *testing.T, issue
 
 	ctx := f.fixtureContext(t)
 	slug := "issuer-workload-" + uuid.NewString()[:8]
-	toolset, err := toolsets_repo.New(f.ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsets_repo.New(f.ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         f.fx.orgID,
 		ProjectID:              f.fx.target.ProjectID,
 		Name:                   "Issuer workload MCP " + slug,
 		Slug:                   slug,
 		Description:            conv.ToPGText("another MCP server of the workload fixture's issuer"),
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-	toolset, err = toolsets_repo.New(f.ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           f.fx.target.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset := hostLegacyToolset(t, ctx, f.ti, toolsetRow, slug, "private", uuid.NullUUID{UUID: issuerID, Valid: true})
 
 	return &mcp.ResolvedMcpEndpoint{
 		AudienceURN:         urn.NewToolset(toolset.ID).String(),
 		OrganizationID:      f.fx.orgID,
 		ProjectID:           f.fx.target.ProjectID,
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 		Slug:                slug,
 		ToolsetID:           uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		UserSessionIssuerID: issuerID,

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -33,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -56,6 +58,11 @@ type Service struct {
 	provisioning          *RemoteMCPProvisioningService
 	distributionAdmission *admission.Guard
 	features              feature.Provider
+
+	// serverURL is the public Speakeasy origin that platform-domain MCP
+	// endpoint URLs resolve under; nil omits those URLs.
+	serverURL *url.URL
+
 	// beforeClaim runs between the claim's list and re-read with the locked previous URL; tests only.
 	beforeClaim func(holderPID uint32, previousURL string)
 	// beforeScopePinLock runs inside the pin transaction before it locks anything; tests only.
@@ -91,9 +98,15 @@ func NewService(
 		provisioning:          NewRemoteMCPProvisioningService(db, policy, auditLogger, iconSetter),
 		distributionAdmission: admission.NewGuard(),
 		features:              features,
+		serverURL:             nil,
 		beforeClaim:           nil,
 		beforeScopePinLock:    nil,
 	}
+}
+
+func (s *Service) WithServerURL(serverURL *url.URL) *Service {
+	s.serverURL = serverURL
+	return s
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -184,9 +197,11 @@ func (s *Service) CreateServerAndMcpServer(ctx context.Context, payload *gen.Cre
 			result.MCPServer = refreshed
 		}
 	}
+	mcpServerView := mv.BuildMcpServerView(result.MCPServer)
+	mcpservers.EnrichViews(ctx, logger, s.db, s.serverURL, authCtx.ActiveOrganizationID, []mcpserversrepo.McpServer{result.MCPServer}, []*types.McpServer{mcpServerView})
 	return &gen.CreateServerAndMcpServerResult{
 		RemoteMcpServer: mv.BuildRemoteMcpServerView(result.RemoteMCPServer),
-		McpServer:       mv.BuildMcpServerView(result.MCPServer),
+		McpServer:       mcpServerView,
 	}, nil
 }
 
@@ -535,6 +550,11 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		return oops.E(oops.CodeUnexpected, err, "delete remote mcp server").LogError(ctx, logger)
 	}
 
+	// Retire the auth clients derived from the deleted source's headers.
+	if err := authclientbackfill.SyncRemoteSource(ctx, dbtx, authCtx.ActiveOrganizationID, deleted.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync remote mcp server auth clients").LogError(ctx, logger)
+	}
+
 	// Deliberately no per-header audit event for the cascade. The parent's
 	// remote-mcp:delete entry already accounts for the headers going away, and
 	// one entry per header would bury that signal under detail nobody asked for.
@@ -691,6 +711,10 @@ func (s *Service) CreateServerHeader(ctx context.Context, payload *gen.CreateSer
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote mcp server header").LogError(ctx, logger)
 	}
 
+	if err := authclientbackfill.SyncRemoteSource(ctx, dbtx, authCtx.ActiveOrganizationID, server.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync remote mcp server auth clients").LogError(ctx, logger)
+	}
+
 	if err := s.audit.LogRemoteMcpServerHeaderCreate(ctx, dbtx, audit.LogRemoteMcpServerHeaderCreateEvent{
 		OrganizationID:            authCtx.ActiveOrganizationID,
 		ProjectID:                 *authCtx.ProjectID,
@@ -812,6 +836,10 @@ func (s *Service) UpdateServerHeader(ctx context.Context, payload *gen.UpdateSer
 		return nil, oops.E(oops.CodeUnexpected, err, "update remote mcp server header").LogError(ctx, logger)
 	}
 
+	if err := authclientbackfill.SyncRemoteSource(ctx, dbtx, authCtx.ActiveOrganizationID, server.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync remote mcp server auth clients").LogError(ctx, logger)
+	}
+
 	afterView := mv.BuildRemoteMcpServerHeaderView(header)
 
 	if err := s.audit.LogRemoteMcpServerHeaderUpdate(ctx, dbtx, audit.LogRemoteMcpServerHeaderUpdateEvent{
@@ -862,6 +890,32 @@ func (s *Service) DeleteServerHeader(ctx context.Context, payload *gen.DeleteSer
 
 	txRepo := repo.New(dbtx)
 
+	// Lock the parent before the header, as the other header writers and the
+	// parent's own deletion do, so the auth client sync below sees every write
+	// and never waits on a lock in the opposite order. Read unredacted through
+	// the repo: only the parent's id is wanted, so no value is revealed.
+	located, err := txRepo.GetServerHeader(ctx, repo.GetServerHeaderParams{
+		ID:        headerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+
+		return oops.E(oops.CodeUnexpected, err, "get remote mcp server header").LogError(ctx, logger)
+	}
+	if _, err := txRepo.GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{
+		ID:        located.RemoteMcpServerID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+
+		return oops.E(oops.CodeUnexpected, err, "lock remote mcp server").LogError(ctx, logger)
+	}
+
 	deleted, err := txRepo.DeleteServerHeader(ctx, repo.DeleteServerHeaderParams{
 		ID:        headerID,
 		ProjectID: *authCtx.ProjectID,
@@ -880,6 +934,10 @@ func (s *Service) DeleteServerHeader(ctx context.Context, payload *gen.DeleteSer
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "get remote mcp server").LogError(ctx, logger)
+	}
+
+	if err := authclientbackfill.SyncRemoteSource(ctx, dbtx, authCtx.ActiveOrganizationID, server.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync remote mcp server auth clients").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogRemoteMcpServerHeaderDelete(ctx, dbtx, audit.LogRemoteMcpServerHeaderDeleteEvent{
@@ -955,6 +1013,8 @@ func validateHeaderWrite(name string, value *string, valueFromRequestHeader *str
 	switch err := proxy.CheckRemoteHeader(check); {
 	case err == nil:
 		return headerName, source, nil
+	case errors.Is(err, proxy.ErrAuthorizationSource):
+		return "", nil, fmt.Errorf("header %q cannot read request header %q: it may carry the caller's Speakeasy credential, so it is never forwarded to remote MCP servers. Have callers send the upstream credential in a separate request header and read it from there", headerName, *source)
 	case errors.Is(err, proxy.ErrProtectedSource):
 		return "", nil, fmt.Errorf("header %q cannot read request header %q: Speakeasy credentials and cookies are never forwarded to remote MCP servers", headerName, *source)
 	case errors.Is(err, proxy.ErrProtectedDestination):

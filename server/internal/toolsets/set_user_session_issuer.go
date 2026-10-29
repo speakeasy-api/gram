@@ -3,155 +3,77 @@ package toolsets
 import (
 	"context"
 	"errors"
+	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/mv"
-	networkingressRepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	"github.com/speakeasy-api/gram/server/internal/urn"
-	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
 )
 
-// SetUserSessionIssuer links a toolset to a user_session_issuer (or unlinks
-// when user_session_issuer_id is null). The USI must already exist in the
-// caller's project or organization. The link lives on toolsets.user_session_issuer_id with
-// ON DELETE SET NULL, so deleting the USI later silently unlinks the
-// toolset.
+var (
+	// setUserSessionIssuerDeprecatedAt is when toolsets.setUserSessionIssuer started announcing its sunset.
+	setUserSessionIssuerDeprecatedAt = time.Date(2026, time.October, 26, 0, 0, 0, 0, time.UTC)
+
+	// setUserSessionIssuerSunset is when toolsets.setUserSessionIssuer is removed (AIM-738).
+	setUserSessionIssuerSunset = time.Date(2026, time.November, 25, 0, 0, 0, 0, time.UTC)
+)
+
+// setUserSessionIssuerRoute tags the deprecation log so the remaining callers can be found before the sunset.
+const setUserSessionIssuerRoute = "/rpc/toolsets.setUserSessionIssuer"
+
+// SetUserSessionIssuer links a session issuer to the toolset's hosted MCP server, or unlinks it when
+// user_session_issuer_id is null, through the same write as mcpServers.update.
+//
+// Deprecated: use mcpServers.update; this endpoint is removed on 2026-11-25.
 func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUserSessionIssuerPayload) (*types.Toolset, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)), attr.SlogHTTPRoute(setUserSessionIssuerRoute))
+	logDeprecatedHostingUse(ctx, logger, authCtx, nil)
 
-	beforeView, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
+	issuerID, err := conv.PtrToNullUUID(payload.UserSessionIssuerID)
 	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogWarn(ctx, logger)
+	}
+
+	toolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{Slug: string(payload.Slug), ProjectID: *authCtx.ProjectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogWarn(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, toolset.ID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: beforeView.ID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	var usiID uuid.NullUUID
-	if payload.UserSessionIssuerID != nil {
-		parsed, parseErr := uuid.Parse(*payload.UserSessionIssuerID)
-		if parseErr != nil {
-			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid user_session_issuer_id").LogError(ctx, s.logger)
+	if _, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: *authCtx.ProjectID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "toolset has no hosted MCP server").LogWarn(ctx, logger)
 		}
-		usiID = uuid.NullUUID{UUID: parsed, Valid: true}
+		return nil, oops.E(oops.CodeUnexpected, err, "load hosted MCP server").LogError(ctx, logger)
 	}
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-	if err := networkingressRepo.New(dbtx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock network ingress lifecycle")
-	}
-	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock project admission")
-	}
-	// Validate that the target USI is attachable in the caller's project or
-	// organization before writing the FK.
-	if usiID.Valid {
-		if _, err := usersessionbindings.ValidateAndLock(ctx, dbtx, usiID.UUID, *authCtx.ProjectID, authCtx.ActiveOrganizationID); err != nil {
-			if errors.Is(err, usersessionbindings.ErrNotFound) {
-				return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, s.logger)
-			}
-			return nil, oops.E(oops.CodeUnexpected, err, "validate user session issuer").LogError(ctx, s.logger)
-		}
-	}
-
-	// The prior link is read under the row lock so a concurrent change cannot
-	// hide an OAuth transition this write makes.
-	locked, err := s.repo.WithTx(dbtx).GetToolsetForUpdate(ctx, repo.GetToolsetForUpdateParams{
-		Slug:      string(payload.Slug),
-		ProjectID: *authCtx.ProjectID,
+	_, view, err := s.writeHostedServer(ctx, toolset.ID, hostedServerChange{
+		Name:                   nil,
+		Visibility:             nil,
+		UserSessionIssuerID:    issuerID,
+		ClearUserSessionIssuer: !issuerID.Valid,
+		ToolVariationsGroupID:  nil,
+		NetworkAccessMode:      nil,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "lock toolset").LogError(ctx, s.logger)
-	}
-
-	updatedToolset, err := s.repo.WithTx(dbtx).UpdateToolsetUserSessionIssuer(ctx, repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: usiID,
-		Slug:                string(payload.Slug),
-		ProjectID:           *authCtx.ProjectID,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "update toolset user_session_issuer").LogError(ctx, s.logger)
-	}
-	clearedDomainIDs, err := s.syncHostedServer(ctx, dbtx, authCtx, updatedToolset, nil)
-	if err != nil {
 		return nil, err
 	}
-	// A package renders an OAuth server differently from a key-authenticated
-	// one, so only linking an issuer where none was, or unlinking it, changes it.
-	carried := false
-	if updatedToolset.McpEnabled && locked.UserSessionIssuerID.Valid != usiID.Valid {
-		carried, err = toolsetCarriedByPlugin(ctx, dbtx, authCtx, updatedToolset.ID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "check toolset plugin membership").LogError(ctx, s.logger)
-		}
-	}
-	if carried {
-		if err := s.requestPluginPublication(ctx, dbtx, authCtx); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "enqueue toolset plugin publication").LogError(ctx, s.logger)
-		}
-	}
-
-	afterView, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	toolsetUUID, err := uuid.Parse(afterView.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset id").LogError(ctx, s.logger)
-	}
-
-	if err := s.audit.LogToolsetUpdate(ctx, dbtx, audit.LogToolsetUpdateEvent{
-		OrganizationID:        authCtx.ActiveOrganizationID,
-		ProjectID:             *authCtx.ProjectID,
-		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:      authCtx.Email,
-		ActorSlug:             nil,
-		ToolsetURN:            urn.NewToolset(toolsetUUID),
-		ToolsetName:           afterView.Name,
-		ToolsetSlug:           string(afterView.Slug),
-		ToolsetVersionAfter:   afterView.ToolsetVersion,
-		ToolsetSnapshotBefore: beforeView,
-		ToolsetSnapshotAfter:  afterView,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log toolset update").LogError(ctx, s.logger)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
-	}
-
-	if carried {
-		s.publishPluginsAfterToolsetChange(ctx, authCtx)
-	}
-	if err := s.reconcileCustomDomains(ctx, clearedDomainIDs); err != nil {
-		return nil, err
-	}
-
-	return afterView, nil
+	return view, nil
 }

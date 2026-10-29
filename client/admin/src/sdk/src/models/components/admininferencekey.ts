@@ -7,11 +7,16 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  AdminInferenceKeyCause,
+  AdminInferenceKeyCause$inboundSchema,
+} from "./admininferencekeycause.js";
 
 /**
  * Current usage and configured state for one materialized platform-managed OpenRouter key, without key material or provider identifiers.
  */
 export type AdminInferenceKey = {
+  causeDiagnostics?: Array<AdminInferenceKeyCause> | undefined;
   /**
    * Credits spent this month in USD.
    */
@@ -35,6 +40,9 @@ export const AdminInferenceKey$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    cause_diagnostics: z.optional(
+      z.array(AdminInferenceKeyCause$inboundSchema),
+    ),
     credits_used: z.number(),
     disable_causes: z.optional(z.array(z.string())),
     disable_causes_classified: z.boolean(),
@@ -44,6 +52,7 @@ export const AdminInferenceKey$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "cause_diagnostics": "causeDiagnostics",
       "credits_used": "creditsUsed",
       "disable_causes": "disableCauses",
       "disable_causes_classified": "disableCausesClassified",

@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -78,16 +79,6 @@ type sharedAuthorizationServer struct {
 	// It is also the `iss` of every token and authorization response the
 	// authorization server issues.
 	issuer string
-
-	// onAuthenticationHost reports whether the authorization server is served
-	// on the authentication host, which serves only its metadata, token, and
-	// revocation endpoints. Such a server accepts only the workload grant, and
-	// MCP clients keep using the per-endpoint authorization servers for
-	// browser sign-in.
-	//
-	// TODO(AIM-418): serve authorization, consent, and registration on the
-	// authentication host, and drop the restrictions this flag drives.
-	onAuthenticationHost bool
 
 	// projectID is the project of a project issuer, or uuid.Nil for an
 	// organization issuer. A session minted for all of the issuer's MCP
@@ -165,7 +156,7 @@ func (e *ResolvedMcpEndpoint) consentPath() string {
 	if shared := e.servingSharedAuthorizationServer(); shared != nil {
 		return shared.consentPath()
 	}
-	return "/" + e.RouteBase + "/" + e.Slug + "/connect"
+	return "/" + e.RouteBase.String() + "/" + e.Slug + "/connect"
 }
 
 // SetPlatformHosts records the deployment's extra first-party hosts (from
@@ -199,12 +190,10 @@ func (s *Service) sharedAuthorizationServerFor(issuer usersessions_repo.UserSess
 	if err != nil {
 		return nil, fmt.Errorf("derive shared issuer: %w", err)
 	}
-	onAuthenticationHost := s.authenticationHostBaseURL != "" && requestorigin.URLOrigin(issuerURL) == requestorigin.URLOrigin(s.authenticationHostBaseURL)
 	return &sharedAuthorizationServer{
-		issuerID:             issuer.ID,
-		issuer:               issuerURL,
-		onAuthenticationHost: onAuthenticationHost,
-		projectID:            issuer.ProjectID.UUID,
+		issuerID:  issuer.ID,
+		issuer:    issuerURL,
+		projectID: issuer.ProjectID.UUID,
 	}, nil
 }
 
@@ -364,21 +353,26 @@ func (s *Service) resolveSharedResource(ctx context.Context, logger *slog.Logger
 	if !ok {
 		return nil, sharedResourceMalformed, nil
 	}
-	routeBase := ""
+	var routeBase mcproute.Base
 	slug := ""
 	switch {
-	case strings.HasPrefix(routePath, "x/mcp/"):
-		routeBase, slug = "x/mcp", strings.TrimPrefix(routePath, "x/mcp/")
-	case strings.HasPrefix(routePath, "mcp/"):
-		routeBase, slug = "mcp", strings.TrimPrefix(routePath, "mcp/")
+	case strings.HasPrefix(routePath, mcproute.OrganizationGateway.String()+"/"):
+		routeBase, slug = mcproute.OrganizationGateway, strings.TrimPrefix(routePath, mcproute.OrganizationGateway.String()+"/")
+	case strings.HasPrefix(routePath, mcproute.MCP.String()+"/"):
+		routeBase, slug = mcproute.MCP, strings.TrimPrefix(routePath, mcproute.MCP.String()+"/")
 	default:
 		return nil, sharedResourceMalformed, nil
 	}
-	if slug == "" || strings.Contains(slug, "/") {
+	if routeBase == mcproute.OrganizationGateway && strings.Contains(slug, "/") {
+		organization, project, scoped := strings.Cut(slug, "/projects/")
+		if !scoped || organization == "" || project == "" || strings.Contains(organization, "/") || strings.Contains(project, "/") {
+			return nil, sharedResourceMalformed, nil
+		}
+	} else if slug == "" || strings.Contains(slug, "/") {
 		return nil, sharedResourceMalformed, nil
 	}
 
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(resourceCtx, logger, slug, routeBase)
+	endpoint, err := s.loadResolvedMcpEndpointBySlug(resourceCtx, logger, slug, routeBase, mcpmetrics.LegacyFallbackSharedResource)
 	if err != nil {
 		var shareable *oops.ShareableError
 		if errors.As(err, &shareable) && shareable.Code == oops.CodeNotFound {

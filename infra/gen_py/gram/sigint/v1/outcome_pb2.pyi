@@ -1,0 +1,156 @@
+from gcp.pubsub.v1 import options_pb2 as _options_pb2
+from google.protobuf.internal import containers as _containers
+from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import message as _message
+from collections.abc import Iterable as _Iterable, Mapping as _Mapping
+from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
+
+DESCRIPTOR: _descriptor.FileDescriptor
+
+class Outcome(_message.Message):
+    __slots__ = ("id", "evaluation_attempt_id", "organization_id", "project_id", "event", "sensor_id", "sensor_slug", "evaluated_at", "definition_hash", "configured_model", "models", "compiler_version", "actor", "billing_user_id", "source", "account", "assistant_id", "replayed", "status", "failure_reason", "provider", "attributes", "input", "trigger_kind", "run_id", "evaluation_requested_at")
+    class Status(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+        __slots__ = ()
+        STATUS_UNSPECIFIED: _ClassVar[Outcome.Status]
+        STATUS_NOT_APPLICABLE: _ClassVar[Outcome.Status]
+        STATUS_DRAFT: _ClassVar[Outcome.Status]
+        STATUS_FAILED: _ClassVar[Outcome.Status]
+    STATUS_UNSPECIFIED: Outcome.Status
+    STATUS_NOT_APPLICABLE: Outcome.Status
+    STATUS_DRAFT: Outcome.Status
+    STATUS_FAILED: Outcome.Status
+    class Actor(_message.Message):
+        __slots__ = ("user_id", "external_user_id", "user_email")
+        USER_ID_FIELD_NUMBER: _ClassVar[int]
+        EXTERNAL_USER_ID_FIELD_NUMBER: _ClassVar[int]
+        USER_EMAIL_FIELD_NUMBER: _ClassVar[int]
+        user_id: str
+        external_user_id: str
+        user_email: str
+        def __init__(self, user_id: _Optional[str] = ..., external_user_id: _Optional[str] = ..., user_email: _Optional[str] = ...) -> None: ...
+    class Account(_message.Message):
+        __slots__ = ("user_account_id", "account_type", "billing_mode")
+        USER_ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
+        ACCOUNT_TYPE_FIELD_NUMBER: _ClassVar[int]
+        BILLING_MODE_FIELD_NUMBER: _ClassVar[int]
+        user_account_id: str
+        account_type: str
+        billing_mode: str
+        def __init__(self, user_account_id: _Optional[str] = ..., account_type: _Optional[str] = ..., billing_mode: _Optional[str] = ...) -> None: ...
+    class Event(_message.Message):
+        __slots__ = ("kind", "id", "occurred_at", "conversation_message", "tool_call")
+        KIND_FIELD_NUMBER: _ClassVar[int]
+        ID_FIELD_NUMBER: _ClassVar[int]
+        OCCURRED_AT_FIELD_NUMBER: _ClassVar[int]
+        CONVERSATION_MESSAGE_FIELD_NUMBER: _ClassVar[int]
+        TOOL_CALL_FIELD_NUMBER: _ClassVar[int]
+        kind: str
+        id: str
+        occurred_at: str
+        conversation_message: Outcome.ConversationMessage
+        tool_call: Outcome.ToolCall
+        def __init__(self, kind: _Optional[str] = ..., id: _Optional[str] = ..., occurred_at: _Optional[str] = ..., conversation_message: _Optional[_Union[Outcome.ConversationMessage, _Mapping]] = ..., tool_call: _Optional[_Union[Outcome.ToolCall, _Mapping]] = ...) -> None: ...
+    class ConversationMessage(_message.Message):
+        __slots__ = ("conversation_id", "role", "generation", "sequence", "capture_kind", "original_message_id")
+        class Role(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+            __slots__ = ()
+            ROLE_UNSPECIFIED: _ClassVar[Outcome.ConversationMessage.Role]
+            ROLE_USER: _ClassVar[Outcome.ConversationMessage.Role]
+            ROLE_ASSISTANT: _ClassVar[Outcome.ConversationMessage.Role]
+        ROLE_UNSPECIFIED: Outcome.ConversationMessage.Role
+        ROLE_USER: Outcome.ConversationMessage.Role
+        ROLE_ASSISTANT: Outcome.ConversationMessage.Role
+        CONVERSATION_ID_FIELD_NUMBER: _ClassVar[int]
+        ROLE_FIELD_NUMBER: _ClassVar[int]
+        GENERATION_FIELD_NUMBER: _ClassVar[int]
+        SEQUENCE_FIELD_NUMBER: _ClassVar[int]
+        CAPTURE_KIND_FIELD_NUMBER: _ClassVar[int]
+        ORIGINAL_MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
+        conversation_id: str
+        role: Outcome.ConversationMessage.Role
+        generation: int
+        sequence: int
+        capture_kind: str
+        original_message_id: str
+        def __init__(self, conversation_id: _Optional[str] = ..., role: _Optional[_Union[Outcome.ConversationMessage.Role, str]] = ..., generation: _Optional[int] = ..., sequence: _Optional[int] = ..., capture_kind: _Optional[str] = ..., original_message_id: _Optional[str] = ...) -> None: ...
+    class ToolCall(_message.Message):
+        __slots__ = ("tool_name", "tool_call_id", "mcp_server_id")
+        TOOL_NAME_FIELD_NUMBER: _ClassVar[int]
+        TOOL_CALL_ID_FIELD_NUMBER: _ClassVar[int]
+        MCP_SERVER_ID_FIELD_NUMBER: _ClassVar[int]
+        tool_name: str
+        tool_call_id: str
+        mcp_server_id: str
+        def __init__(self, tool_name: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., mcp_server_id: _Optional[str] = ...) -> None: ...
+    class Input(_message.Message):
+        __slots__ = ("strategy", "requested_message_count", "message_count", "truncated")
+        STRATEGY_FIELD_NUMBER: _ClassVar[int]
+        REQUESTED_MESSAGE_COUNT_FIELD_NUMBER: _ClassVar[int]
+        MESSAGE_COUNT_FIELD_NUMBER: _ClassVar[int]
+        TRUNCATED_FIELD_NUMBER: _ClassVar[int]
+        strategy: str
+        requested_message_count: int
+        message_count: int
+        truncated: bool
+        def __init__(self, strategy: _Optional[str] = ..., requested_message_count: _Optional[int] = ..., message_count: _Optional[int] = ..., truncated: _Optional[bool] = ...) -> None: ...
+    class AttributesEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    ID_FIELD_NUMBER: _ClassVar[int]
+    EVALUATION_ATTEMPT_ID_FIELD_NUMBER: _ClassVar[int]
+    ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    EVENT_FIELD_NUMBER: _ClassVar[int]
+    SENSOR_ID_FIELD_NUMBER: _ClassVar[int]
+    SENSOR_SLUG_FIELD_NUMBER: _ClassVar[int]
+    EVALUATED_AT_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_HASH_FIELD_NUMBER: _ClassVar[int]
+    CONFIGURED_MODEL_FIELD_NUMBER: _ClassVar[int]
+    MODELS_FIELD_NUMBER: _ClassVar[int]
+    COMPILER_VERSION_FIELD_NUMBER: _ClassVar[int]
+    ACTOR_FIELD_NUMBER: _ClassVar[int]
+    BILLING_USER_ID_FIELD_NUMBER: _ClassVar[int]
+    SOURCE_FIELD_NUMBER: _ClassVar[int]
+    ACCOUNT_FIELD_NUMBER: _ClassVar[int]
+    ASSISTANT_ID_FIELD_NUMBER: _ClassVar[int]
+    REPLAYED_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    FAILURE_REASON_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    ATTRIBUTES_FIELD_NUMBER: _ClassVar[int]
+    INPUT_FIELD_NUMBER: _ClassVar[int]
+    TRIGGER_KIND_FIELD_NUMBER: _ClassVar[int]
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
+    EVALUATION_REQUESTED_AT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    evaluation_attempt_id: str
+    organization_id: str
+    project_id: str
+    event: Outcome.Event
+    sensor_id: str
+    sensor_slug: str
+    evaluated_at: str
+    definition_hash: str
+    configured_model: str
+    models: _containers.RepeatedScalarFieldContainer[str]
+    compiler_version: str
+    actor: Outcome.Actor
+    billing_user_id: str
+    source: str
+    account: Outcome.Account
+    assistant_id: str
+    replayed: bool
+    status: Outcome.Status
+    failure_reason: str
+    provider: str
+    attributes: _containers.ScalarMap[str, str]
+    input: Outcome.Input
+    trigger_kind: str
+    run_id: str
+    evaluation_requested_at: str
+    def __init__(self, id: _Optional[str] = ..., evaluation_attempt_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., project_id: _Optional[str] = ..., event: _Optional[_Union[Outcome.Event, _Mapping]] = ..., sensor_id: _Optional[str] = ..., sensor_slug: _Optional[str] = ..., evaluated_at: _Optional[str] = ..., definition_hash: _Optional[str] = ..., configured_model: _Optional[str] = ..., models: _Optional[_Iterable[str]] = ..., compiler_version: _Optional[str] = ..., actor: _Optional[_Union[Outcome.Actor, _Mapping]] = ..., billing_user_id: _Optional[str] = ..., source: _Optional[str] = ..., account: _Optional[_Union[Outcome.Account, _Mapping]] = ..., assistant_id: _Optional[str] = ..., replayed: _Optional[bool] = ..., status: _Optional[_Union[Outcome.Status, str]] = ..., failure_reason: _Optional[str] = ..., provider: _Optional[str] = ..., attributes: _Optional[_Mapping[str, str]] = ..., input: _Optional[_Union[Outcome.Input, _Mapping]] = ..., trigger_kind: _Optional[str] = ..., run_id: _Optional[str] = ..., evaluation_requested_at: _Optional[str] = ...) -> None: ...

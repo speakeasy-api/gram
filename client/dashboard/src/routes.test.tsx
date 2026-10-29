@@ -2,17 +2,19 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@/contexts/Sdk", () => ({
-  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+const routeSlugs = vi.hoisted(() => ({
+  orgSlug: "org",
+  projectSlug: "project" as string | undefined,
 }));
+vi.mock("@/contexts/Sdk", () => ({ useSlugs: () => routeSlugs }));
 
 import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
-import AccessHubRedirect from "./pages/workload-identities/AccessHubRedirect";
 import {
-  ShadowMCPLegacyRedirect,
+  ShadowAISectionRedirect,
+  ShadowMCPIndexRedirect,
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
-import { orgRoutePaths, useOrgRoutes, useRoutes } from "./routes";
+import { orgRoutePaths, useRoutes } from "./routes";
 
 function GuideHref(): JSX.Element {
   const routes = useRoutes();
@@ -24,7 +26,11 @@ function ProjectRouteHrefs(): JSX.Element {
   return (
     <output data-testid="project-route-hrefs">
       {Object.values(routes)
-        .map((route) => route.href())
+        .map((route) =>
+          route === routes.toolset
+            ? route.href("example-toolset")
+            : route.href(),
+        )
         .join("\n")}
     </output>
   );
@@ -89,7 +95,7 @@ describe("project routes", () => {
     expect(screen.getByText("/org/projects/project/guide")).toBeTruthy();
   });
 
-  it("exposes the Shadow AI section with Shadow MCP as one of its tabs", () => {
+  it("keeps the Shadow AI and Shadow MCP section URLs routable", () => {
     render(
       <MemoryRouter initialEntries={["/org/projects/project"]}>
         <ProjectRouteHrefs />
@@ -98,12 +104,12 @@ describe("project routes", () => {
 
     const hrefs = screen.getByTestId("project-route-hrefs").textContent ?? "";
     expect(hrefs).toContain("/org/projects/project/shadow-ai");
-    // The Shadow MCP paths predate the section and are in bookmarks and block
-    // messages, so they stay routable and redirect.
+    // Both sections live in Guardrails now, but their URLs are in tickets,
+    // bookmarks and block messages, so they stay routable and redirect.
     expect(hrefs).toContain("/org/projects/project/shadow-mcp");
   });
 
-  it("nests the tabs and their detail pages under the section", () => {
+  it("nests the detail pages under the old section tabs", () => {
     render(
       <MemoryRouter initialEntries={["/org/projects/project"]}>
         <ShadowAIHrefs />
@@ -135,19 +141,20 @@ describe("project routes", () => {
     ).toBeTruthy();
   });
 
-  // Block messages and bookmarks carry the old paths with a query and a
-  // fragment; both must survive the redirect or the deep link lands at the top.
-  it("redirects the legacy Shadow MCP paths into the section keeping search and hash", async () => {
-    render(
-      <MemoryRouter
-        initialEntries={[
-          "/org/projects/project/shadow-mcp?status=blocked#tools",
-        ]}
-      >
+  // Shadow AI lives in Guardrails: every tool index page of the old section
+  // sends a pasted link there.
+  it.each([
+    "shadow-ai",
+    "shadow-ai/harnesses",
+    "shadow-ai/assistants",
+    "shadow-ai/models",
+  ])("redirects /%s to Guardrails", async (path) => {
+    const view = render(
+      <MemoryRouter initialEntries={[`/org/projects/project/${path}`]}>
         <Routes>
           <Route
-            path="/org/projects/project/shadow-mcp"
-            element={<ShadowMCPLegacyRedirect />}
+            path={`/org/projects/project/${path}`}
+            element={<ShadowAISectionRedirect />}
           />
           <Route path="*" element={<LocationPath />} />
         </Routes>
@@ -155,11 +162,45 @@ describe("project routes", () => {
     );
 
     expect(
-      await screen.findByText(
-        "/org/projects/project/shadow-ai/mcps?status=blocked#tools",
+      await within(view.container).findByText(
+        "/org/projects/project/risk-policies",
       ),
     ).toBeTruthy();
   });
+
+  // The MCPs index and the older Shadow MCP index were the approvals queue,
+  // so a pasted link lands on the MCP approvals tab. Their query and fragment
+  // named filters of the old page and are dropped rather than carried over.
+  it.each(["shadow-ai/mcps", "shadow-mcp"])(
+    "redirects /%s to the MCP approvals tab of Guardrails",
+    async (path) => {
+      const view = render(
+        <MemoryRouter
+          initialEntries={[
+            `/org/projects/project/${path}?status=blocked#tools`,
+          ]}
+        >
+          <Routes>
+            <Route
+              path={`/org/projects/project/${path}`}
+              element={<ShadowMCPIndexRedirect />}
+            />
+            <Route path="*" element={<LocationPath />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      expect(
+        await within(view.container).findByText(
+          "/org/projects/project/risk-policies?tab=mcp-approvals",
+        ),
+      ).toBeTruthy();
+    },
+  );
+
+  // Block messages and bookmarks carry the old server paths with a query and
+  // a fragment; both must survive the redirect or the deep link lands at the
+  // top.
 
   it("redirects a legacy Shadow MCP server path to the nested detail", async () => {
     render(
@@ -216,64 +257,6 @@ describe("organization routes", () => {
   });
 });
 
-describe("Access Hub", () => {
-  function AccessHubHrefs(): JSX.Element {
-    const orgRoutes = useOrgRoutes();
-    return (
-      <output data-testid="access-hub-hrefs">
-        {[
-          orgRoutes.workloadIssuers.href(),
-          orgRoutes.workloadIssuers.issuerDetail.href("issuer-1"),
-        ].join("\n")}
-      </output>
-    );
-  }
-
-  it("lists its detail page among the organization route paths", () => {
-    expect(orgRoutePaths).toContain("access-hub/:issuerId");
-  });
-
-  it("is an organization route with no project in its path", () => {
-    expect(orgRoutePaths).toContain("access-hub");
-    render(
-      <MemoryRouter initialEntries={["/org"]}>
-        <AccessHubHrefs />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByTestId("access-hub-hrefs").textContent).toBe(
-      "/org/access-hub\n/org/access-hub/issuer-1",
-    );
-  });
-
-  it.each([
-    ["/org/projects/project/access-hub", "/org/access-hub"],
-    [
-      "/org/projects/project/access-hub/issuer-1?tab=machines#rules",
-      "/org/access-hub/issuer-1?tab=machines#rules",
-    ],
-    ["/org/projects/project/workload-identities", "/org/access-hub"],
-  ])("redirects the project URL %s", async (source, destination) => {
-    const { container } = render(
-      <MemoryRouter initialEntries={[source]}>
-        <Routes>
-          <Route
-            path="/:orgSlug/projects/:projectSlug/access-hub/*"
-            element={<AccessHubRedirect />}
-          />
-          <Route
-            path="/:orgSlug/projects/:projectSlug/workload-identities"
-            element={<AccessHubRedirect />}
-          />
-          <Route path="/:orgSlug/access-hub/*" element={<LocationPath />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await within(container).findByText(destination)).toBeTruthy();
-  });
-});
-
 it("lists nested organization pages at every depth, under their parents", () => {
   expect(orgRoutePaths).toContain("signing-keys/:setId");
   expect(orgRoutePaths).toContain("signing-keys/:setId/overview");
@@ -287,4 +270,28 @@ it("removes platform issuer management while preserving tenant and other admin r
   expect(orgRoutePaths).toContain("remote-identity-providers/*");
   expect(orgRoutePaths).toContain("platform-admin");
   expect(orgRoutePaths).toContain("platform-admin/openrouter-keys");
+});
+
+function OrganizationConnectionsHref(): JSX.Element {
+  const routes = useRoutes({ projectSlug: "default" });
+  return (
+    <output data-testid="org-connections">
+      {routes.mcp.organizationGateway.href()}?tab=connections
+    </output>
+  );
+}
+it("builds organization connections from an org-only route using an explicit project", () => {
+  routeSlugs.projectSlug = undefined;
+  try {
+    render(
+      <MemoryRouter initialEntries={["/org/settings"]}>
+        <OrganizationConnectionsHref />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("org-connections").textContent).toBe(
+      "/org/projects/default/mcp/organization-gateway?tab=connections",
+    );
+  } finally {
+    routeSlugs.projectSlug = "project";
+  }
 });

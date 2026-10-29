@@ -10,8 +10,10 @@ no edit to the generated package. The detached `speakeasy-hooks drain` that
 replays the offline spool is the exception: it takes its deployment identity
 (server, project, org) from the spooled events, not from `speakeasy.json` or
 the environment. It still resolves credentials through `SPEAKEASY_AI_HOOKS_AUTH_FILE`
-and `SPEAKEASY_AI_HOOKS_API_KEY` (the env key only for the deployment
-`SPEAKEASY_AI_HOOKS_SERVER_URL` names, when it names one), and honours
+and the `SPEAKEASY_AI_HOOKS_API_KEY` and `SPEAKEASY_AI_HOOKS_ORG_KEY`
+overrides. Environment keys apply only when the recorded deployment matches
+`SPEAKEASY_AI_HOOKS_SERVER_URL` and `SPEAKEASY_AI_HOOKS_ORG_ID`, when set
+(an unknown recorded org remains compatible). The drain also honours
 `SPEAKEASY_AI_HOOKS_DEBUG_LOG`.
 
 The environment is not a universal channel. Some providers scrub the hook
@@ -47,6 +49,34 @@ path stays in use until the new file exists.
 | `SPEAKEASY_AI_HOOKS_NONBLOCKING`            | Legacy fail-open posture baked into older plugins. `SPEAKEASY_AI_HOOKS_OBSERVABILITY_MODE` is its older name.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `SPEAKEASY_AI_HOOKS_DEBUG_LOG`              | Path the binary appends diagnostics to. Unset means no diagnostics.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `SPEAKEASY_AI_HOOKS_HOME`                   | Directory the plugin's bootstrap script caches the downloaded binary in. Read by the bootstrap, not the binary.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+
+## Credential order
+
+This order describes the current hooks source. Deploying agent-key precedence
+requires releasing that source and updating the server's pinned hooks binary;
+the current `0.3.37` pin predates this behavior.
+
+Each event uses the first credential that resolves:
+
+1. `SPEAKEASY_AI_HOOKS_API_KEY`.
+2. The key baked into the plugin, when `speakeasy.json` marks it as an
+   agent's key (`"agent_key": true`). This requires a generator to set
+   `HooksKeyIsAgent: true`. The agent install script selects this mode for its
+   OpenClaw plugin; shared org plugin generation leaves it off.
+   Once set, the agent's events stay under the agent on a machine where a
+   person has also signed in.
+3. The cached `speakeasy-hooks login` sign-in, when it was minted for this
+   server and org.
+4. The shared org key baked into the plugin, or `SPEAKEASY_AI_HOOKS_ORG_KEY`.
+
+`SPEAKEASY_AI_HOOKS_ORG_KEY` replaces the baked key and clears `agent_key`
+before this order is applied. Live events always take it. Offline replay
+takes it only for spooled events whose server matches
+`SPEAKEASY_AI_HOOKS_SERVER_URL` (and whose org matches
+`SPEAKEASY_AI_HOOKS_ORG_ID`, when both are set); other replayed events keep
+their baked key. A matching cached sign-in then wins, so events can be attributed to the
+signed-in person instead of the agent. Use `SPEAKEASY_AI_HOOKS_API_KEY` when
+an explicit credential must win over the cache.
 
 ## Collecting a debug log
 

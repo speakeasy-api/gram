@@ -1,3 +1,7 @@
+-- ClickHouse 26.5+ preserves redundant parentheses in SHOW CREATE. Keep
+-- expression parentheses aligned with the applied migrations so Atlas's
+-- textual comparison does not report formatting-only drift.
+
 CREATE TABLE IF NOT EXISTS telemetry_logs (
     -- OTel Log Record Identity
     id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the log entry.\n@access: confidential',
@@ -196,6 +200,7 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     user_id SimpleAggregateFunction(max, String) COMMENT '@access: confidential-pii',
     -- Managed runtime actor, not the credential owner or approving human.
     agent_id SimpleAggregateFunction(max, String) COMMENT '@access: confidential',
+    authorizer_user_id SimpleAggregateFunction(max, String) COMMENT 'Person an agent call acted on behalf of. Empty for direct calls and for agents that sign in as themselves.\n@access: confidential-pii',
     mcp_match SimpleAggregateFunction(max, String) COMMENT '@access: opaque-restricted',
     mcp_server_url SimpleAggregateFunction(max, String) COMMENT '@access: opaque-restricted',
 
@@ -243,7 +248,12 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     -- it, so a non-empty value must win over empty siblings across part
     -- merges, exactly as toolset_slug and meta_mcp_server_id do.
     mcp_client_name SimpleAggregateFunction(max, String) COMMENT '@access: opaque-confidential',
-    mcp_client_version SimpleAggregateFunction(max, String) COMMENT '@access: confidential'
+    mcp_client_version SimpleAggregateFunction(max, String) COMMENT '@access: confidential',
+    -- Concrete MCP server the trace was served by, materialized on
+    -- telemetry_logs from attributes.gram.mcp_server.id. Empty on traces
+    -- recorded before hosted servers stamped it. Carried, max() keeps the
+    -- non-empty value over empty siblings.
+    mcp_server_id SimpleAggregateFunction(max, String) COMMENT '@access: confidential'
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, trace_id)
 TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 90 DAY
@@ -280,7 +290,8 @@ SELECT
     anyIf(toolset_slug, toolset_slug != '') AS toolset_slug,
     anyIf(external_user_id, external_user_id != '') AS external_user_id,
     anyIf(user_id, user_id != '') AS user_id,
-    max(if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')) AS agent_id,
+    max(if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery', 'hook') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')) AS agent_id,
+    max(if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.authorizer_user_id), '')) AS authorizer_user_id,
     anyIf(toString(attributes.gram.mcp.match), toString(attributes.gram.mcp.match) != '') AS mcp_match,
     anyIf(toString(attributes.gram.mcp.server_url), toString(attributes.gram.mcp.server_url) != '') AS mcp_server_url,
     min(time_unix_nano) AS start_time_unix_nano,
@@ -297,7 +308,8 @@ SELECT
     anyIf(provider, provider != '') AS provider,
     anyIf(meta_mcp_server_id, meta_mcp_server_id != '') AS meta_mcp_server_id,
     anyIf(mcp_client_name, mcp_client_name != '') AS mcp_client_name,
-    anyIf(mcp_client_version, mcp_client_version != '') AS mcp_client_version
+    anyIf(mcp_client_version, mcp_client_version != '') AS mcp_client_version,
+    anyIf(mcp_server_id, mcp_server_id != '') AS mcp_server_id
 FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;
@@ -656,43 +668,40 @@ WITH
     -- ships it.
     toUnixTimestamp64Nano(toDateTime64('2026-07-14 00:00:00', 9, 'UTC')) AS attribute_metrics_cutoff_unix_nano,
     -- Every persisted Claude OTEL log row carries this URN (stamped at ingest).
-    (gram_urn = 'claude-code:otel:logs') AS is_claude_otel_row,
+    gram_urn = 'claude-code:otel:logs' AS is_claude_otel_row,
     -- Claude emits one api_request row per turn with model, token, cost, and
     -- attribution fields — the sole Claude usage source.
-    (
-        is_claude_otel_row
+    is_claude_otel_row
         AND chat_id != ''
         AND toString(attributes.prompt.id) != ''
         AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')
-    ) AS is_claude_api_request,
+    AS is_claude_api_request,
     -- Claude emits one tool_result row per completed tool call (carrying
     -- tool_use_id) — the sole Claude tool-call source; Claude hook rows are
     -- not counted.
-    (
-        is_claude_otel_row
+    is_claude_otel_row
         AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
-    ) AS is_claude_tool_result,
+    AS is_claude_tool_result,
     -- Every persisted Codex OTEL log row carries this URN (stamped at ingest).
-    (gram_urn = 'codex:otel:logs') AS is_codex_otel_row,
+    gram_urn = 'codex:otel:logs' AS is_codex_otel_row,
     -- Codex reports usage on the SSE event that closes a turn; only some
     -- response.completed events carry token counts, signalled by an input or
     -- output count being present. The sole Codex TOKEN source: codex:usage
     -- rows still arrive from the compliance COSTS import but carry cost only
     -- (their token counts ride unmetered codex.compliance.* keys precisely so
     -- they cannot double count against this stream).
-    (
-        is_codex_otel_row
+    is_codex_otel_row
         AND toString(attributes.event.name) = 'codex.sse_event'
         AND toString(attributes.event.kind) = 'response.completed'
         AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')
-    ) AS is_codex_api_request,
+    AS is_codex_api_request,
     -- Codex reports input_token_count INCLUSIVE of cached_token_count (OpenAI
     -- usage semantics: cached tokens are a subset of input), while the
     -- canonical shape is disjoint (input excludes cache reads). Normalize
     -- here, clamping to 0 <= cached <= input so bad client data can never
     -- INCREASE usage. Codex reports no cache writes and no cost.
     least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0)) AS codex_cache_read_tokens,
-    (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens) AS codex_input_tokens,
+    greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens AS codex_input_tokens,
     -- claude_chat:usage rows carry Claude Chat (web/desktop) per-user token
     -- usage and claude_chat:cost rows the matching spend, both polled from the
     -- Anthropic Admin Analytics API — sessionless usage, like Cursor's Admin
@@ -702,14 +711,13 @@ WITH
     -- cost-only since DNO-733: their token counts would duplicate the Codex
     -- OTEL stream above. Deliberately NOT claude-code:usage, which stays
     -- excluded as a duplicate of the OTEL api_request stream.
-    (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
+    startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage') AS is_agent_usage_row,
     -- Canonical hooks require ingest-stamped schema/event provenance and no
     -- provider URN. AHP model-attempt usage.reported samples are authoritative,
     -- independent of the harness name. AHP presentation messages/turn totals
     -- are not billable again. Other hooks count assistant.responded usage.
     -- Unstamped legacy opencode/openclaw/Pi turns retain their original source.
-    (
-        (((gram_urn = ''
+    (((gram_urn = ''
             AND toString(attributes.gram.hook.schema) = 'hook.ingest.v1')
             AND ((toString(attributes.gram.hook.transport) = 'ahp'
             AND toString(attributes.gram.hook.canonical_event) = 'usage.reported'
@@ -721,29 +729,27 @@ WITH
             AND toString(attributes.gram.hook.source) IN ('opencode', 'openclaw', 'pi')
             AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'))
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
-    ) AS is_hook_turn_usage_row,
+    AS is_hook_turn_usage_row,
     -- LiteLLM usage is authoritative only on normalized client model spans.
     -- The resource URN anchors provenance and the closed event-URN set excludes
     -- guardrail, auth, cache, database, metric, and other operational rows.
-    (
-        gram_urn = 'litellm:otel:traces'
+    gram_urn = 'litellm:otel:traces'
         AND event_urn IN (
             'urn:telemetry:provider_otel:span:chat',
             'urn:telemetry:provider_otel:span:embeddings',
             'urn:telemetry:provider_otel:span:text_completion'
         )
-    ) AS is_litellm_usage_row,
+    AS is_litellm_usage_row,
     -- Rows that carry token usage: the sumIf guard for every token/cost sum.
-    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row) AS is_usage_row,
-    (gram_urn = 'chat:transcript:observed') AS is_transcript_row,
+    is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row AS is_usage_row,
+    gram_urn = 'chat:transcript:observed' AS is_transcript_row,
     -- Codex/Cursor/opencode/openclaw/Pi tool calls arrive as hook rows, one
     -- PostToolUse/PostToolUseFailure row per completed call (Codex raw OTEL
     -- tool events are deliberately not counted — hook rows stay the sole
     -- source). The hook.event guard is required: every call also emits a
     -- PreToolUse row with the same gram.tool.name. Provider names (the
     -- usage-metrics rows' tool.name) are excluded — they are not tool calls.
-    (
-        (((gram_urn = ''
+    (((gram_urn = ''
             AND toString(attributes.gram.hook.schema) = 'hook.ingest.v1')
             AND (toString(attributes.gram.hook.source) NOT IN ('claude', 'claude-code', 'cowork')
             OR toString(attributes.gram.hook.transport) = 'ahp')
@@ -753,8 +759,8 @@ WITH
             AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
             AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')))
         AND toString(attributes.gram.tool.name) != ''
-    ) AS is_agent_tool_call,
-    (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
+    AS is_agent_tool_call,
+    is_claude_tool_result OR is_agent_tool_call AS is_counted_tool_call,
     -- Dedup identity per tool call: Claude tool_result rows carry tool_use_id,
     -- Cursor/unified-ingest hook rows carry gen_ai.tool.call.id. Rows with no
     -- call id fall back to the row id, degrading to count-per-row rather than
@@ -769,7 +775,7 @@ WITH
     -- user identity, model, source, and account type). They carry no token
     -- or cost usage of their own -- every usage guard above excludes them --
     -- and feed only the work-units measures at the end of the SELECT.
-    (gram_urn = 'chat_analysis:work_units:score') AS is_work_units_score
+    gram_urn = 'chat_analysis:work_units:score' AS is_work_units_score
 SELECT
     gram_project_id,
     toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket,
@@ -916,12 +922,11 @@ WITH
     -- without the URN guard a Claude-formatted row arriving through any other
     -- path would count toward enforcement but not the dashboard, warning or
     -- blocking users on inflated spend.
-    (
-        gram_urn = 'claude-code:otel:logs'
+    gram_urn = 'claude-code:otel:logs'
         AND chat_id != ''
         AND toString(attributes.prompt.id) != ''
         AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')
-    ) AS is_claude_api_request,
+    AS is_claude_api_request,
     -- Only Codex/Cursor usage-metric rows count. Generic gen_ai chat rows
     -- (Gram-hosted completions and other sources) are deliberately excluded so
     -- spend-rule enforcement reconciles with the cost dashboard's agent
@@ -930,10 +935,9 @@ WITH
     -- attribute_metrics_summaries_mv does count, are also deliberately
     -- excluded for now: spend rules govern agent/CLI spend until a product
     -- decision includes Claude Chat in enforcement budgets.
-    (
-        startsWith(gram_urn, 'codex:usage')
+    startsWith(gram_urn, 'codex:usage')
         OR startsWith(gram_urn, 'cursor:usage')
-    ) AS is_generic_usage_row
+    AS is_generic_usage_row
 SELECT
     gram_project_id,
     user_email,
@@ -1084,38 +1088,34 @@ WITH
     -- place: the runbook's preflight derives the effective boundary from the
     -- MV's actual creation time and repairs the partial buckets below it.
     toUnixTimestamp64Nano(toDateTime64('2026-07-21 22:00:00', 9, 'UTC')) AS chat_session_cutoff_unix_nano,
-    (gram_urn = 'claude-code:otel:logs') AS is_claude_otel_row,
-    (
-        is_claude_otel_row
+    gram_urn = 'claude-code:otel:logs' AS is_claude_otel_row,
+    is_claude_otel_row
         AND chat_id != ''
         AND toString(attributes.prompt.id) != ''
         AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')
-    ) AS is_claude_api_request,
-    (
-        is_claude_otel_row
+    AS is_claude_api_request,
+    is_claude_otel_row
         AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
-    ) AS is_claude_tool_result,
-    (gram_urn = 'codex:otel:logs') AS is_codex_otel_row,
+    AS is_claude_tool_result,
+    gram_urn = 'codex:otel:logs' AS is_codex_otel_row,
     -- Codex usage rides on token-bearing response.completed rows of the raw
     -- OTEL log stream; see attribute_metrics_summaries_mv above.
-    (
-        is_codex_otel_row
+    is_codex_otel_row
         AND toString(attributes.event.name) = 'codex.sse_event'
         AND toString(attributes.event.kind) = 'response.completed'
         AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')
-    ) AS is_codex_api_request,
+    AS is_codex_api_request,
     -- Cache-inclusive -> disjoint input normalization, clamped; identical to
     -- attribute_metrics_summaries_mv above.
     least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0)) AS codex_cache_read_tokens,
-    (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens) AS codex_input_tokens,
+    greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens AS codex_input_tokens,
     -- chatgpt:usage / claude_chat:* rows are chat-less and never pass the
     -- chat_id guard below — listed here only to keep this predicate textually
     -- aligned with attribute_metrics_summaries_mv and the Go session path.
-    (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
+    startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage') AS is_agent_usage_row,
     -- Same canonical/legacy usage authority as attribute_metrics_summaries_mv.
     -- No historical backfill: these guards affect future inserts only.
-    (
-        (((gram_urn = ''
+    (((gram_urn = ''
             AND toString(attributes.gram.hook.schema) = 'hook.ingest.v1')
             AND ((toString(attributes.gram.hook.transport) = 'ahp'
             AND toString(attributes.gram.hook.canonical_event) = 'usage.reported'
@@ -1127,17 +1127,15 @@ WITH
             AND hook_source IN ('opencode', 'openclaw', 'pi')
             AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'))
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
-    ) AS is_hook_turn_usage_row,
-    (
-        gram_urn = 'litellm:otel:traces'
+    AS is_hook_turn_usage_row,
+    gram_urn = 'litellm:otel:traces'
         AND event_urn IN (
             'urn:telemetry:provider_otel:span:chat',
             'urn:telemetry:provider_otel:span:embeddings',
             'urn:telemetry:provider_otel:span:text_completion'
         )
-    ) AS is_litellm_usage_row,
-    (
-        (((gram_urn = ''
+    AS is_litellm_usage_row,
+    (((gram_urn = ''
             AND toString(attributes.gram.hook.schema) = 'hook.ingest.v1')
             AND (hook_source NOT IN ('claude', 'claude-code', 'cowork')
             OR toString(attributes.gram.hook.transport) = 'ahp')
@@ -1147,17 +1145,16 @@ WITH
             AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
             AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')))
         AND toString(attributes.gram.tool.name) != ''
-    ) AS is_agent_tool_call,
-    (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
-    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row) AS is_usage_row,
-    (gram_urn = 'chat:transcript:observed') AS is_transcript_row,
+    AS is_agent_tool_call,
+    is_claude_tool_result OR is_agent_tool_call AS is_counted_tool_call,
+    is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row AS is_usage_row,
+    gram_urn = 'chat:transcript:observed' AS is_transcript_row,
     -- A counted tool call that failed: Claude tool_result rows carry
     -- success="false", Codex/Cursor hook rows report PostToolUseFailure or an
     -- HTTP error status.
-    (
-        (is_claude_tool_result AND toString(attributes.success) = 'false')
+    (is_claude_tool_result AND toString(attributes.success) = 'false')
         OR (is_agent_tool_call AND (toString(attributes.gram.hook.canonical_event) = 'tool.failed' OR toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))
-    ) AS is_failed_tool_call,
+    AS is_failed_tool_call,
     multiIf(
         toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id),
         toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
@@ -1285,9 +1282,9 @@ CREATE TABLE IF NOT EXISTS billing_meter_readings (
     reading_kind LowCardinality(String) MATERIALIZED if(corrects_reading_id IS NULL, 'usage', 'adjustment') COMMENT 'Derived row kind based on whether the reading corrects an earlier reading.\n@access: confidential',
     attributes Map(String, String) COMMENT 'Additional producer-supplied reading dimensions.\n@access: opaque-restricted',
     tokenizer_codec LowCardinality(String) MATERIALIZED attributes['codec'] COMMENT 'Tokenizer codec promoted from attributes for billing analysis.\n@access: confidential',
-    CONSTRAINT identity_valid CHECK id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND notEmpty(trimBoth(organization_id)) AND notEmpty(trimBoth(meter_id)) AND notEmpty(trimBoth(operation_id)),
-    CONSTRAINT value_kind_valid CHECK (corrects_reading_id IS NULL AND value > 0) OR (corrects_reading_id IS NOT NULL AND value != 0),
-    CONSTRAINT correction_id_valid CHECK corrects_reading_id IS NULL OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id),
+    CONSTRAINT identity_valid CHECK (id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND notEmpty(trimBoth(organization_id)) AND notEmpty(trimBoth(meter_id)) AND notEmpty(trimBoth(operation_id))),
+    CONSTRAINT value_kind_valid CHECK ((corrects_reading_id IS NULL AND value > 0) OR (corrects_reading_id IS NOT NULL AND value != 0)),
+    CONSTRAINT correction_id_valid CHECK (corrects_reading_id IS NULL OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id)),
     INDEX idx_billing_meter_readings_occurred_at occurred_at TYPE minmax GRANULARITY 1
 ) ENGINE = ReplacingMergeTree(produced_at)
 PARTITION BY cityHash64(toString(id)) % 64
@@ -1317,9 +1314,9 @@ CREATE TABLE IF NOT EXISTS billing_meter_readings_by_time (
     reading_kind LowCardinality(String) MATERIALIZED if(corrects_reading_id IS NULL, 'usage', 'adjustment') COMMENT 'Derived row kind based on whether the reading corrects an earlier reading.\n@access: confidential',
     attributes Map(String, String) COMMENT 'Additional producer-supplied reading dimensions frozen at acceptance.\n@access: opaque-restricted',
     tokenizer_codec LowCardinality(String) MATERIALIZED attributes['codec'] COMMENT 'Tokenizer codec promoted from attributes for billing analysis.\n@access: confidential',
-    CONSTRAINT identity_valid CHECK id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND notEmpty(trimBoth(organization_id)) AND notEmpty(trimBoth(meter_id)) AND notEmpty(trimBoth(operation_id)),
-    CONSTRAINT value_kind_valid CHECK (corrects_reading_id IS NULL AND value > 0) OR (corrects_reading_id IS NOT NULL AND value != 0),
-    CONSTRAINT correction_id_valid CHECK corrects_reading_id IS NULL OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id)
+    CONSTRAINT identity_valid CHECK (id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND notEmpty(trimBoth(organization_id)) AND notEmpty(trimBoth(meter_id)) AND notEmpty(trimBoth(operation_id))),
+    CONSTRAINT value_kind_valid CHECK ((corrects_reading_id IS NULL AND value > 0) OR (corrects_reading_id IS NOT NULL AND value != 0)),
+    CONSTRAINT correction_id_valid CHECK (corrects_reading_id IS NULL OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id))
 ) ENGINE = ReplacingMergeTree
 PARTITION BY toYYYYMM(occurred_at)
 PRIMARY KEY (organization_id, meter_id, occurred_at)
@@ -1518,6 +1515,135 @@ GROUP BY
     series_key,
     unit,
     measurement_method;
+
+-- One row per logical reading: one sensor's evaluation outcome for one source
+-- event. Source-event time is immutable for a logical reading, so attempts
+-- replace the complete row within its monthly partition and the latest
+-- evaluation wins. Readers deduplicate by id before counting. Only answered rows
+-- carry a result. Other statuses record why an evaluated message has no answer,
+-- so coverage can account for them instead of dropping them. The Pub/Sub
+-- writers validate every row, so rules can change without a migration.
+CREATE TABLE IF NOT EXISTS sigint_readings (
+    id UUID COMMENT 'Producer-assigned logical reading UUID, preserved across attempts.\n@access: confidential',
+    evaluation_attempt_id UUID COMMENT 'Evaluation attempt UUID, not the replacement key.\n@access: confidential',
+    organization_id String COMMENT 'Organization owning the source event.\n@access: confidential',
+    project_id UUID COMMENT 'Project owning the source event and sensor.\n@access: confidential',
+    sensor_id UUID COMMENT 'Stable sensor resource identity.\n@access: confidential',
+    sensor_slug String COMMENT 'Evaluation-time customer-defined sensor slug.\n@access: opaque-confidential',
+    event_kind LowCardinality(String) COMMENT 'Producer-defined source event namespace.\n@access: opaque-confidential',
+    event_id String COMMENT 'Opaque source event identity, not necessarily a UUID.\n@access: opaque-confidential',
+    event_occurred_at DateTime64(9, 'UTC') COMMENT 'Immutable source occurrence time.\n@access: confidential',
+    evaluated_at DateTime64(9, 'UTC') COMMENT 'Producer completion time and replacement version.\n@access: confidential',
+    inserted_at DateTime64(9, 'UTC') DEFAULT now64(9) COMMENT 'ClickHouse ingestion time for delivery diagnostics.\n@access: confidential',
+    status LowCardinality(String) DEFAULT 'answered' COMMENT 'Evaluation outcome: answered, not_applicable, draft or failed.\n@access: confidential',
+    failure_reason LowCardinality(String) DEFAULT '' COMMENT 'Bounded evaluator reason for failed outcomes, otherwise empty.\n@access: confidential',
+    definition_hash String COMMENT 'Semantic classifier-definition fingerprint.\n@access: confidential',
+    configured_model LowCardinality(String) COMMENT 'Requested classifier model identifier.\n@access: opaque-confidential',
+    models Array(String) COMMENT 'Provider-reported model identifiers.\n@access: opaque-confidential',
+    compiler_version LowCardinality(String) COMMENT 'Classification compilation version.\n@access: confidential',
+    provider LowCardinality(String) COMMENT 'Configured inference transport.\n@access: confidential',
+    input_strategy LowCardinality(String) DEFAULT '' COMMENT 'Configured message context, or empty when no input was supplied.\n@access: confidential',
+    input_requested_message_count UInt8 DEFAULT 0 COMMENT 'Configured message count including the target.\n@access: confidential',
+    input_message_count UInt8 DEFAULT 0 COMMENT 'Messages supplied including the target, after short history or budget truncation.\n@access: confidential',
+    input_truncated Bool DEFAULT false COMMENT 'Whether the content budget excluded available history.\n@access: confidential',
+    event_context_type LowCardinality(String) DEFAULT '' COMMENT 'Source-context variant.\n@access: confidential',
+    conversation_id Nullable(UUID) COMMENT 'Associated Speakeasy conversation identity.\n@access: confidential',
+    conversation_role LowCardinality(String) DEFAULT '' COMMENT 'Source message role.\n@access: confidential',
+    tool_name String DEFAULT '' COMMENT 'Producer-defined tool name.\n@access: opaque-confidential',
+    tool_call_id String DEFAULT '' COMMENT 'Producer protocol call identifier.\n@access: opaque-confidential',
+    mcp_server_id Nullable(UUID) COMMENT 'Associated Speakeasy MCP server identity.\n@access: confidential',
+    actor_user_id String DEFAULT '' COMMENT 'Observed Speakeasy actor identity.\n@access: confidential',
+    actor_external_user_id String DEFAULT '' COMMENT 'Observed source-system person identity.\n@access: confidential-pii',
+    actor_user_email String DEFAULT '' COMMENT 'Email explicitly observed by ingestion.\n@access: confidential-pii',
+    billing_user_id String DEFAULT '' COMMENT 'Explicit Speakeasy usage allocation identity.\n@access: confidential',
+    source LowCardinality(String) DEFAULT '' COMMENT 'Canonical ingestion surface.\n@access: confidential',
+    user_account_id Nullable(UUID) COMMENT 'Resolved external-account resource identity.\n@access: confidential',
+    account_type LowCardinality(String) DEFAULT '' COMMENT 'Ingestion-time account classification.\n@access: confidential',
+    billing_mode LowCardinality(String) DEFAULT '' COMMENT 'External account billing classification.\n@access: confidential',
+    assistant_id Nullable(UUID) COMMENT 'Associated Speakeasy assistant resource identity.\n@access: confidential',
+    replayed Nullable(Bool) COMMENT 'Historical-ingestion evidence with explicit absence.\n@access: confidential',
+    attributes Map(String, String) COMMENT 'Customer string labels captured with this attempt.\n@access: opaque-restricted' CODEC(ZSTD),
+    result_type LowCardinality(String) DEFAULT '' COMMENT 'Sensor result variant, empty unless answered.\n@access: confidential',
+    probabilities Array(Tuple(signal_id UUID, signal_slug String, probability Float64)) COMMENT 'Complete configured order, including customer signal slugs and probabilities.\n@access: opaque-confidential' CODEC(ZSTD),
+    selected_signal_id Nullable(UUID) COMMENT 'Selected signal identity for choice results.\n@access: confidential',
+    selected_signal_slug String DEFAULT '' COMMENT 'Customer-defined slug of the selected signal.\n@access: opaque-confidential',
+    expected_index Nullable(Float64) COMMENT 'Probability-weighted ordered-score index.\n@access: confidential',
+    confidence Nullable(Float64) COMMENT 'Optional classifier confidence.\n@access: confidential'
+) ENGINE = ReplacingMergeTree(evaluated_at)
+PARTITION BY toYYYYMM(event_occurred_at)
+PRIMARY KEY (organization_id, project_id, sensor_id, event_occurred_at)
+ORDER BY (organization_id, project_id, sensor_id, event_occurred_at, id)
+TTL toDateTime(event_occurred_at, 'UTC') + INTERVAL 2 YEAR
+SETTINGS index_granularity = 8192
+COMMENT 'Sensor evaluation outcomes with monthly, source-time-stable replacement and two-year retention';
+
+-- Run-scoped evaluation outcomes. Streaming uses the zero run UUID, while each
+-- manual request supplies a distinct run UUID. Every attempt preserves the
+-- logical evaluation request time, keeping replacement in one monthly partition
+-- and giving both triggers the same two-year retention clock. Source occurrence
+-- time remains an independent analytics dimension. Writers must validate the trigger,
+-- run and timestamp contract before insertion.
+CREATE TABLE IF NOT EXISTS sigint_readings_v2 (
+    id UUID COMMENT 'Producer-assigned reading UUID incorporating tenant, trigger, manual run when present, source event and sensor. Preserved across attempts.\n@access: confidential',
+    evaluation_attempt_id UUID COMMENT 'Evaluation attempt UUID, not the replacement key.\n@access: confidential',
+    organization_id String COMMENT 'Organization owning the source event.\n@access: confidential',
+    project_id UUID COMMENT 'Project owning the source event and sensor.\n@access: confidential',
+    trigger_kind LowCardinality(String) COMMENT 'Evaluation trigger: stream or manual. Immutable across attempts.\n@access: confidential',
+    run_id UUID DEFAULT '00000000-0000-0000-0000-000000000000' COMMENT 'Manual evaluation request UUID, or the zero UUID for streaming. Immutable across attempts.\n@access: confidential',
+    evaluation_requested_at DateTime64(9, 'UTC') COMMENT 'Immutable logical evaluation request time used for partitioning and retention. Streaming uses the creation mutation timestamp and manual evaluations use the accepted run creation time.\n@access: confidential',
+    sensor_id UUID COMMENT 'Stable sensor resource identity.\n@access: confidential',
+    sensor_slug String COMMENT 'Evaluation-time customer-defined sensor slug.\n@access: opaque-confidential',
+    event_kind LowCardinality(String) COMMENT 'Producer-defined source event namespace.\n@access: opaque-confidential',
+    event_id String COMMENT 'Opaque source event identity, not necessarily a UUID.\n@access: opaque-confidential',
+    event_occurred_at DateTime64(9, 'UTC') COMMENT 'Immutable source occurrence time, independent of evaluation request time.\n@access: confidential',
+    evaluated_at DateTime64(9, 'UTC') COMMENT 'Producer completion time and replacement version.\n@access: confidential',
+    inserted_at DateTime64(9, 'UTC') DEFAULT now64(9) COMMENT 'ClickHouse ingestion time for delivery diagnostics.\n@access: confidential',
+    status LowCardinality(String) DEFAULT 'answered' COMMENT 'Evaluation outcome: answered, not_applicable, draft or failed.\n@access: confidential',
+    failure_reason LowCardinality(String) DEFAULT '' COMMENT 'Bounded evaluator reason for failed outcomes, otherwise empty.\n@access: confidential',
+    definition_hash String COMMENT 'Semantic classifier-definition fingerprint.\n@access: confidential',
+    configured_model LowCardinality(String) COMMENT 'Requested classifier model identifier.\n@access: opaque-confidential',
+    models Array(String) COMMENT 'Provider-reported model identifiers.\n@access: opaque-confidential',
+    compiler_version LowCardinality(String) COMMENT 'Classification compilation version.\n@access: confidential',
+    provider LowCardinality(String) COMMENT 'Configured inference transport.\n@access: confidential',
+    input_strategy LowCardinality(String) DEFAULT '' COMMENT 'Configured message context, or empty when no input was supplied.\n@access: confidential',
+    input_requested_message_count UInt8 DEFAULT 0 COMMENT 'Configured message count including the target.\n@access: confidential',
+    input_message_count UInt8 DEFAULT 0 COMMENT 'Messages supplied including the target, after short history or budget truncation.\n@access: confidential',
+    input_truncated Bool DEFAULT false COMMENT 'Whether the content budget excluded available history.\n@access: confidential',
+    event_context_type LowCardinality(String) DEFAULT '' COMMENT 'Source-context variant.\n@access: confidential',
+    conversation_id Nullable(UUID) COMMENT 'Associated Speakeasy conversation identity.\n@access: confidential',
+    conversation_role LowCardinality(String) DEFAULT '' COMMENT 'Source message role.\n@access: confidential',
+    conversation_generation Int32 DEFAULT 0 COMMENT 'Captured transcript generation.\n@access: confidential',
+    conversation_sequence Int64 DEFAULT 0 COMMENT 'Captured source message sequence.\n@access: confidential',
+    conversation_capture_kind LowCardinality(String) DEFAULT '' COMMENT 'Original, reobserved, synthetic or unknown source lineage. Empty means unavailable.\n@access: confidential',
+    conversation_original_message_id Nullable(UUID) COMMENT 'Original source message for an exact transcript copy.\n@access: confidential',
+    tool_name String DEFAULT '' COMMENT 'Producer-defined tool name.\n@access: opaque-confidential',
+    tool_call_id String DEFAULT '' COMMENT 'Producer protocol call identifier.\n@access: opaque-confidential',
+    mcp_server_id Nullable(UUID) COMMENT 'Associated Speakeasy MCP server identity.\n@access: confidential',
+    actor_user_id String DEFAULT '' COMMENT 'Observed Speakeasy actor identity.\n@access: confidential',
+    actor_external_user_id String DEFAULT '' COMMENT 'Observed source-system person identity.\n@access: confidential-pii',
+    actor_user_email String DEFAULT '' COMMENT 'Email explicitly observed by ingestion.\n@access: confidential-pii',
+    billing_user_id String DEFAULT '' COMMENT 'Explicit Speakeasy usage allocation identity.\n@access: confidential',
+    source LowCardinality(String) DEFAULT '' COMMENT 'Canonical ingestion surface.\n@access: confidential',
+    user_account_id Nullable(UUID) COMMENT 'Resolved external-account resource identity.\n@access: confidential',
+    account_type LowCardinality(String) DEFAULT '' COMMENT 'Ingestion-time account classification.\n@access: confidential',
+    billing_mode LowCardinality(String) DEFAULT '' COMMENT 'External account billing classification.\n@access: confidential',
+    assistant_id Nullable(UUID) COMMENT 'Associated Speakeasy assistant resource identity.\n@access: confidential',
+    replayed Nullable(Bool) COMMENT 'Historical-ingestion evidence with explicit absence.\n@access: confidential',
+    attributes Map(String, String) COMMENT 'Customer string labels captured with this attempt.\n@access: opaque-restricted' CODEC(ZSTD),
+    result_type LowCardinality(String) DEFAULT '' COMMENT 'Sensor result variant, empty unless answered.\n@access: confidential',
+    probabilities Array(Tuple(signal_id UUID, signal_slug String, probability Float64)) COMMENT 'Complete configured order, including customer signal slugs and probabilities.\n@access: opaque-confidential' CODEC(ZSTD),
+    selected_signal_id Nullable(UUID) COMMENT 'Selected signal identity for choice results.\n@access: confidential',
+    selected_signal_slug String DEFAULT '' COMMENT 'Customer-defined slug of the selected signal.\n@access: opaque-confidential',
+    expected_index Nullable(Float64) COMMENT 'Probability-weighted ordered-score index.\n@access: confidential',
+    confidence Nullable(Float64) COMMENT 'Optional classifier confidence.\n@access: confidential',
+    INDEX event_occurred_at_minmax_idx event_occurred_at TYPE minmax GRANULARITY 1
+) ENGINE = ReplacingMergeTree(evaluated_at)
+PARTITION BY toYYYYMM(evaluation_requested_at)
+PRIMARY KEY (organization_id, project_id, trigger_kind, run_id, sensor_id, event_occurred_at)
+ORDER BY (organization_id, project_id, trigger_kind, run_id, sensor_id, event_occurred_at, id)
+TTL toDateTime(evaluation_requested_at, 'UTC') + INTERVAL 2 YEAR
+SETTINGS index_granularity = 8192
+COMMENT 'Run-scoped sensor evaluation outcomes with monthly request-time partitions and two-year request-time retention';
 
 CREATE TABLE IF NOT EXISTS authz_challenges (
     -- Identity
@@ -1809,6 +1935,63 @@ TTL toDateTime(created_at) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Risk findings event log: one row per detected secret or sensitive-data match, hashed not plaintext, powering the Risk Events page and analytics.';
 
+-- One row per finding, folded from risk_findings as copies arrive, for
+-- analytics that count findings. A finding is an event log of copies: the
+-- scanner's row, its redeliveries, and the suppression and unsuppression
+-- copies that change its state. Copies rank as every risk read ranks them:
+-- a state-change copy outranks a finding copy, then the latest inserted wins
+-- (chrepo.LatestCopyOrderSQL). live is the winning copy's. Each other column
+-- is the best-ranked copy's that set it, as a state-change copy can carry
+-- fewer fields than the scanner's and a blank must not hide what a finding
+-- was. argMax is idempotent, so a redelivered copy
+-- changes nothing and no read-time de-duplication is needed. The shadow
+-- engine's comparison rows are never folded. Columns are only what counting
+-- needs: no matched value, fingerprint, description or chat location.
+CREATE TABLE IF NOT EXISTS risk_finding_states (
+    organization_id String COMMENT 'Organization the finding belongs to.\n@access: confidential' CODEC(ZSTD),
+    project_id String COMMENT 'Project the finding was scoped to. Empty string when unknown.\n@access: confidential' CODEC(ZSTD),
+    id UUID COMMENT 'Finding id that every copy of the finding shares.\n@access: confidential',
+
+    -- Ranked by version (state-change copy, inserted_at).
+    live AggregateFunction(argMax, UInt8, Tuple(UInt8, DateTime64(9))) COMMENT '1 while the finding is neither suppressed, a false positive nor a could-not-analyze sentinel.\n@access: confidential',
+    category AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Risk category of the rule that fired, e.g. secrets.\n@access: confidential',
+    rule_id AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Rule that fired, e.g. pii.email_address.\n@access: confidential',
+    source AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Detection source, e.g. gitleaks or presidio.\n@access: confidential',
+    risk_policy_id AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Risk policy the message was scanned against.\n@access: confidential',
+    chat_source AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Product surface the scanned message came from.\n@access: confidential',
+    team AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Directory department of the resolved user at ingest.\n@access: confidential-pii',
+    user_email AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Email of the resolved internal user at ingest.\n@access: confidential-pii',
+    external_user_id AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Resolved external user id, for findings with no internal user.\n@access: confidential-pii',
+    enforcement_outcome AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'What enforcement did with the finding, e.g. denied. Empty when nothing was enforced.\n@access: confidential',
+    created_at_unix_nano SimpleAggregateFunction(min, Int64) COMMENT 'Time the finding was produced. Every copy of a finding keeps it.\n@access: confidential',
+
+    INDEX idx_risk_finding_states_created_at created_at_unix_nano TYPE minmax GRANULARITY 1
+) ENGINE = AggregatingMergeTree
+ORDER BY (organization_id, project_id, id)
+TTL fromUnixTimestamp64Nano(created_at_unix_nano) + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'One row per risk finding, folded from risk_findings by risk_finding_states_mv, for analytics counts.';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS risk_finding_states_mv TO risk_finding_states AS
+SELECT
+    organization_id,
+    project_id,
+    id,
+    argMaxState(toUInt8(excluded_at IS NULL AND false_positive_at IS NULL AND dead_letter_reason = ''), (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at)) AS live,
+    argMaxIfState(toString(category), (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), category != '') AS category,
+    argMaxIfState(toString(rule_id), (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), rule_id != '') AS rule_id,
+    argMaxIfState(toString(source), (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), source != '') AS source,
+    argMaxIfState(risk_policy_id, (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), risk_policy_id != '') AS risk_policy_id,
+    argMaxIfState(toString(chat_source), (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), chat_source != '') AS chat_source,
+    argMaxIfState(toString(team), (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), team != '') AS team,
+    argMaxIfState(user_email, (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), user_email != '') AS user_email,
+    argMaxIfState(external_user_id, (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), external_user_id != '') AS external_user_id,
+    argMaxIfState(toString(enforcement_outcome), (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), enforcement_outcome != '') AS enforcement_outcome,
+    min(toUnixTimestamp64Nano(created_at)) AS created_at_unix_nano
+FROM risk_findings
+WHERE shadow = 0
+GROUP BY organization_id, project_id, id;
+
 -- Bloom filter indices for point lookups (organization_id and project_id are
 -- already in the ORDER BY so no bloom filters needed for them).
 CREATE INDEX IF NOT EXISTS idx_risk_findings_chat_message_id ON risk_findings (chat_message_id) TYPE bloom_filter(0.01) GRANULARITY 1;
@@ -1896,9 +2079,9 @@ CREATE TABLE IF NOT EXISTS chat_analysis_scores (
     judge_model LowCardinality(String) COMMENT 'Model used to judge the session.\n@access: confidential',
     judge_prompt_version LowCardinality(String) COMMENT 'Judge prompt version.\n@access: confidential',
 
-    CONSTRAINT score_valid CHECK isFinite(score),
-    CONSTRAINT judge_valid CHECK judge != '',
-    CONSTRAINT detail_valid CHECK isValidJSON(detail)
+    CONSTRAINT score_valid CHECK (isFinite(score)),
+    CONSTRAINT judge_valid CHECK (judge != ''),
+    CONSTRAINT detail_valid CHECK (isValidJSON(detail))
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMM(created_at)
 ORDER BY (organization_id, project_id, judge, created_at, id)
@@ -2191,6 +2374,53 @@ TTL fromUnixTimestamp64Nano(occurred_at_unix_nano) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'One row per observed agent occurrence, resolved by the ingest dialects into agent vocabulary rather than the shape it arrived in. Rows sharing a session_id belong to the same agent session. Append-only: every observation is retained so the lineage of a fact stays queryable, and de-duplication is performed at read time. The queryable surface is defined by the semantic layer, not by this table.';
 
+CREATE TABLE IF NOT EXISTS tool_calls (
+    organization_id String COMMENT 'Organization that owns the call.\n@access: confidential' CODEC(ZSTD),
+    project_id String COMMENT 'Project that owns the call.\n@access: confidential' CODEC(ZSTD),
+    event_id String COMMENT 'The tool call id that every observation of the call (decision, call, result) shares.\n@access: confidential' CODEC(ZSTD),
+
+    -- Each column keeps the latest observed non-empty value, which a
+    -- redelivered record cannot change, so no read-time de-duplication is
+    -- needed. Never add a count or sum state here, a duplicate would inflate it.
+    tool_name AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Tool the call ran.\n@access: opaque-confidential',
+    mcp_server_name AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'MCP server the call went to, as reported.\n@access: opaque-confidential',
+    mcp_tool_name AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'MCP tool the call invoked.\n@access: opaque-confidential',
+    skill_name AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Skill the call invoked, empty for a plain tool call.\n@access: opaque-confidential',
+    session_id AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Agent session the call belongs to.\n@access: confidential',
+    user_email AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Email of the user the call ran for.\n@access: confidential-pii',
+    surface AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Agent surface that made the call.\n@access: confidential',
+    status AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'How the call ended: ok, error, rejected or refused.\n@access: confidential',
+    duration_nano AggregateFunction(argMaxIf, Int64, Int64, UInt8) COMMENT 'How long the call took, in nanoseconds.\n@access: confidential',
+    started_at_unix_nano SimpleAggregateFunction(min, Int64) COMMENT 'Earliest observation of the call.\n@access: confidential',
+    ended_at_unix_nano SimpleAggregateFunction(max, Int64) COMMENT 'Latest observation of the call.\n@access: confidential',
+
+    INDEX idx_tool_calls_started_at started_at_unix_nano TYPE minmax GRANULARITY 1
+) ENGINE = AggregatingMergeTree
+ORDER BY (organization_id, project_id, event_id)
+TTL fromUnixTimestamp64Nano(started_at_unix_nano) + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'One row per tool call, folded from agent_events by tool_calls_mv as records arrive. Read with the -Merge combinators and GROUP BY organization_id, project_id, event_id. Filled forward only, from the time the view was created.';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS tool_calls_mv TO tool_calls AS
+SELECT
+    organization_id,
+    project_id,
+    event_id,
+    argMaxIfState(tool_name, observed_at_unix_nano, tool_name != '') AS tool_name,
+    argMaxIfState(mcp_server_name, observed_at_unix_nano, mcp_server_name != '') AS mcp_server_name,
+    argMaxIfState(mcp_tool_name, observed_at_unix_nano, mcp_tool_name != '') AS mcp_tool_name,
+    argMaxIfState(skill_name, observed_at_unix_nano, skill_name != '') AS skill_name,
+    argMaxIfState(session_id, observed_at_unix_nano, session_id != '') AS session_id,
+    argMaxIfState(user_email, observed_at_unix_nano, user_email != '') AS user_email,
+    argMaxIfState(toString(surface), observed_at_unix_nano, surface != '') AS surface,
+    argMaxIfState(toString(outcome), observed_at_unix_nano, outcome != '') AS status,
+    argMaxIfState(duration_nano, observed_at_unix_nano, duration_nano != 0) AS duration_nano,
+    min(occurred_at_unix_nano) AS started_at_unix_nano,
+    max(occurred_at_unix_nano) AS ended_at_unix_nano
+FROM agent_events
+WHERE event_type IN ('tool_call', 'tool_call_result', 'tool_decision') AND event_id != ''
+GROUP BY organization_id, project_id, event_id;
+
 -- agent_metrics is ReplacingMergeTree, unlike agent_events, because metric
 -- measures are sums: duplicates corrupt them directly and there is no
 -- count-distinct equivalent to read around them. Fingerprint collisions resolve
@@ -2261,3 +2491,31 @@ ORDER BY (organization_id, project_id, occurred_at_unix_nano, canonical_metric, 
 TTL fromUnixTimestamp64Nano(occurred_at_unix_nano) + INTERVAL 730 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'One row per measurement data point per measure, at the producer native grain. Carries a full dimension repeat so no join is required. Retained beyond agent_events so billing can read historical cycles. Replacing collapses only on background merges, so a reader must de-duplicate on metric_id (FINAL, or ORDER BY observed_at_unix_nano DESC then LIMIT 1 BY metric_id, since an unordered LIMIT 1 BY keeps an arbitrary version) and never sum raw rows.';
+
+-- Payload-free producer aggregates. Management reads first authorize source_id
+-- against the caller's project. UUID source IDs are globally unique.
+CREATE TABLE IF NOT EXISTS tunnel_metric_snapshots (
+    gram_project_id UUID COMMENT 'Project that owns the tunneled MCP source.\n@access: confidential',
+    source_id UUID COMMENT 'Tunneled MCP source the snapshot describes.\n@access: confidential',
+    bucket DateTime('UTC') COMMENT 'Start of the minute or 15-second sample interval.\n@access: confidential',
+    kind LowCardinality(String) COMMENT 'Snapshot kind, requests or connections.\n@access: confidential',
+    producer_id UUID COMMENT 'Tunnel gateway process that produced the snapshot.\n@access: confidential',
+    server_id UUID COMMENT 'MCP server the requests targeted, nil for connection samples.\n@access: confidential',
+    method LowCardinality(String) COMMENT 'MCP method from a fixed allowlist, other for anything else.\n@access: confidential',
+    client_family LowCardinality(String) COMMENT 'Fixed client family label derived from the MCP client name reported at initialize, falling back to the HTTP User-Agent. Never the raw client name or user agent.\n@access: confidential',
+    revision UInt64 COMMENT 'Producer revision. The highest revision of a key replaces earlier ones.\n@access: confidential',
+    attempts UInt64 COMMENT 'Requests started in the interval.\n@access: confidential',
+    successes UInt64 COMMENT 'Requests that completed with an MCP response.\n@access: confidential',
+    errors UInt64 COMMENT 'Requests that completed with an MCP error.\n@access: confidential',
+    canceled UInt64 COMMENT 'Requests canceled before completion.\n@access: confidential',
+    incomplete UInt64 COMMENT 'Requests: completions with no terminal result. Coverage and connections: the loss watermark of the producer for this source since boot. Growth since the previous row of that producer for the source marks the interval partial.\n@access: confidential',
+    rejected UInt64 COMMENT 'Requests Speakeasy rejected before they reached the MCP server.\n@access: confidential',
+    latency_bins Array(UInt64) COMMENT 'Request counts per fixed latency histogram bin.\n@access: confidential',
+    connections UInt32 COMMENT 'Connected tunnel agents at the sample time.\n@access: confidential',
+    consumers UInt32 COMMENT 'Client sessions open through the tunnel at the sample time.\n@access: confidential',
+    substreams UInt32 COMMENT 'Requests in flight through the tunnel at the sample time.\n@access: confidential',
+    connections_opened UInt64 COMMENT 'Agent connections opened since the previous sample.\n@access: confidential'
+) ENGINE = ReplacingMergeTree(revision)
+PARTITION BY toDate(bucket)
+ORDER BY (gram_project_id, source_id, bucket, kind, producer_id, server_id, method, client_family)
+TTL bucket + INTERVAL 90 DAY DELETE;

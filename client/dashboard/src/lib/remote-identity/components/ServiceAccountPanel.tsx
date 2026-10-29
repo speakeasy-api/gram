@@ -5,11 +5,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/HoverCard";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
@@ -22,7 +17,7 @@ import {
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Info, KeyRound, Settings } from "lucide-react";
+import { ChevronDown, KeyRound, Settings } from "lucide-react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import type { AgentCredentialFields } from "../drafts/useCredentialDraft";
@@ -61,6 +56,7 @@ export function ServiceAccountPanel({
   customerManagedKeys,
   providersHref,
   clientHref,
+  compact = false,
 }: {
   format: ServiceAccountFormat;
   onFormatChange: (format: ServiceAccountFormat) => void;
@@ -72,6 +68,11 @@ export function ServiceAccountPanel({
   customerManagedKeys: boolean;
   providersHref: string;
   clientHref: (issuerId: string, clientId: string) => string;
+  /**
+   * For narrow hosts such as a dialog: the formats become a grid of
+   * title-only tiles above the fields rather than a column beside them.
+   */
+  compact?: boolean;
 }): JSX.Element {
   const choose = (next: string) => {
     const picked = next as ServiceAccountFormat;
@@ -84,10 +85,22 @@ export function ServiceAccountPanel({
     isOAuthFormat(format) && clientDraft.showingBound(format);
 
   return (
-    <div className="flex flex-wrap items-start gap-x-8 gap-y-6">
+    <div
+      className={cn(
+        compact
+          ? "flex flex-col gap-4"
+          : "flex flex-wrap items-start gap-x-8 gap-y-6",
+      )}
+    >
       {showingSaved ? null : (
-        <div className="flex max-w-[280px] min-w-[240px] flex-1 flex-col gap-4">
+        <div
+          className={cn(
+            "flex flex-col",
+            compact ? "gap-3" : "max-w-[280px] min-w-[240px] flex-1 gap-4",
+          )}
+        >
           <FormatGroup
+            compact={compact}
             label="Static"
             value={format}
             onChange={choose}
@@ -111,6 +124,7 @@ export function ServiceAccountPanel({
             ]}
           />
           <FormatGroup
+            compact={compact}
             label="OAuth"
             value={format}
             onChange={choose}
@@ -120,7 +134,7 @@ export function ServiceAccountPanel({
                 value: "client-secret",
                 title: "Client Secret",
                 description:
-                  "Paste a client ID and secret from the identity provider.",
+                  "Paste a client ID and secret from the authorization server.",
               },
               {
                 value: "signing-key",
@@ -134,7 +148,16 @@ export function ServiceAccountPanel({
         </div>
       )}
 
-      <div className="flex min-w-0 flex-[999_1_480px] flex-col gap-4">
+      <div
+        className={cn(
+          "flex min-w-0 flex-col gap-4",
+          // Compact stacks the fields under the format tiles, so they sit in
+          // their own inset panel to read as a separate step.
+          compact
+            ? "border-border bg-muted/40 border p-4"
+            : "flex-[999_1_480px]",
+        )}
+      >
         {isOAuthFormat(format) ? (
           <OAuthClientFields
             format={format}
@@ -161,6 +184,7 @@ function FormatGroup({
   onChange,
   disabled,
   options,
+  compact,
 }: {
   label: string;
   value: ServiceAccountFormat;
@@ -172,17 +196,27 @@ function FormatGroup({
     description: string;
     unavailable?: string;
   }[];
+  /** Title-only tiles in a row; the description moves to a tooltip. */
+  compact: boolean;
 }): JSX.Element {
   // Both groups are one choice, so each shows nothing selected while the
   // other holds it.
   const inGroup = options.some((option) => option.value === value);
   return (
-    <div className="flex flex-col gap-2">
+    <div className={cn("flex flex-col", compact ? "gap-1.5" : "gap-2")}>
       <span className="text-eyebrow">{label}</span>
       <RadioCardGroup
         aria-label={`${label} credential`}
         size="sm"
         showIndicator={false}
+        className={
+          compact
+            ? cn(
+                "grid gap-2",
+                options.length >= 3 ? "grid-cols-3" : "grid-cols-2",
+              )
+            : undefined
+        }
         value={inGroup ? value : null}
         onValueChange={onChange}
         disabled={disabled}
@@ -193,7 +227,10 @@ function FormatGroup({
             value={option.value}
             disabled={!!option.unavailable}
             title={
-              <span className="flex flex-wrap items-center gap-2">
+              <span
+                className="flex flex-wrap items-center gap-2"
+                title={compact ? option.description : undefined}
+              >
                 {option.title}
                 {option.unavailable ? (
                   <AvailabilityBadge>{option.unavailable}</AvailabilityBadge>
@@ -201,7 +238,7 @@ function FormatGroup({
               </span>
             }
           >
-            {option.description}
+            {compact ? null : option.description}
           </RadioCard>
         ))}
       </RadioCardGroup>
@@ -223,7 +260,7 @@ function OAuthClientFields({
   clientHref: (issuerId: string, clientId: string) => string;
 }): JSX.Element {
   const bound = draft.showingBound(format) ? draft.boundClient : undefined;
-  const providerName = draft.issuer?.name ?? "the identity provider";
+  const providerName = draft.issuer?.name ?? "the authorization server";
   // The client being created reads the provider and these fields, so they
   // hold still until the request settles.
   const locked =
@@ -322,14 +359,14 @@ function ProviderRow({
               disabled={disabled || draft.issuersLoading}
             >
               <SelectTrigger
-                aria-label="Identity provider"
+                aria-label="Authorization server"
                 className="h-auto w-auto gap-1.5 border-0 p-0 text-base font-medium shadow-none"
               >
                 <SelectValue
                   placeholder={
                     draft.issuersLoading
-                      ? "Loading identity providers…"
-                      : "Choose an identity provider"
+                      ? "Loading authorization servers…"
+                      : "Choose an authorization server"
                   }
                 />
               </SelectTrigger>
@@ -375,13 +412,13 @@ function ProviderRow({
       </div>
       {!issuer && !draft.issuersLoading ? (
         <Text muted small>
-          A service account needs the provider&apos;s token endpoint. Missing
-          one?{" "}
+          A service account needs the authorization server&apos;s token
+          endpoint. Missing one?{" "}
           <Link
             to={providersHref}
             className="hover:text-foreground underline underline-offset-2"
           >
-            Add an identity provider
+            Add an authorization server
           </Link>
           .
         </Text>
@@ -423,7 +460,7 @@ function ClientSecretFields({
   draft: ServiceAccountClientDraft;
   disabled: boolean;
 }): JSX.Element {
-  const providerName = draft.issuer?.name ?? "the identity provider";
+  const providerName = draft.issuer?.name ?? "the authorization server";
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
@@ -477,73 +514,6 @@ function SigningKeySteps({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1.5">
-        <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
-          Client ID
-          <HoverCard openDelay={150}>
-            <HoverCardTrigger asChild>
-              <button
-                type="button"
-                aria-label="How the client ID options differ"
-                className="hover:text-foreground inline-flex"
-              >
-                <Info aria-hidden="true" className="size-3.5" />
-              </button>
-            </HoverCardTrigger>
-            <HoverCardContent
-              align="start"
-              className="flex w-96 flex-col gap-3"
-            >
-              <div className="flex flex-col gap-1">
-                <Text small className="font-medium">
-                  Provider-created
-                </Text>
-                <Text muted small>
-                  You create an app in {providerName}, and {providerName} issues
-                  its client ID. Paste that ID here and pick a key set from your
-                  KMS. Speakeasy gives you a key set URL to add to the app.
-                </Text>
-              </div>
-              <div className="flex flex-col gap-1">
-                <Text small className="font-medium">
-                  Speakeasy-created
-                </Text>
-                <Text muted small>
-                  Speakeasy creates the client and publishes a client ID
-                  metadata document describing it, including where its public
-                  keys live. Needs a provider that supports it.
-                </Text>
-              </div>
-            </HoverCardContent>
-          </HoverCard>
-        </span>
-        <RadioCardGroup
-          aria-label="Client ID"
-          size="sm"
-          showIndicator={false}
-          orientation="horizontal"
-          value="provider"
-          disabled={disabled || created !== null}
-          className="grid-cols-1 sm:grid-cols-2"
-        >
-          <RadioCard value="provider" title="Provider-created">
-            Create the app in {providerName} first.
-          </RadioCard>
-          <RadioCard
-            value="speakeasy"
-            disabled
-            title={
-              <span className="flex flex-wrap items-center gap-2">
-                Speakeasy-created
-                <AvailabilityBadge />
-              </span>
-            }
-          >
-            Generate the client in Speakeasy and load it via CIMD.
-          </RadioCard>
-        </RadioCardGroup>
-      </div>
-
       <ol aria-label="Signing key setup" className="bg-card border">
         <li className="flex gap-3 border-b px-4 py-3.5">
           <StepMarker index={1} done={false} />
@@ -608,7 +578,8 @@ function SigningKeySteps({
                       </Text>
                     ) : !draft.issuerUsable ? (
                       <Text muted small>
-                        Choose an identity provider with a token endpoint first.
+                        Choose an authorization server with a token endpoint
+                        first.
                       </Text>
                     ) : null}
                   </div>
@@ -735,7 +706,7 @@ function AdvancedFields({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="issuer">
-                  Identity provider URL (default)
+                  Authorization server URL (default)
                 </SelectItem>
                 <SelectItem value="token_endpoint">
                   Token endpoint URL

@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -9,8 +10,15 @@ import {
   MCPServerStatusDropdown,
 } from "./MCPServerDetails";
 
+const followRenamedServer = vi.hoisted(() => vi.fn());
+vi.mock("@/pages/mcp/x/useFollowRenamedServer", () => ({
+  useFollowRenamedServer: () => followRenamedServer,
+}));
+
 const mocks = vi.hoisted(() => ({
   hasScope: vi.fn(),
+  guardRequest: vi.fn(),
+  capture: vi.fn(),
   mutate: vi.fn(),
   mutationOptions: vi.fn(),
   invalidateAudience: vi.fn(() => Promise.resolve()),
@@ -21,6 +29,25 @@ vi.mock("@gram/client/react-query/resourceAudience.js", () => ({
   invalidateAllResourceAudience: mocks.invalidateAudience,
 }));
 
+vi.mock("@/contexts/Telemetry", () => ({
+  useTelemetry: () => ({ capture: mocks.capture }),
+}));
+vi.mock("./hosted/useHostedVisibilityGuard", () => ({
+  useHostedVisibilityGuard: ({
+    server,
+    apply,
+  }: {
+    server: { toolset?: { slug: string } };
+    apply: (next: string) => void;
+  }) => ({
+    request: (next: string) => {
+      mocks.guardRequest(server.toolset?.slug, next);
+      apply(next);
+    },
+    publicUnavailable: false,
+    dialogs: null,
+  }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: mocks.hasScope }),
 }));
@@ -97,6 +124,33 @@ afterEach(() => {
 });
 
 describe("MCPServerAvailabilityToggle", () => {
+  it("keeps unknown availability neutral and blocks both controls", () => {
+    const unknown = {
+      ...server,
+      visibility: unrecognized("future_visibility"),
+    };
+    renderInApp(
+      <>
+        <MCPServerAvailabilityToggle server={unknown} />
+        <MCPServerStatusDropdown server={unknown} />
+      </>,
+    );
+    const toggle = screen.getByRole("switch", {
+      name: "MCP server availability unknown",
+    });
+    const dropdown = screen.getByRole("button", { name: "Unknown" });
+    expect(toggle).toHaveProperty("disabled", true);
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(toggle.parentElement?.getAttribute("title")).toContain(
+      "Refresh the page",
+    );
+    expect(dropdown).toHaveProperty("disabled", true);
+    fireEvent.click(toggle);
+    fireEvent.click(dropdown);
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Private/ }));
+    expect(mocks.mutate).not.toHaveBeenCalled();
+  });
+
   it("disables a Remote MCP server while preserving its backend fields", () => {
     renderToggle();
 
@@ -212,4 +266,56 @@ describe("MCPServerAvailabilityToggle", () => {
       },
     });
   });
+});
+
+describe("hosted MCP server visibility", () => {
+  const hosted = {
+    ...server,
+    id: "hosted-1",
+    remoteMcpServerId: undefined,
+    toolsetId: "hosted-1",
+    toolset: {
+      id: "hosted-1",
+      slug: "hosted-tools",
+      name: "Hosted tools",
+      toolCount: 1,
+      toolSelectionMode: "static",
+      externalMcpSlugs: [],
+      externalMcpProxyOnly: false,
+    },
+    visibility: "private",
+  } as McpServer;
+
+  it("keeps the availability switch on the dropdown's confirmations", () => {
+    renderToggle(hosted);
+
+    expect(
+      screen.getByRole("switch", { name: "Disable MCP server" }),
+    ).toHaveProperty("disabled", true);
+  });
+
+  it("offers Public through the hosted confirmations", () => {
+    renderInApp(<MCPServerStatusDropdown server={hosted} />);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Public/ }));
+
+    expect(mocks.guardRequest).toHaveBeenCalledWith("hosted-tools", "public");
+    expect(mocks.mutate).toHaveBeenCalledWith({
+      request: {
+        updateMcpServerForm: expect.objectContaining({
+          id: "hosted-1",
+          visibility: "public",
+        }),
+      },
+    });
+  });
+});
+
+it("keeps public non-tunneled servers green without offering Public as an editable option", () => {
+  renderInApp(
+    <MCPServerStatusDropdown server={{ ...server, visibility: "public" }} />,
+  );
+  const current = screen.getByRole("button", { name: "Public" });
+  expect(current.querySelector(".bg-green-400")).not.toBeNull();
+  expect(screen.queryByRole("menuitem", { name: /^Public/ })).toBeNull();
 });

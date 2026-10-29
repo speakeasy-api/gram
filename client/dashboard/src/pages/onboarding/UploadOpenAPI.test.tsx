@@ -59,6 +59,9 @@ vi.mock("@/components/upload-asset/deploy-step", () => ({
 vi.mock("@/components/upload-asset/name-deployment-step", () => ({
   default: () => null,
 }));
+vi.mock("@/components/upload-asset/review-changes-step", () => ({
+  default: () => null,
+}));
 vi.mock("@/components/upload-asset/upload-file-step", () => ({
   default: () => null,
 }));

@@ -12,7 +12,11 @@ export type AuthCallbackRequest = {
   /**
    * The auth code for authentication from the speakeasy system
    */
-  code: string;
+  code?: string | undefined;
+  /**
+   * The identity provider error, when sign-in was not completed.
+   */
+  error?: string | undefined;
   /**
    * The opaque state string optionally provided during initialization.
    */
@@ -25,7 +29,8 @@ export type AuthCallbackResponse = {
 
 /** @internal */
 export type AuthCallbackRequest$Outbound = {
-  code: string;
+  code?: string | undefined;
+  error?: string | undefined;
   state?: string | undefined;
 };
 
@@ -34,7 +39,8 @@ export const AuthCallbackRequest$outboundSchema: z.ZodMiniType<
   AuthCallbackRequest$Outbound,
   AuthCallbackRequest
 > = z.object({
-  code: z.string(),
+  code: z.optional(z.string()),
+  error: z.optional(z.string()),
   state: z.optional(z.string()),
 });
 

@@ -11,7 +11,9 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -27,6 +29,10 @@ const (
 	MCPConnectionStateSetupRequired           = "setup_required"
 	MCPConnectionStateNotApplicable           = "not_applicable"
 
+	// MCPConnectionReasonPermissionRequired marks a member who lacks
+	// mcp:connect on the server, so no sign-in can make it usable.
+	MCPConnectionReasonPermissionRequired = "permission_required"
+
 	// MCPConnectionReasonIdentityChaining marks an active connection served by
 	// a usable identity chaining credential rather than an interactive one.
 	MCPConnectionReasonIdentityChaining = "identity_chaining"
@@ -37,6 +43,8 @@ var ErrMemberMCPStatusTargetNotFound = errors.New("member MCP status target not 
 type MemberMCPConnectionReader interface {
 	ListClients(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID) ([]remotesessions.Client, error)
 	RemoteSessionStatuses(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, error)
+	ListAuthClientRegistrations(ctx context.Context, projectID uuid.UUID, organizationID string, ids []uuid.UUID) ([]remotesessions.Client, error)
+	AuthClientRemoteSessionStatuses(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, error)
 }
 
 type GetMyMCPStatusInput struct {
@@ -78,6 +86,19 @@ type memberMCPStatusTarget struct {
 	remoteSessionIssuerID uuid.UUID
 	remoteMCPServerID     uuid.NullUUID
 	tunneledMCPServerID   uuid.NullUUID
+	// associatedClients is a proxied server's associated upstream clients;
+	// nil, for a hosted server, matches clients by the server's derived
+	// authorization server instead.
+	associatedClients map[uuid.UUID]bool
+}
+
+// signInRequired reports whether the server authenticates upstream through a
+// client the member connects.
+func (t memberMCPStatusTarget) signInRequired() bool {
+	if t.associatedClients != nil {
+		return len(t.associatedClients) > 0
+	}
+	return t.remoteSessionIssuerID != uuid.Nil
 }
 
 func (s *PluginsService) GetMyMCPAccess(ctx context.Context, principal Principal, input GetMyMCPStatusInput) (GetMyMCPAccessOutput, error) {
@@ -103,13 +124,32 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 	if err != nil {
 		return GetMyMCPConnectionStatusOutput{}, err
 	}
+	return s.memberConnectionStatus(ctx, principal, target)
+}
+
+// MemberConnectionStatus reports the member's sign-in state for one MCP server
+// from grants the caller already loaded, outside the Platform MCP operation
+// budget. The device agent's menu bar reads it for each server in the
+// member's plugins.
+func (s *PluginsService) MemberConnectionStatus(ctx context.Context, principal Principal, grants []authz.Grant, projectID, mcpID uuid.UUID) (GetMyMCPConnectionStatusOutput, error) {
+	if s == nil || s.db == nil || s.now == nil || s.authorization == nil {
+		return GetMyMCPConnectionStatusOutput{}, ErrUnavailable
+	}
+	target, err := s.resolveMemberMCPStatusTarget(ctx, principal, grants, projectID, mcpID)
+	if err != nil {
+		return GetMyMCPConnectionStatusOutput{}, err
+	}
+	return s.memberConnectionStatus(ctx, principal, target)
+}
+
+func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal Principal, target memberMCPStatusTarget) (GetMyMCPConnectionStatusOutput, error) {
 	output := GetMyMCPConnectionStatusOutput{
 		ProjectID: target.projectID.String(), MCPID: target.mcpID.String(), MCPName: target.name,
 		State: MCPConnectionStateNotConnected, Reason: "", RequiredScope: "", RequestAccessURL: "", ConnectionURL: "", NextAction: "connect",
 	}
 	if !target.canConnect {
 		output.State = MCPConnectionStateNotApplicable
-		output.Reason = "permission_required"
+		output.Reason = MCPConnectionReasonPermissionRequired
 		output.RequiredScope = string(authz.ScopeMCPConnect)
 		output.RequestAccessURL = s.requestMCPAccessURL(ctx, principal.OrganizationID, target.mcpID.String(), target.name)
 		output.NextAction = memberMCPAccessNextAction(output.RequestAccessURL)
@@ -121,16 +161,20 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		output.NextAction = "ask_administrator"
 		return output, nil
 	}
-	output.ConnectionURL = platformBaseURL(ctx, s.serverURL).JoinPath("mcp", target.endpointSlug).String()
-	if target.remoteSessionIssuerID == uuid.Nil {
-		// Direct upstreams select chaining bindings by resource, even without an interactive issuer.
-		chained, err := s.memberMCPChainedStatus(ctx, principal, target, &output)
-		if err != nil {
-			return GetMyMCPConnectionStatusOutput{}, err
-		}
-		if chained {
-			return output, nil
-		}
+	serverURL, _ := s.memberLinkBases(ctx, principal.OrganizationID)
+	output.ConnectionURL = serverURL.JoinPath("mcp", target.endpointSlug).String()
+	if target.associatedClients != nil && len(target.associatedClients) == 0 && target.remoteSessionIssuerID != uuid.Nil {
+		// A proxied server with no associated client that still derives an
+		// authorization server signs in through a client nobody configured for
+		// it, which the runtime refuses until an administrator does.
+		output.State = MCPConnectionStateSetupRequired
+		output.Reason = "upstream_authorization_not_configured"
+		output.NextAction = "ask_administrator"
+		return output, nil
+	}
+	if !target.signInRequired() {
+		// Identity chaining serves a server only through a client the
+		// caller's sign-in chooses, so one without a client needs none.
 		output.State = MCPConnectionStateNotApplicable
 		output.Reason = "authorization_not_required"
 		output.NextAction = "use_mcp"
@@ -146,33 +190,42 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		return GetMyMCPConnectionStatusOutput{}, ErrUnavailable
 	}
 
-	clients, err := s.remoteSessions.ListClients(ctx, target.projectID, principal.OrganizationID, target.userSessionIssuerID)
+	// Where the auth client resolver serves the organization, a proxied
+	// server's registrations and the member's grants are read as the runtime
+	// reads them, without the sign-in link.
+	resolver := target.associatedClients != nil && feature.AuthClientResolver(ctx, s.authClientFlags, principal.OrganizationID) == feature.AuthClientResolverEnforced
+	clients, err := s.memberMCPConnectionClients(ctx, principal, target, resolver)
 	if err != nil {
-		return GetMyMCPConnectionStatusOutput{}, fmt.Errorf("list MCP authorization clients: %w", err)
+		return GetMyMCPConnectionStatusOutput{}, err
 	}
-	clients = memberMCPConnectionClients(clients, target.remoteSessionIssuerID)
-	if len(clients) > 1 {
-		chained, err := s.memberMCPChainedStatus(ctx, principal, target, &output)
+	if len(clients) > 1 && resolver {
+		// The member chooses among the server's credentials when connecting;
+		// any connection of theirs that is active serves.
+		ids := make([]uuid.UUID, 0, len(clients))
+		for _, c := range clients {
+			ids = append(ids, c.ID)
+		}
+		statuses, err := s.remoteSessions.AuthClientRemoteSessionStatuses(ctx, urn.NewUserSubject(principal.UserID), target.projectID, principal.OrganizationID, ids)
 		if err != nil {
-			return GetMyMCPConnectionStatusOutput{}, err
+			return GetMyMCPConnectionStatusOutput{}, fmt.Errorf("read MCP authorization status: %w", err)
 		}
-		if chained {
-			return output, nil
+		for _, status := range statuses {
+			if status.Status == remotesessions.RemoteSessionActive && status.ValidationStatus != remotesessions.ValidationOutcomeRejectedByMember && status.ValidationStatus != remotesessions.ValidationOutcomeInactive {
+				output.State = MCPConnectionStateActive
+				output.NextAction = "use_mcp"
+				return output, nil
+			}
 		}
+		output.Reason = "choose_on_connect"
+		return output, nil
+	}
+	if len(clients) > 1 {
 		output.State = MCPConnectionStateSetupRequired
 		output.Reason = "multiple_authorization_clients"
 		output.NextAction = "ask_administrator"
 		return output, nil
 	}
 	if len(clients) == 0 {
-		// Without an interactive client the runtime chains whenever chaining serves the upstream.
-		chained, err := s.memberMCPChainedStatus(ctx, principal, target, &output)
-		if err != nil {
-			return GetMyMCPConnectionStatusOutput{}, err
-		}
-		if chained {
-			return output, nil
-		}
 		output.State = MCPConnectionStateSetupRequired
 		output.Reason = "upstream_authorization_not_configured"
 		output.NextAction = "ask_administrator"
@@ -187,7 +240,13 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		return output, nil
 	}
 	clientID := clients[0].ID
-	statuses, err := s.remoteSessions.RemoteSessionStatuses(ctx, urn.NewUserSubject(principal.UserID), target.projectID, principal.OrganizationID, target.userSessionIssuerID)
+	subject := urn.NewUserSubject(principal.UserID)
+	var statuses map[uuid.UUID]remotesessions.RemoteSessionState
+	if resolver {
+		statuses, err = s.remoteSessions.AuthClientRemoteSessionStatuses(ctx, subject, target.projectID, principal.OrganizationID, []uuid.UUID{clientID})
+	} else {
+		statuses, err = s.remoteSessions.RemoteSessionStatuses(ctx, subject, target.projectID, principal.OrganizationID, target.userSessionIssuerID)
+	}
 	if err != nil {
 		return GetMyMCPConnectionStatusOutput{}, fmt.Errorf("read MCP authorization status: %w", err)
 	}
@@ -209,7 +268,7 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		output.Reason = memberMCPReauthorizationReason(status, s.now())
 		output.NextAction = "reconnect"
 	}
-	if _, err := s.memberMCPChainedStatus(ctx, principal, target, &output); err != nil {
+	if _, err := s.memberMCPChainedStatus(ctx, principal, target, clients[0], &output); err != nil {
 		return GetMyMCPConnectionStatusOutput{}, err
 	}
 	return output, nil
@@ -218,8 +277,8 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 // memberMCPChainedStatus applies identity chaining to output when it serves
 // the target's upstream: active on a usable chained credential, otherwise the
 // first call through the server obtains access and Connect stays a fallback.
-func (s *PluginsService) memberMCPChainedStatus(ctx context.Context, principal Principal, target memberMCPStatusTarget, output *GetMyMCPConnectionStatusOutput) (bool, error) {
-	served, usable, err := s.memberMCPIdentityChaining(ctx, principal, target)
+func (s *PluginsService) memberMCPChainedStatus(ctx context.Context, principal Principal, target memberMCPStatusTarget, chosen remotesessions.Client, output *GetMyMCPConnectionStatusOutput) (bool, error) {
+	served, usable, err := s.memberMCPIdentityChaining(ctx, principal, target, chosen)
 	switch {
 	case err != nil:
 		return false, err
@@ -250,6 +309,14 @@ func (s *PluginsService) memberMCPStatusTarget(ctx context.Context, principal Pr
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return memberMCPStatusTarget{}, err
 	}
+	grants, ok := authz.GrantsFromContext(ctx)
+	if !ok {
+		return memberMCPStatusTarget{}, ErrUnavailable
+	}
+	return s.resolveMemberMCPStatusTarget(ctx, principal, grants, projectID, mcpID)
+}
+
+func (s *PluginsService) resolveMemberMCPStatusTarget(ctx context.Context, principal Principal, grants []authz.Grant, projectID, mcpID uuid.UUID) (memberMCPStatusTarget, error) {
 	row, err := platformrepo.New(s.db).GetPlatformMCPInstallTarget(ctx, platformrepo.GetPlatformMCPInstallTargetParams{
 		OrganizationID: principal.OrganizationID, McpServerID: mcpID, ProjectID: projectID,
 	})
@@ -258,10 +325,6 @@ func (s *PluginsService) memberMCPStatusTarget(ctx context.Context, principal Pr
 	}
 	if err != nil {
 		return memberMCPStatusTarget{}, fmt.Errorf("get member MCP status target: %w", err)
-	}
-	grants, ok := authz.GrantsFromContext(ctx)
-	if !ok {
-		return memberMCPStatusTarget{}, ErrUnavailable
 	}
 	canRead, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPRead, mcpID.String(), projectID.String()))
 	if err != nil {
@@ -283,6 +346,10 @@ func (s *PluginsService) memberMCPStatusTarget(ctx context.Context, principal Pr
 	if err != nil {
 		return memberMCPStatusTarget{}, fmt.Errorf("load member MCP authorization target: %w", err)
 	}
+	associated, err := s.serverAssociatedClients(ctx, principal.OrganizationID, server)
+	if err != nil {
+		return memberMCPStatusTarget{}, err
+	}
 	name := row.Name.String
 	if name == "" {
 		name = row.Slug.String
@@ -297,14 +364,16 @@ func (s *PluginsService) memberMCPStatusTarget(ctx context.Context, principal Pr
 		remoteSessionIssuerID: server.RemoteSessionIssuerID.UUID,
 		remoteMCPServerID:     server.RemoteMcpServerID,
 		tunneledMCPServerID:   server.TunneledMcpServerID,
+		associatedClients:     associated,
 	}, nil
 }
 
 // memberMCPIdentityChaining reports whether identity chaining is configured
 // to serve the target's upstream for the caller, and whether a stored chained
 // credential is usable now. It resolves the upstream as the MCP runtime does
-// and never acquires a token.
-func (s *PluginsService) memberMCPIdentityChaining(ctx context.Context, principal Principal, target memberMCPStatusTarget) (bool, bool, error) {
+// and never acquires a token, through the one client the caller's sign-in
+// chooses for it.
+func (s *PluginsService) memberMCPIdentityChaining(ctx context.Context, principal Principal, target memberMCPStatusTarget, chosen remotesessions.Client) (bool, bool, error) {
 	if s.identityChaining == nil {
 		return false, false, nil
 	}
@@ -333,10 +402,17 @@ func (s *PluginsService) memberMCPIdentityChaining(ctx context.Context, principa
 	default:
 		return false, false, nil
 	}
-	req, ok := identitychaining.NewRequest(principal.OrganizationID, target.projectID, target.userSessionIssuerID, principal.UserID, upstream, tunneled, uuid.NullUUID{UUID: target.remoteSessionIssuerID, Valid: target.remoteSessionIssuerID != uuid.Nil})
+	tunnelIssuer := uuid.NullUUID{UUID: target.remoteSessionIssuerID, Valid: target.remoteSessionIssuerID != uuid.Nil}
+	if tunneled {
+		// A tunneled upstream routes, and chains, by the chosen client's own
+		// issuer.
+		tunnelIssuer = uuid.NullUUID{UUID: chosen.RemoteSessionIssuerID, Valid: true}
+	}
+	req, ok := identitychaining.NewRequest(principal.OrganizationID, target.projectID, target.userSessionIssuerID, principal.UserID, upstream, tunneled, tunnelIssuer)
 	if !ok {
 		return false, false, nil
 	}
+	req.RemoteSessionClientID = uuid.NullUUID{UUID: chosen.ID, Valid: true}
 	if _, served := s.identityChaining.Serves(ctx, req); !served {
 		return false, false, nil
 	}
@@ -350,14 +426,58 @@ func memberMCPAccessNextAction(requestAccessURL string) string {
 	return "request_access"
 }
 
-func memberMCPConnectionClients(clients []remotesessions.Client, issuerID uuid.UUID) []remotesessions.Client {
+// memberMCPConnectionClients returns the clients that can serve the target:
+// those linked to its sign-in or, for the auth client resolver, its reachable
+// associated registrations.
+func (s *PluginsService) memberMCPConnectionClients(ctx context.Context, principal Principal, target memberMCPStatusTarget, resolver bool) ([]remotesessions.Client, error) {
+	if resolver {
+		ids := make([]uuid.UUID, 0, len(target.associatedClients))
+		for id := range target.associatedClients {
+			ids = append(ids, id)
+		}
+		clients, err := s.remoteSessions.ListAuthClientRegistrations(ctx, target.projectID, principal.OrganizationID, ids)
+		if err != nil {
+			return nil, fmt.Errorf("list MCP auth client registrations: %w", err)
+		}
+		return clients, nil
+	}
+	clients, err := s.remoteSessions.ListClients(ctx, target.projectID, principal.OrganizationID, target.userSessionIssuerID)
+	if err != nil {
+		return nil, fmt.Errorf("list MCP authorization clients: %w", err)
+	}
+	return matchTargetClients(clients, target), nil
+}
+
+func matchTargetClients(clients []remotesessions.Client, target memberMCPStatusTarget) []remotesessions.Client {
 	matched := make([]remotesessions.Client, 0, 1)
 	for _, client := range clients {
-		if client.RemoteSessionIssuerID == issuerID {
+		if target.associatedClients != nil && target.associatedClients[client.ID] ||
+			target.associatedClients == nil && client.RemoteSessionIssuerID == target.remoteSessionIssuerID {
 			matched = append(matched, client)
 		}
 	}
 	return matched
+}
+
+// serverAssociatedClients returns the live clients associated with a proxied
+// server; nil for a hosted server, which keeps the derived match as the
+// runtime does.
+func (s *PluginsService) serverAssociatedClients(ctx context.Context, organizationID string, server mcpserversrepo.McpServer) (map[uuid.UUID]bool, error) {
+	if !server.RemoteMcpServerID.Valid && !server.TunneledMcpServerID.Valid {
+		return nil, nil
+	}
+	rows, err := upstreamclientsrepo.New(s.db).ListServerAssociatedClients(ctx, upstreamclientsrepo.ListServerAssociatedClientsParams{
+		McpServerIds:   []uuid.UUID{server.ID},
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list server associated clients: %w", err)
+	}
+	associated := make(map[uuid.UUID]bool, len(rows))
+	for _, row := range rows {
+		associated[row.RemoteSessionClientID] = true
+	}
+	return associated, nil
 }
 
 func memberMCPReauthorizationReason(status remotesessions.RemoteSessionState, now time.Time) string {

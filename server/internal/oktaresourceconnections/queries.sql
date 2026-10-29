@@ -203,6 +203,7 @@ SELECT
   , rpr.challenge_scopes
   , rpr.scopes_supported
   , rpr.metadata_fetched_at
+  , COALESCE(rpr.metadata->>'resource', '')::text AS document_resource
 FROM remote_protected_resources AS rpr
 JOIN projects AS p
   ON p.id = rpr.project_id

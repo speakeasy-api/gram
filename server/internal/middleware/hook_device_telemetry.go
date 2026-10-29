@@ -63,7 +63,7 @@ func HookDeviceTelemetry(next http.Handler) http.Handler {
 		// allocate nothing.
 		var device map[attr.Key]string
 		for header, key := range hookDeviceHeaderAttrs {
-			v := sanitizeDeviceHeader(r.Header.Get(header))
+			v := SanitizeDeviceValue(r.Header.Get(header))
 			if v == "" {
 				continue
 			}
@@ -98,12 +98,13 @@ func HookDeviceTelemetry(next http.Handler) http.Handler {
 	})
 }
 
-// sanitizeDeviceHeader bounds an untrusted device-reported header value before
-// it becomes an attribute: trimmed, capped in length, and rejected outright
-// if it carries anything beyond printable ASCII. The cap is applied in bytes
-// before any decoding, so an oversized header costs no allocation; for the
-// printable-ASCII values that survive, bytes and characters are the same.
-func sanitizeDeviceHeader(v string) string {
+// SanitizeDeviceValue bounds an untrusted device-reported value (a header or a
+// report body field) before it becomes an attribute: trimmed, capped in
+// length, and rejected outright if it carries anything beyond printable
+// ASCII. The cap is applied in bytes before any decoding, so an oversized
+// value costs no allocation; for the printable-ASCII values that survive,
+// bytes and characters are the same.
+func SanitizeDeviceValue(v string) string {
 	v = strings.TrimSpace(v)
 	if len(v) > maxDeviceHeaderLen {
 		v = v[:maxDeviceHeaderLen]

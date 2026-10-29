@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/classifier/classifiertest"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
+	"github.com/speakeasy-api/gram/server/internal/sigint/readings"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -30,9 +31,20 @@ type eventInput struct {
 
 func (in *eventInput) Event() Event                       { return in.event }
 func (in *eventInput) MatchingMessage() *matching.Message { return nil }
-func (in *eventInput) Resolve(context.Context) (classifier.Entry, error) {
-	in.resolved++
-	return in.data, in.err
+func (in *eventInput) NewBuffer(int) InputBuffer {
+	return &eventBuffer{input: in}
+}
+
+type eventBuffer struct {
+	input *eventInput
+}
+
+func (b *eventBuffer) Resolve(_ context.Context, size int) (ResolvedInput, error) {
+	if size != 1 {
+		return ResolvedInput{}, fmt.Errorf("%w: event has no history", ErrInvalidInput)
+	}
+	b.input.resolved++
+	return ResolvedInput{State: b.input.data, MessageCount: 1, Truncated: false}, b.input.err
 }
 
 func TestEvaluatorAcceptsIndependentEventStreams(t *testing.T) {
@@ -44,20 +56,17 @@ func TestEvaluatorAcceptsIndependentEventStreams(t *testing.T) {
 	data, err := classifier.ParseEntry([]byte(`{"arguments":{"count":9007199254740993},"result":{"status":"ok"}}`))
 	require.NoError(t, err)
 
-	in := &eventInput{event: Event{OrganizationID: "test-organization", ProjectID: project.String(), Subject: subject, BillingUserID: new("allocated-user")}, data: data}
+	in := &eventInput{event: Event{Evaluation: readings.Context{TriggerKind: readings.TriggerStream, RequestedAt: time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)}, OrganizationID: "test-organization", ProjectID: project.String(), Subject: subject, BillingUserID: new("allocated-user")}, data: data}
 	var deps dependencies
 	deps.Test(t)
 	t.Cleanup(func() { deps.AssertExpectations(t) })
 	deps.On("IsFeatureEnabled", mock.Anything, in.event.OrganizationID, productfeatures.FeatureSignalsIntelligence).Return(true, nil).Times(3)
 	deps.On("Load", mock.Anything, in.event.OrganizationID, project, "mcp.tool_call").Return(partialSensors()[1:], nil).Twice()
 	deps.On("Load", mock.Anything, in.event.OrganizationID, project, "custom.audit_event").Return(partialSensors()[1:], nil).Once()
-	c := classifiertest.NewMock(t)
-	c.On("Classify", mock.Anything, mock.MatchedBy(func(req *classifier.Request) bool {
-		return reflect.DeepEqual(req.Input, data) && len(req.Questions) == 1
-	})).Return(partialResult(false)).Times(3)
+	c, requests := newRecordingClassifier(t)
 	var pub capturePublisher
 
-	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, &pub, c)
+	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, &pub, &pub.outcomes, c)
 	require.NoError(t, err)
 	require.NoError(t, evaluator.Evaluate(t.Context(), in))
 	require.NoError(t, evaluator.Evaluate(t.Context(), in))
@@ -87,6 +96,22 @@ func TestEvaluatorAcceptsIndependentEventStreams(t *testing.T) {
 	require.NotEqual(t, a.GetId(), pub.readings[2].GetId(), "event kinds namespace otherwise identical identities")
 	require.Equal(t, "mcp.tool_call", a.GetEvent().GetKind(), "published metadata is an independent snapshot")
 	require.Equal(t, 3, in.resolved)
+	testenv.RequireYAMLGolden(t, "testdata/requests/independent-event.golden.yaml", requests.snapshot(t))
+}
+
+func TestEvaluatorRejectsUnsupportedWindowAfterPublishingTargetOnly(t *testing.T) {
+	t.Parallel()
+	m := message()
+	in := &eventInput{event: (&conversationInput{message: m}).Event(), data: classifier.Text("independent event")}
+	definitions := partialSensors()
+	definitions[0].InputStrategy = InputStrategySlidingWindow
+	c := classifiertest.NewMock(t)
+	c.On("Classify", mock.Anything, mock.Anything).Return(partialResult(false)).Once()
+	h, pub := handler(t, m, definitions, c, testenv.NewMeterProvider(t))
+	require.NoError(t, h.evaluator.Evaluate(t.Context(), in))
+	require.Len(t, pub.readings, 1)
+	require.Equal(t, "other", pub.readings[0].GetSensorId())
+	require.Equal(t, 1, in.resolved)
 }
 
 func TestEvaluatorDefersContentUntilEligible(t *testing.T) {
@@ -103,7 +128,7 @@ func TestEvaluatorDefersContentUntilEligible(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			project := uuid.New()
-			in := &eventInput{event: Event{OrganizationID: "test-organization", ProjectID: project.String(), Subject: sigintv1.Reading_Event_builder{Kind: new("custom.event"), Id: new("event-1"), OccurredAt: new("2026-09-30T12:00:00Z")}.Build()}}
+			in := &eventInput{event: Event{Evaluation: readings.Context{TriggerKind: readings.TriggerStream, RequestedAt: time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)}, OrganizationID: "test-organization", ProjectID: project.String(), Subject: sigintv1.Reading_Event_builder{Kind: new("custom.event"), Id: new("event-1"), OccurredAt: new("2026-09-30T12:00:00Z")}.Build()}}
 			var deps dependencies
 			deps.Test(t)
 			t.Cleanup(func() { deps.AssertExpectations(t) })
@@ -112,10 +137,12 @@ func TestEvaluatorDefersContentUntilEligible(t *testing.T) {
 				deps.On("Load", mock.Anything, in.event.OrganizationID, project, "custom.event").Return(tc.definitions, nil).Once()
 			}
 
-			evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil)
+			var outcomes outcomeCapture
+			evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, &outcomes, nil)
 			require.NoError(t, err)
 			require.NoError(t, evaluator.Evaluate(t.Context(), in))
 			require.Zero(t, in.resolved)
+			require.Len(t, outcomes.messages, len(tc.definitions))
 		})
 	}
 }
@@ -161,13 +188,18 @@ func TestEvaluatorRejectsInvalidEventMetadata(t *testing.T) {
 		{"invalid time", func(e *Event) { e.Subject.SetOccurredAt("yesterday") }},
 		{"invalid project", func(e *Event) { e.ProjectID = "not-a-project" }},
 		{"missing organization", func(e *Event) { e.OrganizationID = "" }},
+		{"missing trigger", func(e *Event) { e.Evaluation.TriggerKind = readings.TriggerUnspecified }},
+		{"unknown trigger", func(e *Event) { e.Evaluation.TriggerKind = readings.TriggerKind("scheduled") }},
+		{"stream with run", func(e *Event) { e.Evaluation.RunID = uuid.New() }},
+		{"manual without run", func(e *Event) { e.Evaluation.TriggerKind = readings.TriggerManual }},
+		{"missing request time", func(e *Event) { e.Evaluation.RequestedAt = time.Time{} }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			in := &eventInput{event: (&conversationInput{message: message()}).Event()}
 			tc.mutate(&in.event)
 
-			evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), nil, nil, nil, nil)
+			evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), nil, nil, nil, nil, nil)
 			require.NoError(t, err)
 			require.NoError(t, evaluator.Evaluate(t.Context(), in))
 			require.Zero(t, in.resolved)

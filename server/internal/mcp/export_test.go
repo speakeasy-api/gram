@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -37,6 +38,7 @@ func AdmitWorkloadAssertion(
 		issuers:    newWorkloadIssuerAdmission(workloadIssuerStoreLookup(db), allowAllWorkloadLookups),
 		identities: workloadIdentityStoreLookup(db),
 		verifier:   verifier,
+		deviceKeys: workloadDeviceKeyStoreLookup(db),
 	}
 	_, err := admitWorkloadAssertion(ctx, grant, endpoint.workloadTenancy(), audiences, raw)
 	return err
@@ -56,6 +58,11 @@ func (s *Service) VerifyRemoteGrantOn(ctx context.Context, endpoint *ResolvedMcp
 		return
 	}
 	s.probeRemoteGrant(ctx, s.logger, endpoint, challengeState, grant)
+}
+
+// LoadResolvedMcpEndpointByRef resumes a cached challenge's endpoint.
+func (s *Service) LoadResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
+	return s.loadResolvedMcpEndpointByRef(ctx, ref)
 }
 
 // RemoteChallengeManager is the manager the service registered its grant hook on.
@@ -96,4 +103,26 @@ func (s *Service) SetRiskScanEvaluator(evaluator *mcpriskscan.Evaluator) {
 // SetPosthog replaces the product analytics client only in the test binary.
 func (s *Service) SetPosthog(p *posthog.Posthog) {
 	s.posthog = p
+}
+
+// SetPrepareMandatory replaces the shadow's caller admission, so a test can
+// count or delay admissions.
+func (s *Service) SetPrepareMandatory(prepare func(context.Context) (authz.MandatoryAuthorization, error)) {
+	s.prepareMandatory = prepare
+}
+
+// SetAuthClientPermission installs a mutable permit decision in the test binary.
+func (s *Service) SetAuthClientPermission(allowed func() bool) {
+	s.authClientPermitter = testAuthClientPermission(allowed)
+}
+
+type testAuthClientPermission func() bool
+
+func (f testAuthClientPermission) Permitted(context.Context, authClientPermitRequest) (bool, error) {
+	return f(), nil
+}
+
+// RecordConnectionPopupGrant exercises the callback's parent-state correlation.
+func (s *Service) RecordConnectionPopupGrant(ctx context.Context, grant remotesessions.RemoteGrant) error {
+	return s.recordConnectionPopupGrant(ctx, grant)
 }

@@ -30,9 +30,10 @@ type OrganizationFeatures struct {
 	CustomerManagedEncryptionKeysEnabled bool   `json:"customer_managed_encryption_keys_enabled"`
 	RemoteSessionAutoRefreshEnabled      bool   `json:"remote_session_auto_refresh_enabled"`
 	RemoteSessionAutoRefreshEnforced     bool   `json:"remote_session_auto_refresh_enforced_enabled"`
-	ConsentToolFilteringEnabled          bool   `json:"consent_tool_filtering_enabled"`
 	SessionPortabilityEnabled            bool   `json:"session_portability_enabled"`
 	NetworkIngressEnabled                bool   `json:"network_ingress_enabled"`
+	OrganizationGatewayDisabled          bool   `json:"organization_gateway_disabled"`
+	CodeModeEnabled                      bool   `json:"code_mode_enabled"`
 }
 
 type OrganizationChatAnalysisSettings struct {
@@ -72,8 +73,10 @@ func registerConfigurationTools(server *mcp.Server, organizations OrganizationRe
 			CustomerManagedEncryptionKeysEnabled: features.CustomerManagedEncryptionKeysEnabled,
 			RemoteSessionAutoRefreshEnabled:      features.RemoteSessionAutoRefreshEnabled,
 			RemoteSessionAutoRefreshEnforced:     features.RemoteSessionAutoRefreshEnforcedEnabled,
-			ConsentToolFilteringEnabled:          features.ConsentToolFilteringEnabled, SessionPortabilityEnabled: features.SessionPortabilityEnabled,
-			NetworkIngressEnabled: features.NetworkIngressEnabled,
+			SessionPortabilityEnabled:            features.SessionPortabilityEnabled,
+			NetworkIngressEnabled:                features.NetworkIngressEnabled,
+			OrganizationGatewayDisabled:          features.OrganizationGatewayDisabled,
+			CodeModeEnabled:                      features.CodeModeEnabled,
 		}, nil
 	})
 

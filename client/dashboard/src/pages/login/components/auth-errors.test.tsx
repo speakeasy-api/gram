@@ -19,6 +19,14 @@ function renderNotice(search: string) {
 describe("SigninErrorNotice", () => {
   it.each([
     [
+      "signin_link_invalid",
+      "This sign-in link expired, was already used, or belongs to another browser. Please sign in again.",
+    ],
+    [
+      "signin_canceled",
+      "Sign-in was canceled. You can try again when you're ready.",
+    ],
+    [
       "transfer_session_expired",
       "Your previous sign-in is no longer available. Please sign in again.",
     ],
@@ -46,7 +54,7 @@ describe("SigninErrorNotice", () => {
       "transfer_temporary_error",
       "We couldn't complete sign-in right now. Please try again.",
     ],
-  ])("explains the session transfer failure %s", (code, message) => {
+  ])("explains the sign-in failure %s", (code, message) => {
     const params = new URLSearchParams({
       signin_error: code,
       redirect: "/acme/mcp?tab=logs",
@@ -54,6 +62,14 @@ describe("SigninErrorNotice", () => {
     renderNotice(`?${params.toString()}`);
 
     expect(screen.getByText(message)).toBeTruthy();
+  });
+
+  it("explains a revoked sign-in", () => {
+    renderNotice("?signin_error=sign_in_revoked");
+
+    expect(
+      screen.getByText("Your sign-in was ended. Sign in again to continue."),
+    ).toBeTruthy();
   });
 
   it("falls back to the generic message for an unknown code", () => {

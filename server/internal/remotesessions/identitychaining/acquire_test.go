@@ -118,7 +118,7 @@ func TestExchange_ClassifiesProviderRejection(t *testing.T) {
 	t.Parallel()
 	idp := &recordingPoster{err: &remotesessions.TokenEndpointError{StatusCode: http.StatusBadRequest, Code: "invalid_target", Transport: false, Signing: false}}
 	_, outcome := exchange(t.Context(), idp, "id-token-value", testSelection())
-	require.Equal(t, Outcome{Stage: StageExchange, Reason: ReasonInvalidTarget, Confidence: ConfidenceInferred, Retryable: false, Cached: false}, outcome)
+	require.Equal(t, Outcome{Stage: StageExchange, Reason: ReasonInvalidTarget, Confidence: ConfidenceInferred, Retryable: false, Cached: false, Provider: ""}, outcome)
 }
 
 func TestRedeem_PresentsGrantAndDiscardsRefreshToken(t *testing.T) {
@@ -216,7 +216,7 @@ func TestClassifyEndpointError(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, Outcome{Stage: StageRedemption, Reason: tc.reason, Confidence: tc.confidence, Retryable: tc.retryable, Cached: false}, classifyEndpointError(StageRedemption, tc.err))
+			require.Equal(t, Outcome{Stage: StageRedemption, Reason: tc.reason, Confidence: tc.confidence, Retryable: tc.retryable, Cached: false, Provider: "", Submitted: tc.reason == ReasonTransientFailure}, classifyEndpointError(StageRedemption, tc.err))
 		})
 	}
 }
@@ -316,7 +316,7 @@ func TestValidateGrant_RejectsUnboundClaims(t *testing.T) {
 			claims := validGrantClaims(sel, now)
 			tc.mutate(claims, now)
 			outcome := c.validateGrant(t.Context(), testenv.NewLogger(t), claimsVerifier{typ: tc.typ, claims: claims, err: nil}, testIdPIssuer, "raw", testUpstreamSubject, sel)
-			require.Equal(t, Outcome{Stage: StageValidation, Reason: ReasonMalformedAssertion, Confidence: ConfidenceVerified, Retryable: false, Cached: false}, outcome)
+			require.Equal(t, Outcome{Stage: StageValidation, Reason: ReasonMalformedAssertion, Confidence: ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, outcome)
 		})
 	}
 }
@@ -348,7 +348,7 @@ func TestGrantScopes_DropsOIDCReservedScopes(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.want, GrantScopes(tc.in))
+			require.Equal(t, tc.want, remotesessions.GrantScopes(tc.in))
 		})
 	}
 }
@@ -357,7 +357,7 @@ func TestExchange_OmitsScopeWhenOnlyOIDCScopesConfigured(t *testing.T) {
 	t.Parallel()
 	idp := &recordingPoster{body: map[string]any{"access_token": "id-jag-value", "issued_token_type": oauthwire.TokenTypeIDJAG, "token_type": "N_A", "expires_in": 300}}
 	sel := testSelection()
-	sel.scopes = GrantScopes([]string{"openid", "offline_access", "email", "profile"})
+	sel.scopes = remotesessions.GrantScopes([]string{"openid", "offline_access", "email", "profile"})
 	_, outcome := exchange(t.Context(), idp, "id-token-value", sel)
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
 	require.False(t, idp.form(t).Has("scope"))
@@ -367,7 +367,7 @@ func TestExchange_SendsOnlyResourceScopes(t *testing.T) {
 	t.Parallel()
 	idp := &recordingPoster{body: map[string]any{"access_token": "id-jag-value", "issued_token_type": oauthwire.TokenTypeIDJAG, "token_type": "N_A", "expires_in": 300}}
 	sel := testSelection()
-	sel.scopes = GrantScopes([]string{"openid", "read", "offline_access"})
+	sel.scopes = remotesessions.GrantScopes([]string{"openid", "read", "offline_access"})
 	_, outcome := exchange(t.Context(), idp, "id-token-value", sel)
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
 	require.Equal(t, "read", idp.form(t).Get("scope"))
@@ -377,7 +377,7 @@ func TestFilteredScopes_AcceptGrantAndRedemption(t *testing.T) {
 	t.Parallel()
 	c, now := testChainer(t)
 	sel := testSelection()
-	sel.scopes = GrantScopes([]string{"openid", "read", "offline_access"})
+	sel.scopes = remotesessions.GrantScopes([]string{"openid", "read", "offline_access"})
 
 	claims := validGrantClaims(sel, now)
 	claims["scope"] = "read"
@@ -396,7 +396,7 @@ func TestFilteredScopes_EmptySetKeepsConfiguredCeiling(t *testing.T) {
 	c, now := testChainer(t)
 	sel := testSelection()
 	sel.configuredScopes = []string{"openid", "email"}
-	sel.scopes = GrantScopes(sel.configuredScopes)
+	sel.scopes = remotesessions.GrantScopes(sel.configuredScopes)
 
 	for _, tc := range []struct {
 		scope any
@@ -443,7 +443,7 @@ func TestValidateGrant_ScopeMismatchIsAScopeFailure(t *testing.T) {
 				claims["scope"] = tc.scope
 			}
 			outcome := c.validateGrant(t.Context(), testenv.NewLogger(t), claimsVerifier{typ: "oauth-id-jag+jwt", claims: claims, err: nil}, testIdPIssuer, "raw", testUpstreamSubject, sel)
-			require.Equal(t, Outcome{Stage: StageValidation, Reason: tc.reason, Confidence: ConfidenceVerified, Retryable: false, Cached: false}, outcome)
+			require.Equal(t, Outcome{Stage: StageValidation, Reason: tc.reason, Confidence: ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, outcome)
 			require.True(t, outcome.cacheable())
 		})
 	}
@@ -474,11 +474,13 @@ func TestAcquisitionFailure_LogsProviderDescriptionOnly(t *testing.T) {
 	require.Equal(t, "No seat was found for this user", outcome.providerDescription)
 
 	var buf bytes.Buffer
-	logAcquisitionFailure(t.Context(), slog.New(slog.NewJSONHandler(&buf, nil)), outcome)
+	logAcquisitionFailure(t.Context(), slog.New(slog.NewJSONHandler(&buf, nil)), outcome, selection{scopes: []string{"read", "write"}})
 	var entry map[string]any
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &entry))
 	require.Equal(t, "WARN", entry["level"])
 	require.Equal(t, "No seat was found for this user", entry[string(attr.OAuthErrorDescriptionKey)])
+	require.Equal(t, "read write", entry[string(attr.OAuthScopeKey)])
+	require.Equal(t, "ema_binding", entry[string(attr.OAuthScopeSourceKey)])
 
 	wire, err := json.Marshal(attemptResult{Outcome: outcome, FinishedAt: time.Time{}})
 	require.NoError(t, err)

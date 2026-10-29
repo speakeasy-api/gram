@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -163,7 +164,37 @@ func TestPlatformMCPSkillsToolsAuthorAndDistributeEndToEnd(t *testing.T) {
 	require.True(t, listed.Distributions[0].FollowsLatest)
 	require.Empty(t, listed.Distributions[0].PinnedVersionID)
 	require.Equal(t, revised.Version.ID, listed.Distributions[0].ResolvedVersionID)
+	require.Nil(t, listed.Distributions[0].LastLoadedOverMcpAt, "nothing has read the skill over MCP yet")
 	require.Empty(t, listed.NextCursor)
+
+	// Once an agent reads the skill over a hosted MCP server, the listing
+	// reports when, as an RFC 3339 time.
+	readAt := time.Now().UTC().Truncate(time.Second)
+	written, err := mcpskills.NewResolver(testenv.NewLogger(t), fixture.conn).RecordRead(ctx, mcpskills.Read{
+		Entry: mcpskills.Entry{
+			SkillID: uuid.MustParse(created.Skill.ID), ProjectID: fixture.project.ID, ProjectSlug: fixture.project.Slug,
+			VersionID: uuid.MustParse(revised.Version.ID),
+			Name:      "add-mcp", Content: "", RawSHA256: "", Frontmatter: nil,
+		},
+		UserID: "", SessionID: "mcp-session", SeenAt: readAt,
+	})
+	require.NoError(t, err)
+	require.True(t, written)
+	listed = callSkillsTool[ListSkillDistributionsOutput](t, ctx, session, "list_skill_distributions", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     created.Skill.ID,
+	})
+	require.Len(t, listed.Distributions, 1)
+	require.NotNil(t, listed.Distributions[0].LastLoadedOverMcpAt)
+	lastLoaded, err := time.Parse(time.RFC3339, *listed.Distributions[0].LastLoadedOverMcpAt)
+	require.NoError(t, err)
+	require.True(t, lastLoaded.Equal(readAt), "last_loaded_over_mcp_at=%s readAt=%s", lastLoaded, readAt)
+	// get_skill carries the same per-skill value, with no distribution needed.
+	got := callSkillsTool[GetSkillOutput](t, ctx, session, "get_skill", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     created.Skill.ID,
+	})
+	require.Equal(t, listed.Distributions[0].LastLoadedOverMcpAt, got.Skill.LastLoadedOverMcpAt)
 
 	// Taking the skill back is gated on the user's explicit confirmation, and
 	// an unconfirmed call revokes nothing.
@@ -898,4 +929,50 @@ func toolNames(tools []*mcp.Tool) []string {
 		names = append(names, tool.Name)
 	}
 	return names
+}
+
+func TestPostgresSkillMCPTargetsResolvesPastTheLookupCap(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "skill_mcp_targets_cap")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+
+	// More servers than the lookup cap, all sorting before the gateway, so a
+	// capped inventory would cut off both the last server and the gateway.
+	toolsetID := uuid.New()
+	_, err = testrepo.New(conn).CreateToolsetFixture(ctx, testrepo.CreateToolsetFixtureParams{
+		ID: toolsetID, OrganizationID: principal.OrganizationID, ProjectID: project.ID,
+		Name: "Catalogue toolset", Slug: "catalogue-toolset",
+	})
+	require.NoError(t, err)
+	inserted, err := testrepo.New(conn).CreateMCPServerCatalogueFixtures(ctx, testrepo.CreateMCPServerCatalogueFixturesParams{
+		ProjectID: project.ID, NamePrefix: "Server ", SlugPrefix: "server-",
+		ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: "private", ServerCount: maxSkillTargetLookup + 1,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, maxSkillTargetLookup+1, inserted)
+	gatewayID, err := testrepo.New(conn).CreateMCPGatewayFixture(ctx, testrepo.CreateMCPGatewayFixtureParams{
+		ID: uuid.New(), OrganizationID: principal.OrganizationID, ProjectID: project.ID, Name: "Team Gateway",
+	})
+	require.NoError(t, err)
+
+	targets := NewPostgresSkillTargets(conn)
+	gateways, err := targets.SkillMCPTargets(ctx, principal.OrganizationID, project.ID, SkillMCPTargetGateway, "team gateway")
+	require.NoError(t, err)
+	require.Equal(t, []SkillMCPTarget{{Kind: SkillMCPTargetGateway, ID: gatewayID.String(), Name: "Team Gateway", Slug: ""}}, gateways)
+
+	last, err := targets.SkillMCPTargets(ctx, principal.OrganizationID, project.ID, SkillMCPTargetServer, fmt.Sprintf("server-%04d", maxSkillTargetLookup))
+	require.NoError(t, err)
+	require.Len(t, last, 1)
+	require.Equal(t, fmt.Sprintf("Server %04d", maxSkillTargetLookup), last[0].Name)
+
+	byID, err := targets.SkillMCPTargets(ctx, principal.OrganizationID, project.ID, SkillMCPTargetServer, last[0].ID)
+	require.NoError(t, err)
+	require.Equal(t, last, byID)
+
+	wrongKind, err := targets.SkillMCPTargets(ctx, principal.OrganizationID, project.ID, SkillMCPTargetServer, "Team Gateway")
+	require.NoError(t, err)
+	require.Empty(t, wrongKind, "a gateway is never matched as an MCP server")
 }

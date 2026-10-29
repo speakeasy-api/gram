@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 )
 
 // AdminCORS allows the configured set of origins to make credentialed
@@ -64,9 +66,7 @@ func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 			}
 
 			origin := r.Header.Get("Origin")
-			if r.Method == http.MethodPost && origin == "" && r.Referer() == "" && (r.URL.Path == "/admin-mcp" || r.URL.Path == "/admin-mcp/token" || r.URL.Path == "/admin-mcp/register") {
-				// These endpoints authenticate through MCP bearer tokens or OAuth
-				// client credentials, not browser cookies. Consent is never exempt.
+			if origin == "" && r.Referer() == "" && tokenAuthenticatedRoute(r) {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -88,8 +88,46 @@ func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 				return
 			}
 
+			// These cookie-authenticated navigation routes retain the same origin
+			// enforcement, but explain the refusal in the browser. Machine routes
+			// and the rest of the admin API retain their own response contracts.
+			proposalID, proposal := strings.CutPrefix(r.URL.Path, "/admin-mcp/proposals/")
+			proposal = proposal && proposalID != "" && !strings.Contains(proposalID, "/")
+			if r.URL.Path == "/admin-mcp/connect" || proposal {
+				_ = oauthui.WriteAuthorizationError(r.Context(), w, oauthui.AuthorizationError{
+					Recovery:       nil,
+					Setup:          false,
+					Status:         http.StatusForbidden,
+					Reason:         oauthui.ReasonSessionChanged,
+					Approval:       proposal,
+					ErrorID:        "",
+					Code:           http.StatusText(http.StatusForbidden),
+					Description:    "forbidden: origin not allowed",
+					CallbackURL:    "",
+					ClientName:     "",
+					ClientID:       "",
+					ClientIDOrigin: "",
+					ServerName:     "",
+				})
+				return
+			}
 			http.Error(w, "forbidden: origin not allowed", http.StatusForbidden)
 		})
+	}
+}
+
+// tokenAuthenticatedRoute reports whether a request targets an endpoint that
+// authenticates through its own bearer token or OAuth client credentials, not
+// browser cookies, so it needs no CSRF Origin check. Consent is never exempt.
+func tokenAuthenticatedRoute(r *http.Request) bool {
+	switch r.Method {
+	case http.MethodPost:
+		return r.URL.Path == "/admin-mcp" || r.URL.Path == "/admin-mcp/token" || r.URL.Path == "/admin-mcp/register"
+	case http.MethodPut:
+		// The staff image upload, redeemed by a single-use upload token.
+		return r.URL.Path == "/admin/assets.uploadImage"
+	default:
+		return false
 	}
 }
 

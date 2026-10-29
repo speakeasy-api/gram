@@ -63,7 +63,10 @@ type Service interface {
 	SetToolMetadata(context.Context, *SetToolMetadataPayload) (res *types.ToolMetadata, err error)
 	// Soft-delete a single tool metadata entry.
 	DeleteToolMetadata(context.Context, *DeleteToolMetadataPayload) (err error)
-	// Delete an MCP server
+	// Delete an MCP server. A toolset's own hosted server (its id equals the
+	// toolset id) is disabled instead, as turning MCP off on the toolset does, and
+	// stays listed with visibility disabled. Other servers, including other
+	// toolset-backed ones, are deleted.
 	DeleteMcpServer(context.Context, *DeleteMcpServerPayload) (err error)
 }
 
@@ -328,6 +331,9 @@ type UpdateMcpServerPayload struct {
 	// The ID of an existing project- or organization-owned user session issuer to
 	// attach. Omit to preserve the current issuer.
 	UserSessionIssuerID *string
+	// Detach the current user session issuer, so the server no longer requires
+	// user sessions. Must not be true when user_session_issuer_id is set.
+	ClearUserSessionIssuer *bool
 	// The visibility of the server
 	Visibility types.McpServerVisibility
 	// The allowed network surfaces. Omit to preserve the stored mode.

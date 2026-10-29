@@ -3,6 +3,7 @@ package remotemcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -107,7 +108,7 @@ func TestProxyManagerRiskScanBlocksBeforeUpstream(t *testing.T) {
 		mcpriskscan.DefaultPolicyConfig,
 	)
 	built := newRiskScanTestProxyWithEvaluator(t, upstream.URL, evaluator, nil, false)
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/sample", strings.NewReader(riskScanRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/sample", strings.NewReader(riskScanRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	rr := httptest.NewRecorder()
@@ -153,7 +154,7 @@ func TestProxyManagerRiskScanFlagPublishesAndAllowsUpstream(t *testing.T) {
 		mcpriskscan.DefaultPolicyConfig,
 	)
 	built := newRiskScanTestProxyWithEvaluator(t, upstream.URL, evaluator, nil, false)
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/sample", strings.NewReader(riskScanRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/sample", strings.NewReader(riskScanRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	rr := httptest.NewRecorder()
@@ -202,7 +203,7 @@ func TestProxyManagerRiskScanWithholdsRemoteResponse(t *testing.T) {
 		mcpriskscan.DefaultPolicyConfig,
 	)
 	built := newRiskScanTestProxyWithEvaluator(t, upstream.URL, evaluator, nil, false)
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/sample", strings.NewReader(riskScanRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/sample", strings.NewReader(riskScanRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	rr := httptest.NewRecorder()
@@ -373,7 +374,7 @@ func assertRiskScanRelay(t *testing.T, tunnel bool, request string, status int, 
 	t.Cleanup(upstream.Close)
 
 	built := newRiskScanTestProxy(t, upstream.URL, recorded, nil, tunnel)
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/sample", strings.NewReader(request))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/sample", strings.NewReader(request))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	rr := httptest.NewRecorder()
@@ -433,7 +434,7 @@ func assertRiskScanSelectionRejection(t *testing.T, request string, code int64) 
 	require.NoError(t, err)
 	recorded := &recordingRemoteRiskScan{events: nil, payloads: nil, calls: atomic.Int32{}}
 	built := newRiskScanTestProxy(t, upstream.URL, recorded, selection, false)
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/sample", strings.NewReader(request))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/sample", strings.NewReader(request))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	require.NoError(t, built.Post(rr, req))
@@ -474,4 +475,20 @@ func newRiskScanTestProxyWithEvaluator(t *testing.T, upstreamURL string, evaluat
 	}
 	return manager.Build(logger, &remotemcprepo.RemoteMcpServer{ID: uuid.New(), Url: upstreamURL},
 		riskScanServerID, nil, mcpservers.VisibilityPublic, "org-test", riskScanProjectID, "", "", selection)
+}
+
+func TestRiskScanRejectionReturnsHeldCallsAsToolResults(t *testing.T) {
+	t.Parallel()
+	held := mcpriskscan.Decision{Disposition: mcpriskscan.DispositionDeny, UserMessage: "Calling send_message needs approval. Request token: apr_example", ApprovalToken: "apr_example"}
+	toolResult, ok := errors.AsType[*proxy.ToolResultError](riskScanRejection(held))
+	require.True(t, ok, "a held call is answered with a tool result")
+	require.Equal(t, held.UserMessage, toolResult.Message)
+	require.NotContains(t, toolResult.Error(), held.ApprovalToken, "the request token stays out of logs and spans")
+
+	blocked := mcpriskscan.Decision{Disposition: mcpriskscan.DispositionDeny, UserMessage: "Blocked by Remote policy", ApprovalToken: ""}
+	rejection, ok := errors.AsType[*proxy.RejectError](riskScanRejection(blocked))
+	require.True(t, ok, "a block stays a JSON-RPC error")
+	require.Equal(t, proxy.RejectCodeForbidden, rejection.Code)
+
+	require.NoError(t, riskScanRejection(mcpriskscan.Allow()))
 }

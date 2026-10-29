@@ -72,10 +72,10 @@ func TestParseSiteURL(t *testing.T) {
 	}
 }
 
-func TestPrivateIngressShutdownCancelsRequestsAndClosesConnections(t *testing.T) {
+func TestDrainHTTPServerCancelsRequestsAndClosesConnections(t *testing.T) {
 	t.Parallel()
-	ctx, cancelRequests := context.WithCancel(t.Context())
-	defer cancelRequests()
+	ctx, cancelRequests := context.WithCancelCause(t.Context())
+	defer cancelRequests(nil)
 	started, finished := make(chan struct{}), make(chan struct{})
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		close(started)
@@ -98,8 +98,9 @@ func TestPrivateIngressShutdownCancelsRequestsAndClosesConnections(t *testing.T)
 	case <-time.After(5 * time.Second):
 		t.Fatal("handler did not start")
 	}
-	shutdownPrivateIngress(t.Context(), testenv.NewLogger(t), server.Config, cancelRequests, 0)
+	drainHTTPServer(t.Context(), testenv.NewLogger(t), server.Config, cancelRequests, 0, "failed to shutdown test server")
 	require.ErrorIs(t, ctx.Err(), context.Canceled)
+	require.ErrorIs(t, context.Cause(ctx), errShutdownDeadline)
 	select {
 	case <-finished:
 	case <-time.After(5 * time.Second):

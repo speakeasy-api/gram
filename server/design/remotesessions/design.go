@@ -73,8 +73,60 @@ var _ = Service("remoteSessions", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ServerIdentityImpact"}`)
 	})
 
+	Method("listServerClientAssociations", func() {
+		Description("List the upstream OAuth clients an MCP server is associated with. An association is a per-server configuration fact: one client can serve several servers, and server_count reports how many live servers share each client, since editing or rotating a shared client changes every one of them. Associations are recorded ahead of the serving path that will read them; until then the server keeps signing in through its user session issuer's bindings. Requires mcp:read on the server.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The MCP server.", func() { Format(FormatUUID) })
+			Required("mcp_server_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListServerClientAssociationsResult)
+
+		HTTP(func() {
+			GET("/rpc/remoteSessions.listServerClientAssociations")
+			Param("mcp_server_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listServerClientAssociations")
+		Meta("openapi:extension:x-speakeasy-name-override", "listServerClientAssociations")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ServerClientAssociations"}`)
+	})
+
+	Method("detachServerClientAssociation", func() {
+		Description("Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding and is refused here with a conflict: turn off User Identity on the server instead. Requires mcp:write on the server.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The MCP server.", func() { Format(FormatUUID) })
+			Attribute("remote_session_client_id", String, "The associated remote session client.", func() { Format(FormatUUID) })
+			Required("mcp_server_id", "remote_session_client_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/remoteSessions.detachServerClientAssociation")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "detachServerClientAssociation")
+		Meta("openapi:extension:x-speakeasy-name-override", "detachServerClientAssociation")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DetachServerClientAssociation"}`)
+	})
+
 	Method("listRemoteSessions", func() {
-		Description("List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).")
+		Description("List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, authorization_expires_at, scopes).")
 
 		Payload(func() {
 			Attribute("principal_id", String, "Owned agent whose eligible sessions to list; requires user_session_issuer_id.", func() { Format(FormatUUID) })
@@ -319,7 +371,12 @@ var _ = Service("organizationRemoteSessions", func() {
 				Format(FormatUUID)
 			})
 			Required("client_id")
-			Attribute("cursor", String, "Pagination cursor.")
+			Attribute("search", String, "Case-insensitive literal identity search.", func() { MaxLength(200) })
+			Attribute("status", String, "Filter by effective upstream authorization status. Access expiry alone does not expire a refreshable account.", func() { Enum("active", "expired", "all") })
+			Attribute("created_after", String, "Inclusive creation lower bound.", func() { Format(FormatDateTime) })
+			Attribute("created_before", String, "Exclusive creation upper bound.", func() { Format(FormatDateTime) })
+			Attribute("sort", String, "Ordering. Authorization expiry is the earliest hard authorization deadline and usable refresh/access deadline. Omit to retain ID ordering and UUID cursors.", func() { Enum("newest", "oldest", "last_used", "expiry") })
+			Attribute("cursor", String, "Pagination cursor. Preserve the filters and ordering when following it.")
 			Attribute("limit", Int, "Page size (default 50, max 100).")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -330,6 +387,11 @@ var _ = Service("organizationRemoteSessions", func() {
 		HTTP(func() {
 			GET("/rpc/organizationRemoteSessions.list")
 			Param("client_id")
+			Param("search")
+			Param("status")
+			Param("created_after")
+			Param("created_before")
+			Param("sort")
 			Param("cursor")
 			Param("limit")
 			security.SessionHeader()
@@ -449,6 +511,11 @@ var RemoteSession = Type("RemoteSession", func() {
 	Attribute("refresh_expires_at", String, "Upstream refresh-token expiry. Null when the session has no refresh token.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("authorization_expires_at", String, "Upstream authorization deadline. When present, the connection cannot be used or refreshed after this time even if its tokens have later expiries.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_used_at", String, "Last recorded upstream request, accurate to within five minutes. Null means unknown.", func() { Format(FormatDateTime) })
+
 	Attribute("has_refresh_token", Boolean, "Whether the session holds an upstream refresh token. Gates the 'Refresh now' action; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token. The token itself is never returned.")
 	Attribute("scopes", ArrayOf(String), "Scopes held by this session.")
 	Attribute("created_at", String, func() {
@@ -476,4 +543,27 @@ var ListRemoteSessionsResult = Type("ListRemoteSessionsResult", func() {
 	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted.")
 
 	Required("items")
+})
+
+var ServerClientAssociation = Type("ServerClientAssociation", func() {
+	Description("One upstream OAuth client an MCP server is associated with. Client secrets are never returned.")
+
+	Attribute("remote_session_client_id", String, "The associated remote session client.", func() { Format(FormatUUID) })
+	Attribute("client_id", String, "The provider-issued client_id.")
+	Attribute("remote_session_issuer_id", String, "The client's remote session issuer: the upstream authorization server it signs in with.", func() { Format(FormatUUID) })
+	Attribute("issuer_name", String, "Display name of the remote session issuer, if set.")
+	Attribute("issuer_slug", String, "Slug of the remote session issuer.")
+	Attribute("issuer_url", String, "The remote session issuer's issuer identifier.")
+	Attribute("scope", String, "Who owns the client.", func() {
+		Enum("project", "organization", "global")
+	})
+	Attribute("server_count", Int64, "How many live MCP servers are associated with this client, including this one.")
+	Attribute("associated_at", String, "When the association was recorded.", func() { Format(FormatDateTime) })
+
+	Required("remote_session_client_id", "client_id", "remote_session_issuer_id", "issuer_slug", "issuer_url", "scope", "server_count", "associated_at")
+})
+
+var ListServerClientAssociationsResult = Type("ListServerClientAssociationsResult", func() {
+	Attribute("associations", ArrayOf(ServerClientAssociation), "The server's associated upstream OAuth clients, oldest first.")
+	Required("associations")
 })

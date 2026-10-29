@@ -142,6 +142,11 @@ func GetOrganizationStatsAdminPath() string {
 	return "/admin/organizations.stats"
 }
 
+// RepairInferenceKeyAdminPath returns the URL path to the admin service repairInferenceKey HTTP endpoint.
+func RepairInferenceKeyAdminPath() string {
+	return "/admin/organization.repairInferenceKey"
+}
+
 // GetInferenceKeysAdminPath returns the URL path to the admin service getInferenceKeys HTTP endpoint.
 func GetInferenceKeysAdminPath() string {
 	return "/admin/organization.inferenceKeys"
@@ -170,6 +175,11 @@ func GetStripeCustomerAdminPath() string {
 // SetStripeCustomerAdminPath returns the URL path to the admin service setStripeCustomer HTTP endpoint.
 func SetStripeCustomerAdminPath() string {
 	return "/admin/organization.setStripeCustomer"
+}
+
+// SetAdoptionDashboardURLAdminPath returns the URL path to the admin service setAdoptionDashboardUrl HTTP endpoint.
+func SetAdoptionDashboardURLAdminPath() string {
+	return "/admin/organization.setAdoptionDashboardUrl"
 }
 
 // GetStripeSubscriptionAdminPath returns the URL path to the admin service getStripeSubscription HTTP endpoint.
@@ -302,6 +312,51 @@ func GetMcpServerToolCallsAdminPath() string {
 	return "/admin/project.mcpServerToolCalls"
 }
 
+// GetHookClientsAdminPath returns the URL path to the admin service getHookClients HTTP endpoint.
+func GetHookClientsAdminPath() string {
+	return "/admin/hookClients.get"
+}
+
+// ListExternalMcpMigrationCandidatesAdminPath returns the URL path to the admin service listExternalMcpMigrationCandidates HTTP endpoint.
+func ListExternalMcpMigrationCandidatesAdminPath() string {
+	return "/admin/externalMcpMigration.listCandidates"
+}
+
+// PreviewExternalMcpMigrationAdminPath returns the URL path to the admin service previewExternalMcpMigration HTTP endpoint.
+func PreviewExternalMcpMigrationAdminPath() string {
+	return "/admin/externalMcpMigration.preview"
+}
+
+// MigrateExternalMcpServersAdminPath returns the URL path to the admin service migrateExternalMcpServers HTTP endpoint.
+func MigrateExternalMcpServersAdminPath() string {
+	return "/admin/externalMcpMigration.migrate"
+}
+
+// ListRegistryPromotionCandidatesAdminPath returns the URL path to the admin service listRegistryPromotionCandidates HTTP endpoint.
+func ListRegistryPromotionCandidatesAdminPath() string {
+	return "/admin/registry.promotionCandidates"
+}
+
+// GetRegistryPromotionCandidateAdminPath returns the URL path to the admin service getRegistryPromotionCandidate HTTP endpoint.
+func GetRegistryPromotionCandidateAdminPath() string {
+	return "/admin/registry.promotionCandidate"
+}
+
+// PromoteRegistryCandidateAdminPath returns the URL path to the admin service promoteRegistryCandidate HTTP endpoint.
+func PromoteRegistryCandidateAdminPath() string {
+	return "/admin/registry.promoteCandidate"
+}
+
+// CurateRegistryPromotionCandidateAdminPath returns the URL path to the admin service curateRegistryPromotionCandidate HTTP endpoint.
+func CurateRegistryPromotionCandidateAdminPath() string {
+	return "/admin/registry.curatePromotionCandidate"
+}
+
+// RetryRegistryPromotionDocsAdminPath returns the URL path to the admin service retryRegistryPromotionDocs HTTP endpoint.
+func RetryRegistryPromotionDocsAdminPath() string {
+	return "/admin/registry.retryPromotionDocs"
+}
+
 // GetRegistryOktaCandidatesAdminPath returns the URL path to the admin service getRegistryOktaCandidates HTTP endpoint.
 func GetRegistryOktaCandidatesAdminPath() string {
 	return "/admin/registry.oktaCandidates"
@@ -412,6 +467,21 @@ func AssignOrganizationOnboardingPlaybookAdminPath() string {
 	return "/admin/organization.onboardingPlaybook"
 }
 
+// ListSignupOffersAdminPath returns the URL path to the admin service listSignupOffers HTTP endpoint.
+func ListSignupOffersAdminPath() string {
+	return "/admin/signupOffers"
+}
+
+// CreateSignupOfferAdminPath returns the URL path to the admin service createSignupOffer HTTP endpoint.
+func CreateSignupOfferAdminPath() string {
+	return "/admin/signupOffers.create"
+}
+
+// UpdateSignupOfferAdminPath returns the URL path to the admin service updateSignupOffer HTTP endpoint.
+func UpdateSignupOfferAdminPath() string {
+	return "/admin/signupOffers.update"
+}
+
 // GetStripeSubscriptionCandidateAdminPath returns the URL path to the admin service getStripeSubscriptionCandidate HTTP endpoint.
 func GetStripeSubscriptionCandidateAdminPath() string {
 	return "/admin/organization.stripeSubscriptionCandidate"
@@ -425,4 +495,29 @@ func SetStripeSubscriptionAdminPath() string {
 // ListCustomerUsageAdminPath returns the URL path to the admin service listCustomerUsage HTTP endpoint.
 func ListCustomerUsageAdminPath() string {
 	return "/admin/organizations.customerUsage"
+}
+
+// ListUpstreamOAuthMigrationOrganizationsAdminPath returns the URL path to the admin service listUpstreamOAuthMigrationOrganizations HTTP endpoint.
+func ListUpstreamOAuthMigrationOrganizationsAdminPath() string {
+	return "/admin/upstreamOAuthMigration.organizations"
+}
+
+// GetUpstreamOAuthMigrationStatusAdminPath returns the URL path to the admin service getUpstreamOAuthMigrationStatus HTTP endpoint.
+func GetUpstreamOAuthMigrationStatusAdminPath() string {
+	return "/admin/upstreamOAuthMigration.status"
+}
+
+// RunUpstreamOAuthMigrationAdminPath returns the URL path to the admin service runUpstreamOAuthMigration HTTP endpoint.
+func RunUpstreamOAuthMigrationAdminPath() string {
+	return "/admin/upstreamOAuthMigration.run"
+}
+
+// EnableUpstreamAuthEnforcementAdminPath returns the URL path to the admin service enableUpstreamAuthEnforcement HTTP endpoint.
+func EnableUpstreamAuthEnforcementAdminPath() string {
+	return "/admin/upstreamOAuthMigration.enableEnforcement"
+}
+
+// DisableUpstreamAuthEnforcementAdminPath returns the URL path to the admin service disableUpstreamAuthEnforcement HTTP endpoint.
+func DisableUpstreamAuthEnforcementAdminPath() string {
+	return "/admin/upstreamOAuthMigration.disableEnforcement"
 }

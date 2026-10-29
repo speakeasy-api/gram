@@ -71,6 +71,14 @@ var AdminOrganization = Type("AdminOrganization", func() {
 	})
 	Attribute("stripe_customer_id", String, "Stripe customer ID, if billing metadata has a customer.")
 	Attribute("stripe_subscription_id", String, "Current Stripe subscription ID, if subscribed.")
+	Attribute("stripe_customer_dashboard_url", String, func() {
+		Description("Link to the Stripe customer in the Stripe dashboard. Absent when the organization has no Stripe customer or the deployment has no Stripe API key configured.")
+		Format(FormatURI)
+	})
+	Attribute("stripe_subscription_dashboard_url", String, func() {
+		Description("Link to the Stripe subscription in the Stripe dashboard. Absent when the organization has no Stripe subscription or the deployment has no Stripe API key configured.")
+		Format(FormatURI)
+	})
 	Attribute("whitelisted", Boolean, "Whether the organization is whitelisted for full access.")
 	Attribute("disabled_at", String, func() {
 		Description("The time at which the organization was disabled, if any.")
@@ -92,6 +100,10 @@ var AdminOrganization = Type("AdminOrganization", func() {
 	Attribute("trial_demoted_at", String, func() {
 		Description("The time at which the organization was demoted after its trial, if any.")
 		Format(FormatDateTime)
+	})
+	Attribute("adoption_dashboard_url", String, func() {
+		Description("Staff-entered link to the organization's adoption dashboard. Absent when none has been set.")
+		Format(FormatURI)
 	})
 	Attribute("member_count", Int, "Number of active members in the organization.")
 	// Deliberately not an Enum. The value is whatever the creating flow
@@ -278,6 +290,31 @@ var AdminStripeSubscription = Type("AdminStripeSubscription", func() {
 	Required("status", "current_period_start", "current_period_end", "cancel_at_period_end", "payment_failed")
 })
 
+var AdminInferenceKeyCause = Type("AdminInferenceKeyCause", func() {
+	Attribute("cause", String)
+	Attribute("description", String)
+	Attribute("removable", Boolean)
+	Attribute("blocked_reason", String)
+	Required("cause", "description", "removable")
+})
+
+var AdminInferenceKeyRepairState = Type("AdminInferenceKeyRepairState", func() {
+	Description("Committed local key policy, without provider usage or credentials.")
+	Attribute("key_type", String)
+	Attribute("monthly_credits", Int64)
+	Attribute("disabled", Boolean)
+	Attribute("disable_causes", ArrayOf(String))
+	Attribute("disable_causes_classified", Boolean)
+	Attribute("cause_diagnostics", ArrayOf(AdminInferenceKeyCause))
+	Required("key_type", "monthly_credits", "disabled", "disable_causes", "disable_causes_classified", "cause_diagnostics")
+})
+
+var AdminInferenceKeyRepairResult = Type("AdminInferenceKeyRepairResult", func() {
+	Attribute("key", AdminInferenceKeyRepairState)
+	Attribute("reconciliation_pending", Boolean)
+	Required("key", "reconciliation_pending")
+})
+
 var AdminInferenceKey = Type("AdminInferenceKey", func() {
 	Description("Current usage and configured state for one materialized platform-managed OpenRouter key, without key material or provider identifiers.")
 	Attribute("key_type", String)
@@ -285,6 +322,7 @@ var AdminInferenceKey = Type("AdminInferenceKey", func() {
 	Attribute("monthly_credits", Int64)
 	Attribute("disabled", Boolean)
 	Attribute("disable_causes", ArrayOf(String), "Active internal disable causes. Omitted for legacy unclassified rows.")
+	Attribute("cause_diagnostics", ArrayOf(AdminInferenceKeyCause))
 	Attribute("disable_causes_classified", Boolean, "Whether disable_causes is classified, including an explicitly empty cause set.")
 	Required("key_type", "credits_used", "monthly_credits", "disabled", "disable_causes_classified")
 })
@@ -965,8 +1003,17 @@ var _ = Service("admin", func() {
 			security.AdminAuthPayload()
 			Required("url", "ownership_confirmed")
 			Meta("openapi:typename", "CreateOrganizationRequestBody")
-			Attribute("url", String, "Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the name and verified email domain.", func() {
+			Attribute("url", String, "Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the verified email domain.", func() {
 				MinLength(1)
+			})
+			Attribute("name", String, "Organization display name. When omitted, a name is derived from the registrable company domain.", func() {
+				MinLength(1)
+				MaxLength(100)
+			})
+			Attribute("slug", String, "Preferred organization URL slug. When omitted, a unique slug is derived from the organization name. Explicit slugs use lowercase letters, numbers, and hyphens.", func() {
+				MinLength(2)
+				MaxLength(100)
+				Pattern("^[a-z0-9]+(?:-[a-z0-9]+)*$")
 			})
 			Attribute("ownership_confirmed", Boolean, "The operator confirms that domain ownership was established outside this form.")
 		})
@@ -1028,6 +1075,31 @@ var _ = Service("admin", func() {
 		})
 
 		Meta("openapi:operationId", "adminGetOrganizationStats")
+	})
+
+	Method("repairInferenceKey", func() {
+		Description("Removes explicitly selected known disable causes without changing tier, credits, or runtime. Staff confirmation and reason required.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Attribute("key_type", String, func() { Enum("chat", "internal") })
+			Attribute("remove_causes", ArrayOf(String, func() {
+				Enum("admin_lock", "trial_demotion", "billing_inactive")
+			}), "Unique known disable causes to remove.", func() {
+				MinLength(1)
+				MaxLength(3)
+			})
+			Attribute("confirmation", String, "Exact staff confirmation: I know what I'm doing", func() {
+				Enum("I know what I'm doing")
+			})
+			Attribute("reason", String, "Nonblank audit reason, at most 2000 UTF-8 bytes (enforced by the handler).", func() {
+				MinLength(1)
+			})
+			Required("organization_id", "key_type", "remove_causes", "confirmation", "reason")
+		})
+		Result(AdminInferenceKeyRepairResult)
+		HTTP(func() { POST("/admin/organization.repairInferenceKey"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminRepairInferenceKey")
 	})
 
 	Method("getInferenceKeys", func() {
@@ -1121,6 +1193,27 @@ var _ = Service("admin", func() {
 			declareUnavailableResponse()
 		})
 		Meta("openapi:operationId", "adminSetStripeCustomer")
+	})
+
+	Method("setAdoptionDashboardUrl", func() {
+		Description("Sets or clears the link to an organization's adoption dashboard shown on the admin overview. An empty or absent URL clears it.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+			Attribute("organization_id", String)
+			Attribute("adoption_dashboard_url", String, func() {
+				Description("An https URL, or empty to clear the link.")
+				MaxLength(2048)
+			})
+			Meta("openapi:typename", "SetAdoptionDashboardUrlRequestBody")
+		})
+		Result(AdminOrganization)
+		HTTP(func() {
+			POST("/admin/organization.setAdoptionDashboardUrl")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminSetAdoptionDashboardUrl")
+		Meta("openapi:extension:x-speakeasy-name-override", "setAdoptionDashboardUrl")
 	})
 
 	Method("getStripeSubscription", func() {
@@ -1306,9 +1399,12 @@ var _ = Service("admin", func() {
 	supportMatrixMethods()
 	supportCoverageMethods()
 	mcpServerHealthMethods()
+	hookClientsMethods()
+	externalMcpMigrationMethods()
 	registryDesign()
 	onboardingStackMethods()
 	onboardingPlaybookMethods()
+	signupOfferMethods()
 
 	Method("getStripeSubscriptionCandidate", func() {
 		Description("Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.")
@@ -1377,4 +1473,5 @@ var _ = Service("admin", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "listCustomerUsage")
 	})
 
+	upstreamOAuthMigrationMethods()
 })

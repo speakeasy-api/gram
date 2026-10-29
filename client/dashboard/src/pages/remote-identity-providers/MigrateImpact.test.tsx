@@ -30,7 +30,7 @@ it.each([
       `Explicitly unlink ${existing} before consolidating`,
     );
     expect(screen.getByRole("alert").textContent).toContain(
-      `prepare ${replacement} for the target provider.`,
+      `prepare ${replacement} for the target authorization server.`,
     );
   },
 );

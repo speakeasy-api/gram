@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
@@ -14,10 +15,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 )
 
 const testAuthenticationHostURL = "https://auth.example.com"
@@ -34,7 +42,7 @@ func newAuthenticationHostHarness(t *testing.T, ti *testInstance) authentication
 
 	authenticationHost, err := mcp.NewAuthenticationHost(testAuthenticationHostURL, ti.serverURL, "test")
 	require.NoError(t, err)
-	mcp.AttachAuthenticationHost(authenticationHost, ti.service)
+	mcp.AttachAuthenticationHost(authenticationHost, ti.service.Service)
 
 	passed := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -54,10 +62,15 @@ func (h authenticationHostHarness) serve(t *testing.T, method, host, path string
 		body = strings.NewReader("")
 	}
 	req := httptest.NewRequestWithContext(t.Context(), method, path, body)
-	req.Host = host
 	if form != nil {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
+	return h.serveRequest(host, req)
+}
+
+// serveRequest serves req through the harness, addressed to host.
+func (h authenticationHostHarness) serveRequest(host string, req *http.Request) *httptest.ResponseRecorder {
+	req.Host = host
 	w := httptest.NewRecorder()
 	h.handler.ServeHTTP(w, req)
 	return w
@@ -235,14 +248,14 @@ func TestAuthenticationHost_OtherAudiencesRefused(t *testing.T) {
 	} {
 		code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, client)
 		w := harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/token", withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, aud)))
-		require.Equal(t, http.StatusUnauthorized, w.Code, "aud %q: %s", aud, w.Body.String())
+		require.Equal(t, http.StatusBadRequest, w.Code, "aud %q: %s", aud, w.Body.String())
 		require.Contains(t, w.Body.String(), "invalid_client")
 	}
 
 	// The authentication host's URL is not an audience on the MCP host.
 	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, client)
 	w := postForm(t, ti, slug, "token", withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, authenticationHostTokenURL(slug))))
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 }
 
 // The canonical resource is the MCP host's, so a resource naming the
@@ -266,24 +279,81 @@ func TestAuthenticationHost_ResourceStaysOnMCPHost(t *testing.T) {
 	require.Contains(t, w.Body.String(), "invalid_target")
 }
 
-// An authenticated ID-JAG exchange is not admitted on the authentication host.
-func TestAuthenticationHost_IDJAGExchangeRefused(t *testing.T) {
+// authenticationHostIDJAGUpstreamIssuer is the upstream identity provider that
+// signs ID-JAG assertions in the authentication host tests.
+const authenticationHostIDJAGUpstreamIssuer = "https://identity.example.test"
+
+// authenticationHostIDJAGFixture is an MCP server whose issuer has an ID-JAG
+// trust link and opts in to the authentication host.
+type authenticationHostIDJAGFixture struct {
+	ti       *testInstance
+	signer   idJAGTestAssertion
+	harness  authenticationHostHarness
+	slug     string
+	clientID string
+}
+
+func newAuthenticationHostIDJAGFixture(t *testing.T) authenticationHostIDJAGFixture {
+	t.Helper()
+
+	ctx, ti, signer, jwksURL := newIDJAGTestService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, authenticationHostIDJAGUpstreamIssuer, jwksURL)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, *authCtx.ProjectID, toolset, issuer.ID)
+	client := createIDJAGClient(t, ctx, ti, issuer.ID)
+	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
+	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
+	useAuthenticationHost(t, ctx, ti, authCtx.ActiveOrganizationID, issuer.ID)
+
+	return authenticationHostIDJAGFixture{
+		ti:       ti,
+		signer:   signer,
+		harness:  newAuthenticationHostHarness(t, ti),
+		slug:     toolset.McpSlug.String,
+		clientID: client.ClientID,
+	}
+}
+
+// exchange sends the token endpoint on the authentication host an ID-JAG
+// addressed to audience.
+func (f authenticationHostIDJAGFixture) exchange(t *testing.T, audience string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	assertion := f.signer.sign(t, authenticationHostIDJAGUpstreamIssuer, audience, mcpHostRoot(f.ti, f.slug), f.clientID, mockidp.MockUserEmail, uuid.NewString())
+	return f.harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+f.slug+"/token", url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer},
+		oauthwire.ParamClientID:  {f.clientID},
+		oauthwire.ParamAssertion: {assertion},
+	})
+}
+
+// The ID-JAG exchange on the authentication host accepts an assertion
+// addressed to the issuer the metadata announces there, and binds the session
+// to the MCP host's resource.
+func TestAuthenticationHost_IDJAGExchangeAddressedToIssuer(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
-	harness := newAuthenticationHostHarness(t, ti)
-	slug := toolset.McpSlug.String
+	f := newAuthenticationHostIDJAGFixture(t)
+	authIssuer := testAuthenticationHostURL + "/mcp/" + f.slug
 
-	form := url.Values{}
-	form.Set("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
-	form.Set("assertion", "header.payload.signature")
-	form.Set("client_id", "id-jag-client")
-	form.Set("resource", "http://0.0.0.0/mcp/"+slug)
-	w := harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/token", form)
+	w := f.exchange(t, authIssuer)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	claims := accessTokenClaims(t, w.Body.Bytes())
+	require.Equal(t, authIssuer, claims["iss"])
+	require.Equal(t, []any{mcpHostRoot(f.ti, f.slug)}, claims["aud"])
+}
+
+// An ID-JAG addressed to the resource rather than the issuer is refused once
+// the issuer has moved to the authentication host.
+func TestAuthenticationHost_IDJAGExchangeRefusesResourceAudience(t *testing.T) {
+	t.Parallel()
+
+	f := newAuthenticationHostIDJAGFixture(t)
+
+	w := f.exchange(t, mcpHostRoot(f.ti, f.slug))
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	require.Contains(t, w.Body.String(), "unsupported_grant_type")
+	require.Equal(t, oautherr.CodeInvalidGrant, decodeSharedTokenResponse(t, w).Error)
 }
 
 // A JWT bearer request presenting no client reaches the workload grant on the
@@ -424,17 +494,7 @@ func TestAuthenticationHost_OptedInAuthorizeRedirectsToConsentOnAuthenticationHo
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
 	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
-	toolset, err := toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
 	harness := newAuthenticationHostHarness(t, ti)
 	slug := toolset.McpSlug.String
 	authIssuer := testAuthenticationHostURL + "/mcp/" + slug
@@ -487,6 +547,233 @@ func TestAuthenticationHost_OptedInConsentEmitsAuthenticationHostIss(t *testing.
 	})
 	require.NotEmpty(t, loc.Query().Get("code"))
 	require.Equal(t, testAuthenticationHostURL+"/mcp/"+slug, loc.Query().Get("iss"))
+}
+
+// seedAuthenticationHostEndpointIssuer is an issuer in endpoint mode, opted in
+// to the authentication host, with a registered public client and public MCP
+// servers.
+func seedAuthenticationHostEndpointIssuer(t *testing.T, ctx context.Context, ti *testInstance) sharedIssuerFixture {
+	t.Helper()
+
+	f := seedSharedIssuer(t, ctx, ti)
+	setIssuerMode(t, ctx, ti, f.issuer.ID, string(authserver.ModeEndpoint), "")
+	useAuthenticationHost(t, ctx, ti, f.issuer.OrganizationID.String, f.issuer.ID)
+	return f
+}
+
+// authorizeOnAuthenticationHost starts a flow for slug on the authentication
+// host and returns the challenge its consent page serves there.
+func authorizeOnAuthenticationHost(t *testing.T, ctx context.Context, ti *testInstance, harness authenticationHostHarness, f sharedIssuerFixture, slug string) mcp.AuthnChallengeState {
+	t.Helper()
+
+	query := url.Values{
+		"response_type":         {"code"},
+		"client_id":             {f.client.ClientID},
+		"redirect_uri":          {sharedTestRedirectURI},
+		"state":                 {"client-state"},
+		"code_challenge":        {pkceChallenge(pkceVerifier(t))},
+		"code_challenge_method": {"S256"},
+	}
+	authorized := harness.serve(t, http.MethodGet, "auth.example.com", "/mcp/"+slug+"/authorize?"+query.Encode(), nil)
+	require.Equal(t, http.StatusFound, authorized.Code, authorized.Body.String())
+	consentURL, err := url.Parse(authorized.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, testAuthenticationHostURL+"/mcp/"+slug+"/connect", consentURL.Scheme+"://"+consentURL.Host+consentURL.Path)
+	stored, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+consentURL.Query().Get("state"))
+	require.NoError(t, err)
+	return stored
+}
+
+// A remote session connect from the consent page on the authentication host
+// returns there, not to the MCP host the resource lives on.
+func TestAuthenticationHost_RemoteConnectReturnsToAuthenticationHostConsent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	f := seedAuthenticationHostEndpointIssuer(t, ctx, ti)
+	harness := newAuthenticationHostHarness(t, ti)
+	remoteClientID := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "authn-host-rc-"+uuid.NewString()[:8], "", []uuid.UUID{f.issuer.ID})
+	stored := authorizeOnAuthenticationHost(t, ctx, ti, harness, f, f.slugA)
+
+	w := harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+f.slugA+"/connect/remote-session", url.Values{"state": {stored.ID}, "csrf_token": {stored.CSRFToken}, "action": {"connect"}, "client_id": {remoteClientID.String()}})
+	require.Equal(t, http.StatusSeeOther, w.Code, w.Body.String())
+	upstream, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+
+	loginCache := cache.NewTypedObjectCache[remotesessions.RemoteLoginState](ti.logger, ti.cacheAdapter, cache.SuffixNone)
+	login, err := loginCache.Get(ctx, "remoteLogin:"+upstream.Query().Get("state"))
+	require.NoError(t, err)
+	require.Equal(t, testAuthenticationHostURL+"/mcp/"+f.slugA+"/connect?state="+stored.ID, login.ConsentURL)
+}
+
+// Turning use_authentication_host off mid-flow moves the issuer, so a flow
+// started on the authentication host cannot finish on the MCP host under an
+// issuer its client never recorded.
+func TestAuthenticationHost_ToggleClosesInFlightFlows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := seedAuthenticationHostEndpointIssuer(t, ctx, ti)
+	harness := newAuthenticationHostHarness(t, ti)
+	stored := authorizeOnAuthenticationHost(t, ctx, ti, harness, f, f.slugA)
+
+	updated, err := testrepo.New(ti.conn).SetUserSessionIssuerUseAuthenticationHostFixture(ctx, testrepo.SetUserSessionIssuerUseAuthenticationHostFixtureParams{
+		UseAuthenticationHost: false,
+		IssuerID:              f.issuer.ID,
+		OrganizationID:        f.issuer.OrganizationID.String,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), updated)
+
+	form := url.Values{"state": {stored.ID}, "csrf_token": {stored.CSRFToken}, "action": {"approve"}}
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/"+f.slugA+"/connect", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("mcpSlug", f.slugA)
+	err = ti.service.HandleConsent(httptest.NewRecorder(), req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx)))
+	require.Contains(t, requireOopsCode(t, err, oops.CodeBadRequest), "authn challenge state does not match this MCP server")
+}
+
+// completeAuthenticationHostFederatedLogin finishes a federated login whose
+// first response, start, came from the authentication host, with the IdP
+// callback on the platform host. The callback binds its own cookie and hands
+// the browser to the consent page at consentURL, which must recognise the
+// initiating browser before and after the login.
+func completeAuthenticationHostFederatedLogin(t *testing.T, ctx context.Context, f *federationLoginFixture, harness authenticationHostHarness, start *httptest.ResponseRecorder, consentURL string) {
+	t.Helper()
+
+	ti, provider := f.ti, f.provider
+	callbackURL := ti.serverURL.String() + f.callbackPath()
+	require.Equal(t, http.StatusFound, start.Code, start.Body.String())
+	bootstrap, err := url.Parse(start.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, callbackURL, bootstrap.Scheme+"://"+bootstrap.Host+bootstrap.Path)
+	originCookies := slices.DeleteFunc(start.Result().Cookies(), func(cookie *http.Cookie) bool {
+		return !strings.HasPrefix(cookie.Name, "__Host-gram-federation-")
+	})
+	require.Len(t, originCookies, 1)
+
+	// The callback host holds no cookie yet, so it binds one and sends the
+	// browser to the consent page.
+	handoff := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleIDPCallback(handoff, routeIDPCallback(httptest.NewRequestWithContext(ctx, http.MethodGet, bootstrap.String(), nil))))
+	require.Equal(t, http.StatusFound, handoff.Code, handoff.Body.String())
+	consent, err := url.Parse(handoff.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, consentURL, consent.Scheme+"://"+consent.Host+consent.Path)
+	callbackCookies := handoff.Result().Cookies()
+	require.Len(t, callbackCookies, 1)
+
+	confirm := httptest.NewRequestWithContext(ctx, http.MethodGet, consent.RequestURI(), nil)
+	confirm.AddCookie(originCookies[0])
+	ready := harness.serveRequest("auth.example.com", confirm)
+	require.Equal(t, http.StatusFound, ready.Code, ready.Body.String())
+	readyURL, err := url.Parse(ready.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, callbackURL, readyURL.Scheme+"://"+readyURL.Host+readyURL.Path)
+
+	begin := httptest.NewRecorder()
+	beginRequest := httptest.NewRequestWithContext(ctx, http.MethodGet, readyURL.String(), nil)
+	beginRequest.AddCookie(callbackCookies[0])
+	require.NoError(t, ti.service.HandleIDPCallback(begin, routeIDPCallback(beginRequest)))
+	upstream, err := url.Parse(begin.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, provider.URL+"/authorize", upstream.Scheme+"://"+upstream.Host+upstream.Path)
+
+	id := upstream.Query().Get("state")
+	provider.issueCode(t, "authentication-host-code", federationToken{challenge: upstream.Query().Get("code_challenge"), nonce: upstream.Query().Get("nonce"), email: mockidp.MockUserEmail, issuer: provider.URL, verified: true, secret: "selected-secret"})
+	callback := httptest.NewRequestWithContext(ctx, http.MethodGet, callbackURL+"?"+url.Values{"state": {id}, "code": {"authentication-host-code"}, "iss": {provider.URL}}.Encode(), nil)
+	callback.AddCookie(callbackCookies[0])
+	result := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleIDPCallback(result, routeIDPCallback(callback)))
+	require.Equal(t, http.StatusFound, result.Code, result.Body.String())
+	connect, err := url.Parse(result.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, consentURL, connect.Scheme+"://"+connect.Host+connect.Path)
+
+	page := httptest.NewRequestWithContext(ctx, http.MethodGet, connect.RequestURI(), nil)
+	page.AddCookie(originCookies[0])
+	rendered := harness.serveRequest("auth.example.com", page)
+	require.Equal(t, http.StatusOK, rendered.Code, rendered.Body.String())
+}
+
+// federatedAuthorizeQuery is the downstream client's authorization request in
+// the federated login tests.
+func federatedAuthorizeQuery(f *federationLoginFixture) url.Values {
+	return url.Values{"response_type": {"code"}, "client_id": {f.downstreamClientID}, "redirect_uri": {"http://127.0.0.1/callback"}, "state": {"downstream-state"}, "code_challenge": {"downstream-pkce"}, "code_challenge_method": {"S256"}}
+}
+
+// Federated login started on the authentication host binds the browser there,
+// for an MCP server whose issuer opts in to it.
+func TestAuthenticationHost_FederatedLoginBindsBrowserOnAuthenticationHost(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newFederationLoginFixture(t, true)
+	useAuthenticationHost(t, ctx, f.ti, f.organizationID, f.issuerID)
+	harness := newAuthenticationHostHarness(t, f.ti)
+
+	start := harness.serve(t, http.MethodGet, "auth.example.com", "/mcp/"+f.toolsetSlug+"/authorize?"+federatedAuthorizeQuery(f).Encode(), nil)
+	completeAuthenticationHostFederatedLogin(t, ctx, f, harness, start, testAuthenticationHostURL+"/mcp/"+f.toolsetSlug+"/connect")
+}
+
+// The dashboard starts first-party connects on the platform host. For an
+// issuer that opts in to the authentication host, the flow moves there before
+// binding the browser, so the consent page on the authentication host finds
+// the browser's cookie.
+func TestAuthenticationHost_FederatedFirstPartyConnectMovesToAuthenticationHost(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newFederationLoginFixture(t, true)
+	useAuthenticationHost(t, ctx, f.ti, f.organizationID, f.issuerID)
+	harness := newAuthenticationHostHarness(t, f.ti)
+	path := "/mcp/" + f.toolsetSlug + "/connect/first-party"
+
+	route := chi.NewRouteContext()
+	route.URLParams.Add("mcpSlug", f.toolsetSlug)
+	moved := httptest.NewRecorder()
+	require.NoError(t, f.ti.service.HandleFirstPartyConnect(moved, httptest.NewRequestWithContext(context.WithValue(ctx, chi.RouteCtxKey, route), http.MethodGet, path, nil)))
+	require.Equal(t, http.StatusFound, moved.Code, moved.Body.String())
+	require.Equal(t, testAuthenticationHostURL+path, moved.Header().Get("Location"))
+	require.Empty(t, moved.Result().Cookies(), "no browser binding is set on the host the flow left")
+
+	start := harness.serve(t, http.MethodGet, "auth.example.com", path, nil)
+	completeAuthenticationHostFederatedLogin(t, ctx, f, harness, start, testAuthenticationHostURL+"/mcp/"+f.toolsetSlug+"/connect")
+}
+
+// Federated login through a shared authorization server on the authentication
+// host binds the browser there.
+func TestAuthenticationHost_SharedFederatedLoginBindsBrowserOnAuthenticationHost(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newFederationLoginFixture(t, true)
+	harness := newAuthenticationHostHarness(t, f.ti)
+	issuerURL := authenticationHostSharedIssuerURL(f.issuerID.String())
+	setIssuerMode(t, ctx, f.ti, f.issuerID, string(authserver.ModeShared), issuerURL)
+
+	query := federatedAuthorizeQuery(f)
+	query.Set("resource", mcpHostRoot(f.ti, f.toolsetSlug))
+	start := harness.serve(t, http.MethodGet, "auth.example.com", "/oauth/usi/"+f.issuerID.String()+"/authorize?"+query.Encode(), nil)
+	completeAuthenticationHostFederatedLogin(t, ctx, f, harness, start, issuerURL+"/connect")
+}
+
+// An authorization request for an issuer that opts in to the authentication
+// host, sent to the MCP host by a client holding older metadata, moves to the
+// authentication host unchanged.
+func TestAuthenticationHost_OptedInAuthorizeOnMCPHostMoves(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := seedAuthenticationHostEndpointIssuer(t, ctx, ti)
+	newAuthenticationHostHarness(t, ti)
+	path := "/mcp/" + f.slugA + "/authorize?" + url.Values{"response_type": {"code"}, "client_id": {f.client.ClientID}, "redirect_uri": {sharedTestRedirectURI}, "state": {"client-state"}}.Encode()
+
+	route := chi.NewRouteContext()
+	route.URLParams.Add("mcpSlug", f.slugA)
+	moved := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleAuthorize(moved, httptest.NewRequestWithContext(context.WithValue(ctx, chi.RouteCtxKey, route), http.MethodGet, path, nil)))
+	require.Equal(t, http.StatusFound, moved.Code, moved.Body.String())
+	require.Equal(t, testAuthenticationHostURL+path, moved.Header().Get("Location"))
 }
 
 // Requests for any other host reach the main mux untouched.

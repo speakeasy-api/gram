@@ -31,8 +31,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	activitiespkg "github.com/speakeasy-api/gram/server/internal/background/activities"
-	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -56,17 +56,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval/slackapproval"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
-	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
-	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -74,6 +75,12 @@ import (
 )
 
 type WorkerOptions struct {
+	// CatalogPromotions runs staff catalogue discovery and durable delivery.
+	CatalogPromotions CatalogPromotionJobs
+
+	// CatalogPromotionDeliveryPaused suspends external guide writes without dropping jobs.
+	CatalogPromotionDeliveryPaused bool
+
 	GuardianPolicy *guardian.Policy
 
 	// TunnelHTTPClient carries back-channel OAuth calls for remote session
@@ -101,6 +108,9 @@ type WorkerOptions struct {
 	// lookups; empty falls back to GitHub's small unauthenticated budget.
 	GitHubEvidenceToken string
 	SiteURL             *url.URL
+	// ServerURL is the API origin. Approval requests sent to Slack use it
+	// through the approvals service.
+	ServerURL *url.URL
 	// OrgHosts resolves the host of links sent to an organization by email.
 	OrgHosts          *orghost.Resolver
 	BillingTracker    billing.Tracker
@@ -123,11 +133,7 @@ type WorkerOptions struct {
 	TriggersApp         *bgtriggers.App
 	AssistantsCore      *assistants.ServiceCore
 	TemporalEnv         *tenv.Environment
-	PIIScanner          risk_analysis.PIIScanner
 	PIScanner           *promptinjection.Scanner
-	CustomRuleScanner   *customruleanalyzer.Scanner
-	BuiltinPresets      *presetlib.Library
-	ShadowMCPClient     *shadowmcp.Client
 	AuditLogger         *audit.Logger
 	WorkOSClient        activitiespkg.WorkOSClient
 	ProductFeatures     *productfeatures.Client
@@ -141,6 +147,8 @@ type WorkerOptions struct {
 	// RemoteSessionAssertionSigner enables scheduled refreshes for clients that
 	// authenticate with private_key_jwt.
 	RemoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner
+	// IssuerKeySweeper retires expired internal session issuer keys; nil sweeps nothing.
+	IssuerKeySweeper InternalSessionIssuerKeySweeper
 
 	// StartupSeeds is the reference data this worker keeps applied. The
 	// worker kicks one run per seed version when it starts.
@@ -195,56 +203,56 @@ func ForDeploymentProcessing(
 		panic(fmt.Errorf("load test worker catalog validator: %w", err))
 	}
 	return &WorkerOptions{
-		PublicationRequests:          plugins.PublicationRequests{Enabled: false},
-		DB:                           db,
-		GuardianPolicy:               guardianPolicy,
-		TunnelHTTPClient:             nil,
-		EncryptionClient:             enc,
-		FeatureProvider:              f,
-		AssetStorage:                 assetStorage,
-		FunctionsDeployer:            deployer,
-		FunctionsVersion:             "local", // Test deployers don't use baked versions
-		MCPRegistryClient:            mcpRegistryClient,
-		MCPCatalog:                   externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, validator)), f),
-		AuditLogger:                  auditLogger,
-		RemoteSessionAssertionSigner: nil,
-		StartupSeeds:                 nil,
-		SlackClient:                  nil,
-		SlackDirectoryTokenRefresher: nil,
-		ChatMessageWriter:            nil,
-		ChatClient:                   nil,
-		OpenRouter:                   nil,
-		OpenRouterSpend:              nil,
-		K8sClient:                    nil,
-		ExpectedTargetCNAME:          "",
-		ExpectedARecords:             nil,
-		GitHubEvidenceToken:          "",
-		SiteURL:                      nil,
-		OrgHosts:                     orghost.New(orghost.Config{ServerURL: nil, SiteURL: nil, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
-		BillingTracker:               nil,
-		BillingRepository:            nil,
-		StripeClient:                 nil,
-		RagService:                   nil,
-		RedisClient:                  nil,
-		PosthogClient:                nil,
-		TelemetryLogger:              nil,
-		MeterReadConn:                nil,
-		TelemetryRepo:                nil,
-		TriggersApp:                  nil,
-		CacheAdapter:                 nil,
-		IssuerMetadataRefresher:      nil,
-		EmailService:                 nil,
-		AssistantsCore:               nil,
-		TemporalEnv:                  nil,
-		PIIScanner:                   nil,
-		PIScanner:                    nil,
-		CustomRuleScanner:            nil,
-		BuiltinPresets:               nil,
-		ShadowMCPClient:              nil,
-		WorkOSClient:                 workos.NewStubClient(),
-		ProductFeatures:              nil,
-		ClickhouseConn:               nil,
-		PluginPublisher:              nil,
+		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
+		CatalogPromotions:              nil,
+		CatalogPromotionDeliveryPaused: false,
+		DB:                             db,
+		GuardianPolicy:                 guardianPolicy,
+		TunnelHTTPClient:               nil,
+		EncryptionClient:               enc,
+		FeatureProvider:                f,
+		AssetStorage:                   assetStorage,
+		FunctionsDeployer:              deployer,
+		FunctionsVersion:               "local", // Test deployers don't use baked versions
+		MCPRegistryClient:              mcpRegistryClient,
+		MCPCatalog:                     externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, validator)), f),
+		AuditLogger:                    auditLogger,
+		RemoteSessionAssertionSigner:   nil,
+		IssuerKeySweeper:               nil,
+		StartupSeeds:                   nil,
+		SlackClient:                    nil,
+		SlackDirectoryTokenRefresher:   nil,
+		ChatMessageWriter:              nil,
+		ChatClient:                     nil,
+		OpenRouter:                     nil,
+		OpenRouterSpend:                nil,
+		K8sClient:                      nil,
+		ExpectedTargetCNAME:            "",
+		ExpectedARecords:               nil,
+		GitHubEvidenceToken:            "",
+		SiteURL:                        nil,
+		ServerURL:                      nil,
+		OrgHosts:                       orghost.New(orghost.Config{ServerURL: nil, SiteURL: nil, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
+		BillingTracker:                 nil,
+		BillingRepository:              nil,
+		StripeClient:                   nil,
+		RagService:                     nil,
+		RedisClient:                    nil,
+		PosthogClient:                  nil,
+		TelemetryLogger:                nil,
+		MeterReadConn:                  nil,
+		TelemetryRepo:                  nil,
+		TriggersApp:                    nil,
+		CacheAdapter:                   nil,
+		IssuerMetadataRefresher:        nil,
+		EmailService:                   nil,
+		AssistantsCore:                 nil,
+		TemporalEnv:                    nil,
+		PIScanner:                      nil,
+		WorkOSClient:                   workos.NewStubClient(),
+		ProductFeatures:                nil,
+		ClickhouseConn:                 nil,
+		PluginPublisher:                nil,
 		Publishers: &Publishers{
 			PresidioAnalysis:        gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
 			GitleaksAnalysis:        gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
@@ -252,6 +260,8 @@ func ForDeploymentProcessing(
 			PromptPolicyAnalysis:    gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
 			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 			LLMAnalysis:             gcp.NewNoopPublisher[*riskv1.LLMAnalysis](),
+			ToolCallAnalysis:        gcp.NewNoopPublisher[*riskv1.ToolCallAnalysis](),
+			AccountIdentityAnalysis: gcp.NewNoopPublisher[*riskv1.AccountIdentityAnalysis](),
 			RiskFindings:            gcp.NewNoopPublisher[*riskv1.Finding](),
 			MeterReadings:           gcp.NewNoopPublisher[*meteringv1.MeterReading](),
 			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
@@ -293,118 +303,118 @@ func NewTemporalWorker(
 	options ...*WorkerOptions,
 ) *Workers {
 	opts := &WorkerOptions{
-		PublicationRequests:          plugins.PublicationRequests{Enabled: false},
-		MCPCatalog:                   nil,
-		GuardianPolicy:               nil,
-		TunnelHTTPClient:             nil,
-		DB:                           nil,
-		EncryptionClient:             nil,
-		FeatureProvider:              nil,
-		AssetStorage:                 nil,
-		SlackClient:                  nil,
-		SlackDirectoryTokenRefresher: nil,
-		ChatMessageWriter:            nil,
-		ChatClient:                   nil,
-		OpenRouter:                   nil,
-		OpenRouterSpend:              nil,
-		K8sClient:                    nil,
-		ExpectedTargetCNAME:          "",
-		ExpectedARecords:             nil,
-		GitHubEvidenceToken:          "",
-		SiteURL:                      nil,
-		OrgHosts:                     orghost.New(orghost.Config{ServerURL: nil, SiteURL: nil, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
-		BillingTracker:               nil,
-		BillingRepository:            nil,
-		StripeClient:                 nil,
-		RedisClient:                  nil,
-		PosthogClient:                nil,
-		FunctionsDeployer:            nil,
-		FunctionsVersion:             "",
-		RagService:                   nil,
-		MCPRegistryClient:            nil,
-		TelemetryLogger:              nil,
-		MeterReadConn:                nil,
-		TelemetryRepo:                nil,
-		TriggersApp:                  nil,
-		CacheAdapter:                 nil,
-		IssuerMetadataRefresher:      nil,
-		RemoteSessionAssertionSigner: nil,
-		StartupSeeds:                 nil,
-		EmailService:                 nil,
-		AssistantsCore:               nil,
-		TemporalEnv:                  env,
-		PIIScanner:                   nil,
-		PIScanner:                    nil,
-		CustomRuleScanner:            nil,
-		BuiltinPresets:               nil,
-		ShadowMCPClient:              nil,
-		AuditLogger:                  nil,
-		WorkOSClient:                 workos.NewStubClient(),
-		ProductFeatures:              nil,
-		ClickhouseConn:               nil,
-		PluginPublisher:              nil,
-		Publishers:                   nil,
-		TrialEmailsService:           nil,
-		TrialFixtureHandler:          nil,
-		RiskFingerprinter:            risk.Fingerprinter{},
-		DisableRiskRetroReconcile:    false,
-		LLMAnalyzerEnabled:           false,
+		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
+		CatalogPromotions:              nil,
+		CatalogPromotionDeliveryPaused: false,
+		MCPCatalog:                     nil,
+		GuardianPolicy:                 nil,
+		TunnelHTTPClient:               nil,
+		DB:                             nil,
+		EncryptionClient:               nil,
+		FeatureProvider:                nil,
+		AssetStorage:                   nil,
+		SlackClient:                    nil,
+		SlackDirectoryTokenRefresher:   nil,
+		ChatMessageWriter:              nil,
+		ChatClient:                     nil,
+		OpenRouter:                     nil,
+		OpenRouterSpend:                nil,
+		K8sClient:                      nil,
+		ExpectedTargetCNAME:            "",
+		ExpectedARecords:               nil,
+		GitHubEvidenceToken:            "",
+		SiteURL:                        nil,
+		ServerURL:                      nil,
+		OrgHosts:                       orghost.New(orghost.Config{ServerURL: nil, SiteURL: nil, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
+		BillingTracker:                 nil,
+		BillingRepository:              nil,
+		StripeClient:                   nil,
+		RedisClient:                    nil,
+		PosthogClient:                  nil,
+		FunctionsDeployer:              nil,
+		FunctionsVersion:               "",
+		RagService:                     nil,
+		MCPRegistryClient:              nil,
+		TelemetryLogger:                nil,
+		MeterReadConn:                  nil,
+		TelemetryRepo:                  nil,
+		TriggersApp:                    nil,
+		CacheAdapter:                   nil,
+		IssuerMetadataRefresher:        nil,
+		RemoteSessionAssertionSigner:   nil,
+		IssuerKeySweeper:               nil,
+		StartupSeeds:                   nil,
+		EmailService:                   nil,
+		AssistantsCore:                 nil,
+		TemporalEnv:                    env,
+		PIScanner:                      nil,
+		AuditLogger:                    nil,
+		WorkOSClient:                   workos.NewStubClient(),
+		ProductFeatures:                nil,
+		ClickhouseConn:                 nil,
+		PluginPublisher:                nil,
+		Publishers:                     nil,
+		TrialEmailsService:             nil,
+		TrialFixtureHandler:            nil,
+		RiskFingerprinter:              risk.Fingerprinter{},
+		DisableRiskRetroReconcile:      false,
+		LLMAnalyzerEnabled:             false,
 	}
 
 	for _, o := range options {
 		opts = &WorkerOptions{
-			GuardianPolicy:               conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
-			TunnelHTTPClient:             conv.Default(o.TunnelHTTPClient, opts.TunnelHTTPClient),
-			DB:                           conv.Default(o.DB, opts.DB),
-			EncryptionClient:             conv.Default(o.EncryptionClient, opts.EncryptionClient),
-			FeatureProvider:              conv.Default(o.FeatureProvider, opts.FeatureProvider),
-			AssetStorage:                 conv.Default(o.AssetStorage, opts.AssetStorage),
-			SlackClient:                  conv.Default(o.SlackClient, opts.SlackClient),
-			SlackDirectoryTokenRefresher: conv.Default(o.SlackDirectoryTokenRefresher, opts.SlackDirectoryTokenRefresher),
-			ChatMessageWriter:            conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
-			OpenRouter:                   conv.Default(o.OpenRouter, opts.OpenRouter),
-			OpenRouterSpend:              conv.Default(o.OpenRouterSpend, opts.OpenRouterSpend),
-			ChatClient:                   conv.Default(o.ChatClient, opts.ChatClient),
-			K8sClient:                    conv.Default(o.K8sClient, opts.K8sClient),
-			ExpectedTargetCNAME:          conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
-			ExpectedARecords:             conv.DefaultSlice(o.ExpectedARecords, opts.ExpectedARecords),
-			GitHubEvidenceToken:          conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
-			SiteURL:                      conv.Default(o.SiteURL, opts.SiteURL),
-			OrgHosts:                     conv.Default(o.OrgHosts, opts.OrgHosts),
-			BillingTracker:               conv.Default(o.BillingTracker, opts.BillingTracker),
-			BillingRepository:            conv.Default(o.BillingRepository, opts.BillingRepository),
-			StripeClient:                 conv.Default(o.StripeClient, opts.StripeClient),
-			RedisClient:                  conv.Default(o.RedisClient, opts.RedisClient),
-			PosthogClient:                conv.Default(o.PosthogClient, opts.PosthogClient),
-			FunctionsDeployer:            conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
-			FunctionsVersion:             conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
-			RagService:                   conv.Default(o.RagService, opts.RagService),
-			MCPRegistryClient:            conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
-			MCPCatalog:                   conv.Default(o.MCPCatalog, opts.MCPCatalog),
-			TelemetryLogger:              conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
-			MeterReadConn:                conv.Default(o.MeterReadConn, opts.MeterReadConn),
-			TelemetryRepo:                conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
-			TriggersApp:                  conv.Default(o.TriggersApp, opts.TriggersApp),
-			CacheAdapter:                 conv.Default(o.CacheAdapter, opts.CacheAdapter),
-			IssuerMetadataRefresher:      conv.Default(o.IssuerMetadataRefresher, opts.IssuerMetadataRefresher),
-			RemoteSessionAssertionSigner: conv.Default(o.RemoteSessionAssertionSigner, opts.RemoteSessionAssertionSigner),
-			StartupSeeds:                 conv.DefaultSlice(o.StartupSeeds, opts.StartupSeeds),
-			EmailService:                 conv.Default(o.EmailService, opts.EmailService),
-			AssistantsCore:               conv.Default(o.AssistantsCore, opts.AssistantsCore),
-			TemporalEnv:                  conv.Default(o.TemporalEnv, opts.TemporalEnv),
-			PIIScanner:                   conv.Default(o.PIIScanner, opts.PIIScanner),
-			PIScanner:                    conv.Default(o.PIScanner, opts.PIScanner),
-			CustomRuleScanner:            conv.Default(o.CustomRuleScanner, opts.CustomRuleScanner),
-			BuiltinPresets:               conv.Default(o.BuiltinPresets, opts.BuiltinPresets),
-			ShadowMCPClient:              conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
-			AuditLogger:                  conv.Default(o.AuditLogger, opts.AuditLogger),
-			WorkOSClient:                 conv.Default(o.WorkOSClient, opts.WorkOSClient),
-			ProductFeatures:              conv.Default(o.ProductFeatures, opts.ProductFeatures),
-			ClickhouseConn:               conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
-			PluginPublisher:              conv.Default(o.PluginPublisher, opts.PluginPublisher),
-			PublicationRequests:          conv.Default(o.PublicationRequests, opts.PublicationRequests),
-			Publishers:                   conv.Default(o.Publishers, opts.Publishers),
-			TrialEmailsService:           conv.Default(o.TrialEmailsService, opts.TrialEmailsService),
+			CatalogPromotions:              conv.Default(o.CatalogPromotions, opts.CatalogPromotions),
+			CatalogPromotionDeliveryPaused: o.CatalogPromotionDeliveryPaused || opts.CatalogPromotionDeliveryPaused,
+			GuardianPolicy:                 conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
+			TunnelHTTPClient:               conv.Default(o.TunnelHTTPClient, opts.TunnelHTTPClient),
+			DB:                             conv.Default(o.DB, opts.DB),
+			EncryptionClient:               conv.Default(o.EncryptionClient, opts.EncryptionClient),
+			FeatureProvider:                conv.Default(o.FeatureProvider, opts.FeatureProvider),
+			AssetStorage:                   conv.Default(o.AssetStorage, opts.AssetStorage),
+			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
+			SlackDirectoryTokenRefresher:   conv.Default(o.SlackDirectoryTokenRefresher, opts.SlackDirectoryTokenRefresher),
+			ChatMessageWriter:              conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
+			OpenRouter:                     conv.Default(o.OpenRouter, opts.OpenRouter),
+			OpenRouterSpend:                conv.Default(o.OpenRouterSpend, opts.OpenRouterSpend),
+			ChatClient:                     conv.Default(o.ChatClient, opts.ChatClient),
+			K8sClient:                      conv.Default(o.K8sClient, opts.K8sClient),
+			ExpectedTargetCNAME:            conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
+			ExpectedARecords:               conv.DefaultSlice(o.ExpectedARecords, opts.ExpectedARecords),
+			GitHubEvidenceToken:            conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
+			SiteURL:                        conv.Default(o.SiteURL, opts.SiteURL),
+			ServerURL:                      conv.Default(o.ServerURL, opts.ServerURL),
+			OrgHosts:                       conv.Default(o.OrgHosts, opts.OrgHosts),
+			BillingTracker:                 conv.Default(o.BillingTracker, opts.BillingTracker),
+			BillingRepository:              conv.Default(o.BillingRepository, opts.BillingRepository),
+			StripeClient:                   conv.Default(o.StripeClient, opts.StripeClient),
+			RedisClient:                    conv.Default(o.RedisClient, opts.RedisClient),
+			PosthogClient:                  conv.Default(o.PosthogClient, opts.PosthogClient),
+			FunctionsDeployer:              conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
+			FunctionsVersion:               conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
+			RagService:                     conv.Default(o.RagService, opts.RagService),
+			MCPRegistryClient:              conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
+			MCPCatalog:                     conv.Default(o.MCPCatalog, opts.MCPCatalog),
+			TelemetryLogger:                conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
+			MeterReadConn:                  conv.Default(o.MeterReadConn, opts.MeterReadConn),
+			TelemetryRepo:                  conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
+			TriggersApp:                    conv.Default(o.TriggersApp, opts.TriggersApp),
+			CacheAdapter:                   conv.Default(o.CacheAdapter, opts.CacheAdapter),
+			IssuerMetadataRefresher:        conv.Default(o.IssuerMetadataRefresher, opts.IssuerMetadataRefresher),
+			RemoteSessionAssertionSigner:   conv.Default(o.RemoteSessionAssertionSigner, opts.RemoteSessionAssertionSigner),
+			IssuerKeySweeper:               conv.Default(o.IssuerKeySweeper, opts.IssuerKeySweeper),
+			StartupSeeds:                   conv.DefaultSlice(o.StartupSeeds, opts.StartupSeeds),
+			EmailService:                   conv.Default(o.EmailService, opts.EmailService),
+			AssistantsCore:                 conv.Default(o.AssistantsCore, opts.AssistantsCore),
+			TemporalEnv:                    conv.Default(o.TemporalEnv, opts.TemporalEnv),
+			PIScanner:                      conv.Default(o.PIScanner, opts.PIScanner),
+			AuditLogger:                    conv.Default(o.AuditLogger, opts.AuditLogger),
+			WorkOSClient:                   conv.Default(o.WorkOSClient, opts.WorkOSClient),
+			ProductFeatures:                conv.Default(o.ProductFeatures, opts.ProductFeatures),
+			ClickhouseConn:                 conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
+			PluginPublisher:                conv.Default(o.PluginPublisher, opts.PluginPublisher),
+			PublicationRequests:            conv.Default(o.PublicationRequests, opts.PublicationRequests),
+			Publishers:                     conv.Default(o.Publishers, opts.Publishers),
+			TrialEmailsService:             conv.Default(o.TrialEmailsService, opts.TrialEmailsService),
 			TrialFixtureHandler: func() func(context.Context, string) (bool, error) {
 				if o.TrialFixtureHandler != nil {
 					return o.TrialFixtureHandler
@@ -503,10 +513,7 @@ func NewTemporalWorker(
 		opts.CacheAdapter,
 		opts.EmailService,
 		opts.AssistantsCore,
-		opts.PIIScanner,
 		opts.PIScanner,
-		opts.CustomRuleScanner,
-		opts.ShadowMCPClient,
 		opts.AuditLogger,
 		opts.WorkOSClient,
 		opts.ProductFeatures,
@@ -515,7 +522,6 @@ func NewTemporalWorker(
 		opts.Publishers,
 		celEng,
 		judgeRateLimiter,
-		opts.BuiltinPresets,
 		opts.TrialEmailsService,
 		opts.TrialFixtureHandler,
 		opts.GitHubEvidenceToken,
@@ -527,10 +533,12 @@ func NewTemporalWorker(
 		remoteSessionEnricher,
 		opts.RemoteSessionAssertionSigner,
 		opts.StartupSeeds,
+		signInEpochs(opts.RedisClient),
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
 	temporalWorker.RegisterActivity(activities.TransitionDeployment)
+	temporalWorker.RegisterActivity(activities.CompleteDeploymentWithExpectedActive)
 	temporalWorker.RegisterActivity(activities.ProvisionFunctionsAccess)
 	temporalWorker.RegisterActivity(activities.DeployFunctionRunners)
 	temporalWorker.RegisterActivity(activities.ReapFlyApps)
@@ -542,6 +550,8 @@ func NewTemporalWorker(
 	adminReconciliationActivities := NewOpenRouterAdminReconciliationActivities(logger, adminReconciler)
 	temporalWorker.RegisterActivityWithOptions(adminReconciliationActivities.CaptureCursor, activity.RegisterOptions{Name: OpenRouterAdminCaptureCursorActivityName})
 	temporalWorker.RegisterActivityWithOptions(adminReconciliationActivities.Reconcile, activity.RegisterOptions{Name: OpenRouterAdminReconcileActivityName})
+	issuerKeySweep := NewInternalSessionIssuerKeySweepActivities(logger, meterProvider, opts.IssuerKeySweeper)
+	temporalWorker.RegisterActivityWithOptions(issuerKeySweep.Sweep, activity.RegisterOptions{Name: InternalSessionIssuerKeySweepActivityName})
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomainV2)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
@@ -607,6 +617,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CancelAssistantsSubscription)
 	// WorkOS sync activities
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
+	temporalWorker.RegisterActivity(activities.SweepSignInRevocations)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSGlobalRoleEvents)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSUserEvents)
 	// Killswitch maintenance activities
@@ -614,6 +625,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CleanupExpiredKillswitchOperations)
 	temporalWorker.RegisterActivity(activities.CleanupTrustedDelegationCredentials)
 	temporalWorker.RegisterActivity(activities.CleanupMCPFindingEvidence)
+	temporalWorker.RegisterActivity(activities.SweepDirectoryReviews)
+	temporalWorker.RegisterActivity(activities.SendDirectoryReviewEmails)
 	// Publish outbox relay activities
 	temporalWorker.RegisterActivity(activities.DrainPublishOutbox)
 	temporalWorker.RegisterActivity(activities.GCPublishOutboxDeadLetters)
@@ -678,6 +691,7 @@ func NewTemporalWorker(
 	})
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
+	temporalWorker.RegisterWorkflow(ProcessGuardedDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
 	temporalWorker.RegisterWorkflow(OpenRouterSpendCapWorkflow)
@@ -703,13 +717,32 @@ func NewTemporalWorker(
 		slackDirectory := newSlackDirectoryActivities(opts.DB, opts.EncryptionClient, opts.GuardianPolicy.PooledClient(), opts.SlackDirectoryTokenRefresher)
 		temporalWorker.RegisterActivity(slackDirectory.SyncSlackDirectory)
 		temporalWorker.RegisterActivity(slackDirectory.ListDueSlackDirectories)
+		if opts.ServerURL != nil {
+			approvals := approval.NewService(logger, opts.DB, opts.ServerURL, opts.AuditLogger)
+			cards := slackapproval.NewCards(opts.DB, approvals, opts.OrgHosts)
+			notifier := slackapproval.NewNotifier(logger, cards, slackDirectory.sync, slackapi.NewClient("", opts.GuardianPolicy.PooledClient()))
+			riskApprovalSlack := &riskApprovalSlackActivities{logger: logger, notifier: notifier}
+			temporalWorker.RegisterActivity(riskApprovalSlack.NotifyRiskApprovalApprovers)
+			temporalWorker.RegisterActivity(riskApprovalSlack.FinishRiskApprovalCards)
+		}
 	}
+	temporalWorker.RegisterWorkflow(RiskApprovalSlackWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
+	temporalWorker.RegisterWorkflow(InternalSessionIssuerKeySweepWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetSweepWorkflow)
+	if opts.CatalogPromotions != nil {
+		temporalWorker.RegisterWorkflow(CatalogPromotionWorkflow)
+		temporalWorker.RegisterWorkflow(CatalogPromotionDeliveryWorkflow)
+		temporalWorker.RegisterWorkflow(CatalogPromotionReviewWorkflow)
+		promotionActivities := &catalogPromotionActivities{jobs: opts.CatalogPromotions, deliveryPaused: opts.CatalogPromotionDeliveryPaused, now: time.Now}
+		temporalWorker.RegisterActivityWithOptions(promotionActivities.reviewBatch, activity.RegisterOptions{Name: catalogPromotionReviewBatchActivity})
+		temporalWorker.RegisterActivityWithOptions(promotionActivities.discover, activity.RegisterOptions{Name: catalogPromotionDiscoverActivity})
+		temporalWorker.RegisterActivityWithOptions(promotionActivities.dispatch, activity.RegisterOptions{Name: catalogPromotionDispatchActivity})
+	}
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(SyncIdentityMapWorkflow)
 	temporalWorker.RegisterWorkflow(SyncTenantDimensionsWorkflow)
@@ -751,10 +784,13 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(KillswitchMaintenanceWorkflow)
 	temporalWorker.RegisterWorkflow(TrustedDelegationCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(MCPFindingEvidenceCleanupWorkflow)
+	temporalWorker.RegisterWorkflow(DirectoryReviewSweepWorkflow)
+	temporalWorker.RegisterWorkflow(DirectoryReviewEmailsWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PlatformMCPReceiptGCWorkflow)
+	temporalWorker.RegisterWorkflow(SignInRevocationSweepWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
 	temporalWorker.RegisterWorkflow(PluginPublishWorkflow)
 	temporalWorker.RegisterWorkflow(PluginPublishWorkflowDebounced)
@@ -852,6 +888,18 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		return
 	}
 
+	if opts.CatalogPromotions != nil {
+		if err := addCatalogPromotionSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "register catalogue promotion schedule", attr.SlogError(err))
+		}
+	}
+
+	// The sweep disables KMS versions. Preview databases clone dev's keys,
+	// so only the shared queue may run it.
+	if err := AddInternalSessionIssuerKeySweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add internal session issuer key sweep schedule", attr.SlogError(err))
+	}
+
 	if err := AddPlatformUsageMetricsSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add platform usage metrics schedule", attr.SlogError(err))
@@ -914,6 +962,14 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		logger.ErrorContext(ctx, "failed to add MCP finding evidence cleanup schedule", attr.SlogError(err))
 	}
 
+	if err := AddDirectoryReviewSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add directory review sweep schedule", attr.SlogError(err))
+	}
+
+	if err := AddDirectoryReviewEmailsSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add directory review emails schedule", attr.SlogError(err))
+	}
+
 	if err := AddKillswitchMaintenanceSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add killswitch maintenance schedule", attr.SlogError(err))
 	}
@@ -928,6 +984,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddPlatformMCPReceiptGCSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add platform mcp receipt gc schedule", attr.SlogError(err))
+	}
+
+	if err := AddSignInRevocationSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add sign-in revocation sweep schedule", attr.SlogError(err))
 	}
 
 	if err := AddStagedTelemetrySweepSchedule(ctx, env); err != nil {
@@ -1081,4 +1141,12 @@ func (w *Workers) Stop() {
 		wg.Go(stop)
 	}
 	wg.Wait()
+}
+
+// signInEpochs lets the revocation sweep retry sign-out-everywhere epochs.
+func signInEpochs(redisClient *redis.Client) signins.EpochRaiser {
+	if redisClient == nil {
+		return nil
+	}
+	return sessions.NewEpochStore(redisClient)
 }

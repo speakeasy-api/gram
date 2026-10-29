@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 )
@@ -29,6 +30,20 @@ type stubAnalyticsEngine struct {
 }
 
 func (s *stubAnalyticsEngine) Catalog() *analytics.Catalog { return analytics.Default }
+
+func (s *stubAnalyticsEngine) DescribeSignals(context.Context, analytics.Tenant) (*analytics.SignalCatalog, error) {
+	return &analytics.SignalCatalog{Dataset: "signals"}, nil
+}
+
+func (s *stubAnalyticsEngine) ReadSignalDefinition(context.Context, analytics.Tenant, string, string) (*analytics.SignalDefinition, error) {
+	return nil, ErrUnavailable
+}
+
+func (s *stubAnalyticsEngine) SignalFindings(_ context.Context, tenant analytics.Tenant, _ analytics.Window, _ analytics.SignalFindingsRequest, _ analytics.ConversationAccess) (*analytics.SignalFindings, error) {
+	s.calls++
+	s.tenant = tenant
+	return &analytics.SignalFindings{Concentration: analytics.Row{"top_session_share": 0.5}}, s.err
+}
 
 func (s *stubAnalyticsEngine) Query(_ context.Context, tenant analytics.Tenant, req analytics.Request) (*analytics.QueryResult, error) {
 	s.calls++
@@ -67,6 +82,7 @@ func (s *stubAnalyticsProjects) ResolveProjectRead(_ context.Context, _ Principa
 }
 
 type analyticsTestHarness struct {
+	service  *AnalyticsService
 	reg      *Registrar
 	engine   *stubAnalyticsEngine
 	projects *stubAnalyticsProjects
@@ -91,17 +107,24 @@ func newAnalyticsTestHarness(t *testing.T, evaluation feature.Evaluation, budget
 	projects := &stubAnalyticsProjects{project: project, err: nil, inputs: nil}
 	flags := &riskMutationFlagProvider{evaluation: evaluation, err: nil, flag: "", groups: nil}
 	logs := &bytes.Buffer{}
-	service := NewAnalyticsService(slog.New(slog.NewJSONHandler(logs, nil)), engine, flags, riskMutationOrganizationResolver{slug: "org", err: nil}, projects, budget)
+	service := NewAnalyticsService(slog.New(slog.NewJSONHandler(logs, nil)), engine, flags, riskMutationOrganizationResolver{slug: "org", err: nil}, projects, budget, nil)
 	require.NotNil(t, service)
 
 	reg := newRegistrar(newTestMCPServer())
 	registerAnalyticsTools(reg, service)
-	return &analyticsTestHarness{reg: reg, engine: engine, projects: projects, flags: flags, project: project, logs: logs}
+	return &analyticsTestHarness{reg: reg, engine: engine, projects: projects, flags: flags, project: project, logs: logs, service: service}
 }
 
 func (h *analyticsTestHarness) invoke(t *testing.T, tool, arguments string) (any, error) {
 	t.Helper()
 	return descriptorByName(t, h.reg, tool).Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(arguments))
+}
+
+// invokeWithGrants calls the tool as a caller holding exactly grants.
+func (h *analyticsTestHarness) invokeWithGrants(t *testing.T, tool, arguments string, grants ...authz.Grant) (any, error) {
+	t.Helper()
+	ctx := authz.GrantsToContext(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), grants)
+	return descriptorByName(t, h.reg, tool).Invoke(ctx, json.RawMessage(arguments))
 }
 
 func (h *analyticsTestHarness) projectArguments() string {
@@ -196,7 +219,7 @@ func TestAnalyticsToolsDeclareTheirContract(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(descriptorByName(t, h.reg, runAnalyticsQueryToolName).InputSchema, &query))
 	require.Equal(t, []string{"project_id", "dataset", "from", "to"}, query.Required)
-	require.Equal(t, []string{"none", "hour", "day", "week", "month"}, query.Properties.Grain.Enum)
+	require.Empty(t, query.Properties.Grain.Enum, "API interval values are discovered and validated by the engine")
 	require.Equal(t, analytics.MaxDimensions, query.Properties.Dimensions.MaxItems)
 	require.Equal(t, analytics.MaxLimit, query.Properties.Limit.Maximum)
 	require.Equal(t, []string{"count", "count_distinct", "sum", "avg", "min", "max", "p50", "p95", "p99"}, query.Properties.Measures.Items.Properties.Op.Enum)
@@ -236,10 +259,10 @@ func TestAnalyticsToolsStubWithoutAService(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))
-	require.Nil(t, NewAnalyticsService(nil, &stubAnalyticsEngine{}, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, &stubAnalyticsProjects{}, allowAnalyticsBudget))
-	require.Nil(t, NewAnalyticsService(logger, nil, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, &stubAnalyticsProjects{}, allowAnalyticsBudget))
-	require.Nil(t, NewAnalyticsService(logger, &stubAnalyticsEngine{}, nil, nil, &stubAnalyticsProjects{}, allowAnalyticsBudget))
-	require.Nil(t, NewAnalyticsService(logger, &stubAnalyticsEngine{}, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, nil, allowAnalyticsBudget))
+	require.Nil(t, NewAnalyticsService(nil, &stubAnalyticsEngine{}, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, &stubAnalyticsProjects{}, allowAnalyticsBudget, nil))
+	require.Nil(t, NewAnalyticsService(logger, nil, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, &stubAnalyticsProjects{}, allowAnalyticsBudget, nil))
+	require.Nil(t, NewAnalyticsService(logger, &stubAnalyticsEngine{}, nil, nil, &stubAnalyticsProjects{}, allowAnalyticsBudget, nil))
+	require.Nil(t, NewAnalyticsService(logger, &stubAnalyticsEngine{}, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, nil, allowAnalyticsBudget, nil))
 }
 
 func indexOfDescriptor(t *testing.T, reg *Registrar, name string) int {
@@ -263,12 +286,16 @@ func TestDescribeAnalyticsCatalogServesTheCatalog(t *testing.T) {
 	require.True(t, ok)
 
 	require.Equal(t, AnalyticsProject{ID: h.project.ID.String(), Name: "Project", Slug: "project"}, output.Project)
-	require.Equal(t, []string{"none", "hour", "day", "week", "month"}, output.Grains)
+	require.Equal(t, []string{"none", "minute", "hour", "day", "week", "month"}, output.Grains)
 	require.Equal(t, AnalyticsLimits{MaxDimensions: 3, MaxFilterValues: 100, DefaultLimit: 100, MaxLimit: 1000, MaxRowsLimit: 200, DefaultValuesLimit: 50, MaxValuesLimit: 200}, output.Limits)
 
+	// The harness loads no grants, so a dataset for org admins alone is not
+	// described.
 	declared := make([]string, 0, len(analytics.Default.Datasets()))
 	for _, ds := range analytics.Default.Datasets() {
-		declared = append(declared, ds.Name)
+		if _, restricted := ds.AccessCheck(testRiskPrincipal("user").OrganizationID); !restricted {
+			declared = append(declared, ds.Name)
+		}
 	}
 	served := make([]string, 0, len(output.Datasets))
 	byName := make(map[string]AnalyticsDataset, len(output.Datasets))
@@ -278,24 +305,21 @@ func TestDescribeAnalyticsCatalogServesTheCatalog(t *testing.T) {
 	}
 	require.Equal(t, declared, served)
 
-	sessions := byName["sessions"]
-	require.Equal(t, "event", sessions.Kind)
-	require.Equal(t, "session", sessions.Grain)
-	require.Equal(t, analytics.MaxEventTimeRangeDays, sessions.MaxTimeRangeDays)
-	fields := make(map[string]AnalyticsField, len(sessions.Fields))
-	for _, f := range sessions.Fields {
-		fields[f.Name] = f
-	}
-	require.Equal(t, AnalyticsField{Name: "user", Type: "string", Role: "dimension", Default: true, Unit: "", Operators: []string{"equals", "in"}, Aggregations: []string{"count_distinct"}, Description: "", Lookup: nil}, fields["user"])
-	require.Equal(t, "measure", fields["duration_seconds"].Role)
-	require.Equal(t, "s", fields["duration_seconds"].Unit)
-	require.Equal(t, []string{"sum", "avg", "p95"}, fields["duration_seconds"].Aggregations)
-	require.Empty(t, fields["duration_seconds"].Operators)
-
-	toolFields := make(map[string]AnalyticsField, len(byName["tool_calls"].Fields))
-	for _, f := range byName["tool_calls"].Fields {
+	toolCalls := byName["tool_calls"]
+	require.Equal(t, "event", toolCalls.Kind)
+	require.Equal(t, "tool call", toolCalls.Grain)
+	require.Equal(t, analytics.MaxEventTimeRangeDays, toolCalls.MaxTimeRangeDays)
+	toolFields := make(map[string]AnalyticsField, len(toolCalls.Fields))
+	for _, f := range toolCalls.Fields {
 		toolFields[f.Name] = f
 	}
+	require.Equal(t, AnalyticsField{Name: "user", Type: "string", Role: "dimension", Default: false, Unit: "", Operators: []string{"equals", "in"}, Aggregations: []string{"count_distinct"}, Description: "", Lookup: nil}, toolFields["user"])
+	require.True(t, toolFields["tool_name"].Default)
+	require.Equal(t, "measure", toolFields["duration_ms"].Role)
+	require.Equal(t, "ms", toolFields["duration_ms"].Unit)
+	require.Equal(t, []string{"sum", "avg", "p95"}, toolFields["duration_ms"].Aggregations)
+	require.Empty(t, toolFields["duration_ms"].Operators)
+
 	require.NotNil(t, toolFields["mcp_server"].Lookup, "describe says which map mcp_server reads through")
 	require.Equal(t, analytics.MCPServerDisplayNamesLookup, toolFields["mcp_server"].Lookup.Name)
 	require.NotEmpty(t, toolFields["mcp_server"].Description)
@@ -321,7 +345,7 @@ func TestAnalyticsToolsRefuseWhenExploreIsOff(t *testing.T) {
 			refusal := requireAnalyticsRefusal(t, err)
 			require.Equal(t, analyticsNotEnabledCode, refusal.Code, name)
 			require.Equal(t, analyticsFeature, refusal.Feature, name)
-			require.Contains(t, refusal.Message, "not switched on", name)
+			require.Contains(t, refusal.Message, "not enabled", name)
 			require.Contains(t, refusal.Message, "Explore", name)
 		}
 		require.Equal(t, feature.FlagExplore, h.flags.flag)
@@ -519,7 +543,6 @@ func TestAnalyticsToolSchemasRejectWhatTheCompilerWouldRefuse(t *testing.T) {
 		"an op the catalog does not know":       {runAnalyticsQueryToolName, h.queryArguments(`,"measures":[{"op":"median","field":"duration_ms"}]`)},
 		"an operator the catalog does not know": {runAnalyticsQueryToolName, h.queryArguments(`,"filters":[{"field":"status","operator":"like","values":["ok"]}]`)},
 		"a filter with no values":               {runAnalyticsQueryToolName, h.queryArguments(`,"filters":[{"field":"status","operator":"in","values":[]}]`)},
-		"a grain the catalog does not know":     {runAnalyticsQueryToolName, h.queryArguments(`,"grain":"minute"`)},
 		"an argument the tool does not take":    {runAnalyticsQueryToolName, h.queryArguments(`,"sql":"select 1"`)},
 		"a values limit past the maximum":       {listAnalyticsDimensionValuesToolName, h.valuesArguments(`,"limit":201`)},
 		"a values call without a dimension":     {listAnalyticsDimensionValuesToolName, `{"project_id":"` + h.project.ID.String() + `","dataset":"tool_calls",` + analyticsTestWindow + `}`},
@@ -529,4 +552,50 @@ func TestAnalyticsToolSchemasRejectWhatTheCompilerWouldRefuse(t *testing.T) {
 	}
 	require.Zero(t, h.engine.calls)
 	require.Empty(t, h.projects.inputs, "a request the schema rejects never reaches the project resolver")
+}
+
+func TestDescribeAnalyticsCatalogListsRiskFindingsToOrgAdmins(t *testing.T) {
+	t.Parallel()
+
+	h := newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
+	organizationID := testRiskPrincipal("user").OrganizationID
+	raw, err := h.invokeWithGrants(t, describeAnalyticsCatalogToolName, h.projectArguments(), authz.NewGrant(authz.ScopeOrgAdmin, organizationID))
+	require.NoError(t, err)
+	output, ok := raw.(DescribeAnalyticsCatalogOutput)
+	require.True(t, ok)
+
+	var riskFindings *AnalyticsDataset
+	for i := range output.Datasets {
+		if output.Datasets[i].Name == "risk_findings" {
+			riskFindings = &output.Datasets[i]
+		}
+	}
+	require.NotNil(t, riskFindings, "an org admin is described the risk dataset")
+	require.Equal(t, "metric", riskFindings.Kind, "it answers aggregates only")
+	require.Equal(t, "event", output.Datasets[0].Kind, "tool_calls answers rows too")
+
+	raw, err = h.invokeWithGrants(t, describeAnalyticsCatalogToolName, h.projectArguments(), authz.NewGrant(authz.ScopeProjectRead, h.project.ID.String()))
+	require.NoError(t, err)
+	output, ok = raw.(DescribeAnalyticsCatalogOutput)
+	require.True(t, ok)
+	for _, ds := range output.Datasets {
+		require.NotEqual(t, "risk_findings", ds.Name, "a member is not described the risk dataset")
+	}
+}
+
+func TestAnalyticsToolsRefuseRiskFindingsToMembers(t *testing.T) {
+	t.Parallel()
+
+	h := newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
+	member := authz.NewGrant(authz.ScopeProjectRead, h.project.ID.String())
+	for tool, arguments := range map[string]string{
+		runAnalyticsQueryToolName:            `{"project_id":"` + h.project.ID.String() + `","dataset":"risk_findings",` + analyticsTestWindow + `,"measures":[{"op":"count"}]}`,
+		listAnalyticsDimensionValuesToolName: `{"project_id":"` + h.project.ID.String() + `","dataset":"risk_findings","dimension":"category",` + analyticsTestWindow + `}`,
+	} {
+		_, err := h.invokeWithGrants(t, tool, arguments, member)
+		require.Error(t, err, tool)
+		require.Contains(t, err.Error(), `"code":"forbidden"`, tool)
+		require.Contains(t, err.Error(), "Only organization administrators", tool)
+	}
+	require.Zero(t, h.engine.calls, "a refused read never reaches the engine")
 }

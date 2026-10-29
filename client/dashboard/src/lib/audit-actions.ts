@@ -16,10 +16,13 @@ export const AUDIT_ACTIONS = [
   "slack-identity-mapping:reconfirm",
   "slack-identity-mapping:unmap",
   "access_challenge:resolve",
+  "access_member:revoke_sign_ins",
   "access_member:update_role",
   "access_role:create",
   "access_role:delete",
   "access_role:update",
+  "agent:connection_block_create",
+  "agent:connection_block_delete",
   "agent:create",
   "agent:delete",
   "agent:owner_loss",
@@ -39,7 +42,16 @@ export const AUDIT_ACTIONS = [
   "ai_tool_decision:set",
   "api_key:create",
   "api_key:revoke",
+  "api_key:update_policy",
   "asset:create",
+  "auth-client:attach-mcp-server",
+  "auth-client:create",
+  "auth-client:detach-mcp-server",
+  "auth-client:disable",
+  "auth-client:enable",
+  "auth-client:update",
+  "auth-client:update-audience",
+  "auth-client:update-headers",
   "assistant:identity_provision",
   "assistant:tool_call",
   "aws_iam_credential:create",
@@ -53,6 +65,10 @@ export const AUDIT_ACTIONS = [
   "billing_metadata:create_stripe_portal",
   "billing_metadata:resume_stripe_subscription",
   "billing_metadata:update",
+  "catalog-promotion:archive",
+  "catalog-promotion:reject",
+  "catalog-promotion:restore",
+  "catalog-promotion:retry-docs",
   "chat_analysis_settings:upsert",
   "chat_session:access",
   "chat_session:handoff_export",
@@ -80,6 +96,10 @@ export const AUDIT_ACTIONS = [
   "device_integration:retry_schedule",
   "device_integration:update_schedule",
   "device_integration:upsert",
+  "directory_review_item:approve",
+  "directory_review_item:dismiss",
+  "directory_review_item:opt_out",
+  "directory_review_settings:update",
   "directory_role_mapping:delete",
   "directory_role_mapping:set",
   "environment:create",
@@ -99,6 +119,8 @@ export const AUDIT_ACTIONS = [
   "identity-provider-connection:submit-client-id",
   "identity-provider-connection:sync-applications",
   "identity-provider-connection:verify",
+  "internal_session_issuer:disable",
+  "internal_session_issuer:enable",
   "json_web_key:activate",
   "json_web_key:delete",
   "json_web_key:publish",
@@ -119,9 +141,11 @@ export const AUDIT_ACTIONS = [
   "mcp-endpoint:update",
   "mcp-server:create",
   "mcp-server:delete",
+  "mcp-server:promote-catalogue",
   "mcp-server:update",
   "mcp-server:update-scope-pin",
   "mcp-server:update-tool-metadata",
+  "mcp-server:update-upstream-auth-requirement",
   "mcp_approval_request:approve",
   "mcp_approval_request:create",
   "mcp_approval_request:deny",
@@ -148,6 +172,8 @@ export const AUDIT_ACTIONS = [
   "organization:disabled",
   "organization:enabled",
   "organization:whitelist_updated",
+  "organization:account_type_changed",
+  "organization:inference_key_repaired",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_converted",
   "organization:enterprise_trial_demoted",
@@ -161,6 +187,8 @@ export const AUDIT_ACTIONS = [
   "organization:onboarding_stack_updated",
   "organization:onboarding_playbook_assigned",
   "organization:onboarding_playbook_unassigned",
+  "organization:partner_signup_attributed",
+  "organization:promotion_redeemed",
   "organization:payg_activated",
   "organization:payg_deactivated",
   "organization:product_feature_disabled",
@@ -213,6 +241,7 @@ export const AUDIT_ACTIONS = [
   "remote-session-client:detach-mcp-server",
   "remote-session-client:detach-user-session-issuer",
   "remote-session-client:disable-identity-chaining",
+  "remote-session-client:duplicate",
   "remote-session-client:enable-identity-chaining",
   "remote-session-client:revoke-sessions",
   "remote-session-client:update",
@@ -221,6 +250,7 @@ export const AUDIT_ACTIONS = [
   "remote-session-issuer:delete",
   "remote-session-issuer:migrate",
   "remote-session-issuer:update",
+  "remote-session-issuer:update_ema_providers",
   "remote-session:attach",
   "remote-session:delete",
   "remote-session:detach",
@@ -228,6 +258,9 @@ export const AUDIT_ACTIONS = [
   "risk_exclusion:create",
   "risk_exclusion:delete",
   "risk_exclusion:update",
+  "risk_policy:approval_approve",
+  "risk_policy:approval_deny",
+  "risk_policy:approval_request",
   "risk_policy:bypass_request_approve",
   "risk_policy:bypass_request_create",
   "risk_policy:bypass_request_deny",
@@ -255,14 +288,17 @@ export const AUDIT_ACTIONS = [
   "skill:archive",
   "skill:create",
   "skill:distribute",
+  "skill:link",
   "skill:restore_version",
   "skill:share_link_create",
   "skill:share_link_revoke",
   "skill:suggestion_approve",
   "skill:suggestion_dismiss",
   "skill:undistribute",
+  "skill:unlink",
   "skill:update",
   "skill:update_distribution",
+  "skill:update_link",
   "skill_efficacy_settings:upsert",
   "spend_rule:archive",
   "spend_rule:create",
@@ -276,6 +312,7 @@ export const AUDIT_ACTIONS = [
   "toolset:delete",
   "toolset:detach_external_oauth",
   "toolset:detach_oauth_proxy",
+  "toolset:migrate_to_remote_mcp",
   "toolset:update",
   "toolset:update_external_oauth_issuer",
   "toolset:update_oauth_proxy",
@@ -311,6 +348,8 @@ export const AUDIT_ACTIONS = [
   "workload-admission:admit",
   "workload-admission:update",
   "workload-admission:withdraw",
+  "workload-device-join-token:create",
+  "workload-device-join-token:redeem",
   "workload-issuer:create",
   "workload-issuer:delete",
   "workload-issuer:update",
@@ -351,6 +390,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "disconnected Slack workspace";
     case "access_challenge:resolve":
       return "resolved access challenge";
+    case "access_member:revoke_sign_ins":
+      return "revoked sign-ins for";
     case "access_member:update_role":
       return "changed member role for";
     case "access_role:create":
@@ -360,6 +401,10 @@ export function staticActionPhrase(action: AuditAction): string {
     case "access_role:delete":
       return "deleted access role";
 
+    case "agent:connection_block_create":
+      return "blocked connection access for agent";
+    case "agent:connection_block_delete":
+      return "unblocked connection access for agent";
     case "agent:create":
       return "created agent";
     case "agent:delete":
@@ -401,9 +446,28 @@ export function staticActionPhrase(action: AuditAction): string {
       return "created API key";
     case "api_key:revoke":
       return "revoked API key";
+    case "api_key:update_policy":
+      return "changed the access policy of API key";
 
     case "asset:create":
       return "uploaded asset";
+
+    case "auth-client:create":
+      return "created auth client";
+    case "auth-client:update":
+      return "renamed auth client";
+    case "auth-client:update-headers":
+      return "changed the headers of auth client";
+    case "auth-client:attach-mcp-server":
+      return "added an MCP server to auth client";
+    case "auth-client:enable":
+      return "enabled auth client";
+    case "auth-client:disable":
+      return "disabled auth client";
+    case "auth-client:detach-mcp-server":
+      return "removed an MCP server from auth client";
+    case "auth-client:update-audience":
+      return "changed who can use auth client";
     case "assistant:identity_provision":
       return "gave a dedicated agent to assistant";
     case "assistant:tool_call":
@@ -465,6 +529,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated JSON Web Key Set";
     case "json_web_key_set:delete":
       return "deleted JSON Web Key Set";
+    case "internal_session_issuer:enable":
+      return "enabled Speakeasy signing with issuer";
+    case "internal_session_issuer:disable":
+      return "disabled Speakeasy signing with issuer";
     case "json_web_key:publish":
       return "published JSON Web Key";
     case "json_web_key:activate":
@@ -486,6 +554,14 @@ export function staticActionPhrase(action: AuditAction): string {
       return "resumed Stripe subscription for";
     case "billing_metadata:update":
       return "updated billing metadata";
+    case "catalog-promotion:archive":
+      return "archived catalog promotion candidate";
+    case "catalog-promotion:reject":
+      return "rejected catalog promotion candidate";
+    case "catalog-promotion:restore":
+      return "restored catalog promotion candidate";
+    case "catalog-promotion:retry-docs":
+      return "retried setup documentation for";
     case "chat_analysis_settings:upsert":
       return "updated chat analysis settings";
     case "chat_session:access":
@@ -546,6 +622,15 @@ export function staticActionPhrase(action: AuditAction): string {
     case "device_integration:retry_schedule":
       return "retried device integration sync";
 
+    case "directory_review_item:approve":
+      return "approved directory change";
+    case "directory_review_item:dismiss":
+      return "dismissed directory change";
+    case "directory_review_item:opt_out":
+      return "stopped review of new attribute values";
+    case "directory_review_settings:update":
+      return "updated directory review emails";
+
     case "directory_role_mapping:set":
       return "set directory role mapping";
     case "directory_role_mapping:delete":
@@ -594,6 +679,8 @@ export function staticActionPhrase(action: AuditAction): string {
     case "meta-mcp:remove_member":
       return "removed meta MCP member";
 
+    case "mcp-server:promote-catalogue":
+      return "published to the MCP catalog";
     case "mcp-server:create":
       return "created MCP server";
     case "mcp-server:update":
@@ -604,6 +691,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated pinned scopes on MCP server";
     case "mcp-server:update-tool-metadata":
       return "updated tool metadata on MCP server";
+    case "mcp-server:update-upstream-auth-requirement":
+      return "changed whether the upstream needs authentication on MCP server";
 
     case "mcp_approval_request:approve":
       return "approved MCP access to";
@@ -649,6 +738,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "disabled fail-open for hooks";
     case "organization:device_agent_configuration_updated":
       return "updated device agent configuration";
+    case "organization:account_type_changed":
+      return "changed account type for";
+    case "organization:inference_key_repaired":
+      return "repaired inference key for";
     case "organization:enterprise_trial_armed":
       return "started enterprise trial";
     case "organization:enterprise_trial_demoted":
@@ -663,6 +756,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "started a new enterprise trial";
     case "organization:enterprise_trial_converted":
       return "converted enterprise trial for";
+    case "organization:partner_signup_attributed":
+      return "attributed a partner signup to";
+    case "organization:promotion_redeemed":
+      return "redeemed a promotion for";
     case "organization:payg_activated":
       return "activated pay-as-you-go billing for";
     case "organization:payg_deactivated":
@@ -780,6 +877,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "deleted remote session";
     case "remote-session-client:create":
       return "created remote session client";
+    case "remote-session-client:duplicate":
+      return "duplicated remote session client";
     case "remote-session-client:update":
       return "updated remote session client";
     case "remote-session-client:delete":
@@ -808,6 +907,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated remote session issuer";
     case "remote-session-issuer:delete":
       return "deleted remote session issuer";
+    case "remote-session-issuer:update_ema_providers":
+      return "changed the enabled identity providers for";
     case "remote-session-issuer:migrate":
       return "migrated remote session issuer";
 
@@ -826,6 +927,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "deleted risk policy";
     case "risk_policy:trigger":
       return "triggered risk policy";
+    case "risk_policy:approval_request":
+      return "requested approval of a tool call under";
+    case "risk_policy:approval_approve":
+      return "approved a held tool call under";
+    case "risk_policy:approval_deny":
+      return "denied a held tool call under";
     case "risk_policy:bypass_request_create":
       return "requested a bypass for";
     case "risk_policy:bypass_request_approve":
@@ -884,6 +991,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "stopped distributing skill";
     case "skill:update_distribution":
       return "updated distribution for skill";
+    case "skill:link":
+      return "linked skill";
+    case "skill:update_link":
+      return "updated a link for skill";
+    case "skill:unlink":
+      return "unlinked skill";
     case "skill:share_link_create":
       return "created a share link for";
     case "skill:share_link_revoke":
@@ -927,6 +1040,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated the OAuth proxy on";
     case "toolset:detach_oauth_proxy":
       return "detached an OAuth proxy from";
+    case "toolset:migrate_to_remote_mcp":
+      return "migrated the external MCP server";
 
     case "trigger-instance:create":
       return "created trigger";
@@ -998,6 +1113,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated workload";
     case "workload-admission:withdraw":
       return "withdrew workload";
+    case "workload-device-join-token:create":
+      return "created a device join token for";
+    case "workload-device-join-token:redeem":
+      return "enrolled a device with a join token for";
 
     default:
       return assertNever(action);

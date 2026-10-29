@@ -1,3 +1,6 @@
+import { MCPToolsetIcon } from "@/components/mcp/MCPToolsetIcon";
+import { SourceMcpIcon } from "@/components/sources/SourceCard";
+import { McpEntityCard } from "@/components/mcp/McpEntityCard";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
@@ -15,7 +18,11 @@ import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Button as UiButton } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
-import { Card } from "@/components/ui/Card";
+import {
+  ServerPickerSheet,
+  type ServerPickerOption,
+  type ServerPickerResult,
+} from "@/components/mcp/ServerPickerSheet";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
@@ -43,7 +50,6 @@ import { useRemovePluginServerMutation } from "@gram/client/react-query/removePl
 import { useAudiences } from "@gram/client/react-query/audiences";
 import { useMembers } from "@gram/client/react-query/members";
 import { useRoles } from "@gram/client/react-query/roles";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useSyncedAgentUsers } from "@gram/client/react-query/syncedAgentUsers.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import { Badge } from "@/components/ui/Badge";
@@ -60,7 +66,7 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Network, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import {
   Fragment,
   useCallback,
@@ -91,7 +97,6 @@ import {
   pluginSectionHref,
   PLUGIN_ASSIGNMENTS_SECTION_ID,
   PLUGIN_OVERVIEW_SECTION_ID,
-  PLUGIN_SERVERS_SECTION_ID,
   PLUGIN_SETTINGS_SECTION_ID,
   PLUGIN_SKILLS_SECTION_ID,
 } from "./plugin-detail-sections";
@@ -114,13 +119,7 @@ type ServerOption = {
   kind: ServerOptionKind;
   id: string;
   name: string;
-  isUnproxied?: boolean;
 };
-
-function serverOptionSuffix(option: ServerOption): string {
-  if (option.kind !== "mcpServer") return "";
-  return option.isUnproxied ? " (Unproxied MCP)" : " (Remote MCP)";
-}
 
 function serverOptionKey(kind: ServerOptionKind, id: string): string {
   return `${kind}:${id}`;
@@ -254,19 +253,22 @@ function PluginDetailContent({
     [toolsetsData?.toolsets],
   );
 
-  // Remote MCP-backed mcp_servers for this project. All of them back the
-  // cards of already-attached plugin servers (an attached server that's been
-  // disabled or lost its endpoints must still resolve for display), while
-  // only non-disabled servers with at least one endpoint are publishable —
-  // mirroring the backend's AddPluginServer check, so the picker never
-  // offers a server the API would reject.
+  // Remote MCP-backed and built-in mcp_servers for this project. All of
+  // them back the cards of already-attached plugin servers (an attached
+  // server that's been disabled or lost its endpoints must still resolve for
+  // display), while only non-disabled servers with at least one endpoint are
+  // publishable, mirroring the backend's AddPluginServer check, so the picker
+  // never offers a server the API would reject.
   const { data: mcpServersData, isLoading: isLoadingMcpServers } = serversQuery;
   const { data: mcpEndpointsData, isLoading: isLoadingMcpEndpoints } =
     endpointsQuery;
   const mcpServers = useMemo(
     () =>
       (mcpServersData?.mcpServers ?? []).filter(
-        (s) => !!s.remoteMcpServerId || !!s.unproxiedMcpServerId,
+        (s) =>
+          !!s.remoteMcpServerId ||
+          !!s.unproxiedMcpServerId ||
+          !!s.builtinBackend,
       ),
     [mcpServersData],
   );
@@ -305,13 +307,6 @@ function PluginDetailContent({
 
   const assignmentsVisible = usePluginAssignmentsVisible();
   const showAssignments = canAdmin && assignmentsVisible;
-  const { data: productFeatures } = useProductFeatures(
-    {
-      organizationId: organization.id,
-    },
-    undefined,
-    { enabled: canAdmin },
-  );
 
   // Invalidate publish status too so the dirty/up-to-date affordance reflects
   // the edit the moment a mutation lands.
@@ -439,13 +434,7 @@ function PluginDetailContent({
     },
   });
 
-  const addServerMutation = useAddPluginServerMutation({
-    onSuccess: () => {
-      setIsAddServerOpen(false);
-      void invalidateAll();
-      offerPublish("Server added to plugin");
-    },
-  });
+  const addServerMutation = useAddPluginServerMutation();
 
   const removeServerMutation = useRemovePluginServerMutation({
     onSuccess: () => {
@@ -487,31 +476,46 @@ function PluginDetailContent({
     });
   };
 
-  const handleAddServer: React.FormEventHandler<HTMLFormElement> = (e) => {
-    e.preventDefault();
-    if (!canPublish) return;
-    const fd = new FormData(e.currentTarget);
-    const key = fd.get("serverKey") as string;
-    if (!key) return;
-    const option = serverOptions.find(
-      (o) => serverOptionKey(o.kind, o.id) === key,
-    );
-    if (!option) return;
-    addServerMutation.mutate({
-      security: { sessionHeaderGramSession: "" },
-      request: {
-        addPluginServerForm: {
-          pluginId: pluginId!,
-          // Submit exactly one backend id per the toolset_id XOR mcp_server_id
-          // contract.
-          ...(option.kind === "mcpServer"
-            ? { mcpServerId: option.id }
-            : { toolsetId: option.id }),
-          displayName: option.name,
-          policy: "required",
-        },
-      },
-    });
+  // Adds one at a time so each failure is reported against its own row.
+  const handleAddServers = async (
+    keys: string[],
+  ): Promise<ServerPickerResult[]> => {
+    if (!canPublish) return [];
+    const results: ServerPickerResult[] = [];
+    for (const key of keys) {
+      const option = serverOptions.find(
+        (o) => serverOptionKey(o.kind, o.id) === key,
+      );
+      if (!option) continue;
+      try {
+        await addServerMutation.mutateAsync({
+          security: { sessionHeaderGramSession: "" },
+          request: {
+            addPluginServerForm: {
+              pluginId: pluginId!,
+              // Submit exactly one backend id per the toolset_id XOR
+              // mcp_server_id contract.
+              ...(option.kind === "mcpServer"
+                ? { mcpServerId: option.id }
+                : { toolsetId: option.id }),
+              displayName: option.name,
+              policy: "required",
+            },
+          },
+        });
+        results.push({ key });
+      } catch (error) {
+        results.push({
+          key,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Couldn't add this server. Try again.",
+        });
+      }
+    }
+    if (results.some((result) => !result.error)) await invalidateAll();
+    return results;
   };
 
   const toolsetById = useMemo(() => {
@@ -519,6 +523,16 @@ function PluginDetailContent({
     for (const t of toolsets) map.set(t.id, t);
     return map;
   }, [toolsets]);
+
+  // Hosted toolsets with a canonical MCP server (same id); undefined until servers load.
+  const canonicalToolsetIds = useMemo(() => {
+    if (!mcpServersData?.mcpServers) return undefined;
+    return new Set(
+      mcpServersData.mcpServers
+        .filter((s) => s.toolsetId === s.id)
+        .map((s) => s.id),
+    );
+  }, [mcpServersData]);
 
   const mcpServerById = useMemo(() => {
     const map = new Map<string, McpServer>();
@@ -539,7 +553,6 @@ function PluginDetailContent({
         kind: "mcpServer",
         id: s.id,
         name: s.name ?? s.slug ?? "Untitled server",
-        isUnproxied: !!s.unproxiedMcpServerId,
       });
     }
     return opts;
@@ -561,18 +574,76 @@ function PluginDetailContent({
     rolesData?.roles ?? [],
   );
 
-  // Exclude servers already added to the plugin, keyed per backend.
+  // Exclude added servers; a hosted server's canonical mcp_server id is its toolset id.
   const addedToolsetIds = new Set(
-    servers.map((s) => s.toolsetId).filter((id): id is string => !!id),
+    servers
+      .map((s) => s.toolsetId ?? s.mcpServerId)
+      .filter((id): id is string => !!id),
   );
   const addedMcpServerIds = new Set(
     servers.map((s) => s.mcpServerId).filter((id): id is string => !!id),
   );
-  const availableServerOptions = serverOptions.filter((o) =>
-    o.kind === "toolset"
-      ? !addedToolsetIds.has(o.id)
-      : !addedMcpServerIds.has(o.id),
-  );
+  const pickerOptions: ServerPickerOption[] = serverOptions
+    .filter((o) =>
+      o.kind === "toolset"
+        ? !addedToolsetIds.has(o.id)
+        : !addedMcpServerIds.has(o.id),
+    )
+    .map((o) => {
+      const toolset = o.kind === "toolset" ? toolsetById.get(o.id) : undefined;
+      const mcpServer =
+        o.kind === "mcpServer" ? mcpServerById.get(o.id) : undefined;
+      const kindLabel = toolset
+        ? "Hosted"
+        : mcpServer?.builtinBackend
+          ? "Built-in"
+          : mcpServer?.unproxiedMcpServerId
+            ? "Unproxied"
+            : "Remote";
+      const slug = toolset?.slug ?? mcpServer?.slug;
+      // Mirrors AddPluginServer: a hosted server needs MCP on and an MCP slug.
+      const mcpOff = !!toolset && !toolset.mcpEnabled;
+      const noMcpAddress = !!toolset && !mcpOff && !toolset.mcpSlug;
+      const noMcpServer =
+        !!toolset &&
+        !mcpOff &&
+        !noMcpAddress &&
+        !!canonicalToolsetIds &&
+        !canonicalToolsetIds.has(toolset.id);
+      return {
+        value: serverOptionKey(o.kind, o.id),
+        label: o.name,
+        icon: toolset ? (
+          <MCPToolsetIcon
+            toolset={toolset}
+            className="size-6 shrink-0"
+            fallbackClassName="size-6"
+          />
+        ) : (
+          <SourceMcpIcon
+            mcpServerId={o.id}
+            className="size-6 shrink-0 object-contain"
+          />
+        ),
+        slug,
+        kindLabel,
+        badge: mcpOff
+          ? "MCP off"
+          : noMcpAddress
+            ? "No MCP address"
+            : noMcpServer
+              ? "No MCP server"
+              : undefined,
+        description: mcpOff
+          ? "Turn on MCP for this server before adding it to a plugin."
+          : noMcpAddress
+            ? "Set an MCP address for this server before adding it to a plugin."
+            : noMcpServer
+              ? "This toolset has no MCP server yet, so it cannot be added to a plugin."
+              : `${slug ?? "No slug"} · ${kindLabel}`,
+        disabled: mcpOff || noMcpAddress || noMcpServer,
+      };
+    });
 
   // Client-side search over the server section, matching on the displayed name.
   const normalizedServerSearch = serverSearch.trim().toLowerCase();
@@ -595,9 +666,9 @@ function PluginDetailContent({
           <PluginServerCard
             key={server.id}
             server={server}
-            toolset={
-              server.toolsetId ? toolsetById.get(server.toolsetId) : undefined
-            }
+            toolset={toolsetById.get(
+              server.toolsetId ?? server.mcpServerId ?? "",
+            )}
             mcpServer={
               server.mcpServerId
                 ? mcpServerById.get(server.mcpServerId)
@@ -711,11 +782,6 @@ function PluginDetailContent({
                   tone="information"
                   format="number"
                   icon="network"
-                  link={pluginSectionHref(
-                    routes,
-                    pluginId!,
-                    PLUGIN_SERVERS_SECTION_ID,
-                  )}
                 />
                 <StatTile
                   title="Skills"
@@ -771,12 +837,12 @@ function PluginDetailContent({
             </section>
           )}
 
-          {section === PLUGIN_SERVERS_SECTION_ID && (
+          {section === PLUGIN_OVERVIEW_SECTION_ID && (
             <SettingsSection>
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <SettingsSection.Header>
                   <div className="flex items-center gap-2">
-                    <SettingsSection.Title>MCP Servers</SettingsSection.Title>
+                    <SettingsSection.Title>MCP servers</SettingsSection.Title>
                     {servers.length > 0 && (
                       <span className="border-border text-muted-foreground border px-1.5 py-0.5 font-mono text-xs tabular-nums">
                         {servers.length}
@@ -789,14 +855,6 @@ function PluginDetailContent({
                   </SettingsSection.Description>
                 </SettingsSection.Header>
                 <div className="flex items-center gap-2">
-                  {servers.length > 0 && (
-                    <SearchBar
-                      value={serverSearch}
-                      onChange={setServerSearch}
-                      placeholder="Search servers"
-                      className="h-9 w-56"
-                    />
-                  )}
                   {canPublish && canReadServers && (
                     <Button
                       variant="secondary"
@@ -811,6 +869,15 @@ function PluginDetailContent({
                   )}
                 </div>
               </div>
+              {servers.length > 0 && (
+                <Page.Toolbar>
+                  <Page.Toolbar.Search
+                    value={serverSearch}
+                    onChange={setServerSearch}
+                    placeholder="Search servers"
+                  />
+                </Page.Toolbar>
+              )}
               {serversContent}
             </SettingsSection>
           )}
@@ -828,31 +895,6 @@ function PluginDetailContent({
               />
             </RequireScope>
           )}
-
-          {/* Assignments only affect device-agent delivery, so the section is
-              hidden for marketplace-only orgs (see usePluginAssignmentsVisible).
-              Now that it's a route, a bookmark can still land here — say why the
-              page is empty rather than rendering nothing. Wait for
-              productFeatures before doing so, since the visibility flag reads
-              false while it loads. */}
-          {section === PLUGIN_ASSIGNMENTS_SECTION_ID &&
-            canAdmin &&
-            !showAssignments &&
-            !!productFeatures && (
-              <SettingsSection>
-                <SettingsSection.Header>
-                  <SettingsSection.Title>Assignments</SettingsSection.Title>
-                  <SettingsSection.Description>
-                    Assignments control delivery to devices running the
-                    Speakeasy agent.
-                  </SettingsSection.Description>
-                </SettingsSection.Header>
-                <SectionEmptyState
-                  title="Assignments aren't available for this project"
-                  subtitle="Marketplace installs receive every published plugin, so there's nothing to assign."
-                />
-              </SettingsSection>
-            )}
 
           {section === PLUGIN_ASSIGNMENTS_SECTION_ID && showAssignments && (
             <SettingsSection>
@@ -1044,74 +1086,47 @@ function PluginDetailContent({
               </Dialog.Content>
             </Dialog>
 
-            {/* Add Server Dialog */}
-            <Dialog open={isAddServerOpen} onOpenChange={setIsAddServerOpen}>
-              <Dialog.Content>
-                <Dialog.Header>
-                  <Dialog.Title>Add MCP Server</Dialog.Title>
-                  <Dialog.Description>
-                    Add an MCP server to this plugin bundle.
-                  </Dialog.Description>
-                </Dialog.Header>
-                <form
-                  onSubmit={handleAddServer}
-                  className="flex flex-col gap-4"
-                >
-                  <div className="flex flex-col gap-2">
-                    <label className="text-sm font-medium">MCP Server</label>
-                    {isLoadingServers ? (
-                      <Skeleton className="h-9 w-full" />
-                    ) : availableServerOptions.length > 0 ? (
-                      <select
-                        name="serverKey"
-                        className="bg-background border px-3 py-2 text-sm"
-                        required
-                      >
-                        <option value="">Select an MCP server</option>
-                        {availableServerOptions.map((o) => (
-                          <option
-                            key={serverOptionKey(o.kind, o.id)}
-                            value={serverOptionKey(o.kind, o.id)}
-                          >
-                            {o.name}
-                            {serverOptionSuffix(o)}
-                          </option>
-                        ))}
-                      </select>
-                    ) : serverOptions.length > 0 ? (
-                      <Text muted small>
-                        All available MCP servers have already been added to
-                        this plugin.
-                      </Text>
-                    ) : (
-                      <Text muted small>
-                        No MCP servers available. Create an MCP server in this
-                        project first.
-                      </Text>
-                    )}
-                  </div>
-                  <Dialog.Footer>
-                    <Button
-                      variant="secondary"
-                      onClick={() => setIsAddServerOpen(false)}
-                      type="button"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={
-                        addServerMutation.isPending ||
-                        isLoadingServers ||
-                        availableServerOptions.length === 0
-                      }
-                    >
-                      Add
-                    </Button>
-                  </Dialog.Footer>
-                </form>
-              </Dialog.Content>
-            </Dialog>
+            <ServerPickerSheet
+              key={pluginId}
+              open={isAddServerOpen}
+              onOpenChange={setIsAddServerOpen}
+              title="Add servers to plugin"
+              description="Everyone who installs this plugin gets the servers you add."
+              options={pickerOptions}
+              isLoading={isLoadingServers}
+              loadFailed={
+                !!toolsetsQuery.error ||
+                !!serversQuery.error ||
+                !!endpointsQuery.error
+              }
+              onRetryLoad={() => {
+                // Only retry what failed; a refetch ignores `enabled`, so
+                // never touch a query the user can't read.
+                for (const query of [
+                  toolsetsQuery,
+                  serversQuery,
+                  endpointsQuery,
+                ]) {
+                  if (query.error) void query.refetch();
+                }
+              }}
+              emptyMessage={
+                serverOptions.length === 0
+                  ? "No MCP servers available. Create an MCP server in this project first."
+                  : "All available MCP servers have already been added to this plugin."
+              }
+              canWrite={canPublish}
+              permissionMessage="Only people who can edit this plugin can add servers."
+              onSubmit={handleAddServers}
+              announceAdded={(count) => {
+                const message = `${count} ${count === 1 ? "server" : "servers"} added to plugin`;
+                if (canPublish && publishStatus?.configured) {
+                  offerPublish(message);
+                } else {
+                  toast.success(message);
+                }
+              }}
+            />
             <PublishDialog
               open={isPublishDialogOpen}
               onOpenChange={setIsPublishDialogOpen}
@@ -1395,9 +1410,11 @@ function PluginServerCard({
 }) {
   const routes = useRoutes();
 
-  // Remote MCP-backed servers reference an mcp_server; toolset-backed servers
-  // reference a toolset. Exactly one backend is set per row.
-  const isRemote = !!server.mcpServerId;
+  // Hosted rows resolve to their toolset; other MCP server rows are remote.
+  const isRemote =
+    !!server.mcpServerId &&
+    !toolset &&
+    (!!mcpServer || (!isLoading && !metadataUnavailable));
   // Approximates per-server publish freshness from the project-wide
   // fingerprint: publish itself isn't scoped to a single server, but a
   // server added after the last publish timestamp can't possibly be in the
@@ -1411,17 +1428,27 @@ function PluginServerCard({
     // Remote MCP servers live on the mcp_servers-backed details page (x/);
     // toolset-backed servers use the toolset details page.
     if (isRemote) {
-      if (mcpServer) routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
+      if (mcpServer)
+        routes.mcp.details.overview.goTo(mcpServerRouteParam(mcpServer));
     } else if (toolset) {
-      routes.mcp.details.goTo(toolset.slug);
+      routes.toolset.goTo(toolset.slug);
     }
   };
 
   return (
-    <Card.Entity
+    <McpEntityCard
       className={cn(isClickable && "cursor-pointer")}
       onClick={isClickable ? handleClick : undefined}
-      icon={<Network className="text-muted-foreground h-8 w-8" />}
+      icon={
+        toolset ? (
+          <MCPToolsetIcon toolset={toolset} />
+        ) : (
+          <SourceMcpIcon
+            mcpServerId={server.mcpServerId}
+            className="h-8 w-8 object-contain"
+          />
+        )
+      }
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <Text
@@ -1450,9 +1477,15 @@ function PluginServerCard({
             // Remote/unproxied MCP servers have no Speakeasy-side tool
             // catalog, so the tool-collection badge is omitted.
             <Badge variant="neutral" className="text-xs">
-              {mcpServer?.unproxiedMcpServerId
-                ? "Unproxied MCP · Not proxied"
-                : "Remote MCP"}
+              {mcpServer?.builtinBackend
+                ? "Built-in"
+                : mcpServer?.unproxiedMcpServerId
+                  ? "Unproxied MCP · Not proxied"
+                  : "Remote MCP"}
+            </Badge>
+          ) : server.metaMcpServerId ? (
+            <Badge variant="neutral" className="text-xs">
+              Gateway
             </Badge>
           ) : metadataUnavailable ? (
             <Badge variant="neutral" className="text-xs">
@@ -1462,11 +1495,7 @@ function PluginServerCard({
             <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
           ) : isLoading ? (
             <Skeleton className="h-5 w-16" />
-          ) : (
-            <Badge variant="destructive" className="text-xs">
-              Toolset missing
-            </Badge>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -1500,6 +1529,6 @@ function PluginServerCard({
           </UiButton>
         )}
       </div>
-    </Card.Entity>
+    </McpEntityCard>
   );
 }

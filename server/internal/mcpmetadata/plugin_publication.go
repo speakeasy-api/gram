@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
@@ -35,7 +36,9 @@ func renderedHeadersChanged(backend *resolvedMetadataBackend, before, after *typ
 	if (len(beforeHeaders) > 0) != (len(afterHeaders) > 0) {
 		return true
 	}
-	return backend.toolset != nil && backend.toolset.McpIsPublic && !maps.Equal(beforeHeaders, afterHeaders)
+	publicToolset := (backend.toolset != nil && backend.hosting.Public) ||
+		(backend.mcpServer != nil && isCanonicalWrapper(backend.mcpServer) && backend.mcpServer.Visibility == mcpservers.VisibilityPublic)
+	return publicToolset && !maps.Equal(beforeHeaders, afterHeaders)
 }
 
 func userHeaders(metadata *types.McpMetadata) map[string]userHeader {

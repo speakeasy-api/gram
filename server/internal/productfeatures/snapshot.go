@@ -24,10 +24,11 @@ type ProductFeaturesSnapshot struct {
 	CustomerManagedEncryptionKeysEnabled    bool
 	RemoteSessionAutoRefreshEnabled         bool
 	RemoteSessionAutoRefreshEnforcedEnabled bool
-	ConsentToolFilteringEnabled             bool
 	SessionPortabilityEnabled               bool
 	NetworkIngressEnabled                   bool
 	SignalsIntelligenceEnabled              bool
+	OrganizationGatewayDisabled             bool
+	CodeModeEnabled                         bool
 	DeviceAgent                             bool
 }
 
@@ -103,10 +104,11 @@ func (c *Client) snapshot(ctx context.Context, organizationID string, strict boo
 		CustomerManagedEncryptionKeysEnabled:    isEnabled(FeatureCustomerManagedEncryptionKeys),
 		RemoteSessionAutoRefreshEnabled:         isEnabled(FeatureRemoteSessionAutoRefresh),
 		RemoteSessionAutoRefreshEnforcedEnabled: isEnabled(FeatureRemoteSessionAutoRefreshEnforced),
-		ConsentToolFilteringEnabled:             isEnabled(FeatureConsentToolFiltering),
 		SessionPortabilityEnabled:               isEnabled(FeatureSessionPortability),
 		NetworkIngressEnabled:                   isEnabled(FeatureNetworkIngress),
 		SignalsIntelligenceEnabled:              isEnabled(FeatureSignalsIntelligence),
+		OrganizationGatewayDisabled:             isEnabled(FeatureOrganizationGatewayDisabled),
+		CodeModeEnabled:                         isEnabled(FeatureCodeMode),
 		DeviceAgent:                             deviceAgent,
 	}
 	if readErr != nil {

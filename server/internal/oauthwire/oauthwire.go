@@ -1,7 +1,7 @@
 // Package oauthwire provides shared OAuth wire identifiers, errors, and
 // redirect-URI validation for issuer and downstream client flows. It is a
 // standard-library-only leaf so consumers can share protocol primitives
-// without importing each other or sharing application policy.
+// without importing each other.
 package oauthwire
 
 import (
@@ -80,6 +80,19 @@ const (
 	// TokenTypeBearer is the bearer token_type value and Authorization scheme
 	// (RFC 6750 §4, §2.1).
 	TokenTypeBearer = "Bearer"
+)
+
+// Authorization response parameters shared with the requesting client.
+const (
+	// ParamState binds the authorization response to the client's request
+	// (RFC 6749 §4.1.1, §4.1.2).
+	ParamState = "state"
+
+	// ParamError identifies an OAuth error response (RFC 6749 §4.1.2.1).
+	ParamError = "error"
+
+	// ParamErrorDescription explains an OAuth error (RFC 6749 §4.1.2.1).
+	ParamErrorDescription = "error_description"
 )
 
 // Client authentication parameters as they appear in a token or revocation
@@ -241,6 +254,27 @@ func ValidateRedirectURI(raw string) error {
 			return &Error{Code: "invalid_redirect_uri", Description: fmt.Sprintf("redirect_uri scheme %q is not permitted", scheme)}
 		}
 		return nil
+	}
+}
+
+// MayAutoRedirectBeforeAuthentication permits automatic error callbacks only
+// to HTTP(S) loopback destinations. Registration alone does not establish trust:
+// DCR and CIMD clients can supply attacker-controlled callbacks (RFC 9700 §4.11.2).
+// Callers must first resolve the client and match its registered redirect URIs;
+// this predicate does not relax registration matching or port restrictions.
+func MayAutoRedirectBeforeAuthentication(raw string) bool {
+	uri, err := url.Parse(raw)
+	if err != nil || uri.User != nil || uri.Fragment != "" || uri.Opaque != "" {
+		return false
+	}
+	if uri.Scheme != "http" && uri.Scheme != "https" {
+		return false
+	}
+	switch strings.ToLower(uri.Hostname()) {
+	case "127.0.0.1", "::1", "localhost":
+		return true
+	default:
+		return false
 	}
 }
 

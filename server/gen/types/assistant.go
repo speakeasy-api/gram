@@ -27,9 +27,11 @@ type Assistant struct {
 	Model string
 	// The system instructions for the assistant.
 	Instructions string
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRef
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRef
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRef
@@ -37,6 +39,9 @@ type Assistant struct {
 	WarmTTLSeconds int
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency int
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Runtime changes require a settled assistant and available destination.
+	RuntimeVersion int
 	// The assistant status.
 	Status string
 	// Creation timestamp.

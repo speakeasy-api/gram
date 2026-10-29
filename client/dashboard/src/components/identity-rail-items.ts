@@ -18,10 +18,62 @@ export function identityRailItems(
    * resets the filters the reader just set.
    */
   search = "",
-  /** Whether the viewer may open Findings; the entry is left out otherwise. */
-  showFindings = false,
+  /**
+   * An agent is not a person, and three of the people tabs have nothing to
+   * read for one: usage, cost and risk findings are all keyed by a human
+   * subject, so each rendered a panel whose only content was a sentence
+   * explaining that it had no content. A tab that can never fill is worse
+   * than a missing one — it costs a click to learn nothing.
+   */
+  kind?: string,
 ): IdentityRailItem[] {
   const detail = routes.identities.detail;
+  if (kind === "agent") {
+    return [
+      {
+        key: "overview",
+        title: "Overview",
+        href: `${detail.overview.href(encodedUrn)}${search}`,
+        active: detail.overview.active,
+      },
+      {
+        key: "permissions",
+        title: "Permissions",
+        href: `${detail.permissions.href(encodedUrn)}${search}`,
+        active: detail.permissions.active,
+      },
+      {
+        key: "sessions",
+        title: "Sessions",
+        href: `${detail.sessions.href(encodedUrn)}${search}`,
+        active: detail.sessions.active,
+      },
+      {
+        key: "activity",
+        title: "Activity",
+        href: `${detail.activity.href(encodedUrn)}${search}`,
+        active: detail.activity.active,
+      },
+      {
+        // The agent's way in: its endpoint, the keys it holds, and the
+        // platforms that sign in as it. Named for what it carries rather
+        // than for the wizard step that first hands them over — setting an
+        // agent up happens once, holding its credentials is forever.
+        key: "credentials",
+        title: "Credentials",
+        href: `${detail.credentials.href(encodedUrn)}${search}`,
+        active: detail.credentials.active,
+      },
+      {
+        // Ending an agent is not something you do while reading it, so it
+        // does not sit under the facts about it.
+        key: "controls",
+        title: "Controls & Safety",
+        href: `${detail.controls.href(encodedUrn)}${search}`,
+        active: detail.controls.active,
+      },
+    ];
+  }
   return [
     {
       key: "overview",
@@ -47,17 +99,6 @@ export function identityRailItems(
       href: `${detail.security.href(encodedUrn)}${search}`,
       active: detail.security.active,
     },
-    ...(showFindings
-      ? [
-          {
-            key: "findings",
-            title: "Findings",
-            href: `${detail.findings.href(encodedUrn)}${search}`,
-            active: detail.findings.active,
-            nested: true,
-          },
-        ]
-      : []),
     {
       key: "cost",
       title: "Cost",

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
     <title>
-      {{if .FirstParty}}Connect {{.MCPSlug}}{{else}}Authorize
+      {{if and .Gateway .Gateway.Focus}}Connect {{.Gateway.Focus.Name}}{{else if .FirstParty}}Connect {{.MCPSlug}}{{else}}Authorize
       {{.ClientName}}{{end}}
     </title>
     {{/* The stylesheet is compiled from the dashboard design system by
@@ -28,6 +28,16 @@
 
       <section class="bg-card border">
         <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
+          {{if and .Gateway .Gateway.Focus}}
+          {{/* One server's connect page. Connecting a service is the whole
+          job here: the gateway is approved on its own page, so this page
+          has no approve step of its own. */}}
+          <p class="text-eyebrow">Connect a server</p>
+          <h1 class="text-display-xs break-all">{{.Gateway.Focus.Name}}</h1>
+          <p class="text-sm text-muted-foreground">
+            <span class="text-foreground font-mono">{{.Gateway.Focus.Slug}}</span>, a server on <span class="text-foreground">{{.MCPSlug}}</span>.
+          </p>
+          {{else}}
           <p class="text-eyebrow">
             {{if .FirstParty}}Connect{{else}}Authorize{{end}}
           </p>
@@ -48,11 +58,12 @@
           {{end}}
           <p class="text-sm text-muted-foreground">
             {{if .FirstParty}}
-            {{if .RemoteSessionCards}}Link the services this MCP server needs to access on your behalf.{{else}}This MCP server needs no per-user service connections — you're all set.{{end}}
+            {{if .Gateway}}Connect the servers you want to use through this gateway.{{else if .RemoteSessionCards}}Link the services this MCP server needs to access on your behalf.{{else}}This MCP server needs no per-user service connections — you're all set.{{end}}
             {{else}}
             <span class="text-foreground">{{.ClientName}}</span> is requesting
-            access to this MCP server. {{end}}
+            access to {{if .Gateway}}this gateway and the servers on it{{else}}this MCP server{{end}}. {{end}}
           </p>
+          {{end}}
         </header>
 
         {{if .LoopbackRedirectWarning}}
@@ -202,6 +213,77 @@
         {{end}}
         {{end}}
 
+        {{if and .Gateway (not .Gateway.Focus)}}
+        {{/* A gateway lists servers, not services: approving the gateway
+        needs no connection, and each server connects on its own page, now or
+        the first time one of its tools needs it. Collapsed so the decision
+        stays the approval itself. */}}
+        <div class="border-b" data-gateway-servers>
+          {{if .Gateway.FocusUnavailable}}
+          <p class="text-xs text-default-warning px-6 pt-4 sm:px-8" data-gateway-focus-unavailable>
+            That server isn't available to you on this gateway.
+          </p>
+          {{end}}
+          {{if .Gateway.Servers}}
+          {{$visible := .VisibleGatewayRows}}
+          {{$hidden := .HiddenGatewayRows}}
+          <details
+            class="group"
+            data-gateway-list
+            data-state="{{.State}}"
+            {{if .Gateway.ListOpen}}open{{end}}
+          >
+            <summary
+              class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-6 py-4 sm:px-8"
+            >
+              <span class="text-sm" data-gateway-summary
+                >{{.Gateway.ReadyCount}} of {{len $visible}} {{if eq (len $visible) 1}}server{{else}}servers{{end}} connected{{if $hidden}} · {{len $hidden}} hidden{{end}}</span
+              >
+              <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true"
+                >Show servers</span
+              >
+              <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true"
+                >Collapse</span
+              >
+            </summary>
+            <div class="flex flex-col gap-3 px-6 pt-4 pb-6 sm:px-8">
+              <p class="text-xs text-muted-foreground">
+                {{if .ShowToolsIsland}}Only servers verified at consent are included. If access or a connection changes, reload this page to review it.{{else}}Connect a server that needs you to sign in before using it.{{end}}
+              </p>
+              <ul
+                class="m-0 flex max-h-96 list-none flex-col overflow-y-auto border p-0"
+                data-gateway-visible-list
+                {{if not $visible}}hidden{{end}}
+              >
+                {{range $visible}}{{template "gatewayServerRow" .}}{{end}}
+              </ul>
+              <p class="text-sm text-muted-foreground" data-gateway-all-hidden {{if $visible}}hidden{{end}}>
+                You've hidden every server on this gateway.
+              </p>
+              <p class="text-xs text-default-warning" data-gateway-visibility-error role="alert" hidden></p>
+              <details class="group/hidden" data-gateway-hidden-section {{if not $hidden}}hidden{{end}}>
+                <summary class="text-muted-foreground interact:text-foreground flex cursor-pointer list-none items-center justify-between gap-3 text-xs">
+                  <span>Hidden (<span data-gateway-hidden-count>{{len $hidden}}</span>)</span>
+                  <span class="text-eyebrow group-open/hidden:hidden" aria-hidden="true">Expand</span>
+                  <span class="text-eyebrow hidden group-open/hidden:inline" aria-hidden="true">Collapse</span>
+                </summary>
+                <p class="text-xs text-muted-foreground mt-2">
+                  Hidden servers aren't available to your AI tools. Show one to use it again.
+                </p>
+                <ul class="m-0 mt-2 flex list-none flex-col border p-0 opacity-60" data-gateway-hidden-list>
+                  {{range $hidden}}{{template "gatewayServerRow" .}}{{end}}
+                </ul>
+              </details>
+            </div>
+          </details>
+          {{else}}
+          <p class="text-sm text-muted-foreground px-6 py-4 sm:px-8">
+            You don't have access to any servers on this gateway yet.
+          </p>
+          {{end}}
+        </div>
+        {{end}}
+
         {{if .RemoteSessionCards}}
         <div
           data-service-connections
@@ -209,7 +291,7 @@
           class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8"
         >
           <div class="flex items-baseline justify-between gap-3">
-            <h2 class="text-eyebrow">Connected services</h2>
+            <h2 class="text-eyebrow">Service connections</h2>
             <p
               class="text-xs text-muted-foreground"
               data-connected-summary
@@ -219,6 +301,12 @@
               {{.ConnectedCardCount}} of {{len .RemoteSessionCards}} connected
             </p>
           </div>
+          {{if and (not .FirstParty) (not .Gateway)}}
+          <p class="text-sm text-muted-foreground">
+            These connections sign you in to services. Choose Give access below
+            to approve {{.ClientName}}’s access.
+          </p>
+          {{end}}
           <ul
             class="m-0 flex list-none flex-col border p-0"
             {{if .ValidationDeadlineMS}}data-verify-deadline-ms="{{.ValidationDeadlineMS}}"{{end}}
@@ -255,7 +343,7 @@
                   >
                   {{else}}
                   <span class="text-xs text-default-success" data-card-status
-                    >Connected{{if .Pending}}<span class="text-muted-foreground" data-validation="pending"
+                    >Service connected{{if .Pending}}<span class="text-muted-foreground" data-validation="pending"
                       > · Verifying…</span
                     >{{else if .Verified}}<span class="text-muted-foreground" data-validation="valid"
                       > · Verified
@@ -271,6 +359,8 @@
                   <span class="text-xs text-default-warning" data-validation-notice
                     >{{.ValidationNotice}}</span
                   >
+                  {{end}} {{if .AttachmentReconnect}}
+                  <span class="text-xs text-muted-foreground">Sign in again to choose the account for this agent</span>
                   {{end}} {{if .IdentityReconnect}}
                   <span class="text-xs text-muted-foreground"
                     >Reconnect to add account details</span
@@ -281,7 +371,7 @@
                   script; the script shows checking and settles it. */}}
                   {{if eq .ChainCheck "connected"}}
                   <span class="text-xs text-default-success" data-card-status data-identity-chained data-chain-check="connected"
-                    >Connected through your identity provider</span
+                    >Service connected through your identity provider</span
                   >
                   {{else if eq .ChainCheck "rejected"}}
                   <span class="text-xs text-default-warning" data-card-status data-identity-chained data-chain-check="rejected"
@@ -304,6 +394,10 @@
                   <span class="text-xs text-muted-foreground"
                     >Not connected</span
                   >
+                  {{end}} {{if .SharedServerNote}}
+                  <span class="text-xs text-muted-foreground" data-shared-server-note
+                    >{{.SharedServerNote}}</span
+                  >
                   {{end}}
                 </div>
               </div>
@@ -320,6 +414,7 @@
                   value="{{$.CSRFToken}}"
                 />
                 <input type="hidden" name="client_id" value="{{.ClientID}}" />
+                {{if and $.Gateway $.Gateway.Focus}}<input type="hidden" name="server" value="{{$.Gateway.Focus.Slug}}" />{{end}}
                 <input
                   type="hidden"
                   name="auto_refresh"
@@ -346,7 +441,7 @@
                 >
                   Verify
                 </button>
-                {{end}} {{if or (not .Connected) .IdentityReconnect .Rejected .Inactive}}
+                {{end}} {{if or (not .Connected) .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}
                 {{if and .Chained (ne .ChainCheck "rejected")}}
                 <button
                   type="submit"
@@ -366,7 +461,7 @@
                   class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
                   data-connect-link
                 >
-                  {{if or .Expired .Unroutable .IdentityReconnect .Rejected .Inactive}}Reconnect{{else}}Connect{{end}}
+                  {{if or .Expired .Unroutable .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}Reconnect{{else}}Connect{{end}}
                 </button>
                 {{end}}
                 {{end}} {{if or .Connected .Expired .Unroutable}}
@@ -528,18 +623,27 @@
         </div>
         {{end}}
 
+        {{with .ApprovalError}}
+        <div role="alert" class="border-b px-6 py-6 text-sm sm:px-8">
+          <p>{{.Message}}</p>
+          {{if .ActionURL}}<a class="underline" href="{{.ActionURL}}">{{.ActionLabel}}</a>{{end}}
+        </div>
+        {{end}}
         {{if .ShowToolsIsland}}
         <div data-agent-self-only class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8"
         >
           <h2 class="text-eyebrow">Tool access</h2>
           <div
             id="consent-tools-root"
+            data-gateway-inventory="{{.GatewayInventory}}"
             data-tools-url="{{.ConsentToolsURL}}"
             data-state="{{.State}}"
             data-csrf-token="{{.CSRFToken}}"
             data-form-id="consent-approve-form"
             data-approve-button-id="consent-approve-button"
+            data-gateway="{{if .ShowDiscoveryMode}}true{{else}}false{{end}}"
             data-consent-enabled="{{if .ConsentEnabled}}true{{else}}false{{end}}"
+            data-inventory-deferred="{{if .ConsentToolsDeferred}}true{{else}}false{{end}}"
             data-server-name="{{.MCPSlug}}"
             {{if
             .ConsentToolsPrefill}}data-prefill="{{.ConsentToolsPrefill}}"
@@ -547,8 +651,9 @@
             aria-live="polite"
           >
             <p class="text-sm text-muted-foreground">
-              Loading available tools…
+              Loading tool choices. Approval is unavailable until they appear.
             </p>
+            <noscript>To choose tools, enable JavaScript and reload this page.</noscript>
           </div>
         </div>
         {{end}}
@@ -578,7 +683,7 @@
             <span
               class="text-eyebrow hidden shrink-0 group-open:inline"
               aria-hidden="true"
-              >Hide</span
+              >Collapse</span
             >
           </summary>
 
@@ -619,7 +724,47 @@
                 </select>
               </dd>
             </div>
-            {{end}} {{if .RemoteSessionCards}}
+            {{end}}
+            {{if .ShowDiscoveryMode}}
+            <div data-agent-self-only>
+              <dt class="text-eyebrow">Tool discovery</dt>
+              <dd class="mt-1 ml-0">
+                <select
+                  name="discovery_mode"
+                  form="consent-approve-form"
+                  aria-label="Tool discovery"
+                  aria-describedby="discovery-mode-help"
+                  class="bg-card border px-2 py-1.5 font-mono text-sm"
+                >
+                  <option value="">{{if .GatewayDefaultMode}}Gateway default ({{.GatewayDefaultMode}}){{else}}Use gateway default{{end}}</option>
+                  <option value="progressive" {{if eq .PrefillDiscoveryMode "progressive"}}selected{{end}}>Progressive</option>
+                  <option value="direct" {{if eq .PrefillDiscoveryMode "direct"}}selected{{end}}>Direct</option>
+                  {{if .ShowCodeMode}}<option value="code_mode"{{if eq .PrefillDiscoveryMode "code_mode"}} selected{{end}}>Code Mode</option>{{end}}
+                </select>
+                <p
+                  id="discovery-mode-help"
+                  class="text-muted-foreground mt-2 text-sm"
+                >
+                  Progressive discovers tools as needed, starting from
+                  <code>list_servers</code>. Direct lists every available tool
+                  as a qualified <code>server--tool</code> name. Use Direct if
+                  your client cannot discover tools progressively. {{if .ShowCodeMode}}Code Mode exposes one execute tool to discover and call tools using Python, with <code>tools.search</code>, <code>tools.describe</code> and <code>tools.call</code>.{{end}}
+                </p>
+              </dd>
+            </div>
+            {{else if .GatewayDefaultMode}}
+            <div data-agent-self-only>
+              <dt class="text-eyebrow">Tool discovery</dt>
+              <dd class="mt-1 ml-0 text-sm text-muted-foreground">{{.GatewayDefaultMode}} (gateway default). Connections without an override follow this setting.</dd>
+            </div>
+            {{end}}
+            {{if .CodeModeUnavailable}}
+            <div data-agent-self-only>
+              <dt class="sr-only">Code Mode unavailable</dt>
+              <dd class="ml-0 text-muted-foreground text-sm">The code runtime is unavailable. Progressive discovery is available for this connection.</dd>
+            </div>
+            {{end}}
+            {{if .RemoteSessionCards}}
             <div>
               <dt class="text-eyebrow">Auto refresh</dt>
               <dd class="mt-1 ml-0">
@@ -671,12 +816,30 @@
           <input type="hidden" name="state" value="{{.State}}" />
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
           <input type="hidden" name="action" value="set_auto_refresh" />
+          {{if and .Gateway .Gateway.Focus}}<input type="hidden" name="server" value="{{.Gateway.Focus.Slug}}" />{{end}}
           <button type="submit" tabindex="-1" aria-hidden="true"></button>
         </form>
         {{end}} {{if .AutoClose}}
         <p class="text-sm text-muted-foreground px-6 py-6 sm:px-8">
           Connection complete. This tab will close automatically.
         </p>
+        {{else if and .Gateway .Gateway.Focus}}
+        {{/* No approve button: connecting a service above is what makes the
+        server usable, so the page says that instead of offering an approval
+        that would do nothing. */}}
+        <div class="flex flex-col gap-4 px-6 py-6 sm:px-8" data-gateway-focus-footer>
+          <p class="text-sm text-muted-foreground">
+            {{if .Gateway.Focus.NotSetUp}}{{.Gateway.Focus.Name}} signs people in through a service that isn't set up on this gateway yet, so it can't be connected here. Ask an administrator to set up sign-in for it.
+            {{else if .Gateway.Focus.NeedsSignIn}}Connecting is all {{.Gateway.Focus.Name}} needs. As soon as a service above is connected, it works through this gateway, with nothing else to approve.
+            {{if .FirstParty}}Go back to your AI client and try again. You can close this tab.{{else}}Go back to all servers to finish giving {{.ClientName}} access.{{end}}{{else}}{{.Gateway.Focus.Name}} needs no sign-in, so it works through this gateway with nothing to connect.{{end}}
+          </p>
+          <a
+            href="{{.ConsentPath}}?state={{.State}}&server="
+            class="bg-card interact:bg-accent flex h-10 w-full items-center justify-center border px-6 text-sm sm:w-fit"
+            data-gateway-back
+            >Back to all servers</a
+          >
+        </div>
         {{else if .FirstParty}}
         <p class="text-sm text-muted-foreground px-6 py-6 sm:px-8">
           {{if .RemoteSessionCards}}When you've connected the services above, you can close this tab.{{else}}You can close this tab.{{end}}
@@ -704,7 +867,7 @@
             >
               Give access
             </button>
-            {{if and (not .ConsentEnabled) (not .ShowToolsIsland)}}
+            {{if and (not .ConsentEnabled) (not .ShowToolsIsland) (not .ApprovalError)}}
             <p data-agent-self-only class="text-muted-foreground mt-2 text-xs">
               Connect a service above to enable access.
             </p>
@@ -728,7 +891,7 @@
 
       <p class="text-xs text-muted-foreground">
         Secured by Speakeasy. Speakeasy never sees your credentials for the services
-        above — they stay with the provider.
+        {{if and .Gateway (not .Gateway.Focus)}}you connect{{else}}above{{end}} — they stay with the provider.
       </p>
     </main>
     <script src="{{.ScriptURL}}"></script>
@@ -737,3 +900,94 @@
     {{end}}
   </body>
 </html>
+{{define "gatewayServerRow"}}
+<li
+  class="group/server flex items-center justify-between gap-3 px-4 py-3 not-first:border-t"
+  data-gateway-server="{{.Slug}}"
+  data-gateway-server-ready="{{.Ready}}"
+  {{if .Hidden}}data-gateway-server-hidden{{end}}
+>
+  <span class="flex min-w-0 flex-col gap-0.5">
+    <span class="flex min-w-0 items-baseline gap-2">
+      <span class="truncate text-sm">{{.Name}}</span>
+      {{if ne .Name .Slug}}<span class="text-muted-foreground truncate font-mono text-xs">{{.Slug}}</span>{{end}}
+    </span>
+    <span
+      class="text-xs {{if .NeedsAttention}}text-default-warning{{else if .Ready}}text-default-success{{else}}text-muted-foreground{{end}}"
+      data-gateway-server-status="{{.Status}}"
+      {{if .Hidden}}hidden{{end}}
+      >{{.StatusLabel}}</span
+    >
+  </span>
+  <span class="flex shrink-0 items-center gap-3">
+    {{if .CanHide}}
+    {{/* Hide is an icon that shows on row hover or focus, and always on touch
+      screens, which can't hover. A hidden row swaps it for a plain Show
+      button. consent_script.js toggles data-gateway-server-hidden on the row. */}}
+    <form method="POST" action="{{.ConsentPath}}/remote-session" class="shrink-0" data-gateway-visibility-form>
+      <input type="hidden" name="state" value="{{.State}}" />
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+      <input type="hidden" name="server_id" value="{{.ServerID}}" />
+      <button
+        type="submit"
+        name="action"
+        value="{{if .Hidden}}show_server{{else}}hide_server{{end}}"
+        class="text-muted-foreground interact:text-foreground interact:bg-accent interact:border-border flex h-8 min-w-8 cursor-pointer items-center justify-center border border-transparent text-xs opacity-0 transition-[color,background-color,border-color,opacity] group-hover/server:opacity-100 group-focus-within/server:opacity-100 pointer-coarse:opacity-100 group-data-[gateway-server-hidden]/server:px-3 group-data-[gateway-server-hidden]/server:opacity-100 disabled:cursor-wait disabled:opacity-60"
+        title="{{if .Hidden}}Make this server available to your tools again{{else}}Hide this server, preventing your agent from attempting to access it.{{end}}"
+        data-gateway-visibility-toggle
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          class="size-4 group-data-[gateway-server-hidden]/server:hidden"
+        >
+          <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" />
+          <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+          <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
+          <path d="m2 2 20 20" />
+        </svg>
+        <span class="sr-only group-data-[gateway-server-hidden]/server:hidden">Hide</span>
+        <span class="hidden group-data-[gateway-server-hidden]/server:inline">Show</span>
+      </button>
+    </form>
+    {{end}}
+    <span class="flex shrink-0 items-center gap-3" data-gateway-server-actions {{if .Hidden}}hidden{{end}}>
+      {{if .ConnectClientID}}
+      <form method="POST" action="{{.ConsentPath}}/remote-session" class="shrink-0">
+        <input type="hidden" name="state" value="{{.State}}" />
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+        <input type="hidden" name="client_id" value="{{.ConnectClientID}}" />
+        <button
+          type="submit"
+          name="action"
+          value="connect"
+          class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
+          data-connect-link
+        >
+          {{if .NeedsAttention}}Reconnect{{else}}Connect{{end}}
+        </button>
+      </form>
+      {{else if .NeedsSignIn}}
+      <a
+        href="{{.ConsentPath}}?state={{.State}}&server={{.Slug}}"
+        class="text-muted-foreground interact:text-foreground shrink-0 text-xs"
+        data-gateway-server-page
+        >{{if .Ready}}Manage{{else}}Connect{{end}} &rsaquo;</a
+      >
+      {{else if .NotSetUp}}
+      <a
+        href="{{.ConsentPath}}?state={{.State}}&server={{.Slug}}"
+        class="text-muted-foreground interact:text-foreground shrink-0 text-xs"
+        data-gateway-server-page
+        >View &rsaquo;</a
+      >
+      {{end}}
+    </span>
+  </span>
+</li>
+{{end}}

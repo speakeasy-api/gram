@@ -15,7 +15,7 @@ const FLAG_OFF =
 const EMPTY_HINT = "Leave empty to use the scopes the MCP server advertises.";
 const ADVERTISED = "Sign-ins request read, advertised by the MCP server.";
 const CATALOGUE =
-  "Sign-ins request every scope the identity provider advertises.";
+  "Sign-ins request every scope the authorization server advertises.";
 const OWN_SCOPES = "Not used: this connection requests its own scopes.";
 const OWN_REQUEST = "Sign-ins request read, set on this connection.";
 
@@ -173,7 +173,7 @@ describe("scopePinStatus", () => {
         "client-1",
       ),
     ).toEqual([
-      `${FLAG_OFF} Sign-ins request read, set by the identity provider's override.`,
+      `${FLAG_OFF} Sign-ins request read, set by the authorization server's override.`,
     ]);
     expect(
       scopePinStatus(
@@ -181,7 +181,7 @@ describe("scopePinStatus", () => {
         "client-1",
       ),
     ).toEqual([
-      `${FLAG_OFF} Sign-ins request no scopes; the identity provider applies its defaults.`,
+      `${FLAG_OFF} Sign-ins request no scopes; the authorization server applies its defaults.`,
     ]);
     expect(
       scopePinStatus(
@@ -194,7 +194,7 @@ describe("scopePinStatus", () => {
         "client-1",
       ),
     ).toEqual([
-      "Sign-ins request read, set by the identity provider's override. This may change once the MCP server is next contacted.",
+      "Sign-ins request read, set by the authorization server's override. This may change once the MCP server is next contacted.",
     ]);
     // A client that does not own the resource never reads it, so nothing can change.
     expect(
@@ -206,7 +206,7 @@ describe("scopePinStatus", () => {
         "client-1",
       ),
     ).toEqual([
-      "Sign-ins request read, set by the identity provider's override.",
+      "Sign-ins request read, set by the authorization server's override.",
     ]);
   });
 
@@ -223,7 +223,7 @@ describe("scopePinStatus", () => {
       ),
     ).toEqual(["After you save, sign-ins request these scopes."]);
     expect(scopePinStatus(withSource("resource_pin"), "client-1", [])).toEqual([
-      "After you save, sign-ins use the scopes the MCP server advertises, or the identity provider's scopes if it advertises none.",
+      "After you save, sign-ins use the scopes the MCP server advertises, or the authorization server's scopes if it advertises none.",
     ]);
   });
 
@@ -456,7 +456,7 @@ describe("ResourceScopePinField", () => {
     ).toBeDefined();
   });
 
-  it("explains that the MCP server and its identity provider define scopes", async () => {
+  it("explains that the MCP server and its authorization server define scopes", async () => {
     render(
       <ResourceScopePinField
         pin={pin(["read", "admin"])}
@@ -484,7 +484,7 @@ describe("ResourceScopePinField", () => {
     );
     expect(
       await screen.findByText(
-        /^Scopes are permissions defined by Linear and its identity provider, not by Speakeasy\./,
+        /^Scopes are permissions defined by Linear and its authorization server, not by Speakeasy\./,
       ),
     ).toBeDefined();
   });

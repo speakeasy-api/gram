@@ -53,24 +53,24 @@ func scopedToken(scope string) http.HandlerFunc {
 	}
 }
 
-func TestRemoteLogin_OpenIDRequestedOnlyWhenAdvertised(t *testing.T) {
+func TestRemoteLogin_ClientScopeIsSentAsSet(t *testing.T) {
 	t.Parallel()
 
+	// An operator's client scope is never widened, even with openid advertised.
 	_, advertised := newSyntheticExpiryEnv(t, "openid-advertised", scopelessToken,
 		withIssuerScopes("channels:history", "openid"),
 		withClientScope("channels:history"),
 	)
-	require.Equal(t, "channels:history openid", scopeOf(t, advertised.authURL))
+	require.Equal(t, "channels:history", scopeOf(t, advertised.authURL))
 	// RFC 6749 §5.1: no scope in the response means the requested scope was
 	// granted, and that is what the session carries for the consent page.
-	require.Equal(t, []string{"channels:history", "openid"}, advertised.session.Scopes)
+	require.Equal(t, []string{"channels:history"}, advertised.session.Scopes)
 
-	_, silent := newSyntheticExpiryEnv(t, "openid-silent", scopelessToken,
-		withIssuerScopes("channels:history"),
-		withClientScope("channels:history"),
+	_, chosen := newSyntheticExpiryEnv(t, "openid-chosen", scopelessToken,
+		withIssuerScopes("channels:history", "openid"),
+		withClientScope("channels:history", "openid"),
 	)
-	require.Equal(t, "channels:history", scopeOf(t, silent.authURL))
-	require.Equal(t, []string{"channels:history"}, silent.session.Scopes)
+	require.Equal(t, "channels:history openid", scopeOf(t, chosen.authURL))
 }
 
 func TestRemoteLogin_OfflineAccessRequestedOnlyWhenAdvertised(t *testing.T) {
@@ -111,9 +111,9 @@ func TestRemoteLogin_ScopeOverrideIsRequestedVerbatim(t *testing.T) {
 		withIssuerScopes("channels:history", "openid", "offline_access"),
 		withClientScope("channels:history"),
 		withScopeOverride("custom:one", "custom:two"),
-		withProber(), withLiveResourceScopes(),
+		withProber(),
 	)
-	require.Equal(t, "channels:history openid offline_access", scopeOf(t, scoped.authURL))
+	require.Equal(t, "channels:history", scopeOf(t, scoped.authURL))
 }
 
 // Empty scopes_supported adds nothing; the NULL case exists only on Client (TestClientRequestedScopes).
@@ -499,12 +499,12 @@ func TestRemoteLoginCallback_DeniedEchoesOnlyRegisteredErrorCodes(t *testing.T) 
 	_, _, w, err := driveSyntheticLogin(t, "denied-registered", scopelessToken,
 		withCallbackQuery(func(q url.Values) {
 			q.Del("code")
-			q.Set("error", "access_denied")
+			q.Set("error", "server_error")
 		}),
 	)
 	require.Error(t, err)
 	require.NotEqual(t, http.StatusSeeOther, w.Code)
-	require.Contains(t, err.Error(), "remote authn challenge denied: access_denied")
+	require.Contains(t, err.Error(), "remote authn challenge denied: server_error")
 
 	_, _, w, err = driveSyntheticLogin(t, "denied-unregistered", scopelessToken,
 		withCallbackQuery(func(q url.Values) {
@@ -547,4 +547,20 @@ func TestRemoteLoginCallback_BareStateDoesNotConsumeLogin(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotEqual(t, uuid.Nil, session.ID)
+}
+
+func TestRemoteLoginCallback_CancellationRejectsWrongIssuer(t *testing.T) {
+	t.Parallel()
+	spy := &exchangeSpy{}
+	_, _, response, err := driveSyntheticLogin(t, "cancel-wrong-issuer", spy.handler(),
+		withIssParameterSupported(true),
+		withCallbackQuery(func(q url.Values) {
+			q.Del("code")
+			q.Set("error", "access_denied")
+			q.Set("iss", "https://untrusted.example")
+		}),
+	)
+	require.ErrorContains(t, err, "expected issuer")
+	require.Empty(t, response.Header().Get("Location"))
+	require.Zero(t, spy.count())
 }

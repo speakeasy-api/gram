@@ -1,7 +1,6 @@
 import { MCPSessionsEmptyState } from "@/components/setup-empty-state";
 import { useSessionAgents } from "@/hooks/useSessionAgents";
 import { useDeferredValue, useMemo, useState } from "react";
-import { Navigate } from "react-router";
 import {
   defineFilters,
   useFilterState,
@@ -10,8 +9,6 @@ import {
 } from "@/components/filters";
 import { Page } from "@/components/page-layout";
 import { ResourceListPage } from "@/components/page-templates";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { useRoutes } from "@/routes";
 import { ConnectionsList } from "@/components/connections/ConnectionsList";
 import {
   CONNECTION_GROUPING_LABELS,
@@ -25,8 +22,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { subjectLabel } from "@/lib/user-session-status";
 import { useUserSessionFacets } from "@gram/client/react-query/userSessionFacets.js";
 import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
-import type { QueryParamStatus as ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
-import { ConsentToolFilteringSetting } from "./ConsentToolFilteringSetting";
+import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
 import { RemoteSessionRefreshPolicySetting } from "./RemoteSessionRefreshPolicySetting";
 
 const USER_SESSION_FILTERS = defineFilters([
@@ -47,6 +43,8 @@ const USER_SESSION_FILTERS = defineFilters([
   // Unpinned to keep the bar on one line. Project and MCP server are the two
   // axes this page is read along; narrowing to one person is a follow-up
   // question, and the chip appears the moment it is answered.
+  // "User", not "Identity": the facets endpoint lists only `user:` subjects,
+  // so the wider label offered agents and keys the filter cannot select.
   { id: "subjectUrn", label: "User", kind: "select" },
 ]);
 
@@ -64,15 +62,6 @@ const GROUPING_OPTIONS: { value: ConnectionGrouping; label: string }[] = [
 
 export default function UserSessions(): JSX.Element {
   const project = useProject();
-  const telemetry = useTelemetry();
-  const routes = useRoutes();
-
-  // Gated behind the `user-sessions-dashboard` PostHog flag (internal rollout).
-  // Redirect direct-URL access when the flag has resolved to disabled; while it
-  // is still loading (undefined) we render and let RBAC guard the data.
-  if (telemetry.isFeatureEnabled("user-sessions-dashboard") === false) {
-    return <Navigate to={routes.home.href()} replace />;
-  }
 
   return <UserSessionsInner key={project.id} />;
 }
@@ -213,8 +202,6 @@ function UserSessionsInner(): JSX.Element {
             which every list page is spaced against. */}
         <div className="-mt-6 space-y-4">
           <RemoteSessionRefreshPolicySetting />
-
-          <ConsentToolFilteringSetting />
         </div>
 
         <div className="space-y-4">

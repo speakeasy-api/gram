@@ -30,7 +30,7 @@ var _ = Service("auth", func() {
 		Payload(func() {
 			Attribute("code", String, "The auth code for authentication from the speakeasy system")
 			Attribute("state", String, "The opaque state string optionally provided during initialization.")
-			Required("code")
+			Attribute("error", String, "The identity provider error, when sign-in was not completed.")
 		})
 
 		Result(func() {
@@ -43,6 +43,7 @@ var _ = Service("auth", func() {
 		HTTP(func() {
 			GET("/rpc/auth.callback")
 			Param("code")
+			Param("error")
 			Param("state")
 
 			Response(StatusTemporaryRedirect, func() {
@@ -65,6 +66,7 @@ var _ = Service("auth", func() {
 
 		Payload(func() {
 			Attribute("redirect", String, "Optional URL to redirect to after successful authentication")
+			Attribute("partner_code", String, "Optional partner signup code.", func() { MaxLength(80) })
 			Attribute("org_name", String, "Optional organization name. When set, the organization is created for a new user during the auth callback.")
 			Attribute("email", String, "Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.")
 			Attribute("support_handoff", String, "Opaque, one-time organization support handoff. Never included in OAuth state.")
@@ -79,6 +81,7 @@ var _ = Service("auth", func() {
 			GET("/rpc/auth.login")
 			Param("redirect")
 			Param("org_name")
+			Param("partner_code")
 			// A top-level browser navigation reaches this endpoint and carries
 			// no custom headers, so `email` has to be a query param. The
 			// request logging middleware redacts it from logged URLs.
@@ -180,12 +183,41 @@ var _ = Service("auth", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Logout"}`)
 	})
 
+	Method("logoutEverywhere", func() {
+		Description("Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their sign-ins in every organization, and revokes every MCP grant made from them.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(func() {
+			Attribute("session_cookie", String, "Empty string to clear the session")
+			Attribute("revoked_sign_ins", Int, "Number of sign-ins revoked.")
+			Attribute("revoked_sessions", Int, "Number of MCP grants revoked.")
+			Required("session_cookie", "revoked_sign_ins", "revoked_sessions")
+		})
+
+		HTTP(func() {
+			POST("/rpc/auth.logoutEverywhere")
+			security.SessionHeader()
+
+			Response(StatusOK, func() {
+				security.DeleteSessionCookie()
+			})
+		})
+
+		Meta("openapi:operationId", "logoutEverywhere")
+		Meta("openapi:extension:x-speakeasy-name-override", "logoutEverywhere")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LogoutEverywhere"}`)
+	})
+
 	Method("register", func() {
 		Description("Register a new org for a user with their session information.")
 
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("org_name", String, "The name of the org to register")
+			Attribute("partner_code", String, "Optional partner signup code.", func() { MaxLength(80) })
 			Required("org_name")
 		})
 
@@ -227,6 +259,7 @@ var _ = Service("auth", func() {
 			})
 			Attribute("gram_account_type", String)
 			Attribute("has_active_subscription", Boolean, "Whether the organization has an active billing subscription")
+			Attribute("accepted_signup_offer_flow", String, "Display-only signup offer variant for an accepted promotion; not billing eligibility")
 			Attribute("whitelisted", Boolean, "Whether the organization is whitelisted to access the platform")
 			Attribute("trial", Trial, func() {
 				Meta("struct:tag:json", "trial")
@@ -295,7 +328,7 @@ var _ = Service("auth", func() {
 	})
 
 	Method("transferIn", func() {
-		Description("Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.")
+		Description("Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host, unless the browser already holds a valid session here for the same user and start mode did not set replace_session; that session is then kept. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.")
 
 		NoSecurity()
 
@@ -303,12 +336,13 @@ var _ = Service("auth", func() {
 			Attribute("source_host", String, "Start mode: the platform host that holds the session to move here (e.g. app.getgram.ai)")
 			Attribute("code", String, "Callback mode: the opaque one-time transfer code from the source host's transferOut endpoint")
 			Attribute("redirect", String, "Optional URL path to land on once the session is established on this host")
+			Attribute("replace_session", Boolean, "Start mode: replace a session this browser already holds on this host for the same user. Without it, the callback keeps that session and its organization, so a stale source session cannot undo an organization switch made here. Set it right after switching organization on the source host.")
 		})
 
 		Result(func() {
 			Attribute("location", String, "The URL to redirect to: the source host's transferOut (start mode), the requested page (callback mode), or this host's login page when a check fails")
-			Attribute("session_token", String, "The new authentication session on this host. Set only when callback mode succeeds.")
-			Attribute("session_cookie", String, "The new authentication session on this host. Set only when callback mode succeeds.")
+			Attribute("session_token", String, "The new authentication session on this host. Set only when callback mode mints one.")
+			Attribute("session_cookie", String, "The new authentication session on this host. Set only when callback mode mints one.")
 			Required("location")
 		})
 
@@ -317,6 +351,7 @@ var _ = Service("auth", func() {
 			Param("source_host")
 			Param("code")
 			Param("redirect")
+			Param("replace_session")
 
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String, func() {

@@ -13,7 +13,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/risk"
-	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -209,27 +208,26 @@ func (s *riskFindingFalsePositiveService) apply(ctx context.Context, principal P
 		Operation: operation, IdempotencyKey: input.IdempotencyKey,
 		Input: normalizedRiskFindingFalsePositive{ProjectSlug: project.Slug, FindingIDs: normalizedIDs, Reason: reason},
 	}, s.controls.Charge(principal), func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
-		existing, err := riskrepo.New(tx).GetRiskResultsByIDs(ctx, riskrepo.GetRiskResultsByIDsParams{ProjectID: project.ID, Ids: ids})
-		if err != nil {
-			return nil, riskMutationUnavailableWithCause(fmt.Errorf("read risk findings for false positive mutation: %w", err))
-		}
-		var changed []riskrepo.RiskResult
+		var (
+			result      risk.FalsePositiveMutationResult
+			mutationErr error
+		)
 		if restore {
-			changed, err = s.falsePositives.UnmarkInTransaction(ctx, tx, mutation)
+			result, mutationErr = s.falsePositives.UnmarkInTransaction(ctx, tx, mutation)
 		} else {
-			changed, err = s.falsePositives.MarkInTransaction(ctx, tx, mutation)
+			result, mutationErr = s.falsePositives.MarkInTransaction(ctx, tx, mutation)
 		}
-		if err != nil {
-			return nil, riskMutationUnavailableWithCause(err)
+		if mutationErr != nil {
+			return nil, riskMutationUnavailableWithCause(mutationErr)
 		}
-		result := partitionRiskFindingOutcomes(project, ids, existing, changed, restore)
+		outcome := partitionRiskFindingOutcomes(project, ids, result.ExistingIDs, result.ChangedIDs, restore)
 		if restore {
-			return UnmarkRiskFindingsFalsePositiveReceiptResult{RiskFindingFalsePositiveReceipt: result}, nil
+			return UnmarkRiskFindingsFalsePositiveReceiptResult{RiskFindingFalsePositiveReceipt: outcome}, nil
 		}
-		return MarkRiskFindingsFalsePositiveReceiptResult{RiskFindingFalsePositiveReceipt: result}, nil
+		return MarkRiskFindingsFalsePositiveReceiptResult{RiskFindingFalsePositiveReceipt: outcome}, nil
 	})
 	if err != nil {
-		return OperationReceipt{}, RiskFindingFalsePositiveReceipt{}, err
+		return OperationReceipt{}, RiskFindingFalsePositiveReceipt{}, fmt.Errorf("execute risk finding false positive mutation: %w", err)
 	}
 	var result RiskFindingFalsePositiveReceipt
 	if err := json.Unmarshal(receipt.ResultPayload, &result); err != nil {
@@ -260,19 +258,16 @@ func parseRiskFindingIDs(raw []string) ([]uuid.UUID, error) {
 	return ids, nil
 }
 
-// partitionRiskFindingOutcomes assigns every requested id to one bucket: the
-// rows the UPDATE returned changed; rows that exist in the project but were
-// not returned were already in the requested state; the rest are not in this
-// project. Slices are always non-nil so the receipt encodes [] rather than
-// null.
-func partitionRiskFindingOutcomes(project ResolvedProject, requested []uuid.UUID, existing, changed []riskrepo.RiskResult, restore bool) RiskFindingFalsePositiveReceipt {
+// partitionRiskFindingOutcomes assigns every requested id to one bucket.
+// Slices are always non-nil so the receipt encodes [] rather than null.
+func partitionRiskFindingOutcomes(project ResolvedProject, requested, existing, changed []uuid.UUID, restore bool) RiskFindingFalsePositiveReceipt {
 	changedSet := make(map[uuid.UUID]struct{}, len(changed))
-	for _, row := range changed {
-		changedSet[row.ID] = struct{}{}
+	for _, id := range changed {
+		changedSet[id] = struct{}{}
 	}
 	existingSet := make(map[uuid.UUID]struct{}, len(existing))
-	for _, row := range existing {
-		existingSet[row.ID] = struct{}{}
+	for _, id := range existing {
+		existingSet[id] = struct{}{}
 	}
 	result := RiskFindingFalsePositiveReceipt{
 		Project:                           riskReceiptProject(project),

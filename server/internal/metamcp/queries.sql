@@ -77,6 +77,7 @@ ORDER BY meta_mcp_servers.created_at DESC, meta_mcp_servers.id DESC;
 -- built-in instructions), so COALESCE cannot distinguish omit from clear.
 UPDATE meta_mcp_servers
 SET name = @name,
+    discovery_mode = COALESCE(sqlc.narg('discovery_mode'), discovery_mode),
     user_session_issuer_id = sqlc.narg('user_session_issuer_id'),
     visibility = COALESCE(sqlc.narg('visibility'), visibility),
     network_access_mode = CASE
@@ -294,15 +295,12 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
--- name: ListMetaMCPMembersForRemoteSessionIssuer :many
--- The meta MCP's proxied (remote or tunneled) members that authenticate
--- against a given authorization server, filtered exactly as
--- ListServableMetaMCPMembers so a member invisible to the serving path cannot
--- claim a credential either.
---
--- A client names exactly one remote_session_issuer, so matching it against the
--- member's own is the whole lookup; the caller still fails closed on none or
--- several, since a grant records one resource.
+-- name: ListMetaMCPMembersForRemoteSessionClient :many
+-- The meta MCP's proxied (remote or tunneled) members associated with a given
+-- upstream OAuth client, filtered exactly as ListServableMetaMCPMembers so a
+-- member invisible to the serving path cannot claim a credential either. The
+-- caller still fails closed on none or several, since a grant records one
+-- resource.
 --
 -- upstream_url is the member's RFC 8707 resource: the remote server URL or
 -- the tunneled server's recorded resource identifier (empty when a tunneled
@@ -310,7 +308,9 @@ RETURNING *;
 -- Hosted and unproxied members have no upstream and cannot claim.
 SELECT
     s.id AS mcp_server_id,
+    s.project_id AS project_id,
     s.visibility AS mcp_server_visibility,
+    s.network_access_mode AS mcp_server_network_access_mode,
     COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url,
     (t.id IS NOT NULL)::boolean AS tunneled
 FROM meta_mcp_server_members m
@@ -332,16 +332,106 @@ WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND m.deleted IS FALSE
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
-  AND s.remote_session_issuer_id = @remote_session_issuer_id
+  AND EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS a
+    WHERE a.mcp_server_id = s.id
+      AND a.remote_session_client_id = @remote_session_client_id
+      AND a.deleted IS FALSE
+  )
 ORDER BY m.sort_order, m.created_at, m.id;
 
--- name: ListMetaMCPProxiedMemberResources :many
--- Every proxied member's authorization server and RFC 8707 resource, filtered
--- as ListMetaMCPMembersForRemoteSessionIssuer but across all issuers, so a
--- consent render resolves resource display ownership for every card from one
--- read.
+-- name: ListOrganizationMCPServersForRemoteSessionClient :many
+-- The organization gateway's counterpart to
+-- ListMetaMCPMembersForRemoteSessionClient: the organization's proxied servers
+-- associated with a given upstream OAuth client, filtered as
+-- ListServableMCPServersByOrganizationID so a server the gateway cannot serve
+-- cannot claim a credential either. Returns the same columns, so callers
+-- treat both alike.
+--
+-- project_id narrows the claim to one project's servers, for a client that a
+-- project owns: that client's grant routes only to its own project's members.
+-- NULL considers every project, for an organization-level client. Callers
+-- apply each server's network access mode for the request's surface, as the
+-- member snapshot does.
 SELECT
-    s.remote_session_issuer_id,
+    s.id AS mcp_server_id,
+    s.project_id AS project_id,
+    s.visibility AS mcp_server_visibility,
+    s.network_access_mode AS mcp_server_network_access_mode,
+    COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url,
+    (t.id IS NOT NULL)::boolean AS tunneled
+FROM mcp_servers s
+JOIN projects p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = s.project_id
+ AND r.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = s.project_id
+ AND t.deleted IS FALSE
+WHERE p.organization_id = @organization_id
+  AND (sqlc.narg('project_id')::uuid IS NULL OR s.project_id = sqlc.narg('project_id')::uuid)
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+  AND s.slug IS NOT NULL
+  AND (r.id IS NOT NULL OR t.id IS NOT NULL)
+  AND EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS a
+    WHERE a.mcp_server_id = s.id
+      AND a.remote_session_client_id = @remote_session_client_id
+      AND a.deleted IS FALSE
+  )
+ORDER BY s.project_id, s.slug;
+
+-- name: ListOrganizationProxiedMCPServerResources :many
+-- The organization gateway's counterpart to ListMetaMCPProxiedMemberResources,
+-- over the servers ListOrganizationMCPServersForRemoteSessionClient considers:
+-- one row per server and associated client. Each row carries its server's
+-- project and network access mode, which the caller matches against a card's
+-- client and the request's surface.
+SELECT
+    a.remote_session_client_id,
+    s.id AS mcp_server_id,
+    s.project_id AS project_id,
+    s.network_access_mode AS mcp_server_network_access_mode,
+    COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
+FROM mcp_servers s
+JOIN projects p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = s.project_id
+ AND r.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = s.project_id
+ AND t.deleted IS FALSE
+JOIN mcp_server_remote_session_clients a
+  ON a.mcp_server_id = s.id
+ AND a.deleted IS FALSE
+WHERE p.organization_id = @organization_id
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+  AND s.slug IS NOT NULL
+  AND (r.id IS NOT NULL OR t.id IS NOT NULL)
+ORDER BY s.project_id, s.slug, a.remote_session_client_id;
+
+-- name: ListMetaMCPProxiedMemberResources :many
+-- Every proxied member's associated clients and RFC 8707 resource, one row
+-- per member and associated client, with the member filters of
+-- ListMetaMCPMembersForRemoteSessionClient, so a consent render resolves
+-- resource display ownership for every card from one read.
+SELECT
+    a.remote_session_client_id,
+    s.id AS mcp_server_id,
+    s.project_id AS project_id,
+    s.network_access_mode AS mcp_server_network_access_mode,
     COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
@@ -357,13 +447,15 @@ LEFT JOIN tunneled_mcp_servers t
   ON t.id = s.tunneled_mcp_server_id
  AND t.project_id = m.project_id
  AND t.deleted IS FALSE
+JOIN mcp_server_remote_session_clients a
+  ON a.mcp_server_id = s.id
+ AND a.deleted IS FALSE
 WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE
   AND s.slug IS NOT NULL
-  AND s.remote_session_issuer_id IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
-ORDER BY m.sort_order, m.created_at, m.id;
+ORDER BY m.sort_order, m.created_at, m.id, a.remote_session_client_id;
 
 -- name: AutoAttachMemberProviderClient :execrows
 -- Bind the member's upstream OAuth client to the gateway's issuer so consent
@@ -455,12 +547,15 @@ ORDER BY s.remote_session_issuer_id, s.user_session_issuer_id;
 
 -- name: ListMetaMCPEndpointsForTelemetryByProjectID :many
 -- Gateway endpoints for classifying hook-observed calls by URL. Deleted rows keep
--- matching unless a live endpoint or toolset now holds the slug in that namespace;
--- those existence checks mirror the global unique indexes, so they are not project-scoped.
+-- matching unless a live endpoint now holds the slug in that namespace (callers also
+-- drop ones a legacy toolset alias holds); the existence check mirrors the global
+-- unique index, so it is not project-scoped.
 SELECT
     ms.id AS meta_mcp_server_id,
     ms.name,
     e.slug,
+    -- legacyalias: the caller checks deleted rows against aliases; drop with AIM-670.
+    e.custom_domain_id,
     e.deleted,
     e.is_domain_root,
     cd.domain AS custom_domain,
@@ -490,13 +585,6 @@ WHERE e.project_id = @project_id
         WHERE l.slug = e.slug
           AND l.custom_domain_id IS NOT DISTINCT FROM e.custom_domain_id
           AND l.deleted IS FALSE
-      )
-      AND NOT EXISTS (
-        SELECT 1
-        FROM toolsets t
-        WHERE t.mcp_slug = e.slug
-          AND t.custom_domain_id IS NOT DISTINCT FROM e.custom_domain_id
-          AND t.deleted IS FALSE
       )
     )
   )
