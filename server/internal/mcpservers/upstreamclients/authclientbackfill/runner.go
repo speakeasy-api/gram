@@ -11,20 +11,27 @@
 // no longer yields, so the records track it, and marks each server it links a
 // client to as needing upstream authentication where that is still
 // undecided. Admin-created records are never
-// read or retired here. Nothing reads these records yet: the existing
-// resolution stays authoritative.
+// retired here. It then names, on each live credential's choice for a server,
+// the one auth client that serves it, admin-created clients included (see
+// selections.go), and reports coverage by credential class; a choice several
+// clients could serve is reported, never guessed. Its last phase grants the default auth permissions
+// the mandatory auth client check needs (see grants.go); those grants are live
+// authorization data. The client records themselves are not read yet: the
+// existing resolution stays authoritative.
 package authclientbackfill
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -74,11 +81,16 @@ var Kinds = []Kind{KindOAuth, KindHeader, KindEMA}
 
 // Phase names, as reported in PhaseErrors.
 const (
-	PhaseOAuth     = "oauth"
-	PhaseHeaders   = "headers"
-	PhaseEMA       = "ema"
-	PhaseReconcile = "reconcile"
-	PhaseMark      = "mark"
+	PhaseOAuth   = "oauth"
+	PhaseHeaders = "headers"
+	PhaseEMA     = "ema"
+	// PhaseEMAWarnings reports same-origin servers no client covers.
+	PhaseEMAWarnings = "ema_warnings"
+	PhaseReconcile   = "reconcile"
+	PhaseMark        = "mark"
+	// PhaseSelections names auth clients on credentials' choices.
+	PhaseSelections = "selections"
+	PhaseGrants     = "grants"
 )
 
 // Outcome classifies one decision.
@@ -158,6 +170,11 @@ const (
 	// credential headers: copying them onto the shared client would send one
 	// source's credentials from the others' servers.
 	ReasonOAuthClientSharedAcrossSources Reason = "oauth_client_shared_across_sources"
+
+	// ReasonEMAClientSharedAcrossSources is an ema client offered by servers
+	// on more than one source with credential headers, so no one source's
+	// headers can be copied onto it.
+	ReasonEMAClientSharedAcrossSources Reason = "ema_client_shared_across_sources"
 
 	// ReasonConflictingScopes is identity chaining bindings for one upstream
 	// requesting different scopes.
@@ -337,6 +354,48 @@ type Report struct {
 	// ServersMarked counts servers marked as needing upstream authentication.
 	ServersMarked int `json:"servers_marked"`
 
+	// PendingGrants counts default grants the organization is missing, and
+	// PendingGrantsByKind splits them by default.
+	PendingGrants       int               `json:"pending_grants"`
+	PendingGrantsByKind map[GrantKind]int `json:"pending_grants_by_kind"`
+
+	// GrantsWritten counts default grants this run added.
+	GrantsWritten int `json:"grants_written"`
+
+	// APIKeysGranted lists the API keys this run added policy grants to, for
+	// the run's log.
+	APIKeysGranted []string `json:"api_keys_granted"`
+
+	// APIKeysWaiting means key policies were not planned because some auth
+	// clients are not recorded yet.
+	APIKeysWaiting bool `json:"api_keys_waiting"`
+
+	// SharedClientsWaiting means shared client grants were not planned
+	// because the recorded clients and links may not be current: a phase
+	// failed, or some await retirement.
+	SharedClientsWaiting bool `json:"shared_clients_waiting"`
+
+	// AttachmentRemediations lists the agent attachments the grants phase
+	// could not carry over, which need their owner to act.
+	AttachmentRemediations []AttachmentRemediation `json:"attachment_remediations"`
+
+	// AttachmentsWaiting counts carryable attachments whose grants were not
+	// planned because the organization's upstream_client write gate is off.
+	// A run with any is not complete.
+	AttachmentsWaiting int `json:"attachments_waiting"`
+
+	// Selections summarizes live choices by credential class, and
+	// SelectionGaps lists each live choice left without a usable auth client.
+	Selections    map[CredentialClass]*SelectionCounts `json:"selections"`
+	SelectionGaps []SelectionGap                       `json:"selection_gaps"`
+
+	// PendingSelectionMappings counts choices with exactly one auth client to
+	// name, named or not.
+	PendingSelectionMappings int `json:"pending_selection_mappings"`
+
+	// SelectionsMapped counts choices this run named an auth client on.
+	SelectionsMapped int `json:"selections_mapped"`
+
 	// PhaseErrors names each phase that failed and why. A failed phase's
 	// writes are rolled back and its records are not retired; the other
 	// phases still run.
@@ -384,25 +443,37 @@ func (r *Report) wroteHeader(k Kind)   { r.HeadersWritten++; r.kind(k).Written++
 // newReport returns an empty report in the given mode.
 func newReport(apply bool) Report {
 	report := Report{
-		Mode:                  "dry_run",
-		Associations:          0,
-		Outcomes:              map[Outcome]int{},
-		ByKind:                map[Kind]*KindCounts{},
-		PendingClients:        0,
-		PendingLinks:          0,
-		PendingHeaders:        0,
-		ClientsWritten:        0,
-		LinksWritten:          0,
-		HeadersWritten:        0,
-		Gaps:                  0,
-		PendingRetiredClients: 0,
-		PendingRetiredLinks:   0,
-		ClientsRetired:        0,
-		LinksRetired:          0,
-		PendingMarkedServers:  0,
-		ServersMarked:         0,
-		PhaseErrors:           map[string]string{},
-		Results:               []Result{},
+		Mode:                     "dry_run",
+		Associations:             0,
+		Outcomes:                 make(map[Outcome]int),
+		ByKind:                   make(map[Kind]*KindCounts),
+		PendingClients:           0,
+		PendingLinks:             0,
+		PendingHeaders:           0,
+		ClientsWritten:           0,
+		LinksWritten:             0,
+		HeadersWritten:           0,
+		Gaps:                     0,
+		PendingRetiredClients:    0,
+		PendingRetiredLinks:      0,
+		ClientsRetired:           0,
+		LinksRetired:             0,
+		PendingMarkedServers:     0,
+		ServersMarked:            0,
+		PendingGrants:            0,
+		PendingGrantsByKind:      make(map[GrantKind]int),
+		GrantsWritten:            0,
+		APIKeysGranted:           []string{},
+		APIKeysWaiting:           false,
+		SharedClientsWaiting:     false,
+		Selections:               make(map[CredentialClass]*SelectionCounts),
+		SelectionGaps:            []SelectionGap{},
+		PendingSelectionMappings: 0,
+		SelectionsMapped:         0,
+		AttachmentRemediations:   []AttachmentRemediation{},
+		AttachmentsWaiting:       0,
+		PhaseErrors:              map[string]string{},
+		Results:                  []Result{},
 	}
 	if apply {
 		report.Mode = "apply"
@@ -444,6 +515,27 @@ func (r *Report) merge(o Report) {
 	r.LinksRetired += o.LinksRetired
 	r.PendingMarkedServers += o.PendingMarkedServers
 	r.ServersMarked += o.ServersMarked
+	r.PendingGrants += o.PendingGrants
+	for kind, n := range o.PendingGrantsByKind {
+		r.PendingGrantsByKind[kind] += n
+	}
+	r.GrantsWritten += o.GrantsWritten
+	r.APIKeysGranted = append(r.APIKeysGranted, o.APIKeysGranted...)
+	r.APIKeysWaiting = r.APIKeysWaiting || o.APIKeysWaiting
+	r.SharedClientsWaiting = r.SharedClientsWaiting || o.SharedClientsWaiting
+	r.AttachmentRemediations = append(r.AttachmentRemediations, o.AttachmentRemediations...)
+	r.AttachmentsWaiting += o.AttachmentsWaiting
+	for class, c := range o.Selections {
+		mine := r.selectionClass(class)
+		mine.Selections += c.Selections
+		mine.Written += c.Written
+		for outcome, n := range c.Outcomes {
+			mine.Outcomes[outcome] += n
+		}
+	}
+	r.SelectionGaps = append(r.SelectionGaps, o.SelectionGaps...)
+	r.PendingSelectionMappings += o.PendingSelectionMappings
+	r.SelectionsMapped += o.SelectionsMapped
 	r.Results = append(r.Results, o.Results...)
 }
 
@@ -495,6 +587,14 @@ type phase struct {
 // What earlier phases committed stays, so an interrupted apply keeps its
 // progress. Run returns an error only when the run as a whole cannot proceed.
 func Run(ctx context.Context, db Acquirer, opts Options) (Report, error) {
+	return withOrganizationLock(ctx, db, opts, func(conn *pgxpool.Conn, startedAt pgtype.Timestamptz) (Report, error) {
+		return runLocked(ctx, conn, opts, startedAt)
+	})
+}
+
+// withOrganizationLock runs fn holding the organization's backfill lock on one
+// connection, taken without waiting.
+func withOrganizationLock(ctx context.Context, db Acquirer, opts Options, fn func(conn *pgxpool.Conn, startedAt pgtype.Timestamptz) (Report, error)) (Report, error) {
 	if opts.OrganizationID == "" {
 		return Report{}, errors.New("organization id is required")
 	}
@@ -514,17 +614,102 @@ func Run(ctx context.Context, db Acquirer, opts Options) (Report, error) {
 		}
 		conn.Release()
 	}()
-	locked, err := New(conn).TryLockOrganizationBackfill(ctx, opts.OrganizationID)
+	lock, err := New(conn).TryLockOrganizationBackfill(ctx, opts.OrganizationID)
 	switch {
 	case err != nil:
 		return Report{}, fmt.Errorf("lock organization backfill: %w", err)
-	case !locked:
+	case !lock.Locked:
 		return Report{}, ErrRunInProgress
 	}
-	return runLocked(ctx, conn, opts)
+	return fn(conn, lock.StartedAt)
 }
 
-func runLocked(ctx context.Context, db TxStarter, opts Options) (Report, error) {
+// RunGrants runs only the grants phase, for organizations the rest of the
+// backfill does not apply to. An apply holds the same organization lock as
+// Run; a dry run writes nothing and takes no lock, so checking never blocks a
+// run.
+func RunGrants(ctx context.Context, db Acquirer, opts Options) (Report, error) {
+	if !opts.Apply {
+		if opts.OrganizationID == "" {
+			return Report{}, errors.New("organization id is required")
+		}
+		conn, err := db.Acquire(ctx)
+		if err != nil {
+			return Report{}, fmt.Errorf("acquire connection: %w", err)
+		}
+		defer conn.Release()
+		return runGrantsPhase(ctx, conn, opts)
+	}
+	return withOrganizationLock(ctx, db, opts, func(conn *pgxpool.Conn, _ pgtype.Timestamptz) (Report, error) {
+		return runGrantsPhase(ctx, conn, opts)
+	})
+}
+
+// runGrantsPhase runs the grants phase alone. Key policies are written once,
+// so they wait until the organization's auth clients are all recorded.
+func runGrantsPhase(ctx context.Context, conn *pgxpool.Conn, opts Options) (Report, error) {
+	report := newReport(opts.Apply)
+	local := newReport(opts.Apply)
+	probe, err := clientsRecorded(ctx, conn, opts.OrganizationID)
+	if err != nil {
+		return report, fmt.Errorf("check recorded auth clients: %w", err)
+	}
+	shared, ready := sharedReady(probe), keysReady(probe)
+	report.SharedClientsWaiting = !shared
+	report.APIKeysWaiting = !ready
+	// The probe's failures say why shared clients and keys wait.
+	maps.Copy(report.PhaseErrors, probe.PhaseErrors)
+	p := phase{name: PhaseGrants, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
+		return runGrants(ctx, tx, opts, local, shared, ready)
+	}}
+	if err := runPhase(ctx, conn, opts, p, &local); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return report, fmt.Errorf("grants interrupted: %w", ctxErr)
+		}
+		report.PhaseErrors[PhaseGrants] = err.Error()
+		return report, nil
+	}
+	report.merge(local)
+	return report, nil
+}
+
+func runLocked(ctx context.Context, db TxStarter, opts Options, startedAt pgtype.Timestamptz) (Report, error) {
+	return runPhases(ctx, db, opts, startedAt, true)
+}
+
+// clientsRecorded dry-runs every phase but grants, to tell whether key
+// policies written now would be complete.
+func clientsRecorded(ctx context.Context, db TxStarter, organizationID string) (Report, error) {
+	return runPhases(ctx, db, Options{OrganizationID: organizationID, Apply: false, PageSize: 0}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, false)
+}
+
+// sharedReady reports whether the recorded auth clients and links are current
+// enough to grant against: no phase before grants failed, and a dry run has
+// nothing left to retire. A client or link awaiting retirement keeps its
+// stable id, so a grant written on it now would come back if it were revived.
+func sharedReady(r Report) bool {
+	for name := range r.PhaseErrors {
+		// Selection coverage only reports and maps credential choices; it
+		// records no client or link a grant depends on. Its failure stays
+		// reported and keeps selections incomplete.
+		if name != PhaseSelections {
+			return false
+		}
+	}
+	return r.Mode == "apply" || (r.PendingRetiredClients == 0 && r.PendingRetiredLinks == 0)
+}
+
+// keysReady reports whether the phases before grants left every auth client,
+// link and header copy recorded and current: shared clients are ready, no
+// decision lacks its records, and a dry run has nothing left to write.
+func keysReady(r Report) bool {
+	if !sharedReady(r) || r.Gaps > 0 {
+		return false
+	}
+	return r.Mode == "apply" || (r.PendingClients == 0 && r.PendingLinks == 0 && r.PendingHeaders == 0)
+}
+
+func runPhases(ctx context.Context, db TxStarter, opts Options, startedAt pgtype.Timestamptz, withGrants bool) (Report, error) {
 	pageSize := opts.PageSize
 	if pageSize <= 0 {
 		pageSize = defaultPageSize
@@ -532,7 +717,9 @@ func runLocked(ctx context.Context, db TxStarter, opts Options) (Report, error) 
 	report := newReport(opts.Apply)
 	size := int32(pageSize) // #nosec G115 -- bounded by defaultPageSize or an operator flag
 	want := newExpected()
-	failed := map[Kind]bool{}
+	failed := make(map[Kind]bool)
+	// Set by the EMA phase when it succeeds.
+	var ema *emaPlan
 	phases := []phase{
 		{name: PhaseOAuth, kind: KindOAuth, run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
 			q := New(tx)
@@ -541,19 +728,50 @@ func runLocked(ctx context.Context, db TxStarter, opts Options) (Report, error) 
 			}
 			return reconcile(ctx, q, opts, local)
 		}},
-		{name: PhaseHeaders, kind: KindHeader, run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
-			return runHeaders(ctx, tx, opts, size, local, want)
-		}},
+		// EMA before headers, so a server an ema client serves gets its
+		// credential headers on that client.
 		{name: PhaseEMA, kind: KindEMA, run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
-			return runEMA(ctx, tx, opts, &report, local, want)
+			plan := newEMAPlan()
+			if err := runEMA(ctx, tx, opts, local, want, plan); err != nil {
+				return err
+			}
+			ema = plan
+			return nil
+		}},
+		{name: PhaseHeaders, kind: KindHeader, run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
+			return runHeaders(ctx, tx, opts, size, local, want, ema)
+		}},
+		{name: PhaseEMAWarnings, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
+			// After every phase that records clients, so a server any of them
+			// covers draws no warning.
+			if ema == nil {
+				return nil
+			}
+			return reportEMAWarnings(ctx, New(tx), opts, ema, &report, local)
 		}},
 		{name: PhaseReconcile, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
-			return reconcileDerived(ctx, New(tx), opts, local, want, failed)
+			return reconcileDerived(ctx, New(tx), opts, local, want, failed, startedAt)
 		}},
 		{name: PhaseMark, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
-			// Last, over every committed phase's servers.
 			return markRequiringUpstreamAuth(ctx, New(tx), opts, &report, local)
 		}},
+		// After every phase that records or retires clients and links, so
+		// choices name what this run left in place.
+		// Choices are only reported, not mapped, when an earlier phase failed:
+		// its clients and links were rolled back, and a mapped choice is never
+		// revisited.
+		{name: PhaseSelections, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
+			return runSelections(ctx, New(tx), opts, size, opts.Apply && len(report.PhaseErrors) == 0, local)
+		}},
+	}
+	if withGrants {
+		phases = append(phases, phase{name: PhaseGrants, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
+			// Last, over every committed phase's auth clients.
+			shared, ready := sharedReady(report), keysReady(report)
+			local.SharedClientsWaiting = !shared
+			local.APIKeysWaiting = !ready
+			return runGrants(ctx, tx, opts, local, shared, ready)
+		}})
 	}
 	for _, p := range phases {
 		local := newReport(opts.Apply)
@@ -566,6 +784,10 @@ func runLocked(ctx context.Context, db TxStarter, opts Options) (Report, error) 
 			report.PhaseErrors[p.name] = err.Error()
 			if p.kind != "" {
 				failed[p.kind] = true
+			}
+			if p.name == PhaseEMA {
+				// Its decisions were rolled back with it.
+				ema = nil
 			}
 		default:
 			report.merge(local)
@@ -711,20 +933,31 @@ func decideAndWrite(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, ro
 	case authClientID != uuid.Nil:
 		// Recorded before this run.
 	default:
+		// A server an administrator detached the client from gets no link,
+		// so a dry run counts none either.
+		linkOutcome := OutcomeAssociated
+		if row.LinkDetached {
+			linkOutcome = OutcomeExisting
+		}
+		pendingLink := func() {
+			if !row.LinkDetached {
+				report.pendingLink(KindOAuth)
+			}
+		}
 		id, seen := decided[key]
 		switch {
 		case seen && id == uuid.Nil:
 			// Decided earlier in this dry run; only the link is new.
-			report.pendingLink(KindOAuth)
-			result.Outcome = OutcomeAssociated
+			pendingLink()
+			result.Outcome = linkOutcome
 			return result, nil
 		case seen:
 			authClientID = id
-			result.Outcome = OutcomeAssociated
-			report.pendingLink(KindOAuth)
+			result.Outcome = linkOutcome
+			pendingLink()
 		default:
 			report.pendingClient(KindOAuth)
-			report.pendingLink(KindOAuth)
+			pendingLink()
 			result.Outcome = OutcomeCreated
 			if !opts.Apply {
 				decided[key] = uuid.Nil
@@ -745,7 +978,8 @@ func decideAndWrite(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, ro
 	}
 	result.AuthClientID = uuid.NullUUID{UUID: authClientID, Valid: true}
 
-	if row.LinkLive {
+	// An administrator's detach is durable: never relink the server.
+	if row.LinkLive || row.LinkDetached {
 		return result, nil
 	}
 	if result.Outcome == OutcomeExisting {
@@ -790,6 +1024,7 @@ func recordAuthClient(ctx context.Context, tx pgx.Tx, row ListAuthClientBackfill
 	err := inSavepoint(ctx, tx, func(sp pgx.Tx) error {
 		var err error
 		id, err = New(sp).CreateAuthClient(ctx, CreateAuthClientParams{
+			ID:                    OAuthClientID(row.OrganizationID, row.RemoteSessionClientID, clientType),
 			OrganizationID:        row.OrganizationID,
 			ProjectID:             row.ClientProjectID,
 			ClientType:            clientType,

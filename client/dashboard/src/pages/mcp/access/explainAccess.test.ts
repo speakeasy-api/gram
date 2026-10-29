@@ -2,13 +2,16 @@ import type { ExplainedAccessLevel } from "@gram/client/models/components/explai
 import type { ExplainedAccessRule } from "@gram/client/models/components/explainedaccessrule.js";
 import type { ExplainResourceAccessResult } from "@gram/client/models/components/explainresourceaccessresult.js";
 import { describe, expect, it } from "vitest";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import {
   accessDecision,
   directorySourceLabel,
   effectNote,
+  effectBadge,
   groupRules,
   levelStatus,
   ruleAccessLabel,
+  ruleAccessTone,
   whySentence,
 } from "./explainAccess";
 
@@ -465,3 +468,134 @@ describe("groupRules", () => {
     expect(groups[0]!.labels).toEqual(["Connect · All tools"]);
   });
 });
+
+describe("rule access types", () => {
+  it.each(["future_level", "blocked_future", "constructor", "__proto__"])(
+    "does not infer access from %s",
+    (value) => {
+      const unknown = rule({
+        displayName: "Analyst",
+        effect: "allows",
+        level: unrecognized(value),
+        tools: ["get_issue"],
+      });
+      expect(ruleAccessLabel(unknown, "view")).toBe("Unknown access");
+      expect(ruleAccessTone(unknown)).toBe("none");
+    },
+  );
+
+  it.each([
+    ["use", "allowed"],
+    ["view", "allowed"],
+    ["manage", "allowed"],
+    ["all", "allowed"],
+    ["blocked", "blocked"],
+    ["blocked_view", "blocked"],
+    ["blocked_manage", "blocked"],
+  ] as const)("keeps the known %s access type", (value, tone) => {
+    expect(
+      ruleAccessTone(
+        rule({ displayName: "Analyst", effect: "allows", level: value }),
+      ),
+    ).toBe(tone);
+  });
+
+  it.each([false, true])(
+    "keeps unknown rules neutral regardless of order (unknown first: %s)",
+    (unknownFirst) => {
+      const known = rule({
+        displayName: "Analyst",
+        effect: "allows",
+        level: "manage",
+      });
+      const unknown = rule({
+        displayName: "Analyst",
+        effect: "allows",
+        level: unrecognized("future_level"),
+      });
+      const unknownBlock = {
+        ...unknown,
+        level: unrecognized("blocked_future"),
+      };
+      const groups = groupRules(
+        unknownFirst
+          ? [unknown, known, unknownBlock]
+          : [known, unknown, unknownBlock],
+        "view",
+      );
+      expect(groups).toHaveLength(2);
+      expect(new Set(groups.map((group) => group.key)).size).toBe(2);
+      expect(
+        groups.find((group) => ruleAccessTone(group.rule) === "allowed")
+          ?.labels,
+      ).toEqual(["Manage · includes View"]);
+      expect(
+        groups.find((group) => ruleAccessTone(group.rule) === "none")?.labels,
+      ).toEqual(["Unknown access"]);
+    },
+  );
+});
+
+describe.each(["appliesTo", "effect"] as const)("unknown rule %s", (field) => {
+  it.each(["future_value", "constructor", "__proto__"])(
+    "keeps grant and block levels neutral for %s",
+    (value) => {
+      for (const accessLevel of ["manage", "blocked"] as const) {
+        const unknown = rule({
+          displayName: "Analyst",
+          level: accessLevel,
+          effect: "allows",
+          [field]: unrecognized(value),
+        });
+        expect(ruleAccessTone(unknown)).toBe("none");
+        expect(ruleAccessLabel(unknown, "use")).toBe("Unknown access");
+        expect(
+          effectNote(unknown, level({ level: "use" }), "Person", "Server"),
+        ).toBe(
+          field === "appliesTo"
+            ? "Rule reach unavailable."
+            : "Access effect unavailable.",
+        );
+        expect(effectBadge(unknown)).toEqual(
+          field === "appliesTo"
+            ? { label: "Allows", variant: "success" }
+            : { label: "Unknown", variant: "neutral" },
+        );
+      }
+    },
+  );
+});
+
+it.each(["resource", "project", "all_resources"] as const)(
+  "preserves known %s rule reach and lost-rule descriptions",
+  (appliesTo) => {
+    const grant = rule({
+      displayName: "Analyst",
+      level: "manage",
+      effect: "blocked",
+      appliesTo,
+    });
+    const block = rule({
+      displayName: "Analyst",
+      level: "blocked",
+      effect: "overridden",
+      appliesTo,
+    });
+    expect(ruleAccessTone(grant)).toBe("allowed");
+    expect(ruleAccessLabel(grant, "use")).toBe("Manage · includes Connect");
+    expect(ruleAccessTone(block)).toBe("blocked");
+    expect(ruleAccessLabel(block, "use")).toBe("Connect · All tools");
+    expect(
+      effectNote(
+        { ...grant, effect: "allows" },
+        level({ level: "use" }),
+        "Person",
+        "Server",
+      ),
+    ).toBe(
+      appliesTo === "resource"
+        ? "Defined on this server."
+        : "Inherited from a rule covering more servers.",
+    );
+  },
+);

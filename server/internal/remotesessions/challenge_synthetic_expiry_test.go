@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -163,6 +164,10 @@ func TestRemoteLoginCallback_StandardRefreshExpirationFields(t *testing.T) {
 // against a mock upstream token endpoint.
 type syntheticExpiryEnv struct {
 	mgr *remotesessions.ChallengeManager
+
+	// service exposes the management API over the same database as the callback.
+	service *remotesessions.Service
+
 	// refresher shares the manager's database, encryption key, and Redis lock
 	// cache, standing in for the scheduled sweep's caller in concurrency tests.
 	refresher *remotesessions.RefreshService
@@ -171,6 +176,7 @@ type syntheticExpiryEnv struct {
 	// test can observe recorded metrics or simulate a degraded lock cache.
 	newRefresher   func(metric.MeterProvider, cache.Cache) *remotesessions.RefreshService
 	db             *pgxpool.Pool
+	enc            *encryption.Client
 	q              *repo.Queries
 	projectID      uuid.UUID
 	organizationID string
@@ -183,6 +189,8 @@ type syntheticExpiryEnv struct {
 	// authURL is the upstream authorize redirect BuildAuthorizationUrl minted
 	// for the login, so a test can assert on its query parameters.
 	authURL string
+	// parentID is the original consent challenge to resume after callback.
+	parentID string
 	// issuerMetadata and issuerMetadataReader are set by withIssuerMetadataRefresh.
 	issuerMetadata       *remotesessions.IssuerMetadataRefresher
 	issuerMetadataReader *sdkmetric.ManualReader
@@ -658,7 +666,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		options.callbackQuery(cbQuery)
 	}
 	env := syntheticExpiryEnv{
+		parentID:  parent.ID,
 		mgr:       mgr,
+		service:   ti.service,
 		refresher: refresher,
 		newRefresher: func(meterProvider metric.MeterProvider, locks cache.Cache) *remotesessions.RefreshService {
 			r := remotesessions.NewRefreshService(logger, meterProvider, ti.conn, enc, policy, options.tunnels, locks, refreshOptions...)
@@ -666,6 +676,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 			return r
 		},
 		db:             ti.conn,
+		enc:            enc,
 		q:              q,
 		projectID:      *authCtx.ProjectID,
 		organizationID: authCtx.ActiveOrganizationID,

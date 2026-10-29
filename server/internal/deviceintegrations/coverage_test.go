@@ -2,6 +2,7 @@ package deviceintegrations
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -422,6 +423,23 @@ func TestCoverageBucketDefinitionsAgreeAcrossQueries(t *testing.T) {
 	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "dl-stranger", "who@example.test", nil, "D-STRANGER", false)
 	seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "dl-missing", "", nil, "D-MISSING", true)
 
+	// One agent_active device per policy state; dl-active stays unreported.
+	seedAgentSync(t, ctx, conn, orgID, activeEmail, now)
+	for i, state := range []string{"attested", "outdated", "halted"} {
+		email := "dl-" + state + "@example.test"
+		serial := "D-" + strings.ToUpper(state)
+		user := seedUser(t, ctx, conn, email)
+		seedDeviceWithSerial(t, ctx, conn, cfg.Config.ID, orgID, "dl-"+state, email, &user, serial, false)
+		seedDeviceAgentSync(t, ctx, conn, orgID, serial, email, now)
+		seedAgentSync(t, ctx, conn, orgID, email, now)
+		seedServedEtag(t, ctx, conn, orgID, email, "served")
+		etag := "served"
+		if state == "outdated" {
+			etag = "older"
+		}
+		seedStateReport(t, ctx, conn, orgID, stateReport{email: email, serial: serial, at: now.Add(-time.Duration(i) * time.Minute), etag: etag, halted: state == "halted"})
+	}
+
 	cutoff := conv.ToPGTimestamptz(now.Add(-time.Hour))
 
 	for _, deviceLevel := range []bool{false, true} {
@@ -440,6 +458,7 @@ func TestCoverageBucketDefinitionsAgreeAcrossQueries(t *testing.T) {
 			Provider:       conv.ToPGTextEmpty(""),
 			CursorID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			Bucket:         conv.ToPGTextEmpty(""),
+			PolicyState:    conv.ToPGTextEmpty(""),
 			PageLimit:      200,
 		})
 		require.NoError(t, err)
@@ -447,6 +466,9 @@ func TestCoverageBucketDefinitionsAgreeAcrossQueries(t *testing.T) {
 		listed := map[string]int64{}
 		for _, row := range rows {
 			listed[row.CoverageBucket]++
+			if row.PolicyState != "" {
+				listed["policy_"+row.PolicyState]++
+			}
 		}
 		aggregate := map[string]int64{
 			"agent_active":       counts.AgentActive,
@@ -456,6 +478,10 @@ func TestCoverageBucketDefinitionsAgreeAcrossQueries(t *testing.T) {
 			"no_email":           counts.NoEmail,
 			"unresolved_email":   counts.UnresolvedEmail,
 			"missing":            counts.Missing,
+			"policy_attested":    counts.PolicyAttested,
+			"policy_outdated":    counts.PolicyOutdated,
+			"policy_unreported":  counts.PolicyUnreported,
+			"policy_halted":      counts.EnforcementHalted,
 		}
 		for bucket, want := range aggregate {
 			require.Equal(t, want, listed[bucket],

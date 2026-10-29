@@ -109,6 +109,102 @@ var _ = Service("agent", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentPlugins"}`)
 	})
 
+	Method("getMyConnections", func() {
+		Description("Report the enrolled user's sign-in state for each MCP server in the plugins delivered to them, with the page that signs in to each. Sign-in belongs to the server, so one sign-in covers every plugin that contains it. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getPlugins resolves the polling user.")
+
+		// The org install key is accepted with a vouched email, unlike
+		// getSessionMeta: this exposes only whether a member has signed in to
+		// each server and whether they may connect to it (getPlugins already
+		// reveals mcp:read through dashboard links), never a credential or any
+		// content. MDM fleets that cannot mint per-user keys would otherwise
+		// show no sign-in state.
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Attribute("email", String, "Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.", func() {
+				Example("dev@acme.corp")
+			})
+		})
+
+		Result(GetMyConnectionsResult)
+
+		HTTP(func() {
+			GET("/rpc/agent.getMyConnections")
+			security.ByKeyHeader()
+			Header("email:Gram-User-Email")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getAgentMyConnections")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMyConnections")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentMyConnections"}`)
+	})
+
+	Method("hideMcpServer", func() {
+		Description("Hide an MCP server for the enrolled user, the same preference the gateway consent page's Hide sets. Gateways leave a hidden server out of the user's tools, and getMyConnections reports it as hidden. Only servers getMyConnections reports to the user can be hidden; anything else is not found. Hiding a hidden server changes nothing. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getMyConnections resolves the user.")
+
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Meta("openapi:typename", "HideAgentMcpServerRequestBody")
+			Attribute("mcp_server_id", String, "The MCP server, as getMyConnections reports it.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("email", String, "Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.", func() {
+				Example("dev@acme.corp")
+			})
+			Required("mcp_server_id")
+		})
+
+		HTTP(func() {
+			POST("/rpc/agent.hideMcpServer")
+			security.ByKeyHeader()
+			Header("email:Gram-User-Email")
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "hideAgentMcpServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "hideMcpServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "HideAgentMcpServer"}`)
+	})
+
+	Method("unhideMcpServer", func() {
+		Description("Show a hidden MCP server again for the enrolled user. Unhiding a server that is not hidden changes nothing. Authenticates like hideMcpServer.")
+
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Meta("openapi:typename", "UnhideAgentMcpServerRequestBody")
+			Attribute("mcp_server_id", String, "The MCP server, as getMyConnections reports it.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("email", String, "Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.", func() {
+				Example("dev@acme.corp")
+			})
+			Required("mcp_server_id")
+		})
+
+		HTTP(func() {
+			POST("/rpc/agent.unhideMcpServer")
+			security.ByKeyHeader()
+			Header("email:Gram-User-Email")
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "unhideAgentMcpServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "unhideMcpServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UnhideAgentMcpServer"}`)
+	})
+
 	Method("listSyncedUsers", func() {
 		Description("List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.")
 
@@ -384,6 +480,61 @@ var _ = Service("agent", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ReportAgentAIScan"}`)
 	})
 
+	Method("reportState", func() {
+		Description("Record the device agent's applied state: the policy etag it enforces, each tool's enforcement outcome, its versions and update posture. A snapshot: the latest report per enrolled user per machine replaces the previous one. Accepts the per-user key and the org install key (with a vouched email), mirroring reportAIScan; agent keys and device-agent tokens are refused. A report from a non-endpoint environment is accepted and not stored, because device coverage matches managed endpoints only. Contract: device-agent ADR-0029.")
+
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Attribute("schema_version", Int, "Report envelope version. Fields are added within a version; a change of meaning bumps it. Newer versions are accepted and stored as far as this server understands them.", func() {
+				Minimum(1)
+				Maximum(2147483647)
+			})
+			Attribute("generated_at", String, "When the agent assembled the report, by its own clock.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("agent", AgentStateVersionsModel, "Versions of the agent binaries and the platform they run on.")
+			Attribute("enforcement_halted", Boolean, "True when the kill switch has halted policy enforcement because the running build is in blocked_versions. The tool outcomes are then those of the last reconcile before the halt.")
+			Attribute("policy", AgentStatePolicyModel, "The policy the agent's last reconcile applied.")
+			Attribute("tools", ArrayOf(AgentStateToolModel), "Each managed tool's outcome from the last reconcile.", func() {
+				MaxLength(32)
+			})
+			Attribute("drift_counting_since", String, "Start of the window tools[].drift_corrections counts over (the daemon's start).", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("update", AgentStateUpdateModel, "The agent's update posture.")
+			// Identity attributes mirror getPlugins: they ride in headers (see
+			// the HTTP mapping) for the access-log hygiene reason getPlugins
+			// documents, and stay optional for the same compatibility reason.
+			Attribute("email", String, "Email of the enrolled user, sent in the Gram-User-Email header. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.")
+			Attribute("serial_number", String, "Hardware serial number of the reporting machine, when the agent can read it.")
+			Attribute("hostname", String, "Hostname of the reporting machine, when the agent can read it.")
+			// Not an Enum, for the reason getPlugins gives: an unrecognized
+			// value degrades to endpoint instead of failing the request.
+			Attribute("environment", String, "What kind of machine the agent runs on, as in getPlugins: endpoint (the default when omitted), ephemeral, or server.")
+			Required("schema_version", "generated_at", "agent", "enforcement_halted", "policy", "tools")
+		})
+
+		Result(ReportStateResult)
+
+		HTTP(func() {
+			POST("/rpc/agent.reportState")
+			security.ByKeyHeader()
+			Header("email:Gram-User-Email")
+			Header("serial_number:Gram-Device-Serial")
+			Header("hostname:Gram-Device-Hostname")
+			Header("environment:Gram-Device-Environment")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "reportAgentState")
+		Meta("openapi:extension:x-speakeasy-name-override", "reportState")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ReportAgentState"}`)
+	})
+
 	Method("createSessionHandoff", func() {
 		Description("Mint a short-lived capability URL for a rendered session-handoff document (session portability). The device agent uploads the handoff it rendered from the local transcript; the returned URL serves the markdown exactly once (burn-after-read) until expiry, so a cloud agent or another machine can continue the session. Content transits the server only for this purpose and stops being served at first read or expiry, whichever comes first. Requires a per-user key: the fleet-shared org install key is refused because minting a fetch-by-token URL for uploaded content is a per-user, content-bearing surface (the same DNO-383 blast-radius rule as getSessionMeta).")
 
@@ -495,6 +646,21 @@ var AgentPluginModel = Type("AgentPlugin", func() {
 	})
 	Attribute("name", String, "Display name of the plugin. Absent for the synthesized observability plugin.")
 	Attribute("description", String, "Short description of the plugin, when one is set.")
+	// omitzero rather than Goa's default omitempty: an empty list must reach
+	// the agent, which shows "No servers" for it, while the observability
+	// plugin leaves the field out entirely.
+	Attribute("servers", ArrayOf(AgentPluginServerModel), "MCP servers the plugin contains, in display order, possibly none. Display-only: the agent installs the plugin, not these entries. Absent for the synthesized observability plugin, which carries hooks rather than servers.", func() {
+		Meta("struct:tag:json", "servers,omitzero")
+	})
+})
+
+var AgentPluginServerModel = Type("AgentPluginServer", func() {
+	Required("name")
+	Attribute("id", String, "Stable identifier of the server, the same in every plugin that contains it. Matches the id getMyConnections reports the server's sign-in state under. Absent from servers predating the field.")
+	Attribute("name", String, "Display name of the server within its plugin.")
+	Attribute("dashboard_url", String, "Link to the server's page in the Speakeasy dashboard. Present only when the enrolled user holds mcp:read on the server; the agent tells the user that links need that scope when it is absent.", func() {
+		Format(FormatURI)
+	})
 })
 
 var SyncedAgentUserModel = Type("SyncedAgentUser", func() {
@@ -653,4 +819,149 @@ var CreateSessionHandoffResult = Type("CreateSessionHandoffResult", func() {
 		Description("When the link stops being served regardless of reads.")
 		Format(FormatDateTime)
 	})
+})
+
+var GetMyConnectionsResult = Type("GetMyConnectionsResult", func() {
+	Required("servers")
+	Attribute("servers", ArrayOf(AgentServerConnectionModel), "One entry per distinct MCP server in the plugins delivered to the user, in plugin order. Servers the user can neither read nor connect to are omitted; a server the user can read but not connect to is reported as no_access.")
+})
+
+var AgentServerConnectionModel = Type("AgentServerConnection", func() {
+	Required("id", "state")
+	Attribute("id", String, "The server's id, as getPlugins reports it on each plugin server.")
+	Attribute("state", String, func() {
+		Description("`connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server's sign-in setup first. `no_access`: the user lacks permission to connect to the server. `unknown`: the state can't be determined, for example for a gateway.")
+		Enum("connected", "not_connected", "reauthorization_required", "not_required", "setup_required", "no_access", "unknown")
+	})
+	Attribute("connect_url", String, "Page that signs the user in to this server in the browser. Present when state is not_connected or reauthorization_required.", func() {
+		Format(FormatURI)
+	})
+	Attribute("request_access_url", String, "Page where the user can ask an administrator for access to this server. Present only when state is no_access and the organization accepts access requests.", func() {
+		Format(FormatURI)
+	})
+	Attribute("hidden", Boolean, "True when the user hid this server, from the gateway consent page or the device agent. Absent when not hidden.")
+})
+
+// Enumerated report values (layer, outcome, pending_reason, error_kind,
+// withheld reason) are plain strings rather than Enums: a newer agent can
+// send a value this server does not know, and Goa would reject the whole
+// report with a 400. The handler stores unrecognized values as "unknown".
+
+var AgentStateVersionsModel = Type("AgentStateVersions", func() {
+	Description("Versions of the device agent's binaries and the platform they run on.")
+	Attribute("speakeasyd", String, "Version of the speakeasyd daemon.", func() {
+		MaxLength(64)
+	})
+	Attribute("speakeasy", String, "Version of the speakeasy CLI, when the agent could read it.", func() {
+		MaxLength(64)
+	})
+	Attribute("speakeasy_ui", String, "Version of the menu bar app, when the agent could read it.", func() {
+		MaxLength(64)
+	})
+	Attribute("os", String, "Operating system (Go GOOS), e.g. darwin.", func() {
+		MaxLength(32)
+	})
+	Attribute("arch", String, "CPU architecture (Go GOARCH), e.g. arm64.", func() {
+		MaxLength(32)
+	})
+	Required("speakeasyd")
+})
+
+var AgentStatePolicyModel = Type("AgentStatePolicy", func() {
+	Description("The policy the agent's last reconcile applied.")
+	Attribute("applied_etag", String, "Etag of the getPlugins snapshot the last reconcile applied. Omitted before the agent has applied one.", func() {
+		MaxLength(128)
+	})
+	Attribute("applied_at", String, "When the agent first applied this etag. Later reconciles of the same etag keep this time.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("withheld_plugins", ArrayOf(AgentStateWithheldPluginModel), "Optional plugins the agent left out of the applied set because of a user choice. Required plugins are never withheld.", func() {
+		MaxLength(500)
+	})
+	Attribute("remote_config_etag", String, "Etag of the remote configuration the agent applied.", func() {
+		MaxLength(128)
+	})
+	Attribute("remote_config_failed", Boolean, "True when the agent could not apply the remote configuration it last received and kept its previous settings.")
+	Required("withheld_plugins")
+})
+
+var AgentStateWithheldPluginModel = Type("AgentStateWithheldPlugin", func() {
+	Description("One optional plugin the agent left out of the applied set.")
+	Attribute("marketplace", String, "Marketplace the plugin belongs to.", func() {
+		MaxLength(128)
+	})
+	Attribute("slug", String, "The plugin's slug.", func() {
+		MinLength(1)
+		MaxLength(128)
+	})
+	Attribute("reason", String, "Why it was withheld: user_disabled for a default-on plugin the user turned off, not_opted_in for an opt-in plugin the user has not turned on.", func() {
+		MaxLength(32)
+	})
+	Required("slug", "reason")
+})
+
+var AgentStateToolModel = Type("AgentStateTool", func() {
+	Description("One managed tool's outcome from the agent's last reconcile. Carries no error text or user-facing message: those can name paths and entries the agent does not own.")
+	Attribute("tool", String, "Stable tool id, e.g. claude_code.", func() {
+		MinLength(1)
+		MaxLength(64)
+	})
+	Attribute("layer", String, "Resolved enforcement layer: user, managed, or off.", func() {
+		MaxLength(16)
+	})
+	Attribute("outcome", String, "Reconcile outcome: armed, pending, skipped (tool not installed), error, or unmanaged.", func() {
+		MaxLength(16)
+	})
+	Attribute("pending_reason", String, "Why a pending tool is not yet enforcing: privileged_writer_not_ready or plugin_bundle_not_cloned.", func() {
+		MaxLength(64)
+	})
+	Attribute("error_kind", String, "Class of a reconcile error: permission_denied, not_found, invalid_config, or unknown.", func() {
+		MaxLength(32)
+	})
+	Attribute("restart_required", Boolean, "True when the agent wrote configuration the tool loads only after it restarts.")
+	Attribute("action_required", Boolean, "True when a problem the user can fix is blocking this tool.")
+	Attribute("drift_corrections", Int, "Times since drift_counting_since the agent rewrote what it owns in this tool although the applied policy had not changed. Omitted when this tool's syncer does not measure drift.", func() {
+		Minimum(0)
+		Maximum(2147483647)
+	})
+	Required("tool", "layer", "outcome")
+})
+
+var AgentStateUpdateModel = Type("AgentStateUpdate", func() {
+	Description("The device agent's update posture.")
+	Attribute("auto_update", String, "Auto-update mode: disabled, notify, or automatic.", func() {
+		MaxLength(16)
+	})
+	Attribute("channel", String, "Release channel the agent resolved to.", func() {
+		MaxLength(32)
+	})
+	Attribute("pinned_target", String, "Version the organization pinned the fleet to, when set.", func() {
+		MaxLength(64)
+	})
+	Attribute("current_blocked", Boolean, "True when the running build is in blocked_versions.")
+	Attribute("last_rollback", AgentStateRollbackModel, "The most recent time the daemon reverted a failed update, when it has.")
+})
+
+var AgentStateRollbackModel = Type("AgentStateRollback", func() {
+	Description("A self-rollback: the daemon reverted an update that did not stabilize.")
+	Attribute("at", String, "When the rollback happened.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("from", String, "Version that failed to stabilize.", func() {
+		MaxLength(64)
+	})
+	Attribute("to", String, "Version the daemon reverted to.", func() {
+		MaxLength(64)
+	})
+	Required("at")
+})
+
+var ReportStateResult = Type("ReportStateResult", func() {
+	Description("Acknowledgement of a state report.")
+	Attribute("stored", Boolean, "False when the report was accepted but not stored because it came from a non-endpoint environment.")
+	Attribute("applied_etag", String, "The applied etag the server now holds for this device.")
+	Attribute("received_at", String, "When the server received the report.", func() {
+		Format(FormatDateTime)
+	})
+	Required("stored", "received_at")
 })

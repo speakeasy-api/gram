@@ -1,5 +1,46 @@
 # admin
 
+## 0.10.0
+
+### Minor Changes
+
+- 8b2d0e2: Staff can store an Adoption Dashboard Link on an organization's overview in the admin dashboard. The link must be https, is cleared by saving an empty value, and is returned by the organization record and the staff Admin MCP organization summary.
+- e94ce5d: Add Code Mode discovery for MCP gateways. A single execute tool runs ephemeral Python with tool search, schema descriptions and live authorized calls to hosted, remote and tunneled tools. All tools (frozen) and Specific tools reuse the catalogue fixed at consent from a fast cache; All tools (live) refreshes only approved members. Adding a member requires new consent. Settings, consent and Inspect support connection overrides, execution results and nested-call outcomes.
+  
+  Organization gateway connections can choose Code Mode on the consent page too, searching and calling approved tools across projects the person can reach.
+  
+  Code Mode is off by default and rolled out per organization: Speakeasy staff enable it from the admin dashboard's organization Features page. New selections also require a configured code runtime.
+  
+  Assistant runtime discovery skips terminating sandbox pods when selecting a running pod.
+
+### Patch Changes
+
+- 4ee1ad2: Browse and search the enabled staff Admin MCP tools on the setup page before connecting a client, with descriptions and access labels for reads, approval flows, and direct writes.
+- 0908c44: Organizations can now be granted the default auth permissions the mandatory auth client check needs: everyone's and each agent's use of their own personal connections, shared clients for whoever can connect to a server using them, and a policy for each legacy API key that has none. An offline backfill grants them for every organization and records each grant it writes, so a rerun never restores one an admin removed; the upstream OAuth migration grants them for the clients it records, and new organizations start with the personal default. Role permission counts no longer include these provisioned permissions.
+- c7d8212: Assistant turns now bind a versioned execution-selection profile that records, for each MCP server the assistant reaches, which typed auth client its turns use, kept separately for turns run for an identified user and turns run as the trigger's workload. A server several clients could serve, or only a personal connection could serve on a turn with no user, is reported instead of guessed. The upstream OAuth migration records profiles for every assistant trigger and reports what still needs configuring. How turns authenticate upstream does not change yet.
+- 2ec5a32: Staff can now turn on upstream auth enforcement per organization from the upstream OAuth migration page, and only once its auth clients, credential choices and assistant profiles are recorded. Under enforcement each request is served with the auth client its credential chose, assistant turns with the one their profile names, and using that client requires permission; a credential with no usable choice is asked to reconnect rather than served with another client. Valid credentials from another organization are refused on an organization's public servers instead of being served anonymously. Turning enforcement off returns the organization to the previous behavior within a minute.
+- c1a55fb: The upstream OAuth migration now names, on every live credential's choice for a server, the one typed auth client that serves it, and reports coverage by credential class (interactive, ID-JAG, dashboard-minted, workload and agent sessions). A choice that several auth clients could serve is listed for an administrator to resolve instead of being guessed, and choices whose client is gone or no longer fits the server are listed as needing a reconnect.
+- 05e84c0: Allow staff to explicitly promote remote MCP servers despite health eligibility criteria through the admin dashboard and Admin MCP, recording the override in the audit log. Run automatic eligibility reviews weekly while keeping setup-docs delivery hourly. Exclude matching catalogue URLs from discovery and the default promotion queue and notify staff after rejection, archival, and restoration.
+- dba7b6a: Validate catalogue promotion titles and descriptions against the 100-character catalogue limit. Show field-specific guidance without discarding reviewed input, and return actionable length errors through the admin API and Admin MCP.
+- 4a3531f: The server no longer reads the retired OAuth proxy link on toolsets. A hosted MCP server that still carries the link can now change its visibility, it is no longer reported as requiring OAuth unless it has a sign-in provider or an external OAuth server, admin server health no longer reports `oauth_proxy` as its legacy authentication, external MCP migration no longer warns about the link, and deployment evaluation counts only an external OAuth server as configured OAuth.
+
+## 0.9.5
+
+### Patch Changes
+
+- 414c2d2: MCP tool calls that answer HTTP 200 with a result carrying `isError: true` now count as `failed` in MCP server health, Platform MCP diagnostics and drill-down, and per-user error flags. Before this change they counted as successes. `failed` is the same class hook-observed tool errors already use.
+  
+  Remote MCP proxy and playground tool-call rows now record the tool's verdict, and the proxy logs in-band tool errors at warn level, without the result body. When a server's only failures are tool errors, fault attribution reports `tool_error_dominant`; tool errors no longer dilute status-based majorities.
+  
+  Hosted calls are reclassified back to 2026-10-15, when their rows began recording the verdict. Older hosted rows, and remote rows from before this deploy, still count as successes. The dashboard charts, project overview, tool usage summaries and tool-call search still classify by HTTP status only.
+
+## 0.9.4
+
+### Patch Changes
+
+- e2ab479: The typed auth client backfill now also records static credential and pass-through clients from a source's credential headers, copies credential headers onto upstream OAuth clients, and records EMA clients from ready identity chaining bindings. It keeps copies and scopes in sync, retires what the configuration no longer yields, runs each phase independently under a per-organization lock, and reports per-kind counts and why anything is unresolved.
+- 03b4725: Record a typed auth client for every upstream OAuth client an MCP server uses, as a separate step of the admin upstream OAuth migration, retire backfilled records whose association or client is gone, and mark servers that offer one as needing upstream authentication where that is still undecided. Nothing reads these records yet.
+
 ## 0.9.3
 
 ### Patch Changes

@@ -48,12 +48,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const isSignalsIntelligenceEnabled =
     productFeatures.isSuccess &&
     productFeatures.data.signalsIntelligenceEnabled === true;
-  const riskWatchdogFlag = useFeatureFlag(FEATURE_FLAGS.riskWatchdog);
   const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
 
-  // Watchdog is opt-in: unavailable flags remain hidden.
-  const isRiskWatchdogEnabled = riskWatchdogFlag.status === "enabled";
   // Explore is opt-in while it is dogfooded: the flag is released to the
   // organizations trying it, and everyone else never sees the page.
   const isExploreEnabled = exploreFlag.status === "enabled";
@@ -106,9 +103,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       },
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
-      ...(isRiskWatchdogEnabled
-        ? [{ route: routes.watchdog, scope: read }]
-        : []),
+      { route: routes.watchdog, scope: ["org:admin"] as Scope[] },
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
       { route: routes.costs, scope: observe },
@@ -140,7 +135,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     projectId,
     isExploreEnabled,
     isOrgMemoryEnabled,
-    isRiskWatchdogEnabled,
     isSignalsIntelligenceEnabled,
   ]);
 }

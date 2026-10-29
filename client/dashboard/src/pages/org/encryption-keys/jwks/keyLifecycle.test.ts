@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { JSONWebKey } from "@gram/client/models/components/jsonwebkey.js";
+import {
+  KeyState$inboundSchema,
+  type JSONWebKey,
+} from "@gram/client/models/components/jsonwebkey.js";
 import {
   availableKeyActions,
   keyActionCopy,
@@ -30,6 +33,11 @@ describe("availableKeyActions", () => {
 
   it("never offers retire to a pending key", () => {
     expect(availableKeyActions("pending")).not.toContain("retire");
+  });
+
+  it("preserves emergency revocation for an unknown signing state", () => {
+    const state = KeyState$inboundSchema.parse("future_state");
+    expect(availableKeyActions(state)).toEqual(["revoke"]);
   });
 });
 

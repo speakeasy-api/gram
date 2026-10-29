@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -421,4 +422,22 @@ func TestRewriteAdminCookie_AddsSecureWhenMissing(t *testing.T) {
 	require.Contains(t, out, "Secure")
 	require.Contains(t, out, "SameSite=None")
 	require.Contains(t, out, "Domain=.speakeasy.com")
+}
+
+func TestAdminOriginCheckBrowserErrorPages(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"/admin-mcp/connect", "/admin-mcp/proposals/example"} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			handler := AdminOriginCheck(nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				t.Fatal("rejected origin must not reach the handler")
+			}))
+			request := httptest.NewRequest(http.MethodPost, "https://staff.example"+path, nil)
+			request.Header.Set("Origin", "https://foreign.example")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			body := oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusForbidden)
+			require.Equal(t, "forbidden: origin not allowed", body.Description)
+		})
+	}
 }

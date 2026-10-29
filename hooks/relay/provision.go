@@ -29,6 +29,9 @@ type PluginConfig struct {
 	HooksAPIKey  string
 	BrowserLogin bool
 	BinaryPath   string
+	// AgentKey marks HooksAPIKey as an agent identity's own key, so it
+	// outranks a cached personal sign-in (see Config.AgentKey).
+	AgentKey bool
 }
 
 const pluginName = "speakeasy-observability"
@@ -134,6 +137,11 @@ func manifest(provider agenthooks.Provider, cfg PluginConfig, dir string) instal
 	if provider == agenthooks.ProviderCodex || provider == agenthooks.ProviderOpenCode || provider == agenthooks.ProviderCopilot {
 		hooks = append(hooks, gate(agenthooks.KindPermission, 60*time.Second))
 	}
+	// OpenClaw's Codex app-server harness fires llm_input but no
+	// before_agent_run; the relay reports the user prompt from llm_input.
+	if provider == agenthooks.ProviderOpenClaw {
+		hooks = append(hooks, observe(agenthooks.KindModelRequest))
+	}
 	return install.Manifest{
 		Command:  []string{cfg.BinaryPath, "--config=" + filepath.Join(dir, configFileName)},
 		Hooks:    hooks,
@@ -210,6 +218,7 @@ func writeConfigFile(dir string, cfg PluginConfig) error {
 		Project:      cfg.ProjectSlug,
 		Org:          cfg.OrgID,
 		HooksAPIKey:  cfg.HooksAPIKey,
+		AgentKey:     cfg.AgentKey,
 		BrowserLogin: cfg.BrowserLogin,
 		Nonblocking:  false,
 	})
@@ -223,5 +232,10 @@ func writeJSON(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(b, '\n'), 0o644)
+	// The config carries the hooks API key, so it stays owner-only. WriteFile
+	// keeps an existing file's mode, so set it explicitly.
+	if err := os.WriteFile(path, append(b, '\n'), 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600)
 }

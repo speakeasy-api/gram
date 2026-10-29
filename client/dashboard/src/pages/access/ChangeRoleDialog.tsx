@@ -1,3 +1,5 @@
+import { invalidateAllExplainResourceAccess } from "@gram/client/react-query/explainResourceAccess.js";
+import { invalidateAllIdentityAccess } from "@gram/client/react-query/identityAccess.js";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { RoleLink } from "@/components/role-link";
@@ -53,6 +55,9 @@ export function ChangeRoleDialog({
         invalidateAllMembers(queryClient),
         invalidateAllRoles(queryClient),
         invalidateAllResourceAudience(queryClient),
+        invalidateAllExplainResourceAccess(queryClient),
+        invalidateAllIdentityAccess(queryClient),
+        queryClient.invalidateQueries({ queryKey: ["mcpAssignments"] }),
       ]);
       onOpenChange(false);
     },

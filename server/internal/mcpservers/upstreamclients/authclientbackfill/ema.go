@@ -19,13 +19,51 @@ type emaUpstream struct {
 	resource string
 }
 
+// emaTarget is one decided ema client and the servers it is offered by. Its
+// id is nil when a dry run would record it.
+type emaTarget struct {
+	clientID uuid.UUID
+	recorded bool
+	servers  []uuid.UUID
+}
+
+// emaPlan is what the EMA phase decided, for the phases after it: which
+// servers an ema client serves, so their credential headers go onto that
+// client, and the groups whose unmatched servers are warned about last.
+type emaPlan struct {
+	targets []emaTarget
+	served  map[uuid.UUID]bool
+	// direct holds the served servers an ema client serves on their direct
+	// route too, not only through the gateways.
+	direct  map[uuid.UUID]bool
+	order   []emaUpstream
+	groups  map[emaUpstream][]ListEMABackfillBindingsRow
+	reached map[emaUpstream][]reachedServer
+}
+
+func newEMAPlan() *emaPlan {
+	return &emaPlan{targets: nil, served: map[uuid.UUID]bool{}, direct: map[uuid.UUID]bool{}, order: nil, groups: map[emaUpstream][]ListEMABackfillBindingsRow{}, reached: map[emaUpstream][]reachedServer{}}
+}
+
+// reaches reports whether an ema client serves the server. A nil plan, as
+// when the EMA phase failed, serves none.
+func (p *emaPlan) reaches(serverID uuid.UUID) bool {
+	return p != nil && p.served[serverID]
+}
+
+// reachesDirectly reports whether an ema client serves the server on its
+// direct route. A server reached only through the gateways keeps its direct
+// route's own clients, which the ema client cannot replace there.
+func (p *emaPlan) reachesDirectly(serverID uuid.UUID) bool {
+	return p.reaches(serverID) && p.direct[serverID]
+}
+
 // runEMA groups the organization's ready, client-bound identity chaining
 // bindings into one ema client per upstream, offered by every server the
 // bindings reach as the runtime matches them. The bindings' user session
-// issuer is not carried over: it is inbound only. committed holds the earlier
-// phases' decisions, so a server another backfilled client covers draws no
-// warning.
-func runEMA(ctx context.Context, tx pgx.Tx, opts Options, committed *Report, report *Report, want *expected) error {
+// issuer is not carried over: it is inbound only. It records its decisions in
+// plan for the header phase and the warnings after it.
+func runEMA(ctx context.Context, tx pgx.Tx, opts Options, report *Report, want *expected, plan *emaPlan) error {
 	q := New(tx)
 	bindings, err := q.ListEMABackfillBindings(ctx, opts.OrganizationID)
 	if err != nil {
@@ -57,32 +95,39 @@ func runEMA(ctx context.Context, tx pgx.Tx, opts Options, committed *Report, rep
 		}
 		groups[key] = append(groups[key], binding)
 	}
-	// Servers with an upstream identity already, so a same-origin server
-	// covered otherwise draws no warning.
+	plan.order, plan.groups = order, groups
+	for _, key := range order {
+		servers, err := reachedServers(ctx, q, opts.OrganizationID, groups[key])
+		if err != nil {
+			return err
+		}
+		plan.reached[key] = servers
+	}
+	for _, key := range order {
+		if err := decideEMA(ctx, tx, q, opts, key, groups[key], plan.reached[key], report, want, plan); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// reportEMAWarnings warns of same-origin servers the EMA phase's bindings
+// could cover that no backfilled client covers. It runs after every phase
+// that records clients, so committed holds all their decisions.
+func reportEMAWarnings(ctx context.Context, q *Queries, opts Options, plan *emaPlan, committed *Report, report *Report) error {
 	covered := map[uuid.UUID]bool{}
 	for _, result := range committed.Results {
 		if result.MCPServerID != uuid.Nil && result.AuthClientID.Valid && result.Outcome.Covered() && result.Outcome != OutcomeWarning {
 			covered[result.MCPServerID] = true
 		}
 	}
-	reachedBy := map[emaUpstream][]reachedServer{}
-	for _, key := range order {
-		servers, err := reachedServers(ctx, q, opts.OrganizationID, groups[key])
-		if err != nil {
-			return err
-		}
-		reachedBy[key] = servers
-		for _, server := range servers {
+	for _, key := range plan.order {
+		for _, server := range plan.reached[key] {
 			covered[server.id] = true
 		}
 	}
-	for _, key := range order {
-		if err := decideEMA(ctx, tx, q, opts, key, groups[key], reachedBy[key], report, want); err != nil {
-			return err
-		}
-	}
-	for _, key := range order {
-		if err := reportUnmatchedServers(ctx, q, opts, key, groups[key], covered, report); err != nil {
+	for _, key := range plan.order {
+		if err := reportUnmatchedServers(ctx, q, opts, key, plan.groups[key], covered, report); err != nil {
 			return err
 		}
 	}
@@ -94,10 +139,11 @@ func runEMA(ctx context.Context, tx pgx.Tx, opts Options, committed *Report, rep
 type reachedServer struct {
 	id, projectID uuid.UUID
 	allowed       bool
+	direct        bool
 }
 
 func reachedServers(ctx context.Context, q *Queries, organizationID string, bindings []ListEMABackfillBindingsRow) ([]reachedServer, error) {
-	seen := map[uuid.UUID]bool{}
+	seen := map[uuid.UUID]int{}
 	var servers []reachedServer
 	for _, binding := range bindings {
 		rows, err := q.ListEMABindingServers(ctx, ListEMABindingServersParams{BindingID: binding.BindingID, OrganizationID: organizationID})
@@ -105,10 +151,13 @@ func reachedServers(ctx context.Context, q *Queries, organizationID string, bind
 			return nil, fmt.Errorf("list servers of binding %s: %w", binding.BindingID, err)
 		}
 		for _, row := range rows {
-			if !seen[row.McpServerID] {
-				seen[row.McpServerID] = true
-				servers = append(servers, reachedServer{id: row.McpServerID, projectID: row.ProjectID, allowed: row.Match == "match"})
+			if i, ok := seen[row.McpServerID]; ok {
+				// Reached by several bindings: directly if any reaches it so.
+				servers[i].direct = servers[i].direct || row.Direct
+				continue
 			}
+			seen[row.McpServerID] = len(servers)
+			servers = append(servers, reachedServer{id: row.McpServerID, projectID: row.ProjectID, allowed: row.Match == "match", direct: row.Direct})
 		}
 	}
 	return servers, nil
@@ -153,7 +202,7 @@ func reportUnmatchedServers(ctx context.Context, q *Queries, opts Options, key e
 	return nil
 }
 
-func decideEMA(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, key emaUpstream, bindings []ListEMABackfillBindingsRow, servers []reachedServer, report *Report, want *expected) error {
+func decideEMA(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, key emaUpstream, bindings []ListEMABackfillBindingsRow, servers []reachedServer, report *Report, want *expected, plan *emaPlan) error {
 	first := bindings[0]
 	ids := make([]uuid.UUID, 0, len(bindings))
 	for _, binding := range bindings {
@@ -185,17 +234,40 @@ func decideEMA(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, key ema
 		default:
 			continue
 		}
+		reachedDirectly := map[uuid.UUID]bool{}
+		for _, server := range servers {
+			reachedDirectly[server.id] = server.direct
+		}
 		// Disagreeing bindings decide nothing new, but a client already
 		// recorded for one of them keeps serving with its links until they
 		// agree again.
+		kept := map[uuid.UUID]bool{}
 		for _, binding := range bindings {
 			existing, found, err := findEMA(ctx, q, opts.OrganizationID, key.issuerID, key.clientID, binding.ExactResource)
 			if err != nil {
 				return err
 			}
-			if found {
-				want.race(existing.ID)
+			if !found || kept[existing.ID] {
+				continue
 			}
+			kept[existing.ID] = true
+			want.race(existing.ID)
+			// The kept client keeps exactly the servers it is linked to, so it
+			// keeps carrying their credential headers and no other server's.
+			linked, err := q.ListEMAClientLiveServers(ctx, ListEMAClientLiveServersParams{OrganizationID: opts.OrganizationID, AuthClientID: existing.ID})
+			if err != nil {
+				return fmt.Errorf("list servers of kept ema auth client %s: %w", existing.ID, err)
+			}
+			target := emaTarget{clientID: existing.ID, recorded: true, servers: linked}
+			for _, serverID := range linked {
+				plan.served[serverID] = true
+				// A linked server the bindings reach only through the gateways
+				// stays gateway-only; one they no longer reach keeps being
+				// treated as served directly until its link retires.
+				direct, reached := reachedDirectly[serverID]
+				plan.direct[serverID] = plan.direct[serverID] || !reached || direct
+			}
+			plan.targets = append(plan.targets, target)
 		}
 		report.add(result)
 		return nil
@@ -259,6 +331,7 @@ func decideEMA(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, key ema
 			err := inSavepoint(ctx, tx, func(sp pgx.Tx) error {
 				var err error
 				id, err = New(sp).CreateEMAAuthClient(ctx, CreateEMAAuthClientParams{
+					ID:                    EMAClientID(opts.OrganizationID, key.issuerID, key.clientID, first.ExactResource),
 					RemoteSessionIssuerID: key.issuerID,
 					Resource:              first.ExactResource,
 					RequestedScopes:       scopes,
@@ -300,6 +373,13 @@ func decideEMA(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, key ema
 		want.clients[clientID] = true
 	}
 	report.add(result)
+	target := emaTarget{clientID: clientID, recorded: live, servers: nil}
+	for _, server := range servers {
+		target.servers = append(target.servers, server.id)
+		plan.served[server.id] = true
+		plan.direct[server.id] = plan.direct[server.id] || server.direct
+	}
+	plan.targets = append(plan.targets, target)
 
 	for _, server := range servers {
 		link := Result{

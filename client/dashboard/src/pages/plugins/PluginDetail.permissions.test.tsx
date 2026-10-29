@@ -150,26 +150,23 @@ vi.mock("@gram/client/react-query/addPluginServer", () => ({
 vi.mock("@gram/client/react-query/removePluginServer", () => ({
   useRemovePluginServerMutation: () => ({ mutate: vi.fn() }),
 }));
-function renderAdmin(section = "overview") {
+const hostedServer = {
+  id: "server-a",
+  displayName: "Example server",
+  toolsetId: "toolset-a",
+  mcpServerId: "toolset-a",
+  createdAt: new Date(),
+};
+function renderAdmin(section = "overview", servers: object[] = [hostedServer]) {
   adminQuery.mockReturnValue({
-    data: {
-      name: "Example plugin",
-      slug: "example-plugin",
-      servers: [
-        {
-          id: "server-a",
-          displayName: "Example server",
-          toolsetId: "toolset-a",
-          createdAt: new Date(),
-        },
-      ],
-    },
+    data: { name: "Example plugin", slug: "example-plugin", servers },
   });
   return render(
     <TooltipProvider>
       <QueryClientProvider client={new QueryClient()}>
         <MemoryRouter initialEntries={[`/plugins/plugin-a/${section}`]}>
           <Routes>
+            <Route path="/plugins" element={<h1>Plugins</h1>} />
             <Route
               path="/plugins/:pluginId/:section"
               element={<PluginDetail />}
@@ -247,7 +244,6 @@ describe("plugin detail permission boundary", () => {
     });
     expect(screen.getByText("Example server")).toBeTruthy();
     expect(screen.getByText("Server metadata unavailable")).toBeTruthy();
-    expect(screen.queryByText("Toolset missing")).toBeNull();
     for (const query of Object.values(assignments))
       expect(query).not.toHaveBeenCalled();
   });
@@ -415,11 +411,7 @@ describe("plugin detail permission boundary", () => {
         expect(screen.getByText("Example server")).toBeTruthy();
       }
       expect(adminQuery).toHaveBeenCalled();
-      expect(features).toHaveBeenLastCalledWith(
-        { organizationId: "org-a" },
-        undefined,
-        { enabled: false },
-      );
+      expect(features).not.toHaveBeenCalled();
       expect(screen.queryByText("Distribution-only skills")).toBeNull();
       for (const query of Object.values(assignments))
         expect(query).not.toHaveBeenCalled();
@@ -452,12 +444,19 @@ describe("plugin detail permission boundary", () => {
     for (const query of Object.values(assignments))
       expect(query).toHaveBeenCalled();
   });
-  it("reports missing toolsets only when metadata is available", () => {
+  it("labels gateway-backed members as gateways", () => {
     state.orgRead = true;
     state.canReadServers = true;
-    renderAdmin();
-    expect(screen.getByText("Toolset missing")).toBeTruthy();
-    expect(screen.queryByText("Server metadata unavailable")).toBeNull();
+    renderAdmin("overview", [
+      {
+        id: "server-g",
+        displayName: "Example gateway",
+        metaMcpServerId: "gateway-a",
+        createdAt: new Date(),
+      },
+    ]);
+    expect(screen.getByText("Gateway")).toBeTruthy();
+    expect(screen.queryByText("Remote MCP")).toBeNull();
   });
 });
 

@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -86,6 +87,7 @@ func (f selectionFixture) issuePicked(t *testing.T, ctx context.Context, slug st
 		Source:              upstreamclients.SelectionSourceIssuance,
 		PickedMcpServerIds:  servers,
 		PickedClientIds:     clients,
+		PickedAuthClientIds: nil,
 	})
 	require.NoError(t, err)
 	return token
@@ -366,4 +368,60 @@ func TestUpstreamClientSelection_ServerOfferingSeveralClientsServesThePickedOne(
 	resp, err = callTool(t, f.ti, slug, f.issue(t, ctx, slug, issuerID, picked), "ping")
 	requireReconnect(t, resp, err, slug)
 	require.Equal(t, before, upstream.requestCount())
+}
+
+// A typed auth client picked on the consent page is recorded as the
+// credential's choice even when the sign-in does not bind its registration
+// for the server, and a picked headers-only client records no registration.
+func TestUpstreamClientSelection_RecordsTypedConsentPicks(t *testing.T) {
+	t.Parallel()
+	ctx, f := newSelectionFixture(t)
+
+	issuerID := createUserSessionIssuer(t, ctx, f.ti.conn, f.projectID)
+	oauthServer, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, newRecordingUpstream(t, "ping").url, "typed-oauth-"+uuid.NewString()[:8], "public", issuerID)
+	headerServer, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, newRecordingUpstream(t, "ping").url, "typed-header-"+uuid.NewString()[:8], "public", issuerID)
+	// Registered for the project, but bound to no sign-in.
+	registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "typed-unbound", "", nil)
+
+	fixtures := authclientbackfill.New(f.ti.conn)
+	seed := func(serverID uuid.UUID, clientType string, registration uuid.NullUUID) uuid.UUID {
+		id, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: f.orgID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ClientType: clientType, Source: "admin", RemoteSessionClientID: registration})
+		require.NoError(t, err)
+		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: serverID, AuthClientID: id, Source: "admin"}))
+		return id
+	}
+	personal := seed(oauthServer.ID, "remote_session", uuid.NullUUID{UUID: registration, Valid: true})
+	staticToken := seed(headerServer.ID, "static_credential", uuid.NullUUID{})
+
+	subject := createTestUser(t, ctx, f.ti, "typed-user-"+uuid.NewString())
+	_, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{Subject: subject, Audience: urn.NewUserSessionIssuer(issuerID).String(), Issuer: f.ti.serverURL.String() + "/mcp/typed", Lifetime: time.Hour})
+	require.NoError(t, err)
+	persistTestUserSession(t, f.ti, issuerID, subject, jti)
+	policy, err := usersessions_repo.New(f.ti.conn).GetUserSessionPolicyByJTI(ctx, usersessions_repo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuerID, Jti: jti})
+	require.NoError(t, err)
+
+	_, err = usersessions_repo.New(f.ti.conn).RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{
+		UserSessionIssuerID: issuerID,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        policy.CredentialID,
+		Source:              upstreamclients.SelectionSourceIssuance,
+		PickedMcpServerIds:  []uuid.UUID{oauthServer.ID, headerServer.ID},
+		PickedClientIds:     []uuid.UUID{registration, uuid.Nil},
+		PickedAuthClientIds: []uuid.UUID{personal, staticToken},
+	})
+	require.NoError(t, err)
+
+	rows, err := upstreamclientsrepo.New(f.ti.conn).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
+		Proposed: false, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: policy.CredentialID,
+		McpServerIds: []uuid.UUID{oauthServer.ID, headerServer.ID}, OrganizationID: f.orgID,
+	})
+	require.NoError(t, err)
+	byServer := map[uuid.UUID]upstreamclientsrepo.GetAuthClientSelectionRow{}
+	for _, row := range rows {
+		byServer[row.McpServerID] = row
+	}
+	require.Equal(t, uuid.NullUUID{UUID: personal, Valid: true}, byServer[oauthServer.ID].AuthClientID)
+	require.Equal(t, uuid.NullUUID{UUID: registration, Valid: true}, byServer[oauthServer.ID].RegistrationID)
+	require.Equal(t, uuid.NullUUID{UUID: staticToken, Valid: true}, byServer[headerServer.ID].AuthClientID)
+	require.False(t, byServer[headerServer.ID].RegistrationID.Valid)
 }

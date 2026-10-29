@@ -1,3 +1,4 @@
+import { supportsAudienceReading } from "./manageAccessState";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import {
@@ -103,6 +104,8 @@ export interface AccessRow {
   memberIds: string[];
   /** True when no rule on this row names this server. */
   inheritedOnly: boolean;
+  /** A reaching rule cannot be interpreted by this dashboard version. */
+  accessUnknown: boolean;
 }
 
 /** Whether a rule reaches this principal, directly or through a role. */
@@ -189,6 +192,7 @@ export function buildAccessRows(entries: ResourceAudienceEntry[]): AccessRow[] {
         },
         memberIds: [],
         inheritedOnly: true,
+        accessUnknown: false,
       };
       rows.set(entry.principalUrn, row);
     }
@@ -203,6 +207,10 @@ export function buildAccessRows(entries: ResourceAudienceEntry[]): AccessRow[] {
   for (const row of rows.values()) {
     for (const entry of entries) {
       if (!reaches(entry, row)) continue;
+      if (!supportsAudienceReading([entry])) {
+        row.accessUnknown = true;
+        continue;
+      }
       const own = entry.principalUrn === row.principalUrn;
       const blocked = blockedScope(entry.level);
 
@@ -297,6 +305,11 @@ export interface ScopeState {
   value: string;
   /** True when a rule grants this line and nothing takes it away. */
   granted: boolean;
+  /**
+   * True when this row's own block closes the line. A blocking role reads
+   * differently from one nothing was granted to: its block outranks grants.
+   */
+  blocked: boolean;
   /**
    * True when closing or narrowing this line has to be written as a block:
    * something other than this row's own rule on this server is granting it,
@@ -404,11 +417,42 @@ function isClosed(cell: ScopeCell, reachable: string[] | null): boolean {
   );
 }
 
+/**
+ * Whether this line's own blocks alone close it: an unnarrowed one, or, with
+ * a catalogue, narrowed ones that between them cover every tool the grants
+ * open. A block trimming only some of those tools leaves the line open.
+ */
+function closedByOwnBlocks(
+  cell: ScopeCell,
+  catalog: ToolSelectionTool[],
+): boolean {
+  const own = cell.blocks.filter((block) => !isInherited(cell, block));
+  if (own.some(isUnnarrowed)) return true;
+  if (own.length === 0 || catalog.length === 0) return false;
+  const granted = catalog.filter((tool) =>
+    cell.grants.some((grant) => coversTool(grant, tool)),
+  );
+  return (
+    granted.length > 0 &&
+    granted.every((tool) => own.some((block) => coversTool(block, tool)))
+  );
+}
+
 export function scopeState(
   row: AccessRow,
   scope: ScopeKey,
   catalog: ToolSelectionTool[] = [],
 ): ScopeState {
+  if (row.accessUnknown) {
+    return {
+      value: "Access unknown",
+      granted: false,
+      blocked: false,
+      subtracts: false,
+      canRevoke: false,
+      capped: false,
+    };
+  }
   const cell = row.cells[scope];
   const reachable = reachableTools(cell, catalog);
   const closed = isClosed(cell, reachable);
@@ -419,14 +463,19 @@ export function scopeState(
     const foreign = foreignBlocks(row, cell);
     const cancelling = foreign.find(isUnnarrowed) ?? foreign[0];
     const cancellingSelf = cancelling?.principalUrn === row.principalUrn;
+    // The row's own block decides the line, so naming another principal's
+    // block beside it would only repeat the answer.
+    const blocked = closedByOwnBlocks(cell, catalog);
     return {
-      value: "No access",
+      value: blocked ? "Blocked" : "No access",
       granted: false,
+      blocked,
       subtracts: false,
       canRevoke: false,
-      via: cancellingSelf ? undefined : cancelling?.displayName,
-      viaPrincipalUrn: cancellingSelf ? undefined : cancelling?.principalUrn,
-      note: cancellingSelf ? sourceNote(cancelling) : undefined,
+      via: cancellingSelf || blocked ? undefined : cancelling?.displayName,
+      viaPrincipalUrn:
+        cancellingSelf || blocked ? undefined : cancelling?.principalUrn,
+      note: cancellingSelf && !blocked ? sourceNote(cancelling) : undefined,
       // Any block this row can neither lift nor outrank caps it, whether it
       // closed the line outright or trimmed the last tool away.
       capped: cappingBlocks(row, cell).length > 0,
@@ -446,6 +495,7 @@ export function scopeState(
   return {
     value: scope === "use" ? connectLabel(cell, catalog, reachable) : "Allowed",
     granted: true,
+    blocked: false,
     subtracts: effectiveForeignGrants(row, scope).length > 0,
     canRevoke: true,
     via: cell.own || grantingSelf ? undefined : granting?.displayName,
@@ -524,15 +574,42 @@ export function accessSummary(
   row: AccessRow,
   catalog: ToolSelectionTool[] = [],
 ): string {
+  if (row.accessUnknown) return "Access unknown";
   const granted = SCOPE_ROWS.filter(
     ({ key }) => scopeState(row, key, catalog).granted,
   );
-  if (granted.length === 0) return "No access";
-  return granted
-    .map(({ key, label }) =>
+  const blocked = blockedScopes(row, catalog);
+  // Fully blocked reads as one word; a partial block is named after what
+  // the row still has, so the exception sits at the end of the line.
+  const blockedPart =
+    blocked.length === 0
+      ? []
+      : blocked.length === SCOPE_ROWS.length
+        ? ["Blocked"]
+        : [`${listLabels(blocked)} blocked`];
+  if (granted.length === 0 && blockedPart.length === 0) return "No access";
+  return [
+    ...granted.map(({ key, label }) =>
       key === "use" ? scopeState(row, key, catalog).value : label,
-    )
-    .join(" · ");
+    ),
+    ...blockedPart,
+  ].join(" · ");
+}
+
+/** The labels of the scopes this row's own block closes, weakest first. */
+export function blockedScopes(
+  row: AccessRow,
+  catalog: ToolSelectionTool[] = [],
+): string[] {
+  if (row.accessUnknown) return [];
+  return SCOPE_ROWS.filter(
+    ({ key }) => scopeState(row, key, catalog).blocked,
+  ).map(({ label }) => label);
+}
+
+function listLabels(labels: string[]): string {
+  if (labels.length < 2) return labels.join("");
+  return `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
 }
 
 /**

@@ -10,10 +10,129 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	analytics "github.com/speakeasy-api/gram/server/gen/analytics"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// BuildSignalDefinitionPayload builds the payload for the analytics
+// signalDefinition endpoint from CLI flags.
+func BuildSignalDefinitionPayload(analyticsSignalDefinitionSensorID string, analyticsSignalDefinitionDefinitionHash string, analyticsSignalDefinitionSessionToken string, analyticsSignalDefinitionProjectSlugInput string) (*analytics.SignalDefinitionPayload, error) {
+	var err error
+	var sensorID string
+	{
+		sensorID = analyticsSignalDefinitionSensorID
+		err = goa.MergeErrors(err, goa.ValidateFormat("sensor_id", sensorID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var definitionHash string
+	{
+		definitionHash = analyticsSignalDefinitionDefinitionHash
+		err = goa.MergeErrors(err, goa.ValidatePattern("definition_hash", definitionHash, "^[a-f0-9]{64}$"))
+		if utf8.RuneCountInString(definitionHash) < 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("definition_hash", definitionHash, utf8.RuneCountInString(definitionHash), 64, true))
+		}
+		if utf8.RuneCountInString(definitionHash) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("definition_hash", definitionHash, utf8.RuneCountInString(definitionHash), 64, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if analyticsSignalDefinitionSessionToken != "" {
+			sessionToken = &analyticsSignalDefinitionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if analyticsSignalDefinitionProjectSlugInput != "" {
+			projectSlugInput = &analyticsSignalDefinitionProjectSlugInput
+		}
+	}
+	v := &analytics.SignalDefinitionPayload{}
+	v.SensorID = sensorID
+	v.DefinitionHash = definitionHash
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSignalFindingsPayload builds the payload for the analytics
+// signalFindings endpoint from CLI flags.
+func BuildSignalFindingsPayload(analyticsSignalFindingsBody string, analyticsSignalFindingsSessionToken string, analyticsSignalFindingsProjectSlugInput string) (*analytics.SignalFindingsPayload, error) {
+	var err error
+	var body SignalFindingsRequestBody
+	{
+		err = json.Unmarshal([]byte(analyticsSignalFindingsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"compare_previous\": false,\n      \"evidence\": false,\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"peer\": {\n         \"minimum_level\": 1,\n         \"sensor_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"signal_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"threshold\": 1\n      },\n      \"signal_query\": {\n         \"filters\": [\n            {\n               \"dimension\": {\n                  \"attribute\": \"aa\",\n                  \"field\": \"abc123\"\n               },\n               \"operator\": \"abc123\",\n               \"values\": [\n                  \"abc123\",\n                  \"abc123\",\n                  \"abc123\"\n               ]\n            },\n            {\n               \"dimension\": {\n                  \"attribute\": \"aa\",\n                  \"field\": \"abc123\"\n               },\n               \"operator\": \"abc123\",\n               \"values\": [\n                  \"abc123\",\n                  \"abc123\",\n                  \"abc123\"\n               ]\n            },\n            {\n               \"dimension\": {\n                  \"attribute\": \"aa\",\n                  \"field\": \"abc123\"\n               },\n               \"operator\": \"abc123\",\n               \"values\": [\n                  \"abc123\",\n                  \"abc123\",\n                  \"abc123\"\n               ]\n            }\n         ],\n         \"group_by\": [\n            {\n               \"attribute\": \"aa\",\n               \"field\": \"abc123\"\n            },\n            {\n               \"attribute\": \"aa\",\n               \"field\": \"abc123\"\n            }\n         ],\n         \"groups\": 2,\n         \"points\": 2,\n         \"run_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"selection\": {\n            \"minimum_level\": 1,\n            \"sensor_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"signal_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"threshold\": 1\n         },\n         \"trigger\": \"abc123\"\n      },\n      \"to\": \"1970-01-01T00:00:01Z\"\n   }'")
+		}
+		if body.SignalQuery == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("signal_query", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if body.SignalQuery != nil {
+			if err2 := ValidateAnalyticsSignalQueryRequestBody(body.SignalQuery); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if body.Peer != nil {
+			if err2 := ValidateAnalyticsSignalSelectionRequestBody(body.Peer); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if analyticsSignalFindingsSessionToken != "" {
+			sessionToken = &analyticsSignalFindingsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if analyticsSignalFindingsProjectSlugInput != "" {
+			projectSlugInput = &analyticsSignalFindingsProjectSlugInput
+		}
+	}
+	v := &analytics.SignalFindingsPayload{
+		From:            body.From,
+		To:              body.To,
+		ComparePrevious: body.ComparePrevious,
+		Evidence:        body.Evidence,
+	}
+	if body.SignalQuery != nil {
+		v.SignalQuery = marshalAnalyticsSignalQueryRequestBodyToAnalyticsAnalyticsSignalQuery(body.SignalQuery)
+	}
+	if body.Peer != nil {
+		v.Peer = marshalAnalyticsSignalSelectionRequestBodyToAnalyticsAnalyticsSignalSelection(body.Peer)
+	}
+	{
+		var zero bool
+		if v.ComparePrevious == zero {
+			v.ComparePrevious = false
+		}
+	}
+	{
+		var zero bool
+		if v.Evidence == zero {
+			v.Evidence = false
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
 
 // BuildQueryPayload builds the payload for the analytics query endpoint from
 // CLI flags.
@@ -23,15 +142,15 @@ func BuildQueryPayload(analyticsQueryBody string, analyticsQuerySessionToken str
 	{
 		err = json.Unmarshal([]byte(analyticsQueryBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"dataset\": \"tool_calls\",\n      \"dimensions\": [\n         \"abc123\"\n      ],\n      \"filters\": [\n         {\n            \"field\": \"surface\",\n            \"operator\": \"in\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2026-09-01T00:00:00Z\",\n      \"grain\": \"hour\",\n      \"limit\": 2,\n      \"measures\": [\n         {\n            \"alias\": \"total_ms\",\n            \"field\": \"duration_ms\",\n            \"op\": \"sum\"\n         }\n      ],\n      \"order_by\": [\n         {\n            \"direction\": \"desc\",\n            \"measure\": \"total_ms\"\n         }\n      ],\n      \"to\": \"2026-09-08T00:00:00Z\",\n      \"ungrouped\": false\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"dataset\": \"tool_calls\",\n      \"dimensions\": [\n         \"abc123\"\n      ],\n      \"filters\": [\n         {\n            \"field\": \"surface\",\n            \"operator\": \"in\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2026-09-01T00:00:00Z\",\n      \"grain\": \"abc123\",\n      \"limit\": 2,\n      \"measures\": [\n         {\n            \"alias\": \"total_ms\",\n            \"field\": \"duration_ms\",\n            \"op\": \"sum\"\n         }\n      ],\n      \"order_by\": [\n         {\n            \"direction\": \"desc\",\n            \"measure\": \"total_ms\"\n         }\n      ],\n      \"signal_query\": {\n         \"filters\": [\n            {\n               \"dimension\": {\n                  \"attribute\": \"aa\",\n                  \"field\": \"abc123\"\n               },\n               \"operator\": \"abc123\",\n               \"values\": [\n                  \"abc123\",\n                  \"abc123\",\n                  \"abc123\"\n               ]\n            },\n            {\n               \"dimension\": {\n                  \"attribute\": \"aa\",\n                  \"field\": \"abc123\"\n               },\n               \"operator\": \"abc123\",\n               \"values\": [\n                  \"abc123\",\n                  \"abc123\",\n                  \"abc123\"\n               ]\n            },\n            {\n               \"dimension\": {\n                  \"attribute\": \"aa\",\n                  \"field\": \"abc123\"\n               },\n               \"operator\": \"abc123\",\n               \"values\": [\n                  \"abc123\",\n                  \"abc123\",\n                  \"abc123\"\n               ]\n            }\n         ],\n         \"group_by\": [\n            {\n               \"attribute\": \"aa\",\n               \"field\": \"abc123\"\n            },\n            {\n               \"attribute\": \"aa\",\n               \"field\": \"abc123\"\n            }\n         ],\n         \"groups\": 2,\n         \"points\": 2,\n         \"run_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"selection\": {\n            \"minimum_level\": 1,\n            \"sensor_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"signal_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"threshold\": 1\n         },\n         \"trigger\": \"abc123\"\n      },\n      \"to\": \"2026-09-08T00:00:00Z\",\n      \"ungrouped\": false\n   }'")
+		}
+		if body.SignalQuery != nil {
+			if err2 := ValidateAnalyticsSignalQueryRequestBody(body.SignalQuery); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
-		if body.Grain != nil {
-			if !(*body.Grain == "none" || *body.Grain == "hour" || *body.Grain == "day" || *body.Grain == "week" || *body.Grain == "month") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.grain", *body.Grain, []any{"none", "hour", "day", "week", "month"}))
-			}
-		}
 		for _, e := range body.Measures {
 			if e != nil {
 				if err2 := ValidateAnalyticsMeasureRequestBody(e); err2 != nil {
@@ -82,6 +201,9 @@ func BuildQueryPayload(analyticsQueryBody string, analyticsQuerySessionToken str
 		Grain:     body.Grain,
 		Limit:     body.Limit,
 		Ungrouped: body.Ungrouped,
+	}
+	if body.SignalQuery != nil {
+		v.SignalQuery = marshalAnalyticsSignalQueryRequestBodyToAnalyticsAnalyticsSignalQuery(body.SignalQuery)
 	}
 	if body.Dimensions != nil {
 		v.Dimensions = make([]string, len(body.Dimensions))
@@ -167,7 +289,22 @@ func BuildDimensionValuesPayload(analyticsDimensionValuesBody string, analyticsD
 	{
 		err = json.Unmarshal([]byte(analyticsDimensionValuesBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"dataset\": \"tool_calls\",\n      \"dimension\": \"tool_name\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"limit\": 2,\n      \"to\": \"1970-01-01T00:00:01Z\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"attribute\": \"aa\",\n      \"dataset\": \"tool_calls\",\n      \"dimension\": \"tool_name\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"limit\": 2,\n      \"signal_scope\": {\n         \"run_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"sensor_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"trigger\": \"abc123\"\n      },\n      \"to\": \"1970-01-01T00:00:01Z\"\n   }'")
+		}
+		if body.SignalScope != nil {
+			if err2 := ValidateAnalyticsSignalScopeRequestBody(body.SignalScope); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if body.Attribute != nil {
+			if utf8.RuneCountInString(*body.Attribute) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute", *body.Attribute, utf8.RuneCountInString(*body.Attribute), 1, true))
+			}
+		}
+		if body.Attribute != nil {
+			if utf8.RuneCountInString(*body.Attribute) > 256 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute", *body.Attribute, utf8.RuneCountInString(*body.Attribute), 256, false))
+			}
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -196,9 +333,13 @@ func BuildDimensionValuesPayload(analyticsDimensionValuesBody string, analyticsD
 	v := &analytics.DimensionValuesPayload{
 		Dataset:   body.Dataset,
 		Dimension: body.Dimension,
+		Attribute: body.Attribute,
 		From:      body.From,
 		To:        body.To,
 		Limit:     body.Limit,
+	}
+	if body.SignalScope != nil {
+		v.SignalScope = marshalAnalyticsSignalScopeRequestBodyToAnalyticsAnalyticsSignalScope(body.SignalScope)
 	}
 	{
 		var zero int

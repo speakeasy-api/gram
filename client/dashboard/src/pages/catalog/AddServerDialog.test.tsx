@@ -76,6 +76,7 @@ const server = {
   toolCount: 0,
   isReadOnly: false,
   supportsDcr: true,
+  supportsCimd: false,
   remotes: [
     {
       url: "https://mcp.example.test/mcp",
@@ -97,11 +98,11 @@ function render(ui: React.ReactElement) {
   };
 }
 
-function renderDialog(): void {
+function renderDialog(selectedServer = server): void {
   render(
     <TooltipProvider>
       <AddServerDialog
-        servers={[server]}
+        servers={[selectedServer]}
         open
         onOpenChange={(open) => {
           mocks.onOpenChange(open);
@@ -111,14 +112,13 @@ function renderDialog(): void {
   );
 }
 
-beforeEach(() => {
-  mocks.hasScope.mockReturnValue(false);
+function mockConfigureWorkflow(selectedServer = server): void {
   mocks.workflow.mockReturnValue({
     phase: "configure",
     projectSlug: "default",
     serverConfigs: [
       {
-        server,
+        server: selectedServer,
         name: "Test Server",
         remotes: server.remotes,
         identityMode: "user",
@@ -133,6 +133,11 @@ beforeEach(() => {
     startInstall: mocks.startInstall,
     updateServerConfig: mocks.updateServerConfig,
   });
+}
+
+beforeEach(() => {
+  mocks.hasScope.mockReturnValue(false);
+  mockConfigureWorkflow();
 });
 
 afterEach(() => {
@@ -141,6 +146,15 @@ afterEach(() => {
 });
 
 describe("AddServerDialog identity permissions", () => {
+  it("marks User Identity as Default for CIMD-only servers", async () => {
+    const cimdServer = { ...server, supportsDcr: false, supportsCimd: true };
+    mockConfigureWorkflow(cimdServer);
+    renderDialog(cimdServer);
+    expect(
+      await screen.findByRole("radio", { name: /User Identity Default/ }),
+    ).toBeDefined();
+  });
+
   it("disables User Identity and explains project:write", async () => {
     renderDialog();
 

@@ -45,7 +45,22 @@ const (
 	// admin-only scope on ListDirectoryRoleMappings is. SetDirectoryRoleMappings
 	// still accepts any existing key and value.
 	maxDirectoryAttributeOptionsPerKey = 100
+
+	// maxDirectoryRolesPerSource is a sanity cap on how many roles one group
+	// or attribute value can grant. A source granting more than this is far
+	// more likely a mistake than a deliberate setup, and every role it grants
+	// widens access for everyone the source matches.
+	maxDirectoryRolesPerSource = 20
 )
+
+// requireDirectoryRoleSetWithinCap rejects a role set larger than
+// maxDirectoryRolesPerSource. count is the number of distinct roles.
+func (s *Service) requireDirectoryRoleSetWithinCap(ctx context.Context, count int) error {
+	if count > maxDirectoryRolesPerSource {
+		return oops.E(oops.CodeBadRequest, nil, "a directory group or attribute value can grant at most %d roles; this request asks for %d", maxDirectoryRolesPerSource, count).LogWarn(ctx, s.logger)
+	}
+	return nil
+}
 
 // ListDirectoryRoleMappings returns the organization's live mappings together
 // with the directory groups and attribute values an admin can map.
@@ -347,6 +362,9 @@ func (s *Service) writeDirectoryRoleSetTx(ctx context.Context, dbtx pgx.Tx, ac *
 	roleURNs := slices.Clone(payload.RoleUrns)
 	slices.Sort(roleURNs)
 	roleURNs = slices.Compact(roleURNs)
+	if err := s.requireDirectoryRoleSetWithinCap(ctx, len(roleURNs)); err != nil {
+		return nil, err
+	}
 	roles, err := queries.ListLiveDirectoryMappingRoles(ctx, repo.ListLiveDirectoryMappingRolesParams{
 		OrganizationID: ac.ActiveOrganizationID, RoleUrns: roleURNs,
 	})
@@ -489,7 +507,7 @@ func (s *Service) writeDirectoryRoleSetTx(ctx context.Context, dbtx pgx.Tx, ac *
 			if err := s.audit.LogDirectoryRoleMappingSet(ctx, dbtx, audit.LogDirectoryRoleMappingSetEvent{
 				OrganizationID: ac.ActiveOrganizationID,
 				Actor:          urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ActorDisplayName: ac.Email, ActorSlug: nil,
-				MappingURN: urn.NewDirectoryRoleMapping(mappingID), SourceLabel: sourceLabel, RoleURN: roleURN, PreviousRoleURN: nil,
+				MappingURN: urn.NewDirectoryRoleMapping(mappingID), SourceLabel: sourceLabel, RoleURN: roleURN,
 			}); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "log directory role mapping addition").LogError(ctx, s.logger)
 			}

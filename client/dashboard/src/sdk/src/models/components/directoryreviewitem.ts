@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -24,9 +25,7 @@ export const DirectoryReviewItemKind = {
 /**
  * new_group: an unmapped group first seen after review started. new_attribute_value: a new value of an attribute key that has mappings. source_missing: a mapped group or attribute value that has gone.
  */
-export type DirectoryReviewItemKind = ClosedEnum<
-  typeof DirectoryReviewItemKind
->;
+export type DirectoryReviewItemKind = OpenEnum<typeof DirectoryReviewItemKind>;
 
 export type DirectoryReviewItem = {
   /**
@@ -49,9 +48,10 @@ export type DirectoryReviewItem = {
 };
 
 /** @internal */
-export const DirectoryReviewItemKind$inboundSchema: z.ZodMiniEnum<
-  typeof DirectoryReviewItemKind
-> = z.enum(DirectoryReviewItemKind);
+export const DirectoryReviewItemKind$inboundSchema: z.ZodMiniType<
+  DirectoryReviewItemKind,
+  unknown
+> = openEnums.inboundSchema(DirectoryReviewItemKind);
 
 /** @internal */
 export const DirectoryReviewItem$inboundSchema: z.ZodMiniType<

@@ -36,6 +36,12 @@ func transferNonceCookieName(nonceHash string) string {
 	return constants.TransferInNonceCookiePrefix + nonceHash[:min(16, len(nonceHash))]
 }
 
+// transferReplaceCookieName names the cookie that marks the transfer whose
+// nonce hash is nonceHash as replacing any session already on this host.
+func transferReplaceCookieName(nonceHash string) string {
+	return transferNonceCookieName(nonceHash) + "_replace"
+}
+
 // transferCookieMiddleware hands the request's cookies and the response to
 // the wrapped TransferIn handler.
 func transferCookieMiddleware(next http.Handler) http.Handler {

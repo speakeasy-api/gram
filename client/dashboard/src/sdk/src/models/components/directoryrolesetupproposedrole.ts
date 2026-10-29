@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { RoleGrant, RoleGrant$inboundSchema } from "./rolegrant.js";
@@ -20,7 +21,7 @@ export const RoleAction = {
 /**
  * reuse an existing role, or create a new one.
  */
-export type RoleAction = ClosedEnum<typeof RoleAction>;
+export type RoleAction = OpenEnum<typeof RoleAction>;
 
 export type DirectoryRoleSetupProposedRole = {
   /**
@@ -46,8 +47,8 @@ export type DirectoryRoleSetupProposedRole = {
 };
 
 /** @internal */
-export const RoleAction$inboundSchema: z.ZodMiniEnum<typeof RoleAction> = z
-  .enum(RoleAction);
+export const RoleAction$inboundSchema: z.ZodMiniType<RoleAction, unknown> =
+  openEnums.inboundSchema(RoleAction);
 
 /** @internal */
 export const DirectoryRoleSetupProposedRole$inboundSchema: z.ZodMiniType<

@@ -46,6 +46,11 @@ type Request struct {
 	// this sign-in instead of a grant, and its credential is stored without
 	// one. A request without it always needs UserSessionJTI.
 	consentSignInID uuid.UUID
+
+	// consentNeedsToken marks consent-time discovery, which calls the upstream
+	// with the credential. A consent acceptance recorded without a stored
+	// credential carries no token, so it never satisfies such a request.
+	consentNeedsToken bool
 }
 
 // consent reports whether r checks a consent page's sign-in before its MCP
@@ -87,6 +92,7 @@ func NewUpstreamRequest(organizationID string, projectID, userSessionIssuerID uu
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		consentSignInID:       uuid.Nil,
+		consentNeedsToken:     false,
 	}
 	if tunneled {
 		if !tunneledIssuerID.Valid || tunneledIssuerID.UUID == uuid.Nil {

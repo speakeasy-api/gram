@@ -115,6 +115,9 @@ type Service interface {
 	// Sets an organization's Stripe customer ID when it has no existing Stripe
 	// customer or subscription.
 	SetStripeCustomer(context.Context, *SetStripeCustomerPayload) (res *AdminOrganization, err error)
+	// Sets or clears the link to an organization's adoption dashboard shown on the
+	// admin overview. An empty or absent URL clears it.
+	SetAdoptionDashboardURL(context.Context, *SetAdoptionDashboardURLPayload) (res *AdminOrganization, err error)
 	// Returns the live Stripe subscription and payment state for an organization.
 	GetStripeSubscription(context.Context, *GetStripeSubscriptionPayload) (res *AdminStripeSubscription, err error)
 	// Schedules an organization's PAYG subscription to cancel at period end.
@@ -246,6 +249,22 @@ type Service interface {
 	// Never creates a sign-in provider or a client and never registers one with
 	// the upstream.
 	MigrateExternalMcpServers(context.Context, *MigrateExternalMcpServersPayload) (res *AdminExternalMcpMigrationResult, err error)
+	// List observed remote MCP candidates and durable promotion delivery status.
+	// Active excludes endpoints already in the catalogue; candidate includes all
+	// unpublished active entries. No source URLs or credentials are returned.
+	ListRegistryPromotionCandidates(context.Context, *ListRegistryPromotionCandidatesPayload) (res *AdminRegistryPromotionCandidates, err error)
+	// Refresh health evidence for one exact remote MCP deployment before staff
+	// review.
+	GetRegistryPromotionCandidate(context.Context, *GetRegistryPromotionCandidatePayload) (res *AdminRegistryPromotionCandidate, err error)
+	// Publish an explicitly reviewed public catalogue entry and queue setup
+	// documentation. Customer credentials are never copied.
+	PromoteRegistryCandidate(context.Context, *PromoteRegistryCandidatePayload) (res *AdminRegistryPromotionCandidate, err error)
+	// Reject, archive, or restore one exact unpublished catalogue candidate.
+	// Hidden candidates cannot be promoted until restored and refreshed.
+	CurateRegistryPromotionCandidate(context.Context, *CurateRegistryPromotionCandidatePayload) (res *AdminRegistryPromotionCandidate, err error)
+	// Retry a failed setup-guide request for one exact reviewed promotion without
+	// republishing the catalogue entry.
+	RetryRegistryPromotionDocs(context.Context, *RetryRegistryPromotionDocsPayload) (res *AdminRegistryPromotionCandidate, err error)
 	// Staff-only registry administration: Okta application names observed across
 	// synced tenants that plausibly belong to the entry, for confirmation in the
 	// editor.
@@ -337,6 +356,22 @@ type Service interface {
 	// client choice. Idempotent, so it is safe to run again; a server the
 	// configuration does not prove is reported and never guessed.
 	RunUpstreamOAuthMigration(context.Context, *RunUpstreamOAuthMigrationPayload) (res *AdminUpstreamOAuthMigrationRun, err error)
+	// Enables upstream auth enforcement for one organization: its direct proxied
+	// servers and assistant turns are served by the typed auth client resolver,
+	// and using the chosen auth client requires mcp:auth. Refused unless the
+	// organization is migrated, its auth clients are recorded, its default auth
+	// permissions are granted, every credential choice that can name an auth
+	// client does, and its assistant profiles are recorded. Choices left ambiguous
+	// and profile gaps are not blocking: those credentials are asked to reconnect
+	// and those turns are refused with the reason. Shadow parity and the
+	// cross-organization denial notice are confirmed by the caller, since they are
+	// read from telemetry and communication outside the database. Enabled
+	// enforcement does not depend on the auth-client-resolver flags.
+	EnableUpstreamAuthEnforcement(context.Context, *EnableUpstreamAuthEnforcementPayload) (res *AdminUpstreamOAuthMigrationStatus, err error)
+	// Disables upstream auth enforcement for one organization. This is its
+	// rollback: requests return to the upstream client choice within a minute.
+	// Safe to call when enforcement is already off.
+	DisableUpstreamAuthEnforcement(context.Context, *DisableUpstreamAuthEnforcementPayload) (res *AdminUpstreamOAuthMigrationStatus, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -359,7 +394,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [95]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration"}
+var MethodNames = [103]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -756,6 +791,28 @@ type AdminMcpServerHealth struct {
 	// issuer.
 	LegacyAuth        *string
 	UserSessionIssuer *AdminMcpServerHealthUserSessionIssuer
+	// How the server reaches its upstream. Omitted for toolset-only servers.
+	UpstreamAuth *AdminMcpServerHealthUpstreamAuth
+}
+
+// One auth client the server offers for reaching its upstream. Never carries
+// its name or header values.
+type AdminMcpServerHealthAuthClient struct {
+	// Auth client id.
+	ID string
+	// How the client authenticates upstream.
+	ClientType string
+	// backfill when created from existing configuration, admin when an
+	// administrator created it.
+	Source string
+	// Whether the client can be used.
+	Enabled bool
+	// The OAuth registration behind an OAuth-backed client.
+	RemoteSessionClientID *string
+	// Servers offering the client, this one included.
+	ServerCount int
+	// Headers the client sends upstream.
+	HeaderCount int
 }
 
 // The identities telemetry is matched on for this server.
@@ -874,6 +931,17 @@ type AdminMcpServerHealthTrustedRemoteSession struct {
 	ClientID string
 }
 
+// Whether the server's upstream needs authentication and the auth clients it
+// offers.
+type AdminMcpServerHealthUpstreamAuth struct {
+	// configured, setup_incomplete (required with no enabled client),
+	// no_auth_required or undecided.
+	Status string
+	// Whether the upstream needs authentication. Omitted while undecided.
+	RequiresUpstreamAuth *bool
+	AuthClients          []*AdminMcpServerHealthAuthClient
+}
+
 // The user session issuer that authenticates the server's users.
 type AdminMcpServerHealthUserSessionIssuer struct {
 	// The user session issuer ID.
@@ -931,12 +999,15 @@ type AdminMcpServerToolCallBucket struct {
 	BucketStart string
 	// Tool calls in the bucket.
 	Total int64
-	// Failed tool calls in the bucket.
+	// Tool calls in the bucket that failed with status 400 or above. Tool errors
+	// returned inside HTTP 200 (isError) are not counted here.
 	Failed int64
 }
 
-// Tool calls inside the window by outcome class. In-band tool errors (isError
-// inside HTTP 200) count as success.
+// Tool calls inside the window by outcome class. failed counts isError tool
+// errors in 2xx/3xx responses and hook-reported tool errors; hosted rows
+// recorded before 2026-10-15 and remote rows recorded before this change
+// shipped still count as success.
 type AdminMcpServerToolCallOutcomes struct {
 	Success      int64
 	Unauthorized int64
@@ -1169,6 +1240,9 @@ type AdminOrganization struct {
 	TrialConvertedAt *string
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string
 	// Number of active members in the organization.
 	MemberCount int
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1358,6 +1432,71 @@ type AdminRegistryPage struct {
 	NextCursor *string
 }
 
+// Publicly advertised authentication capabilities, not a verified OAuth
+// connection.
+type AdminRegistryPromotionAuthDiscovery struct {
+	SupportsDcr  bool
+	SupportsCimd bool
+	AuthSetup    string
+	Status       string
+}
+
+// AdminRegistryPromotionCandidate is the result type of the admin service
+// getRegistryPromotionCandidate method.
+type AdminRegistryPromotionCandidate struct {
+	ID                string
+	OrganizationID    string
+	ProjectID         string
+	McpServerID       string
+	RemoteMcpServerID string
+	SourceName        *string
+	CreatedAt         string
+	CurationRevision  string
+	SuggestedMetadata *AdminRegistryPromotionSuggestions
+	AuthDiscovery     *AdminRegistryPromotionAuthDiscovery
+	SourceRevision    string
+	Eligible          bool
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility bool
+	Reason                 string
+	Status                 string
+	ObservedSuccesses      int64
+	ObservedFailures       int64
+	ObservedDays           int
+	CheckedAt              *string
+	RegistryEntryID        *string
+	DocsStatus             *string
+	DocsURL                *string
+	DocsRevision           string
+	DocsRetryAllowed       bool
+	DocsAttempts           int
+	DocsLastAttemptAt      *string
+	DocsNextAttemptAt      *string
+	DocsQueuedAt           *string
+	PromotedAt             *string
+	PublicTitle            *string
+	DeliveryError          *string
+}
+
+// AdminRegistryPromotionCandidates is the result type of the admin service
+// listRegistryPromotionCandidates method.
+type AdminRegistryPromotionCandidates struct {
+	Candidates []*AdminRegistryPromotionCandidate
+	NextCursor *string
+}
+
+// Untrusted observed metadata suggestions. Staff must edit and explicitly
+// confirm every value before publication.
+type AdminRegistryPromotionSuggestions struct {
+	PublicName        *string
+	PublicTitle       *string
+	PublicDescription *string
+	PublicURL         *string
+	DocumentationURL  *string
+	DocsSlug          *string
+	AuthMode          *string
+}
+
 type AdminRegistrySummary struct {
 	ID        string
 	Name      string
@@ -1435,6 +1574,16 @@ type AdminStripeSubscriptionCandidate struct {
 	Status string
 }
 
+// One organization's upstream auth enforcement.
+type AdminUpstreamAuthEnforcement struct {
+	// Whether enforcement is on.
+	Enabled bool
+	// Whether the coverage enforcement needs is in place, so it can be turned on.
+	Ready bool
+	// What keeps enforcement from being turned on, empty when ready.
+	Blockers []string
+}
+
 // Where one kind of configured upstream identity stands.
 type AdminUpstreamOAuthMigrationAuthClientKind struct {
 	// The kind: oauth, header or ema.
@@ -1492,9 +1641,60 @@ type AdminUpstreamOAuthMigrationAuthClients struct {
 	Warnings []*AdminUpstreamOAuthMigrationUnresolvedAssociation
 	// The same counts for each kind of configured identity.
 	Kinds []*AdminUpstreamOAuthMigrationAuthClientKind
-	// Phases whose check failed: oauth, headers, ema, reconcile or mark. The
-	// counts cover the other phases.
+	// Phases whose check failed: oauth, headers, ema, ema_warnings, reconcile,
+	// mark, selections or grants. The counts cover the other phases.
 	FailedPhases []string
+	// Whether every live credential choice names a usable auth client or is an
+	// explicit no-auth choice, and the selections check did not fail.
+	SelectionsComplete *bool
+	// Live credential choices with exactly one auth client to name, not yet named.
+	PendingSelectionMappings *int64
+	// Default auth permission grants (mcp:auth) the organization's roles, users,
+	// agents and API keys are missing, which a run adds. Enforcement needs them,
+	// so existing callers keep their access.
+	PendingGrants *int64
+	// Agent attachments whose grants a run does not write while the organization's
+	// upstream selector writes are not allowed. While any wait, complete is false.
+	AttachmentsWaiting *int64
+	// Credential choice coverage for each credential class.
+	SelectionClasses []*AdminUpstreamOAuthMigrationSelectionClass
+	// The first live credential choices left without a usable auth client.
+	SelectionGaps []*AdminUpstreamOAuthMigrationSelectionGap
+	// Every live credential choice left without a usable auth client, including
+	// those beyond selection_gaps.
+	SelectionGapCount *int64
+}
+
+// MCP servers execution-selection profiles hold no choice for, for one
+// execution context and reason.
+type AdminUpstreamOAuthMigrationExecutionProfileGap struct {
+	// user_backed for turns run for a user the event identified, userless for
+	// turns run as the trigger's workload.
+	ExecutionContext string
+	// Why there is no choice: selection_required (several clients could serve it),
+	// personal_requires_user (only a personal client serves it, and the turn has
+	// no user), no_client (no live, enabled auth client carries its upstream OAuth
+	// client), setup_incomplete (it needs upstream authentication and offers no
+	// auth client) or upstream_auth_undecided (it offers no auth client and an
+	// administrator has not decided whether it needs upstream authentication).
+	Reason string
+	// Profile and server pairs with no choice for this reason.
+	Servers int64
+}
+
+// Where one organization stands in recording, for each assistant, trigger and
+// execution context, the versioned auth client choices its turns use.
+type AdminUpstreamOAuthMigrationExecutionProfiles struct {
+	// Whether every profile is recorded and holds a choice for every server its
+	// assistant reaches.
+	Complete bool
+	// Assistant and trigger pairs, each with a profile per execution context.
+	Targets int64
+	// Profile versions not yet recorded.
+	PendingVersions int64
+	// Servers the profiles hold no choice for, by execution context and reason.
+	// They are never guessed: configure the server's auth clients.
+	Gaps []*AdminUpstreamOAuthMigrationExecutionProfileGap
 }
 
 // An organization the upstream OAuth migration applies to: it has a live MCP
@@ -1534,11 +1734,64 @@ type AdminUpstreamOAuthMigrationRun struct {
 	// Servers marked as needing upstream authentication because they offer a
 	// backfilled auth client.
 	ServersMarkedRequiringUpstreamAuth *int64
+	// Credential choices this run named a typed auth client on.
+	SelectionsMapped *int64
+	// Execution-selection profile versions this run recorded.
+	ExecutionProfileVersionsWritten *int64
+	// Default auth permissions this run granted across the organization: the
+	// personal default and shared client grants for every recorded client, and API
+	// key policies once every client is recorded. The auth-permission-defaults
+	// backfill grants the rest.
+	AuthPermissionGrantsWritten *int64
 	// Why recording typed auth clients failed, when it did. The upstream OAuth
 	// migration itself is unaffected.
 	AuthClientsError *string
 	// The organization's status after the run.
 	Status *AdminUpstreamOAuthMigrationStatus
+}
+
+// How the live credential choices of one credential class map onto typed auth
+// clients.
+type AdminUpstreamOAuthMigrationSelectionClass struct {
+	// The class: interactive, id_jag, dashboard_mint, workload or agent.
+	CredentialClass string
+	// Live credential choices of this class.
+	Selections int64
+	// Choices that already name a usable auth client.
+	Mapped int64
+	// Choices with exactly one auth client to name, not yet named.
+	Pending int64
+	// Explicit no-auth choices on servers with no auth client.
+	NoAuth int64
+	// Choices several auth clients could serve. They are never guessed: configure
+	// the server or ask the credential to reconnect.
+	Ambiguous int64
+	// Choices whose upstream OAuth client has no live, enabled auth client linked
+	// to the server.
+	NoClient int64
+	// No-auth choices, and choices naming the server's headers, on servers that
+	// now offer an OAuth-backed client; the credential reconnects.
+	StaleNoAuth int64
+	// Choices naming an auth client that is no longer usable for the server; the
+	// credential reconnects.
+	Unusable int64
+}
+
+// One live credential choice left without a usable typed auth client.
+type AdminUpstreamOAuthMigrationSelectionGap struct {
+	// The choice.
+	SelectionID string
+	// The class of the credential the choice belongs to.
+	CredentialClass string
+	// The credential.
+	CredentialID string
+	// The server the choice is for.
+	McpServerID string
+	// The server's project.
+	ProjectID string
+	// Why the choice has no usable auth client: ambiguous, no_client,
+	// stale_no_auth, unusable or skipped_race.
+	Outcome string
 }
 
 // An MCP server whose upstream OAuth client the existing configuration does
@@ -1577,6 +1830,12 @@ type AdminUpstreamOAuthMigrationStatus struct {
 	// migrated: it never gates the upstream OAuth cutover. Absent when its check
 	// failed.
 	AuthClients *AdminUpstreamOAuthMigrationAuthClients
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfiles
+	// Whether upstream auth enforcement is on for the organization, and whether it
+	// can be turned on.
+	Enforcement *AdminUpstreamAuthEnforcement
 }
 
 // Configuration the typed auth client backfill cannot record without a guess,
@@ -1587,9 +1846,9 @@ type AdminUpstreamOAuthMigrationUnresolvedAssociation struct {
 	// Why it cannot be recorded: unknown_owner, type_mismatch, project_mismatch,
 	// multiple_authorization_headers, duplicate_header_names, denied_source,
 	// mixed_credential_headers, oauth_client_shared_across_sources,
-	// conflicting_scopes, resource_variants, resource_not_matched,
-	// issuer_not_allowed or registration_out_of_reach; for a warning,
-	// server_not_matched.
+	// ema_client_shared_across_sources, conflicting_scopes, resource_variants,
+	// resource_not_matched, issuer_not_allowed or registration_out_of_reach; for a
+	// warning, server_not_matched.
 	Reason string
 	// The association, source, upstream OAuth client or first binding decided.
 	SubjectID string
@@ -1874,8 +2133,15 @@ type CreateOnboardingUseCasePayload struct {
 type CreateOrganizationPayload struct {
 	AdminSessionToken *string
 	// Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes
-	// the name and verified email domain.
+	// the verified email domain.
 	URL string
+	// Organization display name. When omitted, a name is derived from the
+	// registrable company domain.
+	Name *string
+	// Preferred organization URL slug. When omitted, a unique slug is derived from
+	// the organization name. Explicit slugs use lowercase letters, numbers, and
+	// hyphens.
+	Slug *string
 	// The operator confirms that domain ownership was established outside this
 	// form.
 	OwnershipConfirmed bool
@@ -1897,6 +2163,17 @@ type CreateSignupOfferPayload struct {
 	Name                  string
 	StripePromotionCodeID string
 	SignupFlow            string
+}
+
+// CurateRegistryPromotionCandidatePayload is the payload type of the admin
+// service curateRegistryPromotionCandidate method.
+type CurateRegistryPromotionCandidatePayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	PromotionID       string
+	CurationRevision  string
+	Action            string
+	RetryKey          string
 }
 
 // DeleteGlobalIssuerPayload is the payload type of the admin service
@@ -1945,12 +2222,35 @@ type DisableOrganizationPayload struct {
 	ID string
 }
 
+// DisableUpstreamAuthEnforcementPayload is the payload type of the admin
+// service disableUpstreamAuthEnforcement method.
+type DisableUpstreamAuthEnforcementPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
+}
+
 // EnableOrganizationPayload is the payload type of the admin service
 // enableOrganization method.
 type EnableOrganizationPayload struct {
 	AdminSessionToken *string
 	// Organization ID.
 	ID string
+}
+
+// EnableUpstreamAuthEnforcementPayload is the payload type of the admin
+// service enableUpstreamAuthEnforcement method.
+type EnableUpstreamAuthEnforcementPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
+	// The caller checked the organization's mandatory authorization shadow
+	// (mcp.authz.mandatory_shadow) and found no unexplained new denial.
+	ShadowParityConfirmed bool
+	// The organization was told that valid credentials from another organization
+	// are refused on its public servers once enforcement is on, instead of being
+	// served anonymously.
+	CrossOrganizationDenialCommunicated bool
 }
 
 // ExtendTrialPayload is the payload type of the admin service extendTrial
@@ -2131,6 +2431,15 @@ type GetRegistryEntryPayload struct {
 type GetRegistryOktaCandidatesPayload struct {
 	AdminSessionToken *string
 	ID                string
+}
+
+// GetRegistryPromotionCandidatePayload is the payload type of the admin
+// service getRegistryPromotionCandidate method.
+type GetRegistryPromotionCandidatePayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	ProjectID         string
+	McpServerID       string
 }
 
 // GetSessionPayload is the payload type of the admin service getSession method.
@@ -2476,6 +2785,15 @@ type ListRegistryOktaUnmappedPayload struct {
 	AdminSessionToken *string
 }
 
+// ListRegistryPromotionCandidatesPayload is the payload type of the admin
+// service listRegistryPromotionCandidates method.
+type ListRegistryPromotionCandidatesPayload struct {
+	AdminSessionToken *string
+	Cursor            *string
+	Status            string
+	Limit             int
+}
+
 // ListSignupOffersPayload is the payload type of the admin service
 // listSignupOffers method.
 type ListSignupOffersPayload struct {
@@ -2662,10 +2980,37 @@ type ProductFeatures struct {
 	// Whether an organization admin turned the organization gateway off, so its
 	// routes answer 404
 	OrganizationGatewayDisabled bool
+	// Whether the organization has the staff-managed gateway Code Mode entitlement
+	CodeModeEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool
+}
+
+// PromoteRegistryCandidatePayload is the payload type of the admin service
+// promoteRegistryCandidate method.
+type PromoteRegistryCandidatePayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	ProjectID         string
+	McpServerID       string
+	SourceRevision    string
+	CurationRevision  string
+	PublicName        string
+	// Public title, at most 100 Unicode code points.
+	PublicTitle string
+	// Public description, at most 100 Unicode code points.
+	PublicDescription       string
+	PublicURL               string
+	DocumentationURL        string
+	DocsSlug                string
+	AuthMode                string
+	RetryKey                string
+	PublicMetadataConfirmed bool
+	// Explicitly accept insufficient, failed, or unavailable health evidence.
+	// Source safety checks still apply.
+	OverrideEligibility bool
 }
 
 // RearmTrialPayload is the payload type of the admin service rearmTrial method.
@@ -2706,6 +3051,16 @@ type ResumeStripeSubscriptionPayload struct {
 	OrganizationID    string
 }
 
+// RetryRegistryPromotionDocsPayload is the payload type of the admin service
+// retryRegistryPromotionDocs method.
+type RetryRegistryPromotionDocsPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	PromotionID       string
+	DocsRevision      string
+	RetryKey          string
+}
+
 // RunUpstreamOAuthMigrationPayload is the payload type of the admin service
 // runUpstreamOAuthMigration method.
 type RunUpstreamOAuthMigrationPayload struct {
@@ -2738,6 +3093,15 @@ type ServeImageResult struct {
 	LastModified              string
 	AccessControlAllowOrigin  *string
 	CrossOriginResourcePolicy string
+}
+
+// SetAdoptionDashboardURLPayload is the payload type of the admin service
+// setAdoptionDashboardUrl method.
+type SetAdoptionDashboardURLPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	// An https URL, or empty to clear the link.
+	AdoptionDashboardURL *string
 }
 
 // SetInferenceKeyMonthlyLimitPayload is the payload type of the admin service
@@ -3234,6 +3598,9 @@ func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
 	if vres.OrganizationGatewayDisabled != nil {
 		res.OrganizationGatewayDisabled = *vres.OrganizationGatewayDisabled
 	}
+	if vres.CodeModeEnabled != nil {
+		res.CodeModeEnabled = *vres.CodeModeEnabled
+	}
 	if vres.DeviceAgent != nil {
 		res.DeviceAgent = *vres.DeviceAgent
 	}
@@ -3264,6 +3631,7 @@ func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesVie
 		NetworkIngressEnabled:                   &res.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              &res.SignalsIntelligenceEnabled,
 		OrganizationGatewayDisabled:             &res.OrganizationGatewayDisabled,
+		CodeModeEnabled:                         &res.CodeModeEnabled,
 		DeviceAgent:                             &res.DeviceAgent,
 	}
 	return vres

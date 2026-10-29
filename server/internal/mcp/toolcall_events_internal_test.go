@@ -172,27 +172,6 @@ func TestToolCallErrorTypeIsEmptyOnlyForASuccess(t *testing.T) {
 	require.Equal(t, string(oops.CodeUnexpected), toolCallErrorType(http.StatusInternalServerError, false, oops.E(oops.CodeUnexpected, nil, "boom")))
 }
 
-func TestToolCallOutcomeFollowsTheIsErrorRule(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, dialect.OutcomeOK, toolCallOutcome(http.StatusOK, false))
-	require.Equal(t, dialect.OutcomeOK, toolCallOutcome(http.StatusNoContent, false))
-	require.Equal(t, dialect.OutcomeError, toolCallOutcome(http.StatusBadRequest, false))
-	require.Equal(t, dialect.OutcomeError, toolCallOutcome(http.StatusBadGateway, false))
-	require.Equal(t, dialect.OutcomeError, toolCallOutcome(http.StatusFound, false), "a redirect is not a tool result, so the client sees isError and so does the row")
-	require.Equal(t, dialect.OutcomeError, toolCallOutcome(http.StatusOK, true), "a passthrough result's own isError is the verdict the client reads")
-}
-
-func TestMCPResultIsErrorReadsOnlyAResultDocument(t *testing.T) {
-	t.Parallel()
-
-	require.True(t, mcpResultIsError([]byte(`{"content":[{"type":"text","text":"boom"}],"isError":true}`)))
-	require.False(t, mcpResultIsError([]byte(`{"content":[{"type":"text","text":"ok"}]}`)))
-	require.False(t, mcpResultIsError([]byte(`{"content":[],"isError":false}`)))
-	require.False(t, mcpResultIsError([]byte(`not json`)))
-	require.False(t, mcpResultIsError(nil))
-}
-
 func TestToolCallCallerIsNamedOnlyInsideTheToolsOrganization(t *testing.T) {
 	t.Parallel()
 

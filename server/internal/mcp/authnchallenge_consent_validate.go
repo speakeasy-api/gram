@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
-	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -213,14 +212,8 @@ func (s *Service) resolveValidationTarget(
 		return ctx, none, fmt.Errorf("stamp consent subject context: %w", err)
 	}
 
-	// Discovery identity belongs to the user who authenticated this challenge.
-	ctx = mcpidentity.WithoutIdentity(ctx)
-	if subject.Kind == urn.SessionSubjectKindUser &&
-		challengeState.AuthorizerImpersonated != nil && !*challengeState.AuthorizerImpersonated &&
-		challengeState.AuthorizerUserID != "" && subject.ID == challengeState.AuthorizerUserID &&
-		challengeState.Federation == nil && !challengeState.CreatedAt.IsZero() && !challengeState.CreatedAt.After(time.Now().Add(time.Minute)) {
-		ctx = s.identityValidator.StampConsentDiscovery(ctx, subject.ID, challengeState.CreatedAt.Add(challengeState.TTL()))
-	}
+	ctx = s.consentDiscoveryContext(ctx, challengeState)
+
 	switch {
 	case endpoint.MetaMcpServerID.Valid:
 		return s.metaValidationTarget(ctx, logger, endpoint, client, tokens, sessionID, subject)
@@ -267,7 +260,7 @@ func (s *Service) metaValidationTarget(
 		return ctx, none, errRemoteSessionUnroutable
 	}
 
-	ctx, members, err := s.resolveEndpointMemberSnapshot(ctx, logger, endpoint)
+	ctx, members, err := s.resolveEndpointMemberSnapshot(ctx, logger, mandatorySurfaceConsent, endpoint)
 	if err != nil {
 		return ctx, none, fmt.Errorf("resolve meta MCP member snapshot: %w", err)
 	}
@@ -311,7 +304,13 @@ func (s *Service) metaValidationTarget(
 		userSessionIssuerID: uuid.Nil,
 		connectRoot:         "",
 		chainUpstream:       nil,
-		toolSelection:       nil,
+		catalog:             nil,
+		consentDiagnostics:  nil,
+		catalogRef:          nil,
+		authentication:      nil,
+		unapprovedMembers:   nil,
+		hiddenMembers:       nil,
+		execute:             false,
 		authenticated:       subject.Kind != urn.SessionSubjectKindAnonymous,
 		sessionID:           sessionID,
 		chatID:              "",
@@ -390,7 +389,7 @@ func (s *Service) standaloneValidationTarget(
 	}
 	token := selectedToken.Token
 
-	authorized, err := s.authorizeProxyBackendAccess(ctx, logger, endpoint.ProjectID, &server)
+	authorized, err := s.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceConsent, endpoint.OrganizationID, endpoint.ProjectID, &server)
 	if err != nil {
 		return ctx, none, fmt.Errorf("authorize validation access: %w", err)
 	}
@@ -417,6 +416,7 @@ func (s *Service) standaloneValidationTarget(
 			UpstreamAuth:       token,
 			WWWAuthenticate:    "",
 			Selection:          nil,
+			Request:            nil,
 		}, remotemcp.WithoutToolsCallIdentityCoverage())
 		if berr != nil {
 			return nil, fmt.Errorf("build tunnel proxy: %w", berr)
@@ -446,6 +446,7 @@ func probeProxyBuilder(build memberProxyBuilder) memberProxyBuilder {
 		p.InitializeRequestInterceptors = nil
 		p.UserRequestObservationInterceptors = nil
 		p.Metrics = nil
+		p.RequestObserver = nil
 		return p, nil
 	}
 }

@@ -63,7 +63,7 @@ func TestReserveCommitResolveRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, store.Reserve(t.Context(), tunnelID, "server-1", sid))
-	session := Session{BackendSessionID: "backend-abc", GatewayAddr: "10.0.0.1:9000", AgentSessionID: "agent-1"}
+	session := Session{BackendSessionID: "backend-abc", GatewayAddr: "10.0.0.1:9000", AgentSessionID: "agent-1", ClientFamily: "cursor"}
 	require.NoError(t, store.Commit(t.Context(), tunnelID, "server-1", sid, session))
 
 	resolved, err := store.Resolve(t.Context(), tunnelID, "server-1", sid, true)

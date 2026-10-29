@@ -22,8 +22,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 )
@@ -248,14 +248,14 @@ func TestAuthenticationHost_OtherAudiencesRefused(t *testing.T) {
 	} {
 		code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, client)
 		w := harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/token", withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, aud)))
-		require.Equal(t, http.StatusUnauthorized, w.Code, "aud %q: %s", aud, w.Body.String())
+		require.Equal(t, http.StatusBadRequest, w.Code, "aud %q: %s", aud, w.Body.String())
 		require.Contains(t, w.Body.String(), "invalid_client")
 	}
 
 	// The authentication host's URL is not an audience on the MCP host.
 	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, client)
 	w := postForm(t, ti, slug, "token", withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, authenticationHostTokenURL(slug))))
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 }
 
 // The canonical resource is the MCP host's, so a resource naming the
@@ -300,12 +300,7 @@ func newAuthenticationHostIDJAGFixture(t *testing.T) authenticationHostIDJAGFixt
 	authCtx := requireProjectAuthContext(t, ctx)
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, authenticationHostIDJAGUpstreamIssuer, jwksURL)
-	toolset, err := toolsets_repo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, *authCtx.ProjectID, toolset, issuer.ID)
 	client := createIDJAGClient(t, ctx, ti, issuer.ID)
 	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
@@ -499,17 +494,7 @@ func TestAuthenticationHost_OptedInAuthorizeRedirectsToConsentOnAuthenticationHo
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
 	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
-	toolset, err := toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
 	harness := newAuthenticationHostHarness(t, ti)
 	slug := toolset.McpSlug.String
 	authIssuer := testAuthenticationHostURL + "/mcp/" + slug
@@ -647,7 +632,7 @@ func TestAuthenticationHost_ToggleClosesInFlightFlows(t *testing.T) {
 	routeCtx := chi.NewRouteContext()
 	routeCtx.URLParams.Add("mcpSlug", f.slugA)
 	err = ti.service.HandleConsent(httptest.NewRecorder(), req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx)))
-	require.Contains(t, requireOopsCode(t, err, oops.CodeUnauthorized), "authn challenge state does not match this MCP server")
+	require.Contains(t, requireOopsCode(t, err, oops.CodeBadRequest), "authn challenge state does not match this MCP server")
 }
 
 // completeAuthenticationHostFederatedLogin finishes a federated login whose

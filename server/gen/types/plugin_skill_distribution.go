@@ -35,4 +35,7 @@ type PluginSkillDistribution struct {
 	CreatedAt string
 	// When the distribution configuration last changed.
 	UpdatedAt string
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Loads are counted per skill, not per distribution.
+	LastLoadedOverMcpAt *string
 }

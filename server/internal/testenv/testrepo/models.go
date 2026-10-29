@@ -11,6 +11,73 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type DeviceAgentStateReport struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential-pii
+	Email string
+	// @access: confidential-pii
+	SerialNumber pgtype.Text
+	// @access: confidential-pii
+	Hostname pgtype.Text
+	// @access: confidential
+	SchemaVersion int32
+	// @access: confidential
+	GeneratedAt pgtype.Timestamptz
+	// @access: confidential
+	ReportedAt pgtype.Timestamptz
+	// @access: confidential
+	AppliedEtag pgtype.Text
+	// @access: confidential
+	AppliedAt pgtype.Timestamptz
+	// @access: confidential
+	EnforcementHalted bool
+	// @access: confidential
+	RemoteConfigEtag pgtype.Text
+	// @access: confidential
+	RemoteConfigFailed bool
+	// Marketplace and plugin slugs chosen by the organization.
+	// @access: opaque-confidential
+	WithheldPlugins []byte
+	// Speakeasy-defined tool ids and enforcement enums.
+	// @access: confidential
+	Tools []byte
+	// @access: confidential
+	DegradedToolCount int32
+	// @access: confidential
+	DriftCountingSince pgtype.Timestamptz
+	// @access: confidential
+	SpeakeasydVersion pgtype.Text
+	// @access: confidential
+	SpeakeasyVersion pgtype.Text
+	// @access: confidential
+	SpeakeasyUiVersion pgtype.Text
+	// @access: confidential
+	Os pgtype.Text
+	// @access: confidential
+	Arch pgtype.Text
+	// @access: confidential
+	AutoUpdate pgtype.Text
+	// @access: confidential
+	UpdateChannel pgtype.Text
+	// @access: confidential
+	PinnedTarget pgtype.Text
+	// @access: confidential
+	CurrentBlocked bool
+	// @access: confidential
+	LastRollbackAt pgtype.Timestamptz
+	// @access: confidential
+	LastRollbackFrom pgtype.Text
+	// @access: confidential
+	LastRollbackTo pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type FunctionResourceDefinition struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -172,35 +239,6 @@ type HttpToolDefinition struct {
 	Deleted bool
 }
 
-type PluginServer struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	PluginID uuid.UUID
-	// @access: confidential
-	ProjectID uuid.NullUUID
-	// @access: confidential
-	ToolsetID uuid.NullUUID
-	// @access: confidential
-	McpServerID uuid.NullUUID
-	// @access: confidential
-	MetaMcpServerID uuid.NullUUID
-	// @access: confidential
-	DisplayName string
-	// @access: confidential
-	Policy string
-	// @access: confidential
-	SortOrder int32
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-	// @access: confidential
-	DeletedAt pgtype.Timestamptz
-	// @access: confidential
-	Deleted bool
-}
-
 type PublishOutboxDeadLetter struct {
 	// @access: confidential
 	ID int64
@@ -272,6 +310,51 @@ type RiskResult struct {
 	FalsePositiveAt pgtype.Timestamptz
 	// @access: opaque-restricted
 	FalsePositiveReason pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+}
+
+type SkillObservation struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: opaque-confidential
+	IdempotencyKey pgtype.Text
+	// @access: confidential
+	Provider string
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential-pii
+	UserEmail pgtype.Text
+	// @access: confidential-pii
+	Hostname pgtype.Text
+	// @access: opaque-confidential
+	SessionID pgtype.Text
+	// @access: confidential
+	SkillName string
+	// @access: opaque-confidential
+	Source pgtype.Text
+	// @access: opaque-confidential
+	SourceLevel pgtype.Text
+	// @access: opaque-restricted
+	SourcePath pgtype.Text
+	// @access: confidential
+	RawSha256 pgtype.Text
+	// @access: confidential
+	SeenAt pgtype.Timestamptz
+	// @access: confidential
+	SkillID uuid.NullUUID
+	// @access: confidential
+	SkillVersionID uuid.NullUUID
+	// @access: confidential
+	ReconciledAt pgtype.Timestamptz
+	// @access: confidential
+	MetricsSyncedAt pgtype.Timestamptz
+	// @access: confidential
+	EfficacyEnqueuedAt pgtype.Timestamptz
+	// @access: confidential
+	ReconcileErrorCode pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 }

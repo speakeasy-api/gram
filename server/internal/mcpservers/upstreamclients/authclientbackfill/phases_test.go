@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 const (
@@ -431,6 +433,158 @@ func TestRun_CredentialHeadersOnAnOAuthSourceAreCopiedOntoTheOAuthClient(t *test
 	require.Empty(t, f.headers(oauthID), "a copy no source names is retired")
 }
 
+// emaSourceAt is a remote source at url and one server on it the user
+// session issuer signs in to.
+func (f *fixture) emaSourceAt(url string, usi uuid.UUID) (sourceID, serverID uuid.UUID) {
+	f.t.Helper()
+	sourceID = uuid.New()
+	require.NoError(f.t, f.q.SeedRemoteMCPServerFixture(f.t.Context(), SeedRemoteMCPServerFixtureParams{ID: sourceID, ProjectID: f.projectID, Url: url}))
+	serverID = f.serverOn(sourceID)
+	require.NoError(f.t, f.q.SetServerUserSessionIssuerFixture(f.t.Context(), SetServerUserSessionIssuerFixtureParams{UserSessionIssuerID: uuid.NullUUID{UUID: usi, Valid: true}, ID: serverID}))
+	return sourceID, serverID
+}
+
+// A server an ema client serves keeps its auxiliary credential headers on
+// that client, tracking the source, rather than as a separate client.
+func TestRun_EMAClientCarriesItsServersCredentialHeaders(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	usi := f.userSessionIssuer()
+	clientID, issuerID := f.emaClient()
+	resource := "https://mcp.vendor.example.com/mcp"
+	source, server := f.emaSourceAt(resource, usi)
+	key := f.header(source, "X-Api-Key", true, secretValue, "")
+	f.binding(usi, issuerID, clientID, resource, []string{})
+
+	dry := f.run(false)
+	require.Positive(t, dry.ByKind[KindEMA].PendingHeaders, "a dry run counts the copy")
+
+	f.run(true)
+	require.Empty(t, f.live(TypeStaticCredential), "no separate client for a server an ema client serves")
+	emaID := f.live(TypeEMA)[0].ID
+	require.Contains(t, f.links(server), emaID)
+	headers := f.headers(emaID)
+	require.Len(t, headers, 1)
+	require.Equal(t, "X-Api-Key", headers[0].Name)
+	require.Equal(t, secretValue, headers[0].Value.String)
+	require.Empty(t, results(f.run(true), KindEMA, OutcomeUpdated), "a rerun changes nothing")
+
+	require.NoError(t, f.q.UpdateRemoteHeaderFixture(t.Context(), UpdateRemoteHeaderFixtureParams{Name: "X-Api-Key", Value: pgtype.Text{String: "rotated", Valid: true}, ValueFromRequestHeader: pgtype.Text{}, IsSecret: true, ID: key}))
+	f.run(true)
+	require.Equal(t, "rotated", f.headers(emaID)[0].Value.String, "the copy follows a rotation")
+
+	require.NoError(t, f.q.SoftDeleteRemoteHeaderFixture(t.Context(), key))
+	f.run(true)
+	require.Empty(t, f.headers(emaID), "a copy no source names is retired")
+}
+
+// A client kept while its bindings disagree keeps carrying its server's
+// credential headers and following them, so none becomes a separate client.
+func TestRun_KeptEMAClientKeepsTrackingItsHeaders(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	usi, otherUSI := f.userSessionIssuer(), f.userSessionIssuer()
+	clientID, issuerID := f.emaClient()
+	resource := "https://mcp.vendor.example.com/mcp"
+	source, _ := f.emaSourceAt(resource, usi)
+	key := f.header(source, "X-Api-Key", true, secretValue, "")
+	f.binding(usi, issuerID, clientID, resource, []string{"read"})
+	f.run(true)
+	emaID := f.live(TypeEMA)[0].ID
+
+	f.binding(otherUSI, issuerID, clientID, resource, []string{"read", "write"})
+	f.binding(f.userSessionIssuer(), issuerID, clientID, resource, []string{"read", "write", "admin"})
+	require.NoError(t, f.q.UpdateRemoteHeaderFixture(t.Context(), UpdateRemoteHeaderFixtureParams{Name: "X-Api-Key", Value: pgtype.Text{String: "rotated", Valid: true}, ValueFromRequestHeader: pgtype.Text{}, IsSecret: true, ID: key}))
+	dry := f.run(false)
+	require.Equal(t, 1, dry.ByKind[KindEMA].PendingHeaders, "the kept client is synced once, however many bindings find it")
+	applied := f.run(true)
+	require.Equal(t, 1, applied.ByKind[KindEMA].Written)
+	require.Empty(t, f.live(TypeStaticCredential))
+	headers := f.headers(emaID)
+	require.Len(t, headers, 1)
+	require.Equal(t, "rotated", headers[0].Value.String)
+}
+
+// A disagreeing binding that reaches a server the kept client is not linked
+// to leaves that server's own header client in place: the kept client covers
+// only the servers it keeps.
+func TestRun_KeptEMAClientCoversOnlyItsLinkedServers(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	usi, otherUSI := f.userSessionIssuer(), f.userSessionIssuer()
+	clientID, issuerID := f.emaClient()
+	resource := "https://mcp.vendor.example.com/mcp"
+	sourceA, _ := f.emaSourceAt(resource, usi)
+	f.header(sourceA, "X-Api-Key", true, secretValue, "")
+	sourceB, serverB := f.emaSourceAt(resource, otherUSI)
+	f.header(sourceB, "X-Api-Key", true, "other-"+secretValue, "")
+	f.binding(usi, issuerID, clientID, resource, []string{"read"})
+	f.run(true)
+	emaID := f.live(TypeEMA)[0].ID
+	static := f.live(TypeStaticCredential)
+	require.Len(t, static, 1, "B, which no binding reaches, has its own header client")
+	require.Equal(t, []uuid.UUID{static[0].ID}, f.links(serverB))
+
+	f.binding(otherUSI, issuerID, clientID, resource, []string{"read", "write"})
+	for range 2 {
+		f.run(true)
+		require.Equal(t, []uuid.UUID{static[0].ID}, f.links(serverB), "B keeps its header client")
+		live := f.live(TypeStaticCredential)
+		require.Len(t, live, 1)
+		require.Equal(t, static[0].ID, live[0].ID)
+		headers := f.headers(emaID)
+		require.Len(t, headers, 1)
+		require.Equal(t, secretValue, headers[0].Value.String, "the kept client carries only A's header")
+	}
+}
+
+// A server whose ema client is going away is not linked to a separate header
+// client while that client's link is still live; the next run links it.
+func TestRun_LiveEMALinkHoldsBackAStandaloneHeaderLink(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	usi := f.userSessionIssuer()
+	clientID, issuerID := f.emaClient()
+	resource := "https://mcp.vendor.example.com/mcp"
+	source, server := f.emaSourceAt(resource, usi)
+	f.header(source, "X-Api-Key", true, secretValue, "")
+	binding := f.binding(usi, issuerID, clientID, resource, []string{})
+	f.run(true)
+	require.Len(t, f.links(server), 1)
+
+	require.NoError(t, f.q.DeleteEMABindingFixture(t.Context(), binding))
+	f.run(true)
+	require.Empty(t, f.links(server), "the header client waits for the ema link to retire")
+	f.run(true)
+	static := f.live(TypeStaticCredential)
+	require.Len(t, static, 1)
+	require.Equal(t, []uuid.UUID{static[0].ID}, f.links(server))
+}
+
+// An ema client its servers reach from more than one source with credential
+// headers is reported and carries no copies: one source's credentials would
+// otherwise be sent from the other's servers.
+func TestRun_EMAClientSharedAcrossSourcesIsNeverCopiedOnto(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	usi := f.userSessionIssuer()
+	clientID, issuerID := f.emaClient()
+	resource := "https://mcp.vendor.example.com/mcp"
+	first, _ := f.emaSourceAt(resource, usi)
+	second, _ := f.emaSourceAt(resource, usi)
+	f.header(first, "X-Api-Key", true, secretValue, "")
+	f.header(second, "X-Api-Key", true, "other-"+secretValue, "")
+	f.binding(usi, issuerID, clientID, resource, []string{})
+
+	report := f.run(true)
+	shared := results(report, KindEMA, OutcomeAmbiguous)
+	require.Len(t, shared, 1)
+	require.Equal(t, ReasonEMAClientSharedAcrossSources, shared[0].Reason)
+	require.ElementsMatch(t, []uuid.UUID{first, second}, shared[0].SourceIDs)
+	require.Empty(t, f.headers(f.live(TypeEMA)[0].ID))
+	require.Empty(t, f.live(TypeStaticCredential))
+}
+
 // Retiring an OAuth client whose association is gone retires its header
 // copies with it, so none stays live on a client nothing reaches.
 func TestRun_RetiredOAuthClientRetiresItsHeaderCopies(t *testing.T) {
@@ -735,9 +889,66 @@ func TestRun_RemovedBindingRetiresTheEMAClient(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, deleted, "the EMA details retire with their client")
 
-	// The upstream comes back: a new client is recorded.
+	// The upstream comes back: its client is revived under the same id.
 	f.binding(usi, issuerID, clientID, resource, []string{})
 	require.Equal(t, 1, f.run(true).ClientsWritten)
+	live := f.live(TypeEMA)
+	require.Len(t, live, 1)
+	require.Equal(t, emaID, live[0].ID, "the returning upstream keeps its client's id")
+	require.Contains(t, f.links(server), emaID)
+}
+
+// An OAuth client retired when its last association went away returns under
+// the same id when the registration is associated again.
+func TestRun_ReassociatedOAuthClientKeepsItsID(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	source := f.source()
+	server := f.serverOn(source)
+	client := f.client("subject")
+	association := f.associate(server, client)
+	f.run(true)
+	original := f.live(TypeRemoteSession)[0].ID
+
+	require.NoError(t, f.q.SoftDeleteAssociationFixture(t.Context(), association))
+	require.Equal(t, 1, f.run(true).ClientsRetired)
+	require.Empty(t, f.live(TypeRemoteSession))
+
+	f.associate(server, client)
+	f.run(true)
+	live := f.live(TypeRemoteSession)
+	require.Len(t, live, 1)
+	require.Equal(t, original, live[0].ID)
+	require.Contains(t, f.links(server), original)
+}
+
+// A source header restored after the header phase decided its client was no
+// longer configured keeps the client: retirement rechecks the configuration.
+func TestRun_ConfigurationRestoredMidRunIsNotRetired(t *testing.T) { //nolint:paralleltest // swaps a package seam
+	f := newFixture(t)
+	source := f.source()
+	server := f.serverOn(source)
+	header := f.staticHeader(source, "Authorization")
+	f.run(true)
+	clientID := f.live(TypeStaticCredential)[0].ID
+
+	require.NoError(t, f.q.SoftDeleteRemoteHeaderFixture(t.Context(), header))
+	original := beforePhase
+	beforePhase = func(name string) error {
+		if name == PhaseReconcile {
+			return f.q.RestoreRemoteHeaderFixture(t.Context(), header)
+		}
+		return nil
+	}
+	t.Cleanup(func() { beforePhase = original })
+
+	report := f.run(true)
+	require.Zero(t, report.ClientsRetired)
+	require.Zero(t, report.LinksRetired)
+	live := f.live(TypeStaticCredential)
+	require.Len(t, live, 1)
+	require.Equal(t, clientID, live[0].ID)
+	require.Contains(t, f.links(server), clientID)
 }
 
 func TestRun_HoldsTheOrganizationLock(t *testing.T) {
@@ -760,7 +971,7 @@ func TestRun_HoldsTheOrganizationLock(t *testing.T) {
 	stillHeld, err := New(other).TryLockOrganizationBackfill(t.Context(), f.orgID)
 	other.Release()
 	require.NoError(t, err)
-	require.False(t, stillHeld)
+	require.False(t, stillHeld.Locked)
 
 	require.NoError(t, tx.Rollback(t.Context()))
 	_, err = Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
@@ -1018,15 +1229,17 @@ func TestReconcileDerived_KeepsARacedClientsLinks(t *testing.T) {
 	f.run(true)
 	clientID := f.live(TypeStaticCredential)[0].ID
 
+	startedAt, err := testrepo.New(f.pool).CurrentDatabaseTime(t.Context())
+	require.NoError(t, err)
 	want := newExpected()
 	want.race(clientID)
 	report := newReport(true)
-	require.NoError(t, reconcileDerived(t.Context(), f.q, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, &report, want, map[Kind]bool{}))
+	require.NoError(t, reconcileDerived(t.Context(), f.q, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, &report, want, make(map[Kind]bool), startedAt))
 	require.Zero(t, report.ClientsRetired+report.LinksRetired+report.PendingRetiredLinks)
 	require.Equal(t, []uuid.UUID{clientID}, f.links(server), "a race never retires the client's links")
 
 	report = newReport(true)
-	require.NoError(t, reconcileDerived(t.Context(), f.q, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, &report, newExpected(), map[Kind]bool{}))
+	require.NoError(t, reconcileDerived(t.Context(), f.q, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, &report, newExpected(), make(map[Kind]bool), startedAt))
 	require.Equal(t, 1, report.LinksRetired, "without the race the link is retired")
 }
 
@@ -1145,7 +1358,7 @@ func TestRun_EMAHonorsThePersistedProtectedResource(t *testing.T) {
 	require.Empty(t, f.live(TypeEMA))
 	require.Empty(t, f.links(refused))
 	require.Empty(t, f.links(renamed))
-	reasons := map[Reason]uuid.UUID{}
+	reasons := make(map[Reason]uuid.UUID)
 	for _, r := range results(report, KindEMA, OutcomeAmbiguous) {
 		reasons[r.Reason] = r.MCPServerID
 	}
@@ -1330,10 +1543,11 @@ func TestRun_HoldsTheLockAcrossPhases(t *testing.T) { //nolint:paralleltest // s
 			return fmt.Errorf("acquire: %w", err)
 		}
 		defer conn.Release()
-		got, err := New(conn).TryLockOrganizationBackfill(t.Context(), f.orgID)
+		lock, err := New(conn).TryLockOrganizationBackfill(t.Context(), f.orgID)
 		if err != nil {
 			return fmt.Errorf("try lock: %w", err)
 		}
+		got := lock.Locked
 		if got {
 			_ = New(conn).UnlockOrganizationBackfill(t.Context(), f.orgID)
 		}
@@ -1352,6 +1566,6 @@ func TestRun_HoldsTheLockAcrossPhases(t *testing.T) { //nolint:paralleltest // s
 	defer conn.Release()
 	free, err := New(conn).TryLockOrganizationBackfill(t.Context(), f.orgID)
 	require.NoError(t, err)
-	require.True(t, free)
+	require.True(t, free.Locked)
 	require.NoError(t, New(conn).UnlockOrganizationBackfill(t.Context(), f.orgID))
 }

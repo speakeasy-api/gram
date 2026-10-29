@@ -10,23 +10,51 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const bindClientIssuerFixture = `-- name: BindClientIssuerFixture :exec
+INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+`
+
+type BindClientIssuerFixtureParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+func (q *Queries) BindClientIssuerFixture(ctx context.Context, arg BindClientIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, bindClientIssuerFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	return err
+}
+
+const countServerSelectionsFixture = `-- name: CountServerSelectionsFixture :one
+SELECT count(*) FROM upstream_client_selections WHERE mcp_server_id = $1
+`
+
+func (q *Queries) CountServerSelectionsFixture(ctx context.Context, mcpServerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countServerSelectionsFixture, mcpServerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAuthClient = `-- name: CreateAuthClient :one
-INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name, remote_session_client_id, client_attachment_scope)
-SELECT $1::text, $2::uuid, $3::text, 'backfill', $4::text, c.id, c.attachment_scope
+INSERT INTO mcp_auth_clients (id, organization_id, project_id, client_type, source, name, remote_session_client_id, client_attachment_scope)
+SELECT $1::uuid, $2::text, $3::uuid, $4::text, 'backfill', $5::text, c.id, c.attachment_scope
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS rsi
   ON rsi.id = c.remote_session_issuer_id
  AND rsi.deleted IS FALSE
- AND (rsi.organization_id IS NULL OR rsi.organization_id = $1::text)
-WHERE c.id = $5::uuid
+ AND (rsi.organization_id IS NULL OR rsi.organization_id = $2::text)
+WHERE c.id = $6::uuid
   AND c.deleted IS FALSE
-  AND c.credential_owner = CASE $3::text WHEN 'service_account' THEN 'self' ELSE 'subject' END
-  AND $3::text IN ('remote_session', 'service_account')
-  AND (c.project_id = $2::uuid
-       OR (c.project_id IS NULL AND c.organization_id = $1::text)
-       OR (c.project_id IS NULL AND c.organization_id IS NULL AND $3::text = 'remote_session'))
+  AND c.credential_owner = CASE $4::text WHEN 'service_account' THEN 'self' ELSE 'subject' END
+  AND $4::text IN ('remote_session', 'service_account')
+  AND (c.project_id = $3::uuid
+       OR (c.project_id IS NULL AND c.organization_id = $2::text)
+       OR (c.project_id IS NULL AND c.organization_id IS NULL AND $4::text = 'remote_session'))
   AND EXISTS (
     SELECT 1
     FROM mcp_server_remote_session_clients AS a
@@ -40,14 +68,22 @@ WHERE c.id = $5::uuid
      AND s.deleted IS FALSE
     WHERE a.remote_session_client_id = c.id
       AND a.client_attachment_scope = c.attachment_scope
-      AND a.organization_id = $1::text
+      AND a.organization_id = $2::text
       AND a.deleted IS FALSE
       AND (rsi.project_id IS NULL OR rsi.project_id = a.project_id)
   )
+ON CONFLICT (id) DO UPDATE
+SET deleted_at = NULL, updated_at = clock_timestamp()
+WHERE mcp_auth_clients.deleted
+  AND mcp_auth_clients.source = 'backfill'
+  AND mcp_auth_clients.organization_id = EXCLUDED.organization_id
+  AND mcp_auth_clients.client_type = EXCLUDED.client_type
+  AND mcp_auth_clients.remote_session_client_id = EXCLUDED.remote_session_client_id
 RETURNING id
 `
 
 type CreateAuthClientParams struct {
+	ID                    uuid.UUID
 	OrganizationID        string
 	ProjectID             uuid.NullUUID
 	ClientType            string
@@ -60,9 +96,14 @@ type CreateAuthClientParams struct {
 // still being live and in that organization's reach, the client owned as
 // decided and associated with a live server of a live project there. A
 // self-owned client is never platform-global. A concurrent run recording the
-// same client fails the type's unique key.
+// same client either fails the type's unique key or, under the same id, finds
+// it live and returns no row. The id is stable for the
+// organization, registration and type, so a client retired when its last
+// association went away is revived under the same id when one returns; only
+// its deletion is undone.
 func (q *Queries) CreateAuthClient(ctx context.Context, arg CreateAuthClientParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, createAuthClient,
+		arg.ID,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.ClientType,
@@ -76,25 +117,25 @@ func (q *Queries) CreateAuthClient(ctx context.Context, arg CreateAuthClientPara
 
 const createEMAAuthClient = `-- name: CreateEMAAuthClient :one
 WITH base AS (
-  INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name, remote_session_client_id, client_attachment_scope)
-  SELECT $4::text, c.project_id, 'ema', 'backfill', $5::text, c.id, c.attachment_scope
+  INSERT INTO mcp_auth_clients (id, organization_id, project_id, client_type, source, name, remote_session_client_id, client_attachment_scope)
+  SELECT $4::uuid, $5::text, c.project_id, 'ema', 'backfill', $6::text, c.id, c.attachment_scope
   FROM remote_session_clients AS c
   JOIN remote_session_issuers AS rsi
     ON rsi.id = c.remote_session_issuer_id
    AND rsi.deleted IS FALSE
-  WHERE c.id = $6::uuid
+  WHERE c.id = $7::uuid
     AND c.remote_session_issuer_id = $1::uuid
     AND c.deleted IS FALSE
     AND ((c.project_id IS NOT NULL AND EXISTS (
            SELECT 1 FROM projects AS p
-           WHERE p.id = c.project_id AND p.organization_id = $4::text AND p.deleted IS FALSE
+           WHERE p.id = c.project_id AND p.organization_id = $5::text AND p.deleted IS FALSE
          ))
-         OR (c.project_id IS NULL AND c.organization_id = $4::text)
+         OR (c.project_id IS NULL AND c.organization_id = $5::text)
          OR (c.project_id IS NULL AND c.organization_id IS NULL))
     AND EXISTS (
       SELECT 1 FROM remote_session_ema_bindings AS b
       JOIN projects AS bp ON bp.id = b.project_id AND bp.organization_id = b.organization_id AND bp.deleted IS FALSE
-      WHERE b.organization_id = $4::text
+      WHERE b.organization_id = $5::text
         AND b.remote_session_issuer_id = c.remote_session_issuer_id
         AND b.remote_session_client_id = c.id
         AND b.resource = $2::text
@@ -107,11 +148,23 @@ WITH base AS (
              OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL))
         AND ARRAY(SELECT DISTINCT btrim(x) COLLATE "C" FROM unnest(b.requested_scopes) AS x WHERE btrim(x) <> '' ORDER BY 1) = $3::text[]
     )
+  ON CONFLICT (id) DO UPDATE
+  SET deleted_at = NULL, updated_at = clock_timestamp()
+  WHERE mcp_auth_clients.deleted
+    AND mcp_auth_clients.source = 'backfill'
+    AND mcp_auth_clients.organization_id = EXCLUDED.organization_id
+    AND mcp_auth_clients.client_type = 'ema'
+    AND mcp_auth_clients.remote_session_client_id = EXCLUDED.remote_session_client_id
   RETURNING id, organization_id, remote_session_client_id
 )
 INSERT INTO mcp_auth_client_emas (auth_client_id, organization_id, remote_session_client_id, remote_session_issuer_id, resource, requested_scopes)
 SELECT base.id, base.organization_id, base.remote_session_client_id, $1::uuid, $2::text, $3::text[]
 FROM base
+ON CONFLICT (auth_client_id) DO UPDATE
+SET deleted_at = NULL, requested_scopes = EXCLUDED.requested_scopes, updated_at = clock_timestamp()
+WHERE mcp_auth_client_emas.deleted
+  AND mcp_auth_client_emas.remote_session_issuer_id = EXCLUDED.remote_session_issuer_id
+  AND mcp_auth_client_emas.resource = EXCLUDED.resource
 RETURNING auth_client_id
 `
 
@@ -119,6 +172,7 @@ type CreateEMAAuthClientParams struct {
 	RemoteSessionIssuerID uuid.UUID
 	Resource              string
 	RequestedScopes       []string
+	ID                    uuid.UUID
 	OrganizationID        string
 	Name                  string
 	RemoteSessionClientID uuid.UUID
@@ -128,12 +182,15 @@ type CreateEMAAuthClientParams struct {
 // statement, conditional on the registration still being live, naming a live
 // issuer and in the organization's reach, and a ready binding of the
 // organization still naming that upstream with those scopes. A project
-// registration's client belongs to that project.
+// registration's client belongs to that project. The id is stable for the
+// organization, issuer, registration and resource, so a client retired while
+// its bindings were gone is revived under the same id, EMA details included.
 func (q *Queries) CreateEMAAuthClient(ctx context.Context, arg CreateEMAAuthClientParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, createEMAAuthClient,
 		arg.RemoteSessionIssuerID,
 		arg.Resource,
 		arg.RequestedScopes,
+		arg.ID,
 		arg.OrganizationID,
 		arg.Name,
 		arg.RemoteSessionClientID,
@@ -235,6 +292,15 @@ func (q *Queries) DeleteEMABindingFixture(ctx context.Context, id uuid.UUID) err
 	return err
 }
 
+const disableUserFixture = `-- name: DisableUserFixture :exec
+UPDATE users SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) DisableUserFixture(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, disableUserFixture, id)
+	return err
+}
+
 const findEMAAuthClient = `-- name: FindEMAAuthClient :one
 SELECT ac.id, e.requested_scopes
 FROM mcp_auth_client_emas AS e
@@ -316,6 +382,22 @@ func (q *Queries) FindOAuthAuthClients(ctx context.Context, arg FindOAuthAuthCli
 	return items, nil
 }
 
+const getAuthClientFixture = `-- name: GetAuthClientFixture :one
+SELECT client_type, deleted FROM mcp_auth_clients WHERE id = $1
+`
+
+type GetAuthClientFixtureRow struct {
+	ClientType string
+	Deleted    bool
+}
+
+func (q *Queries) GetAuthClientFixture(ctx context.Context, id uuid.UUID) (GetAuthClientFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getAuthClientFixture, id)
+	var i GetAuthClientFixtureRow
+	err := row.Scan(&i.ClientType, &i.Deleted)
+	return i, err
+}
+
 const getAuthClientState = `-- name: GetAuthClientState :one
 SELECT ac.id, ac.client_type, ac.deleted
 FROM mcp_auth_clients AS ac
@@ -392,6 +474,36 @@ func (q *Queries) GetRequiresUpstreamAuthFixture(ctx context.Context, id uuid.UU
 	return requires_upstream_auth, err
 }
 
+const getSelectionFixture = `-- name: GetSelectionFixture :one
+SELECT remote_session_client_id, auth_client_id, no_auth, source
+FROM upstream_client_selections
+WHERE credential_id = $1 AND mcp_server_id = $2 AND deleted IS FALSE
+`
+
+type GetSelectionFixtureParams struct {
+	CredentialID uuid.UUID
+	McpServerID  uuid.UUID
+}
+
+type GetSelectionFixtureRow struct {
+	RemoteSessionClientID uuid.NullUUID
+	AuthClientID          uuid.NullUUID
+	NoAuth                bool
+	Source                string
+}
+
+func (q *Queries) GetSelectionFixture(ctx context.Context, arg GetSelectionFixtureParams) (GetSelectionFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getSelectionFixture, arg.CredentialID, arg.McpServerID)
+	var i GetSelectionFixtureRow
+	err := row.Scan(
+		&i.RemoteSessionClientID,
+		&i.AuthClientID,
+		&i.NoAuth,
+		&i.Source,
+	)
+	return i, err
+}
+
 const hardDeleteAssociationFixture = `-- name: HardDeleteAssociationFixture :exec
 DELETE FROM mcp_server_remote_session_clients WHERE id = $1
 `
@@ -438,6 +550,36 @@ WHERE TRUE
         FALSE
       )
   ))
+  AND ($6::uuid IS NULL OR (
+    EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS l
+      JOIN mcp_servers AS s3 ON s3.id = l.mcp_server_id AND s3.project_id = l.project_id AND s3.deleted IS FALSE
+      WHERE l.auth_client_id = $6::uuid
+        AND l.organization_id = $3::text
+        AND l.deleted IS FALSE
+        AND s3.project_id = src.project_id
+        AND COALESCE(
+          (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
+          OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
+          FALSE
+        )
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS l
+      JOIN mcp_servers AS s3 ON s3.id = l.mcp_server_id AND s3.project_id = l.project_id AND s3.deleted IS FALSE
+      WHERE l.auth_client_id = $6::uuid
+        AND l.organization_id = $3::text
+        AND l.deleted IS FALSE
+        AND NOT COALESCE(
+          s3.project_id = src.project_id
+          AND ((src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
+               OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id)),
+          FALSE
+        )
+    )
+  ))
 ON CONFLICT (auth_client_id, name) WHERE deleted IS FALSE DO NOTHING
 `
 
@@ -447,14 +589,15 @@ type InsertHeaderCopyParams struct {
 	OrganizationID                string
 	AuthClientID                  uuid.UUID
 	RequiredRemoteSessionClientID uuid.NullUUID
+	RequiredAuthClientID          uuid.NullUUID
 }
 
 // Copies one source credential header onto a live backfilled auth client of
 // the organization as stored, ciphertext included, conditional on the header
 // and its source being live in a live project of the organization, in the
 // auth client's project when the client has one, and, for an upstream OAuth
-// client's auth client, that client still being used only on the header's
-// source. Zero rows means the evidence changed or a copy with
+// client's auth client or a required auth client, that client still being
+// used on the header's source and only there. Zero rows means the evidence changed or a copy with
 // that name already exists.
 func (q *Queries) InsertHeaderCopy(ctx context.Context, arg InsertHeaderCopyParams) (int64, error) {
 	result, err := q.db.Exec(ctx, insertHeaderCopy,
@@ -463,6 +606,7 @@ func (q *Queries) InsertHeaderCopy(ctx context.Context, arg InsertHeaderCopyPara
 		arg.OrganizationID,
 		arg.AuthClientID,
 		arg.RequiredRemoteSessionClientID,
+		arg.RequiredAuthClientID,
 	)
 	if err != nil {
 		return 0, err
@@ -477,8 +621,8 @@ SELECT EXISTS (
   WHERE link.mcp_server_id = $1::uuid
     AND link.auth_client_id = $2::uuid
     AND link.organization_id = $3::text
-    AND link.source = 'backfill'
-    AND link.deleted IS FALSE
+    AND ((link.source = 'backfill' AND link.deleted IS FALSE)
+         OR (link.source = 'admin' AND link.deleted IS TRUE))
 )::boolean AS linked
 `
 
@@ -488,7 +632,8 @@ type IsServerLinkedParams struct {
 	OrganizationID string
 }
 
-// Whether a server already offers an auth client.
+// Whether a server already offers an auth client, or an administrator
+// detached it from the server so the backfill must not link it again.
 func (q *Queries) IsServerLinked(ctx context.Context, arg IsServerLinkedParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isServerLinked, arg.McpServerID, arg.AuthClientID, arg.OrganizationID)
 	var linked bool
@@ -535,6 +680,16 @@ WHERE a.id = $2::uuid
     WHERE link.mcp_server_id = a.mcp_server_id
       AND link.auth_client_id = ac.id
       AND link.deleted IS FALSE
+  )
+  AND NOT EXISTS (
+    -- An administrator detached this client from this server: the backfill
+    -- never links it again.
+    SELECT 1
+    FROM mcp_server_auth_clients AS detached
+    WHERE detached.mcp_server_id = a.mcp_server_id
+      AND detached.auth_client_id = ac.id
+      AND detached.source = 'admin'
+      AND detached.deleted IS TRUE
   )
 ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO NOTHING
 `
@@ -610,7 +765,21 @@ WHERE s.id = $3::uuid
     SELECT 1 FROM remote_session_ema_bindings AS b
     WHERE b.organization_id = p.organization_id
       AND b.project_id = s.project_id
-      AND b.user_session_issuer_id = s.user_session_issuer_id
+      AND (b.user_session_issuer_id = s.user_session_issuer_id
+           OR b.user_session_issuer_id = (
+             -- The gateways' issuer, as ListEMABindingServers reads it.
+             SELECT (array_agg(gi.id))[1]
+             FROM user_session_issuers AS gi
+             WHERE gi.organization_id = b.organization_id
+               AND gi.project_id IS NULL
+               AND gi.deleted IS FALSE
+               AND EXISTS (
+                 SELECT 1 FROM organization_features AS gf
+                 WHERE gf.organization_id = b.organization_id
+                   AND gf.feature_name = 'organization_gateway_disabled'
+               )
+             HAVING count(*) = 1
+           ))
       AND b.remote_session_issuer_id = e.remote_session_issuer_id
       AND b.remote_session_client_id = e.remote_session_client_id
       AND rtrim(b.resource, '/') = rtrim(e.resource, '/')
@@ -624,6 +793,16 @@ WHERE s.id = $3::uuid
             AND s.remote_session_issuer_id = b.remote_session_issuer_id
             AND rtrim(t.resource_identifier, '/') = rtrim(b.resource, '/'))
       )
+  )
+  AND NOT EXISTS (
+    -- An administrator detached this client from this server: the backfill
+    -- never links it again.
+    SELECT 1
+    FROM mcp_server_auth_clients AS detached
+    WHERE detached.mcp_server_id = s.id
+      AND detached.auth_client_id = ac.id
+      AND detached.source = 'admin'
+      AND detached.deleted IS TRUE
   )
 ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO NOTHING
 `
@@ -665,7 +844,7 @@ WHERE s.id = $3::uuid
         ELSE FALSE
       END
   AND ($6::boolean IS NULL
-       OR $6::boolean = EXISTS (
+       OR $6::boolean = (EXISTS (
          SELECT 1 FROM mcp_server_remote_session_clients AS a
          JOIN remote_session_clients AS c
            ON c.id = a.remote_session_client_id
@@ -678,7 +857,69 @@ WHERE s.id = $3::uuid
                OR (rsi.project_id IS NULL AND rsi.organization_id = a.organization_id)
                OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL))
          WHERE a.mcp_server_id = s.id AND a.organization_id = p.organization_id AND a.deleted IS FALSE
-       ))
+       ) OR EXISTS (
+         SELECT 1 FROM mcp_server_auth_clients AS el
+         JOIN mcp_auth_clients AS ec
+           ON ec.id = el.auth_client_id
+          AND ec.organization_id = el.organization_id
+          AND ec.client_type = 'ema'
+          AND ec.source = 'backfill'
+          AND ec.deleted IS FALSE
+         WHERE el.mcp_server_id = s.id AND el.organization_id = p.organization_id AND el.deleted IS FALSE
+           AND NOT EXISTS (
+             -- Reached only through the gateways: the server's own issuer has no
+             -- ready binding for the client's upstream, so the client cannot serve
+             -- its direct route and leaves that route's configuration alone.
+             SELECT 1
+             FROM mcp_auth_client_emas AS gx
+             JOIN mcp_servers AS gs ON gs.id = el.mcp_server_id
+             WHERE gx.auth_client_id = ec.id
+               AND gx.deleted IS FALSE
+               AND NOT EXISTS (
+                 SELECT 1 FROM remote_session_ema_bindings AS db
+                 WHERE db.organization_id = gx.organization_id
+                   AND db.project_id = gs.project_id
+                   AND db.remote_session_issuer_id = gx.remote_session_issuer_id
+                   AND db.remote_session_client_id = gx.remote_session_client_id
+                   AND rtrim(db.resource, '/') = rtrim(gx.resource, '/')
+                   AND db.state = 'ready'
+                   AND db.user_session_issuer_id = gs.user_session_issuer_id
+               )
+               AND EXISTS (
+                 SELECT 1 FROM remote_session_ema_bindings AS gb
+                 WHERE gb.organization_id = gx.organization_id
+                   AND gb.project_id = gs.project_id
+                   AND gb.remote_session_issuer_id = gx.remote_session_issuer_id
+                   AND gb.remote_session_client_id = gx.remote_session_client_id
+                   AND rtrim(gb.resource, '/') = rtrim(gx.resource, '/')
+                   AND gb.state = 'ready'
+                   AND gb.user_session_issuer_id = (
+                     -- The gateways' issuer, as ListEMABindingServers reads it.
+                     SELECT (array_agg(gi.id))[1]
+                     FROM user_session_issuers AS gi
+                     WHERE gi.organization_id = gb.organization_id
+                       AND gi.project_id IS NULL
+                       AND gi.deleted IS FALSE
+                       AND EXISTS (
+                         SELECT 1 FROM organization_features AS gf
+                         WHERE gf.organization_id = gb.organization_id
+                           AND gf.feature_name = 'organization_gateway_disabled'
+                       )
+                     HAVING count(*) = 1
+                   )
+               )
+           )
+       )))
+  AND NOT EXISTS (
+    -- An administrator detached this client from this server: the backfill
+    -- never links it again.
+    SELECT 1
+    FROM mcp_server_auth_clients AS detached
+    WHERE detached.mcp_server_id = s.id
+      AND detached.auth_client_id = ac.id
+      AND detached.source = 'admin'
+      AND detached.deleted IS TRUE
+  )
 ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO NOTHING
 `
 
@@ -693,8 +934,9 @@ type LinkSourceServerParams struct {
 
 // Records that a live server offers a live backfilled auth client,
 // conditional on the server still being backed by the source the decision
-// read and, when required_has_oauth is set, its upstream OAuth association
-// state being the one the decision used.
+// read and, when required_has_oauth is set, its upstream identity state being
+// the one the decision used: an upstream OAuth association or a live
+// backfilled EMA client.
 func (q *Queries) LinkSourceServer(ctx context.Context, arg LinkSourceServerParams) (int64, error) {
 	result, err := q.db.Exec(ctx, linkSourceServer,
 		arg.OrganizationID,
@@ -708,6 +950,108 @@ func (q *Queries) LinkSourceServer(ctx context.Context, arg LinkSourceServerPara
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const listAPIKeyGrantRows = `-- name: ListAPIKeyGrantRows :many
+SELECT principal_urn, scope, selectors
+FROM principal_grants
+WHERE organization_id = $1
+  AND principal_type = 'api_key'
+ORDER BY principal_urn, scope, id
+`
+
+type ListAPIKeyGrantRowsRow struct {
+	PrincipalUrn urn.Principal
+	Scope        string
+	Selectors    []byte
+}
+
+// Every key policy row, to tell provisioned policies from explicit ones.
+func (q *Queries) ListAPIKeyGrantRows(ctx context.Context, organizationID string) ([]ListAPIKeyGrantRowsRow, error) {
+	rows, err := q.db.Query(ctx, listAPIKeyGrantRows, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAPIKeyGrantRowsRow
+	for rows.Next() {
+		var i ListAPIKeyGrantRowsRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveLegacyAPIKeys = `-- name: ListActiveLegacyAPIKeys :many
+SELECT id, project_id, scopes
+FROM api_keys
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND subject_urn IS NULL
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
+ORDER BY id
+`
+
+type ListActiveLegacyAPIKeysRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+	Scopes    []string
+}
+
+// Live legacy keys, matching admission's active predicate.
+func (q *Queries) ListActiveLegacyAPIKeys(ctx context.Context, organizationID string) ([]ListActiveLegacyAPIKeysRow, error) {
+	rows, err := q.db.Query(ctx, listActiveLegacyAPIKeys, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveLegacyAPIKeysRow
+	for rows.Next() {
+		var i ListActiveLegacyAPIKeysRow
+		if err := rows.Scan(&i.ID, &i.ProjectID, &i.Scopes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentRolePrincipals = `-- name: ListAgentRolePrincipals :many
+SELECT DISTINCT ara.role_urn::text AS role_urn
+FROM agent_role_assignments AS ara
+JOIN agents ON agents.organization_id = ara.organization_id AND agents.id = ara.agent_id AND agents.deleted IS FALSE
+WHERE ara.organization_id = $1
+  AND ara.deleted_at IS NULL
+ORDER BY role_urn
+`
+
+// Roles live agents hold, whose policies include them.
+func (q *Queries) ListAgentRolePrincipals(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listAgentRolePrincipals, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var role_urn string
+		if err := rows.Scan(&role_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, role_urn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAuthClientBackfillCandidates = `-- name: ListAuthClientBackfillCandidates :many
@@ -729,7 +1073,21 @@ SELECT a.id AS association_id,
            AND link.auth_client_id = existing.id
            AND link.organization_id = a.organization_id
            AND link.deleted IS FALSE
-       ))::boolean AS link_live
+       ))::boolean AS link_live,
+       EXISTS (
+         SELECT 1
+         FROM mcp_server_auth_clients AS detached
+         JOIN mcp_auth_clients AS dac
+           ON dac.id = detached.auth_client_id
+          AND dac.organization_id = detached.organization_id
+          AND dac.remote_session_client_id = c.id
+          AND dac.client_type IN ('remote_session', 'service_account')
+          AND dac.source = 'backfill'
+         WHERE detached.mcp_server_id = a.mcp_server_id
+           AND detached.organization_id = a.organization_id
+           AND detached.source = 'admin'
+           AND detached.deleted IS TRUE
+       )::boolean AS link_detached
 FROM mcp_server_remote_session_clients AS a
 JOIN projects AS p
   ON p.id = a.project_id
@@ -786,6 +1144,7 @@ type ListAuthClientBackfillCandidatesRow struct {
 	AuthClientType        string
 	AuthClientProjectID   uuid.NullUUID
 	LinkLive              bool
+	LinkDetached          bool
 }
 
 // One row per live MCP server upstream OAuth client association after the
@@ -798,7 +1157,9 @@ type ListAuthClientBackfillCandidatesRow struct {
 // client in the association's organization, auth_client_type its type and
 // auth_client_project_id its project; the nil UUID and empty when none is.
 // Admin-created clients are never treated as existing. link_live reports that
-// the server already offers that auth client.
+// the server already offers that auth client; link_detached that an
+// administrator detached the client's backfilled auth client from the server,
+// so the backfill must not link it again.
 func (q *Queries) ListAuthClientBackfillCandidates(ctx context.Context, arg ListAuthClientBackfillCandidatesParams) ([]ListAuthClientBackfillCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listAuthClientBackfillCandidates, arg.Cursor, arg.OrganizationID, arg.PageSize)
 	if err != nil {
@@ -821,7 +1182,47 @@ func (q *Queries) ListAuthClientBackfillCandidates(ctx context.Context, arg List
 			&i.AuthClientType,
 			&i.AuthClientProjectID,
 			&i.LinkLive,
+			&i.LinkDetached,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAuthClientGrantRows = `-- name: ListAuthClientGrantRows :many
+SELECT principal_urn, scope, selectors
+FROM principal_grants
+WHERE organization_id = $1
+  AND scope = ANY($2::text[])
+`
+
+type ListAuthClientGrantRowsParams struct {
+	OrganizationID string
+	Scopes         []string
+}
+
+type ListAuthClientGrantRowsRow struct {
+	PrincipalUrn urn.Principal
+	Scope        string
+	Selectors    []byte
+}
+
+// Existing grants of the given scopes, to tell which defaults are missing.
+func (q *Queries) ListAuthClientGrantRows(ctx context.Context, arg ListAuthClientGrantRowsParams) ([]ListAuthClientGrantRowsRow, error) {
+	rows, err := q.db.Query(ctx, listAuthClientGrantRows, arg.OrganizationID, arg.Scopes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuthClientGrantRowsRow
+	for rows.Next() {
+		var i ListAuthClientGrantRowsRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -953,6 +1354,87 @@ func (q *Queries) ListAuthClientsFixture(ctx context.Context, organizationID str
 	return items, nil
 }
 
+const listAuthPermissionProvisions = `-- name: ListAuthPermissionProvisions :many
+SELECT principal_urn, scope, selectors, (taken_over_at IS NOT NULL)::boolean AS taken_over
+FROM auth_permission_provisions
+WHERE organization_id = $1
+`
+
+type ListAuthPermissionProvisionsRow struct {
+	PrincipalUrn string
+	Scope        string
+	Selectors    []byte
+	TakenOver    bool
+}
+
+// Every grant the backfill provisioned in the organization, live or since
+// removed, and whether an admin since took it over.
+func (q *Queries) ListAuthPermissionProvisions(ctx context.Context, organizationID string) ([]ListAuthPermissionProvisionsRow, error) {
+	rows, err := q.db.Query(ctx, listAuthPermissionProvisions, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuthPermissionProvisionsRow
+	for rows.Next() {
+		var i ListAuthPermissionProvisionsRow
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Selectors,
+			&i.TakenOver,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAuthPermissionProvisionsFixture = `-- name: ListAuthPermissionProvisionsFixture :many
+SELECT principal_urn, scope, selectors, kind, (taken_over_at IS NOT NULL)::boolean AS taken_over
+FROM auth_permission_provisions
+WHERE organization_id = $1
+ORDER BY principal_urn, scope
+`
+
+type ListAuthPermissionProvisionsFixtureRow struct {
+	PrincipalUrn string
+	Scope        string
+	Selectors    []byte
+	Kind         string
+	TakenOver    bool
+}
+
+func (q *Queries) ListAuthPermissionProvisionsFixture(ctx context.Context, organizationID string) ([]ListAuthPermissionProvisionsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listAuthPermissionProvisionsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuthPermissionProvisionsFixtureRow
+	for rows.Next() {
+		var i ListAuthPermissionProvisionsFixtureRow
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Selectors,
+			&i.Kind,
+			&i.TakenOver,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listBackfillClientsOfTypes = `-- name: ListBackfillClientsOfTypes :many
 SELECT ac.id, ac.client_type
 FROM mcp_auth_clients AS ac
@@ -985,6 +1467,76 @@ func (q *Queries) ListBackfillClientsOfTypes(ctx context.Context, arg ListBackfi
 	for rows.Next() {
 		var i ListBackfillClientsOfTypesRow
 		if err := rows.Scan(&i.ID, &i.ClientType); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBackfillLinkedServersFixture = `-- name: ListBackfillLinkedServersFixture :many
+SELECT mcp_server_id
+FROM mcp_server_auth_clients
+WHERE auth_client_id = $1 AND source = 'backfill' AND deleted IS FALSE
+ORDER BY mcp_server_id
+`
+
+func (q *Queries) ListBackfillLinkedServersFixture(ctx context.Context, authClientID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listBackfillLinkedServersFixture, authClientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var mcp_server_id uuid.UUID
+		if err := rows.Scan(&mcp_server_id); err != nil {
+			return nil, err
+		}
+		items = append(items, mcp_server_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBackfillLinksOfClients = `-- name: ListBackfillLinksOfClients :many
+SELECT l.id, l.mcp_server_id, l.auth_client_id
+FROM mcp_server_auth_clients AS l
+WHERE l.organization_id = $1::text
+  AND l.auth_client_id = ANY($2::uuid[])
+  AND l.source = 'backfill'
+  AND l.deleted IS FALSE
+ORDER BY l.id
+`
+
+type ListBackfillLinksOfClientsParams struct {
+	OrganizationID string
+	AuthClientIds  []uuid.UUID
+}
+
+type ListBackfillLinksOfClientsRow struct {
+	ID           uuid.UUID
+	McpServerID  uuid.UUID
+	AuthClientID uuid.UUID
+}
+
+// Live backfilled server links in the organization to any of the given auth
+// clients.
+func (q *Queries) ListBackfillLinksOfClients(ctx context.Context, arg ListBackfillLinksOfClientsParams) ([]ListBackfillLinksOfClientsRow, error) {
+	rows, err := q.db.Query(ctx, listBackfillLinksOfClients, arg.OrganizationID, arg.AuthClientIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBackfillLinksOfClientsRow
+	for rows.Next() {
+		var i ListBackfillLinksOfClientsRow
+		if err := rows.Scan(&i.ID, &i.McpServerID, &i.AuthClientID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1057,7 +1609,7 @@ WITH creds AS (
          rh.value_from_request_header AS forwarded_from
   FROM remote_mcp_server_headers AS rh
   JOIN remote_mcp_servers AS r ON r.id = rh.remote_mcp_server_id AND r.deleted IS FALSE
-  JOIN projects AS p ON p.id = r.project_id AND p.organization_id = $3::text AND p.deleted IS FALSE
+  JOIN projects AS p ON p.id = r.project_id AND p.organization_id = $4::text AND p.deleted IS FALSE
   WHERE rh.deleted IS FALSE
     AND (lower(rh.name) = 'authorization' OR rh.value_from_request_header IS NOT NULL OR rh.is_secret)
   UNION ALL
@@ -1065,7 +1617,7 @@ WITH creds AS (
          th.value_from_request_header
   FROM tunneled_mcp_server_headers AS th
   JOIN tunneled_mcp_servers AS t ON t.id = th.tunneled_mcp_server_id AND t.deleted IS FALSE
-  JOIN projects AS p ON p.id = t.project_id AND p.organization_id = $3::text AND p.deleted IS FALSE
+  JOIN projects AS p ON p.id = t.project_id AND p.organization_id = $4::text AND p.deleted IS FALSE
   WHERE th.deleted IS FALSE
     AND (lower(th.name) = 'authorization' OR th.value_from_request_header IS NOT NULL OR th.is_secret)
 )
@@ -1084,13 +1636,16 @@ SELECT c.source_kind,
        COALESCE(array_agg(c.header_id ORDER BY c.header_id) FILTER (WHERE lower(c.name) <> 'authorization'), ARRAY[]::uuid[])::uuid[] AS other_header_ids
 FROM creds AS c
 WHERE c.source_id > $1::uuid
+  -- Set to decide one source's headers as they are written.
+  AND ($2::uuid IS NULL OR c.source_id = $2::uuid)
 GROUP BY c.source_kind, c.source_id, c.project_id
 ORDER BY c.source_id
-LIMIT $2::int
+LIMIT $3::int
 `
 
 type ListCredentialSourcesParams struct {
 	Cursor         uuid.UUID
+	OnlySourceID   uuid.NullUUID
 	PageSize       int32
 	OrganizationID string
 }
@@ -1116,7 +1671,12 @@ type ListCredentialSourcesRow struct {
 // from the request; other static headers stay server headers. Read-only and
 // value-free.
 func (q *Queries) ListCredentialSources(ctx context.Context, arg ListCredentialSourcesParams) ([]ListCredentialSourcesRow, error) {
-	rows, err := q.db.Query(ctx, listCredentialSources, arg.Cursor, arg.PageSize, arg.OrganizationID)
+	rows, err := q.db.Query(ctx, listCredentialSources,
+		arg.Cursor,
+		arg.OnlySourceID,
+		arg.PageSize,
+		arg.OrganizationID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1235,6 +1795,7 @@ func (q *Queries) ListEMABackfillBindings(ctx context.Context, organizationID st
 const listEMABindingServers = `-- name: ListEMABindingServers :many
 SELECT s.id AS mcp_server_id,
        s.project_id,
+       COALESCE(s.user_session_issuer_id = b.user_session_issuer_id, FALSE)::boolean AS direct,
        (CASE WHEN rp.id IS NOT NULL AND rp.authorization_servers IS NOT NULL AND NOT EXISTS (
                SELECT 1 FROM unnest(rp.authorization_servers) AS allowed(server)
                WHERE rtrim(allowed.server, '/') = rtrim(rsi.issuer, '/')
@@ -1256,7 +1817,28 @@ JOIN remote_session_clients AS rc
       OR (rc.project_id IS NULL AND rc.organization_id IS NULL))
 JOIN mcp_servers AS s
   ON s.project_id = b.project_id
- AND s.user_session_issuer_id = b.user_session_issuer_id
+ AND (s.user_session_issuer_id = b.user_session_issuer_id
+      OR b.user_session_issuer_id = (
+        -- The organization and project gateways' issuer, as orggateway.Resolve
+        -- chooses it: the organization's sole live organization-level user
+        -- session issuer. They chain a member in its own project through it.
+        -- Configured reach, not current availability: an organization that has
+        -- never made a gateway decision is not reached, while turning the
+        -- gateway off, disabling the organization or restricting its custom
+        -- domain leaves it reached, so no toggle retires a client. Every
+        -- request is still matched to its own inbound issuer at runtime.
+        SELECT (array_agg(gi.id))[1]
+        FROM user_session_issuers AS gi
+        WHERE gi.organization_id = b.organization_id
+          AND gi.project_id IS NULL
+          AND gi.deleted IS FALSE
+          AND EXISTS (
+            SELECT 1 FROM organization_features AS gf
+            WHERE gf.organization_id = b.organization_id
+              AND gf.feature_name = 'organization_gateway_disabled'
+          )
+        HAVING count(*) = 1
+      ))
  AND s.deleted IS FALSE
 LEFT JOIN remote_mcp_servers AS r ON r.id = s.remote_mcp_server_id AND r.deleted IS FALSE
 LEFT JOIN tunneled_mcp_servers AS t ON t.id = s.tunneled_mcp_server_id AND t.deleted IS FALSE
@@ -1298,17 +1880,23 @@ type ListEMABindingServersParams struct {
 type ListEMABindingServersRow struct {
 	McpServerID uuid.UUID
 	ProjectID   uuid.UUID
+	Direct      bool
 	Match       string
 }
 
 // The live servers a ready binding reaches, as the runtime matches them: in
-// the binding's project and signed in through its user session issuer, a
+// the binding's project and signed in through its user session issuer, either
+// directly or as the issuer of the organization and project gateways, which
+// serve the server as a member and chain it in its own project. A link offers
+// the client on the server whichever way it is reached; the runtime still
+// chains only a request whose own inbound issuer the binding names. It is a
 // remote server whose valid persisted protected resource names the binding's
 // resource, or, with no valid persisted record, whose URL names it; or a
 // tunneled server whose resource identifier names it under its own derived
 // issuer. A remote server whose valid record lists authorization servers
 // without the binding's issuer is returned as issuer_not_allowed, since the
-// runtime would refuse it.
+// runtime would refuse it. direct reports that the server's own issuer is the
+// binding's.
 func (q *Queries) ListEMABindingServers(ctx context.Context, arg ListEMABindingServersParams) ([]ListEMABindingServersRow, error) {
 	rows, err := q.db.Query(ctx, listEMABindingServers, arg.BindingID, arg.OrganizationID)
 	if err != nil {
@@ -1318,7 +1906,113 @@ func (q *Queries) ListEMABindingServers(ctx context.Context, arg ListEMABindingS
 	var items []ListEMABindingServersRow
 	for rows.Next() {
 		var i ListEMABindingServersRow
-		if err := rows.Scan(&i.McpServerID, &i.ProjectID, &i.Match); err != nil {
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.ProjectID,
+			&i.Direct,
+			&i.Match,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMAClientLiveServers = `-- name: ListEMAClientLiveServers :many
+SELECT s.id
+FROM mcp_server_auth_clients AS l
+JOIN mcp_auth_clients AS ac
+  ON ac.id = l.auth_client_id
+ AND ac.organization_id = l.organization_id
+ AND ac.client_type = 'ema'
+ AND ac.source = 'backfill'
+JOIN mcp_servers AS s ON s.id = l.mcp_server_id AND s.project_id = l.project_id AND s.deleted IS FALSE
+WHERE l.auth_client_id = $1::uuid
+  AND l.organization_id = $2::text
+  AND l.deleted IS FALSE
+ORDER BY s.id
+`
+
+type ListEMAClientLiveServersParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+// The live servers a backfilled ema client is linked to.
+func (q *Queries) ListEMAClientLiveServers(ctx context.Context, arg ListEMAClientLiveServersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listEMAClientLiveServers, arg.AuthClientID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMAClientsOfServers = `-- name: ListEMAClientsOfServers :many
+SELECT ac.id AS auth_client_id,
+       COALESCE(array_agg(DISTINCT ls.id) FILTER (WHERE ls.id IS NOT NULL), ARRAY[]::uuid[])::uuid[] AS mcp_server_ids
+FROM mcp_auth_clients AS ac
+JOIN mcp_server_auth_clients AS named
+  ON named.auth_client_id = ac.id
+ AND named.organization_id = ac.organization_id
+ AND named.mcp_server_id = ANY($1::uuid[])
+LEFT JOIN mcp_server_auth_clients AS live
+  ON live.auth_client_id = ac.id
+ AND live.organization_id = ac.organization_id
+ AND live.deleted IS FALSE
+LEFT JOIN mcp_servers AS ls
+  ON ls.id = live.mcp_server_id
+ AND ls.project_id = live.project_id
+ AND ls.deleted IS FALSE
+WHERE ac.organization_id = $2::text
+  AND ac.client_type = 'ema'
+  AND ac.source = 'backfill'
+  AND ac.deleted IS FALSE
+GROUP BY ac.id
+ORDER BY ac.id
+`
+
+type ListEMAClientsOfServersParams struct {
+	McpServerIds   []uuid.UUID
+	OrganizationID string
+}
+
+type ListEMAClientsOfServersRow struct {
+	AuthClientID uuid.UUID
+	McpServerIds []uuid.UUID
+}
+
+// Every live backfilled EMA client the given servers are linked to, with the
+// live servers that offer it, so the rule that refuses a client shared across
+// sources sees the same evidence as the backfill. The naming link is read
+// deleted ones included, so a server that has just left a source or been
+// deleted still names its clients; an empty server list then means the client
+// serves nothing and carries no source's credentials.
+func (q *Queries) ListEMAClientsOfServers(ctx context.Context, arg ListEMAClientsOfServersParams) ([]ListEMAClientsOfServersRow, error) {
+	rows, err := q.db.Query(ctx, listEMAClientsOfServers, arg.McpServerIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMAClientsOfServersRow
+	for rows.Next() {
+		var i ListEMAClientsOfServersRow
+		if err := rows.Scan(&i.AuthClientID, &i.McpServerIds); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1334,7 +2028,21 @@ SELECT s.id AS mcp_server_id, s.project_id
 FROM remote_session_ema_bindings AS b
 JOIN mcp_servers AS s
   ON s.project_id = b.project_id
- AND s.user_session_issuer_id = b.user_session_issuer_id
+ AND (s.user_session_issuer_id = b.user_session_issuer_id
+      OR b.user_session_issuer_id = (
+        -- The gateways' issuer, as ListEMABindingServers reads it.
+        SELECT (array_agg(gi.id))[1]
+        FROM user_session_issuers AS gi
+        WHERE gi.organization_id = b.organization_id
+          AND gi.project_id IS NULL
+          AND gi.deleted IS FALSE
+          AND EXISTS (
+            SELECT 1 FROM organization_features AS gf
+            WHERE gf.organization_id = b.organization_id
+              AND gf.feature_name = 'organization_gateway_disabled'
+          )
+        HAVING count(*) = 1
+      ))
  AND s.deleted IS FALSE
 JOIN remote_mcp_servers AS r ON r.id = s.remote_mcp_server_id AND r.deleted IS FALSE
 LEFT JOIN LATERAL (
@@ -1371,7 +2079,8 @@ type ListEMASameOriginServersRow struct {
 }
 
 // The live remote servers a ready binding could plausibly cover without a
-// match: in the binding's project, signed in through its user session issuer,
+// match: in the binding's project, signed in through its user session issuer
+// directly or through the gateways as ListEMABindingServers reads them,
 // at the same origin as its resource, and with no valid persisted protected
 // resource naming another resource. Whether their metadata names the
 // binding's resource only live discovery can confirm, so these are reported
@@ -1386,6 +2095,118 @@ func (q *Queries) ListEMASameOriginServers(ctx context.Context, arg ListEMASameO
 	for rows.Next() {
 		var i ListEMASameOriginServersRow
 		if err := rows.Scan(&i.McpServerID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLiveAgentAttachments = `-- name: ListLiveAgentAttachments :many
+SELECT
+  b.id AS binding_id,
+  b.principal_id AS agent_id,
+  b.remote_session_client_id,
+  b.attached_by_subject_id,
+  a.owner_user_id,
+  COALESCE(rs.subject_urn, '')::text AS connection_subject,
+  (
+    a.revoked_at IS NULL AND a.suspended_at IS NULL AND a.owner_reassignment_required_at IS NULL
+    AND EXISTS (
+      SELECT 1
+      FROM users AS owner
+      JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
+        AND membership.user_id = owner.id AND membership.deleted_at IS NULL
+      WHERE owner.id = a.owner_user_id AND owner.deleted_at IS NULL
+    )
+  )::boolean AS agent_active,
+  (
+    rs.id IS NOT NULL AND rs.deleted IS FALSE
+    AND rs.remote_session_client_id = b.remote_session_client_id
+  )::boolean AS connection_live,
+  EXISTS (
+    SELECT 1
+    FROM remote_session_clients AS c
+    JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id AND issuer.deleted IS FALSE
+    JOIN user_session_issuers AS usi ON usi.id = b.user_session_issuer_id AND usi.deleted IS FALSE
+    JOIN user_session_issuers AS provenance ON provenance.id = rs.user_session_issuer_id AND provenance.deleted IS FALSE
+    JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
+    JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = usi.id
+    WHERE c.id = b.remote_session_client_id
+      AND c.deleted IS FALSE
+      AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
+      AND (provenance.project_id = p.id OR (provenance.project_id IS NULL AND provenance.organization_id = p.organization_id))
+      AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  )::boolean AS configuration_live,
+  EXISTS (
+    SELECT 1
+    FROM mcp_auth_clients AS ac
+    WHERE ac.organization_id = b.organization_id
+      AND ac.remote_session_client_id = b.remote_session_client_id
+      AND ac.client_type = 'remote_session'
+      AND ac.deleted IS FALSE
+  )::boolean AS client_recorded
+FROM principal_remote_session_bindings AS b
+JOIN agents AS a ON a.organization_id = b.organization_id AND a.id = b.principal_id AND a.deleted IS FALSE
+LEFT JOIN remote_sessions AS rs ON rs.id = b.remote_session_id
+WHERE b.organization_id = $1
+  AND b.revoked_at IS NULL
+  AND ($2::uuid IS NULL OR b.id = $2::uuid)
+ORDER BY b.id
+`
+
+type ListLiveAgentAttachmentsParams struct {
+	OrganizationID string
+	BindingID      uuid.NullUUID
+}
+
+type ListLiveAgentAttachmentsRow struct {
+	BindingID             uuid.UUID
+	AgentID               uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	AttachedBySubjectID   string
+	OwnerUserID           string
+	ConnectionSubject     string
+	AgentActive           bool
+	ConnectionLive        bool
+	ConfigurationLive     bool
+	ClientRecorded        bool
+}
+
+// Unrevoked attachments of live agents to a user's connection, with what the
+// attachment runtime (GetPrincipalRemoteSessionBinding) checks before serving
+// one: the exact attached connection row is still live with its current credentials, it
+// belongs to the user who attached it, that user still owns the agent, the
+// agent and its owner are active, and the sign-in, project, upstream client
+// and issuer are live and reach the attachment's project. binding_id, when
+// set, reads that one attachment. It takes no lock: a grant is written only
+// from a read of one attachment taken after LockAttachmentIssuers through
+// LockAttachmentAuthClients hold what it decides from.
+func (q *Queries) ListLiveAgentAttachments(ctx context.Context, arg ListLiveAgentAttachmentsParams) ([]ListLiveAgentAttachmentsRow, error) {
+	rows, err := q.db.Query(ctx, listLiveAgentAttachments, arg.OrganizationID, arg.BindingID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLiveAgentAttachmentsRow
+	for rows.Next() {
+		var i ListLiveAgentAttachmentsRow
+		if err := rows.Scan(
+			&i.BindingID,
+			&i.AgentID,
+			&i.RemoteSessionClientID,
+			&i.AttachedBySubjectID,
+			&i.OwnerUserID,
+			&i.ConnectionSubject,
+			&i.AgentActive,
+			&i.ConnectionLive,
+			&i.ConfigurationLive,
+			&i.ClientRecorded,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1420,12 +2241,143 @@ func (q *Queries) ListLiveAuthClientIDsFixture(ctx context.Context, organization
 	return items, nil
 }
 
+const listLiveBackfillClients = `-- name: ListLiveBackfillClients :many
+SELECT ac.id
+FROM mcp_auth_clients AS ac
+WHERE ac.organization_id = $1::text
+  AND ac.id = ANY($2::uuid[])
+  AND ac.source = 'backfill'
+  AND ac.client_type = ANY($3::text[])
+  AND ac.deleted IS FALSE
+ORDER BY ac.id
+`
+
+type ListLiveBackfillClientsParams struct {
+	OrganizationID string
+	AuthClientIds  []uuid.UUID
+	ClientTypes    []string
+}
+
+// The clients among those given, in the organization, that are live
+// backfilled clients of one of the given types. Only those can be retired, so
+// a sync reads the live ones once instead of attempting every derived id.
+func (q *Queries) ListLiveBackfillClients(ctx context.Context, arg ListLiveBackfillClientsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listLiveBackfillClients, arg.OrganizationID, arg.AuthClientIds, arg.ClientTypes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLiveCredentialClasses = `-- name: ListLiveCredentialClasses :many
+SELECT DISTINCT ON (COALESCE(s.credential_id, s.id))
+       COALESCE(s.credential_id, s.id)::uuid AS credential_id,
+       s.user_session_issuer_id,
+       (CASE
+         WHEN s.subject_urn LIKE 'agent:%' THEN 'agent'
+         WHEN s.subject_urn LIKE 'workload:%' THEN 'workload'
+         WHEN s.refresh_token_hash LIKE 'id-jag:%' THEN 'id_jag'
+         WHEN s.refresh_token_hash LIKE 'dashboard-mint%' THEN 'dashboard_mint'
+         ELSE 'interactive'
+       END)::text AS credential_class
+FROM user_sessions AS s
+JOIN user_session_issuers AS usi
+  ON usi.id = s.user_session_issuer_id
+LEFT JOIN projects AS p
+  ON p.id = usi.project_id
+WHERE s.deleted IS FALSE
+  AND s.refresh_expires_at > clock_timestamp()
+  AND COALESCE(s.credential_id, s.id) > $1::uuid
+  AND COALESCE(usi.organization_id, p.organization_id) = $2::text
+ORDER BY COALESCE(s.credential_id, s.id), s.created_at DESC
+LIMIT $3::int
+`
+
+type ListLiveCredentialClassesParams struct {
+	Cursor         uuid.UUID
+	OrganizationID string
+	PageSize       int32
+}
+
+type ListLiveCredentialClassesRow struct {
+	CredentialID        uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	CredentialClass     string
+}
+
+// One row per live user session credential in the organization after the
+// cursor, with the class coverage is reported by and the user session issuer
+// it was issued by. A credential is live while a row of it is not deleted and
+// can still refresh; its class is read from its latest row. The subject kind
+// names agent and workload sessions; the refresh token hash prefixes are the
+// ones issuance writes: id-jag: for an inbound ID-JAG exchange and
+// dashboard-mint for a session the dashboard minted.
+func (q *Queries) ListLiveCredentialClasses(ctx context.Context, arg ListLiveCredentialClassesParams) ([]ListLiveCredentialClassesRow, error) {
+	rows, err := q.db.Query(ctx, listLiveCredentialClasses, arg.Cursor, arg.OrganizationID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLiveCredentialClassesRow
+	for rows.Next() {
+		var i ListLiveCredentialClassesRow
+		if err := rows.Scan(&i.CredentialID, &i.UserSessionIssuerID, &i.CredentialClass); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLiveLinkIDsFixture = `-- name: ListLiveLinkIDsFixture :many
 SELECT id FROM mcp_server_auth_clients WHERE organization_id = $1 AND deleted IS FALSE ORDER BY id
 `
 
 func (q *Queries) ListLiveLinkIDsFixture(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listLiveLinkIDsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLiveProjects = `-- name: ListLiveProjects :many
+SELECT id
+FROM projects
+WHERE organization_id = $1
+  AND deleted IS FALSE
+ORDER BY id
+`
+
+func (q *Queries) ListLiveProjects(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listLiveProjects, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -1468,6 +2420,11 @@ WITH used AS (
         OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL))
   WHERE a.organization_id = $1::text
     AND a.deleted IS FALSE
+    -- Set to re-decide named clients as a source or its servers are written.
+    -- Every source of a named client is still returned, so the rule that
+    -- refuses a client shared across sources sees the same evidence.
+    AND ($2::uuid[] IS NULL
+         OR a.remote_session_client_id = ANY($2::uuid[]))
 ), grouped AS (
   SELECT remote_session_client_id, credential_owner, source_kind, source_id,
          array_agg(DISTINCT server_id ORDER BY server_id) AS server_ids
@@ -1504,6 +2461,11 @@ LEFT JOIN LATERAL (
 ORDER BY g.remote_session_client_id, g.source_id
 `
 
+type ListOAuthClientSourcesParams struct {
+	OrganizationID string
+	OnlyClientIds  []uuid.UUID
+}
+
 type ListOAuthClientSourcesRow struct {
 	RemoteSessionClientID uuid.UUID
 	CredentialOwner       string
@@ -1521,8 +2483,8 @@ type ListOAuthClientSourcesRow struct {
 // in letter case. A server with no remote or tunneled source (hosted,
 // unproxied) is a source of its own with no headers, so a client it shares
 // with another source's servers is never copied onto.
-func (q *Queries) ListOAuthClientSources(ctx context.Context, organizationID string) ([]ListOAuthClientSourcesRow, error) {
-	rows, err := q.db.Query(ctx, listOAuthClientSources, organizationID)
+func (q *Queries) ListOAuthClientSources(ctx context.Context, arg ListOAuthClientSourcesParams) ([]ListOAuthClientSourcesRow, error) {
+	rows, err := q.db.Query(ctx, listOAuthClientSources, arg.OrganizationID, arg.OnlyClientIds)
 	if err != nil {
 		return nil, err
 	}
@@ -1543,6 +2505,142 @@ func (q *Queries) ListOAuthClientSources(ctx context.Context, organizationID str
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOAuthClientsOfServers = `-- name: ListOAuthClientsOfServers :many
+SELECT DISTINCT a.remote_session_client_id
+FROM mcp_server_remote_session_clients AS a
+WHERE a.organization_id = $1::text
+  AND a.mcp_server_id = ANY($2::uuid[])
+ORDER BY a.remote_session_client_id
+`
+
+type ListOAuthClientsOfServersParams struct {
+	OrganizationID string
+	McpServerIds   []uuid.UUID
+}
+
+// Every upstream OAuth client the given servers are associated with, deleted
+// associations and tombstoned servers included, so a server that has just
+// left a source or been deleted still names the clients whose copies have to
+// be re-decided.
+func (q *Queries) ListOAuthClientsOfServers(ctx context.Context, arg ListOAuthClientsOfServersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOAuthClientsOfServers, arg.OrganizationID, arg.McpServerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var remote_session_client_id uuid.UUID
+		if err := rows.Scan(&remote_session_client_id); err != nil {
+			return nil, err
+		}
+		items = append(items, remote_session_client_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationIDsForGrants = `-- name: ListOrganizationIDsForGrants :many
+SELECT id
+FROM organization_metadata
+ORDER BY id
+`
+
+// Every organization, for the offline default auth permission backfill.
+func (q *Queries) ListOrganizationIDsForGrants(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listOrganizationIDsForGrants)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteSourceHeaderIDs = `-- name: ListRemoteSourceHeaderIDs :many
+SELECT h.id
+FROM remote_mcp_server_headers AS h
+JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id
+JOIN projects AS p ON p.id = r.project_id AND p.organization_id = $1::text
+WHERE h.remote_mcp_server_id = $2::uuid
+ORDER BY h.id
+`
+
+type ListRemoteSourceHeaderIDsParams struct {
+	OrganizationID string
+	SourceID       uuid.UUID
+}
+
+// Every header ever recorded on one remote source of the organization,
+// deleted ones included, so the auth clients derived from any of them can be
+// found by their stable ids.
+func (q *Queries) ListRemoteSourceHeaderIDs(ctx context.Context, arg ListRemoteSourceHeaderIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listRemoteSourceHeaderIDs, arg.OrganizationID, arg.SourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteSourceServerIDs = `-- name: ListRemoteSourceServerIDs :many
+SELECT s.id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id AND p.organization_id = $1::text AND p.deleted IS FALSE
+WHERE s.remote_mcp_server_id = $2::uuid
+ORDER BY s.id
+`
+
+type ListRemoteSourceServerIDsParams struct {
+	OrganizationID string
+	SourceID       uuid.UUID
+}
+
+// The servers backed by one remote source, tombstoned ones included, so a
+// source whose last server was deleted still names it for the copy pass.
+func (q *Queries) ListRemoteSourceServerIDs(ctx context.Context, arg ListRemoteSourceServerIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listRemoteSourceServerIDs, arg.OrganizationID, arg.SourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1608,6 +2706,392 @@ func (q *Queries) ListRemoteSourceServers(ctx context.Context, arg ListRemoteSou
 	return items, nil
 }
 
+const listSelectionMappings = `-- name: ListSelectionMappings :many
+SELECT sel.id,
+       sel.project_id,
+       sel.credential_id,
+       sel.mcp_server_id,
+       sel.remote_session_client_id,
+       sel.no_auth,
+       sel.auth_client_id,
+       (sel.auth_client_id IS NOT NULL AND EXISTS (
+         SELECT 1
+         FROM mcp_auth_clients AS ac
+         JOIN mcp_server_auth_clients AS l
+           ON l.auth_client_id = ac.id
+          AND l.mcp_server_id = sel.mcp_server_id
+          AND l.deleted IS FALSE
+         WHERE ac.id = sel.auth_client_id
+           AND ac.organization_id = sel.organization_id
+           AND ac.deleted IS FALSE
+           AND ac.enabled
+           AND (sel.remote_session_client_id IS NULL OR ac.remote_session_client_id = sel.remote_session_client_id)
+       ))::boolean AS mapped_usable,
+       EXISTS (
+         SELECT 1
+         FROM mcp_auth_clients AS headers_only
+         WHERE headers_only.id = sel.auth_client_id
+           AND sel.remote_session_client_id IS NULL
+           AND headers_only.organization_id = sel.organization_id
+           AND (headers_only.project_id IS NULL OR headers_only.project_id = sel.project_id)
+           AND headers_only.client_type IN ('static_credential', 'pass_through')
+       )::boolean AS names_headers,
+       EXISTS (
+         SELECT 1
+         FROM mcp_server_remote_session_clients AS a
+         WHERE a.mcp_server_id = sel.mcp_server_id
+           AND a.deleted IS FALSE
+       )::boolean AS server_has_associations,
+       EXISTS (
+         SELECT 1
+         FROM mcp_server_remote_session_clients AS a
+         JOIN remote_session_clients AS c
+           ON c.id = a.remote_session_client_id
+          AND c.deleted IS FALSE
+         WHERE a.mcp_server_id = sel.mcp_server_id
+           AND a.remote_session_client_id = sel.remote_session_client_id
+           AND a.deleted IS FALSE
+       )::boolean AS registration_associated,
+       ARRAY(
+         SELECT link.user_session_issuer_id
+         FROM remote_session_client_user_session_issuers AS link
+         WHERE link.remote_session_client_id = sel.remote_session_client_id
+         ORDER BY link.user_session_issuer_id
+       )::uuid[] AS registration_issuer_ids,
+       ARRAY(
+         SELECT ac.id
+         FROM mcp_auth_clients AS ac
+         JOIN mcp_server_auth_clients AS l
+           ON l.auth_client_id = ac.id
+          AND l.mcp_server_id = sel.mcp_server_id
+          AND l.deleted IS FALSE
+         WHERE ac.organization_id = sel.organization_id
+           AND ac.deleted IS FALSE
+           AND ac.enabled
+           AND (
+             (sel.remote_session_client_id IS NOT NULL
+              AND ac.remote_session_client_id = sel.remote_session_client_id
+              AND ac.client_type IN ('remote_session', 'service_account'))
+             OR (sel.no_auth
+                 AND ac.client_type IN ('static_credential', 'pass_through')
+                 -- The client carries the source's current credential
+                 -- headers, compared as stored. RecordUpstreamClientSelections
+                 -- repeats this comparison; the two must stay identical.
+                 AND (
+                   SELECT string_agg(format('%L|%L|%L', lower(h.name), h.value, h.value_from_request_header), ',' ORDER BY lower(h.name), h.value, h.value_from_request_header)
+                   FROM mcp_auth_client_headers AS h
+                   WHERE h.auth_client_id = ac.id
+                     AND h.deleted IS FALSE
+                 ) = (
+                   SELECT string_agg(format('%L|%L|%L', lower(src.name), src.value, src.value_from_request_header), ',' ORDER BY lower(src.name), src.value, src.value_from_request_header)
+                   FROM (
+                     SELECT rh.name, rh.value, rh.value_from_request_header, rh.is_secret
+                     FROM mcp_servers AS s
+                     JOIN remote_mcp_servers AS r
+                       ON r.id = s.remote_mcp_server_id
+                      AND r.project_id = s.project_id
+                      AND r.deleted IS FALSE
+                     JOIN remote_mcp_server_headers AS rh
+                       ON rh.remote_mcp_server_id = r.id
+                      AND rh.deleted IS FALSE
+                     WHERE s.id = sel.mcp_server_id
+                     UNION ALL
+                     SELECT th.name, th.value, th.value_from_request_header, th.is_secret
+                     FROM mcp_servers AS s
+                     JOIN tunneled_mcp_servers AS t
+                       ON t.id = s.tunneled_mcp_server_id
+                      AND t.project_id = s.project_id
+                      AND t.deleted IS FALSE
+                     JOIN tunneled_mcp_server_headers AS th
+                       ON th.tunneled_mcp_server_id = t.id
+                      AND th.deleted IS FALSE
+                     WHERE s.id = sel.mcp_server_id
+                   ) AS src
+                   WHERE lower(src.name) = 'authorization' OR src.value_from_request_header IS NOT NULL OR src.is_secret
+                 ))
+           )
+         ORDER BY ac.id
+       )::uuid[] AS candidate_ids,
+       EXISTS (
+         SELECT 1
+         FROM mcp_auth_clients AS ac
+         JOIN mcp_server_auth_clients AS l
+           ON l.auth_client_id = ac.id
+          AND l.mcp_server_id = sel.mcp_server_id
+          AND l.deleted IS FALSE
+         WHERE ac.organization_id = sel.organization_id
+           AND ac.deleted IS FALSE
+           AND ac.enabled
+           AND ac.client_type IN ('remote_session', 'service_account', 'ema')
+           AND NOT (ac.client_type = 'ema' AND EXISTS (
+             -- Reached only through the gateways: the server's own issuer has no
+             -- ready binding for the client's upstream, so the client cannot serve
+             -- its direct route and leaves that route's configuration alone.
+             SELECT 1
+             FROM mcp_auth_client_emas AS gx
+             JOIN mcp_servers AS gs ON gs.id = l.mcp_server_id
+             WHERE gx.auth_client_id = ac.id
+               AND gx.deleted IS FALSE
+               AND NOT EXISTS (
+                 SELECT 1 FROM remote_session_ema_bindings AS db
+                 WHERE db.organization_id = gx.organization_id
+                   AND db.project_id = gs.project_id
+                   AND db.remote_session_issuer_id = gx.remote_session_issuer_id
+                   AND db.remote_session_client_id = gx.remote_session_client_id
+                   AND rtrim(db.resource, '/') = rtrim(gx.resource, '/')
+                   AND db.state = 'ready'
+                   AND db.user_session_issuer_id = gs.user_session_issuer_id
+               )
+               AND EXISTS (
+                 SELECT 1 FROM remote_session_ema_bindings AS gb
+                 WHERE gb.organization_id = gx.organization_id
+                   AND gb.project_id = gs.project_id
+                   AND gb.remote_session_issuer_id = gx.remote_session_issuer_id
+                   AND gb.remote_session_client_id = gx.remote_session_client_id
+                   AND rtrim(gb.resource, '/') = rtrim(gx.resource, '/')
+                   AND gb.state = 'ready'
+                   AND gb.user_session_issuer_id = (
+                     -- The gateways' issuer, as ListEMABindingServers reads it.
+                     SELECT (array_agg(gi.id))[1]
+                     FROM user_session_issuers AS gi
+                     WHERE gi.organization_id = gb.organization_id
+                       AND gi.project_id IS NULL
+                       AND gi.deleted IS FALSE
+                       AND EXISTS (
+                         SELECT 1 FROM organization_features AS gf
+                         WHERE gf.organization_id = gb.organization_id
+                           AND gf.feature_name = 'organization_gateway_disabled'
+                       )
+                     HAVING count(*) = 1
+                   )
+               )
+           ))
+       )::boolean AS server_has_oauth_clients,
+       -- The gateways' issuer when an EMA client reaches the server only through
+       -- them: a choice whose credential it issued reads the client as
+       -- OAuth-backed, a choice made on the direct route does not.
+       ARRAY(
+         SELECT DISTINCT gb2.user_session_issuer_id
+         FROM mcp_auth_clients AS ac
+         JOIN mcp_server_auth_clients AS l
+           ON l.auth_client_id = ac.id
+          AND l.mcp_server_id = sel.mcp_server_id
+          AND l.deleted IS FALSE
+         JOIN mcp_auth_client_emas AS x ON x.auth_client_id = ac.id AND x.deleted IS FALSE
+         JOIN remote_session_ema_bindings AS gb2
+           ON gb2.organization_id = x.organization_id
+          AND gb2.project_id = sel.project_id
+          AND gb2.remote_session_issuer_id = x.remote_session_issuer_id
+          AND gb2.remote_session_client_id = x.remote_session_client_id
+          AND rtrim(gb2.resource, '/') = rtrim(x.resource, '/')
+          AND gb2.state = 'ready'
+          AND gb2.user_session_issuer_id = (
+            -- The gateways' issuer, as ListEMABindingServers reads it.
+            SELECT (array_agg(gi.id))[1]
+            FROM user_session_issuers AS gi
+            WHERE gi.organization_id = gb2.organization_id
+              AND gi.project_id IS NULL
+              AND gi.deleted IS FALSE
+              AND EXISTS (
+                SELECT 1 FROM organization_features AS gf
+                WHERE gf.organization_id = gb2.organization_id
+                  AND gf.feature_name = 'organization_gateway_disabled'
+              )
+            HAVING count(*) = 1
+          )
+         WHERE ac.organization_id = sel.organization_id
+           AND ac.deleted IS FALSE
+           AND ac.enabled
+           AND ac.client_type = 'ema'
+           AND EXISTS (
+             -- Reached only through the gateways: the server's own issuer has no
+             -- ready binding for the client's upstream, so the client cannot serve
+             -- its direct route and leaves that route's configuration alone.
+             SELECT 1
+             FROM mcp_auth_client_emas AS gx
+             JOIN mcp_servers AS gs ON gs.id = l.mcp_server_id
+             WHERE gx.auth_client_id = ac.id
+               AND gx.deleted IS FALSE
+               AND NOT EXISTS (
+                 SELECT 1 FROM remote_session_ema_bindings AS db
+                 WHERE db.organization_id = gx.organization_id
+                   AND db.project_id = gs.project_id
+                   AND db.remote_session_issuer_id = gx.remote_session_issuer_id
+                   AND db.remote_session_client_id = gx.remote_session_client_id
+                   AND rtrim(db.resource, '/') = rtrim(gx.resource, '/')
+                   AND db.state = 'ready'
+                   AND db.user_session_issuer_id = gs.user_session_issuer_id
+               )
+               AND EXISTS (
+                 SELECT 1 FROM remote_session_ema_bindings AS gb
+                 WHERE gb.organization_id = gx.organization_id
+                   AND gb.project_id = gs.project_id
+                   AND gb.remote_session_issuer_id = gx.remote_session_issuer_id
+                   AND gb.remote_session_client_id = gx.remote_session_client_id
+                   AND rtrim(gb.resource, '/') = rtrim(gx.resource, '/')
+                   AND gb.state = 'ready'
+                   AND gb.user_session_issuer_id = (
+                     -- The gateways' issuer, as ListEMABindingServers reads it.
+                     SELECT (array_agg(gi.id))[1]
+                     FROM user_session_issuers AS gi
+                     WHERE gi.organization_id = gb.organization_id
+                       AND gi.project_id IS NULL
+                       AND gi.deleted IS FALSE
+                       AND EXISTS (
+                         SELECT 1 FROM organization_features AS gf
+                         WHERE gf.organization_id = gb.organization_id
+                           AND gf.feature_name = 'organization_gateway_disabled'
+                       )
+                     HAVING count(*) = 1
+                   )
+               )
+           )
+       )::uuid[] AS ema_gateway_issuer_ids
+FROM upstream_client_selections AS sel
+WHERE sel.organization_id = $1::text
+  AND sel.credential_kind = 'user_session'
+  AND sel.deleted IS FALSE
+  -- A choice for a deleted server is kept as history but is never served
+  -- again, so it is not live coverage.
+  AND EXISTS (
+    SELECT 1
+    FROM mcp_servers AS live_server
+    WHERE live_server.id = sel.mcp_server_id
+      AND live_server.deleted IS FALSE
+  )
+  AND sel.id > $2::uuid
+  AND ($3::uuid IS NULL OR sel.id = $3::uuid)
+ORDER BY sel.id
+LIMIT $4::int
+`
+
+type ListSelectionMappingsParams struct {
+	OrganizationID string
+	Cursor         uuid.UUID
+	OnlyID         uuid.NullUUID
+	PageSize       int32
+}
+
+type ListSelectionMappingsRow struct {
+	ID                     uuid.UUID
+	ProjectID              uuid.UUID
+	CredentialID           uuid.UUID
+	McpServerID            uuid.UUID
+	RemoteSessionClientID  uuid.NullUUID
+	NoAuth                 bool
+	AuthClientID           uuid.NullUUID
+	MappedUsable           bool
+	NamesHeaders           bool
+	ServerHasAssociations  bool
+	RegistrationAssociated bool
+	RegistrationIssuerIds  []uuid.UUID
+	CandidateIds           []uuid.UUID
+	ServerHasOauthClients  bool
+	EmaGatewayIssuerIds    []uuid.UUID
+}
+
+// Every live user session choice for a live server in the organization after
+// the cursor, or the one named by only_id, with what mapping it onto a typed
+// auth client decides from.
+//
+// What the upstream client choice reads today (GetUpstreamClientSelection):
+// whether the server has any upstream OAuth client association, whether the
+// chosen registration is live and associated with the server, the user
+// session issuers the registration is bound to, and whether the choice names
+// the server's headers, which reads as no-auth.
+//
+// The typed auth clients: an OAuth choice can name the live, enabled
+// remote_session or service_account clients of its registration linked to
+// the server. A no-auth choice can name the server's linked, enabled
+// static_credential or pass_through clients that carry exactly the server
+// source's current credential headers, while the server has no OAuth
+// association and links no enabled OAuth-backed client: those are the
+// server's own headers, which the no-auth choice was served with. A mapped
+// choice's client is usable while it is live, enabled, linked to the server
+// and, for an OAuth choice, still the registration's.
+func (q *Queries) ListSelectionMappings(ctx context.Context, arg ListSelectionMappingsParams) ([]ListSelectionMappingsRow, error) {
+	rows, err := q.db.Query(ctx, listSelectionMappings,
+		arg.OrganizationID,
+		arg.Cursor,
+		arg.OnlyID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSelectionMappingsRow
+	for rows.Next() {
+		var i ListSelectionMappingsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.CredentialID,
+			&i.McpServerID,
+			&i.RemoteSessionClientID,
+			&i.NoAuth,
+			&i.AuthClientID,
+			&i.MappedUsable,
+			&i.NamesHeaders,
+			&i.ServerHasAssociations,
+			&i.RegistrationAssociated,
+			&i.RegistrationIssuerIds,
+			&i.CandidateIds,
+			&i.ServerHasOauthClients,
+			&i.EmaGatewayIssuerIds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listServerAccessGrants = `-- name: ListServerAccessGrants :many
+SELECT principal_urn, scope, selectors
+FROM principal_grants
+WHERE organization_id = $1
+  AND scope = ANY($2::text[])
+  AND principal_type <> 'api_key'
+ORDER BY principal_urn, scope, id
+`
+
+type ListServerAccessGrantsParams struct {
+	OrganizationID string
+	Scopes         []string
+}
+
+type ListServerAccessGrantsRow struct {
+	PrincipalUrn urn.Principal
+	Scope        string
+	Selectors    []byte
+}
+
+// Grants that can satisfy mcp:connect, held by anyone but API keys, whose
+// policies are provisioned separately. Like grant loading, effect is ignored.
+func (q *Queries) ListServerAccessGrants(ctx context.Context, arg ListServerAccessGrantsParams) ([]ListServerAccessGrantsRow, error) {
+	rows, err := q.db.Query(ctx, listServerAccessGrants, arg.OrganizationID, arg.Scopes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServerAccessGrantsRow
+	for rows.Next() {
+		var i ListServerAccessGrantsRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listServerAuthClientsFixture = `-- name: ListServerAuthClientsFixture :many
 SELECT auth_client_id
 FROM mcp_server_auth_clients
@@ -1628,6 +3112,143 @@ func (q *Queries) ListServerAuthClientsFixture(ctx context.Context, mcpServerID 
 			return nil, err
 		}
 		items = append(items, auth_client_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listServerCredentialSources = `-- name: ListServerCredentialSources :many
+WITH used AS (
+  SELECT CASE WHEN s.remote_mcp_server_id IS NOT NULL THEN 'remote'
+              WHEN s.tunneled_mcp_server_id IS NOT NULL THEN 'tunneled'
+              ELSE 'none' END AS source_kind,
+         COALESCE(s.remote_mcp_server_id, s.tunneled_mcp_server_id, s.id) AS source_id,
+         s.id AS server_id
+  FROM mcp_servers AS s
+  JOIN projects AS p ON p.id = s.project_id AND p.organization_id = $1::text AND p.deleted IS FALSE
+  WHERE s.id = ANY($2::uuid[])
+    AND s.deleted IS FALSE
+), grouped AS (
+  SELECT source_kind, source_id, array_agg(DISTINCT server_id ORDER BY server_id) AS server_ids
+  FROM used
+  GROUP BY source_kind, source_id
+)
+SELECT g.source_kind::text AS source_kind,
+       g.source_id::uuid AS source_id,
+       g.server_ids::uuid[] AS server_ids,
+       COALESCE(h.ids, ARRAY[]::uuid[])::uuid[] AS header_ids,
+       COALESCE(h.duplicate, FALSE)::boolean AS has_duplicate_names,
+       COALESCE(h.forwarded, ARRAY[]::text[])::text[] AS forwarded_sources
+FROM grouped AS g
+LEFT JOIN LATERAL (
+  SELECT array_agg(x.id ORDER BY x.id) AS ids,
+         COUNT(DISTINCT lower(x.name)) < COUNT(*) AS duplicate,
+         array_agg(DISTINCT x.forwarded) FILTER (WHERE x.forwarded IS NOT NULL) AS forwarded
+  FROM (
+    SELECT h.id, h.name, h.value_from_request_header AS forwarded FROM remote_mcp_server_headers AS h
+    JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id AND r.deleted IS FALSE
+    JOIN projects AS sp ON sp.id = r.project_id AND sp.organization_id = $1::text AND sp.deleted IS FALSE
+    WHERE g.source_kind = 'remote' AND h.remote_mcp_server_id = g.source_id AND h.deleted IS FALSE
+      AND lower(h.name) <> 'authorization' AND (h.value_from_request_header IS NOT NULL OR h.is_secret)
+    UNION ALL
+    SELECT h.id, h.name, h.value_from_request_header FROM tunneled_mcp_server_headers AS h
+    JOIN tunneled_mcp_servers AS t ON t.id = h.tunneled_mcp_server_id AND t.deleted IS FALSE
+    JOIN projects AS sp ON sp.id = t.project_id AND sp.organization_id = $1::text AND sp.deleted IS FALSE
+    WHERE g.source_kind = 'tunneled' AND h.tunneled_mcp_server_id = g.source_id AND h.deleted IS FALSE
+      AND lower(h.name) <> 'authorization' AND (h.value_from_request_header IS NOT NULL OR h.is_secret)
+  ) AS x
+) AS h ON TRUE
+ORDER BY g.source_id
+`
+
+type ListServerCredentialSourcesParams struct {
+	OrganizationID string
+	McpServerIds   []uuid.UUID
+}
+
+type ListServerCredentialSourcesRow struct {
+	SourceKind        string
+	SourceID          uuid.UUID
+	ServerIds         []uuid.UUID
+	HeaderIds         []uuid.UUID
+	HasDuplicateNames bool
+	ForwardedSources  []string
+}
+
+// The sources of the given live servers in the organization, each with those
+// servers, its non-Authorization credential headers, and whether two of them
+// differ only in letter case. A server with no remote or tunneled source is a
+// source of its own with no headers.
+func (q *Queries) ListServerCredentialSources(ctx context.Context, arg ListServerCredentialSourcesParams) ([]ListServerCredentialSourcesRow, error) {
+	rows, err := q.db.Query(ctx, listServerCredentialSources, arg.OrganizationID, arg.McpServerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServerCredentialSourcesRow
+	for rows.Next() {
+		var i ListServerCredentialSourcesRow
+		if err := rows.Scan(
+			&i.SourceKind,
+			&i.SourceID,
+			&i.ServerIds,
+			&i.HeaderIds,
+			&i.HasDuplicateNames,
+			&i.ForwardedSources,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSharedAuthClientServers = `-- name: ListSharedAuthClientServers :many
+SELECT DISTINCT l.auth_client_id, ac.client_type, l.project_id, s.id AS mcp_server_id, s.toolset_id
+FROM mcp_server_auth_clients AS l
+JOIN mcp_auth_clients AS ac ON ac.id = l.auth_client_id AND ac.organization_id = l.organization_id AND ac.deleted IS FALSE
+JOIN mcp_servers AS s ON s.id = l.mcp_server_id AND s.project_id = l.project_id AND s.deleted IS FALSE
+JOIN projects AS p ON p.id = l.project_id AND p.organization_id = l.organization_id AND p.deleted IS FALSE
+WHERE l.organization_id = $1
+  AND l.deleted IS FALSE
+  AND ac.client_type <> 'remote_session'
+ORDER BY l.auth_client_id, l.project_id
+`
+
+type ListSharedAuthClientServersRow struct {
+	AuthClientID uuid.UUID
+	ClientType   string
+	ProjectID    uuid.UUID
+	McpServerID  uuid.UUID
+	ToolsetID    uuid.NullUUID
+}
+
+// Every live server link to a shared auth client, with both ids mcp:connect
+// can be checked on: the server, and its toolset when it has one.
+func (q *Queries) ListSharedAuthClientServers(ctx context.Context, organizationID string) ([]ListSharedAuthClientServersRow, error) {
+	rows, err := q.db.Query(ctx, listSharedAuthClientServers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSharedAuthClientServersRow
+	for rows.Next() {
+		var i ListSharedAuthClientServersRow
+		if err := rows.Scan(
+			&i.AuthClientID,
+			&i.ClientType,
+			&i.ProjectID,
+			&i.McpServerID,
+			&i.ToolsetID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1739,6 +3360,76 @@ ORDER BY l.id
 // (associations may be soft or hard deleted). Read-only.
 func (q *Queries) ListStaleBackfillLinks(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listStaleBackfillLinks, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTunneledSourceHeaderIDs = `-- name: ListTunneledSourceHeaderIDs :many
+SELECT h.id
+FROM tunneled_mcp_server_headers AS h
+JOIN tunneled_mcp_servers AS t ON t.id = h.tunneled_mcp_server_id
+JOIN projects AS p ON p.id = t.project_id AND p.organization_id = $1::text
+WHERE h.tunneled_mcp_server_id = $2::uuid
+ORDER BY h.id
+`
+
+type ListTunneledSourceHeaderIDsParams struct {
+	OrganizationID string
+	SourceID       uuid.UUID
+}
+
+// ListRemoteSourceHeaderIDs for a tunneled source.
+func (q *Queries) ListTunneledSourceHeaderIDs(ctx context.Context, arg ListTunneledSourceHeaderIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listTunneledSourceHeaderIDs, arg.OrganizationID, arg.SourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTunneledSourceServerIDs = `-- name: ListTunneledSourceServerIDs :many
+SELECT s.id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id AND p.organization_id = $1::text AND p.deleted IS FALSE
+WHERE s.tunneled_mcp_server_id = $2::uuid
+ORDER BY s.id
+`
+
+type ListTunneledSourceServerIDsParams struct {
+	OrganizationID string
+	SourceID       uuid.UUID
+}
+
+// The servers backed by one tunneled source, as ListTunneledSourceServers
+// reads them but without the upstream OAuth state, for the copy pass.
+func (q *Queries) ListTunneledSourceServerIDs(ctx context.Context, arg ListTunneledSourceServerIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listTunneledSourceServerIDs, arg.OrganizationID, arg.SourceID)
 	if err != nil {
 		return nil, err
 	}
@@ -1876,7 +3567,21 @@ WHERE s.id = ANY($2::uuid[])
     ) AS rp ON TRUE
     WHERE b.organization_id = $1::text
       AND b.project_id = s.project_id
-      AND b.user_session_issuer_id = s.user_session_issuer_id
+      AND (b.user_session_issuer_id = s.user_session_issuer_id
+           OR b.user_session_issuer_id = (
+             -- The gateways' issuer, as ListEMABindingServers reads it.
+             SELECT (array_agg(gi.id))[1]
+             FROM user_session_issuers AS gi
+             WHERE gi.organization_id = b.organization_id
+               AND gi.project_id IS NULL
+               AND gi.deleted IS FALSE
+               AND EXISTS (
+                 SELECT 1 FROM organization_features AS gf
+                 WHERE gf.organization_id = b.organization_id
+                   AND gf.feature_name = 'organization_gateway_disabled'
+               )
+             HAVING count(*) = 1
+           ))
       AND b.state = 'ready'
       AND b.remote_session_client_id IS NOT NULL
       AND (rp.id IS NULL OR rp.authorization_servers IS NULL OR EXISTS (
@@ -1927,6 +3632,198 @@ func (q *Queries) ListUndecidedUpstreamAuthServers(ctx context.Context, arg List
 	return items, nil
 }
 
+const lockAttachmentAuthClients = `-- name: LockAttachmentAuthClients :exec
+SELECT ac.id
+FROM mcp_auth_clients AS ac
+WHERE ac.organization_id = $1
+  AND ac.client_type = 'remote_session'
+  AND ac.deleted IS FALSE
+  AND ac.remote_session_client_id = (
+    SELECT b.remote_session_client_id
+    FROM principal_remote_session_bindings AS b
+    WHERE b.id = $2 AND b.organization_id = $1
+  )
+ORDER BY ac.id
+FOR SHARE
+`
+
+type LockAttachmentAuthClientsParams struct {
+	OrganizationID string
+	BindingID      uuid.UUID
+}
+
+func (q *Queries) LockAttachmentAuthClients(ctx context.Context, arg LockAttachmentAuthClientsParams) error {
+	_, err := q.db.Exec(ctx, lockAttachmentAuthClients, arg.OrganizationID, arg.BindingID)
+	return err
+}
+
+const lockAttachmentBinding = `-- name: LockAttachmentBinding :exec
+SELECT b.id
+FROM principal_remote_session_bindings AS b
+JOIN agents AS a ON a.organization_id = b.organization_id AND a.id = b.principal_id
+WHERE b.id = $1 AND b.organization_id = $2
+FOR SHARE OF b, a
+`
+
+type LockAttachmentBindingParams struct {
+	BindingID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockAttachmentBinding(ctx context.Context, arg LockAttachmentBindingParams) error {
+	_, err := q.db.Exec(ctx, lockAttachmentBinding, arg.BindingID, arg.OrganizationID)
+	return err
+}
+
+const lockAttachmentConfiguration = `-- name: LockAttachmentConfiguration :exec
+SELECT c.id
+FROM principal_remote_session_bindings AS b
+JOIN remote_session_clients AS c ON c.id = b.remote_session_client_id
+JOIN projects AS p ON p.id = b.project_id
+JOIN remote_session_client_user_session_issuers AS link
+  ON link.remote_session_client_id = c.id
+ AND link.user_session_issuer_id = b.user_session_issuer_id
+WHERE b.id = $1 AND b.organization_id = $2
+FOR SHARE OF c, p, link
+`
+
+type LockAttachmentConfigurationParams struct {
+	BindingID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockAttachmentConfiguration(ctx context.Context, arg LockAttachmentConfigurationParams) error {
+	_, err := q.db.Exec(ctx, lockAttachmentConfiguration, arg.BindingID, arg.OrganizationID)
+	return err
+}
+
+const lockAttachmentIssuers = `-- name: LockAttachmentIssuers :exec
+SELECT usi.id
+FROM user_session_issuers AS usi
+WHERE usi.id IN (
+  SELECT b.user_session_issuer_id
+  FROM principal_remote_session_bindings AS b
+  WHERE b.id = $1 AND b.organization_id = $2
+  UNION
+  SELECT rs.user_session_issuer_id
+  FROM principal_remote_session_bindings AS b
+  JOIN remote_sessions AS rs ON rs.id = b.remote_session_id
+  WHERE b.id = $1 AND b.organization_id = $2
+)
+ORDER BY usi.id
+FOR SHARE
+`
+
+type LockAttachmentIssuersParams struct {
+	BindingID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockAttachmentIssuers(ctx context.Context, arg LockAttachmentIssuersParams) error {
+	_, err := q.db.Exec(ctx, lockAttachmentIssuers, arg.BindingID, arg.OrganizationID)
+	return err
+}
+
+const lockAttachmentOwnerMemberships = `-- name: LockAttachmentOwnerMemberships :exec
+SELECT membership.user_id
+FROM organization_user_relationships AS membership
+WHERE membership.organization_id = $1
+  AND membership.user_id = ANY($2::text[])
+  AND membership.deleted_at IS NULL
+ORDER BY membership.user_id
+FOR SHARE
+`
+
+type LockAttachmentOwnerMembershipsParams struct {
+	OrganizationID string
+	UserIds        []string
+}
+
+// Their live memberships in the organization, after the users and before any
+// attachment or agent lock, as membership removal locks the membership before
+// latching the agents.
+func (q *Queries) LockAttachmentOwnerMemberships(ctx context.Context, arg LockAttachmentOwnerMembershipsParams) error {
+	_, err := q.db.Exec(ctx, lockAttachmentOwnerMemberships, arg.OrganizationID, arg.UserIds)
+	return err
+}
+
+const lockAttachmentOwners = `-- name: LockAttachmentOwners :exec
+
+SELECT owner.id
+FROM users AS owner
+WHERE owner.id = ANY($1::text[])
+ORDER BY owner.id
+FOR SHARE
+`
+
+// The attachment locks below hold, until the grants commit, every row that
+// makes an attachment servable, so none of the writers that make it
+// unservable (issuer deletion or migration, attachment revocation, agent
+// suspension, revocation or reassignment, reauthorization or revocation of
+// the connection, removal of the owner or their membership, and removal of
+// the upstream client, its issuer, the project, the sign-in binding or the
+// auth client) can commit between the read that decides a grant and the
+// grant. FOR SHARE, not FOR KEY SHARE, so they also wait on writers that only
+// update a column, such as a reauthorization's grant_generation. Every
+// candidate's owner and membership are locked first, once for the whole run,
+// then each attachment's issuers, the binding before its connection, the
+// upstream issuer before its client, as user and membership lifecycle
+// writers, issuer-first child writers, agent admission and issuer migration
+// take them. A row already gone locks nothing: the read that follows then
+// reports the attachment for remediation.
+// Every candidate attachment's owner, in id order, before any attachment or
+// agent lock, as user lifecycle writers lock a user before its agents.
+func (q *Queries) LockAttachmentOwners(ctx context.Context, userIds []string) error {
+	_, err := q.db.Exec(ctx, lockAttachmentOwners, userIds)
+	return err
+}
+
+const lockAttachmentSession = `-- name: LockAttachmentSession :exec
+SELECT rs.id
+FROM remote_sessions AS rs
+WHERE rs.id = (
+  SELECT b.remote_session_id
+  FROM principal_remote_session_bindings AS b
+  WHERE b.id = $1 AND b.organization_id = $2
+)
+FOR SHARE
+`
+
+type LockAttachmentSessionParams struct {
+	BindingID      uuid.UUID
+	OrganizationID string
+}
+
+// The connection may be gone; then the subquery is NULL and nothing is locked.
+func (q *Queries) LockAttachmentSession(ctx context.Context, arg LockAttachmentSessionParams) error {
+	_, err := q.db.Exec(ctx, lockAttachmentSession, arg.BindingID, arg.OrganizationID)
+	return err
+}
+
+const lockAttachmentUpstreamIssuer = `-- name: LockAttachmentUpstreamIssuer :exec
+SELECT issuer.id
+FROM remote_session_issuers AS issuer
+WHERE issuer.id = (
+  SELECT c.remote_session_issuer_id
+  FROM principal_remote_session_bindings AS b
+  JOIN remote_session_clients AS c ON c.id = b.remote_session_client_id
+  WHERE b.id = $1 AND b.organization_id = $2
+)
+FOR SHARE
+`
+
+type LockAttachmentUpstreamIssuerParams struct {
+	BindingID      uuid.UUID
+	OrganizationID string
+}
+
+// The upstream client's issuer, before the client itself, as issuer
+// migration takes them.
+func (q *Queries) LockAttachmentUpstreamIssuer(ctx context.Context, arg LockAttachmentUpstreamIssuerParams) error {
+	_, err := q.db.Exec(ctx, lockAttachmentUpstreamIssuer, arg.BindingID, arg.OrganizationID)
+	return err
+}
+
 const lockOrganizationBackfill = `-- name: LockOrganizationBackfill :exec
 SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || $1::text))
 `
@@ -1936,6 +3833,204 @@ SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || $1::text))
 func (q *Queries) LockOrganizationBackfill(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, lockOrganizationBackfill, organizationID)
 	return err
+}
+
+const lockRemoteCredentialSource = `-- name: LockRemoteCredentialSource :one
+SELECT r.id
+FROM remote_mcp_servers AS r
+JOIN projects AS p ON p.id = r.project_id AND p.organization_id = $1::text
+WHERE r.id = $2::uuid
+FOR UPDATE OF r
+`
+
+type LockRemoteCredentialSourceParams struct {
+	OrganizationID string
+	SourceID       uuid.UUID
+}
+
+// Locks one remote source of the organization, live or deleted, so header
+// syncs for it run one at a time and see each other's writes. The source's
+// own writers take this lock before touching its headers, so the two never
+// wait on each other in opposite order. No row means the source is not the
+// organization's.
+func (q *Queries) LockRemoteCredentialSource(ctx context.Context, arg LockRemoteCredentialSourceParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockRemoteCredentialSource, arg.OrganizationID, arg.SourceID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockSelectionIssuerBinding = `-- name: LockSelectionIssuerBinding :exec
+SELECT link.remote_session_client_id
+FROM remote_session_client_user_session_issuers AS link
+WHERE link.remote_session_client_id = $1::uuid
+  AND link.user_session_issuer_id = $2::uuid
+FOR SHARE OF link
+`
+
+type LockSelectionIssuerBindingParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+// Holds the binding of an unmapped OAuth choice's registration to its
+// credential's user session issuer, which is what makes the upstream client
+// choice usable, against unbinding until the transaction ends, so a choice is
+// never named after the binding it was decided from is gone. Taken after
+// LockSelectionServerAuthClients. A binding that is already gone locks
+// nothing, and the fresh decision then rejects the choice.
+func (q *Queries) LockSelectionIssuerBinding(ctx context.Context, arg LockSelectionIssuerBindingParams) error {
+	_, err := q.db.Exec(ctx, lockSelectionIssuerBinding, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	return err
+}
+
+const lockSelectionRemoteSource = `-- name: LockSelectionRemoteSource :exec
+SELECT r.id
+FROM remote_mcp_servers AS r
+JOIN mcp_servers AS s ON s.remote_mcp_server_id = r.id
+WHERE s.id = $1::uuid
+FOR SHARE OF r
+`
+
+// Holds the remote source of a choice's server against header writers, which
+// lock it FOR UPDATE, until the transaction ends. Taken before
+// LockSelectionServer.
+func (q *Queries) LockSelectionRemoteSource(ctx context.Context, mcpServerID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockSelectionRemoteSource, mcpServerID)
+	return err
+}
+
+const lockSelectionServer = `-- name: LockSelectionServer :exec
+SELECT s.id
+FROM mcp_servers AS s
+WHERE s.id = $1::uuid
+FOR SHARE
+`
+
+// Holds a choice's server against configuration writers, which lock it FOR
+// UPDATE before changing its upstream OAuth client associations, until the
+// transaction ends.
+func (q *Queries) LockSelectionServer(ctx context.Context, mcpServerID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockSelectionServer, mcpServerID)
+	return err
+}
+
+const lockSelectionServerAuthClients = `-- name: LockSelectionServerAuthClients :exec
+SELECT ac.id
+FROM mcp_auth_clients AS ac
+JOIN mcp_server_auth_clients AS l
+  ON l.auth_client_id = ac.id
+ AND l.mcp_server_id = $1::uuid
+ AND l.deleted IS FALSE
+WHERE ac.organization_id = $2::text
+  AND ac.deleted IS FALSE
+ORDER BY ac.id
+FOR SHARE OF ac
+`
+
+type LockSelectionServerAuthClientsParams struct {
+	McpServerID    uuid.UUID
+	OrganizationID string
+}
+
+// Holds every auth client linked to a choice's server, enabled or not,
+// against auth client writers, which lock a client FOR UPDATE before enabling,
+// disabling or detaching it, until the transaction ends. Taken after
+// LockSelectionServer.
+func (q *Queries) LockSelectionServerAuthClients(ctx context.Context, arg LockSelectionServerAuthClientsParams) error {
+	_, err := q.db.Exec(ctx, lockSelectionServerAuthClients, arg.McpServerID, arg.OrganizationID)
+	return err
+}
+
+const lockSelectionTunneledSource = `-- name: LockSelectionTunneledSource :exec
+SELECT t.id
+FROM tunneled_mcp_servers AS t
+JOIN mcp_servers AS s ON s.tunneled_mcp_server_id = t.id
+WHERE s.id = $1::uuid
+FOR SHARE OF t
+`
+
+// LockSelectionRemoteSource for a tunneled source.
+func (q *Queries) LockSelectionTunneledSource(ctx context.Context, mcpServerID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockSelectionTunneledSource, mcpServerID)
+	return err
+}
+
+const lockTunneledCredentialSource = `-- name: LockTunneledCredentialSource :one
+SELECT t.id
+FROM tunneled_mcp_servers AS t
+JOIN projects AS p ON p.id = t.project_id AND p.organization_id = $1::text
+WHERE t.id = $2::uuid
+FOR UPDATE OF t
+`
+
+type LockTunneledCredentialSourceParams struct {
+	OrganizationID string
+	SourceID       uuid.UUID
+}
+
+// LockRemoteCredentialSource for a tunneled source.
+func (q *Queries) LockTunneledCredentialSource(ctx context.Context, arg LockTunneledCredentialSourceParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockTunneledCredentialSource, arg.OrganizationID, arg.SourceID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const mapSelectionToAuthClient = `-- name: MapSelectionToAuthClient :execrows
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE,
+    updated_at = clock_timestamp()
+FROM mcp_auth_clients AS ac
+WHERE sel.id = $1::uuid
+  AND sel.organization_id = $2::text
+  AND sel.deleted IS FALSE
+  AND sel.auth_client_id IS NULL
+  AND sel.no_auth = $3::boolean
+  AND sel.remote_session_client_id IS NOT DISTINCT FROM $4::uuid
+  AND ac.id = $5::uuid
+  AND ac.organization_id = sel.organization_id
+  AND ac.deleted IS FALSE
+  AND ac.enabled
+  AND EXISTS (
+    SELECT 1
+    FROM mcp_server_auth_clients AS l
+    WHERE l.auth_client_id = ac.id
+      AND l.mcp_server_id = sel.mcp_server_id
+      AND l.deleted IS FALSE
+  )
+`
+
+type MapSelectionToAuthClientParams struct {
+	ID                    uuid.UUID
+	OrganizationID        string
+	NoAuth                bool
+	RemoteSessionClientID uuid.NullUUID
+	AuthClientID          uuid.UUID
+}
+
+// Names a typed auth client on one choice, conditional on the evidence it was
+// decided from: the choice is still unmapped and unchanged, and the client is
+// still live, enabled and linked to the server. The caller holds the
+// LockSelection* locks and decided from a read taken after them, so the
+// decision as a whole, not only this client, still holds. Naming a client is
+// never no-auth, so a no-auth choice served by the server's headers stops
+// being one; the upstream client choice reads a choice naming a header client
+// as no-auth, as before.
+func (q *Queries) MapSelectionToAuthClient(ctx context.Context, arg MapSelectionToAuthClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, mapSelectionToAuthClient,
+		arg.ID,
+		arg.OrganizationID,
+		arg.NoAuth,
+		arg.RemoteSessionClientID,
+		arg.AuthClientID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const markServersRequiringUpstreamAuth = `-- name: MarkServersRequiringUpstreamAuth :many
@@ -2012,7 +4107,21 @@ WHERE p.id = s.project_id
         ) AS rp ON TRUE
         WHERE b.organization_id = $1::text
           AND b.project_id = s.project_id
-          AND b.user_session_issuer_id = s.user_session_issuer_id
+          AND (b.user_session_issuer_id = s.user_session_issuer_id
+               OR b.user_session_issuer_id = (
+                 -- The gateways' issuer, as ListEMABindingServers reads it.
+                 SELECT (array_agg(gi.id))[1]
+                 FROM user_session_issuers AS gi
+                 WHERE gi.organization_id = b.organization_id
+                   AND gi.project_id IS NULL
+                   AND gi.deleted IS FALSE
+                   AND EXISTS (
+                     SELECT 1 FROM organization_features AS gf
+                     WHERE gf.organization_id = b.organization_id
+                       AND gf.feature_name = 'organization_gateway_disabled'
+                   )
+                 HAVING count(*) = 1
+               ))
           AND b.state = 'ready'
           AND b.remote_session_client_id IS NOT NULL
           AND EXISTS (
@@ -2070,6 +4179,31 @@ func (q *Queries) MarkServersRequiringUpstreamAuth(ctx context.Context, arg Mark
 		return nil, err
 	}
 	return items, nil
+}
+
+const moveServerSourceFixture = `-- name: MoveServerSourceFixture :exec
+UPDATE mcp_servers SET remote_mcp_server_id = $1 WHERE id = $2
+`
+
+type MoveServerSourceFixtureParams struct {
+	RemoteMcpServerID uuid.NullUUID
+	ID                uuid.UUID
+}
+
+func (q *Queries) MoveServerSourceFixture(ctx context.Context, arg MoveServerSourceFixtureParams) error {
+	_, err := q.db.Exec(ctx, moveServerSourceFixture, arg.RemoteMcpServerID, arg.ID)
+	return err
+}
+
+const organizationExistsForGrants = `-- name: OrganizationExistsForGrants :one
+SELECT EXISTS (SELECT 1 FROM organization_metadata WHERE id = $1)::boolean
+`
+
+func (q *Queries) OrganizationExistsForGrants(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, organizationExistsForGrants, organizationID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const planClientHeaders = `-- name: PlanClientHeaders :many
@@ -2163,6 +4297,89 @@ func (q *Queries) PlanClientHeaders(ctx context.Context, arg PlanClientHeadersPa
 	return items, nil
 }
 
+const probeAttachmentBindingLockFixture = `-- name: ProbeAttachmentBindingLockFixture :one
+SELECT b.id
+FROM principal_remote_session_bindings AS b
+WHERE b.id = $1
+FOR UPDATE NOWAIT
+`
+
+func (q *Queries) ProbeAttachmentBindingLockFixture(ctx context.Context, bindingID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, probeAttachmentBindingLockFixture, bindingID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const probeServerLockFixture = `-- name: ProbeServerLockFixture :one
+SELECT id FROM mcp_servers WHERE id = $1 FOR UPDATE NOWAIT
+`
+
+// Fails with lock_not_available while anyone holds a lock on the server row.
+func (q *Queries) ProbeServerLockFixture(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, probeServerLockFixture, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
+const probeUserLockFixture = `-- name: ProbeUserLockFixture :one
+SELECT id FROM users WHERE id = $1 FOR UPDATE NOWAIT
+`
+
+func (q *Queries) ProbeUserLockFixture(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRow(ctx, probeUserLockFixture, id)
+	var id_2 string
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
+const reauthorizeAttachmentConnectionFixture = `-- name: ReauthorizeAttachmentConnectionFixture :exec
+UPDATE remote_sessions AS rs
+SET grant_generation = rs.grant_generation + 1
+WHERE rs.id = (SELECT b.remote_session_id FROM principal_remote_session_bindings AS b WHERE b.id = $1)
+`
+
+func (q *Queries) ReauthorizeAttachmentConnectionFixture(ctx context.Context, bindingID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, reauthorizeAttachmentConnectionFixture, bindingID)
+	return err
+}
+
+const recordAuthPermissionProvision = `-- name: RecordAuthPermissionProvision :exec
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
+`
+
+type RecordAuthPermissionProvisionParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+	Kind           string
+}
+
+// Records one grant the backfill wrote.
+func (q *Queries) RecordAuthPermissionProvision(ctx context.Context, arg RecordAuthPermissionProvisionParams) error {
+	_, err := q.db.Exec(ctx, recordAuthPermissionProvision,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+		arg.Kind,
+	)
+	return err
+}
+
+const restoreRemoteHeaderFixture = `-- name: RestoreRemoteHeaderFixture :exec
+UPDATE remote_mcp_server_headers SET deleted_at = NULL, updated_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) RestoreRemoteHeaderFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, restoreRemoteHeaderFixture, id)
+	return err
+}
+
 const retireBackfillClient = `-- name: RetireBackfillClient :execrows
 WITH retired AS (
   UPDATE mcp_auth_clients AS ac
@@ -2172,6 +4389,39 @@ WITH retired AS (
     AND ac.source = 'backfill'
     AND ac.client_type = ANY($3::text[])
     AND ac.deleted IS FALSE
+    AND NOT EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS l
+      JOIN mcp_servers AS s ON s.id = l.mcp_server_id AND s.project_id = l.project_id AND s.deleted IS FALSE
+      WHERE l.auth_client_id = ac.id
+        AND l.organization_id = ac.organization_id
+        AND l.deleted IS FALSE
+        AND (
+          EXISTS (
+            SELECT 1 FROM remote_mcp_server_headers AS h
+            JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id AND r.project_id = s.project_id
+            WHERE h.remote_mcp_server_id = s.remote_mcp_server_id
+              AND GREATEST(h.created_at, h.updated_at, h.deleted_at) >= $4::timestamptz
+          )
+          OR EXISTS (
+            SELECT 1 FROM tunneled_mcp_server_headers AS h
+            JOIN tunneled_mcp_servers AS t ON t.id = h.tunneled_mcp_server_id AND t.project_id = s.project_id
+            WHERE h.tunneled_mcp_server_id = s.tunneled_mcp_server_id
+              AND GREATEST(h.created_at, h.updated_at, h.deleted_at) >= $4::timestamptz
+          )
+        )
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM mcp_auth_client_emas AS e
+      JOIN remote_session_ema_bindings AS b
+        ON b.organization_id = e.organization_id
+       AND b.remote_session_issuer_id = e.remote_session_issuer_id
+       AND b.remote_session_client_id = e.remote_session_client_id
+       AND rtrim(b.resource, '/') = rtrim(e.resource, '/')
+      WHERE e.auth_client_id = ac.id
+        AND GREATEST(b.created_at, b.updated_at) >= $4::timestamptz
+    )
   RETURNING ac.id
 ), details AS (
   UPDATE mcp_auth_client_emas AS e
@@ -2197,12 +4447,21 @@ type RetireBackfillClientParams struct {
 	ID             uuid.UUID
 	OrganizationID string
 	ClientTypes    []string
+	EvidenceSince  pgtype.Timestamptz
 }
 
 // Soft-deletes one live backfilled auth client of the given types, with its
-// EMA details and header copies.
+// EMA details and header copies, unless the configuration it was derived from
+// changed since the run began: a header of a source one of its servers is on,
+// or a binding naming its EMA upstream. The run decided from evidence read
+// earlier, so a change since then is left for the next run.
 func (q *Queries) RetireBackfillClient(ctx context.Context, arg RetireBackfillClientParams) (int64, error) {
-	result, err := q.db.Exec(ctx, retireBackfillClient, arg.ID, arg.OrganizationID, arg.ClientTypes)
+	result, err := q.db.Exec(ctx, retireBackfillClient,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ClientTypes,
+		arg.EvidenceSince,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -2393,6 +4652,62 @@ func (q *Queries) RetireStaleBackfillLinks(ctx context.Context, organizationID s
 	return items, nil
 }
 
+const revokeAttachmentConnectionFixture = `-- name: RevokeAttachmentConnectionFixture :exec
+UPDATE remote_sessions AS rs
+SET deleted_at = clock_timestamp()
+WHERE rs.id = (SELECT b.remote_session_id FROM principal_remote_session_bindings AS b WHERE b.id = $1)
+`
+
+func (q *Queries) RevokeAttachmentConnectionFixture(ctx context.Context, bindingID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, revokeAttachmentConnectionFixture, bindingID)
+	return err
+}
+
+const seedAgentAttachmentFixture = `-- name: SeedAgentAttachmentFixture :one
+WITH link AS (
+  INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+  VALUES ($4, $7)
+  ON CONFLICT DO NOTHING
+), session AS (
+  INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted)
+  VALUES ($8::text, $7, $4, 'fixture-not-a-token')
+  ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
+  DO UPDATE SET access_token_encrypted = EXCLUDED.access_token_encrypted
+  RETURNING id, grant_generation, user_session_issuer_id
+)
+INSERT INTO principal_remote_session_bindings (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, grant_generation, attached_by_subject_id)
+SELECT $1, $2, $3, session.user_session_issuer_id, $4, session.id, session.grant_generation + $5::bigint, $6::text
+FROM session
+RETURNING id
+`
+
+type SeedAgentAttachmentFixtureParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	AgentID               uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	GenerationOffset      int64
+	AttachedBy            string
+	UserSessionIssuerID   uuid.UUID
+	ConnectionSubject     string
+}
+
+func (q *Queries) SeedAgentAttachmentFixture(ctx context.Context, arg SeedAgentAttachmentFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedAgentAttachmentFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.AgentID,
+		arg.RemoteSessionClientID,
+		arg.GenerationOffset,
+		arg.AttachedBy,
+		arg.UserSessionIssuerID,
+		arg.ConnectionSubject,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const seedAssociationFixture = `-- name: SeedAssociationFixture :one
 INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
 VALUES (
@@ -2419,6 +4734,24 @@ func (q *Queries) SeedAssociationFixture(ctx context.Context, arg SeedAssociatio
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const seedAuthClientEMAFixture = `-- name: SeedAuthClientEMAFixture :exec
+INSERT INTO mcp_auth_client_emas (auth_client_id, organization_id, remote_session_client_id, remote_session_issuer_id, resource)
+SELECT ac.id, ac.organization_id, ac.remote_session_client_id, c.remote_session_issuer_id, $1::text
+FROM mcp_auth_clients AS ac
+JOIN remote_session_clients AS c ON c.id = ac.remote_session_client_id
+WHERE ac.id = $2::uuid
+`
+
+type SeedAuthClientEMAFixtureParams struct {
+	Resource     string
+	AuthClientID uuid.UUID
+}
+
+func (q *Queries) SeedAuthClientEMAFixture(ctx context.Context, arg SeedAuthClientEMAFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedAuthClientEMAFixture, arg.Resource, arg.AuthClientID)
+	return err
 }
 
 const seedAuthClientFixture = `-- name: SeedAuthClientFixture :one
@@ -2449,6 +4782,34 @@ func (q *Queries) SeedAuthClientFixture(ctx context.Context, arg SeedAuthClientF
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const seedAuthClientHeaderFixture = `-- name: SeedAuthClientHeaderFixture :exec
+INSERT INTO mcp_auth_client_headers (auth_client_id, organization_id, name, is_required, is_secret, value, value_from_request_header)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+`
+
+type SeedAuthClientHeaderFixtureParams struct {
+	AuthClientID           uuid.UUID
+	OrganizationID         string
+	Name                   string
+	IsRequired             bool
+	IsSecret               bool
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+}
+
+func (q *Queries) SeedAuthClientHeaderFixture(ctx context.Context, arg SeedAuthClientHeaderFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedAuthClientHeaderFixture,
+		arg.AuthClientID,
+		arg.OrganizationID,
+		arg.Name,
+		arg.IsRequired,
+		arg.IsSecret,
+		arg.Value,
+		arg.ValueFromRequestHeader,
+	)
+	return err
 }
 
 const seedEMABindingFixture = `-- name: SeedEMABindingFixture :one
@@ -2524,12 +4885,70 @@ func (q *Queries) SeedMCPServerFixture(ctx context.Context, arg SeedMCPServerFix
 	return err
 }
 
+const seedOAuthSelectionFixture = `-- name: SeedOAuthSelectionFixture :exec
+INSERT INTO upstream_client_selections (project_id, organization_id, credential_kind, credential_id, mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth, source)
+SELECT $1, $2, 'user_session', $3, $4, c.id, c.attachment_scope, FALSE, 'issuance'
+FROM remote_session_clients AS c
+WHERE c.id = $5::uuid
+`
+
+type SeedOAuthSelectionFixtureParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	CredentialID          uuid.UUID
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+func (q *Queries) SeedOAuthSelectionFixture(ctx context.Context, arg SeedOAuthSelectionFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedOAuthSelectionFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.CredentialID,
+		arg.McpServerID,
+		arg.RemoteSessionClientID,
+	)
+	return err
+}
+
+const seedOrganizationFeatureFixture = `-- name: SeedOrganizationFeatureFixture :exec
+INSERT INTO organization_features (organization_id, feature_name, deleted_at)
+VALUES ($1, $2, $3)
+`
+
+type SeedOrganizationFeatureFixtureParams struct {
+	OrganizationID string
+	FeatureName    string
+	DeletedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) SeedOrganizationFeatureFixture(ctx context.Context, arg SeedOrganizationFeatureFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedOrganizationFeatureFixture, arg.OrganizationID, arg.FeatureName, arg.DeletedAt)
+	return err
+}
+
 const seedOrganizationFixture = `-- name: SeedOrganizationFixture :exec
 INSERT INTO organization_metadata (id, name, slug) VALUES ($1, $1, $1)
 `
 
 func (q *Queries) SeedOrganizationFixture(ctx context.Context, id string) error {
 	_, err := q.db.Exec(ctx, seedOrganizationFixture, id)
+	return err
+}
+
+const seedOrganizationUserSessionIssuerFixture = `-- name: SeedOrganizationUserSessionIssuerFixture :exec
+INSERT INTO user_session_issuers (id, organization_id, slug, authn_challenge_mode, session_duration)
+VALUES ($1, $2, $3, 'interactive', '1 day')
+`
+
+type SeedOrganizationUserSessionIssuerFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+	Slug           string
+}
+
+func (q *Queries) SeedOrganizationUserSessionIssuerFixture(ctx context.Context, arg SeedOrganizationUserSessionIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedOrganizationUserSessionIssuerFixture, arg.ID, arg.OrganizationID, arg.Slug)
 	return err
 }
 
@@ -2641,6 +5060,34 @@ func (q *Queries) SeedRemoteSessionIssuerFixture(ctx context.Context, arg SeedRe
 	return err
 }
 
+const seedServerAuthClientLinkFixture = `-- name: SeedServerAuthClientLinkFixture :exec
+INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+VALUES (
+    $1, $2, $3, $4,
+    (SELECT ac.attachment_scope FROM mcp_auth_clients AS ac WHERE ac.id = $4),
+    $5
+)
+`
+
+type SeedServerAuthClientLinkFixtureParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	McpServerID    uuid.UUID
+	AuthClientID   uuid.UUID
+	Source         string
+}
+
+func (q *Queries) SeedServerAuthClientLinkFixture(ctx context.Context, arg SeedServerAuthClientLinkFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedServerAuthClientLinkFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.McpServerID,
+		arg.AuthClientID,
+		arg.Source,
+	)
+	return err
+}
+
 const seedToolsetFixture = `-- name: SeedToolsetFixture :exec
 INSERT INTO toolsets (id, organization_id, project_id, name, slug) VALUES ($1, $2, $3, $4, $5)
 `
@@ -2736,6 +5183,64 @@ func (q *Queries) SeedTunneledSourceFixture(ctx context.Context, arg SeedTunnele
 	return err
 }
 
+const seedUpstreamSelectionFixture = `-- name: SeedUpstreamSelectionFixture :exec
+INSERT INTO upstream_client_selections (project_id, organization_id, credential_kind, credential_id, mcp_server_id, no_auth, source, auth_client_id, auth_client_attachment_scope)
+VALUES (
+    $1, $2, 'user_session', $3, $4, $5, 'issuance',
+    $6,
+    (SELECT ac.attachment_scope FROM mcp_auth_clients AS ac WHERE ac.id = $6)
+)
+`
+
+type SeedUpstreamSelectionFixtureParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	CredentialID   uuid.UUID
+	McpServerID    uuid.UUID
+	NoAuth         bool
+	AuthClientID   uuid.NullUUID
+}
+
+func (q *Queries) SeedUpstreamSelectionFixture(ctx context.Context, arg SeedUpstreamSelectionFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedUpstreamSelectionFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.CredentialID,
+		arg.McpServerID,
+		arg.NoAuth,
+		arg.AuthClientID,
+	)
+	return err
+}
+
+const seedUserSessionFixture = `-- name: SeedUserSessionFixture :exec
+INSERT INTO user_sessions (project_id, organization_id, user_session_issuer_id, subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, credential_id)
+VALUES ($1, $2, $3, $4, $5, $6, clock_timestamp() + interval '1 day', clock_timestamp() + interval '1 hour', $7)
+`
+
+type SeedUserSessionFixtureParams struct {
+	ProjectID           uuid.NullUUID
+	OrganizationID      pgtype.Text
+	UserSessionIssuerID uuid.UUID
+	SubjectUrn          urn.SessionSubject
+	Jti                 string
+	RefreshTokenHash    pgtype.Text
+	CredentialID        uuid.NullUUID
+}
+
+func (q *Queries) SeedUserSessionFixture(ctx context.Context, arg SeedUserSessionFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedUserSessionFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.SubjectUrn,
+		arg.Jti,
+		arg.RefreshTokenHash,
+		arg.CredentialID,
+	)
+	return err
+}
+
 const seedUserSessionIssuerFixture = `-- name: SeedUserSessionIssuerFixture :exec
 INSERT INTO user_session_issuers (id, project_id, slug, authn_challenge_mode, session_duration)
 VALUES ($1, $2, $3, 'interactive', '1 day')
@@ -2776,6 +5281,20 @@ func (q *Queries) SeedValidProtectedResourceFixture(ctx context.Context, arg See
 	return err
 }
 
+const setAuthClientEnabledFixture = `-- name: SetAuthClientEnabledFixture :exec
+UPDATE mcp_auth_clients SET enabled = $1 WHERE id = $2
+`
+
+type SetAuthClientEnabledFixtureParams struct {
+	Enabled bool
+	ID      uuid.UUID
+}
+
+func (q *Queries) SetAuthClientEnabledFixture(ctx context.Context, arg SetAuthClientEnabledFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAuthClientEnabledFixture, arg.Enabled, arg.ID)
+	return err
+}
+
 const setEMAStoredScopesFixture = `-- name: SetEMAStoredScopesFixture :exec
 UPDATE mcp_auth_client_emas SET requested_scopes = $1 WHERE auth_client_id = $2
 `
@@ -2787,6 +5306,20 @@ type SetEMAStoredScopesFixtureParams struct {
 
 func (q *Queries) SetEMAStoredScopesFixture(ctx context.Context, arg SetEMAStoredScopesFixtureParams) error {
 	_, err := q.db.Exec(ctx, setEMAStoredScopesFixture, arg.RequestedScopes, arg.AuthClientID)
+	return err
+}
+
+const setRemoteHeaderRequiredFixture = `-- name: SetRemoteHeaderRequiredFixture :exec
+UPDATE remote_mcp_server_headers SET is_required = $1 WHERE id = $2
+`
+
+type SetRemoteHeaderRequiredFixtureParams struct {
+	IsRequired bool
+	ID         uuid.UUID
+}
+
+func (q *Queries) SetRemoteHeaderRequiredFixture(ctx context.Context, arg SetRemoteHeaderRequiredFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRemoteHeaderRequiredFixture, arg.IsRequired, arg.ID)
 	return err
 }
 
@@ -2841,6 +5374,31 @@ func (q *Queries) SoftDeleteAssociationFixture(ctx context.Context, id uuid.UUID
 	return err
 }
 
+const softDeleteAssociationOfClientFixture = `-- name: SoftDeleteAssociationOfClientFixture :exec
+UPDATE mcp_server_remote_session_clients SET deleted_at = clock_timestamp()
+WHERE mcp_server_id = $1 AND remote_session_client_id = $2 AND deleted IS FALSE
+`
+
+type SoftDeleteAssociationOfClientFixtureParams struct {
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+func (q *Queries) SoftDeleteAssociationOfClientFixture(ctx context.Context, arg SoftDeleteAssociationOfClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteAssociationOfClientFixture, arg.McpServerID, arg.RemoteSessionClientID)
+	return err
+}
+
+const softDeleteAttachmentUserSessionIssuerFixture = `-- name: SoftDeleteAttachmentUserSessionIssuerFixture :exec
+UPDATE user_session_issuers SET deleted_at = clock_timestamp()
+WHERE id = (SELECT user_session_issuer_id FROM principal_remote_session_bindings WHERE principal_remote_session_bindings.id = $1)
+`
+
+func (q *Queries) SoftDeleteAttachmentUserSessionIssuerFixture(ctx context.Context, bindingID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteAttachmentUserSessionIssuerFixture, bindingID)
+	return err
+}
+
 const softDeleteAuthClientFixture = `-- name: SoftDeleteAuthClientFixture :exec
 UPDATE mcp_auth_clients SET deleted_at = clock_timestamp() WHERE id = $1
 `
@@ -2857,6 +5415,24 @@ WHERE id = (SELECT remote_session_issuer_id FROM remote_session_clients WHERE re
 
 func (q *Queries) SoftDeleteIssuerOfClientFixture(ctx context.Context, clientID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, softDeleteIssuerOfClientFixture, clientID)
+	return err
+}
+
+const softDeleteMCPServerFixture = `-- name: SoftDeleteMCPServerFixture :exec
+UPDATE mcp_servers SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) SoftDeleteMCPServerFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteMCPServerFixture, id)
+	return err
+}
+
+const softDeleteProjectFixture = `-- name: SoftDeleteProjectFixture :exec
+UPDATE projects SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) SoftDeleteProjectFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteProjectFixture, id)
 	return err
 }
 
@@ -2878,6 +5454,15 @@ func (q *Queries) SoftDeleteRemoteSessionClientFixture(ctx context.Context, id u
 	return err
 }
 
+const softDeleteRemoteSourceFixture = `-- name: SoftDeleteRemoteSourceFixture :exec
+UPDATE remote_mcp_servers SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) SoftDeleteRemoteSourceFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteRemoteSourceFixture, id)
+	return err
+}
+
 const softDeleteServerAuthClientLinksFixture = `-- name: SoftDeleteServerAuthClientLinksFixture :exec
 UPDATE mcp_server_auth_clients SET deleted_at = clock_timestamp() WHERE mcp_server_id = $1
 `
@@ -2887,18 +5472,67 @@ func (q *Queries) SoftDeleteServerAuthClientLinksFixture(ctx context.Context, mc
 	return err
 }
 
-const tryLockOrganizationBackfill = `-- name: TryLockOrganizationBackfill :one
-SELECT pg_try_advisory_lock(hashtext('authclientbackfill:' || $1::text))::boolean AS locked
+const softDeleteTunneledSourceFixture = `-- name: SoftDeleteTunneledSourceFixture :exec
+UPDATE tunneled_mcp_servers SET deleted_at = clock_timestamp() WHERE id = $1
 `
+
+func (q *Queries) SoftDeleteTunneledSourceFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteTunneledSourceFixture, id)
+	return err
+}
+
+const swapUpstreamAuthClientFixture = `-- name: SwapUpstreamAuthClientFixture :exec
+UPDATE upstream_client_selections
+SET auth_client_id = $1,
+    auth_client_attachment_scope = (SELECT attachment_scope FROM mcp_auth_clients WHERE id = $1)
+WHERE credential_id = $2 AND mcp_server_id = $3
+`
+
+type SwapUpstreamAuthClientFixtureParams struct {
+	AuthClientID uuid.NullUUID
+	CredentialID uuid.UUID
+	McpServerID  uuid.UUID
+}
+
+func (q *Queries) SwapUpstreamAuthClientFixture(ctx context.Context, arg SwapUpstreamAuthClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, swapUpstreamAuthClientFixture, arg.AuthClientID, arg.CredentialID, arg.McpServerID)
+	return err
+}
+
+const tryLockOrganizationBackfill = `-- name: TryLockOrganizationBackfill :one
+SELECT pg_try_advisory_lock(hashtext('authclientbackfill:' || $1::text))::boolean AS locked,
+       clock_timestamp()::timestamptz AS started_at
+`
+
+type TryLockOrganizationBackfillRow struct {
+	Locked    bool
+	StartedAt pgtype.Timestamptz
+}
 
 // Takes the organization's backfill lock for the session's life without
 // waiting, so one run holds it across all its phases; false means another run
-// holds it.
-func (q *Queries) TryLockOrganizationBackfill(ctx context.Context, organizationID string) (bool, error) {
+// holds it. started_at is the database's clock as the run begins, against
+// which retirement checks for configuration changed since.
+func (q *Queries) TryLockOrganizationBackfill(ctx context.Context, organizationID string) (TryLockOrganizationBackfillRow, error) {
 	row := q.db.QueryRow(ctx, tryLockOrganizationBackfill, organizationID)
-	var locked bool
-	err := row.Scan(&locked)
-	return locked, err
+	var i TryLockOrganizationBackfillRow
+	err := row.Scan(&i.Locked, &i.StartedAt)
+	return i, err
+}
+
+const unbindClientIssuerFixture = `-- name: UnbindClientIssuerFixture :exec
+DELETE FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = $1 AND user_session_issuer_id = $2
+`
+
+type UnbindClientIssuerFixtureParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+func (q *Queries) UnbindClientIssuerFixture(ctx context.Context, arg UnbindClientIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, unbindClientIssuerFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	return err
 }
 
 const unlockOrganizationBackfill = `-- name: UnlockOrganizationBackfill :exec
@@ -2959,14 +5593,14 @@ FROM (
   FROM remote_mcp_server_headers AS h
   JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id AND r.deleted IS FALSE
   JOIN projects AS sp ON sp.id = r.project_id AND sp.organization_id = $2::text AND sp.deleted IS FALSE
-  WHERE $4::text = 'remote' AND h.id = $5::uuid AND h.deleted IS FALSE
+  WHERE $5::text = 'remote' AND h.id = $6::uuid AND h.deleted IS FALSE
   UNION ALL
   SELECT h.name, h.description, h.is_required, h.is_secret, h.value, h.value_from_request_header,
          'tunneled'::text, t.id, t.project_id
   FROM tunneled_mcp_server_headers AS h
   JOIN tunneled_mcp_servers AS t ON t.id = h.tunneled_mcp_server_id AND t.deleted IS FALSE
   JOIN projects AS sp ON sp.id = t.project_id AND sp.organization_id = $2::text AND sp.deleted IS FALSE
-  WHERE $4::text = 'tunneled' AND h.id = $5::uuid AND h.deleted IS FALSE
+  WHERE $5::text = 'tunneled' AND h.id = $6::uuid AND h.deleted IS FALSE
 ) AS src
 WHERE c.id = $1::uuid
   AND c.organization_id = $2::text
@@ -2991,24 +5625,58 @@ WHERE c.id = $1::uuid
         FALSE
       )
   ))
+  AND ($4::uuid IS NULL OR (
+    EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS l
+      JOIN mcp_servers AS s3 ON s3.id = l.mcp_server_id AND s3.project_id = l.project_id AND s3.deleted IS FALSE
+      WHERE l.auth_client_id = $4::uuid
+        AND l.organization_id = $2::text
+        AND l.deleted IS FALSE
+        AND s3.project_id = src.project_id
+        AND COALESCE(
+          (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
+          OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
+          FALSE
+        )
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS l
+      JOIN mcp_servers AS s3 ON s3.id = l.mcp_server_id AND s3.project_id = l.project_id AND s3.deleted IS FALSE
+      WHERE l.auth_client_id = $4::uuid
+        AND l.organization_id = $2::text
+        AND l.deleted IS FALSE
+        AND NOT COALESCE(
+          s3.project_id = src.project_id
+          AND ((src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
+               OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id)),
+          FALSE
+        )
+    )
+  ))
 `
 
 type UpdateHeaderCopyParams struct {
 	CopyID                        uuid.UUID
 	OrganizationID                string
 	RequiredRemoteSessionClientID uuid.NullUUID
+	RequiredAuthClientID          uuid.NullUUID
 	SrcKind                       string
 	SrcID                         uuid.UUID
 }
 
 // Brings one live header copy in line with its source header, conditional on
 // the source header still being live and named the same in any letter case,
-// and in the auth client's project when the client has one.
+// and in the auth client's project when the client has one; with a required
+// upstream OAuth client or auth client, that client still being used on the
+// header's source and only there.
 func (q *Queries) UpdateHeaderCopy(ctx context.Context, arg UpdateHeaderCopyParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateHeaderCopy,
 		arg.CopyID,
 		arg.OrganizationID,
 		arg.RequiredRemoteSessionClientID,
+		arg.RequiredAuthClientID,
 		arg.SrcKind,
 		arg.SrcID,
 	)

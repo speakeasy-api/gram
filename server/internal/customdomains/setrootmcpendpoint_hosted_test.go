@@ -20,6 +20,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -36,15 +37,9 @@ func seedCanonicalHostedServer(t *testing.T, ctx context.Context, conn *pgxpool.
 		Slug:                   slug,
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: slug, Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-	require.NoError(t, toolsetsrepo.New(conn).SetToolsetCustomDomain(ctx, toolsetsrepo.SetToolsetCustomDomainParams{
-		CustomDomainID: customDomainID,
-		Slug:           slug,
-		ProjectID:      projectID,
-	}))
+	testenv.SetLegacyAlias(t, ctx, conn, projectID, toolset.ID, slug, customDomainID)
 	_, err = mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:         toolset.ID,
 		ProjectID:  projectID,
@@ -103,7 +98,8 @@ func TestSetRootMcpEndpoint_ByServerHostedOnDomainReusesItsEndpoint(t *testing.T
 	// A later hosted reconcile must still see one endpoint and keep the root marker.
 	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: SetHostedNetworkAccessInTransaction needs a caller-owned transaction
 	require.NoError(t, err)
-	require.NoError(t, toolsets.SetHostedNetworkAccessInTransaction(ctx, tx, audit.NewLogger(), authCtx, serverID, networkaccess.ModePublicOnly))
+	_, err = toolsets.SetHostedNetworkAccessInTransaction(ctx, tx, audit.NewLogger(), authCtx, serverID, networkaccess.ModePublicOnly)
+	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 
 	endpoints, err = mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{
