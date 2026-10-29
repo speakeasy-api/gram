@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -51,6 +52,7 @@ type Service struct {
 	auth   *auth.Auth
 	authz  *authz.Engine
 	audit  *audit.Logger
+	enc    *encryption.Client
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -63,6 +65,7 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	enc *encryption.Client,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("authclients"))
 
@@ -73,6 +76,7 @@ func NewService(
 		auth:   auth.New(logger, db, sessions, authzEngine),
 		authz:  authzEngine,
 		audit:  auditLogger,
+		enc:    enc,
 	}
 }
 
@@ -175,7 +179,7 @@ func (s *Service) UpdateAuthClient(ctx context.Context, payload *gen.UpdateAuthC
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
-	existing, err := queries.LockAuthClient(ctx, repo.LockAuthClientParams{ID: clientID, OrganizationID: authCtx.ActiveOrganizationID})
+	existing, servers, err := lockAuthClientForUpdate(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "auth client not found").LogError(ctx, logger)
@@ -195,16 +199,8 @@ func (s *Service) UpdateAuthClient(ctx context.Context, payload *gen.UpdateAuthC
 	}
 
 	if enabled && !existing.Enabled {
-		// Locking the offering servers serializes with
-		// SetMcpServerUpstreamAuthRequirement, which locks the server before
-		// checking for enabled clients.
-		servers, err := queries.LockAuthClientServerRequirements(ctx, repo.LockAuthClientServerRequirementsParams{
-			AuthClientID:   clientID,
-			OrganizationID: authCtx.ActiveOrganizationID,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "lock auth client servers").LogError(ctx, logger)
-		}
+		// Offering servers were locked before the client, matching preparation
+		// and upstream requirement writers. Their requirements remain stable.
 		for _, srv := range servers {
 			if srv.RequiresUpstreamAuth.Valid && !srv.RequiresUpstreamAuth.Bool {
 				return nil, oops.E(oops.CodeConflict, nil, "a server that offers this auth client declares that its upstream needs no authentication; change that declaration or detach the client before enabling it").LogError(ctx, logger)
@@ -302,7 +298,7 @@ func (s *Service) DetachAuthClientFromMcpServer(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeUnexpected, err, "detach auth client from mcp server").LogError(ctx, logger)
 	}
 
-	if err := s.audit.LogAuthClientDetachMcpServer(ctx, dbtx, audit.LogAuthClientDetachMcpServerEvent{
+	if err := s.audit.LogAuthClientDetachMcpServer(ctx, dbtx, audit.LogAuthClientMcpServerEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        detached.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

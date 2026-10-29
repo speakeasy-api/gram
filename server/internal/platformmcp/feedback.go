@@ -441,6 +441,8 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	riskRuleBreakdownToolName:               {},
 	operationListShadowAIInventory:          {},
 	operationListAIScanLibrary:              {},
+	operationGetDeviceCoverage:              {},
+	operationListManagedDevices:             {},
 	"list_skills":                           {},
 	"get_skill":                             {},
 	"list_skill_versions":                   {},

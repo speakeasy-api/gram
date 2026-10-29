@@ -306,7 +306,7 @@ func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFa
 }
 
 const listAuditLogs = `-- name: ListAuditLogs :many
-SELECT a.id, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.acting_surface, a.acting_client_id, a.category, a.created_at, p.slug AS project_slug, u.display_name AS actor_user_display_name
+SELECT a.id, a.seq, a.organization_id, a.project_id, a.actor_id, a.actor_type, a.actor_display_name, a.actor_slug, a.action, a.subject_id, a.subject_type, a.subject_display_name, a.subject_slug, a.before_snapshot, a.after_snapshot, a.metadata, a.acting_surface, a.acting_client_id, a.created_at, p.slug AS project_slug, u.display_name AS actor_user_display_name
 FROM audit_logs a
 LEFT JOIN projects p ON p.id = a.project_id
 LEFT JOIN organization_user_relationships actor_membership
@@ -403,7 +403,6 @@ type ListAuditLogsRow struct {
 	Metadata             []byte
 	ActingSurface        pgtype.Text
 	ActingClientID       pgtype.Text
-	Category             string
 	CreatedAt            pgtype.Timestamptz
 	ProjectSlug          pgtype.Text
 	ActorUserDisplayName pgtype.Text
@@ -467,7 +466,6 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 			&i.Metadata,
 			&i.ActingSurface,
 			&i.ActingClientID,
-			&i.Category,
 			&i.CreatedAt,
 			&i.ProjectSlug,
 			&i.ActorUserDisplayName,

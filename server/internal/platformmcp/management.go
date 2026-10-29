@@ -547,7 +547,7 @@ func (s *ManagementService) currentDistribution(ctx context.Context, authCtx *co
 	// The dashboard onboarding surface asks about the project's default plugin,
 	// which is the plugin its own action distributes to. Naming a target is the
 	// agent-facing tools' concern.
-	distribution, err := s.distributions.Current(ctx, principal, projection.SelectedProject.Slug, "")
+	distribution, err := s.distributions.Current(ctx, principal, projection.SelectedProject.Slug, uuid.Nil, "")
 	if err != nil {
 		return Distribution{}, false
 	}

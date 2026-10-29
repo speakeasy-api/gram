@@ -2,6 +2,9 @@ package demoseed
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -9,6 +12,9 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // chPurgeAndTelemetry regenerates the tenant's telemetry, ClickHouse side.
@@ -73,6 +79,7 @@ func (s *seeder) chPurgeAndTelemetry(ctx context.Context, ch driver.Conn) error 
 		{"claude api requests", s.chClaudeAPIRows},
 		{"claude tool results", s.chClaudeToolResultRows},
 		{"skill hook rows", s.chSkillRows},
+		{"mcp skill loads", s.chMCPSkillLoadRows},
 		{"blocked hook rows", s.chBlockedRows},
 		{"cursor usage metrics", s.chCursorUsageRows},
 		{"cursor hook rows", s.chCursorHookRows},
@@ -807,6 +814,91 @@ func (s *seeder) chSkillRows() []chTelemetryRow {
 		}
 	}
 	return rows
+}
+
+// demoProjectSlug is the slug the org phase gives the tenant's one project
+// (OrgInsertProject), the authority of its skill:// URIs.
+const demoProjectSlug = "default"
+
+// chMCPSkillLoadRows are skill:// reads served over the support server, one
+// in every third chat, shaped like the rows the hosted MCP skill read path
+// writes: a resource_read named Skill with the skill name as its argument, so
+// skill_name materializes and the tool-usage queries classify it as a skill
+// next to the hook rows above. Without them every skill on Logs and MCP &
+// Tools reads as hook-only and the "Loaded via" MCP filter is empty.
+func (s *seeder) chMCPSkillLoadRows() []chTelemetryRow {
+	var rows []chTelemetryRow
+	for i := 3; i <= bulkChats; i += 3 {
+		uidx := s.chChatOwnerIdx(i)
+		u := demoUsers[uidx]
+		chatID := s.chatID(i).String()
+		pos := 1 + int(hash64("mcpskl", i)%3)
+		name := skillNames[pos-1]
+		// Loads come early in a chat: the agent reads the skill before it
+		// starts calling tools.
+		at := s.chatTS(i).Add(20*time.Second + time.Duration(hash64("mcpsklt", i)%40)*time.Second)
+		ts := at.UnixNano()
+		// Recent runbook loads served v2, on the same cutoff as the runbook
+		// activations in seedSkills.
+		versionID := s.skillVersionID(pos)
+		content := skillsManual[pos-1].content
+		if pos == 3 && s.chatDayOff(i) <= 4 {
+			versionID = s.skillsRunbookV2()
+			content = skillContentRunbookV2
+		}
+		digest := sha256.Sum256([]byte(content))
+		uri := mcpskills.SkillURI(demoProjectSlug, name)
+		cidx := s.chClientIdx(i)
+		rows = append(rows, chTelemetryRow{
+			timeNano:     ts,
+			observedNano: ts,
+			severity:     "INFO",
+			body:         "Skill read: " + name,
+			traceID:      s.chTrace(fmt.Sprintf("mcpskilltrace-%d", i)),
+			attributes: `{"gram.event.source":"resource_read"` +
+				`,"gram.tool.name":"Skill"` +
+				`,"gen_ai.tool.call.arguments":"{\"skill\":\"` + name + `\"}"` +
+				`,"gram.resource.uri":"` + uri + `"` +
+				`,"gram.mcp.skill.id":"` + s.skillID(pos).String() + `"` +
+				`,"gram.mcp.skill.version_id":"` + versionID.String() + `"` +
+				`,"gram.mcp.skill.digest":"sha256:` + hex.EncodeToString(digest[:]) + `"` +
+				`,"gram.toolset.slug":"acme-support-tools"` +
+				`,"gram.mcp_server.id":"` + s.toolset1().String() + `"` +
+				`,"gram.mcp_endpoint.id":"` + s.det("endpoint-hosted-acme-support-tools").String() + `"` +
+				`,"http.response.status_code":200` +
+				`,"http.response.body":` + strconv.Itoa(skillReadResponseSize(uri, content)) +
+				`,"gram.mcp.client.name":"` + chClientNames[cidx-1] + `"` +
+				`,"gram.mcp.client.version":"` + chClientVersions[cidx-1][s.chChatByte(i, 16)%5] + `"` +
+				`,"gen_ai.conversation.id":"` + chatID + `"` +
+				`,"gram.project.id":"` + s.projectID().String() + `"` +
+				`,"user.email":"` + s.email(u.handle) + `"` +
+				chIdentityAttrs(uidx) + `}`,
+			resource: s.chResource(),
+			urn:      urn.NewSkill(s.skillID(pos)).String(),
+			service:  "gram-server",
+			chatID:   new(chatID),
+		})
+	}
+	return rows
+}
+
+// skillReadResponseSize is the size of the resources/read response a hosted
+// skill read serves for content, which is what the live row records.
+func skillReadResponseSize(uri, content string) int {
+	type resourceContent struct {
+		URI      string `json:"uri"`
+		MimeType string `json:"mimeType"`
+		Text     string `json:"text"`
+	}
+	bs, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"result":  map[string]any{"contents": []resourceContent{{URI: uri, MimeType: "text/markdown", Text: content}}},
+	})
+	if err != nil {
+		return len(content)
+	}
+	return len(bs)
 }
 
 // chBlockedRows are calls the Speakeasy hook denied before they ran

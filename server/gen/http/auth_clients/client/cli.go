@@ -167,6 +167,178 @@ func BuildUpdateAuthClientPayload(authClientsUpdateAuthClientBody string, authCl
 	return v, nil
 }
 
+// BuildCreateAuthClientPayload builds the payload for the authClients
+// createAuthClient endpoint from CLI flags.
+func BuildCreateAuthClientPayload(authClientsCreateAuthClientBody string, authClientsCreateAuthClientSessionToken string, authClientsCreateAuthClientApikeyToken string) (*authclients.CreateAuthClientPayload, error) {
+	var err error
+	var body CreateAuthClientRequestBody
+	{
+		err = json.Unmarshal([]byte(authClientsCreateAuthClientBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_type\": \"service_account\",\n      \"headers\": [\n         {\n            \"description\": \"abc123\",\n            \"is_required\": false,\n            \"is_secret\": false,\n            \"name\": \"aa\",\n            \"value\": \"abc123\",\n            \"value_from_request_header\": \"abc123\"\n         }\n      ],\n      \"mcp_server_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"name\": \"aa\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_client_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		if !(body.ClientType == "remote_session" || body.ClientType == "service_account" || body.ClientType == "static_credential" || body.ClientType == "pass_through") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through"}))
+		}
+		if utf8.RuneCountInString(body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+		}
+		if body.ProjectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+		}
+		if body.RemoteSessionClientID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_client_id", *body.RemoteSessionClientID, goa.FormatUUID))
+		}
+		for _, e := range body.Headers {
+			if e != nil {
+				if err2 := ValidateAuthClientHeaderInputRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		for _, e := range body.McpServerIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if authClientsCreateAuthClientSessionToken != "" {
+			sessionToken = &authClientsCreateAuthClientSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if authClientsCreateAuthClientApikeyToken != "" {
+			apikeyToken = &authClientsCreateAuthClientApikeyToken
+		}
+	}
+	v := &authclients.CreateAuthClientPayload{
+		ClientType:            body.ClientType,
+		Name:                  body.Name,
+		ProjectID:             body.ProjectID,
+		RemoteSessionClientID: body.RemoteSessionClientID,
+	}
+	if body.Headers != nil {
+		v.Headers = make([]*authclients.AuthClientHeaderInput, len(body.Headers))
+		for i, val := range body.Headers {
+			if val == nil {
+				v.Headers[i] = nil
+				continue
+			}
+			v.Headers[i] = marshalAuthClientHeaderInputRequestBodyToAuthclientsAuthClientHeaderInput(val)
+		}
+	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildAttachAuthClientToMcpServerPayload builds the payload for the
+// authClients attachAuthClientToMcpServer endpoint from CLI flags.
+func BuildAttachAuthClientToMcpServerPayload(authClientsAttachAuthClientToMcpServerBody string, authClientsAttachAuthClientToMcpServerSessionToken string, authClientsAttachAuthClientToMcpServerApikeyToken string) (*authclients.AttachAuthClientToMcpServerPayload, error) {
+	var err error
+	var body AttachAuthClientToMcpServerRequestBody
+	{
+		err = json.Unmarshal([]byte(authClientsAttachAuthClientToMcpServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if authClientsAttachAuthClientToMcpServerSessionToken != "" {
+			sessionToken = &authClientsAttachAuthClientToMcpServerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if authClientsAttachAuthClientToMcpServerApikeyToken != "" {
+			apikeyToken = &authClientsAttachAuthClientToMcpServerApikeyToken
+		}
+	}
+	v := &authclients.AttachAuthClientToMcpServerPayload{
+		ID:          body.ID,
+		McpServerID: body.McpServerID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildSetAuthClientHeadersPayload builds the payload for the authClients
+// setAuthClientHeaders endpoint from CLI flags.
+func BuildSetAuthClientHeadersPayload(authClientsSetAuthClientHeadersBody string, authClientsSetAuthClientHeadersSessionToken string, authClientsSetAuthClientHeadersApikeyToken string) (*authclients.SetAuthClientHeadersPayload, error) {
+	var err error
+	var body SetAuthClientHeadersRequestBody
+	{
+		err = json.Unmarshal([]byte(authClientsSetAuthClientHeadersBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"headers\": [\n         {\n            \"description\": \"abc123\",\n            \"is_required\": false,\n            \"is_secret\": false,\n            \"name\": \"aa\",\n            \"value\": \"abc123\",\n            \"value_from_request_header\": \"abc123\"\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		if body.Headers == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		for _, e := range body.Headers {
+			if e != nil {
+				if err2 := ValidateAuthClientHeaderInputRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if authClientsSetAuthClientHeadersSessionToken != "" {
+			sessionToken = &authClientsSetAuthClientHeadersSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if authClientsSetAuthClientHeadersApikeyToken != "" {
+			apikeyToken = &authClientsSetAuthClientHeadersApikeyToken
+		}
+	}
+	v := &authclients.SetAuthClientHeadersPayload{
+		ID: body.ID,
+	}
+	if body.Headers != nil {
+		v.Headers = make([]*authclients.AuthClientHeaderInput, len(body.Headers))
+		for i, val := range body.Headers {
+			if val == nil {
+				v.Headers[i] = nil
+				continue
+			}
+			v.Headers[i] = marshalAuthClientHeaderInputRequestBodyToAuthclientsAuthClientHeaderInput(val)
+		}
+	} else {
+		v.Headers = []*authclients.AuthClientHeaderInput{}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
 // BuildDetachAuthClientFromMcpServerPayload builds the payload for the
 // authClients detachAuthClientFromMcpServer endpoint from CLI flags.
 func BuildDetachAuthClientFromMcpServerPayload(authClientsDetachAuthClientFromMcpServerBody string, authClientsDetachAuthClientFromMcpServerSessionToken string, authClientsDetachAuthClientFromMcpServerApikeyToken string) (*authclients.DetachAuthClientFromMcpServerPayload, error) {
@@ -199,6 +371,38 @@ func BuildDetachAuthClientFromMcpServerPayload(authClientsDetachAuthClientFromMc
 		ID:          body.ID,
 		McpServerID: body.McpServerID,
 	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildListMcpServerAuthClientChoicesPayload builds the payload for the
+// authClients listMcpServerAuthClientChoices endpoint from CLI flags.
+func BuildListMcpServerAuthClientChoicesPayload(authClientsListMcpServerAuthClientChoicesMcpServerID string, authClientsListMcpServerAuthClientChoicesSessionToken string, authClientsListMcpServerAuthClientChoicesApikeyToken string) (*authclients.ListMcpServerAuthClientChoicesPayload, error) {
+	var err error
+	var mcpServerID string
+	{
+		mcpServerID = authClientsListMcpServerAuthClientChoicesMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if authClientsListMcpServerAuthClientChoicesSessionToken != "" {
+			sessionToken = &authClientsListMcpServerAuthClientChoicesSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if authClientsListMcpServerAuthClientChoicesApikeyToken != "" {
+			apikeyToken = &authClientsListMcpServerAuthClientChoicesApikeyToken
+		}
+	}
+	v := &authclients.ListMcpServerAuthClientChoicesPayload{}
+	v.McpServerID = mcpServerID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 

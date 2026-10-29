@@ -344,9 +344,8 @@ func TestRun_EMADirectAndGatewayReachMovesAuxiliaryHeadersOntoTheEMAClient(t *te
 	require.Len(t, f.headers(emaID), 1)
 }
 
-// A recorded client whose bindings come to disagree keeps its links, and a
-// server it reaches only through the gateways stays gateway-only: the direct
-// route keeps its header client and choice.
+// A binding for another exact resource does not change gateway-only reach:
+// the direct route keeps its header client and choice.
 func TestRun_KeptEMAGatewayClientKeepsADirectAuxiliaryHeaderChoice(t *testing.T) {
 	t.Parallel()
 	f, gatewayIssuer, server, headerClient, credential := directHeaderChoice(t, "X-Api-Key")
@@ -356,9 +355,9 @@ func TestRun_KeptEMAGatewayClientKeepsADirectAuxiliaryHeaderChoice(t *testing.T)
 
 	f.binding(gatewayIssuer, issuerID, clientID, gatewayResource+"/", []string{})
 	report := f.run(false)
-	conflicting := results(report, KindEMA, OutcomeAmbiguous)
-	require.Len(t, conflicting, 1)
-	require.Equal(t, ReasonResourceVariants, conflicting[0].Reason)
+	unmatched := results(report, KindEMA, OutcomeAmbiguous)
+	require.Len(t, unmatched, 1)
+	require.Equal(t, ReasonResourceNotMatched, unmatched[0].Reason)
 	requireDirectChoiceKept(t, f, server, headerClient, credential)
 }
 

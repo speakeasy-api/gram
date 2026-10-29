@@ -2068,7 +2068,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		// distribution and is neither metered nor billed. With the extension
 		// off, a skill:// URI is an ordinary resource URI and falls through.
 		if uri, ok := skillResourceURI(req.Params); ok && s.skillsOverMCPEnabled(ctx, payload) {
-			return handleSkillResourceRead(ctx, s.logger, s.db, s.skillResolver, s.metrics, payload, req, uri, time.Now())
+			return handleSkillResourceRead(ctx, s.logger, s.db, s.skillResolver, s.metrics, s.telemLogger, s.sessionClientInfo, payload, req, uri, time.Now())
 		}
 		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras, s.scanEvaluator)
 	case mcpversions.MethodSkillsList:

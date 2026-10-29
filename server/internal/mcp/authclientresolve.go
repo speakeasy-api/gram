@@ -82,6 +82,7 @@ const (
 	authClientReasonAmbiguous       = "ambiguous_choice"
 	authClientReasonMissingChoice   = "missing_choice"
 	authClientReasonUnmapped        = "unmapped_choice"
+	authClientReasonNoAuthDeclared  = "no_auth_declared"
 	authClientReasonClientGone      = "client_gone"
 	authClientReasonClientDeleted   = "client_deleted"
 	authClientReasonClientDisabled  = "client_disabled"
@@ -134,6 +135,17 @@ type authClientResolution struct {
 // with no bearer to acquire.
 func (r *authClientResolution) headersOnly() bool {
 	return r.outcome == authClientResolved && isHeadersOnlyType(r.clientType)
+}
+
+// sendsClientHeaders reports whether the request sends the client's own
+// headers in place of the server's: a resolved client, or a mapped client
+// whose registration the upstream client choice serves because it may chain
+// an identity. A tunneled server is sent no client headers.
+func (r *authClientResolution) sendsClientHeaders() bool {
+	if r.tunneled {
+		return false
+	}
+	return r.outcome == authClientResolved || (r.outcome == authClientLegacy && r.reason == authClientReasonLegacyMayChain)
 }
 
 func isHeadersOnlyType(clientType string) bool {
@@ -247,6 +259,11 @@ func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authCli
 			// headers.
 			res.outcome = authClientLegacy
 			res.reason = authClientReasonUnmapped
+			if res.noAuthAllowed && !row.CredentialHeadersUncovered {
+				// The server declares it needs no authentication, so the
+				// choice stays usable where nothing falls back to the old path.
+				res.reason = authClientReasonNoAuthDeclared
+			}
 		case row.RequiresUpstreamAuth.Valid && row.RequiresUpstreamAuth.Bool:
 			res.reason = authClientReasonNoAuthForbidden
 		case !row.RequiresUpstreamAuth.Valid && row.ServerHasClients:
@@ -290,14 +307,14 @@ func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authCli
 			res.outcome = authClientLegacy
 			res.reason = authClientReasonHeadersStale
 			res.choice = upstreamChoice{clientID: row.RegistrationID, remoteSessionIssuerID: row.RegistrationIssuerID}
+		case row.CredentialHeadersUncovered, row.RequiresDeniedSource:
+			res.reason = authClientReasonSetup
 		case res.clientType == authClientTypeRemoteSession && row.RegistrationHasEma:
 			// The upstream client choice may chain an identity for this
 			// registration when its token is unusable; the resolver does not.
 			res.outcome = authClientLegacy
 			res.reason = authClientReasonLegacyMayChain
 			res.choice = upstreamChoice{clientID: row.RegistrationID, remoteSessionIssuerID: row.RegistrationIssuerID}
-		case row.CredentialHeadersUncovered, row.RequiresDeniedSource:
-			res.reason = authClientReasonSetup
 		default:
 			res.outcome = authClientResolved
 			res.choice = upstreamChoice{clientID: row.RegistrationID, remoteSessionIssuerID: row.RegistrationIssuerID}
@@ -342,7 +359,7 @@ func (u *upstreamSelector) resolveAuthClient(ctx context.Context, serverID uuid.
 
 func (u *upstreamSelector) resolveAuthClients(ctx context.Context, serverIDs []uuid.UUID) (map[uuid.UUID]authClientResolution, error) {
 	rows, err := upstreamclientsrepo.New(u.service.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
-		Proposed: false, ProposedRegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Proposed: false, ProposedRegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ProposedAuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		CredentialKind: u.credentialKindOrDefault(), CredentialID: u.credentialID,
 		McpServerIds: serverIDs, OrganizationID: u.organizationID,
 	})
@@ -383,10 +400,23 @@ func (s *Service) resolveAuthClientForServing(ctx context.Context, selector *ups
 }
 
 // resolveAuthClientForConsent validates a proposed choice through the same
-// resolver as an established credential, before a credential row exists.
+// resolver as an established credential, before a credential row exists. The
+// proposal names the registration a consent card connects, or none for the
+// server's headers-only client.
 func (s *Service) resolveAuthClientForConsent(ctx context.Context, organizationID string, serverID, projectID uuid.UUID, registrationID uuid.NullUUID, subject urn.SessionSubject) (authClientResolution, error) {
+	return s.resolveProposedAuthClient(ctx, organizationID, serverID, projectID, registrationID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, subject)
+}
+
+// resolveAuthClientChoiceForConsent validates one typed auth client a person
+// picked on the consent screen, through the same resolver as an established
+// credential. A client the server does not offer is a gap.
+func (s *Service) resolveAuthClientChoiceForConsent(ctx context.Context, organizationID string, serverID, projectID, authClientID uuid.UUID, subject urn.SessionSubject) (authClientResolution, error) {
+	return s.resolveProposedAuthClient(ctx, organizationID, serverID, projectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: authClientID, Valid: true}, subject)
+}
+
+func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID string, serverID, projectID uuid.UUID, registrationID, authClientID uuid.NullUUID, subject urn.SessionSubject) (authClientResolution, error) {
 	rows, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
-		Proposed: true, ProposedRegistrationID: registrationID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{serverID}, OrganizationID: organizationID,
+		Proposed: true, ProposedRegistrationID: registrationID, ProposedAuthClientID: authClientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{serverID}, OrganizationID: organizationID,
 	})
 	if err != nil {
 		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("resolve proposed auth client: %w", err)
@@ -395,6 +425,9 @@ func (s *Service) resolveAuthClientForConsent(ctx context.Context, organizationI
 		return gapResolution(authClientReasonMissingChoice), nil
 	}
 	row := rows[0]
+	if authClientID.Valid && !row.AuthClientID.Valid {
+		return gapResolution(authClientReasonUnassociated), nil
+	}
 	res := decideAuthClient(row)
 	if res.outcome == authClientLegacy {
 		res.choice = upstreamChoice{clientID: row.RegistrationID, remoteSessionIssuerID: row.RegistrationIssuerID}
@@ -408,7 +441,7 @@ func (s *Service) prepareAuthClient(ctx context.Context, permit authClientPermit
 	if err != nil {
 		return res, err
 	}
-	if res.outcome == authClientResolved && !res.tunneled {
+	if res.sendsClientHeaders() {
 		headers, err := s.loadAuthClientHeaders(ctx, permit.OrganizationID, []uuid.UUID{res.clientID})
 		if err != nil {
 			return res, err
@@ -466,10 +499,23 @@ func (s *Service) resolveEnforcedAuthClient(ctx context.Context, selector *upstr
 		return res, err
 	}
 	if res.clientID == uuid.Nil {
-		res.outcome = authClientGap
+		res = withoutLegacyFallback(res)
 		annotateAuthClient(ctx, s.logger, res)
 	}
 	return res, nil
+}
+
+// withoutLegacyFallback decides a choice that names no auth client where the
+// upstream client choice does not serve it: no-auth on a server that declares
+// it needs none, otherwise a gap.
+func withoutLegacyFallback(res authClientResolution) authClientResolution {
+	if res.reason == authClientReasonNoAuthDeclared {
+		res.outcome = authClientNoAuth
+		res.reason = ""
+		return res
+	}
+	res.outcome = authClientGap
+	return res
 }
 
 func applyAuthClientHeaders(res authClientResolution, headers []proxy.ConfiguredHeader) authClientResolution {
@@ -629,6 +675,9 @@ func (s *Service) enforceAuthClient(ctx context.Context, w http.ResponseWriter, 
 	authentication.attachedSession = res.attachedSession
 	switch res.outcome {
 	case authClientLegacy:
+		if res.sendsClientHeaders() {
+			authentication.chainingAuthClient = &res
+		}
 		return none, false, nil
 	case authClientGap:
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: auth client unusable: "+res.reason, issuerGateReasonUpstreamSelectionUnavailable)
@@ -772,7 +821,7 @@ func (s *Service) reportAuthClientParity(ctx context.Context, organizationID str
 	var agreed bool
 	warn := true
 	switch {
-	case res.outcome == authClientLegacy && res.reason == authClientReasonUnmapped:
+	case res.outcome == authClientLegacy && (res.reason == authClientReasonUnmapped || res.reason == authClientReasonNoAuthDeclared):
 		agreed, warn = false, false
 	case res.outcome == authClientLegacy && (res.reason == authClientReasonHeadersStale || res.reason == authClientReasonLegacyMayChain):
 		agreed = false

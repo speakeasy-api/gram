@@ -1,6 +1,7 @@
-import { useOrganization } from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
+import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
 import {
   DetailSidebarInfoLabel,
   DetailSidebarNav,
@@ -73,6 +74,7 @@ import {
   Plug,
   Settings as SettingsIcon,
   ShieldCheck,
+  Terminal,
   Users,
   Wrench,
   Database,
@@ -101,7 +103,7 @@ function remoteIdentityLabel(mode: IdentityMode): string {
     case "user":
       return "User";
     case "agent":
-      return "Service Account";
+      return "Shared credential";
     case "none":
       return "Manual";
   }
@@ -137,7 +139,7 @@ export function RemoteIdentitySummary({
       "A legacy pass-through Authorization header is still configured. Remove it under Custom Headers so this server's identity is the only thing sending a credential.";
   } else if (authenticationRequired) {
     problem =
-      "This server answers with an authentication challenge, but no identity is configured. Requests will keep failing until User Identity or a Service Account is set up.";
+      "This server answers with an authentication challenge, but no identity is configured. Requests will keep failing until User Identity or a shared credential is set up.";
   }
 
   let status: React.JSX.Element;
@@ -310,6 +312,8 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const mcpScoped =
     useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
   const organization = useOrganization();
+  const project = useProject();
+  const skillsOverMcp = useSkillsOverMcpEnabled();
   const pluginScope = usePluginQueryScope();
   const canWritePlugins = usePluginWriteAccess();
   const canReadPlugins =
@@ -469,6 +473,12 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     !!mcpServer &&
     hasScope("org:read", organization.id) &&
     hasScope("mcp:read", grantResourceId);
+  // Same check as the Skills tab routes: skill read on this project. Only
+  // hosted and remote-backed servers have the tab.
+  const canViewSkills =
+    skillsOverMcp &&
+    (hosted || isRemoteBacked) &&
+    hasScope("skill:read", project.id, project.id);
 
   // Guardrails police traffic that passes through Speakeasy, so unproxied servers
   // (which never do) have none. Admin-only, like the policies it manages.
@@ -636,6 +646,17 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
               active: activeTab === "inspect",
             },
           ]),
+    ...(canViewSkills
+      ? [
+          {
+            key: "skills",
+            title: "Skills",
+            Icon: Terminal,
+            href: mcpServerTabHref(routes, idOrSlug, "skills"),
+            active: activeTab === "skills",
+          },
+        ]
+      : []),
     ...(canViewTeamAccess
       ? [
           {

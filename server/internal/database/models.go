@@ -972,8 +972,6 @@ type AuditLog struct {
 	// @access: confidential
 	ActingClientID pgtype.Text
 	// @access: confidential
-	Category string
-	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 }
 
@@ -2802,6 +2800,35 @@ type InternalSessionIssuer struct {
 	AllowedSignInMethods []string
 	// @access: opaque-confidential
 	AllowedMicrosoftTenantIds []string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type IssuanceSelectionProfile struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	UserSessionIssuerID uuid.UUID
+	// @access: confidential
+	UserSessionClientID uuid.NullUUID
+	// @access: confidential
+	WorkloadIssuerID uuid.NullUUID
+	// @access: restricted
+	WorkloadSubject pgtype.Text
+	// @access: opaque-confidential
+	Name string
+	// @access: confidential
+	CreatedByUserID pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -4933,6 +4960,8 @@ type Plugin struct {
 	IsDefault pgtype.Bool
 	// @access: confidential
 	AutoCreated bool
+	// @access: confidential
+	AutoSyncEnabled pgtype.Bool
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

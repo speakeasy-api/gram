@@ -3,6 +3,7 @@
  */
 
 import { adminAssignOrganizationOnboardingPlaybook } from "../funcs/adminAssignOrganizationOnboardingPlaybook.js";
+import { adminBackfillMcpAuthGrants } from "../funcs/adminBackfillMcpAuthGrants.js";
 import { adminBulkUpdateAccountType } from "../funcs/adminBulkUpdateAccountType.js";
 import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscription.js";
 import { adminChangeTrialEndDate } from "../funcs/adminChangeTrialEndDate.js";
@@ -103,6 +104,7 @@ import { adminUpdateSignupOffer } from "../funcs/adminUpdateSignupOffer.js";
 import { adminUpdateSupportMatrix } from "../funcs/adminUpdateSupportMatrix.js";
 import { adminUploadPlatformImage } from "../funcs/adminUploadPlatformImage.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { AdminBackfillMCPAuthGrantsResult } from "../models/components/adminbackfillmcpauthgrantsresult.js";
 import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulkupdateaccounttyperesult.js";
 import { AdminChatAnalysisSettings } from "../models/components/adminchatanalysissettings.js";
 import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatanalysistriggerresult.js";
@@ -377,6 +379,21 @@ export class Admin extends ClientSDK {
     return unwrapAsync(adminGetHookClients(
       this,
       request,
+      options,
+    ));
+  }
+
+  /**
+   * backfillMcpAuthGrants admin
+   *
+   * @remarks
+   * Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.
+   */
+  async backfillMcpAuthGrants(
+    options?: RequestOptions,
+  ): Promise<AdminBackfillMCPAuthGrantsResult> {
+    return unwrapAsync(adminBackfillMcpAuthGrants(
+      this,
       options,
     ));
   }

@@ -136,7 +136,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "auth client associations",
 			count: byOrg(s.q.PostflightCountAuthClientAssociations),
-			fail:  postflightMustEqual(3, "expected 3 auth client associations, found %d"),
+			fail:  postflightMustEqual(4, "expected 4 auth client associations, found %d"),
 		},
 		{
 			what:  "setup tasks",
@@ -409,6 +409,11 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			fail:  postflightMustEqual(1, "expected 1 removed gateway member, found %d"),
 		},
 		{
+			what:  "mcp skill links",
+			count: byProject(s.q.PostflightCountMCPSkillLinks),
+			fail:  postflightMustEqual(5, "expected 5 MCP skill links, found %d"),
+		},
+		{
 			what:  "approvals server",
 			count: byProject(s.q.PostflightCountApprovalsServers),
 			fail:  postflightMustEqual(1, "expected 1 approvals server with an endpoint in the Default plugin, found %d"),
@@ -472,6 +477,23 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			what:  "mdm devices",
 			count: byOrg(s.q.PostflightCountMDMDevices),
 			fail:  postflightMustEqual(7, "expected 7 mdm devices, found %d"),
+		},
+		// The policy states coverage refines agent_active into: one attested
+		// machine and one behind, beside a third with no report.
+		{
+			what:  "device agent state reports",
+			count: byOrg(s.q.PostflightCountDeviceAgentStateReports),
+			fail:  postflightMustEqual(2, "expected 2 device agent state reports, found %d"),
+		},
+		{
+			what:  "attested device agent state reports",
+			count: byOrg(s.q.PostflightCountAttestedDeviceAgentStateReports),
+			fail:  postflightMustEqual(1, "expected 1 state report applying its served etag, found %d"),
+		},
+		{
+			what:  "outdated device agent state reports",
+			count: byOrg(s.q.PostflightCountOutdatedDeviceAgentStateReports),
+			fail:  postflightMustEqual(1, "expected 1 state report behind on policy with a permission error, found %d"),
 		},
 		{
 			what:  "device integration configs",

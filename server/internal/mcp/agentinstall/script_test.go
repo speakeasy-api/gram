@@ -406,7 +406,7 @@ func TestScriptOmitsAcceptCapabilitiesForOlderOpenClaw(t *testing.T) {
 }
 
 // The reply is what the pinned hooks binary returns when the hooks API
-// answers 403, which it does for a missing hooks or project grant.
+// answers 403, which it does for a missing hooks grant.
 func TestScriptExplainsAForbiddenHooksKey(t *testing.T) {
 	t.Parallel()
 	reply := `{"seq":1,"output":{"block":true,"blockReason":"permission denied"}}`
@@ -415,7 +415,7 @@ func TestScriptExplainsAForbiddenHooksKey(t *testing.T) {
 
 	require.Contains(t, out, "Speakeasy hooks: FAIL: permission denied")
 	require.Contains(t, out, "org:hooks_ingest")
-	require.Contains(t, out, "project:read")
+	require.NotContains(t, out, "project:read")
 	require.NotContains(t, out, "PASS")
 }
 

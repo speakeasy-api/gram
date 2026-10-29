@@ -134,6 +134,16 @@ func (s *seeder) chTelemetryChecks() []chCheck {
 			settings: "",
 			msg:      "demo seed postflight: hook-observed gateway calls missing",
 		},
+		// Skill loads over MCP: what the "Loaded via" MCP filter on Logs and
+		// the skill-load counts on MCP & Tools read.
+		{
+			cond: `(SELECT count() FROM telemetry_logs
+   WHERE gram_project_id = toUUID(@proj)
+     AND event_source = 'resource_read'
+     AND skill_name != '') != 60`,
+			settings: "",
+			msg:      "demo seed postflight: expected 60 MCP skill load rows",
+		},
 		// Hooks sent with an agent key: without them the Tool Logs agent
 		// filter only ever matches gateway calls.
 		{
