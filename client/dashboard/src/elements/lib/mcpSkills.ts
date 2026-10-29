@@ -34,53 +34,74 @@ export function serverServesSkills(client: SkillsClient): boolean {
   return capabilities?.extensions?.[SKILLS_EXTENSION] !== undefined;
 }
 
+/** Most `skills/list` pages followed before discovery gives up. */
+const MAX_SKILL_PAGES = 20;
+
+/** How long one `skills/list` request may take before discovery gives up. */
+const SKILLS_LIST_TIMEOUT_MS = 10_000;
+
 /**
  * Lists the skills a server serves. `@ai-sdk/mcp` has no method for extension
  * requests, so `skills/list` goes out as a plain JSON-RPC POST carrying the
- * same headers as the client's transport and the negotiated protocol version.
- * Every page is followed, and entries without a name are skipped.
+ * same headers as the client's transport, the negotiated protocol version,
+ * and the request metadata MCP 2026-07-28 requires on every request. Every
+ * page is followed and entries without a name are skipped. A request that
+ * times out, a repeated cursor, or more than MAX_SKILL_PAGES pages fails
+ * discovery rather than returning a partial catalog.
  */
 export async function listServedSkills({
   url,
   headers,
   protocolVersion,
   fetchFn = (...args) => globalThis.fetch(...args),
+  timeoutMs = SKILLS_LIST_TIMEOUT_MS,
 }: {
   url: string;
   headers: Record<string, string>;
   protocolVersion: string | undefined;
   fetchFn?: typeof fetch;
+  timeoutMs?: number;
 }): Promise<ServedSkill[]> {
   const skills: ServedSkill[] = [];
+  const seenCursors = new Set<string>();
   let cursor: string | undefined;
-  // A misbehaving server could hand back the same cursor forever.
-  for (let page = 0; page < 20; page++) {
+  for (let page = 0; ; page++) {
+    if (page === MAX_SKILL_PAGES) {
+      throw new Error(
+        `skills/list returned more than ${MAX_SKILL_PAGES} pages`,
+      );
+    }
+
     const params: Record<string, unknown> = cursor ? { cursor } : {};
     if (protocolVersion) {
       params._meta = {
         "io.modelcontextprotocol/protocolVersion": protocolVersion,
+        "io.modelcontextprotocol/clientCapabilities": {},
       };
     }
+    const id = `skills-list-${page}`;
     const response = await fetchFn(url, {
       method: "POST",
       headers: {
         ...headers,
         "Content-Type": "application/json",
         Accept: "application/json, text/event-stream",
+        "Mcp-Method": "skills/list",
         ...(protocolVersion && { "MCP-Protocol-Version": protocolVersion }),
       },
       body: JSON.stringify({
         jsonrpc: "2.0",
-        id: `skills-list-${page}`,
+        id,
         method: "skills/list",
         params,
       }),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) {
       throw new Error(`skills/list failed with HTTP ${response.status}`);
     }
 
-    const message = await readJSONRPCMessage(response);
+    const message = await readJSONRPCResponse(response, id);
     if (message.error) {
       throw new Error(
         `skills/list failed: ${message.error.message ?? "error"}`,
@@ -99,12 +120,16 @@ export async function listServedSkills({
     }
 
     cursor = message.result?.nextCursor || undefined;
-    if (!cursor) break;
+    if (!cursor) return skills;
+    if (seenCursors.has(cursor)) {
+      throw new Error("skills/list repeated a cursor");
+    }
+    seenCursors.add(cursor);
   }
-  return skills;
 }
 
 interface SkillsListMessage {
+  id?: unknown;
   result?: {
     skills?: Array<{
       uri?: unknown;
@@ -116,11 +141,13 @@ interface SkillsListMessage {
 }
 
 /**
- * Reads the JSON-RPC response from either a JSON body or a Streamable HTTP
- * event stream, where it is the first `data:` line that parses.
+ * Reads the JSON-RPC response to request `id` from either a JSON body or a
+ * Streamable HTTP event stream, where notifications and other messages may
+ * precede it.
  */
-async function readJSONRPCMessage(
+async function readJSONRPCResponse(
   response: Response,
+  id: string,
 ): Promise<SkillsListMessage> {
   const body = await response.text();
   if (!response.headers.get("content-type")?.includes("text/event-stream")) {
@@ -128,13 +155,15 @@ async function readJSONRPCMessage(
   }
   for (const line of body.split("\n")) {
     if (!line.startsWith("data:")) continue;
+    let message: SkillsListMessage;
     try {
-      return JSON.parse(line.slice("data:".length)) as SkillsListMessage;
+      message = JSON.parse(line.slice("data:".length)) as SkillsListMessage;
     } catch {
       continue;
     }
+    if (message.id === id) return message;
   }
-  throw new Error("skills/list returned no message");
+  throw new Error("skills/list returned no response");
 }
 
 /**

@@ -78,9 +78,56 @@ describe("listServedSkills", () => {
     const headers = init?.headers as Record<string, string>;
     expect(headers["Gram-Chat-Session"]).toBe("token");
     expect(headers["MCP-Protocol-Version"]).toBe("2025-11-25");
+    expect(headers["Mcp-Method"]).toBe("skills/list");
     const body = JSON.parse(init?.body as string);
     expect(body.method).toBe("skills/list");
     expect(body.params.cursor).toBe("next");
+    expect(body.params._meta).toEqual({
+      "io.modelcontextprotocol/protocolVersion": "2025-11-25",
+      "io.modelcontextprotocol/clientCapabilities": {},
+    });
+  });
+
+  it("skips stream messages that are not the response", async () => {
+    const stream = [
+      `data: ${JSON.stringify({ jsonrpc: "2.0", method: "notifications/message", params: {} })}`,
+      `data: ${JSON.stringify({ jsonrpc: "2.0", id: "skills-list-0", result: { skills: [skillEntry("a", "Does A.")] } })}`,
+      "",
+    ].join("\n\n");
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(stream, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
+
+    const skills = await listServedSkills({
+      url: "https://example.test/mcp/slug",
+      headers: {},
+      protocolVersion: undefined,
+      fetchFn,
+    });
+    expect(skills.map((skill) => skill.name)).toEqual(["a"]);
+  });
+
+  it("fails on a repeated cursor instead of returning a partial catalog", async () => {
+    const fetchFn = vi.fn<typeof fetch>().mockImplementation(async () =>
+      jsonResponse({
+        jsonrpc: "2.0",
+        id: "skills-list-0",
+        result: { skills: [skillEntry("a", "Does A.")], nextCursor: "same" },
+      }),
+    );
+
+    await expect(
+      listServedSkills({
+        url: "https://example.test/mcp/slug",
+        headers: {},
+        protocolVersion: undefined,
+        fetchFn,
+      }),
+    ).rejects.toThrow("repeated a cursor");
   });
 
   it("throws on a JSON-RPC error", async () => {

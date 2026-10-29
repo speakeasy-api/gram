@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
@@ -186,8 +185,8 @@ func hostedSkillScope(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	}
 
 	userID := ""
-	if payload.authenticated && payload.apiKeyID == "" && actsAsUser(ctx) {
-		userID = payload.userID
+	if payload.authenticated && payload.apiKeyID == "" {
+		userID = skillRecipientUserID(ctx, payload.userID)
 	}
 	return mcpskills.Scope{
 		OrganizationID:     payload.organizationID,
@@ -197,37 +196,25 @@ func hostedSkillScope(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	}, true
 }
 
-// actsAsUser reports whether the request's MCP credential, if any, proves an
-// acting user. Unstamped requests did not come through an MCP credential, so
-// the auth context's user is the caller.
-func actsAsUser(ctx context.Context) bool {
+// skillRecipientUserID returns the user the request's MCP credential, if
+// any, proves is calling, or empty when it proves none. Unstamped requests
+// did not come through an MCP credential, so the auth context's user is the
+// caller. A chat session counts only when it was minted from a signed-in
+// dashboard session (the playground), and then names the minting user as
+// recorded by its validator.
+func skillRecipientUserID(ctx context.Context, authUserID string) string {
 	identity, ok := mcpidentity.FromContext(ctx)
 	if !ok {
-		return true
+		return authUserID
 	}
 	switch identity.Kind() {
 	case mcpidentity.KindUserSession:
-		return true
+		return authUserID
 	case mcpidentity.KindChatSession:
-		return chatSessionMintedByUser(ctx)
+		return identity.ChatSessionMinterUserID()
 	default:
-		return false
+		return ""
 	}
-}
-
-// chatSessionMintedByUser reports whether a chat-session token was minted
-// from a dashboard session rather than an API key. Such a token carries the
-// signed-in user's id and dashboard session id, both copied by the server
-// from the minting session, so its user claim is proof rather than
-// attribution. A key-minted token carries the key id and, for a legacy key,
-// its creator's user id, which names the key's owner, not the caller; the
-// embedder-supplied external user id is never consulted.
-func chatSessionMintedByUser(ctx context.Context) bool {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	return ok && authCtx != nil &&
-		authCtx.APIKeyID == "" &&
-		authCtx.UserID != "" &&
-		authCtx.SessionID != nil && *authCtx.SessionID != ""
 }
 
 // skillResourceURI reports the skill URI a resources/read request names, when
