@@ -234,10 +234,11 @@ export function matchesSourceFilter(
 
 // What a device is called when it reports no hostname.
 export function deviceName(device: FleetDevice): string {
+  // || rather than ??: an MDM can report an empty hostname.
   return (
-    device.hostname ??
-    device.serialNumber ??
-    device.externalId ??
+    device.hostname ||
+    device.serialNumber ||
+    device.externalId ||
     "Unnamed device"
   );
 }

@@ -98,7 +98,7 @@ export type FleetDevice = {
    */
   osName?: string | undefined;
   /**
-   * Operating system version as the MDM reports it.
+   * Operating system version as the MDM reports it. Omitted for an agent-only machine.
    */
   osVersion?: string | undefined;
   /**

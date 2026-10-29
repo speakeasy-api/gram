@@ -59,7 +59,7 @@ WHERE d.organization_id = $1::text
   AND NOT EXISTS (
     SELECT 1 FROM mdm_devices m
     WHERE m.organization_id = d.organization_id
-      AND m.serial_number = d.serial_number
+      AND LOWER(m.serial_number) = LOWER(d.serial_number)
   )
 `
 

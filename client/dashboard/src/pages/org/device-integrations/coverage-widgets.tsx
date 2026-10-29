@@ -339,7 +339,10 @@ export const DeviceTable = memo(function DeviceTable({
         <Page.Toolbar.Filters
           schema={filters}
           values={values}
-          optionsById={{ coverage: COVERAGE_OPTIONS, source: SOURCE_OPTIONS }}
+          optionsById={{
+            coverage: mdmConnected ? COVERAGE_OPTIONS : AGENT_COVERAGE_OPTIONS,
+            source: SOURCE_OPTIONS,
+          }}
           onChange={setValue as (id: string, value: FilterValue) => void}
           onClear={clearValue as (id: string) => void}
           onClearAll={clearAll}
@@ -393,6 +396,14 @@ const COVERAGE_OPTIONS = [
       : coverageDisplay(key).label,
   value: key,
 }));
+// Without an MDM every device is agent-only, which is only ever agent_active
+// or agent_stale; the MDM gap buckets would match nothing.
+const AGENT_COVERAGE_OPTIONS = COVERAGE_OPTIONS.filter(
+  ({ value }) =>
+    Object.hasOwn(POLICY_STATES, value) ||
+    value === "agent_active" ||
+    value === "agent_stale",
+);
 const DEVICE_FILTERS = defineFilters([
   { id: "coverage", label: "Coverage", kind: "multiselect", pinned: true },
 ]);

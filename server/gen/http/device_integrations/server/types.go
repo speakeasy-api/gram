@@ -2792,7 +2792,8 @@ type FleetDeviceResponseBody struct {
 	// Operating system name as the MDM reports it. Omitted for an agent-only
 	// machine; agent_state.os carries the agent's.
 	OsName *string `form:"os_name,omitempty" json:"os_name,omitempty" xml:"os_name,omitempty"`
-	// Operating system version as the MDM reports it.
+	// Operating system version as the MDM reports it. Omitted for an agent-only
+	// machine.
 	OsVersion *string `form:"os_version,omitempty" json:"os_version,omitempty" xml:"os_version,omitempty"`
 	// The MDM's assigned user, or for an agent-only machine the user its agent
 	// runs as.

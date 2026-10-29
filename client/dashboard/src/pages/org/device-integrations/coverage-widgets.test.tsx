@@ -168,6 +168,17 @@ describe("DeviceTable on the Devices tab", () => {
     expect(screen.queryByRole("button", { name: /source/i })).toBeNull();
   });
 
+  it("names a machine by its serial when the hostname is empty", () => {
+    renderTable(
+      [device("agent:a", "", { inInventory: false, serialNumber: "SER-1" })],
+      { pathname: "/devices" },
+      {},
+      { variant: "fleet", mdmConnected: false },
+    );
+
+    expect(screen.getAllByText("SER-1").length).toBeGreaterThan(0);
+  });
+
   it("marks the machines no connected MDM holds", () => {
     renderTable(
       [device("mdm:a", "alpha-mbp"), agentOnly("agent:b", "beta-mbp")],

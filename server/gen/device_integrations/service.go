@@ -330,7 +330,8 @@ type FleetDevice struct {
 	// Operating system name as the MDM reports it. Omitted for an agent-only
 	// machine; agent_state.os carries the agent's.
 	OsName *string
-	// Operating system version as the MDM reports it.
+	// Operating system version as the MDM reports it. Omitted for an agent-only
+	// machine.
 	OsVersion *string
 	// The MDM's assigned user, or for an agent-only machine the user its agent
 	// runs as.

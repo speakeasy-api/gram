@@ -115,16 +115,17 @@ func TestFleetWithoutMDMListsAgentMachines(t *testing.T) {
 		require.Len(t, rows, 6, "device_level=%v", deviceLevel)
 		got := byFleetKey(rows)
 
+		// bySerial is only checked for the rows that carry a report.
 		want := map[string]struct {
-			bucket, policy string
-			bySerial       bool
+			bucket, policy      string
+			hasReport, bySerial bool
 		}{
-			"S-A":            {"agent_active", "attested", true},
-			"S-B":            {"agent_active", "outdated", true},
-			"c@example.test": {"agent_active", "unreported", false},
-			"d@example.test": {"agent_active", "halted", false},
-			"S-E":            {"agent_stale", "", true},
-			"S-F":            {"agent_active", "unreported", true},
+			"S-A":            {"agent_active", "attested", true, true},
+			"S-B":            {"agent_active", "outdated", true, true},
+			"c@example.test": {"agent_active", "unreported", false, false},
+			"d@example.test": {"agent_active", "halted", true, false},
+			"S-E":            {"agent_stale", "", false, false},
+			"S-F":            {"agent_active", "unreported", false, false},
 		}
 		for key, w := range want {
 			row, ok := got[key]
@@ -133,7 +134,8 @@ func TestFleetWithoutMDMListsAgentMachines(t *testing.T) {
 			require.Empty(t, row.Provider, key)
 			require.Equal(t, w.bucket, row.CoverageBucket, key)
 			require.Equal(t, w.policy, row.PolicyState, key)
-			if row.HasReport {
+			require.Equal(t, w.hasReport, row.HasReport, key)
+			if w.hasReport {
 				require.Equal(t, w.bySerial, row.ReportBySerial, key)
 			}
 			require.True(t, strings.HasPrefix(fleetDeviceID(row), "agent:"), key)

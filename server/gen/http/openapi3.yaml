@@ -107298,7 +107298,7 @@ components:
                     description: Operating system name as the MDM reports it. Omitted for an agent-only machine; agent_state.os carries the agent's.
                 os_version:
                     type: string
-                    description: Operating system version as the MDM reports it.
+                    description: Operating system version as the MDM reports it. Omitted for an agent-only machine.
                 policy_state:
                     type: string
                     description: 'Whether the agent that answers for an agent_active device verifiably applies its policy; agent_state.attestation says whether that agent runs on this machine. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different policy, or none. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the reporting agent''s kill switch stopped enforcement on a blocked build. Omitted for every other bucket.'

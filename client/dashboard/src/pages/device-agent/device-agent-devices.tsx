@@ -34,7 +34,9 @@ export function DeviceAgentDevicesTab(): React.JSX.Element {
     [devicesQuery.data],
   );
   const coverage = coverageQuery.data;
-  const mdmConnected = coverage?.mdmConnected ?? true;
+  // Unknown until coverage loads; fail closed so a failed read never shows
+  // MDM columns for a fleet that may have no MDM.
+  const mdmConnected = coverage?.mdmConnected ?? false;
 
   return (
     <Stack gap={6} className="mt-3 mb-6">

@@ -240,7 +240,7 @@ var FleetDevice = Type("FleetDevice", func() {
 	Attribute("serial_number", String, "Hardware serial number, from the MDM or the agent. Omitted when neither reported one.")
 	Attribute("hostname", String, "Device hostname, from the MDM or the agent.")
 	Attribute("os_name", String, "Operating system name as the MDM reports it. Omitted for an agent-only machine; agent_state.os carries the agent's.")
-	Attribute("os_version", String, "Operating system version as the MDM reports it.")
+	Attribute("os_version", String, "Operating system version as the MDM reports it. Omitted for an agent-only machine.")
 	Attribute("user_email", String, "The MDM's assigned user, or for an agent-only machine the user its agent runs as.")
 	Attribute("user_id", String, "Resolved Speakeasy user for user_email. Omitted when it does not resolve to an org member.")
 	Attribute("mdm_last_check_in_at", String, "Last device check-in as reported by the MDM.", func() {
