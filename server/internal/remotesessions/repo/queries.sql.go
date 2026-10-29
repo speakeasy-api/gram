@@ -6899,11 +6899,14 @@ func (q *Queries) GetUserSessionIssuerForProject(ctx context.Context, arg GetUse
 const hasLivePrincipalRemoteSessionBindingsForClientBinding = `-- name: HasLivePrincipalRemoteSessionBindingsForClientBinding :one
 SELECT EXISTS (
   SELECT 1
-  FROM principal_remote_session_bindings
-  WHERE organization_id = $1
-    AND remote_session_client_id = $2
-    AND user_session_issuer_id = $3
-    AND revoked_at IS NULL
+  FROM principal_remote_session_bindings AS b
+  JOIN projects AS bp ON bp.id = b.project_id AND bp.organization_id = b.organization_id AND bp.deleted IS FALSE
+  JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+    AND a.deleted IS FALSE AND a.revoked_at IS NULL
+  WHERE b.organization_id = $1
+    AND b.remote_session_client_id = $2
+    AND b.user_session_issuer_id = $3
+    AND b.revoked_at IS NULL
 )
 `
 
