@@ -121,6 +121,7 @@ async function $do(
     "coverage_bucket": payload?.coverage_bucket,
     "cursor": payload?.cursor,
     "limit": payload?.limit,
+    "policy_state": payload?.policy_state,
     "provider": payload?.provider,
     "user_emails": payload?.user_emails,
     "user_ids": payload?.user_ids,

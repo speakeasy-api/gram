@@ -85,6 +85,8 @@ type metaGateContext struct {
 	chainUpstream func(ctx context.Context, member metaMember, upstreamResource string) (string, error)
 	// catalog is the immutable consent record; nil for connections without materialized approval.
 	catalog *connectionCatalog
+	// consentDiagnostics is shared only within one Code Mode execution.
+	consentDiagnostics *consentDiagnostics
 	// catalogRef is the authenticated consent reference and discovery mode.
 	catalogRef *toolfilter.CatalogReference
 	// authentication retains validated endpoint identity for lazy catalogue loading.
@@ -758,6 +760,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		connectRoot:         connectRoot,
 		chainUpstream:       nil,
 		catalog:             nil,
+		consentDiagnostics:  nil,
 		catalogRef:          nil,
 		authentication:      gateAuthentication,
 		unapprovedMembers:   nil,

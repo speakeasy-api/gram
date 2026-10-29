@@ -14,9 +14,12 @@ import (
 )
 
 const (
+	ActionAuthClientCreate          Action = "auth-client:create"
 	ActionAuthClientUpdate          Action = "auth-client:update"
+	ActionAuthClientUpdateHeaders   Action = "auth-client:update-headers"
 	ActionAuthClientEnable          Action = "auth-client:enable"
 	ActionAuthClientDisable         Action = "auth-client:disable"
+	ActionAuthClientAttachMcpServer Action = "auth-client:attach-mcp-server"
 	ActionAuthClientDetachMcpServer Action = "auth-client:detach-mcp-server"
 	ActionAuthClientAudienceUpdate  Action = "auth-client:update-audience"
 )
@@ -40,6 +43,18 @@ type LogAuthClientUpdateEvent struct {
 // with their own actions so they can be found without diffing snapshots.
 func (l *Logger) LogAuthClientUpdate(ctx context.Context, dbtx repo.DBTX, event LogAuthClientUpdateEvent) error {
 	return l.logAuthClientChange(ctx, dbtx, ActionAuthClientUpdate, event)
+}
+
+// LogAuthClientCreate records a new client. Only the after snapshot is set,
+// and it never carries header values.
+func (l *Logger) LogAuthClientCreate(ctx context.Context, dbtx repo.DBTX, event LogAuthClientUpdateEvent) error {
+	return l.logAuthClientChange(ctx, dbtx, ActionAuthClientCreate, event)
+}
+
+// LogAuthClientUpdateHeaders records a change to the headers a client sends,
+// including a rotated secret. Snapshots never carry header values.
+func (l *Logger) LogAuthClientUpdateHeaders(ctx context.Context, dbtx repo.DBTX, event LogAuthClientUpdateEvent) error {
+	return l.logAuthClientChange(ctx, dbtx, ActionAuthClientUpdateHeaders, event)
 }
 
 func (l *Logger) LogAuthClientEnable(ctx context.Context, dbtx repo.DBTX, event LogAuthClientUpdateEvent) error {
@@ -85,9 +100,9 @@ func (l *Logger) logAuthClientChange(ctx context.Context, dbtx repo.DBTX, action
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AuthClientV1})
 }
 
-type LogAuthClientDetachMcpServerEvent struct {
+type LogAuthClientMcpServerEvent struct {
 	OrganizationID string
-	// ProjectID is the detached server's project.
+	// ProjectID is the server's project.
 	ProjectID uuid.UUID
 
 	Actor            urn.Principal
@@ -100,9 +115,16 @@ type LogAuthClientDetachMcpServerEvent struct {
 	McpServerName  string
 }
 
-func (l *Logger) LogAuthClientDetachMcpServer(ctx context.Context, dbtx repo.DBTX, event LogAuthClientDetachMcpServerEvent) error {
-	action := ActionAuthClientDetachMcpServer
+func (l *Logger) LogAuthClientDetachMcpServer(ctx context.Context, dbtx repo.DBTX, event LogAuthClientMcpServerEvent) error {
+	return l.logAuthClientServerChange(ctx, dbtx, ActionAuthClientDetachMcpServer, event)
+}
 
+// LogAuthClientAttachMcpServer records a server starting to offer the client.
+func (l *Logger) LogAuthClientAttachMcpServer(ctx context.Context, dbtx repo.DBTX, event LogAuthClientMcpServerEvent) error {
+	return l.logAuthClientServerChange(ctx, dbtx, ActionAuthClientAttachMcpServer, event)
+}
+
+func (l *Logger) logAuthClientServerChange(ctx context.Context, dbtx repo.DBTX, action Action, event LogAuthClientMcpServerEvent) error {
 	metadata, err := marshalAuditPayload(map[string]any{"mcp_server_id": event.McpServerURN.ID.String(), "mcp_server_name": event.McpServerName})
 	if err != nil {
 		return fmt.Errorf("build %s metadata: %w", action, err)

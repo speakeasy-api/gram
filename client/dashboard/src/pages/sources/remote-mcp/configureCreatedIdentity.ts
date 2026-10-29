@@ -113,7 +113,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Add a Service Account credential in Settings > Identity.",
+        "Add a shared credential in Settings > Identity.",
       );
     }
     try {
@@ -134,7 +134,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Service Account could not be configured. Add the credential in Settings > Identity.",
+        "The shared credential could not be configured. Add it in Settings > Identity.",
       );
     }
 
@@ -147,7 +147,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Service Account was configured, but the server could not be enabled. Enable it from Settings.",
+        "The shared credential was configured, but the server could not be enabled. Enable it from Settings.",
       );
     }
   }

@@ -83,4 +83,8 @@ const (
 	// SelectionSourceBackfill is a choice recorded for an existing credential
 	// by the offline backfill.
 	SelectionSourceBackfill = "backfill"
+
+	// SelectionSourceNewMember is a choice recorded for a gateway member
+	// added after the credential was issued, the first time it was used.
+	SelectionSourceNewMember = "new_member"
 )

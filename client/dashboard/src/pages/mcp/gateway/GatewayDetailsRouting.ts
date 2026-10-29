@@ -5,6 +5,7 @@ import type { useRoutes } from "@/routes";
 const VALID_TABS = [
   "overview",
   "inspect",
+  "skills",
   "team-access",
   "sessions",
   "settings",
@@ -75,6 +76,8 @@ export function gatewayTabHref(
       return routes.mcp.gateway.overview.href(gatewayId);
     case "inspect":
       return routes.mcp.gateway.inspect.href(gatewayId);
+    case "skills":
+      return routes.mcp.gateway.skills.href(gatewayId);
     case "team-access":
       return routes.mcp.gateway.teamAccess.href(gatewayId);
     case "sessions":

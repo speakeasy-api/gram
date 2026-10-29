@@ -198,6 +198,27 @@ func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal P
 	if err != nil {
 		return GetMyMCPConnectionStatusOutput{}, err
 	}
+	if len(clients) > 1 && resolver {
+		// The member chooses among the server's credentials when connecting;
+		// any connection of theirs that is active serves.
+		ids := make([]uuid.UUID, 0, len(clients))
+		for _, c := range clients {
+			ids = append(ids, c.ID)
+		}
+		statuses, err := s.remoteSessions.AuthClientRemoteSessionStatuses(ctx, urn.NewUserSubject(principal.UserID), target.projectID, principal.OrganizationID, ids)
+		if err != nil {
+			return GetMyMCPConnectionStatusOutput{}, fmt.Errorf("read MCP authorization status: %w", err)
+		}
+		for _, status := range statuses {
+			if status.Status == remotesessions.RemoteSessionActive && status.ValidationStatus != remotesessions.ValidationOutcomeRejectedByMember && status.ValidationStatus != remotesessions.ValidationOutcomeInactive {
+				output.State = MCPConnectionStateActive
+				output.NextAction = "use_mcp"
+				return output, nil
+			}
+		}
+		output.Reason = "choose_on_connect"
+		return output, nil
+	}
 	if len(clients) > 1 {
 		output.State = MCPConnectionStateSetupRequired
 		output.Reason = "multiple_authorization_clients"
