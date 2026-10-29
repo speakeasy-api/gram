@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -202,7 +203,9 @@ func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
 
 			ctx, ti := newTestMCPService(t)
 			authCtx := requireProjectAuthContext(t, ctx)
-			_, issuer, client, refreshToken, oldJTI := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+			toolset, issuer, client, refreshToken, oldJTI := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+			// Only the remote server signs in through the issuer.
+			testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{UserSessionIssuerID: &uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 			remoteClient := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
 			if tc.sibling {
 				attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)

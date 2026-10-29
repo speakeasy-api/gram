@@ -409,13 +409,13 @@ func TestListUserSessionsAgentAttachmentUpstreams(t *testing.T) {
 			}
 			return rows, nil
 		}, humanRemains: true},
-		{name: "superseded grant generation", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+		{name: "reauthenticated same session", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
 			rows, err := q.MutateAttachmentSupersededGrantGenerationFixture(ctx, args.Source)
 			if err != nil {
 				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
 			}
 			return rows, nil
-		}, humanRemains: true},
+		}, wantAttached: true, humanRemains: true},
 		{name: "deleted source", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
 			rows, err := q.MutateAttachmentDeletedSourceFixture(ctx, args.Source)
 			if err != nil {

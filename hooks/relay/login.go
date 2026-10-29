@@ -66,7 +66,9 @@ func (l *loginFlow) Run(ctx context.Context, force bool) error {
 	if l.cfg.ConfigError != "" {
 		return fmt.Errorf("cannot read plugin config at %q (%s); reinstall the Speakeasy hooks plugin", l.cfg.ConfigPath, l.cfg.ConfigError)
 	}
-	if c, ok := resolveAuth(l.cfg); ok && !force && c.Source != credOrg {
+	// Only an env key or a cached sign-in counts as signed in. The baked key,
+	// even an agent's key that outranks the cache, is not this person's.
+	if _, cached := readCachedAuth(l.cfg); !force && (cached || Env("HOOKS_API_KEY") != "") {
 		return nil
 	}
 	// A key minted for a plaintext non-loopback server would be refused by

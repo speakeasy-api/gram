@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -74,13 +75,15 @@ func (f *hostedFixture) payload(visibility types.McpServerVisibility, mutate fun
 }
 
 // requireProjected asserts the wrapper shares the toolset's name and tool variations group, keeps its single
-// platform endpoint, and that the toolset hosting columns stay unset.
+// platform endpoint, and that the toolset has no legacy alias.
 func (f *hostedFixture) requireProjected(t *testing.T, ctx context.Context) (toolsetsrepo.Toolset, mcpserversrepo.McpServer) {
 	t.Helper()
 
 	toolset, err := toolsetsrepo.New(f.ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.toolset.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
-	require.False(t, toolset.McpSlug.Valid || toolset.McpEnabled || toolset.McpIsPublic || toolset.UserSessionIssuerID.Valid || toolset.CustomDomainID.Valid, "hosting writes never touch the toolset hosting columns")
+	alias, err := legacyalias.Get(ctx, f.ti.conn, f.projectID, f.toolset.ID)
+	require.NoError(t, err)
+	require.Equal(t, legacyalias.None(), alias, "hosting writes never give the toolset a legacy alias")
 	server, err := mcpserversrepo.New(f.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.toolset.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
 	require.Equal(t, toolset.Name, server.Name.String)
@@ -256,7 +259,7 @@ func TestUpdateMcpServerHostedWrapperRejectsPublicFlipWithExternalOAuth(t *testi
 	require.Equal(t, "disabled", server.Visibility)
 }
 
-func TestUpdateMcpServerHostedWrapperFlipsVisibilityWithRetiredOAuthProxyLink(t *testing.T) {
+func TestUpdateMcpServerHostedWrapperFlipsIssuerGatedVisibility(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedFixture(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -273,7 +276,6 @@ func TestUpdateMcpServerHostedWrapperFlipsVisibilityWithRetiredOAuthProxyLink(t 
 		p.UserSessionIssuerID = new(issuer.ID.String())
 	}))
 	require.NoError(t, err)
-	testenv.LinkRetiredOAuthProxy(t, ctx, f.ti.conn, f.projectID, f.toolset.ID)
 
 	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("public"), nil))
 	require.NoError(t, err)
@@ -292,7 +294,7 @@ func TestUpdateMcpServerHostedWrapperFlipsVisibilityWithRetiredOAuthProxyLink(t 
 	require.NoError(t, err)
 	toolset, server := f.requireProjected(t, ctx)
 	require.Equal(t, "disabled", server.Visibility)
-	require.False(t, hostedmcp.WithServerState(toolset, &server).McpIsPublic)
+	require.False(t, hostedmcp.ServerHosting(toolset, &server).Public)
 
 	tx := testenv.BeginTx(t, ctx, f.ti.conn)
 	enabled, err := hostedmcp.Enable(ctx, tx, audit.NewLogger(), hostedmcp.SystemActor("re-enable-test"), toolset)
@@ -300,7 +302,7 @@ func TestUpdateMcpServerHostedWrapperFlipsVisibilityWithRetiredOAuthProxyLink(t 
 	require.True(t, enabled)
 	require.NoError(t, tx.Commit(ctx))
 	_, server = f.requireProjected(t, ctx)
-	require.Equal(t, "private", server.Visibility, "the retired proxy link alone re-enables private")
+	require.Equal(t, "private", server.Visibility, "re-enabling an issuer-gated server restores private")
 }
 
 func TestUpdateMcpServerHostedWrapperRejectsNameOverToolsetLimit(t *testing.T) {

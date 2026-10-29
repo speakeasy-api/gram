@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   toolsets: vi.fn(),
   fetch: vi.fn(),
   platforms: vi.fn(),
+  tokenEndpoints: vi.fn(),
   platformsStatus: "success" as "success" | "pending" | "error",
   registerIssuer: vi.fn(),
   admitSubject: vi.fn(),
@@ -153,7 +154,7 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
 }));
 vi.mock("@gram/client/react-query/workloadTokenEndpoints.js", () => ({
   useWorkloadTokenEndpoints: () => ({
-    data: { items: [] },
+    data: { items: mocks.tokenEndpoints() },
     isPending: false,
     isError: false,
   }),
@@ -205,6 +206,13 @@ vi.mock("../agent-policy-grants", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../agent-policy-grants")>()),
   invalidateAgentPolicy: vi.fn(),
 }));
+// Highlighting is asynchronous and splits code into token elements; the
+// snippet's text is what these tests read.
+vi.mock("./CodeBlock", () => ({
+  CodeBlock: ({ value, label }: { value: string; label: string }) => (
+    <pre aria-label={label}>{value}</pre>
+  ),
+}));
 
 const grant = {
   effect: "allow",
@@ -240,7 +248,7 @@ function setup(initialPlatformKey?: string, initialEntry = "/") {
 }
 
 async function continueFromAuthentication() {
-  await screen.findByRole("heading", { name: "MCP authentication" });
+  await screen.findByRole("heading", { name: "MCP Authentication" });
   const next = screen.getByRole("button", { name: "Continue" });
   await waitFor(() => expect(next.hasAttribute("disabled")).toBe(false));
   fireEvent.click(next);
@@ -301,6 +309,7 @@ beforeEach(() => {
   mocks.canReadWorkloads = true;
   mocks.platformsStatus = "success";
   mocks.platforms.mockReturnValue([]);
+  mocks.tokenEndpoints.mockReturnValue([]);
   mocks.agentList.mockReturnValue([]);
   mocks.renameAgent.mockResolvedValue({});
   mocks.createGrant.mockResolvedValue({});
@@ -364,7 +373,7 @@ describe("Provisioning a new agent", () => {
     setup(platform.key, "/?step=3");
 
     expect(
-      await screen.findByRole("heading", { name: "MCP selection" }),
+      await screen.findByRole("heading", { name: "MCP Selection" }),
     ).toBeTruthy();
     expect(mocks.createAgent).not.toHaveBeenCalled();
   });
@@ -382,7 +391,7 @@ describe("Provisioning a new agent", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
-    await screen.findByRole("heading", { name: "MCP selection" });
+    await screen.findByRole("heading", { name: "MCP Selection" });
     expect(
       (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
         .disabled,
@@ -824,6 +833,206 @@ describe("Connecting a GKE cluster", () => {
       agentId: "agent_new",
       tags: [],
     });
+  });
+
+  const sharedServer = {
+    userSessionIssuerId: "usi_shared",
+    userSessionIssuerSlug: "shared",
+    projectId: "",
+    projectName: "",
+    issuer: "https://app.example.test/oauth/usi/usi_shared",
+    tokenEndpoint: "https://app.example.test/oauth/usi/usi_shared/token",
+    mcpHost: "app.example.test",
+  };
+
+  const githubServer = {
+    id: "server_one",
+    name: "GitHub",
+    slug: "github",
+    platformEndpointSlug: "github-mcp",
+    projectId: "project_one",
+    toolsetId: "toolset_one",
+    visibility: "private",
+    networkAccessMode: "dual",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  /** Connects a cluster for an agent that reaches these servers, then shows the pod step. */
+  async function reachPodStep(
+    servers: (typeof githubServer)[] = [githubServer],
+  ) {
+    mocks.platforms.mockReturnValue([gke]);
+    mocks.mcpServers.mockResolvedValue({ mcpServers: servers });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Review Agent" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    for (const server of servers) {
+      fireEvent.click(
+        await screen.findByRole("checkbox", { name: server.name }),
+      );
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Your cluster" });
+    for (const [label, value] of [
+      ["Project ID", "example-project"],
+      ["Location", "us-west1"],
+      ["Cluster name", "example-cluster"],
+    ] as const) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Your workload" });
+    fireEvent.change(screen.getByLabelText("Namespace"), {
+      target: { value: "pr-review" },
+    });
+    fireEvent.change(screen.getByLabelText("Service account"), {
+      target: { value: "review-agent" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Connect GKE" }));
+    await screen.findByRole("heading", {
+      name: "Give the pod a Speakeasy token",
+    });
+  }
+
+  it("names the audience, token endpoint and server URL the pod needs", async () => {
+    mocks.tokenEndpoints.mockReturnValue([sharedServer]);
+    await reachPodStep();
+
+    expect(screen.getByText("Audience")).toBeTruthy();
+    expect(screen.getAllByText(sharedServer.issuer).length).toBeGreaterThan(0);
+    expect(document.body.textContent).toContain(
+      `audience: ${sharedServer.issuer}`,
+    );
+    expect(document.body.textContent).not.toContain("SPEAKEASY_AUDIENCE");
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", {
+      name: "Exchange the token and call the server",
+    });
+    const serverUrl = new URL("/mcp/github-mcp", window.location.origin).href;
+    expect(screen.getByText("Call GitHub with the access token")).toBeTruthy();
+    expect(
+      screen.getAllByText(sharedServer.tokenEndpoint).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText(serverUrl).length).toBeGreaterThan(0);
+    const text = document.body.textContent ?? "";
+    // Quoted, so nothing in a value is read as shell syntax.
+    expect(text).toContain(`TOKEN_ENDPOINT='${sharedServer.tokenEndpoint}'`);
+    expect(text).toContain(`MCP_URL='${serverUrl}'`);
+    // No resource: the shared authorization server then issues one token for
+    // all of the agent's servers. Naming one would bind the token to it, and
+    // the pod's identity token is accepted only once.
+    expect(text).not.toContain("resource=");
+    expect(text).not.toContain("SPEAKEASY_TOKEN_ENDPOINT");
+  });
+
+  it("says why the values are missing and which placeholders stand in", async () => {
+    await reachPodStep();
+
+    expect(
+      screen.getByText(/usable shared Speakeasy authorization server/),
+    ).toBeTruthy();
+    expect(document.body.textContent).toContain("audience: SPEAKEASY_AUDIENCE");
+    expect(
+      screen.getByText(/Until then, the snippet below shows/),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", {
+      name: "Exchange the token and call the server",
+    });
+    expect(
+      screen.getByText(/usable shared Speakeasy authorization server/),
+    ).toBeTruthy();
+    expect(document.body.textContent).toContain(
+      "TOKEN_ENDPOINT='SPEAKEASY_TOKEN_ENDPOINT'",
+    );
+  });
+
+  async function reachExchangeStep(servers: (typeof githubServer)[]) {
+    mocks.tokenEndpoints.mockReturnValue([sharedServer]);
+    await reachPodStep(servers);
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", {
+      name: "Exchange the token and call the server",
+    });
+  }
+
+  it("targets the server picked from the agent's servers, at its own public URL", async () => {
+    // Radix Select reads pointer capture and scrolls options into view, which
+    // jsdom does not implement.
+    for (const [name, value] of [
+      ["hasPointerCapture", () => false],
+      ["releasePointerCapture", () => undefined],
+      ["scrollIntoView", () => undefined],
+    ] as const) {
+      if (!(name in Element.prototype)) {
+        Object.defineProperty(Element.prototype, name, {
+          value,
+          configurable: true,
+        });
+      }
+    }
+    const linearUrl = "https://mcp.example.test/mcp/linear";
+    await reachExchangeStep([
+      githubServer,
+      {
+        ...githubServer,
+        id: "server_two",
+        name: "Linear",
+        slug: "linear",
+        toolsetId: "toolset_two",
+        platformEndpointSlug: "linear-platform",
+        primaryEndpointUrl: linearUrl,
+      } as typeof githubServer,
+    ]);
+
+    const githubUrl = new URL("/mcp/github-mcp", window.location.origin).href;
+    expect(document.body.textContent).toContain(`MCP_URL='${githubUrl}'`);
+
+    const picker = screen.getByRole("combobox", { name: "MCP server" });
+    fireEvent.keyDown(picker, { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "Linear" }));
+
+    await screen.findByText("Call Linear with the access token");
+    expect(screen.getAllByText(linearUrl).length).toBeGreaterThan(0);
+    // Its own public URL wins over its platform route.
+    expect(document.body.textContent).toContain(`MCP_URL='${linearUrl}'`);
+    expect(document.body.textContent).not.toContain("linear-platform");
+  });
+
+  it("withholds a server URL that would carry the access token over plaintext", async () => {
+    await reachExchangeStep([
+      {
+        ...githubServer,
+        primaryEndpointUrl: "http://mcp.example.test/mcp/github",
+      } as typeof githubServer,
+    ]);
+
+    expect(screen.getByText(/only served over plaintext HTTP/)).toBeTruthy();
+    expect(document.body.textContent).not.toContain("http://mcp.example.test");
+    expect(document.body.textContent).toContain("MCP_URL='MCP_SERVER_URL'");
+  });
+
+  it("calls a server served at the root of its domain, without naming it as a resource", async () => {
+    const domainRoot = "https://mcp.example.test";
+    await reachExchangeStep([
+      {
+        ...githubServer,
+        primaryEndpointUrl: domainRoot,
+      } as typeof githubServer,
+    ]);
+
+    expect(screen.getAllByText(domainRoot).length).toBeGreaterThan(0);
+    const text = document.body.textContent ?? "";
+    expect(text).toContain(`MCP_URL='${domainRoot}'`);
+    expect(text).not.toContain("resource=");
   });
 });
 
@@ -1293,7 +1502,7 @@ describe("Editing an agent that already exists", () => {
   }
 
   async function authenticationSave() {
-    if (screen.queryByRole("heading", { name: "MCP selection" })) {
+    if (screen.queryByRole("heading", { name: "MCP Selection" })) {
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     }
     return screen.findByRole("button", { name: "Save changes and exit" });
@@ -1449,11 +1658,10 @@ describe("Editing an agent that already exists", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("checkbox", { name: "GitHub" });
     await authenticationSave();
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: /GitHub.*Requires connection/,
-      }),
-    );
+    // The first row starts expanded.
+    await screen.findByRole("button", {
+      name: /GitHub.*Requires connection/,
+    });
     expect(
       await screen.findByRole("button", {
         name: "Disconnect unavailable account",
@@ -1849,7 +2057,7 @@ describe("Servers that sign in as a person", () => {
       target: { value: "Release Bot" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP selection" });
+    await screen.findByRole("heading", { name: "MCP Selection" });
     await screen.findByRole("checkbox", { name: "Linear" });
   }
 
@@ -1878,10 +2086,11 @@ describe("Servers that sign in as a person", () => {
     expect(screen.queryByText(/owner@upstream.test/)).toBeNull();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP authentication" });
+    await screen.findByRole("heading", { name: "MCP Authentication" });
     expect(
-      await screen.findByText(/Your connection|Uses your connection/),
-    ).toBeTruthy();
+      (await screen.findAllByText(/Your connection|Uses your connection/))
+        .length,
+    ).toBeGreaterThan(0);
     // Read as the creator, before the agent exists.
     expect(mocks.sessions).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2020,7 +2229,7 @@ describe("Servers that sign in as a person", () => {
       await waitFor(() => expect(server.hasAttribute("disabled")).toBe(false));
       fireEvent.click(server);
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-      await screen.findByRole("heading", { name: "MCP authentication" });
+      await screen.findByRole("heading", { name: "MCP Authentication" });
       const next = screen.getByRole("button", { name: "Continue" });
       await waitFor(() => expect(next.hasAttribute("disabled")).toBe(true));
       fireEvent.click(next);
@@ -2035,11 +2244,10 @@ describe("Servers that sign in as a person", () => {
       const open = vi
         .spyOn(window, "open")
         .mockReturnValue(popup as unknown as Window);
-      fireEvent.click(
-        screen.getByRole("button", {
-          name: /Linear.*(?:Expired|Requires connection)/,
-        }),
-      );
+      // The first row starts expanded.
+      screen.getByRole("button", {
+        name: /Linear.*(?:Expired|Requires connection)/,
+      });
       fireEvent.click(
         await screen.findByRole("button", {
           name: state === "expired" ? "Reauthenticate" : "Connect account",
@@ -2076,10 +2284,10 @@ describe("Servers that sign in as a person", () => {
     await reachServers();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP authentication" });
+    await screen.findByRole("heading", { name: "MCP Authentication" });
     fireEvent.click(screen.getByRole("button", { name: "Remove Linear" }));
     expect(
-      screen.getByRole("heading", { name: "MCP authentication" }),
+      screen.getByRole("heading", { name: "MCP Authentication" }),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Remove Linear" })).toBeNull();
     expect(
@@ -2092,7 +2300,7 @@ describe("Servers that sign in as a person", () => {
     await reachServers();
     fireEvent.click(await enabledAllServers());
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP authentication" });
+    await screen.findByRole("heading", { name: "MCP Authentication" });
     expect(
       (await screen.findByText(/No usable connection available for/))
         .textContent,

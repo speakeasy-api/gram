@@ -1,5 +1,5 @@
 import { ServerInfoPopover } from "./ServerInfoPopover";
-import type { JSX } from "react";
+import { useState, type JSX } from "react";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import {
   Accordion,
@@ -38,6 +38,9 @@ export function StepAuthentication({
 }): JSX.Element {
   const { user } = useSession();
   const oauth = useOAuthPopup(connections.refetch);
+  // Controlled so the first row opens even when the server list arrives after
+  // mount; until someone toggles a row, the default tracks the list.
+  const [openRows, setOpenRows] = useState<string[] | null>(null);
   const displayedConnections = agent
     ? (connections.assignedByServer ?? connections.byServer)
     : connections.byServer;
@@ -51,7 +54,7 @@ export function StepAuthentication({
   return (
     <div className="space-y-5">
       <WizardStepHeader
-        title="MCP authentication"
+        title="MCP Authentication"
         description="Choose how the agent connects to each selected MCP server. Open a row to manage its connection, or remove a server here."
       />
       {allServers && missing.length > 0 && (
@@ -65,7 +68,14 @@ export function StepAuthentication({
           Allow popups, then try connecting again.
         </Text>
       )}
-      <Accordion type="multiple" className="border-border border">
+      {/* The first row starts open, so the step shows what a connection
+          looks like without a click. */}
+      <Accordion
+        type="multiple"
+        value={openRows ?? (servers[0] ? [servers[0].id] : [])}
+        onValueChange={setOpenRows}
+        className="border-border border"
+      >
         {servers.map((server) => {
           const connection = displayedConnections.get(server.id);
           const shared =

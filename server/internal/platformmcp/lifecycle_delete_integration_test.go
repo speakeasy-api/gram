@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -102,7 +103,7 @@ func (f *deleteMCPFixture) callerContext(ctx context.Context, grants ...authz.Gr
 // exists, so no other lifecycle tool could touch it.
 func (f *deleteMCPFixture) seedServer(t *testing.T, ctx context.Context) mcpserversrepo.McpServer {
 	t.Helper()
-	toolset := f.seedToolset(t, ctx, false)
+	toolset := f.seedToolset(t, ctx)
 	server, err := mcpserversrepo.New(f.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: uuid.New(), ProjectID: f.project.ID, Name: conv.ToPGText("Duplicate Slack"), Slug: conv.ToPGText("dup-" + uuid.NewString()[:8]),
 		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "private",
@@ -115,24 +116,29 @@ func (f *deleteMCPFixture) seedServer(t *testing.T, ctx context.Context) mcpserv
 // which the dashboard delete only turns off.
 func (f *deleteMCPFixture) seedHostedServer(t *testing.T, ctx context.Context) mcpserversrepo.McpServer {
 	t.Helper()
-	toolset := f.seedToolset(t, ctx, true)
+	toolset := f.seedToolset(t, ctx)
+	orgSlug := projectOrganizationSlug(ctx, f.conn, f.principal.OrganizationID)
+	require.NotEmpty(t, orgSlug)
+	slug := orgSlug + "-" + toolset.Slug
 	server, err := mcpserversrepo.New(f.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID: toolset.ID, ProjectID: f.project.ID, Name: conv.ToPGText(toolset.Name), Slug: toolset.McpSlug,
+		ID: toolset.ID, ProjectID: f.project.ID, Name: conv.ToPGText(toolset.Name), Slug: conv.ToPGText(slug),
 		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "private",
+	})
+	require.NoError(t, err)
+	// The hosted server owns its address, as one created in the dashboard does.
+	_, err = mcpendpointsrepo.New(f.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: f.project.ID, McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Slug: slug,
 	})
 	require.NoError(t, err)
 	return server
 }
 
-func (f *deleteMCPFixture) seedToolset(t *testing.T, ctx context.Context, enabled bool) toolsetsrepo.Toolset {
+func (f *deleteMCPFixture) seedToolset(t *testing.T, ctx context.Context) toolsetsrepo.Toolset {
 	t.Helper()
-	orgSlug := projectOrganizationSlug(ctx, f.conn, f.principal.OrganizationID)
-	require.NotEmpty(t, orgSlug)
 	suffix := uuid.NewString()[:8]
 	toolset, err := toolsetsrepo.New(f.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: f.principal.OrganizationID, ProjectID: f.project.ID,
 		Name: "Hosted " + suffix, Slug: "hosted-" + suffix,
-		McpSlug: conv.ToPGText(orgSlug + "-" + suffix), McpEnabled: enabled,
 	})
 	require.NoError(t, err)
 	// A toolset-backed server's mcp:write resource is its toolset.

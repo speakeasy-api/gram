@@ -89,8 +89,8 @@ import {
 /** Each step's name, and the one or two words it shrinks to in a full row. */
 const STEPS = [
   { label: "Name", short: "Name" },
-  { label: "MCP selection", short: "MCPs" },
-  { label: "MCP authentication", short: "Authentication" },
+  { label: "MCP Selection", short: "MCPs" },
+  { label: "MCP Authentication", short: "Authentication" },
   { label: "Credential", short: "Credential" },
   { label: "Install", short: "Install" },
   { label: "Verify", short: "Verify" },
@@ -926,6 +926,11 @@ export function CredentialsWizard({
     entry: credential === "workload" ? platform : undefined,
     platformKey: credential === "workload" ? platformKey : null,
     agentName: name.trim(),
+    servers: connectionReach().flatMap((server) =>
+      server.mcpUrl
+        ? [{ id: server.id, name: server.name, mcpUrl: server.mcpUrl }]
+        : [],
+    ),
     ensureAgent: async () => {
       const targetId = await ensureAgent();
       await attachSelectedConnections(targetId, connectionReach());
