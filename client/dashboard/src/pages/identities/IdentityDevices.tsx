@@ -1,4 +1,5 @@
 import { IdentityWorkIdentities } from "./IdentityWorkIdentities";
+import { coverageDisplay } from "@/pages/org/device-integrations/coverage-states";
 import { AccountRow } from "@/components/observe/account-display";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
@@ -351,10 +352,23 @@ export default function IdentityDevices(): JSX.Element {
           ) : (
             devices.map((device) => {
               const coverage = COVERAGE[device.coverageBucket];
+              // Only the policy states that need attention earn a label.
+              const policyProblem =
+                device.coverageBucket === "agent_active" &&
+                (device.policyState === "outdated" ||
+                  device.policyState === "halted")
+                  ? device.policyState
+                  : undefined;
               return (
                 <IdentityPanelRow
                   key={device.id}
-                  accent={coverage?.flag ? "warning" : undefined}
+                  accent={
+                    policyProblem === "halted"
+                      ? "destructive"
+                      : coverage?.flag || policyProblem
+                        ? "warning"
+                        : undefined
+                  }
                   leading={osLogo(device.osName)}
                   title={
                     device.hostname ?? device.serialNumber ?? device.externalId
@@ -364,6 +378,9 @@ export default function IdentityDevices(): JSX.Element {
                       ? `${device.osName} ${device.osVersion}`
                       : device.osName,
                     device.provider,
+                    policyProblem
+                      ? coverageDisplay(policyProblem).label
+                      : undefined,
                   ]
                     .filter(Boolean)
                     .join(" · ")}
