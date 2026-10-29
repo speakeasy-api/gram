@@ -537,6 +537,7 @@ const (
 	McpConsentCatalogModeKey     = attribute.Key("gram.mcp.consent.catalog_mode")
 	McpConsentExecuteKey         = attribute.Key("gram.mcp.consent.execute")
 	McpConsentComparisonsKey     = attribute.Key("gram.mcp.consent.comparisons")
+	McpConsentExpiresAtKey       = attribute.Key("gram.mcp.consent.expires_at")
 
 	// Legacy toolsets.mcp_slug fallback attribution; logs only, never metric dimensions.
 	McpFallbackRequestHostKey         = attribute.Key("gram.mcp.fallback.request_host")
@@ -3377,6 +3378,9 @@ func SlogMcpConsentCatalogMode(v string) slog.Attr {
 func SlogMcpConsentExecute(v bool) slog.Attr { return slog.Bool(string(McpConsentExecuteKey), v) }
 func SlogMcpConsentComparisons(v map[string]bool) slog.Attr {
 	return slog.Any(string(McpConsentComparisonsKey), v)
+}
+func SlogMcpConsentExpiresAt(v time.Time) slog.Attr {
+	return slog.Time(string(McpConsentExpiresAtKey), v)
 }
 
 func ToolsetID(v string) attribute.KeyValue { return ToolsetIDKey.String(v) }

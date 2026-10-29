@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"maps"
 	"sync"
 	"testing"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -149,13 +151,140 @@ func TestConnectionCatalogDiagnosticsDeduplicateConcurrentGateCopies(t *testing.
 	require.Equal(t, 4, bytes.Count(logs.Bytes(), []byte("\n")))
 }
 
+func TestConnectionCatalogLoadDiagnostics(t *testing.T) {
+	t.Parallel()
+	expiresAt := time.Date(2030, time.January, 2, 3, 4, 5, 0, time.UTC)
+	allMatch := map[string]any{"version_matches": true, "id_matches": true, "organization_matches": true, "issuer_matches": true, "resource_matches": true, "subject_matches": true, "client_matches": true}
+	mismatch := func(key string) map[string]any {
+		comparisons := make(map[string]any, len(allMatch))
+		maps.Copy(comparisons, allMatch)
+		comparisons[key] = false
+		return comparisons
+	}
+	type load struct {
+		endpoint  *ResolvedMcpEndpoint
+		subject   urn.SessionSubject
+		clientID  string
+		reference *toolfilter.CatalogReference
+		now       time.Time
+	}
+	tests := []struct {
+		name        string
+		stored      func(*connectionCatalog) []byte
+		change      func(*load)
+		reason      string
+		catalogID   bool
+		comparisons map[string]any
+		expiresAt   bool
+	}{
+		{name: "valid"},
+		{name: "missing reference", change: func(l *load) { l.reference = nil }, reason: "catalog_reference_missing"},
+		{name: "evicted or expired from store", change: func(l *load) {
+			l.reference = &toolfilter.CatalogReference{ID: uuid.New(), Mode: toolfilter.CatalogModeCached}
+		}, reason: "catalog_not_found", catalogID: true},
+		{name: "another organization's store key", change: func(l *load) {
+			other := *l.endpoint
+			other.OrganizationID = "org_other"
+			l.endpoint = &other
+		}, reason: "catalog_not_found", catalogID: true},
+		{name: "unreadable", stored: func(*connectionCatalog) []byte { return []byte("{private invalid") }, reason: "catalog_unreadable", catalogID: true},
+		{name: "version", stored: func(c *connectionCatalog) []byte {
+			c.Version = connectionCatalogVersion + 1
+			return nil
+		}, reason: "catalog_binding_mismatch", catalogID: true, comparisons: mismatch("version_matches"), expiresAt: true},
+		{name: "stored id", stored: func(c *connectionCatalog) []byte {
+			c.ID = uuid.New()
+			return nil
+		}, reason: "catalog_binding_mismatch", catalogID: true, comparisons: mismatch("id_matches"), expiresAt: true},
+		{name: "organization", stored: func(c *connectionCatalog) []byte {
+			c.OrganizationID = "org_other"
+			return nil
+		}, reason: "catalog_binding_mismatch", catalogID: true, comparisons: mismatch("organization_matches"), expiresAt: true},
+		{name: "issuer", change: func(l *load) {
+			other := *l.endpoint
+			other.UserSessionIssuerID = uuid.New()
+			l.endpoint = &other
+		}, reason: "catalog_binding_mismatch", catalogID: true, comparisons: mismatch("issuer_matches"), expiresAt: true},
+		{name: "resource", change: func(l *load) {
+			other := *l.endpoint
+			other.MetaMcpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+			l.endpoint = &other
+		}, reason: "catalog_binding_mismatch", catalogID: true, comparisons: mismatch("resource_matches"), expiresAt: true},
+		{name: "subject", change: func(l *load) { l.subject = urn.NewUserSubject("private other user") }, reason: "catalog_binding_mismatch", catalogID: true, comparisons: mismatch("subject_matches"), expiresAt: true},
+		{name: "client", change: func(l *load) { l.clientID = "private other client" }, reason: "catalog_binding_mismatch", catalogID: true, comparisons: mismatch("client_matches"), expiresAt: true},
+		{name: "expired", change: func(l *load) { l.now = expiresAt }, reason: "catalog_expired", catalogID: true, expiresAt: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			mr := miniredis.RunT(t)
+			client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+			t.Cleanup(func() { require.NoError(t, client.Close()) })
+			var logs bytes.Buffer
+			service := &Service{logger: slog.New(slog.NewJSONHandler(&logs, nil)), connectionCatalogCache: cache.NewRedisCacheAdapter(client)}
+			endpoint := &ResolvedMcpEndpoint{OrganizationID: "org_test", ProjectID: uuid.New(), UserSessionIssuerID: uuid.New(), Slug: "gateway", RouteBase: mcproute.MCP, MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+			subject := urn.NewUserSubject("private user")
+			catalog := connectionCatalog{Version: connectionCatalogVersion, ID: uuid.New(), OrganizationID: endpoint.OrganizationID, IssuerID: endpoint.UserSessionIssuerID, Resource: endpointToolSelectionResource(endpoint), ClientID: "private client", Subject: subject, Members: map[string]connectionCatalogMember{}, Tools: []*toolListEntry{}, ExpiresAt: expiresAt}
+			id, key := catalog.ID, catalog.CacheKey()
+			var raw []byte
+			if tt.stored != nil {
+				raw = tt.stored(&catalog)
+			}
+			if raw == nil {
+				var err error
+				raw, err = json.Marshal(catalog)
+				require.NoError(t, err)
+			}
+			require.NoError(t, service.connectionCatalogCache.Set(t.Context(), key, raw, time.Hour))
+			l := load{endpoint: endpoint, subject: subject, clientID: "private client", reference: &toolfilter.CatalogReference{ID: id, Mode: toolfilter.CatalogModeCached}, now: expiresAt.Add(-time.Minute)}
+			if tt.change != nil {
+				tt.change(&l)
+			}
+
+			loaded, err := service.loadConnectionCatalog(contextvalues.SetOAuthClientID(t.Context(), l.clientID), l.endpoint, l.subject, l.reference, l.now)
+			if tt.reason == "" {
+				require.NoError(t, err)
+				require.NotNil(t, loaded)
+				require.Empty(t, logs.String(), "a usable approval logs nothing")
+				return
+			}
+			require.ErrorIs(t, err, errConnectionCatalogExpired)
+			require.Equal(t, errConnectionCatalogExpired.Error(), err.Error(), "the challenge text clients see is unchanged")
+			entry := decodeLogEntry(t, &logs)
+			require.Equal(t, "INFO", entry["level"])
+			require.Equal(t, "gateway connection catalog rejected", entry["msg"])
+			require.Equal(t, tt.reason, entry[string(attr.ReasonKey)])
+			require.Equal(t, l.endpoint.OrganizationID, entry[string(attr.OrganizationIDKey)])
+			require.Equal(t, endpoint.ProjectID.String(), entry[string(attr.ProjectIDKey)])
+			require.Equal(t, l.endpoint.MetaMcpServerID.UUID.String(), entry[string(attr.MetaMcpServerIDKey)])
+			// time, level, msg, reason, organization, project, gateway
+			fields := 7
+			if tt.catalogID {
+				require.Equal(t, l.reference.ID.String(), entry[string(attr.McpConsentCatalogIDKey)])
+				require.Equal(t, string(toolfilter.CatalogModeCached), entry[string(attr.McpConsentCatalogModeKey)])
+				fields += 2
+			}
+			if tt.comparisons != nil {
+				require.Equal(t, tt.comparisons, entry[string(attr.McpConsentComparisonsKey)])
+				fields++
+			}
+			if tt.expiresAt {
+				require.Equal(t, expiresAt.Format(time.RFC3339Nano), entry[string(attr.McpConsentExpiresAtKey)])
+				fields++
+			}
+			require.Len(t, entry, fields, "only bounded diagnostic fields may be logged")
+			require.NotContains(t, logs.String(), "private", "never log subjects, OAuth clients, or stored catalog content")
+		})
+	}
+}
+
 func TestConnectionCatalogExpiryAndIsolation(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
 	mr := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
-	service := &Service{connectionCatalogCache: cache.NewRedisCacheAdapter(client)}
+	service := &Service{logger: testenv.NewLogger(t), connectionCatalogCache: cache.NewRedisCacheAdapter(client)}
 	endpoint := &ResolvedMcpEndpoint{OrganizationID: "org_test", UserSessionIssuerID: uuid.New(), Slug: "gateway", RouteBase: mcproute.MCP, MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 	subject := urn.NewUserSubject("test-user")
 	ctx := contextvalues.SetOAuthClientID(t.Context(), "test-client")
