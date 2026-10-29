@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
@@ -166,9 +167,10 @@ func marshalSkillRead(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID
 // counts. The RBAC engine refuses the same identification (an API key is not
 // a user principal), so the skill scope follows it. The same holds for every
 // other credential whose user claim is attribution rather than proof: an
-// assistant, agent, workload or chat-session token, or a consent-discovery
-// sign-in. Only a validated user session, or a request no MCP credential
-// stamped (a dashboard session), names the caller.
+// assistant, agent or workload token, a chat-session token minted from an API
+// key, or a consent-discovery sign-in. Only a validated user session, a
+// chat-session token minted from a dashboard session (the playground), or a
+// request no MCP credential stamped (a dashboard session), names the caller.
 func hostedSkillScope(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs) (scope mcpskills.Scope, ok bool) {
 	// The dispatcher leaves attribution to the handlers, and it must not turn
 	// an otherwise valid skills request into an error.
@@ -200,7 +202,32 @@ func hostedSkillScope(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 // the auth context's user is the caller.
 func actsAsUser(ctx context.Context) bool {
 	identity, ok := mcpidentity.FromContext(ctx)
-	return !ok || identity.Kind() == mcpidentity.KindUserSession
+	if !ok {
+		return true
+	}
+	switch identity.Kind() {
+	case mcpidentity.KindUserSession:
+		return true
+	case mcpidentity.KindChatSession:
+		return chatSessionMintedByUser(ctx)
+	default:
+		return false
+	}
+}
+
+// chatSessionMintedByUser reports whether a chat-session token was minted
+// from a dashboard session rather than an API key. Such a token carries the
+// signed-in user's id and dashboard session id, both copied by the server
+// from the minting session, so its user claim is proof rather than
+// attribution. A key-minted token carries the key id and, for a legacy key,
+// its creator's user id, which names the key's owner, not the caller; the
+// embedder-supplied external user id is never consulted.
+func chatSessionMintedByUser(ctx context.Context) bool {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	return ok && authCtx != nil &&
+		authCtx.APIKeyID == "" &&
+		authCtx.UserID != "" &&
+		authCtx.SessionID != nil && *authCtx.SessionID != ""
 }
 
 // skillResourceURI reports the skill URI a resources/read request names, when

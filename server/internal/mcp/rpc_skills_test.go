@@ -10,11 +10,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
@@ -505,6 +508,78 @@ func TestServePublic_Skills_AssistantCallerIsServedNothing(t *testing.T) {
 	var skills []wireSkill
 	require.NoError(t, json.Unmarshal(requireRPCResult(t, w)["skills"], &skills))
 	require.Len(t, skills, 1)
+}
+
+// chatSessionToken mints a chat-session token for the fixture's project with
+// the given caller claims, the way chatSessions.create does.
+func chatSessionToken(t *testing.T, ti *testInstance, f *skillsFixture, userID, apiKeyID string, sessionID *string, externalUserID *string) string {
+	t.Helper()
+
+	token, _, err := ti.chatSessionsManager.GenerateToken(t.Context(), chatsessions.ChatSessionClaims{
+		OrgID:            f.organizationID,
+		ProjectID:        f.projectID.String(),
+		OrganizationSlug: f.authCtx.OrganizationSlug,
+		ProjectSlug:      f.projectSlug,
+		ExternalUserID:   externalUserID,
+		APIKeyID:         apiKeyID,
+		UserID:           userID,
+		SessionID:        sessionID,
+		AccountType:      "",
+		RegisteredClaims: jwt.RegisteredClaims{}, //nolint:exhaustruct // populated by the manager
+	}, "http://localhost", 3600)
+	require.NoError(t, err)
+	return token
+}
+
+// The playground authenticates with a chat-session token minted from the
+// signed-in user's dashboard session. That token proves the user, so it is
+// served the user's skills like the dashboard session itself.
+func TestServePublic_Skills_DashboardChatSessionIsServed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newSkillsFixture(t, ctx, ti)
+	_, content := servedSkill(t, ctx, ti, f, "playground-skill")
+	uri := f.uri("playground-skill")
+
+	sessionID := "dashboard-session-" + uuid.NewString()[:8]
+	token := chatSessionToken(t, ti, f, f.authCtx.UserID, "", &sessionID, nil)
+	anonymous := t.Context()
+
+	w, err := servePublicHTTP(t, anonymous, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), token, nil)
+	require.NoError(t, err)
+	var skills []wireSkill
+	require.NoError(t, json.Unmarshal(requireRPCResult(t, w)["skills"], &skills))
+	require.Len(t, skills, 1)
+	requireWireSkill(t, f, skills[0], "playground-skill", content)
+
+	w, err = servePublicHTTP(t, anonymous, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodResourcesRead, map[string]any{"uri": uri}), token, nil)
+	require.NoError(t, err)
+	requireRPCResult(t, w)
+}
+
+// A chat-session token minted from an API key carries the key creator's user
+// id as attribution, and an embedder's token names its user only by an
+// external id the embedder chose. Neither proves the caller.
+func TestServePublic_Skills_NonDashboardChatSessionIsServedNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newSkillsFixture(t, ctx, ti)
+	servedSkill(t, ctx, ti, f, "embed-out")
+
+	externalUserID := "embedded-user"
+	cases := map[string]string{
+		"key minted":          chatSessionToken(t, ti, f, f.authCtx.UserID, uuid.NewString(), nil, nil),
+		"key minted with sid": chatSessionToken(t, ti, f, f.authCtx.UserID, uuid.NewString(), conv.PtrEmpty("sid"), nil),
+		"external user only":  chatSessionToken(t, ti, f, "", "", nil, &externalUserID),
+		"user without sid":    chatSessionToken(t, ti, f, f.authCtx.UserID, "", nil, nil),
+	}
+	for name, token := range cases {
+		w, err := servePublicHTTP(t, t.Context(), ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), token, nil)
+		require.NoError(t, err, name)
+		require.JSONEq(t, `[]`, string(requireRPCResult(t, w)["skills"]), name)
+	}
 }
 
 func TestServePublic_Skills_FlagOffAnswersMethodNotFound(t *testing.T) {
