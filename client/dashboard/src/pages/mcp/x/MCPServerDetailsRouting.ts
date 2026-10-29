@@ -1,6 +1,7 @@
 import type { useRoutes } from "@/routes";
 
 const VALID_TABS = [
+  "setup",
   "overview",
   "tools",
   "resources",
@@ -95,6 +96,8 @@ export function mcpServerTabHref(
   tab: TabValue,
 ): string {
   switch (tab) {
+    case "setup":
+      return routes.mcp.details.setup.href(mcpServerSlug);
     case "overview":
       return routes.mcp.details.overview.href(mcpServerSlug);
     case "tools":

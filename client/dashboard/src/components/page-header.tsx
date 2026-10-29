@@ -56,7 +56,9 @@ function PageHeaderComponent({
   // banner there would hide a paused organization from the page it was working
   // on.
   const onBillingPage = useMatch("/:orgSlug/billing") !== null;
-  const showBreadcrumbs = useShowBreadcrumbs();
+  const breadcrumbPage = useShowBreadcrumbs();
+  const showBreadcrumbs =
+    breadcrumbPage && React.Children.toArray(children).length > 0;
   const stickyRef = useStickyTopVar();
 
   return (

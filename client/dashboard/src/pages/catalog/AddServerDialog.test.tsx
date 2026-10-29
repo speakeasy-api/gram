@@ -54,6 +54,18 @@ vi.mock("react-router", async (importOriginal) => ({
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
     policyCenter: { new: { href: () => "/p/risk-policies/new" } },
+    mcp: {
+      Link: ({ children }: { children: React.ReactNode }) => (
+        <div>{children}</div>
+      ),
+      details: {
+        Link: ({ children }: { children: React.ReactNode }) => (
+          <div>{children}</div>
+        ),
+        setup: { href: (slug: string) => `/p/mcp/${slug}/setup` },
+        href: (slug: string) => `/p/mcp/${slug}`,
+      },
+    },
   }),
 }));
 
@@ -429,3 +441,86 @@ describe("catalog admission", () => {
     expect(mocks.getServerDetails).not.toHaveBeenCalled();
   });
 });
+
+describe.each([["Slack", "https://mcp.slack.com/mcp"]])(
+  "%s catalog setup handoff",
+  (provider, url) => {
+    const catalogServer = {
+      ...server,
+      registrySpecifier: "example/official-mcp",
+      title: provider,
+      remotes: [
+        {
+          url,
+          transportType: "streamable-http" as const,
+        },
+      ],
+    };
+    it("opens the installed server's setup page once from an opted-in catalog install", async () => {
+      mocks.workflow.mockReturnValue({
+        phase: "complete",
+        statuses: [
+          {
+            key: provider.toLowerCase(),
+            name: provider,
+            identityMode: "user",
+            status: "completed",
+            mcpServerId: "example-id",
+            mcpServerParam: `${provider.toLowerCase()}-installed`,
+          },
+        ],
+        reset: mocks.reset,
+      });
+      render(
+        <TooltipProvider>
+          <AddServerDialog
+            servers={[catalogServer]}
+            open
+            openProviderSetup
+            onOpenChange={(open) => {
+              mocks.onOpenChange(open);
+            }}
+          />
+        </TooltipProvider>,
+      );
+      await waitFor(() => {
+        expect(mocks.navigate).toHaveBeenCalledWith(
+          `/p/mcp/${provider.toLowerCase()}-installed/setup`,
+        );
+      });
+      expect(mocks.navigate).toHaveBeenCalledTimes(1);
+      expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
+    });
+    it("does not redirect gateway/plugin/headless callers without catalog opt-in", async () => {
+      mocks.workflow.mockReturnValue({
+        phase: "complete",
+        statuses: [
+          {
+            key: provider.toLowerCase(),
+            name: provider,
+            identityMode: "user",
+            status: "completed",
+            mcpServerId: "example-id",
+            mcpServerParam: `${provider.toLowerCase()}-installed`,
+          },
+        ],
+        reset: mocks.reset,
+      });
+      render(
+        <TooltipProvider>
+          <AddServerDialog
+            servers={[catalogServer]}
+            open
+            onOpenChange={(open) => {
+              mocks.onOpenChange(open);
+            }}
+          />
+        </TooltipProvider>,
+      );
+      await waitFor(() => {
+        expect(screen.getByText("Added to your project")).toBeDefined();
+      });
+      expect(mocks.navigate).not.toHaveBeenCalled();
+    });
+  },
+);

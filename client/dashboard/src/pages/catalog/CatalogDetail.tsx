@@ -495,6 +495,7 @@ export default function CatalogDetail(): JSX.Element {
           </div>
         </div>
         <AddServerDialog
+          openProviderSetup
           servers={[server]}
           open={showAddDialog}
           onOpenChange={setShowAddDialog}

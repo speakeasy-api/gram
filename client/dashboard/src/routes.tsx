@@ -500,6 +500,7 @@ const ROUTE_STRUCTURE = {
           },
         },
       },
+
       // The Organization Gateway. A static segment beside `add`,
       // `catalog` and `sources`, with the same latent toolset-slug collision.
       // It lives under MCP rather than the organization settings because it
@@ -555,6 +556,7 @@ const ROUTE_STRUCTURE = {
         url: ":mcpServerSlug",
         component: MCPServerDetails,
         subPages: {
+          setup: { title: "Setup", url: "setup" },
           overview: {
             title: "MCP Server Overview",
             url: "overview",

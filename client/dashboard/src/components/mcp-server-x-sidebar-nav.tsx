@@ -1,3 +1,4 @@
+import { setupProviderForUrl } from "@/pages/mcp/x/setup/provider-setup";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
@@ -600,6 +601,19 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     : [];
 
   const items: DetailSidebarNavItem[] = [
+    ...(mcpServer?.remoteMcpServerId &&
+    setupProviderForUrl(upstreamUrl) &&
+    hasScope("mcp:write", mcpServer.id)
+      ? [
+          {
+            key: "setup",
+            title: "Setup",
+            Icon: Wrench,
+            href: mcpServerTabHref(routes, idOrSlug, "setup"),
+            active: activeTab === "setup",
+          },
+        ]
+      : []),
     {
       key: "overview",
       title: "Overview",

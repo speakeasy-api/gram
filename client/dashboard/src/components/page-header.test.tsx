@@ -64,6 +64,14 @@ describe("PageHeader.Actions", () => {
 });
 
 describe("PageHeader", () => {
+  it("does not reserve an empty breadcrumb row on a setup page", () => {
+    const { container } = render(<PageHeader>{null}</PageHeader>, {
+      at: "/placeholder-organization/projects/placeholder-project/mcp/x/example/setup",
+    });
+    const chrome = container.querySelector("header")?.parentElement;
+    // App toolbar and its separator only; no empty breadcrumb bar below them.
+    expect(chrome?.children.length).toBe(2);
+  });
   // Inference going quiet is felt on whichever page the user was working on, so
   // the banners that explain it hang off the header rather than the billing
   // page.
