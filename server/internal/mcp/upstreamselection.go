@@ -26,6 +26,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
@@ -863,9 +864,24 @@ func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID stri
 				return nil, err
 			}
 			endpoint := &ResolvedMcpEndpoint{
-				ProjectID:           member.projectID,
-				OrganizationID:      organizationID,
-				UserSessionIssuerID: issuerID,
+				AudienceURN:               "",
+				CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
+				CustomDomainID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				IsPublic:                  false,
+				idJAGConfigured:           false,
+				issuerStamped:             false,
+				McpServerID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				MetaMcpServerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				sharedAuthorizationServer: nil,
+				sharedResource:            nil,
+				RouteBase:                 "",
+				Slug:                      "",
+				ToolsetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				useAuthenticationHost:     false,
+				UpstreamResource:          "",
+				ProjectID:                 member.projectID,
+				OrganizationID:            organizationID,
+				UserSessionIssuerID:       issuerID,
 			}
 			tokens, err := s.resolveChosenMemberTokens(ctx, endpoint, subject, true, member)
 			if err != nil {
