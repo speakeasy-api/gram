@@ -144,7 +144,23 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error) {
-	return s.chatSessions.Authorize(ctx, token)
+	ctx, err := s.chatSessions.Authorize(ctx, token)
+	if err != nil {
+		return ctx, err
+	}
+
+	// Chat session tokens minted by a dashboard user carry that user's session,
+	// so project reads must be checked against the user's current grants.
+	ctx, err = s.authz.PrepareContext(ctx)
+	if err != nil {
+		var shareable *oops.ShareableError
+		if errors.As(err, &shareable) && shareable.Code != oops.CodeUnexpected {
+			return ctx, fmt.Errorf("chat session admission: %w", err)
+		}
+		return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").LogError(ctx, s.logger)
+	}
+
+	return ctx, nil
 }
 
 func (s *Service) ListAssets(ctx context.Context, payload *gen.ListAssetsPayload) (*gen.ListAssetsResult, error) {
@@ -834,8 +850,7 @@ func (s *Service) ServeOpenAPIv3(ctx context.Context, payload *gen.ServeOpenAPIv
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "project id cannot be empty")
 	}
 
-	// This check is important to ensure the client has access to the project they specified in the request.
-	if err := s.auth.CheckProjectAccess(ctx, s.logger, projectID); err != nil {
+	if err := s.auth.AuthorizeProjectRead(ctx, s.logger, projectID); err != nil {
 		return nil, nil, err
 	}
 
@@ -1267,8 +1282,7 @@ func (s *Service) ServeFunction(ctx context.Context, payload *gen.ServeFunctionF
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "project id cannot be empty")
 	}
 
-	// This check is important to ensure the client has access to the project they specified in the request.
-	if err := s.auth.CheckProjectAccess(ctx, s.logger, projectID); err != nil {
+	if err := s.auth.AuthorizeProjectRead(ctx, s.logger, projectID); err != nil {
 		return nil, nil, err
 	}
 
@@ -1468,7 +1482,7 @@ func (s *Service) ServeChatAttachment(ctx context.Context, payload *gen.ServeCha
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "project id cannot be empty")
 	}
 
-	if err := s.auth.CheckProjectAccess(ctx, s.logger, projectID); err != nil {
+	if err := s.auth.AuthorizeProjectRead(ctx, s.logger, projectID); err != nil {
 		return nil, nil, err
 	}
 
@@ -1541,7 +1555,7 @@ func (s *Service) CreateSignedChatAttachmentURL(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeBadRequest, nil, "project id cannot be empty")
 	}
 
-	if err := s.auth.CheckProjectAccess(ctx, s.logger, projectID); err != nil {
+	if err := s.auth.AuthorizeProjectRead(ctx, s.logger, projectID); err != nil {
 		return nil, err
 	}
 

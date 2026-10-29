@@ -450,7 +450,7 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 		return err
 	}
 
-	err = s.auth.CheckProjectAccess(ctx, s.logger, projectID)
+	err = s.auth.CheckProjectInOrganization(ctx, s.logger, projectID)
 	if err != nil {
 		return oops.E(oops.CodeForbidden, err, "forbidden")
 	}
