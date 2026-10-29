@@ -5067,6 +5067,10 @@ COMMENT ON COLUMN user_session_clients.updated_at IS '@access: confidential';
 COMMENT ON COLUMN user_session_clients.deleted_at IS '@access: confidential';
 COMMENT ON COLUMN user_session_clients.deleted IS '@access: confidential';
 
+-- FK target for children pinned to a client of one issuer.
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_clients_issuer_id_key
+ON user_session_clients (user_session_issuer_id, id);
+
 CREATE INDEX IF NOT EXISTS user_session_clients_organization_id_idx
 ON user_session_clients (organization_id);
 
@@ -10442,6 +10446,76 @@ ON execution_selection_profile_versions (profile_id, version);
 
 CREATE INDEX IF NOT EXISTS execution_selection_profile_versions_project_id_idx
 ON execution_selection_profile_versions (project_id);
+
+-- Which upstream credential a headless caller's session uses on each MCP
+-- server, for callers that cannot pick one in a browser: a standard
+-- jwt-bearer client, or a workload subject, signing in through one user
+-- session issuer. The choices themselves are upstream_client_selections rows
+-- of credential_kind 'issuance_profile' naming this row; issuance copies the
+-- ones that validate onto the new session. A profile grants nothing: issuance
+-- admits the caller and checks every choice on its own path first.
+CREATE TABLE IF NOT EXISTS issuance_selection_profiles (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  -- The user session issuer's project; NULL for an organization issuer.
+  project_id uuid,
+  user_session_issuer_id uuid NOT NULL,
+  -- Exactly one of a client, or a workload issuer and subject, is set;
+  -- validated in application code.
+  user_session_client_id uuid,
+  workload_issuer_id uuid,
+  workload_subject TEXT CHECK (workload_subject IS NULL OR workload_subject <> ''),
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  created_by_user_id TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT issuance_selection_profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT issuance_selection_profiles_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT issuance_selection_profiles_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT issuance_selection_profiles_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
+  -- Pins the client to the profile's issuer.
+  CONSTRAINT issuance_selection_profiles_user_session_client_fkey FOREIGN KEY (user_session_issuer_id, user_session_client_id) REFERENCES user_session_clients (user_session_issuer_id, id) ON DELETE CASCADE,
+  CONSTRAINT issuance_selection_profiles_workload_issuer_tenant_fkey FOREIGN KEY (organization_id, workload_issuer_id) REFERENCES workload_issuers (organization_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN issuance_selection_profiles.id IS '@access: confidential';
+COMMENT ON COLUMN issuance_selection_profiles.organization_id IS '@access: confidential';
+COMMENT ON COLUMN issuance_selection_profiles.project_id IS '@access: confidential';
+COMMENT ON COLUMN issuance_selection_profiles.user_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN issuance_selection_profiles.user_session_client_id IS '@access: confidential';
+COMMENT ON COLUMN issuance_selection_profiles.workload_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN issuance_selection_profiles.workload_subject IS '@access: restricted';
+COMMENT ON COLUMN issuance_selection_profiles.name IS '@access: opaque-confidential';
+COMMENT ON COLUMN issuance_selection_profiles.created_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN issuance_selection_profiles.created_at IS '@access: confidential';
+COMMENT ON COLUMN issuance_selection_profiles.updated_at IS '@access: confidential';
+COMMENT ON COLUMN issuance_selection_profiles.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN issuance_selection_profiles.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS issuance_selection_profiles_client_key
+ON issuance_selection_profiles (user_session_issuer_id, user_session_client_id)
+WHERE deleted IS FALSE AND user_session_client_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS issuance_selection_profiles_workload_key
+ON issuance_selection_profiles (user_session_issuer_id, workload_issuer_id, workload_subject)
+WHERE deleted IS FALSE AND workload_issuer_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS issuance_selection_profiles_organization_id_idx
+ON issuance_selection_profiles (organization_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS issuance_selection_profiles_project_id_idx
+ON issuance_selection_profiles (project_id);
+
+CREATE INDEX IF NOT EXISTS issuance_selection_profiles_user_session_client_id_idx
+ON issuance_selection_profiles (user_session_client_id);
+
+CREATE INDEX IF NOT EXISTS issuance_selection_profiles_workload_issuer_id_idx
+ON issuance_selection_profiles (workload_issuer_id);
 
 -- Meta MCP servers expose an explicitly managed set of MCP servers through a
 -- dedicated runtime. This identity remains separate from mcp_servers so
