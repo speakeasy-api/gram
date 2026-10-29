@@ -22,17 +22,17 @@ type Service interface {
 	// Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf
 	// of the authenticated dashboard user. Resolves the target project (given
 	// slug, else the org's default/first project) and records {user, org, project,
-	// scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL.
-	// Requires membership in the active organization. Refused (403) while
-	// impersonating an organization or user, or without membership in the active
-	// org.
+	// key scope, challenge} against the code with a ~5 minute TTL. A producer key
+	// scope requires org:admin. Requires membership in the active organization.
+	// Refused (403) while impersonating an organization or user, or without
+	// membership in the active org.
 	Authorize(context.Context, *AuthorizePayload) (res *AuthorizeResult, err error)
 	// Exchange a one-time code plus its PKCE code_verifier for a freshly minted
-	// per-user [agent,hooks] API key. No session or API-key auth: proving
-	// knowledge of the code_verifier that matches the stored challenge IS the
-	// credential. The code is single-use — consumed atomically on lookup — so any
-	// missing/expired/already-consumed code or PKCE mismatch returns 401. The raw
-	// key is returned exactly once and never again.
+	// API key of the scope requested at authorize. No session or API-key auth:
+	// proving knowledge of the code_verifier that matches the stored challenge IS
+	// the credential. The code is single-use — consumed atomically on lookup — so
+	// any missing/expired/already-consumed code or PKCE mismatch returns 401. The
+	// raw key is returned exactly once and never again.
 	Redeem(context.Context, *RedeemPayload) (res *RedeemResult, err error)
 }
 
@@ -64,9 +64,15 @@ type AuthorizePayload struct {
 	CodeChallenge string
 	// PKCE challenge method. Only S256 is supported.
 	CodeChallengeMethod string
-	// Optional project slug to scope the minted key to. Defaults to the org's
-	// default (first) project when omitted.
-	ProjectSlug  *string
+	// Optional project slug. For agent_user keys it is the project the key is
+	// scoped to; for producer keys it is only reported back to the CLI as its
+	// default project. Defaults to the org's default (first) project when omitted.
+	ProjectSlug *string
+	// The kind of key redeem mints. agent_user (the default) is the device agent's
+	// per-user project-scoped key. producer is the organization-wide key the
+	// Speakeasy CLI uses, and requires org:admin, the same as creating one in the
+	// dashboard.
+	KeyScope     string
 	SessionToken *string
 }
 
@@ -90,8 +96,8 @@ type RedeemPayload struct {
 
 // RedeemResult is the result type of the cliAuth service redeem method.
 type RedeemResult struct {
-	// The raw gram_ API key, carrying the [agent,hooks] scopes. Returned exactly
-	// once.
+	// The raw gram_ API key, carrying the scope requested at authorize. Returned
+	// exactly once.
 	AccessToken string
 	// Email of the user the key was minted for.
 	UserEmail string

@@ -136,6 +136,7 @@ function AppContent() {
     return (
       <CliCallback
         keyScope={cliFlow.keyScope}
+        pkceKeyScope={cliFlow.pkceKeyScope}
         localCallbackUrl={cliFlow.cliCallbackUrl}
         projectSlug={cliFlow.projectSlug}
         organizationId={cliFlow.organizationId}
@@ -479,6 +480,7 @@ const routesToNavActions = (
 type LocalAuthFlow = {
   cliCallbackUrl: string;
   keyScope: "producer" | "hooks";
+  pkceKeyScope: "producer" | null;
   projectSlug: string | null;
   organizationId: string | null;
   codeChallenge: string | null;
@@ -505,6 +507,9 @@ function useCliAuthFlow(): LocalAuthFlow | null {
     return {
       cliCallbackUrl,
       keyScope: keyScope === "hooks" ? "hooks" : "producer",
+      // PKCE codes mint device-agent keys unless the client asks for a
+      // producer key by name, so the producer default above never applies.
+      pkceKeyScope: keyScope === "producer" ? "producer" : null,
       projectSlug,
       organizationId,
       codeChallenge,

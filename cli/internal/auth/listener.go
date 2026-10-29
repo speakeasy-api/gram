@@ -24,21 +24,23 @@ const (
 
 	// stateParam is the callback query parameter that carries the state token.
 	// The dashboard preserves the callback URL's own query string when it
-	// appends the API key, so the token round-trips unchanged.
+	// appends the code, so the token round-trips unchanged.
 	stateParam = "state"
 )
 
 // CallbackResult contains the data returned from the auth callback.
 type CallbackResult struct {
-	APIKey  string
-	Project string
+	// Code is the one-time code the dashboard minted for this login's PKCE
+	// challenge. It is worthless without the login's verifier.
+	Code string
 }
 
-// Listener manages an HTTP server that waits for the dashboard to return an
-// API key. Each listener is bound to one login attempt by a random state token
-// carried in its callback URL: a callback without the exact token is rejected,
-// so another local user or process that finds the loopback port cannot
-// substitute a key for an account the user never signed in to.
+// Listener manages an HTTP server that waits for the dashboard to return a
+// one-time code. Each listener is bound to one login attempt by a random state
+// token carried in its callback URL: a callback without the exact token is
+// rejected, so a stray or forged request cannot end the user's real login. The
+// code itself is bound to the login's PKCE challenge, so a code minted for
+// another account cannot be redeemed in its place.
 type Listener struct {
 	server   *http.Server
 	listener net.Listener
@@ -107,7 +109,7 @@ func (l *Listener) Start() {
 	}()
 }
 
-// Wait blocks until an API key is received or timeout occurs.
+// Wait blocks until a code is received or timeout occurs.
 func (l *Listener) Wait(ctx context.Context) (*CallbackResult, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, callbackTimeout)
 	defer cancel()
@@ -272,8 +274,8 @@ const authSuccessHTML = `<!doctype html>
 `
 
 // handleCallback accepts the first callback that carries this attempt's state
-// and an API key. Rejected requests leave the attempt open, so a stray or
-// forged request cannot cancel the user's real login.
+// and a code. Rejected requests leave the attempt open, so a stray or forged
+// request cannot cancel the user's real login.
 func (l *Listener) handleCallback(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 
@@ -282,9 +284,9 @@ func (l *Listener) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apiKey := query.Get("api_key")
-	if apiKey == "" {
-		http.Error(w, "missing api_key parameter", http.StatusBadRequest)
+	code := query.Get("code")
+	if code == "" {
+		http.Error(w, "missing code parameter", http.StatusBadRequest)
 		return
 	}
 
@@ -293,10 +295,7 @@ func (l *Listener) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	l.result <- CallbackResult{
-		APIKey:  apiKey,
-		Project: query.Get("project"),
-	}
+	l.result <- CallbackResult{Code: code}
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 	_, _ = fmt.Fprint(w, authSuccessHTML)

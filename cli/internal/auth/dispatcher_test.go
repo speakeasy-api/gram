@@ -26,7 +26,7 @@ func TestDispatch_OpensUserOnlyRedirectFileInsteadOfURL(t *testing.T) {
 		return nil
 	})
 
-	cleanup, err := d.Dispatch(t.Context(), "https://app.example.test", callbackURL)
+	cleanup, err := d.Dispatch(t.Context(), "https://app.example.test", callbackURL, "<CHALLENGE>")
 	require.NoError(t, err)
 
 	require.NotEmpty(t, opened)
@@ -47,6 +47,9 @@ func TestDispatch_OpensUserOnlyRedirectFileInsteadOfURL(t *testing.T) {
 	require.Equal(t, "app.example.test", authURL.Host)
 	require.Equal(t, "true", authURL.Query().Get("from_cli"))
 	require.Equal(t, callbackURL, authURL.Query().Get("cli_callback_url"))
+	require.Equal(t, "producer", authURL.Query().Get("key_scope"))
+	require.Equal(t, "<CHALLENGE>", authURL.Query().Get("code_challenge"))
+	require.Equal(t, "S256", authURL.Query().Get("code_challenge_method"))
 
 	cleanup()
 	_, err = os.Stat(opened)
@@ -62,7 +65,7 @@ func TestDispatch_NoBrowserStillSucceeds(t *testing.T) {
 		return ErrNoBrowser
 	})
 
-	cleanup, err := d.Dispatch(t.Context(), "https://app.example.test", "http://127.0.0.1:5555/callback?state="+testState)
+	cleanup, err := d.Dispatch(t.Context(), "https://app.example.test", "http://127.0.0.1:5555/callback?state="+testState, "<CHALLENGE>")
 	require.NoError(t, err)
 	cleanup()
 

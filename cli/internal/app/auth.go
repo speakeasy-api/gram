@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/cli/internal/profile"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/cli/internal/workflow"
+	"github.com/speakeasy-api/gram/server/gen/cli_auth"
 	"github.com/speakeasy-api/gram/server/gen/keys"
 )
 
@@ -59,6 +60,7 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 
 	profileName := profileNameFromURL(apiURL.String())
 	keysClient := api.NewKeysClientFromURL(apiURL)
+	cliAuthClient := api.NewCliAuthClientFromURL(apiURL)
 
 	prof := opts.Profile
 	if prof == nil {
@@ -90,6 +92,7 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 		apiURL.String(),
 		dashboardURL,
 		keysClient,
+		cliAuthClient,
 		opts.ProfilePath,
 		auth.OpenSystemBrowser,
 	); err != nil {
@@ -218,15 +221,28 @@ func canRefreshProfile(prof *profile.Profile) bool {
 	return prof != nil && prof.Secret != ""
 }
 
+// keyRedeemer exchanges a login's one-time code for its API key.
+type keyRedeemer interface {
+	Redeem(ctx context.Context, code, codeVerifier string) (*cliauth.RedeemResult, error)
+}
+
 // mintKey starts a local HTTP listener while the user authenticates in the web
-// app. The user's new API key is returned to the listener as a query param,
-// and only a callback carrying this attempt's state token is accepted.
+// app. Only a callback carrying this attempt's state token is accepted, and it
+// carries a one-time code rather than a key: the key is minted when this
+// process redeems the code with the PKCE verifier only it holds, so neither a
+// forged callback nor a process that reads the real one gets a usable key.
 func mintKey(
 	ctx context.Context,
 	logger *slog.Logger,
 	apiURL string,
+	redeemer keyRedeemer,
 	openBrowser auth.BrowserOpener,
-) (*auth.CallbackResult, error) {
+) (*cliauth.RedeemResult, error) {
+	pkce, err := auth.NewPKCE()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate login proof key: %w", err)
+	}
+
 	listener, err := auth.NewListener()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create callback listener: %w", err)
@@ -244,13 +260,18 @@ func mintKey(
 	listener.Start()
 
 	dispatcher := auth.NewDispatcher(logger, openBrowser)
-	cleanup, err := dispatcher.Dispatch(ctx, apiURL, callbackURL)
+	cleanup, err := dispatcher.Dispatch(ctx, apiURL, callbackURL, pkce.Challenge)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dispatch auth request: %w", err)
 	}
 	defer cleanup()
 
-	result, err := listener.Wait(ctx)
+	callback, err := listener.Wait(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("authentication failed: %w", err)
+	}
+
+	result, err := redeemer.Redeem(ctx, callback.Code, pkce.Verifier)
 	if err != nil {
 		return nil, fmt.Errorf("authentication failed: %w", err)
 	}
@@ -318,20 +339,21 @@ func authenticateNewProfile(
 	apiURL string,
 	dashboardURL string,
 	keysClient *api.KeysClient,
+	redeemer keyRedeemer,
 	profilePath string,
 	openBrowser auth.BrowserOpener,
 ) error {
-	callbackResult, err := mintKey(ctx, logger, dashboardURL, openBrowser)
+	minted, err := mintKey(ctx, logger, dashboardURL, redeemer, openBrowser)
 	if err != nil {
 		return err
 	}
 
-	result, err := keysClient.Verify(ctx, secret.Secret(callbackResult.APIKey))
+	result, err := keysClient.Verify(ctx, secret.Secret(minted.AccessToken))
 	if err != nil {
 		return fmt.Errorf("failed to authenticate profile: %w", err)
 	}
 
-	return saveProfile(ctx, logger, callbackResult.APIKey, apiURL, result, profilePath, profileName, callbackResult.Project)
+	return saveProfile(ctx, logger, minted.AccessToken, apiURL, result, profilePath, profileName, minted.ProjectSlug)
 }
 
 func doAuth(c *cli.Context) error {

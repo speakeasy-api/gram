@@ -37,16 +37,13 @@ func callback(t *testing.T, l *Listener, query url.Values) *httptest.ResponseRec
 	return rec
 }
 
-func callbackQuery(state, apiKey, project string) url.Values {
+func callbackQuery(state, code string) url.Values {
 	q := url.Values{}
 	if state != "" {
 		q.Set("state", state)
 	}
-	if apiKey != "" {
-		q.Set("api_key", apiKey)
-	}
-	if project != "" {
-		q.Set("project", project)
+	if code != "" {
+		q.Set("code", code)
 	}
 	return q
 }
@@ -66,10 +63,10 @@ func TestHandleCallback_ServesSpeakeasyBrandedPage(t *testing.T) {
 
 	l := newTestListener()
 
-	rec := callback(t, l, callbackQuery(testState, "key", "proj"))
+	rec := callback(t, l, callbackQuery(testState, "code"))
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, CallbackResult{APIKey: "key", Project: "proj"}, <-l.result)
+	require.Equal(t, CallbackResult{Code: "code"}, <-l.result)
 
 	body := rec.Body.String()
 	require.Contains(t, body, `aria-label="Speakeasy"`)
@@ -81,13 +78,13 @@ func TestHandleCallback_RejectsMissingStateWithoutConsumingAttempt(t *testing.T)
 
 	l := newTestListener()
 
-	rec := callback(t, l, callbackQuery("", "attacker-key", "attacker-proj"))
+	rec := callback(t, l, callbackQuery("", "attacker-code"))
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	requireNoResult(t, l)
 
-	rec = callback(t, l, callbackQuery(testState, "victim-key", "victim-proj"))
+	rec = callback(t, l, callbackQuery(testState, "victim-code"))
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, CallbackResult{APIKey: "victim-key", Project: "victim-proj"}, <-l.result)
+	require.Equal(t, CallbackResult{Code: "victim-code"}, <-l.result)
 }
 
 func TestHandleCallback_RejectsMismatchedStateWithoutConsumingAttempt(t *testing.T) {
@@ -96,28 +93,28 @@ func TestHandleCallback_RejectsMismatchedStateWithoutConsumingAttempt(t *testing
 	l := newTestListener()
 
 	for _, state := range []string{"wrong", testState[:len(testState)-1], testState + "0"} {
-		rec := callback(t, l, callbackQuery(state, "attacker-key", "attacker-proj"))
+		rec := callback(t, l, callbackQuery(state, "attacker-code"))
 		require.Equal(t, http.StatusBadRequest, rec.Code, "state %q", state)
 	}
 	requireNoResult(t, l)
 
-	rec := callback(t, l, callbackQuery(testState, "victim-key", "victim-proj"))
+	rec := callback(t, l, callbackQuery(testState, "victim-code"))
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, CallbackResult{APIKey: "victim-key", Project: "victim-proj"}, <-l.result)
+	require.Equal(t, CallbackResult{Code: "victim-code"}, <-l.result)
 }
 
-func TestHandleCallback_RejectsMissingAPIKeyWithoutConsumingAttempt(t *testing.T) {
+func TestHandleCallback_RejectsMissingCodeWithoutConsumingAttempt(t *testing.T) {
 	t.Parallel()
 
 	l := newTestListener()
 
-	rec := callback(t, l, callbackQuery(testState, "", "proj"))
+	rec := callback(t, l, callbackQuery(testState, ""))
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	requireNoResult(t, l)
 
-	rec = callback(t, l, callbackQuery(testState, "key", "proj"))
+	rec = callback(t, l, callbackQuery(testState, "code"))
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, CallbackResult{APIKey: "key", Project: "proj"}, <-l.result)
+	require.Equal(t, CallbackResult{Code: "code"}, <-l.result)
 }
 
 func TestHandleCallback_RejectsReplayedState(t *testing.T) {
@@ -125,13 +122,13 @@ func TestHandleCallback_RejectsReplayedState(t *testing.T) {
 
 	l := newTestListener()
 
-	rec := callback(t, l, callbackQuery(testState, "victim-key", "victim-proj"))
+	rec := callback(t, l, callbackQuery(testState, "victim-code"))
 	require.Equal(t, http.StatusOK, rec.Code)
 
-	rec = callback(t, l, callbackQuery(testState, "attacker-key", "attacker-proj"))
+	rec = callback(t, l, callbackQuery(testState, "attacker-code"))
 	require.Equal(t, http.StatusConflict, rec.Code)
 
-	require.Equal(t, CallbackResult{APIKey: "victim-key", Project: "victim-proj"}, <-l.result)
+	require.Equal(t, CallbackResult{Code: "victim-code"}, <-l.result)
 	requireNoResult(t, l)
 }
 
@@ -159,7 +156,7 @@ func TestNewListener_URLCarriesUniqueState(t *testing.T) {
 
 // TestListener_ConcurrentAttemptsCannotExchangeCallbacks runs two login
 // attempts at once and delivers each attempt's callback to the other's port:
-// both must be refused, and each attempt must still complete with its own key.
+// both must be refused, and each attempt must still complete with its own code.
 func TestListener_ConcurrentAttemptsCannotExchangeCallbacks(t *testing.T) {
 	t.Parallel()
 
@@ -178,8 +175,8 @@ func TestListener_ConcurrentAttemptsCannotExchangeCallbacks(t *testing.T) {
 	bURL, err := url.Parse(b.URL())
 	require.NoError(t, err)
 
-	get := func(target url.URL, state, apiKey string) int {
-		target.RawQuery = callbackQuery(state, apiKey, "").Encode()
+	get := func(target url.URL, state, code string) int {
+		target.RawQuery = callbackQuery(state, code).Encode()
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, target.String(), nil)
 		require.NoError(t, err)
 		resp, err := noKeepAliveClient.Do(req)
@@ -188,22 +185,22 @@ func TestListener_ConcurrentAttemptsCannotExchangeCallbacks(t *testing.T) {
 		return resp.StatusCode
 	}
 
-	require.Equal(t, http.StatusBadRequest, get(*bURL, aURL.Query().Get("state"), "key-a"))
-	require.Equal(t, http.StatusBadRequest, get(*aURL, bURL.Query().Get("state"), "key-b"))
+	require.Equal(t, http.StatusBadRequest, get(*bURL, aURL.Query().Get("state"), "code-a"))
+	require.Equal(t, http.StatusBadRequest, get(*aURL, bURL.Query().Get("state"), "code-b"))
 	requireNoResult(t, a)
 	requireNoResult(t, b)
 
-	require.Equal(t, http.StatusOK, get(*aURL, aURL.Query().Get("state"), "key-a"))
-	require.Equal(t, http.StatusOK, get(*bURL, bURL.Query().Get("state"), "key-b"))
+	require.Equal(t, http.StatusOK, get(*aURL, aURL.Query().Get("state"), "code-a"))
+	require.Equal(t, http.StatusOK, get(*bURL, bURL.Query().Get("state"), "code-b"))
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
 	ra, err := a.Wait(ctx)
 	require.NoError(t, err)
-	require.Equal(t, "key-a", ra.APIKey)
+	require.Equal(t, "code-a", ra.Code)
 
 	rb, err := b.Wait(ctx)
 	require.NoError(t, err)
-	require.Equal(t, "key-b", rb.APIKey)
+	require.Equal(t, "code-b", rb.Code)
 }

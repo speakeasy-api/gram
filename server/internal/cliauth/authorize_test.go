@@ -26,6 +26,7 @@ func TestAuthorize_MemberSessionSucceeds(t *testing.T) {
 		CodeChallenge:       challenge,
 		CodeChallengeMethod: "S256",
 		ProjectSlug:         nil,
+		KeyScope:            "agent_user",
 		SessionToken:        nil,
 	})
 	require.NoError(t, err)
@@ -53,6 +54,7 @@ func TestAuthorize_MemberWithoutGrantsSucceeds(t *testing.T) {
 		CodeChallenge:       challenge,
 		CodeChallengeMethod: "S256",
 		ProjectSlug:         nil,
+		KeyScope:            "agent_user",
 		SessionToken:        nil,
 	})
 	require.NoError(t, err)
@@ -74,6 +76,7 @@ func TestAuthorize_ImpersonatingAdminSupportSessionBlocked(t *testing.T) {
 		CodeChallenge:       challenge,
 		CodeChallengeMethod: "S256",
 		ProjectSlug:         nil,
+		KeyScope:            "agent_user",
 		SessionToken:        nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -96,6 +99,7 @@ func TestAuthorize_AdminWithSupportSessionElsewhereOnOwnOrgSucceeds(t *testing.T
 		CodeChallenge:       challenge,
 		CodeChallengeMethod: "S256",
 		ProjectSlug:         nil,
+		KeyScope:            "agent_user",
 		SessionToken:        nil,
 	})
 	require.NoError(t, err)
@@ -117,6 +121,7 @@ func TestAuthorize_NonAdminWithSupportOrgSucceeds(t *testing.T) {
 		CodeChallenge:       challenge,
 		CodeChallengeMethod: "S256",
 		ProjectSlug:         nil,
+		KeyScope:            "agent_user",
 		SessionToken:        nil,
 	})
 	require.NoError(t, err)
@@ -141,6 +146,7 @@ func TestAuthorize_ImpersonatedUserSessionBlocked(t *testing.T) {
 		CodeChallenge:       challenge,
 		CodeChallengeMethod: "S256",
 		ProjectSlug:         nil,
+		KeyScope:            "agent_user",
 		SessionToken:        nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -192,6 +198,7 @@ func TestAuthorize_DemoOrgSessionBlocked(t *testing.T) {
 		CodeChallenge:       challenge,
 		CodeChallengeMethod: "S256",
 		ProjectSlug:         nil,
+		KeyScope:            "agent_user",
 		SessionToken:        nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)

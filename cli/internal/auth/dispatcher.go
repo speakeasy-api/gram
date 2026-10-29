@@ -30,14 +30,16 @@ func NewDispatcher(logger *slog.Logger, open BrowserOpener) *Dispatcher {
 }
 
 // Dispatch opens the authentication URL in the user's browser, or prints it if
-// the browser cannot be launched. The returned cleanup removes the redirect
-// file handed to the browser; call it once the login attempt is over.
+// the browser cannot be launched. The URL asks the dashboard for a one-time
+// producer key code bound to codeChallenge. The returned cleanup removes the
+// redirect file handed to the browser; call it once the login attempt is over.
 func (d *Dispatcher) Dispatch(
 	ctx context.Context,
 	webAppURL string,
 	callbackURL string,
+	codeChallenge string,
 ) (cleanup func(), err error) {
-	authURL, err := buildAuthURL(webAppURL, callbackURL)
+	authURL, err := buildAuthURL(webAppURL, callbackURL, codeChallenge)
 	if err != nil {
 		return func() {}, fmt.Errorf("failed to build auth URL: %w", err)
 	}
@@ -77,7 +79,7 @@ func (d *Dispatcher) Dispatch(
 	return cleanup, nil
 }
 
-func buildAuthURL(webAppURL, callbackURL string) (string, error) {
+func buildAuthURL(webAppURL, callbackURL, codeChallenge string) (string, error) {
 	parsed, err := url.Parse(webAppURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse web app URL: %w", err)
@@ -86,6 +88,9 @@ func buildAuthURL(webAppURL, callbackURL string) (string, error) {
 	q := parsed.Query()
 	q.Set("from_cli", "true")
 	q.Set("cli_callback_url", callbackURL)
+	q.Set("key_scope", "producer")
+	q.Set("code_challenge", codeChallenge)
+	q.Set("code_challenge_method", pkceMethod)
 	parsed.RawQuery = q.Encode()
 
 	return parsed.String(), nil
