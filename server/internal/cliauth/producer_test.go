@@ -4,13 +4,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/cli_auth"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -42,22 +43,14 @@ func TestAuthorize_ProducerKeyForAdmin(t *testing.T) {
 	keyHash, err := auth.GetAPIKeyHash(redeemed.AccessToken)
 	require.NoError(t, err)
 
-	var (
-		keyID     uuid.UUID
-		projectID *uuid.UUID
-		scopes    []string
-		name      string
-	)
-	err = ti.conn.QueryRow(ctx, `SELECT id, project_id, scopes, name FROM api_keys WHERE key_hash = $1`, keyHash).Scan(&keyID, &projectID, &scopes, &name)
+	key, err := keysrepo.New(ti.conn).GetAPIKeyByKeyHash(ctx, keyHash)
 	require.NoError(t, err)
-	require.Nil(t, projectID, "a CLI producer key is organization-wide")
-	require.Equal(t, []string{auth.APIKeyScopeProducer.String()}, scopes)
-	require.True(t, strings.HasPrefix(name, "CLI Key (Generated) - "))
+	require.False(t, key.ProjectID.Valid, "a CLI producer key is organization-wide")
+	require.Equal(t, []string{auth.APIKeyScopeProducer.String()}, key.Scopes)
+	require.True(t, strings.HasPrefix(key.Name, "CLI Key (Generated) - "))
 
-	var audited int
-	err = ti.conn.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE action = $1 AND subject_id = $2`, string(audit.ActionKeyCreate), keyID.String()).Scan(&audited)
+	_, err = audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionKeyCreate, key.ID.String())
 	require.NoError(t, err)
-	require.Equal(t, 1, audited)
 }
 
 // Producer keys take org:admin, so a member without it cannot get a producer
