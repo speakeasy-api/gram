@@ -202,13 +202,12 @@ func (s *PluginsService) metadataMutationValid() bool {
 // changes that haven't been synced. Implemented by the plugins management
 // service, so the rule is the dashboard's own.
 type pluginAutoSyncGuard interface {
-	// RequireAutoSyncCanTurnOff checks in a transaction of its own, to refuse
-	// before anything is charged or written.
+	// RequireAutoSyncCanTurnOff refuses early, before anything is charged or
+	// written.
 	RequireAutoSyncCanTurnOff(ctx context.Context, organizationID string, projectID, pluginID uuid.UUID) error
 
-	// RequireAutoSyncCanTurnOffInTransaction checks in the transaction that
-	// writes the setting, so no change to the plugin commits unseen between
-	// the check and the write.
+	// RequireAutoSyncCanTurnOffInTransaction is the check that decides, run in
+	// the transaction that writes the setting.
 	RequireAutoSyncCanTurnOffInTransaction(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID uuid.UUID) error
 }
 
@@ -430,6 +429,9 @@ func (s *PluginsService) setPluginAutoSync(ctx context.Context, principal Princi
 	// never charged. The write checks again in its own transaction, which is
 	// what keeps a change to the plugin from committing unseen in between.
 	var ref PluginRef
+	unsynced := func(err error) error {
+		return pluginMetadataCoreError(fmt.Errorf("check plugin has no unsynced changes: %w", err))
+	}
 	precheck := func(ctx context.Context) error {
 		resolved, err := s.resolve(ctx, platformrepo.New(s.db), principal, project.ID, target)
 		if err != nil {
@@ -440,14 +442,14 @@ func (s *PluginsService) setPluginAutoSync(ctx context.Context, principal Princi
 			return nil
 		}
 		if err := s.autoSyncGuard.RequireAutoSyncCanTurnOff(ctx, principal.OrganizationID, project.ID, ref.ID); err != nil {
-			return pluginMetadataCoreError(fmt.Errorf("check plugin has no unsynced changes: %w", err))
+			return unsynced(err)
 		}
 		return nil
 	}
 	return s.executePluginMetadataMutation(ctx, principal, project, operationSetPluginAutoSync, key, normalized, precheck, func(ctx context.Context, tx pgx.Tx) (PluginMetadataReceiptResult, error) {
 		if !input.AutoSyncEnabled {
 			if err := s.autoSyncGuard.RequireAutoSyncCanTurnOffInTransaction(ctx, tx, principal.OrganizationID, project.ID, ref.ID); err != nil {
-				return PluginMetadataReceiptResult{}, pluginMetadataCoreError(fmt.Errorf("check plugin has no unsynced changes: %w", err))
+				return PluginMetadataReceiptResult{}, unsynced(err)
 			}
 		}
 		updated, err := s.metadataCore.UpdateInTransaction(ctx, tx, plugindelivery.UpdatePluginMutation{

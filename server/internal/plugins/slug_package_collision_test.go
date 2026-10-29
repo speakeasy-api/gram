@@ -9,7 +9,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
@@ -69,9 +68,7 @@ func TestPluginsService_RefusesSlugsOfTheMarketplacesOwnPackages(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestPluginsService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	observability := naming.ObservabilitySlug(organizationName(t, ctx, ti.conn, authCtx.ActiveOrganizationID))
+	observability, _ := orgObservabilitySlugs(t, ctx, ti)
 
 	for slug, message := range map[string]string{
 		"cursor-plugins":            "invalid slug: cursor-plugins would publish into cursor-plugins/, which the marketplace's Cursor packages already uses; choose a different slug",
@@ -117,8 +114,11 @@ func TestPluginsService_ExistingSharedDirectoryKeepsPublishing(t *testing.T) {
 	f.addServer(t, ctx, seeded["foo"], "shared-dir-foo-two", "foo Two", 1)
 	f.addServer(t, ctx, seeded["foo-codex"], "shared-dir-foo-codex-two", "foo-codex Two", 1)
 
+	// Neither plugin can be held, since both write into foo-codex/, so the
+	// paused one publishes its live state.
 	result := f.automaticPublish(t, ctx)
 	require.False(t, result.Skipped)
 	pushed := f.mock.lastPushedFiles
-	require.Contains(t, string(pushed["foo-codex/.mcp.json"]), "foo-codex Two", "the shared directory keeps the plugin named after it")
+	require.Contains(t, string(pushed["foo/.mcp.json"]), "foo Two")
+	require.Contains(t, string(pushed["foo-codex/.claude-plugin/plugin.json"]), `"name": "foo-codex"`)
 }

@@ -183,21 +183,25 @@ func (s *Service) planPausedPlugins(
 type pluginPrefixOwners map[string]string
 
 // ownersOfPlugins assigns each plugin directory to its plugin. New slugs can't
-// share a directory (see pluginSlugPackageCollision), but a project may predate
-// that check: plugin foo's Codex package and plugin foo-codex's Claude package
-// are then both foo-codex/. Such a directory belongs to the plugin it is named
-// after, whatever the order of plugins: generating both writes that plugin
-// last, so its files are the ones the repo keeps. The other plugin's copy then
-// misses files it needs there, so holding it falls back to its live state.
+// share a directory (see pluginSlugPackageCollision), but plugins created
+// before that check or outside the metadata core (role distribution names
+// plugins after roles) may: plugin foo's Codex package and plugin foo-codex's
+// Claude package are then both foo-codex/. Such a directory belongs to
+// neither, since both write into it, so neither can be held and both publish
+// their live state.
 func ownersOfPlugins(plugins []PluginInfo) pluginPrefixOwners {
 	owners := make(pluginPrefixOwners)
+	shared := make(map[string]bool)
 	for _, p := range plugins {
 		for _, prefix := range pluginSubtreePrefixes(p.Slug) {
-			if _, claimed := owners[prefix]; claimed && prefix != p.Slug+"/" {
-				continue
+			if _, claimed := owners[prefix]; claimed {
+				shared[prefix] = true
 			}
 			owners[prefix] = p.Slug
 		}
+	}
+	for prefix := range shared {
+		delete(owners, prefix)
 	}
 	return owners
 }
@@ -344,9 +348,10 @@ func publishMCPFingerprints(active []PluginInfo, held []heldPlugin, cfg Generate
 // never published, or a project with no marketplace yet, has nothing to
 // compare against, so turning auto sync off is always allowed there. The live
 // fingerprint is computed with the same configuration publishProject uses.
-// It reads the plugin's live state in tx, which must hold the locks
-// requireAutoSyncCanTurnOff takes.
-func (s *Service) requirePluginSyncedForPause(ctx context.Context, tx pgx.Tx, plugin repo.Plugin) error {
+// It reads the plugin's live state in tx. lockContent first takes the package
+// content lock exclusively, as the check that decides must (see
+// requireAutoSyncCanTurnOff); it waits only once there is something to compare.
+func (s *Service) requirePluginSyncedForPause(ctx context.Context, tx pgx.Tx, plugin repo.Plugin, lockContent bool) error {
 	conn, err := s.repo.WithTx(tx).GetGitHubConnection(ctx, plugin.ProjectID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
@@ -373,6 +378,17 @@ func (s *Service) requirePluginSyncedForPause(ctx context.Context, tx pgx.Tx, pl
 		return oops.E(oops.CodeUnexpected, err, "get project").LogError(ctx, s.logger)
 	}
 	serverURL := s.organizationServerURL(project.DefaultHost)
+	observabilityEnabled, err := s.projectObservabilityEnabled(ctx, plugin.ProjectID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "read observability plugin setting").LogError(ctx, s.logger)
+	}
+	cfg := s.generateConfig(ctx, project.ID, project.Slug, project.ProjectSlug, plugin.ProjectID, serverURL, conn.PublishedHooksConfig)
+
+	if lockContent {
+		if err := s.repo.WithTx(tx).LockPluginPackageContent(ctx, plugin.ProjectID.String()); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock plugin package content").LogError(ctx, s.logger)
+		}
+	}
 	infos, err := s.resolvePluginInfosInTx(ctx, tx, project.ID, plugin.ProjectID, serverURL, plugin.ID)
 	if err != nil {
 		return err
@@ -381,11 +397,6 @@ func (s *Service) requirePluginSyncedForPause(ctx context.Context, tx pgx.Tx, pl
 	if idx < 0 {
 		return oops.C(oops.CodeNotFound)
 	}
-	observabilityEnabled, err := s.projectObservabilityEnabled(ctx, plugin.ProjectID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "read observability plugin setting").LogError(ctx, s.logger)
-	}
-	cfg := s.generateConfig(ctx, project.ID, project.Slug, project.ProjectSlug, plugin.ProjectID, serverURL, conn.PublishedHooksConfig)
 	current, err := PluginMCPFingerprint(infos[idx], cfg, observabilityEnabled)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "compute plugin fingerprint").LogError(ctx, s.logger)

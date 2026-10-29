@@ -49,9 +49,15 @@ func (g *stubAutoSyncGuard) RequireAutoSyncCanTurnOffInTransaction(_ context.Con
 
 func (g *stubAutoSyncGuard) refusal(pluginID uuid.UUID) error {
 	if g.unsynced[pluginID] {
-		return oops.E(oops.CodeFailedPrecondition, plugindelivery.ErrPluginHasUnsyncedChanges, "This plugin has changes that haven't been synced yet.")
+		return unsyncedChangesRefusal()
 	}
 	return nil
+}
+
+// unsyncedChangesRefusal is the plugins service's refusal for a plugin with
+// changes that haven't been synced.
+func unsyncedChangesRefusal() error {
+	return oops.E(oops.CodeFailedPrecondition, plugindelivery.ErrPluginHasUnsyncedChanges, "This plugin has changes that haven't been synced yet.")
 }
 
 func (g *stubAutoSyncGuard) checks() []uuid.UUID {
@@ -272,7 +278,7 @@ func (racingAutoSyncGuard) RequireAutoSyncCanTurnOff(context.Context, string, uu
 }
 
 func (racingAutoSyncGuard) RequireAutoSyncCanTurnOffInTransaction(context.Context, pgx.Tx, string, uuid.UUID, uuid.UUID) error {
-	return oops.E(oops.CodeFailedPrecondition, plugindelivery.ErrPluginHasUnsyncedChanges, "This plugin has changes that haven't been synced yet.")
+	return unsyncedChangesRefusal()
 }
 
 // The check in the write's transaction is the one that decides: a change that

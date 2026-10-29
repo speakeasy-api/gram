@@ -2078,41 +2078,6 @@ func (q *Queries) ListPluginSkillsForProject(ctx context.Context, arg ListPlugin
 	return items, nil
 }
 
-const listPluginSlugsForProject = `-- name: ListPluginSlugsForProject :many
-SELECT id, slug
-FROM plugins
-WHERE project_id = $1
-  AND deleted IS FALSE
-ORDER BY slug
-`
-
-type ListPluginSlugsForProjectRow struct {
-	ID   uuid.UUID
-	Slug string
-}
-
-// Every live plugin's slug in a project, for refusing a slug whose published
-// package directories another plugin already uses.
-func (q *Queries) ListPluginSlugsForProject(ctx context.Context, projectID uuid.UUID) ([]ListPluginSlugsForProjectRow, error) {
-	rows, err := q.db.Query(ctx, listPluginSlugsForProject, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListPluginSlugsForProjectRow
-	for rows.Next() {
-		var i ListPluginSlugsForProjectRow
-		if err := rows.Scan(&i.ID, &i.Slug); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listPlugins = `-- name: ListPlugins :many
 SELECT
   p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.auto_sync_enabled, p.created_at, p.updated_at, p.deleted_at, p.deleted,
@@ -2875,10 +2840,8 @@ const lockPluginPackageContent = `-- name: LockPluginPackageContent :exec
 SELECT pg_advisory_xact_lock(hashtextextended('plugin-package-content:' || $1::text, 0))
 `
 
-// Waits for every change that has requested a publication of the project's
-// plugin packages to finish, and holds off new ones until the transaction
-// ends, so what the transaction reads of the packages' live state stays
-// current until it commits.
+// Waits out every in-flight package-affecting change in the project and holds
+// off new ones until the transaction ends.
 func (q *Queries) LockPluginPackageContent(ctx context.Context, projectID string) error {
 	_, err := q.db.Exec(ctx, lockPluginPackageContent, projectID)
 	return err
@@ -2889,8 +2852,7 @@ SELECT pg_advisory_xact_lock_shared(hashtextextended('plugin-package-content:' |
 `
 
 // Taken by every change that requests a publication of the project's plugin
-// packages. Shared, so those changes never wait on one another, only on a
-// holder of LockPluginPackageContent.
+// packages; shared, so those changes only ever wait on LockPluginPackageContent.
 func (q *Queries) LockPluginPackageContentShared(ctx context.Context, projectID string) error {
 	_, err := q.db.Exec(ctx, lockPluginPackageContentShared, projectID)
 	return err

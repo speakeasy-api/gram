@@ -11,8 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/plugins"
-	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 )
 
 // marketplaceRenameFixture publishes a project once (non-phased, so it lands on
@@ -117,33 +115,22 @@ func TestPluginsService_OrgRenameWithCarriedHooksStopsRepublishing(t *testing.T)
 	// Empty provider: the org is not cleared for a newer hooks version, so
 	// its published hooks subtree is carried rather than regenerated.
 	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, &feature.InMemory{})
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
+	f := newAutoSyncFixtureFor(t, ctx, ti, mock)
 
 	orgID, _ := marketplaceRenameFixture(t, ctx, ti, "Carried Hooks Rename")
-	oldHooksDir := naming.ObservabilitySlug(organizationName(t, ctx, ti.conn, orgID)) + "/"
+	oldClaudeObservability, _ := orgObservabilitySlugs(t, ctx, ti)
+	oldHooksDir := oldClaudeObservability + "/"
 	require.NotEmpty(t, filesWithPrefix(mock.lastPushedFiles, oldHooksDir))
 	renameOrganization(t, ctx, ti.conn, orgID, "Carried Hooks Renamed")
-	newHooksDir := naming.ObservabilitySlug("Carried Hooks Renamed") + "/"
+	newClaudeObservability, _ := orgObservabilitySlugs(t, ctx, ti)
+	newHooksDir := newClaudeObservability + "/"
 
-	automaticPublish := func() *plugins.PublishProjectResult {
-		t.Helper()
-		result, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
-			ProjectID:       *authCtx.ProjectID,
-			CreatedByUserID: authCtx.UserID,
-			CommitMessage:   "Update plugin packages",
-			SkipIfUnchanged: true,
-		})
-		require.NoError(t, err)
-		return result
-	}
-
-	automaticPublish()
+	f.automaticPublish(t, ctx)
 	require.NotEmpty(t, filesWithPrefix(mock.lastPushedFiles, oldHooksDir), "the hooks subtree stays under the old name")
 	require.Empty(t, filesWithPrefix(mock.lastPushedFiles, newHooksDir))
 
 	mock.pushFilesCalled = false
-	again := automaticPublish()
+	again := f.automaticPublish(t, ctx)
 	require.True(t, again.Skipped, "nothing changed since the last automatic publish")
 	require.False(t, mock.pushFilesCalled)
 }

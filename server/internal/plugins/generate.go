@@ -1336,6 +1336,12 @@ func hooksOptionalSubtreePrefixes(orgName string) []string {
 	}
 }
 
+// allHooksSubtreePrefixes is every directory prefix the hooks subtree may
+// occupy for orgName, required and optional.
+func allHooksSubtreePrefixes(orgName string) []string {
+	return slices.Concat(hooksSubtreePrefixes(orgName), hooksOptionalSubtreePrefixes(orgName))
+}
+
 // pluginSubtreePrefixes returns the repo directory prefixes one feature
 // plugin's MCP packages occupy, one per platform layout generateMCPFiles
 // writes: Claude (<slug>/), Cursor, Codex, OpenCode, and the portable Agent
@@ -1358,17 +1364,15 @@ func pluginSubtreePrefixes(slug string) []string {
 // its directories may derive from.
 func reservedPackageDirs(orgNames []string) map[string]string {
 	reserved := map[string]string{
-		cursorPluginRoot + "/":              "the marketplace's Cursor packages",
-		opencodePluginRoot + "/":            "the marketplace's OpenCode packages",
-		agentPluginRoot + "/":               "the marketplace's Agent Plugins packages",
-		platformMCPPluginRoot + "/":         "the Speakeasy Platform MCP plugin",
-		platformMCPCursorPluginRoot + "/":   "the Speakeasy Platform MCP plugin",
-		platformMCPCodexPluginRoot + "/":    "the Speakeasy Platform MCP plugin",
-		platformMCPOpenCodePluginRoot + "/": "the Speakeasy Platform MCP plugin",
-		platformMCPAgentPluginRoot + "/":    "the Speakeasy Platform MCP plugin",
+		cursorPluginRoot + "/":   "the marketplace's Cursor packages",
+		opencodePluginRoot + "/": "the marketplace's OpenCode packages",
+		agentPluginRoot + "/":    "the marketplace's Agent Plugins packages",
+	}
+	for _, platformPackage := range platformMCPPackages {
+		reserved[platformPackage.root+"/"] = "the Speakeasy Platform MCP plugin"
 	}
 	for _, orgName := range orgNames {
-		for _, dir := range slices.Concat(hooksSubtreePrefixes(orgName), hooksOptionalSubtreePrefixes(orgName)) {
+		for _, dir := range allHooksSubtreePrefixes(orgName) {
 			reserved[dir] = "the observability plugin"
 		}
 	}
@@ -3080,23 +3084,26 @@ echo "✓ Speakeasy observability plugin installed. Restart Codex to activate."
 	return []byte(b.String())
 }
 
+// platformMCPPackages are the Platform MCP plugin's package directories, one
+// per client platform.
+var platformMCPPackages = []struct {
+	root     string
+	platform string
+}{
+	{root: platformMCPPluginRoot, platform: "claude"},
+	{root: platformMCPCursorPluginRoot, platform: "cursor"},
+	{root: platformMCPCodexPluginRoot, platform: "codex"},
+	{root: platformMCPOpenCodePluginRoot, platform: "opencode"},
+	{root: platformMCPAgentPluginRoot, platform: "agent-plugin"},
+}
+
 func generatePlatformMCPFilesInto(files map[string][]byte, cfg GenerateConfig) error {
 	platformURL, err := platformMCPURL(cfg.ServerURL)
 	if err != nil {
 		return err
 	}
 
-	packages := []struct {
-		root     string
-		platform string
-	}{
-		{root: platformMCPPluginRoot, platform: "claude"},
-		{root: platformMCPCursorPluginRoot, platform: "cursor"},
-		{root: platformMCPCodexPluginRoot, platform: "codex"},
-		{root: platformMCPOpenCodePluginRoot, platform: "opencode"},
-		{root: platformMCPAgentPluginRoot, platform: "agent-plugin"},
-	}
-	for _, packageSpec := range packages {
+	for _, packageSpec := range platformMCPPackages {
 		packageFiles, err := generatePlatformMCPPackageForClient(cfg, platformURL.String(), packageSpec.platform)
 		if err != nil {
 			return err

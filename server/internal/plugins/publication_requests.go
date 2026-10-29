@@ -48,9 +48,8 @@ func (r PublicationRequests) SyncProjectWithOutcome(ctx context.Context, tx pgx.
 }
 
 func (r PublicationRequests) projectWithOutcome(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, actorID string, includePausedPlugins bool) (ProjectPublicationRequestOutcome, error) {
-	// Taken whether or not emission is enabled: it is what turning a plugin's
-	// auto sync off waits on, so that a change committing alongside it is
-	// either seen by its unsynced-changes check or made after it.
+	// Taken whether or not emission is enabled: turning a plugin's auto sync
+	// off waits on it (see Service.requireAutoSyncCanTurnOff).
 	if err := repo.New(tx).LockPluginPackageContentShared(ctx, projectID.String()); err != nil {
 		return "", fmt.Errorf("lock plugin package content: %w", err)
 	}

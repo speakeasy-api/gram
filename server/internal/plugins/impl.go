@@ -658,9 +658,9 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 // until that transaction ends. A change to the plugin's content that commits
 // before the write is then always one the check saw: every such change requests
 // a publication, which takes the project's package content lock shared, and
-// this takes it exclusively before reading the live state. One that commits
-// after the write is held like any change made while auto sync is off. The
-// locks go in the order the metadata write and most content changes take
+// the check takes it exclusively before reading the live state. One that
+// commits after the write is held like any change made while auto sync is off.
+// The locks go in the order the metadata write and most content changes take
 // theirs (the project's admission lock, then the plugin row) with the package
 // content lock last, because content changes take it last too: one holding it
 // shared never waits on a lock held here, so neither side can deadlock.
@@ -687,35 +687,44 @@ func (s *Service) requireAutoSyncCanTurnOff(ctx context.Context, tx pgx.Tx, orga
 		conv.PtrValOr(payload.Description, "") != conv.FromPGTextOrEmpty[string](current.Description)) {
 		return oops.E(oops.CodeFailedPrecondition, nil, "%s", autoSyncOffWithOtherChangesMessage)
 	}
-	if err := s.repo.WithTx(tx).LockPluginPackageContent(ctx, projectID.String()); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "lock plugin package content").LogError(ctx, s.logger)
-	}
-	return s.requirePluginSyncedForPause(ctx, tx, current)
+	return s.requirePluginSyncedForPause(ctx, tx, current, true)
 }
 
 // RequireAutoSyncCanTurnOffInTransaction is the check UpdatePlugin makes before
 // turning a plugin's auto sync off, for a caller that changes nothing else
 // about the plugin, such as the Platform MCP. Run it in the transaction that
-// writes the setting, before the write: its locks are what keep a change to the
-// plugin from committing unseen between the check and the write. A refusal
-// because the plugin has changes that haven't been synced matches
+// writes the setting, before the write (see requireAutoSyncCanTurnOff). A
+// refusal because the plugin has changes that haven't been synced matches
 // ErrPluginHasUnsyncedChanges. The caller must already have authorized plugin
 // write for the project.
 func (s *Service) RequireAutoSyncCanTurnOffInTransaction(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID uuid.UUID) error {
 	return s.requireAutoSyncCanTurnOff(ctx, tx, organizationID, projectID, pluginID, nil)
 }
 
-// RequireAutoSyncCanTurnOff is RequireAutoSyncCanTurnOffInTransaction in a
-// transaction of its own, for refusing early before any write begins. Passing
-// it doesn't make the write safe; the write must still run the check in its
-// own transaction.
+// RequireAutoSyncCanTurnOff is RequireAutoSyncCanTurnOffInTransaction without
+// its locks, for refusing early before any write begins. Passing it doesn't
+// make the write safe: the write must still run the locked check.
 func (s *Service) RequireAutoSyncCanTurnOff(ctx context.Context, organizationID string, projectID, pluginID uuid.UUID) error {
+	current, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
+		ID:             pluginID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.C(oops.CodeNotFound)
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "get plugin").LogError(ctx, s.logger)
+	}
+	if !PluginAutoSyncEnabled(current.AutoSyncEnabled) {
+		return nil
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	return s.requireAutoSyncCanTurnOff(ctx, tx, organizationID, projectID, pluginID, nil)
+	return s.requirePluginSyncedForPause(ctx, tx, current, false)
 }
 
 func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPayload) error {
@@ -2521,11 +2530,11 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	carryHooks := observabilityEnabled && !hooksChanged
 	carryHooksOrgName, hooksPrefixes := hooksCarryPrefixes(targetHooksConfigJSON, cfg.OrgName)
 
-	// The shared manifests list the observability plugin under the directories
-	// its hooks subtree sits in, and a carried subtree keeps the ones it was
-	// published under even after an org rename. Fingerprint the manifests as
-	// this publish will push them, or every automatic publish after such a
-	// rename would read them as changed and regenerate the MCP packages.
+	// A carried hooks subtree keeps the directory names it was published under,
+	// which diverge from cfg.OrgName after an org rename, and the shared
+	// manifests point their observability entries at those directories.
+	// Fingerprint the manifests as this publish will push them, or every
+	// automatic publish after such a rename would read them as changed.
 	fingerprintCfg := cfg
 	if carryHooks {
 		fingerprintCfg.HooksOrgName = carryHooksOrgName
@@ -2672,9 +2681,8 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// CURRENT generator's paths would fail against an older published layout
 	// and silently regenerate past the rollout gate.
 	carriedHooks := false
-	carriedHooksOrgName := ""
 	if carryHooks {
-		carriedHooksOrgName, carriedHooks = carryHooksSubtree(files, existingFiles, targetHooksConfigJSON, cfg.OrgName)
+		_, carriedHooks = carryHooksSubtree(files, existingFiles, targetHooksConfigJSON, cfg.OrgName)
 	}
 	if observabilityEnabled && !carriedHooks {
 		if hooksCandidate == nil {
@@ -2729,11 +2737,11 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	if observabilityEnabled {
 		sharedCfg.HooksAPIKey = fingerprintHooksKeySentinel
 	}
-	// A carried subtree keeps the directory names it was published under, which
-	// diverge from cfg.OrgName after an org rename; point the regenerated
-	// manifests' observability entries at the carried directories so they stay
-	// resolvable.
-	sharedCfg.HooksOrgName = carriedHooksOrgName
+	// Point the observability entries at a carried subtree's directories (see
+	// fingerprintCfg above) so they stay resolvable.
+	if carriedHooks {
+		sharedCfg.HooksOrgName = carryHooksOrgName
+	}
 	sharedFiles, err := generateSharedFilesFromEntries(sharedPublishEntries(plan.Active, plan.Held, sharedCfg), sharedCfg)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate shared files").LogError(ctx, s.logger)
@@ -2832,7 +2840,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 // (required and optional) carryHooksSubtree reads under it.
 func hooksCarryPrefixes(publishedConfig []byte, currentOrgName string) (string, []string) {
 	orgName := conv.Default(naming.PublishedHooksOrgName(publishedConfig), currentOrgName)
-	return orgName, slices.Concat(hooksSubtreePrefixes(orgName), hooksOptionalSubtreePrefixes(orgName))
+	return orgName, allHooksSubtreePrefixes(orgName)
 }
 
 // carryHooksSubtree copies the published hooks (observability) subtree
@@ -3430,8 +3438,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 }
 
 // resolvePluginInfosInTx is resolvePluginInfos inside the caller's transaction,
-// for a caller that must read the plugins' live state under locks it already
-// holds. It takes the project's admission lock itself.
+// which it takes the project's admission lock in.
 func (s *Service) resolvePluginInfosInTx(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, serverURL string, pluginIDs ...uuid.UUID) ([]PluginInfo, error) {
 	if err := admission.LockProject(ctx, tx, projectID); err != nil {
 		return nil, oops.E(oops.CodeUnavailable, err, "lock gateway distribution check").LogError(ctx, s.logger)

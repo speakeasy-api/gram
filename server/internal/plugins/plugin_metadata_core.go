@@ -46,9 +46,9 @@ var (
 	// holds.
 	ErrPluginSlugConflict = errors.New("a plugin with this slug already exists")
 
-	// ErrPluginSlugUnavailable is a slug whose published packages would land
-	// in a directory another plugin in the project, or the marketplace itself,
-	// already publishes into. The error carrying it names the directory.
+	// ErrPluginSlugUnavailable is a slug whose packages would share a
+	// directory with another package in the marketplace (see
+	// pluginSlugPackageCollision).
 	ErrPluginSlugUnavailable = errors.New("invalid slug: its packages would share a directory with another package in the marketplace")
 
 	// ErrPluginMetadataTargetNotFound is a plugin id that matches no plugin in
@@ -144,9 +144,8 @@ type UpdatePluginMutation struct {
 
 	// AutoSyncEnabled turns automatic publishing of the plugin's changes on or
 	// off. Nil keeps the current setting. Callers that turn it off must first
-	// check, in the same transaction, that the plugin has no unsynced changes,
-	// with Service.RequireAutoSyncCanTurnOffInTransaction or as
-	// Service.UpdatePlugin does.
+	// run Service.RequireAutoSyncCanTurnOffInTransaction in the same
+	// transaction.
 	AutoSyncEnabled *bool
 
 	// Actor is who the update is attributed to.
@@ -199,8 +198,8 @@ func ResolveCreatePluginSlug(name string, requested *string) (string, error) {
 	return slug, nil
 }
 
-// pluginSlugUnavailableError is ErrPluginSlugUnavailable for one slug, naming
-// the directory it would share and what already publishes there.
+// pluginSlugUnavailableError names the directory a refused slug would share
+// and what already publishes there.
 type pluginSlugUnavailableError struct {
 	slug   string
 	dir    string
@@ -213,12 +212,11 @@ func (e *pluginSlugUnavailableError) Error() string {
 
 func (e *pluginSlugUnavailableError) Unwrap() error { return ErrPluginSlugUnavailable }
 
-// requirePluginSlugPackagesFree refuses slug for pluginID (uuid.Nil for a new
-// plugin) when its package directories would collide with another plugin's
-// in the project or with one the marketplace reserves. The caller holds the
-// project lock, so no concurrent create or rename can claim them in between.
+// requirePluginSlugPackagesFree applies pluginSlugPackageCollision to slug for
+// pluginID (uuid.Nil for a new plugin). The caller holds the project lock, so
+// no concurrent create or rename can claim the directories in between.
 func requirePluginSlugPackagesFree(ctx context.Context, queries *repo.Queries, organizationID string, projectID, pluginID uuid.UUID, slug string) error {
-	rows, err := queries.ListPluginSlugsForProject(ctx, projectID)
+	rows, err := queries.ListActivePluginsForProject(ctx, repo.ListActivePluginsForProjectParams{ProjectID: projectID, PluginIds: nil})
 	if err != nil {
 		return fmt.Errorf("list plugin slugs: %w", err)
 	}
@@ -325,12 +323,7 @@ func (c *PluginMetadataCore) CreateInTransaction(ctx context.Context, tx pgx.Tx,
 		PluginID:         plugin.ID,
 		PluginName:       plugin.Name,
 		PluginSlug:       plugin.Slug,
-		SnapshotAfter: &audit.PluginSnapshot{
-			Name:            plugin.Name,
-			Slug:            plugin.Slug,
-			Description:     conv.FromPGText[string](plugin.Description),
-			AutoSyncEnabled: new(PluginAutoSyncEnabled(plugin.AutoSyncEnabled)),
-		},
+		SnapshotAfter:    pluginAuditSnapshot(plugin),
 	}); err != nil {
 		return PluginMetadataResult{}, fmt.Errorf("audit log plugin create: %w", err)
 	}
@@ -382,10 +375,10 @@ func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx,
 	if mutation.AutoSyncEnabled != nil {
 		autoSyncAfter = *mutation.AutoSyncEnabled
 	}
-	if slug != before.Slug && !autoSyncAfter {
-		return PluginMetadataResult{}, ErrPluginSlugLockedWhileAutoSyncOff
-	}
 	if slug != before.Slug {
+		if !autoSyncAfter {
+			return PluginMetadataResult{}, ErrPluginSlugLockedWhileAutoSyncOff
+		}
 		if err := requirePluginSlugPackagesFree(ctx, queries, mutation.OrganizationID, mutation.ProjectID, mutation.PluginID, slug); err != nil {
 			return PluginMetadataResult{}, err
 		}
@@ -426,18 +419,8 @@ func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx,
 		PluginID:         plugin.ID,
 		PluginName:       plugin.Name,
 		PluginSlug:       plugin.Slug,
-		SnapshotBefore: &audit.PluginSnapshot{
-			Name:            before.Name,
-			Slug:            before.Slug,
-			Description:     conv.FromPGText[string](before.Description),
-			AutoSyncEnabled: new(PluginAutoSyncEnabled(before.AutoSyncEnabled)),
-		},
-		SnapshotAfter: &audit.PluginSnapshot{
-			Name:            plugin.Name,
-			Slug:            plugin.Slug,
-			Description:     conv.FromPGText[string](plugin.Description),
-			AutoSyncEnabled: new(PluginAutoSyncEnabled(plugin.AutoSyncEnabled)),
-		},
+		SnapshotBefore:   pluginAuditSnapshot(before),
+		SnapshotAfter:    pluginAuditSnapshot(plugin),
 	}); err != nil {
 		return PluginMetadataResult{}, fmt.Errorf("audit log plugin update: %w", err)
 	}
@@ -447,6 +430,15 @@ func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx,
 		return PluginMetadataResult{}, fmt.Errorf("enqueue plugin publication: %w", err)
 	}
 	return PluginMetadataResult{Plugin: plugin, Before: &before, DeliveredToEveryone: false, Publication: outcome}, nil
+}
+
+func pluginAuditSnapshot(plugin repo.Plugin) *audit.PluginSnapshot {
+	return &audit.PluginSnapshot{
+		Name:            plugin.Name,
+		Slug:            plugin.Slug,
+		Description:     conv.FromPGText[string](plugin.Description),
+		AutoSyncEnabled: new(PluginAutoSyncEnabled(plugin.AutoSyncEnabled)),
+	}
 }
 
 // PluginAutoSyncEnabled resolves a plugin's stored auto sync setting: NULL
