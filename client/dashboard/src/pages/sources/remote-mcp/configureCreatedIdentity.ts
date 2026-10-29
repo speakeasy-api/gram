@@ -1,6 +1,6 @@
 import { requireKnownEnumValue } from "@/lib/enum";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
-import { isNotFoundError } from "@/lib/errors";
+import { isForbiddenError, isNotFoundError } from "@/lib/errors";
 import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import { serverIdentityAuthMethod } from "@/lib/remote-identity/model/clientConfiguration";
@@ -273,11 +273,13 @@ export async function configureCreatedRemoteMcpIdentity({
       undefined,
       options,
     );
-  } catch {
+  } catch (error) {
     return setupRequired(
       mcpServer,
       identityMode,
-      "User Identity could not be configured. Open Settings > Identity to finish setup.",
+      isForbiddenError(error)
+        ? "This server shares its sign-in client with other projects. An organization admin can finish setup in Settings > Identity."
+        : "User Identity could not be configured. Open Settings > Identity to finish setup.",
     );
   }
 

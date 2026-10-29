@@ -1330,6 +1330,7 @@ JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
 WHERE s.user_session_issuer_id = ANY($1::uuid[])
   AND usi.project_id IS NULL
   AND usi.organization_id = $2::text
+  AND usi.deleted IS FALSE
   AND p.organization_id = $2::text
   AND p.deleted IS FALSE
   AND s.deleted IS FALSE

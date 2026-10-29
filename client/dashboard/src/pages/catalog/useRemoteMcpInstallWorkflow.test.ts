@@ -580,7 +580,16 @@ describe("useRemoteMcpInstallWorkflow", () => {
     );
     // The server decides whether this caller may bind a client to the shared
     // organization issuer, so setup still reaches the identity commit.
-    expect(mockCommitIdentity).toHaveBeenCalled();
+    expect(mockCommitIdentity).toHaveBeenCalledWith(
+      {
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          mcpServerId: "mcp-server-1",
+          clientMode: "auto",
+        }),
+      },
+      undefined,
+      undefined,
+    );
   });
 
   it("lets auto-config bind a client to the project-specific issuer", async () => {

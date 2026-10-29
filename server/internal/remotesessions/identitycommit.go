@@ -1095,7 +1095,6 @@ func refuseOrgWideBinding(userIssuerOrgLevel, actorIsOrganizationAdmin bool, cli
 // unaudited.
 func refuseLiveAgentBindings(ctx context.Context, q *repo.Queries, scope IdentityScope, clientID, userIssuerID uuid.UUID) error {
 	live, err := q.HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx, repo.HasLivePrincipalRemoteSessionBindingsForClientBindingParams{
-		ProjectID:             scope.ProjectID,
 		OrganizationID:        scope.OrganizationID,
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   userIssuerID,

@@ -63,19 +63,18 @@ func ResyncMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserversrep
 // them.
 func BestEffortResyncMCPServerRemoteSessionIssuers(ctx context.Context, logger *slog.Logger, db mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) {
 	// Detached from request cancellation like RevokeAllDetached: already committed.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerResyncTimeout)
-	defer cancel()
+	ctx = context.WithoutCancel(ctx)
 
-	if err := ResyncMCPServerRemoteSessionIssuers(ctx, db, organizationID, projectID, userIssuerIDs); err != nil {
-		logger.ErrorContext(ctx, "resync mcp server remote session issuers", attr.SlogError(err))
-	}
+	bestEffortResyncProject(ctx, logger, db, organizationID, projectID, userIssuerIDs)
 	if len(userIssuerIDs) == 0 {
 		return
 	}
-	sharing, err := mcpserversrepo.New(db).ListProjectsSharingOrganizationUserSessionIssuers(ctx, mcpserversrepo.ListProjectsSharingOrganizationUserSessionIssuersParams{
+	listCtx, cancel := context.WithTimeout(ctx, issuerResyncTimeout)
+	sharing, err := mcpserversrepo.New(db).ListProjectsSharingOrganizationUserSessionIssuers(listCtx, mcpserversrepo.ListProjectsSharingOrganizationUserSessionIssuersParams{
 		UserSessionIssuerIds: userIssuerIDs,
 		OrganizationID:       organizationID,
 	})
+	cancel()
 	if err != nil {
 		logger.ErrorContext(ctx, "list projects sharing organization user session issuers", attr.SlogError(err))
 		return
@@ -84,8 +83,16 @@ func BestEffortResyncMCPServerRemoteSessionIssuers(ctx context.Context, logger *
 		if sharingProjectID == projectID {
 			continue
 		}
-		if err := ResyncMCPServerRemoteSessionIssuers(ctx, db, organizationID, sharingProjectID, userIssuerIDs); err != nil {
-			logger.ErrorContext(ctx, "resync mcp server remote session issuers", attr.SlogError(err), attr.SlogProjectID(sharingProjectID.String()))
-		}
+		bestEffortResyncProject(ctx, logger, db, organizationID, sharingProjectID, userIssuerIDs)
+	}
+}
+
+// bestEffortResyncProject gives each project its own deadline, so one slow
+// project cannot starve the ones after it.
+func bestEffortResyncProject(ctx context.Context, logger *slog.Logger, db mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) {
+	ctx, cancel := context.WithTimeout(ctx, issuerResyncTimeout)
+	defer cancel()
+	if err := ResyncMCPServerRemoteSessionIssuers(ctx, db, organizationID, projectID, userIssuerIDs); err != nil {
+		logger.ErrorContext(ctx, "resync mcp server remote session issuers", attr.SlogError(err), attr.SlogProjectID(projectID.String()))
 	}
 }

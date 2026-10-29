@@ -677,6 +677,7 @@ JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
 WHERE s.user_session_issuer_id = ANY(@user_session_issuer_ids::uuid[])
   AND usi.project_id IS NULL
   AND usi.organization_id = @organization_id::text
+  AND usi.deleted IS FALSE
   AND p.organization_id = @organization_id::text
   AND p.deleted IS FALSE
   AND s.deleted IS FALSE

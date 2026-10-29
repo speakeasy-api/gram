@@ -1073,6 +1073,33 @@ func TestCommitServerIdentityConfigurationLinksOrgClientToOrgIssuerForOrganizati
 	require.Equal(t, uuid.NullUUID{UUID: providerID, Valid: true}, otherServer.RemoteSessionIssuerID)
 }
 
+func TestCommitServerIdentityConfigurationRefusesReplacingOrgClientWithAgentBindingInAnotherProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "org-agent-replace-issuer")
+	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "org-agent-replace-target", userIssuerID)
+	currentProviderID := createServerIdentityProvider(t, ctx, ti, "org-agent-replace-current", "", false, []string{"none"})
+	orgClientID := bindServerIdentityClient(t, ctx, ti, "org-agent-replace-client", currentProviderID, userIssuerID, true)
+
+	// The agent is attached in another project, through the binding every
+	// project's servers on the issuer share.
+	otherProjectID := createProject(t, ctx, ti.conn, "org-agent-replace-other")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	otherAuth := *authCtx
+	otherAuth.ProjectID = &otherProjectID
+	seedLiveAgentBinding(t, contextvalues.SetAuthContext(ctx, &otherAuth), ti, orgClientID, userIssuerID)
+
+	nextProviderID := createServerIdentityProvider(t, ctx, ti, "org-agent-replace-next", "", false, []string{"none"})
+	nextClientID := createServerIdentityClient(t, ctx, ti, "org-agent-replace-next-client", nextProviderID, true)
+
+	_, err := ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(targetID, nextProviderID, nextClientID))
+	requireOopsCode(t, err, oops.CodeConflict)
+	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, true)
+	requireLiveAgentBindings(t, ctx, ti, orgClientID, userIssuerID)
+}
+
 func TestCommitServerIdentityConfigurationKeepsAlreadyBoundOrgClientOnOrgIssuer(t *testing.T) {
 	t.Parallel()
 

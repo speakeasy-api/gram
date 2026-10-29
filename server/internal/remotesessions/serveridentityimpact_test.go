@@ -205,7 +205,7 @@ func TestGetServerIdentityImpactOrganizationIssuerAcrossProjects(t *testing.T) {
 	// server among those it reaches.
 	result, err = ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "attach", nil, &orgClientID))
 	require.NoError(t, err)
-	require.Positive(t, result.HiddenServerCount+len(result.Servers))
+	require.Contains(t, impactsByServer(result), otherServerID.String())
 }
 
 func TestGetServerIdentityImpactRefusesUnbindingOrgClientOnOrgIssuerWithoutOrganizationAdmin(t *testing.T) {
