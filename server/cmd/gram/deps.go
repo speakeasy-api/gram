@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -665,12 +666,18 @@ func newBillingProvider(
 	}
 }
 
+var stripePublishableKeyPattern = regexp.MustCompile(`^pk_(test|live)_[A-Za-z0-9]+$`)
+
 func newStripeClient(
 	ctx context.Context,
 	logger *slog.Logger,
 	guardianPolicy *guardian.Policy,
 	c *cli.Context,
 ) (stripeclient.Client, error) {
+	publishableKey := c.String("stripe-publishable-key")
+	if stripeclient.IsConfigured(publishableKey) && !stripePublishableKeyPattern.MatchString(publishableKey) {
+		return nil, errors.New("invalid Stripe publishable key format")
+	}
 	apiKey := c.String("stripe-api-key")
 	if !stripeclient.IsConfigured(apiKey) {
 		if c.String("environment") == "local" {
@@ -696,7 +703,7 @@ func newStripeClient(
 		guardianPolicy,
 		apiKey,
 		c.String("stripe-webhook-secret"),
-		c.String("stripe-publishable-key"),
+		publishableKey,
 		catalog,
 	), nil
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
@@ -44,8 +45,14 @@ func (s *Service) GetStripeCheckoutStatus(ctx context.Context, payload *gen.GetS
 		return nil, oops.C(oops.CodeUnavailable)
 	}
 	state, err := s.stripeClient.GetCheckoutSession(ctx, payload.SessionID)
+	if errors.Is(err, stripeclient.ErrCheckoutSessionNotFound) {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnavailable, err, "failed to retrieve Stripe Checkout session")
+	}
 	// Missing and foreign sessions deliberately have the same public response.
-	if err != nil || state == nil || state.ID != payload.SessionID || state.CustomerID != metadata.StripeCustomerID.String || state.OrganizationID != authCtx.ActiveOrganizationID {
+	if state == nil || state.ID != payload.SessionID || state.CustomerID != metadata.StripeCustomerID.String || state.OrganizationID != authCtx.ActiveOrganizationID {
 		return nil, oops.C(oops.CodeNotFound)
 	}
 	switch state.Status {

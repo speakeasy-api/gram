@@ -117,6 +117,8 @@ export function useBillingState({
           retryOnMount: true,
           retry: false,
           refetchInterval: confirming ? 2000 : false,
+          refetchOnWindowFocus: false,
+          refetchOnReconnect: false,
         }
       : {}),
   });

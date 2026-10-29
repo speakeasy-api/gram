@@ -44,6 +44,9 @@ var ErrWebhookNotConfigured = errors.New("stripe webhook is not configured")
 // ErrCustomerNotFound indicates that a customer is missing or deleted in Stripe.
 var ErrCustomerNotFound = errors.New("stripe customer not found or deleted")
 
+// ErrCheckoutSessionNotFound indicates that a Checkout session is missing in Stripe.
+var ErrCheckoutSessionNotFound = errors.New("stripe checkout session not found")
+
 // ErrSubscriptionNotFound indicates that a subscription is missing in Stripe.
 var ErrSubscriptionNotFound = errors.New("stripe subscription not found")
 
@@ -906,6 +909,9 @@ func (c *client) GetCheckoutSession(ctx context.Context, id string) (*CheckoutSe
 
 	session, err := c.api.retrieveCheckoutSession(ctx, id, params)
 	if err != nil {
+		if stripeErr, ok := errors.AsType[*stripesdk.Error](err); ok && stripeErr.Code == stripesdk.ErrorCodeResourceMissing {
+			return nil, fmt.Errorf("%w: %w", ErrCheckoutSessionNotFound, err)
+		}
 		return nil, fmt.Errorf("retrieve Stripe Checkout session: %w", err)
 	}
 	if session == nil {

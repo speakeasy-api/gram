@@ -439,3 +439,75 @@ func newStripeCLIContext(t *testing.T, values map[string]string) *cli.Context {
 
 	return cli.NewContext(cli.NewApp(), set, nil)
 }
+
+func TestNewStripeClientPublishableKeyEmpty(t *testing.T) {
+	t.Parallel()
+	testNewStripeClientPublishableKey(t, "", true)
+}
+
+func TestNewStripeClientPublishableKeyUnset(t *testing.T) {
+	t.Parallel()
+	testNewStripeClientPublishableKey(t, "unset", true)
+}
+
+func TestNewStripeClientPublishableKeyTest(t *testing.T) {
+	t.Parallel()
+	testNewStripeClientPublishableKey(t, "pk_test_placeholder", true)
+}
+
+func TestNewStripeClientPublishableKeyLive(t *testing.T) {
+	t.Parallel()
+	testNewStripeClientPublishableKey(t, "pk_live_placeholder", true)
+}
+
+func TestNewStripeClientPublishableKeySecret(t *testing.T) {
+	t.Parallel()
+	testNewStripeClientPublishableKey(t, "sk_test_secret", false)
+}
+
+func TestNewStripeClientPublishableKeyRestricted(t *testing.T) {
+	t.Parallel()
+	testNewStripeClientPublishableKey(t, "rk_live_secret", false)
+}
+
+func TestNewStripeClientPublishableKeyEmptyTestSuffix(t *testing.T) {
+	t.Parallel()
+	testNewStripeClientPublishableKey(t, "pk_test_", false)
+}
+
+func TestNewStripeClientPublishableKeyEmptyLiveSuffix(t *testing.T) {
+	t.Parallel()
+	testNewStripeClientPublishableKey(t, "pk_live_", false)
+}
+
+func TestNewStripeClientPublishableKeyWrongMode(t *testing.T) {
+	t.Parallel()
+	testNewStripeClientPublishableKey(t, "pk_other_value", false)
+}
+
+func TestNewStripeClientPublishableKeySpaces(t *testing.T) {
+	t.Parallel()
+	testNewStripeClientPublishableKey(t, "pk_test_has space", false)
+}
+
+func TestNewStripeClientPublishableKeyLeadingSpace(t *testing.T) {
+	t.Parallel()
+	testNewStripeClientPublishableKey(t, " pk_test_value", false)
+}
+
+func testNewStripeClientPublishableKey(t *testing.T, key string, valid bool) {
+	t.Helper()
+	ctx := newStripeCLIContext(t, map[string]string{
+		"environment": "prod", "stripe-api-key": "sk_test_placeholder", "stripe-publishable-key": key,
+		"stripe-price-id-tum": "price_test", "stripe-price-id-mcp-egress": "price_test", "stripe-price-id-risk-scans": "price_test", "stripe-portal-configuration-id": "bpc_test",
+	})
+	client, err := newStripeClient(t.Context(), testenv.NewLogger(t), guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), ctx)
+	if valid {
+		require.NoError(t, err)
+		require.Equal(t, key, client.PublishableKey())
+	} else {
+		require.Error(t, err)
+		require.NotContains(t, err.Error(), key)
+		require.Nil(t, client)
+	}
+}

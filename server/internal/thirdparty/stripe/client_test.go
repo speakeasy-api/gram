@@ -1710,3 +1710,31 @@ func TestCreateCheckoutSessionFormPreservesPromotionCodesWithPreset(t *testing.T
 	require.Equal(t, promotionCodeID, stripesdk.StringValue(params.Discounts[0].PromotionCode))
 	require.Nil(t, params.Discounts[0].Coupon)
 }
+
+func TestGetCheckoutSessionClassifiesMissing(t *testing.T) {
+	t.Parallel()
+	testGetCheckoutSessionClassifiesError(t, &stripesdk.Error{Code: stripesdk.ErrorCodeResourceMissing}, true)
+}
+
+func TestGetCheckoutSessionClassifiesRateLimit(t *testing.T) {
+	t.Parallel()
+	testGetCheckoutSessionClassifiesError(t, &stripesdk.Error{HTTPStatusCode: 429}, false)
+}
+
+func TestGetCheckoutSessionClassifiesServerError(t *testing.T) {
+	t.Parallel()
+	testGetCheckoutSessionClassifiesError(t, &stripesdk.Error{HTTPStatusCode: 503}, false)
+}
+
+func TestGetCheckoutSessionClassifiesNetworkError(t *testing.T) {
+	t.Parallel()
+	testGetCheckoutSessionClassifiesError(t, errors.New("network unavailable"), false)
+}
+
+func testGetCheckoutSessionClassifiesError(t *testing.T, upstreamErr error, missing bool) {
+	t.Helper()
+	state, err := (&client{api: &fakeStripeAPI{err: upstreamErr}}).GetCheckoutSession(t.Context(), "cs_test")
+	require.Nil(t, state)
+	require.ErrorIs(t, err, upstreamErr)
+	require.Equal(t, missing, errors.Is(err, ErrCheckoutSessionNotFound))
+}

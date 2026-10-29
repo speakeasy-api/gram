@@ -1,6 +1,8 @@
 package usage
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -107,6 +109,9 @@ func testGetStripeCheckoutStatusRejectsInvalidAndForeignSessions(t *testing.T, t
 	if org == "own" {
 		org = ti.orgID
 	}
+	if tcId == "cs_missing" {
+		ti.stripe.checkoutGetErr = stripeclient.ErrCheckoutSessionNotFound
+	}
 	ti.stripe.checkoutState = &stripeclient.CheckoutSessionState{ID: "cs_test", CustomerID: tcCustomer, OrganizationID: org, Status: "complete", PaymentStatus: "paid"}
 	_, err := ti.service.GetStripeCheckoutStatus(ti.context(t, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID), authz.NewGrant(authz.ScopeOrgRead, ti.orgID)), &gen.GetStripeCheckoutStatusPayload{SessionID: tcId})
 	requireOopsCode(t, err, tcCode)
@@ -193,4 +198,24 @@ func testGetStripeCheckoutStatusReadinessUsesReturnedSubscription(t *testing.T, 
 	after, err := repo.New(ti.service.db).GetBillingMetadata(t.Context(), ti.orgID)
 	require.NoError(t, err)
 	require.Equal(t, before, after, "status must remain read-only")
+}
+
+func TestGetStripeCheckoutStatusRetrievalMissing(t *testing.T) {
+	t.Parallel()
+	testGetStripeCheckoutStatusRetrievalError(t, fmt.Errorf("retrieve: %w", stripeclient.ErrCheckoutSessionNotFound), oops.CodeNotFound)
+}
+
+func TestGetStripeCheckoutStatusRetrievalTransient(t *testing.T) {
+	t.Parallel()
+	testGetStripeCheckoutStatusRetrievalError(t, errors.New("upstream request failed"), oops.CodeUnavailable)
+}
+
+func testGetStripeCheckoutStatusRetrievalError(t *testing.T, upstreamErr error, code oops.Code) {
+	t.Helper()
+	ti := newStripeCheckoutTestInstance(t)
+	configureStripeSubscription(t, ti, false)
+	ti.stripe.checkoutGetErr = upstreamErr
+	result, err := ti.service.GetStripeCheckoutStatus(ti.context(t, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID), authz.NewGrant(authz.ScopeOrgRead, ti.orgID)), &gen.GetStripeCheckoutStatusPayload{SessionID: "cs_test"})
+	require.Nil(t, result)
+	requireOopsCode(t, err, code)
 }

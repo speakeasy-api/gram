@@ -31,3 +31,16 @@ it("only exempts exact billing recovery routes for the active organization", () 
     false,
   );
 });
+it("allows trailing slashes without widening the tenant boundary", () => {
+  for (const path of [
+    "/test-org/billing/setup/",
+    "/test-org/billing/payment-method/",
+    "/test-org/billing/",
+  ])
+    expect(
+      isBillingRecoveryPath(path, "?session_id=cs_test_example", "test-org"),
+    ).toBe(true);
+  expect(
+    isBillingRecoveryPath("/other-org/billing/setup/", "", "test-org"),
+  ).toBe(false);
+});

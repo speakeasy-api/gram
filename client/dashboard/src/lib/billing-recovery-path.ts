@@ -5,6 +5,7 @@ export function isBillingRecoveryPath(
   organizationSlug: string | undefined,
 ): boolean {
   if (!organizationSlug) return false;
+  pathname = pathname.replace(/\/$/, "");
   const billing = `/${organizationSlug}/billing`;
   return (
     pathname === `${billing}/setup` ||

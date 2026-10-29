@@ -426,14 +426,18 @@ it("does not activate billing from a return URL without a persisted subscription
   expect(mocks.createCheckout).not.toHaveBeenCalled();
 });
 it("fails closed on unverified return status and retries through the API", async () => {
-  mocks.fetchCheckoutStatus.mockResolvedValueOnce({
+  mocks.fetchCheckoutStatus.mockResolvedValue({
     ok: false,
     error: new Error("unavailable"),
   });
+  vi.useFakeTimers();
   render(<Harness path={returnedPath} />);
-  expect((await screen.findByRole("alert")).textContent).toContain(
-    "Could not verify",
-  );
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(8_000);
+  });
+  vi.useRealTimers();
+  expect(screen.getByText(/Could not verify/)).toBeTruthy();
+  expect(mocks.fetchCheckoutStatus).toHaveBeenCalledTimes(4);
   expect(mocks.createCheckout).not.toHaveBeenCalled();
   mocks.fetchCheckoutStatus.mockResolvedValue(
     success({
@@ -444,7 +448,7 @@ it("fails closed on unverified return status and retries through the API", async
   );
   fireEvent.click(screen.getByText("Check again"));
   expect(await screen.findByText("Complete Stripe")).toBeTruthy();
-  expect(mocks.fetchCheckoutStatus).toHaveBeenCalledTimes(2);
+  expect(mocks.fetchCheckoutStatus).toHaveBeenCalledTimes(5);
   expect(mocks.createCheckout).toHaveBeenCalledOnce();
 });
 it("does not trust cached open return status before a fresh read", async () => {
@@ -587,3 +591,146 @@ it.each([
     expect(mocks.createCheckout).not.toHaveBeenCalled();
   },
 );
+
+it("bounds all confirmation polling and lets the user restart it", async () => {
+  vi.useFakeTimers();
+  try {
+    render(<Harness path={returnedPath} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    expect(screen.getByText(/Automatic checks have paused/)).toBeTruthy();
+    const counts = [
+      mocks.fetchSubscription.mock.calls.length,
+      mocks.fetchCheckoutStatus.mock.calls.length,
+      mocks.sessionRefetch.mock.calls.length,
+    ];
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    expect([
+      mocks.fetchSubscription.mock.calls.length,
+      mocks.fetchCheckoutStatus.mock.calls.length,
+      mocks.sessionRefetch.mock.calls.length,
+    ]).toEqual(counts);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    });
+    expect(mocks.sessionRefetch.mock.calls.length).toBeGreaterThan(counts[2]!);
+    expect(screen.queryByText(/Automatic checks have paused/)).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("retries transient checkout status failures with backoff", async () => {
+  mocks.fetchCheckoutStatus.mockResolvedValueOnce({
+    ok: false,
+    error: { statusCode: 503 },
+  });
+  vi.useFakeTimers();
+  try {
+    render(<Harness path={returnedPath} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.fetchCheckoutStatus).toHaveBeenCalledOnce();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(mocks.fetchCheckoutStatus).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("does not retry missing or foreign returned checkout sessions", async () => {
+  mocks.fetchCheckoutStatus.mockResolvedValue(missing);
+  vi.useFakeTimers();
+  try {
+    render(<Harness path={returnedPath} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(mocks.fetchCheckoutStatus).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "Check again" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Return to billing setup" }),
+    ).toBeTruthy();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it.each([59_500, 61_000])(
+  "does not retry a status failure at %i ms beyond the retry budget",
+  async (elapsed) => {
+    const response = deferred<{ ok: false; error: { statusCode: number } }>();
+    mocks.fetchCheckoutStatus.mockReturnValue(response.promise);
+    vi.useFakeTimers();
+    try {
+      render(<Harness path={returnedPath} />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(elapsed);
+        response.resolve({ ok: false, error: { statusCode: 503 } });
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(20_000);
+      });
+      expect(mocks.fetchCheckoutStatus).toHaveBeenCalledOnce();
+      expect(screen.getByText(/Automatic checks have paused/)).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
+
+it("starts a fresh confirmation window after a late open status resumes checkout", async () => {
+  const response = deferred<
+    ReturnType<
+      typeof success<{
+        status: string;
+        paymentStatus: string;
+        billingReady: boolean;
+      }>
+    >
+  >();
+  mocks.fetchCheckoutStatus.mockReturnValue(response.promise);
+  vi.useFakeTimers();
+  try {
+    render(<Harness path={returnedPath} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    expect(screen.getByText(/Automatic checks have paused/)).toBeTruthy();
+    await act(async () => {
+      response.resolve(
+        success({
+          status: "open",
+          paymentStatus: "unpaid",
+          billingReady: false,
+        }),
+      );
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(screen.getByText("Complete Stripe")).toBeTruthy();
+    const calls = mocks.sessionRefetch.mock.calls.length;
+    await act(async () => {
+      fireEvent.click(screen.getByText("Complete Stripe"));
+    });
+    expect(screen.queryByText(/Automatic checks have paused/)).toBeNull();
+    expect(mocks.sessionRefetch.mock.calls.length).toBeGreaterThan(calls);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(59_000);
+    });
+    expect(screen.queryByText(/Automatic checks have paused/)).toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    expect(screen.getByText(/Automatic checks have paused/)).toBeTruthy();
+  } finally {
+    vi.useRealTimers();
+  }
+});

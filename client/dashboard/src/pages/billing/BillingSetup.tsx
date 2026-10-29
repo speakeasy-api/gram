@@ -94,7 +94,11 @@ function BillingSetupInner() {
     "session_id",
   );
   const [confirming, setConfirming] = useState(returnedSessionId !== null);
-  const billing = useBillingState({ surface: "setup", confirming });
+  const [checksPaused, setChecksPaused] = useState(false);
+  const [checkAttempt, setCheckAttempt] = useState(0);
+  const confirmationDeadline = useRef(Date.now() + 60_000);
+  const polling = confirming && !checksPaused;
+  const billing = useBillingState({ surface: "setup", confirming: polling });
   const {
     checkoutEligible: eligible,
     trialLifecycle,
@@ -106,11 +110,24 @@ function BillingSetupInner() {
     { sessionId: returnedSessionId ?? "" },
     undefined,
     {
-      enabled: eligible && returnedSessionId !== null,
+      enabled: eligible && returnedSessionId !== null && polling,
       throwOnError: false,
-      retry: false,
+      retry: (failureCount, error) =>
+        !isNotFoundError(error) &&
+        failureCount < 3 &&
+        Date.now() + Math.min(1000 * 2 ** failureCount, 8000) <
+          confirmationDeadline.current,
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
       refetchOnMount: "always",
-      refetchInterval: (query) => (query.state.error ? false : 2000),
+      refetchInterval: (query) =>
+        !polling ||
+        query.state.error ||
+        query.state.data?.status === "open" ||
+        query.state.data?.status === "expired"
+          ? false
+          : 2000,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
     },
   );
   const returnedCheckoutFresh =
@@ -182,14 +199,34 @@ function BillingSetupInner() {
     navigate,
   ]);
 
+  // A bounded foreground window covers every confirmation read, including
+  // session permission propagation. Slow payment methods can finish off-page.
   useEffect(() => {
-    if (!confirming || !eligible) return;
+    if (!polling || !eligible) return;
+    const timer = window.setTimeout(
+      () => setChecksPaused(true),
+      Math.max(0, confirmationDeadline.current - Date.now()),
+    );
+    return () => window.clearTimeout(timer);
+  }, [polling, eligible, checkAttempt]);
+
+  useEffect(() => {
+    if (returnedCheckout.error) setChecksPaused(true);
+  }, [returnedCheckout.error]);
+
+  useEffect(() => {
+    if (!polling || !eligible) return;
     let cancelled = false;
+    let refreshing = false;
     const refresh = async () => {
+      if (refreshing) return;
+      refreshing = true;
       try {
         await sessionRefetch.current();
       } catch {
-        /* Keep waiting; retry below. */
+        /* Keep waiting within this bounded attempt. */
+      } finally {
+        refreshing = false;
       }
     };
     void refresh();
@@ -200,7 +237,7 @@ function BillingSetupInner() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [confirming, eligible]);
+  }, [polling, eligible, checkAttempt]);
 
   useEffect(() => {
     if (!confirming || !confirmed || !whitelisted || !returnedCheckoutComplete)
@@ -256,7 +293,7 @@ function BillingSetupInner() {
       ) : confirming ? (
         <Stack gap={4} align="start">
           <Stack direction="horizontal" gap={2} align="center">
-            <Spinner />
+            {!checksPaused && <Spinner />}
             <Text role="status" muted>
               {returnedCheckout.data?.status === "complete" &&
               returnedCheckout.data.billingReady === false
@@ -264,6 +301,14 @@ function BillingSetupInner() {
                 : "Waiting for payment confirmation. This can take a moment; you can safely leave this page."}
             </Text>
           </Stack>
+          {checksPaused && (
+            <Alert variant="info">
+              <Text>
+                Automatic checks have paused. Your payment may still be
+                processing. You can safely leave this page or check again.
+              </Text>
+            </Alert>
+          )}
           {returnedCheckout.error && (
             <Alert variant="error">
               <Text>
@@ -274,17 +319,39 @@ function BillingSetupInner() {
           )}
           {subscription.error && !isNotFoundError(subscription.error) && (
             <Alert variant="error">
-              <Text>Could not refresh billing. Retrying automatically.</Text>
+              <Text>
+                Could not refresh billing.{" "}
+                {checksPaused
+                  ? "Check again to retry."
+                  : "Retrying automatically."}
+              </Text>
             </Alert>
           )}
           <Button
             variant="secondary"
             onClick={() => {
+              if (isNotFoundError(returnedCheckout.error)) {
+                const search = new URLSearchParams(location.search);
+                search.delete("session_id");
+                started.current = false;
+                setConfirming(false);
+                setChecksPaused(false);
+                void navigate(
+                  { pathname: location.pathname, search: search.toString() },
+                  { replace: true },
+                );
+                return;
+              }
+              confirmationDeadline.current = Date.now() + 60_000;
+              setChecksPaused(false);
+              setCheckAttempt((attempt) => attempt + 1);
               void subscription.refetch();
               if (returnedSessionId !== null) void returnedCheckout.refetch();
             }}
           >
-            Check again
+            {isNotFoundError(returnedCheckout.error)
+              ? "Return to billing setup"
+              : "Check again"}
           </Button>
         </Stack>
       ) : subscription.error && !isNotFoundError(subscription.error) ? (
@@ -312,6 +379,9 @@ function BillingSetupInner() {
         <PaygCheckoutMount
           session={checkout.session}
           onComplete={() => {
+            confirmationDeadline.current = Date.now() + 60_000;
+            setChecksPaused(false);
+            setCheckAttempt((attempt) => attempt + 1);
             setConfirming(true);
             void subscription.refetch();
           }}
