@@ -559,7 +559,7 @@ func (s *Service) loadMemberToolset(
 	}
 	toolset, hosting, servable, err := loadServableMemberToolset(ctx, s.db, member.serverID, member.toolsetID.UUID, member.projectID)
 	if err != nil {
-		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member toolset").LogError(ctx, logger)
+		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member toolset and hosting state").LogError(ctx, logger)
 	}
 	if !servable {
 		return nil, hostingstate.NotHosted(), uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
