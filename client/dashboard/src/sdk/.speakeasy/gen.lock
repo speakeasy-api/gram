@@ -4923,7 +4923,7 @@ examples:
   cliAuthAuthorize:
     speakeasy-default-cli-auth-authorize:
       requestBody:
-        application/json: {"code_challenge": "<value>", "code_challenge_method": "S256"}
+        application/json: {"code_challenge": "<value>", "code_challenge_method": "S256", "key_scope": "agent_user"}
       responses:
         "200":
           application/json: {"code": "<value>", "expires_in": 195102}

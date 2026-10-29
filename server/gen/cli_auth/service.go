@@ -17,7 +17,9 @@ import (
 // Interactive device-agent enrollment via a PKCE one-time-code exchange.
 // authorize (dashboard session) mints a short-lived code bound to a PKCE
 // challenge; redeem (no auth — the code+verifier pair is the credential)
-// exchanges it once for a per-user [agent,hooks] API key.
+// exchanges it once for an API key of the scope requested at authorize: the
+// device agent's per-user key by default, or the Speakeasy CLI's
+// organization-wide producer key.
 type Service interface {
 	// Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf
 	// of the authenticated dashboard user. Resolves the target project (given

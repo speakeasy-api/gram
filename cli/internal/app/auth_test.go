@@ -199,7 +199,8 @@ func TestAuthenticateNewProfile_CodeForAnotherLoginIsNotRedeemed(t *testing.T) {
 	t.Parallel()
 
 	var challenges sync.Map
-	challenges.Store("attacker-code", "<ATTACKER_CHALLENGE>")
+	attackerSum := sha256.Sum256([]byte("attacker-verifier"))
+	challenges.Store("attacker-code", base64.RawURLEncoding.EncodeToString(attackerSum[:]))
 	srv, verifiedKeys := fakeAuthServer(t, "victim-key", &challenges)
 	profilePath := filepath.Join(t.TempDir(), "profile.json")
 

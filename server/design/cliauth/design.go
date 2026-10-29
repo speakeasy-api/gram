@@ -15,10 +15,11 @@ import (
 //  2. The device agent (which holds the matching code_verifier) calls redeem
 //     with {code, code_verifier}. The verifier proving knowledge of the
 //     challenge IS the credential, so redeem takes no session/api-key auth.
-//     On success it mints a per-user [agent,hooks] API key and returns the
-//     raw key exactly once.
+//     On success it mints the key the authorize call asked for (the device
+//     agent's per-user [agent,hooks] key by default, or the Speakeasy CLI's
+//     organization-wide producer key) and returns the raw key exactly once.
 var _ = Service("cliAuth", func() {
-	Description("Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.")
+	Description("Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for an API key of the scope requested at authorize: the device agent's per-user key by default, or the Speakeasy CLI's organization-wide producer key.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
 
