@@ -228,7 +228,7 @@ func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContex
 	var dispositions map[string]string
 	private := member.visibility != "public"
 	if member.backend == metaMemberBackendHosted {
-		_, hosting, _, err := s.loadMemberToolset(ctx, s.logger, gate.memberToolsetAccess(ctx), member)
+		_, hosting, _, err := s.loadMemberToolset(ctx, s.logger, gate, member)
 		if err != nil {
 			return nil, err
 		}

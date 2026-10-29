@@ -431,10 +431,21 @@ func TestWorkloadGateway_ResourceGrantRefusedWhenNoMemberIsReachable(t *testing.
 	require.NotContains(t, logs.String(), "agent_admission_denied")
 }
 
+// deleteToolset deletes the toolset a hosted member fronts.
+func (g workloadGatewayFixture) deleteToolset(t *testing.T, toolsetID uuid.UUID) {
+	t.Helper()
+
+	ctx := g.fixtureContext(t)
+	toolset, err := toolsets_repo.New(g.ti.conn).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: toolsetID, ProjectID: g.fx.target.ProjectID})
+	require.NoError(t, err)
+	_, err = toolsets_repo.New(g.ti.conn).DeleteToolset(ctx, toolsets_repo.DeleteToolsetParams{Slug: toolset.Slug, ProjectID: g.fx.target.ProjectID})
+	require.NoError(t, err)
+}
+
 // Issuance decides on the membership its own transaction reads: a member the
 // preflight reached but that has since left the gateway is not counted, nor is
-// one the preflight did not reach, and a hosted member's check names its
-// toolset.
+// one the preflight did not reach, nor a hosted member whose toolset has since
+// stopped serving. A hosted member's check names its toolset.
 func TestWorkloadGateway_IssuanceRereadsMembership(t *testing.T) {
 	t.Parallel()
 
@@ -456,6 +467,11 @@ func TestWorkloadGateway_IssuanceRereadsMembership(t *testing.T) {
 	resources, err = mcp.FreshGatewayMemberResources(ctx, g.ti.conn, g.endpoint(), g.grantedServerID, deniedID, hosted.serverID)
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{g.grantedServerID.String(), hosted.toolsetID.String()}, resources, "a member removed since the preflight is not counted")
+
+	g.deleteToolset(t, hosted.toolsetID)
+	resources, err = mcp.FreshGatewayMemberResources(ctx, g.ti.conn, g.endpoint(), g.grantedServerID, hosted.serverID)
+	require.NoError(t, err)
+	require.Equal(t, []string{g.grantedServerID.String()}, resources, "a hosted member whose toolset stopped serving is not counted")
 }
 
 // A hosted member the agent may connect to, but whose toolset no longer
@@ -473,11 +489,7 @@ func TestWorkloadGateway_UnservableHostedMemberDoesNotMakeASessionIssuable(t *te
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Equal(t, []string{hosted.slug}, g.listServers(t, decodeSharedTokenResponse(t, w).AccessToken))
 
-	toolset, err := toolsets_repo.New(g.ti.conn).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: hosted.toolsetID, ProjectID: g.fx.target.ProjectID})
-	require.NoError(t, err)
-	_, err = toolsets_repo.New(g.ti.conn).DeleteToolset(ctx, toolsets_repo.DeleteToolsetParams{Slug: toolset.Slug, ProjectID: g.fx.target.ProjectID})
-	require.NoError(t, err)
-
+	g.deleteToolset(t, hosted.toolsetID)
 	requireWorkloadGrantRefused(t, g.exchangeAtGateway(t))
 }
 

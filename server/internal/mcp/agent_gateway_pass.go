@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -153,37 +154,21 @@ var errGatewayMemberUnreachable = errors.New("workload reaches no member of this
 // gatewayWorkloadReach is the members of a stored gateway a workload grant's
 // preflight found the workload reaches.
 type gatewayWorkloadReach struct {
-	// members is the mcp_servers id of each member the preflight admitted and
-	// could serve: public or private, since a workload is held to mcp:connect
-	// on both, and for a hosted member only while its toolset serves.
+	// members is the mcp_servers id of each member the preflight admitted,
+	// public or private: a workload is held to mcp:connect on both.
 	members map[uuid.UUID]struct{}
 }
 
 // resolveGatewayWorkloadReach admits a stored gateway's live members for an
 // admitted workload, as its requests will, and refuses a workload that
 // reaches none of them: a session for an empty gateway serves nothing.
-//
-// A hosted member counts only when its toolset loads as it would on
-// drill-down, so a member that lists but reads as nonexistent there does not
-// make the session issuable. The workload acts in the gateway's own
-// organization.
 func (s *Service) resolveGatewayWorkloadReach(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (context.Context, gatewayWorkloadReach, error) {
 	reach := gatewayWorkloadReach{members: map[uuid.UUID]struct{}{}}
 	ctx, members, err := s.resolveEndpointMemberSnapshot(withMandatoryAdmission(ctx), logger, mandatorySurfaceTokenIssuance, endpoint)
 	if err != nil {
 		return ctx, reach, fmt.Errorf("resolve gateway members for workload: %w", err)
 	}
-	access := memberToolsetAccess{authenticated: true, connectPublic: true}
 	for _, member := range members {
-		if member.backend == metaMemberBackendHosted {
-			_, _, _, err := s.loadMemberToolset(ctx, logger, access, member)
-			if memberReadsAsNonexistent(err) {
-				continue
-			}
-			if err != nil {
-				return ctx, reach, fmt.Errorf("load hosted gateway member for workload: %w", err)
-			}
-		}
 		reach.members[member.serverID] = struct{}{}
 	}
 	if len(reach.members) == 0 {
@@ -194,9 +179,11 @@ func (s *Service) resolveGatewayWorkloadReach(ctx context.Context, logger *slog.
 
 // freshMemberChecks re-reads the gateway's servable members through db, the
 // issuance transaction, and returns the connect check of each member the
-// preflight reached that still is one, so issuance never counts a member
-// removed, disabled, or rewired since the preflight read it.
-func (r gatewayWorkloadReach) freshMemberChecks(ctx context.Context, db metamcprepo.DBTX, endpoint *ResolvedMcpEndpoint) ([]authz.Check, error) {
+// preflight reached that still serves, so issuance never counts a member
+// removed, disabled, or rewired since the preflight read it, nor a hosted
+// member whose toolset no longer serves and so reads as nonexistent on
+// drill-down.
+func (r gatewayWorkloadReach) freshMemberChecks(ctx context.Context, db toolsets_repo.DBTX, endpoint *ResolvedMcpEndpoint) ([]authz.Check, error) {
 	rows, err := metamcprepo.New(db).ListServableMetaMCPMembers(ctx, metamcprepo.ListServableMetaMCPMembersParams{
 		MetaMcpServerID: endpoint.MetaMcpServerID.UUID,
 		ProjectID:       endpoint.ProjectID,
@@ -208,6 +195,15 @@ func (r gatewayWorkloadReach) freshMemberChecks(ctx context.Context, db metamcpr
 	for _, row := range rows {
 		if _, reached := r.members[row.McpServerID]; !reached || row.McpServerUnproxiedMcpServerID.Valid {
 			continue
+		}
+		if row.McpServerToolsetID.Valid {
+			_, _, servable, err := loadServableMemberToolset(ctx, db, row.McpServerID, row.McpServerToolsetID.UUID, endpoint.ProjectID)
+			if err != nil {
+				return nil, fmt.Errorf("re-read hosted gateway member for issuance: %w", err)
+			}
+			if !servable {
+				continue
+			}
 		}
 		checks = append(checks, metaMemberConnectCheck(row.McpServerID, row.McpServerToolsetID, endpoint.ProjectID))
 	}

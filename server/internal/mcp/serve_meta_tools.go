@@ -349,7 +349,7 @@ func (s *Service) describeMemberToolset(
 	gate *metaGateContext,
 	member metaMember,
 ) (*memberCatalog, error) {
-	toolset, hosting, _, err := s.loadMemberToolset(ctx, logger, gate.memberToolsetAccess(ctx), member)
+	toolset, hosting, _, err := s.loadMemberToolset(ctx, logger, gate, member)
 	if err != nil {
 		return nil, err
 	}
@@ -434,7 +434,7 @@ func (s *Service) buildMemberDispatch(
 	gate *metaGateContext,
 	member metaMember,
 ) (*toolsets_repo.Toolset, hostingstate.Hosting, *mcpInputs, error) {
-	toolset, hosting, projectID, err := s.loadMemberToolset(ctx, logger, gate.memberToolsetAccess(ctx), member)
+	toolset, hosting, projectID, err := s.loadMemberToolset(ctx, logger, gate, member)
 	if err != nil {
 		return nil, hostingstate.NotHosted(), nil, err
 	}
@@ -546,58 +546,25 @@ func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken, membe
 	return map[uuid.UUID]remotesessions.UpstreamToken{member.remoteSessionIssuerID.UUID: entry}, nil
 }
 
-// memberToolsetAccess is the caller a hosted member's toolset is loaded for.
-type memberToolsetAccess struct {
-	// authenticated reports a caller in the organization that owns the
-	// gateway's project.
-	authenticated bool
-
-	// connectPublic holds a public toolset to the caller's mcp:connect too.
-	connectPublic bool
-}
-
-// memberToolsetAccess is the access the gate's caller loads hosted members
-// with.
-func (g *metaGateContext) memberToolsetAccess(ctx context.Context) memberToolsetAccess {
-	return memberToolsetAccess{authenticated: g.authenticated, connectPublic: g.publicMembersNeedConnect(ctx)}
-}
-
 // loadMemberToolset loads the member's toolset row, applying the member
-// endpoint's own privacy rule for non-public toolsets. A member that cannot
-// be served reads as nonexistent, by memberReadsAsNonexistent.
+// endpoint's own privacy rule for non-public toolsets.
 func (s *Service) loadMemberToolset(
 	ctx context.Context,
 	logger *slog.Logger,
-	access memberToolsetAccess,
+	gate *metaGateContext,
 	member metaMember,
 ) (*toolsets_repo.Toolset, hostingstate.Hosting, uuid.UUID, error) {
 	if !member.toolsetID.Valid {
 		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, nil, "hosted member %q has no toolset", member.slug).LogError(ctx, logger)
 	}
-	toolset, err := toolsets_repo.New(s.db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
-		ID: member.toolsetID.UUID,
-		// The member's own project: an agent gateway's members are not all in
-		// one, and a mismatch here reads as "not servable" rather than failing
-		// loudly, so it would silently hide members.
-		ProjectID: member.projectID,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, hostingstate.NotHosted(), uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
-	case err != nil:
+	toolset, hosting, servable, err := loadServableMemberToolset(ctx, s.db, member.serverID, member.toolsetID.UUID, member.projectID)
+	if err != nil {
 		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member toolset").LogError(ctx, logger)
 	}
-	hosting, _, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
-	if err != nil {
-		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member hosting state").LogError(ctx, logger)
-	}
-	// Match direct wrapper dispatch: only the canonical wrapper gates on the
-	// toolset's hosting state. Independently configured servers use their own
-	// visibility, already checked during member admission.
-	if member.serverID == toolset.ID && !hosting.Enabled {
+	if !servable {
 		return nil, hostingstate.NotHosted(), uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	}
-	allowed, err := s.memberToolsetConnectAllowed(ctx, s.newMandatoryShadow(ctx, toolset.OrganizationID), mandatorySurfaceGatewayMember, access.authenticated, &toolset, hosting.Public, access.connectPublic)
+	allowed, err := s.memberToolsetConnectAllowed(ctx, s.newMandatoryShadow(ctx, toolset.OrganizationID), mandatorySurfaceGatewayMember, gate.authenticated, toolset, hosting.Public, gate.publicMembersNeedConnect(ctx))
 	if err != nil {
 		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "check toolset-level authz").LogError(ctx, logger)
 	}
@@ -605,17 +572,31 @@ func (s *Service) loadMemberToolset(
 		// Unauthorized reads as nonexistent (as in ServeToolsetResolved).
 		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogWarn(ctx, logger)
 	}
-	return &toolset, hosting, toolset.ProjectID, nil
+	return toolset, hosting, toolset.ProjectID, nil
 }
 
-// memberReadsAsNonexistent reports whether err is loadMemberToolset finding
-// the member unservable or not allowed, rather than failing to decide.
-func memberReadsAsNonexistent(err error) bool {
-	if _, ok := errors.AsType[*metaMemberError](err); ok {
-		return true
+// loadServableMemberToolset loads a hosted member's toolset through db and
+// reports whether the member serves it: the toolset exists in the member's
+// project, which may differ from the request's for an agent gateway, and a
+// member that is the toolset's canonical wrapper serves only while the
+// toolset is hosted, as direct wrapper dispatch requires. Independently
+// configured servers use their own visibility, checked at member admission.
+func loadServableMemberToolset(ctx context.Context, db toolsets_repo.DBTX, serverID, toolsetID, projectID uuid.UUID) (*toolsets_repo.Toolset, hostingstate.Hosting, bool, error) {
+	toolset, err := toolsets_repo.New(db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: toolsetID, ProjectID: projectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, hostingstate.NotHosted(), false, nil
+	case err != nil:
+		return nil, hostingstate.NotHosted(), false, fmt.Errorf("load member toolset: %w", err)
 	}
-	shareable, ok := errors.AsType[*oops.ShareableError](err)
-	return ok && shareable.Code == oops.CodeNotFound
+	hosting, _, err := hostedmcp.LoadServerState(ctx, db, toolset)
+	if err != nil {
+		return nil, hostingstate.NotHosted(), false, fmt.Errorf("load member hosting state: %w", err)
+	}
+	if serverID == toolset.ID && !hosting.Enabled {
+		return nil, hostingstate.NotHosted(), false, nil
+	}
+	return &toolset, hosting, true, nil
 }
 
 // memberToolsetConnectAllowed applies a non-public toolset's own mcp:connect
