@@ -1,7 +1,7 @@
 import { Icon, IconProps } from "@/components/ui/Icon";
 import { IconName } from "@/components/ui/Icon/names";
 import React, { useMemo } from "react";
-import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router";
+import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import { ReleaseStage } from "./components/release-stage-badge";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
@@ -9,10 +9,6 @@ import AssistantPage from "./pages/assistants/Assistant";
 import AssistantsIndex, { AssistantsRoot } from "./pages/assistants/Assistants";
 import NewAssistantPage from "./pages/assistants/NewAssistant";
 import Billing from "./pages/billing/Billing";
-import {
-  BillingSetup,
-  BillingPaymentMethod,
-} from "./pages/billing/BillingSetup";
 import Catalog, { CatalogRoot } from "./pages/catalog/Catalog";
 import CatalogDetail, {
   CatalogDetailRoot,
@@ -1344,16 +1340,7 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Billing",
     url: "billing",
     icon: "credit-card",
-    component: Outlet,
-    indexComponent: Billing,
-    subPages: {
-      setup: { title: "Billing setup", url: "setup", component: BillingSetup },
-      paymentMethod: {
-        title: "Payment method",
-        url: "payment-method",
-        component: BillingPaymentMethod,
-      },
-    },
+    component: Billing,
   },
   team: {
     title: "Team",

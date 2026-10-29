@@ -69,11 +69,9 @@ export function PaygPortalButton({
   return (
     <Stack gap={2} align="start">
       <Button
-        variant="primary"
+        variant="secondary"
         onClick={openPortal}
         disabled={portal.isPending}
-        icon="arrow-up-right"
-        iconAfter={true}
       >
         {portal.isPending ? "OPENING..." : label}
       </Button>

@@ -696,7 +696,6 @@ func newStripeClient(
 		guardianPolicy,
 		apiKey,
 		c.String("stripe-webhook-secret"),
-		c.String("stripe-publishable-key"),
 		catalog,
 	), nil
 }

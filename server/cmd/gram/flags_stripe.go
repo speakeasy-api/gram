@@ -15,11 +15,6 @@ func stripeFlags() []cli.Flag {
 			EnvVars: []string{"STRIPE_API_KEY"},
 		},
 		&cli.StringFlag{
-			Name:    "stripe-publishable-key",
-			Usage:   "The Stripe publishable key used to mount embedded Checkout",
-			EnvVars: []string{"STRIPE_PUBLISHABLE_KEY"},
-		},
-		&cli.StringFlag{
 			Name:    "stripe-webhook-secret",
 			Usage:   "The Stripe webhook signing secret",
 			EnvVars: []string{"STRIPE_WEBHOOK_SECRET"},

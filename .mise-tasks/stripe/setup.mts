@@ -9,15 +9,7 @@
 import { intro, isCancel, log, note, outro, password } from "@clack/prompts";
 import { $ } from "zx";
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import {
-  chmodSync,
-  lstatSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { lstatSync } from "node:fs";
 import { join } from "node:path";
 import { localWebhookTarget } from "./helpers.mts";
 import { getSetupReadiness, preflightStripeCLI } from "./readiness.mts";
@@ -245,54 +237,27 @@ function assertPortalConfiguration(configuration: StripePortalConfiguration) {
   );
 }
 
-// Current CLI builds print test_mode_publishable_key. Older builds print
-// test_mode_pub_key. Either name is the sandbox publishable key.
-const stripePublishableKeyPattern =
-  /(?:test_mode_publishable_key|test_mode_pub_key)\s*=\s*['"]?(pk_test_[A-Za-z0-9_]+)/;
-
-export function publishableKeyFromStripeCLI(configList: string): string {
-  return configList.match(stripePublishableKeyPattern)?.[1] ?? "";
-}
-
-export async function resolveSecretKey(
-  env: NodeJS.ProcessEnv = process.env,
-  readCLIConfig = async () => {
-    const config = await $({
-      nothrow: true,
-      quiet: true,
-    })`stripe config --list`;
-    return config.stdout;
-  },
-): Promise<{
-  key: string;
-  prompted: boolean;
-  publishableKey: string;
-}> {
-  const fromEnv = env.STRIPE_API_KEY;
+async function resolveSecretKey(): Promise<{ key: string; prompted: boolean }> {
+  const fromEnv = process.env.STRIPE_API_KEY;
   if (fromEnv && fromEnv !== "unset") {
-    // Treat explicitly configured keys as a pair. The CLI login may belong
-    // to another account, so it must not supply the missing half of that pair.
-    return {
-      key: fromEnv,
-      prompted: false,
-      publishableKey: env.STRIPE_PUBLISHABLE_KEY ?? "",
-    };
+    return { key: fromEnv, prompted: false };
   }
-
-  const cliConfig = await readCLIConfig();
-  const publishableKey = publishableKeyFromStripeCLI(cliConfig);
 
   // An authenticated Stripe CLI carries a short-lived test-mode key. Use it
   // for provisioning, the server and listener; persist it consistently. It
   // expires (typically after 90 days), so this is not durable readiness.
-  const cliKey = cliConfig.match(
+  const cliConfig = await $({
+    nothrow: true,
+    quiet: true,
+  })`stripe config --list`;
+  const cliKey = cliConfig.stdout.match(
     /test_mode_api_key\s*=\s*['"]?((?:sk|rk)_test_[A-Za-z0-9_]+)/,
   )?.[1];
   if (cliKey) {
     log.info(
-      "Using the CLI test key for all local Stripe clients. CLI keys expire (typically after 90 days). After expiry, replace STRIPE_API_KEY and its matching STRIPE_PUBLISHABLE_KEY in mise.local.toml and rerun setup. CLI reauthentication alone does not replace the saved key.",
+      "Using the CLI test key for all local Stripe clients. CLI keys expire (typically after 90 days). After expiry, replace the saved key with `mise set --prompt --file mise.local.toml STRIPE_API_KEY` and rerun setup. CLI reauthentication alone does not replace the saved key.",
     );
-    return { key: cliKey, prompted: false, publishableKey };
+    return { key: cliKey, prompted: false };
   }
 
   if (!process.stdin.isTTY) {
@@ -318,23 +283,7 @@ export async function resolveSecretKey(
     outro("Cancelled.");
     process.exit(1);
   }
-  const enteredPublishableKey = await password({
-    message:
-      "Paste the matching sandbox publishable key from the same Stripe account:",
-    validate: (value) =>
-      /^pk_test_[A-Za-z0-9_]+$/.test(value ?? "")
-        ? undefined
-        : "A sandbox publishable key (pk_test_…) is required.",
-  });
-  if (isCancel(enteredPublishableKey)) {
-    outro("Cancelled.");
-    process.exit(1);
-  }
-  return {
-    key: entered,
-    prompted: true,
-    publishableKey: enteredPublishableKey,
-  };
+  return { key: entered, prompted: true };
 }
 
 async function resolveWebhookSecret(key: string): Promise<string> {
@@ -735,7 +684,7 @@ export async function provisionCatalog(key: string) {
 
 interface SetupDependencies {
   preflight: () => Promise<void>;
-  resolveKey: () => Promise<{ key: string; publishableKey?: string }>;
+  resolveKey: () => Promise<{ key: string }>;
   webhookSecret: (key: string) => Promise<string>;
   provision: typeof provisionCatalog;
   persist: (settings: Record<string, string>) => Promise<void>;
@@ -743,15 +692,9 @@ interface SetupDependencies {
 
 export async function setupStripe(deps: SetupDependencies) {
   await deps.preflight();
-  const { key, publishableKey } = await deps.resolveKey();
+  const { key } = await deps.resolveKey();
   if (!/^(sk|rk)_test_[A-Za-z0-9_]+$/.test(key)) {
     throw new Error("Only Stripe sandbox/test-mode keys are accepted.");
-  }
-  if (!publishableKey || !/^pk_test_[A-Za-z0-9_]+$/.test(publishableKey)) {
-    throw new Error(
-      "Set the matching sandbox publishable key with `mise set --prompt --file mise.local.toml STRIPE_PUBLISHABLE_KEY`. " +
-        "It must come from the same Stripe account as STRIPE_API_KEY; update both keys when switching accounts. Setup has not changed any settings.",
-    );
   }
   // Authentication must succeed before provisioning catalog objects.
   const webhookSecret = await deps.webhookSecret(key);
@@ -781,7 +724,7 @@ export async function setupStripe(deps: SetupDependencies) {
       }
     }
   }
-  const settings: Record<string, string> = {
+  await deps.persist({
     STRIPE_API_KEY: key,
     STRIPE_PRICE_ID_TUM: price.id,
     STRIPE_PRICE_ID_MCP_EGRESS: mcpEgressPrice.id,
@@ -799,9 +742,7 @@ export async function setupStripe(deps: SetupDependencies) {
     STRIPE_METER_EVENT_NAME_RISK_LLM_ANALYZER: riskScansMeter.event_name,
     STRIPE_PORTAL_CONFIGURATION_ID: portalConfiguration.id,
     STRIPE_WEBHOOK_SECRET: webhookSecret,
-  };
-  settings.STRIPE_PUBLISHABLE_KEY = publishableKey;
-  await deps.persist(settings);
+  });
 }
 
 /** Worktree-only safety: no database, organization or feature-flag access. */
@@ -832,78 +773,6 @@ export function preflightLocalSetup(
   }
 }
 
-function localConfigSnapshot(path: string) {
-  try {
-    const stat = lstatSync(path);
-    if (!stat.isFile() || stat.nlink !== 1) {
-      throw new Error(
-        "Stripe setup requires a regular mise.local.toml (no links).",
-      );
-    }
-    return { contents: readFileSync(path, "utf8"), mode: stat.mode & 0o777 };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw error;
-  }
-}
-
-export async function persistStripeSettings(
-  settings: Record<string, string>,
-  options: {
-    root?: string;
-    env?: NodeJS.ProcessEnv;
-    set?: (path: string, name: string, value: string) => Promise<void>;
-  } = {},
-): Promise<void> {
-  const root = options.root ?? process.cwd();
-  const env = options.env ?? process.env;
-  preflightLocalSetup(root, env);
-  const localPath = join(root, "mise.local.toml");
-  const original = localConfigSnapshot(localPath);
-  // The ignored staging file stays on the same filesystem for atomic rename.
-  const stagingPath = join(root, `mise.stripe-${randomUUID()}.local.toml`);
-  execFileSync("git", ["check-ignore", "--quiet", "--", stagingPath], {
-    cwd: root,
-    stdio: "pipe",
-  });
-  writeFileSync(stagingPath, original?.contents ?? "", {
-    flag: "wx",
-    mode: 0o600,
-  });
-  try {
-    for (const [name, value] of Object.entries(settings)) {
-      if (options.set) {
-        await options.set(stagingPath, name, value);
-      } else {
-        await $({
-          cwd: root,
-          // Trust only this temporary file for this child; do not persist trust
-          // or trust every config in the working directory.
-          env: { ...env, MISE_TRUSTED_CONFIG_PATHS: stagingPath },
-          // A buffer sends EOF even for empty values; secrets stay out of argv.
-          input: Buffer.from(value),
-          quiet: true,
-        })`mise set --stdin --file ${stagingPath} ${name}`;
-      }
-    }
-    preflightLocalSetup(root, env);
-    const current = localConfigSnapshot(localPath);
-    // Best effort: editors and plain mise commands do not share a writer lock.
-    if (
-      current?.contents !== original?.contents ||
-      current?.mode !== original?.mode
-    ) {
-      throw new Error(
-        "mise.local.toml changed during Stripe setup; rerun setup to keep those edits.",
-      );
-    }
-    chmodSync(stagingPath, original?.mode ?? 0o600);
-    renameSync(stagingPath, localPath);
-  } finally {
-    rmSync(stagingPath, { force: true });
-  }
-}
-
 async function main() {
   intro("Stripe PAYG sandbox setup");
   await setupStripe({
@@ -915,7 +784,13 @@ async function main() {
     webhookSecret: resolveWebhookSecret,
     provision: provisionCatalog,
     persist: async (settings) => {
-      await persistStripeSettings(settings);
+      preflightLocalSetup();
+      for (const [name, value] of Object.entries(settings)) {
+        await $({
+          input: value,
+          quiet: true,
+        })`mise set --stdin --file mise.local.toml ${name}`;
+      }
       log.success(
         "Saved consistent test credentials and billing configuration to ignored mise.local.toml.",
       );

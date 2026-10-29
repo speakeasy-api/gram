@@ -4,29 +4,12 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { ClosedEnum } from "../../types/enums.js";
 
 export type CreateStripeCheckoutSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-/**
- * Appearance for new embedded Checkout sessions; existing sessions retain their original theme.
- */
-export const Theme = {
-  Light: "light",
-  Dark: "dark",
-} as const;
-/**
- * Appearance for new embedded Checkout sessions; existing sessions retain their original theme.
- */
-export type Theme = ClosedEnum<typeof Theme>;
-
 export type CreateStripeCheckoutRequest = {
-  /**
-   * Appearance for new embedded Checkout sessions; existing sessions retain their original theme.
-   */
-  theme?: Theme | undefined;
   /**
    * Session header
    */
@@ -64,11 +47,7 @@ export function createStripeCheckoutSecurityToJSON(
 }
 
 /** @internal */
-export const Theme$outboundSchema: z.ZodMiniEnum<typeof Theme> = z.enum(Theme);
-
-/** @internal */
 export type CreateStripeCheckoutRequest$Outbound = {
-  theme: string;
   "Gram-Session"?: string | undefined;
 };
 
@@ -78,7 +57,6 @@ export const CreateStripeCheckoutRequest$outboundSchema: z.ZodMiniType<
   CreateStripeCheckoutRequest
 > = z.pipe(
   z.object({
-    theme: z._default(Theme$outboundSchema, "light"),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {

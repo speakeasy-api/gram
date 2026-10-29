@@ -1,3 +1,4 @@
+import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -13,7 +14,6 @@ import {
 import { useSetBillingEmailMutation } from "@gram/client/react-query/setBillingEmail.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { Heading } from "../ui/Heading";
 
 // Who receives billing notifications for a pay-as-you-go organization. The
 // scope gate wraps the component that owns the query so a member never fires
@@ -61,16 +61,15 @@ function BillingEmailSectionInner(): JSX.Element {
   }
 
   return (
-    <Stack gap={6} className="mt-6">
-      <Stack gap={1}>
-        <Heading variant="h3">Billing notifications</Heading>
-        <Text muted>
-          Choose who receives billing notifications — invoices, payment
-          failures, and usage alerts — for this organization.
-        </Text>
-      </Stack>
-      {body}
-    </Stack>
+    <Page.Section>
+      {/* Secondary section below Usage: suppress the area eyebrow. */}
+      <Page.Section.Title area="">Billing notifications</Page.Section.Title>
+      <Page.Section.Description>
+        Choose who receives billing notifications — invoices, payment failures,
+        and usage alerts — for this organization.
+      </Page.Section.Description>
+      <Page.Section.Body>{body}</Page.Section.Body>
+    </Page.Section>
   );
 }
 
@@ -112,7 +111,7 @@ function BillingEmailForm({ initial }: { initial: BillingEmail }): JSX.Element {
 
   return (
     <form onSubmit={handleSubmit}>
-      <Stack gap={6} className="max-w-md">
+      <Stack gap={4} className="max-w-md">
         <Stack gap={2}>
           <Label htmlFor="billing-notification-email">
             Billing notification email
@@ -131,7 +130,7 @@ function BillingEmailForm({ initial }: { initial: BillingEmail }): JSX.Element {
         </Stack>
         <Stack direction="horizontal" align="center" gap={3}>
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? "Saving..." : "Save Billing Email"}
+            {mutation.isPending ? "SAVING..." : "SAVE BILLING EMAIL"}
           </Button>
           {mutation.isSuccess && (
             <Text muted small role="status">

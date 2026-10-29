@@ -355,9 +355,6 @@ GRAM_RISK_FINGERPRINT_PEPPER_KEYRING = '{"current": "v1", "keys": {"v1": "bmvSy6
 ## payg-risk-scans. The task writes catalog values into mise.local.toml.
 ## Requires a Stripe sandbox API key.
 STRIPE_API_KEY = { default = "unset" }
-## Publishable key paired with STRIPE_API_KEY. Embedded Checkout cannot mount without it.
-## `mise run stripe:setup` saves the CLI test-mode publishable key when Stripe CLI config has one.
-STRIPE_PUBLISHABLE_KEY = { default = "unset" }
 STRIPE_WEBHOOK_SECRET = { default = "unset" }
 STRIPE_PRICE_ID_TUM = { default = "" }
 STRIPE_PRICE_ID_MCP_EGRESS = { default = "" }

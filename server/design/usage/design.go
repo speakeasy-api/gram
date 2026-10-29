@@ -129,14 +129,6 @@ var InferenceSpendCap = Type("InferenceSpendCap", func() {
 	Required("key_type", "credits_used", "monthly_credits", "disabled")
 })
 
-// StripeEmbeddedCheckout is what the dashboard needs to mount embedded Checkout.
-var StripeEmbeddedCheckout = Type("StripeEmbeddedCheckout", func() {
-	Attribute("client_secret", String, "Client secret Stripe.js uses to mount embedded Checkout")
-	Attribute("publishable_key", String, "Stripe publishable key used to load Stripe.js")
-
-	Required("client_secret", "publishable_key")
-})
-
 // StripeSubscription reports the live lifecycle state of the organization's
 // Stripe PAYG subscription.
 var StripeSubscription = Type("StripeSubscription", func() {
@@ -581,47 +573,17 @@ var _ = Service("usage", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createCheckout"}`)
 	})
 
-	Method("getStripeCheckoutStatus", func() {
-		Description("Read the current status of a Stripe Checkout session owned by the active organization")
-		Payload(func() {
-			security.SessionPayload()
-			Attribute("session_id", String, "Stripe Checkout session identifier", func() { Pattern("^cs_[A-Za-z0-9_]+$"); MaxLength(255) })
-			Required("session_id")
-		})
-		Result(func() {
-			Attribute("status", String, func() { Enum("open", "complete", "expired") })
-			Attribute("payment_status", String, func() { Enum("paid", "unpaid", "no_payment_required") })
-			Attribute("billing_ready", Boolean, "Whether this completed session and its own subscription are ready for billing activation; local webhook persistence is still required")
-			Required("status", "payment_status", "billing_ready")
-		})
-		HTTP(func() {
-			GET("/rpc/usage.getStripeCheckoutStatus")
-			Param("session_id")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-		Meta("openapi:operationId", "getStripeCheckoutStatus")
-		Meta("openapi:extension:x-speakeasy-name-override", "getStripeCheckoutStatus")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getStripeCheckoutStatus"}`)
-	})
-
 	Method("createStripeCheckout", func() {
-		Description("Create an embedded Stripe Checkout session for starting PAYG billing")
+		Description("Create a Stripe Checkout link for starting PAYG billing")
 
 		Payload(func() {
 			security.SessionPayload()
-			Attribute("theme", String, "Appearance for new embedded Checkout sessions; existing sessions retain their original theme.", func() {
-				Enum("light", "dark")
-				Default("light")
-			})
 		})
 
-		Result(StripeEmbeddedCheckout)
+		Result(String)
 
 		HTTP(func() {
 			POST("/rpc/usage.createStripeCheckout")
-			// Keep bodyless requests compatible with older dashboard clients.
-			Param("theme")
 			security.SessionHeader()
 			Response(StatusOK)
 		})

@@ -27,7 +27,6 @@ type Client struct {
 	GetUsageTiersEndpoint             goa.Endpoint
 	CreateCustomerSessionEndpoint     goa.Endpoint
 	CreateCheckoutEndpoint            goa.Endpoint
-	GetStripeCheckoutStatusEndpoint   goa.Endpoint
 	CreateStripeCheckoutEndpoint      goa.Endpoint
 	GetStripeSubscriptionEndpoint     goa.Endpoint
 	GetPaygBillingSummaryEndpoint     goa.Endpoint
@@ -38,7 +37,7 @@ type Client struct {
 }
 
 // NewClient initializes a "usage" service client given the endpoints.
-func NewClient(getPeriodUsage, getMeterUsage, getSpendBreakdown, getTokensUnderManagement, setBillingMetadata, getBillingEmail, setBillingEmail, setSpendCap, getInferenceSpendCaps, getUsageTiers, createCustomerSession, createCheckout, getStripeCheckoutStatus, createStripeCheckout, getStripeSubscription, getPaygBillingSummary, createStripePortalSession, cancelStripeSubscription, resumeStripeSubscription, createTopUpCheckout goa.Endpoint) *Client {
+func NewClient(getPeriodUsage, getMeterUsage, getSpendBreakdown, getTokensUnderManagement, setBillingMetadata, getBillingEmail, setBillingEmail, setSpendCap, getInferenceSpendCaps, getUsageTiers, createCustomerSession, createCheckout, createStripeCheckout, getStripeSubscription, getPaygBillingSummary, createStripePortalSession, cancelStripeSubscription, resumeStripeSubscription, createTopUpCheckout goa.Endpoint) *Client {
 	return &Client{
 		GetPeriodUsageEndpoint:            getPeriodUsage,
 		GetMeterUsageEndpoint:             getMeterUsage,
@@ -52,7 +51,6 @@ func NewClient(getPeriodUsage, getMeterUsage, getSpendBreakdown, getTokensUnderM
 		GetUsageTiersEndpoint:             getUsageTiers,
 		CreateCustomerSessionEndpoint:     createCustomerSession,
 		CreateCheckoutEndpoint:            createCheckout,
-		GetStripeCheckoutStatusEndpoint:   getStripeCheckoutStatus,
 		CreateStripeCheckoutEndpoint:      createStripeCheckout,
 		GetStripeSubscriptionEndpoint:     getStripeSubscription,
 		GetPaygBillingSummaryEndpoint:     getPaygBillingSummary,
@@ -332,29 +330,6 @@ func (c *Client) CreateCheckout(ctx context.Context, p *CreateCheckoutPayload) (
 	return ires.(string), nil
 }
 
-// GetStripeCheckoutStatus calls the "getStripeCheckoutStatus" endpoint of the
-// "usage" service.
-// GetStripeCheckoutStatus may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) GetStripeCheckoutStatus(ctx context.Context, p *GetStripeCheckoutStatusPayload) (res *GetStripeCheckoutStatusResult, err error) {
-	var ires any
-	ires, err = c.GetStripeCheckoutStatusEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*GetStripeCheckoutStatusResult), nil
-}
-
 // CreateStripeCheckout calls the "createStripeCheckout" endpoint of the
 // "usage" service.
 // CreateStripeCheckout may return the following errors:
@@ -369,13 +344,13 @@ func (c *Client) GetStripeCheckoutStatus(ctx context.Context, p *GetStripeChecko
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) CreateStripeCheckout(ctx context.Context, p *CreateStripeCheckoutPayload) (res *StripeEmbeddedCheckout, err error) {
+func (c *Client) CreateStripeCheckout(ctx context.Context, p *CreateStripeCheckoutPayload) (res string, err error) {
 	var ires any
 	ires, err = c.CreateStripeCheckoutEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*StripeEmbeddedCheckout), nil
+	return ires.(string), nil
 }
 
 // GetStripeSubscription calls the "getStripeSubscription" endpoint of the
