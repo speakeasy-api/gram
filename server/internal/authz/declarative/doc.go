@@ -22,6 +22,9 @@
 //     An organization that is not active keeps the legacy authz check
 //     unchanged.
 //
+// walkthroughs/ follows one request per slice from startup to the decision,
+// with the code at each step.
+//
 // Services identify the operation and pass a trusted MCPServerRef built from
 // a tenant-scoped row; they make no policy decisions. The call sites are
 // mcpservers.UpdateMcpServer and GetMcpServer (edit, read and the reported
