@@ -545,7 +545,6 @@ INSERT INTO security_audit_logs (
   acting_client_id,
   created_at
 )
-OVERRIDING SYSTEM VALUE
 SELECT
   id,
   seq,
