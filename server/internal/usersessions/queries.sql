@@ -2303,7 +2303,10 @@ ORDER BY tb.original_trigger_id;
 -- serves today. When the issuer binds several of the server's clients, the
 -- one picked on the consent page (picked_mcp_server_ids and picked_client_ids,
 -- parallel arrays) is chosen if it is still one of them; without a pick the
--- choice is left to a reconnection. No-auth is chosen when the server has no
+-- choice is left to a reconnection. A pick naming a typed auth client
+-- (picked_auth_client_ids) records that client and its own registration when
+-- the client is still enabled and offered by the server, whether or not the
+-- issuer binds the registration: the consent page validated it. No-auth is chosen when the server has no
 -- associated client: a server uses exactly the clients associated with it.
 -- A server given a client later makes the no-auth choice unusable, so the
 -- credential reconnects and records the client. A server whose associated
@@ -2380,6 +2383,22 @@ decided AS (
            CASE WHEN pick.auth_client_id IS NOT NULL
                      AND pick.remote_session_client_id = '00000000-0000-0000-0000-000000000000'::uuid
                 THEN NULL
+                -- A picked typed client names its own registration, whether
+                -- or not the issuer binds it for the server.
+                WHEN pick.auth_client_id IS NOT NULL THEN (
+                  SELECT ac.remote_session_client_id
+                  FROM mcp_auth_clients AS ac
+                  JOIN mcp_server_auth_clients AS link
+                    ON link.auth_client_id = ac.id
+                   AND link.mcp_server_id = r.id
+                   AND link.organization_id = ac.organization_id
+                   AND link.deleted IS FALSE
+                  WHERE ac.id = pick.auth_client_id
+                    AND ac.remote_session_client_id = pick.remote_session_client_id
+                    AND ac.organization_id = (SELECT organization_id FROM session_issuer)
+                    AND ac.deleted IS FALSE
+                    AND ac.enabled
+                )
                 ELSE COALESCE(
              (
                SELECT CASE WHEN count(*) = 1 THEN (array_agg(e.remote_session_client_id))[1] END

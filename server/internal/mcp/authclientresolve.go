@@ -359,7 +359,7 @@ func (u *upstreamSelector) resolveAuthClient(ctx context.Context, serverID uuid.
 
 func (u *upstreamSelector) resolveAuthClients(ctx context.Context, serverIDs []uuid.UUID) (map[uuid.UUID]authClientResolution, error) {
 	rows, err := upstreamclientsrepo.New(u.service.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
-		Proposed: false, ProposedRegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Proposed: false, ProposedRegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ProposedAuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		CredentialKind: u.credentialKindOrDefault(), CredentialID: u.credentialID,
 		McpServerIds: serverIDs, OrganizationID: u.organizationID,
 	})
@@ -400,10 +400,23 @@ func (s *Service) resolveAuthClientForServing(ctx context.Context, selector *ups
 }
 
 // resolveAuthClientForConsent validates a proposed choice through the same
-// resolver as an established credential, before a credential row exists.
+// resolver as an established credential, before a credential row exists. The
+// proposal names the registration a consent card connects, or none for the
+// server's headers-only client.
 func (s *Service) resolveAuthClientForConsent(ctx context.Context, organizationID string, serverID, projectID uuid.UUID, registrationID uuid.NullUUID, subject urn.SessionSubject) (authClientResolution, error) {
+	return s.resolveProposedAuthClient(ctx, organizationID, serverID, projectID, registrationID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, subject)
+}
+
+// resolveAuthClientChoiceForConsent validates one typed auth client a person
+// picked on the consent screen, through the same resolver as an established
+// credential. A client the server does not offer is a gap.
+func (s *Service) resolveAuthClientChoiceForConsent(ctx context.Context, organizationID string, serverID, projectID, authClientID uuid.UUID, subject urn.SessionSubject) (authClientResolution, error) {
+	return s.resolveProposedAuthClient(ctx, organizationID, serverID, projectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: authClientID, Valid: true}, subject)
+}
+
+func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID string, serverID, projectID uuid.UUID, registrationID, authClientID uuid.NullUUID, subject urn.SessionSubject) (authClientResolution, error) {
 	rows, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
-		Proposed: true, ProposedRegistrationID: registrationID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{serverID}, OrganizationID: organizationID,
+		Proposed: true, ProposedRegistrationID: registrationID, ProposedAuthClientID: authClientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{serverID}, OrganizationID: organizationID,
 	})
 	if err != nil {
 		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("resolve proposed auth client: %w", err)
@@ -412,6 +425,9 @@ func (s *Service) resolveAuthClientForConsent(ctx context.Context, organizationI
 		return gapResolution(authClientReasonMissingChoice), nil
 	}
 	row := rows[0]
+	if authClientID.Valid && !row.AuthClientID.Valid {
+		return gapResolution(authClientReasonUnassociated), nil
+	}
 	res := decideAuthClient(row)
 	if res.outcome == authClientLegacy {
 		res.choice = upstreamChoice{clientID: row.RegistrationID, remoteSessionIssuerID: row.RegistrationIssuerID}
