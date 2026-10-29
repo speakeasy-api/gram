@@ -1,4 +1,6 @@
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
+import { providerSetupInstallTarget } from "@/pages/mcp/x/setup/provider-setup";
+import { useNavigate } from "react-router";
 import { catalogLogoClassName } from "./logo";
 import { CatalogGuardrailsPhase } from "./CatalogGuardrailsPhase";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
@@ -80,6 +82,8 @@ export interface AddServerDialogProps {
   projectSlug?: string;
   /** When true, shows a summary view instead of individual name inputs in the configure phase. */
   bulk?: boolean;
+  /** Catalog-only handoff; headless, gateway and plugin callers retain their workflow. */
+  openProviderSetup?: boolean;
   /** When true, starts the install as soon as the default configuration is ready. */
   autoStartInstall?: boolean;
   /** When true, runs the workflow without rendering the dialog UI. */
@@ -184,9 +188,14 @@ export function AddServerDialog({
   onInstallFinished,
   projectSlug,
   bulk,
+  openProviderSetup = false,
   autoStartInstall,
   headless,
 }: AddServerDialogProps): JSX.Element | null {
+  const navigate = useNavigate();
+  const routes = useRoutes();
+  const setupHandoffRef = useRef(false);
+
   // Fetch server details (including remotes) when dialog opens
   const {
     enrichedServers,
@@ -224,6 +233,7 @@ export function AddServerDialog({
   // Reset when dialog closes
   useEffect(() => {
     if (!open) {
+      setupHandoffRef.current = false;
       releaseState.reset();
       autoStartRef.current = false;
       finishedRef.current = false;
@@ -325,6 +335,36 @@ export function AddServerDialog({
       document.body.style.removeProperty("pointer-events");
     };
   }, []);
+
+  useEffect(() => {
+    if (
+      !openProviderSetup ||
+      !open ||
+      headless ||
+      autoStartInstall ||
+      setupHandoffRef.current ||
+      releaseState.phase !== "complete"
+    )
+      return;
+    const target = providerSetupInstallTarget(
+      enrichedServers,
+      releaseState.statuses,
+    );
+    if (!target) return;
+    setupHandoffRef.current = true;
+    onOpenChange(false);
+    void navigate(routes.mcp.details.setup.href(target));
+  }, [
+    openProviderSetup,
+    open,
+    headless,
+    autoStartInstall,
+    releaseState,
+    enrichedServers,
+    onOpenChange,
+    navigate,
+    routes,
+  ]);
 
   // Notify parent when all installs are done
   const allInstallsDone =
