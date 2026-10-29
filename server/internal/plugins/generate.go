@@ -2102,6 +2102,9 @@ const DEFAULT_TIMEOUT_MS = 30000
 // How long an agent_end that arrived before its run's llm_output waits for it
 // before it is sent without the final message.
 const AGENT_END_WAIT_MS = 2000
+// How long a run whose agent_end was sent without its final message ignores a
+// late llm_output, so that output is not cached where nothing will consume it.
+const ENDED_RUN_TTL_MS = 60000
 // The relay resolves the org's fail-open posture in-process; shim-level
 // fail-closed covers the binary being unavailable (mirrors cursor failClosed).
 const FAIL_CLOSED = true
@@ -2122,6 +2125,7 @@ export default {
     // The built-in runtime can fire agent_end just before the run's last
     // llm_output, so an agent_end with nothing to splice waits briefly for it.
     const pendingEnds = new Map()
+    const endedRuns = new Set()
 
     createInterface({ input: child.stdout }).on("line", (line) => {
       if (!line.trim()) return
@@ -2206,8 +2210,9 @@ export default {
         if (hook === "llm_output") {
           const texts = Array.isArray(event?.assistantTexts) ? event.assistantTexts : []
           const key = event?.runId ?? ctx?.runId ?? event?.sessionId ?? ""
-          llmByRun.set(key, { finalMessage: texts.join("\n") || undefined, usage: event?.usage })
           void call(hook, event, sanitizeCtx(hook, ctx))
+          if (endedRuns.delete(key)) return
+          llmByRun.set(key, { finalMessage: texts.join("\n") || undefined, usage: event?.usage })
           const waiting = pendingEnds.get(key)
           if (waiting !== undefined) {
             clearTimeout(waiting.timer)
@@ -2234,6 +2239,8 @@ export default {
             const waitingCtx = sanitizeCtx(hook, ctx)
             const timer = setTimeout(() => {
               pendingEnds.delete(runKey)
+              endedRuns.add(runKey)
+              setTimeout(() => endedRuns.delete(runKey), ENDED_RUN_TTL_MS).unref?.()
               void call(hook, event, waitingCtx)
             }, AGENT_END_WAIT_MS)
             pendingEnds.set(runKey, { event, ctx: waitingCtx, timer })

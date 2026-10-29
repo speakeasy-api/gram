@@ -2484,7 +2484,15 @@ handlers.llm_output({ runId: "late-output", assistantTexts: ["hello world"], usa
 handlers.agent_end({ runId: "no-output", success: true, messages: [] }, ctx("no-output"))
 handlers.agent_end({ success: true, messages: [] }, ctx("ctx-only"))
 handlers.llm_output({ assistantTexts: ["from ctx"], usage: { input: 1, output: 2 } }, ctx("ctx-only"))
-setTimeout(() => process.exit(0), 3000)
+handlers.llm_output({ runId: "early-output", assistantTexts: ["said first"], usage: { input: 1, output: 2 } }, ctx("early-output"))
+handlers.agent_end({ runId: "early-output", success: true, messages: [] }, ctx("early-output"))
+// A late llm_output after the wait ran out is not cached, so a later run that
+// reuses its key gets no stale final message.
+setTimeout(() => {
+  handlers.llm_output({ runId: "no-output", assistantTexts: ["too late"], usage: { input: 1, output: 2 } }, ctx("no-output"))
+  handlers.agent_end({ runId: "no-output", success: true, messages: [] }, ctx("no-output"))
+}, 2500)
+setTimeout(() => process.exit(0), 5500)
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "driver.mjs"), []byte(driver), 0o600))
 
@@ -2511,8 +2519,11 @@ setTimeout(() => process.exit(0), 3000)
 	}
 	require.Len(t, ends["late-output"], 1, "agent_end is sent once")
 	require.Equal(t, "hello world", ends["late-output"][0]["finalMessage"])
-	require.Len(t, ends["no-output"], 1, "agent_end without an llm_output is still sent")
+	require.Len(t, ends["early-output"], 1, "agent_end is sent once")
+	require.Equal(t, "said first", ends["early-output"][0]["finalMessage"])
+	require.Len(t, ends["no-output"], 2, "agent_end without an llm_output is still sent")
 	require.NotContains(t, ends["no-output"][0], "finalMessage")
+	require.NotContains(t, ends["no-output"][1], "finalMessage", "a late llm_output must not be spliced into a later agent_end")
 	// A run ID that only ctx carries still pairs the two hooks.
 	require.Len(t, ends[""], 1, "agent_end with a ctx-only run ID is sent once")
 	require.Equal(t, "from ctx", ends[""][0]["finalMessage"])
