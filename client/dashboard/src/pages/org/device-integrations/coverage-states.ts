@@ -1,13 +1,14 @@
 import type {
   CoverageBucket,
-  ManagedDevice,
+  FleetDevice,
   PolicyState,
-} from "@gram/client/models/components/manageddevice.js";
+} from "@gram/client/models/components/fleetdevice.js";
 import {
   CheckCircle2,
   CircleSlash,
   HelpCircle,
   Laptop,
+  LaptopMinimal,
   MailX,
   MonitorX,
   ShieldCheck,
@@ -136,12 +137,22 @@ export const UNMANAGED_USERS: CoverageDisplay = {
     "Users reporting device agent heartbeats whose email matches no managed device in the MDM inventory.",
 };
 
+// An agent-only machine: the agent reports it, no connected MDM holds it.
+// Only shown with an MDM connected; without one, every device is this.
+export const AGENT_ONLY: CoverageDisplay = {
+  label: "Not in an MDM",
+  variant: "neutral",
+  icon: LaptopMinimal,
+  detail:
+    "Machines running the device agent that no connected MDM's inventory holds. Enroll them in your MDM, or check they belong to your organization.",
+};
+
 // One key per thing the Coverage column can say: an agent_active device is
 // shown by its policy state when the server sent one.
 export type CoverageKey = Exclude<CoverageBucket, "agent_active"> | PolicyState;
 
 export function deviceCoverageKey(
-  device: ManagedDevice,
+  device: FleetDevice,
 ): CoverageKey | "agent_active" {
   if (device.coverageBucket === "agent_active" && device.policyState) {
     return device.policyState;
@@ -152,7 +163,7 @@ export function deviceCoverageKey(
 // The coverage filter matches what the Coverage column shows, and
 // agent_active also matches every active device, whatever its policy state.
 export function matchesCoverageFilter(
-  device: ManagedDevice,
+  device: FleetDevice,
   selected: readonly string[] | undefined,
 ): boolean {
   if (!selected || selected.length === 0) return true;
@@ -207,8 +218,32 @@ export function osLabel(os: string): string {
   return (Object.hasOwn(OS_LABELS, os) ? OS_LABELS[os] : undefined) ?? os;
 }
 
+// The source filter on the Devices tab.
+export const SOURCE_OPTIONS = [
+  { label: "In an MDM", value: "mdm" },
+  { label: "Not in an MDM", value: "agent" },
+];
+
+export function matchesSourceFilter(
+  device: FleetDevice,
+  selected: readonly string[] | undefined,
+): boolean {
+  if (!selected || selected.length === 0) return true;
+  return selected.includes(device.inInventory ? "mdm" : "agent");
+}
+
+// What a device is called when it reports no hostname.
+export function deviceName(device: FleetDevice): string {
+  return (
+    device.hostname ??
+    device.serialNumber ??
+    device.externalId ??
+    "Unnamed device"
+  );
+}
+
 // Command K links a device with ?device=<id> and carries the device it
 // matched as navigation state.
 export const LINKED_DEVICE_PARAM = "device";
 
-export type LinkedDeviceState = { device?: ManagedDevice };
+export type LinkedDeviceState = { device?: FleetDevice };
