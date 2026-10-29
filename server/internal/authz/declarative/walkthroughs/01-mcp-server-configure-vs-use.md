@@ -4,6 +4,67 @@ This document follows one request from server startup all the way to a 403. Ever
 
 **The scenario.** Member U holds `mcp:write` on private server S1 in project P1. U tries to start an MCP session on S1 with a user-session token. U's organization has the new schema switched on.
 
+## The whole flow at a glance
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Boot as Server startup
+    participant Client as MCP client (member U)
+    participant EP as mcp/serveendpoint.go
+    participant Eng as authz.Engine
+    participant DB as Postgres
+    participant Decl as authz/declarative
+    participant RS as declarative/relschema
+
+    Note over Boot,RS: Startup
+    Boot->>RS: Compile(mcpServerTypes()) via builders
+    RS-->>Boot: schema (fails startup if a scope is unmapped)
+    Boot->>Eng: NewEngine(EngineOpts{MCPServerSchemaActive})
+
+    Note over Client,RS: Request
+    Client->>EP: POST /mcp/{slug} (user-session token)
+    EP->>DB: load endpoint, server, project → organizationID
+    EP->>Eng: PrepareContext(ctx)
+    Eng->>DB: ResolveUserPrincipals + LoadGrants
+    Eng-->>EP: ctx with grants, bound to the organization
+    EP->>Decl: RequireMCPServer(connect, MCPServerRef)
+    Decl->>Eng: MCPServerSchemaActive(ctx)
+    alt switched off
+        Decl->>Eng: Require(legacy mcp:connect check)
+    else switched on
+        Decl->>Eng: PolicySet(ctx)
+        Eng-->>Decl: policies + organization
+        loop each policy
+            Decl->>RS: Decode(row) for each grant row
+            RS-->>Decl: relationships (or an error)
+            Decl->>RS: Evaluate(object, "connect")
+            RS-->>Decl: allowed / denied / undetermined + path
+        end
+        Decl->>Eng: RecordDecision(legacy check, decision)
+        Eng-->>Decl: nil or 403 (challenge log written)
+    end
+    Decl-->>EP: nil or 403
+    EP-->>Client: session, or 403 with the request-access link
+```
+
+How the permissions are computed from stored rows. `editor` feeds `edit` only, so nothing connects an edit grant to `connect`:
+
+```mermaid
+flowchart LR
+    W["mcp:write {S1}"] --> E[editor]
+    C["mcp:connect {S1}"] --> K[connector]
+    CW["mcp:connect {*} or {project}"] -. legacy anchor .-> K
+    R["root *"] --> RT[root]
+    B["mcp:blocked_connect"] --> KB[connect_blocked]
+
+    E --> EDIT((edit))
+    RT --> EDIT
+    K --> CONNECT((connect))
+    RT --> CONNECT
+    KB -- withdraws --x CONNECT
+```
+
 ---
 
 ## Part 1: when the server starts ("configured")
