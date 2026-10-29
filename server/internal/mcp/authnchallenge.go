@@ -207,6 +207,8 @@ type AuthnChallengeState struct {
 	ReauthenticateClientID uuid.UUID `json:"reauthenticate_client_id,omitzero"`
 	// WorkloadReconnect binds a workload-started first-party flow to its owner.
 	WorkloadReconnect *WorkloadReconnectBinding `json:"workload_reconnect,omitempty"`
+	// CodeReconnect binds a code-mode browser sign-in to its requesting user.
+	CodeReconnect *CodeReconnectBinding `json:"code_reconnect,omitempty"`
 	// AutoConnectDone records that the consent page has already sent this
 	// challenge straight to an upstream provider without the user clicking
 	// Connect (see maybeAutoConnect). It is a latch, not a success flag: it is

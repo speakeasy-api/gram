@@ -143,3 +143,7 @@ func TestCallbackReplyCarriesExactlyOneResult(t *testing.T) {
 		})
 	}
 }
+
+func (idleHost) Connect(context.Context, string) (*ConnectionAction, error) {
+	return nil, ErrToolUnavailable
+}

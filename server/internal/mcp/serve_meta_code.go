@@ -40,13 +40,15 @@ Next run: use the described path and inputSchema. Example, if tracker--list_issu
     r = await tools.call("tracker--list_issues", {"state": "open"})
     r["data"] if r["ok"] else r
 
-Search returns summaries; describe returns full definitions. Exact paths: server--tool. search(query="", server=None, limit=10, cursor=None), max limit 50; server omits "--"; empty query lists tools. tools.servers(limit=10, cursor=None) lists prefixes. Both paginate via next_cursor. Search incomplete/failed_members means discovery missed unavailable members; reason consent_required means the user must reconnect and give consent again.
+Search returns summaries; describe returns full definitions. Exact paths: server--tool. search(query="", server=None, limit=10, cursor=None), max limit 50; server omits "--"; empty query lists tools. tools.servers(limit=10, cursor=None) lists visible prefixes and connection state. Both paginate via next_cursor. Search incomplete/failed_members means discovery missed unavailable members; reason consent_required means this connection needs new consent.
+
+Connection recovery: servers() reports connection.consent and connection.authentication without probing upstreams. unknown does not mean disconnected; verified_at_consent is historical. For one member needing sign-in or consent, call await tools.connect(server="tracker"). Return its authorization_url and instructions to the user, then stop. If client_reconnect_required, they must also reconnect this gateway in their MCP client. After they finish, use a fresh execution; do not poll or replay the previous program.
 
 Calls return {ok, data, content, outcome, error?}; check ok. data preserves structuredContent; None when absent. A server refusing the call (unknown tool, invalid arguments) gives ok False, error "tool_call_rejected" and its reason in content: describe the tool and fix the call. Disallowed paths and non-object arguments raise RuntimeError.
 
 Python subset; import asyncio enables await asyncio.gather(...). No external packages, filesystem, environment access, direct network or sleep. Limits: 64 KiB source, 64 MiB heap, 30 s wall, 2 s active Python (tool waits excluded), 64 helper attempts, 8 concurrent helpers, 1 MiB per reply/8 MiB total, 256 KiB result, 16 KiB printed output (truncated). Output printed before a Python error, limit or timeout is still returned.
 
-Optional tools argument restricts every helper to exact paths; omit = all permitted, [] = none.
+Optional tools argument restricts tool discovery and invocation to exact paths; omit = all permitted, [] = none. servers and connect remain available for visible members but never widen that tool allowlist.
 
 Errors/cancellation never undo writes. Unknown outcome: check state; never replay automatically.
 
@@ -85,7 +87,7 @@ func (s *Service) listMetaCodeTools(ctx context.Context, logger *slog.Logger, se
 	case len(members) == 0 && len(gate.hiddenMembers) > 0 && gate.connectURL != "":
 		fmt.Fprintf(&description, "The user hid every server on this gateway. The user can show one again at %s.\n", gate.connectURL)
 	case len(members) == 0:
-		description.WriteString("No tool prefixes are currently permitted.\n")
+		description.WriteString("No member tools are currently callable. Use tools.servers() to inspect visible members. For a user-authenticated connection with a visible member, tools.connect(server=...) can return a browser sign-in link.\n")
 	case len(gate.hiddenMembers) == 1:
 		description.WriteString("The user hid 1 more server, which is not available.\n")
 	case len(gate.hiddenMembers) > 1:
@@ -102,6 +104,12 @@ func (s *Service) listMetaCodeTools(ctx context.Context, logger *slog.Logger, se
 // permitted by this connection's immutable catalogue. Helpers keep members
 // that need a new consent, so they can report that instead of hiding them.
 func (s *Service) codeCallableMembers(ctx context.Context, gate *metaGateContext, members []metaMember, keepConsentRequired bool) []metaMember {
+	if gate.catalogRecoveryOnly {
+		if keepConsentRequired {
+			return members
+		}
+		return nil
+	}
 	if gate.catalog == nil {
 		return members
 	}

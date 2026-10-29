@@ -136,13 +136,28 @@ func (h *CatalogHost) members(ctx context.Context) ([]Server, Lister, error) {
 	return permitted, list, nil
 }
 
-// Servers returns permitted prefixes without enumerating upstream tools.
+// Servers lists visible members independently of the tool invocation allowlist.
 func (h *CatalogHost) Servers(ctx context.Context, args PageArgs) (*ServerPage, error) {
-	servers, _, err := h.members(ctx)
-	if err != nil {
-		return nil, err
+	var servers []Server
+	var err error
+	if backend, ok := h.backend.(ConnectionBackend); ok {
+		servers, err = backend.DiscoveryServers(ctx)
+	} else {
+		servers, _, err = h.backend.Members(ctx)
 	}
-	return PaginateServers(h.scope, args, servers)
+	if err != nil {
+		return nil, fmt.Errorf("list servers: %w", err)
+	}
+	if len(servers) > maxMembers {
+		return nil, fmt.Errorf("gateway exceeds code-mode member limit")
+	}
+	visible := make([]Server, 0, len(servers))
+	for _, server := range servers {
+		if server.Slug != "" && !strings.Contains(server.Slug, pathSeparator) {
+			visible = append(visible, server)
+		}
+	}
+	return PaginateServers(h.scope, args, visible)
 }
 
 // Search enumerates relevant members on demand and bounds upstream concurrency.
@@ -336,4 +351,31 @@ func publicDefinition(raw json.RawMessage, path string) (json.RawMessage, error)
 		return nil, fmt.Errorf("encode definition: %w", err)
 	}
 	return definition, nil
+}
+
+// ConnectionBackend owns recovery independently of an execution's tool allowlist.
+// Implementations must refresh identity and restrict results to visible members.
+type ConnectionBackend interface {
+	DiscoveryServers(context.Context) ([]Server, error)
+	Connect(context.Context, string) (*ConnectionAction, error)
+}
+
+func validConnectionServer(server string) bool {
+	return server != "" && len(server) <= 1024 &&
+		!strings.Contains(server, "--") && strings.TrimSpace(server) == server
+}
+
+func (h *CatalogHost) Connect(ctx context.Context, server string) (*ConnectionAction, error) {
+	if !validConnectionServer(server) {
+		return nil, fmt.Errorf("connect requires an exact server slug")
+	}
+	backend, ok := h.backend.(ConnectionBackend)
+	if !ok {
+		return nil, ErrToolUnavailable
+	}
+	result, err := backend.Connect(ctx, server)
+	if err != nil {
+		return nil, fmt.Errorf("connect server: %w", err)
+	}
+	return result, nil
 }

@@ -56,7 +56,8 @@ func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request
 //
 // On a gateway, a `server` query parameter names the server to connect, and
 // the flow lands on that server's connect page. A gateway tool call links here
-// when a server cannot be reached without the user's sign-in.
+// when a server cannot be reached without the user's sign-in. A code_reconnect
+// ticket pins the user and server and takes precedence over the server parameter.
 func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) (retErr error) {
 	defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	if s.redirectToAuthorizationServer(w, r, endpoint) {
@@ -64,12 +65,23 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	}
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
+	query := r.URL.Query()
+	if query.Get("code_reconnect") != "" && (query.Get("workload_reconnect") != "" || query.Get("binding_refresh_attempt") != "" || query.Get("reauthenticate_client_id") != "") {
+		return oops.E(oops.CodeBadRequest, nil, "conflicting connection requests")
+	}
 	reconnect, err := s.consumeWorkloadReconnect(r, endpoint)
 	if err != nil {
 		return err
 	}
 
+	codeReconnect, err := s.codeReconnectTicket(r, endpoint, false)
+	if err != nil {
+		return err
+	}
 	focusServer := r.URL.Query().Get("server")
+	if codeReconnect != nil {
+		focusServer = codeReconnect.Server
+	}
 	if len(focusServer) > maxFocusServerLength {
 		return oops.E(oops.CodeBadRequest, nil, "server is too long").LogError(ctx, logger)
 	}
@@ -127,6 +139,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		BindingRefreshAttemptID: attemptID,
 		ReauthenticateClientID:  reauthenticateClientID,
 		WorkloadReconnect:       reconnect,
+		CodeReconnect:           codeReconnect,
 		// Auto-connect has not run for a challenge this new.
 		AutoConnectDone: false,
 		FocusServer:     focusServer,
@@ -135,6 +148,11 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").LogError(ctx, logger)
 	}
 
+	defer func() {
+		if retErr != nil && codeReconnect != nil {
+			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+		}
+	}()
 	s.metrics.RecordOAuthFlowStarted(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
 
 	federatedURL, err := s.prepareFederatedLogin(w, r, endpoint, &challengeState)
@@ -166,6 +184,17 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	}
 	// Claim only after all validation and login setup succeeded, so a failed
 	// preparation does not consume the dashboard's one-time decision.
+	if codeReconnect != nil {
+		claimed, err := s.codeReconnectTicket(r, endpoint, true)
+		if err != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+			return err
+		}
+		if claimed == nil || *claimed != *codeReconnect {
+			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+			return oops.E(oops.CodeBadRequest, nil, "connection request changed; request a new link")
+		}
+	}
 	if attemptID != "" {
 		if err := s.bindingRefresh.Start(ctx, attemptID, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID); err != nil {
 			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)

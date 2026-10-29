@@ -305,6 +305,7 @@ func (s *Service) metaValidationTarget(
 		connectRoot:         "",
 		chainUpstream:       nil,
 		catalog:             nil,
+		catalogRecoveryOnly: false,
 		catalogRef:          nil,
 		authentication:      nil,
 		unapprovedMembers:   nil,

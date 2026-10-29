@@ -7,11 +7,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/go-chi/chi/v5"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -23,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -384,4 +388,104 @@ func TestCodeModeAvailableFollowsRuntime(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, w.Body.String(), `"value":42`)
 	require.NotContains(t, w.Body.String(), `"isError":true`)
+}
+
+// Real Python, gateway dispatch and OAuth token exchange against owned fixtures.
+// The browser-facing handlers run as HTTP requests; no real account is used.
+func TestCodeModeReconnectEndToEnd(t *testing.T) {
+	t.Parallel()
+	mock := memberMock()
+	mock.buildAuthURLResult, _ = url.Parse("https://login.example.test/authorize")
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	mock.upsertResult = auth.UserID
+	ti.service.manual = true
+	configureCodeRunner(t, ctx, ti)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	slug := "code-reconnect-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer)
+	upstream := newRecordingUpstream(t, "ping")
+	var exchanged atomic.Value
+	provider := newConsentExchangeAS(t, &exchanged, "reconnected-token")
+	client := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-oauth", provider.URL, []uuid.UUID{issuer})
+	remoteIssuer := clientRemoteIssuerID(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, client)
+	member := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "tracker", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
+	selection := selectionFixture{ti: ti, projectID: *auth.ProjectID, orgID: auth.ActiveOrganizationID}
+	selection.associate(t, ctx, member.mcpServerID, client)
+	bearer := mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode)
+	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(bearer, urn.NewUserSessionIssuer(issuer).String())
+	require.NoError(t, err)
+	sessionPolicy, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
+	require.NoError(t, err)
+	_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{member.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
+	require.NoError(t, err)
+	execute := func(code string, restricted bool) codemode.ExecutionResult {
+		t.Helper()
+		args := map[string]any{"code": code}
+		if restricted {
+			args["tools"] = []string{}
+		}
+		w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": args}), bearer, nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var response struct {
+			Result struct {
+				StructuredContent codemode.ExecutionResult `json:"structuredContent"`
+			} `json:"result"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		require.Nil(t, response.Result.StructuredContent.Error, w.Body.String())
+		return response.Result.StructuredContent
+	}
+	status := execute(`await tools.servers()`, true)
+	require.Contains(t, string(status.Value), `"authentication":"unknown"`)
+	t.Log("BEFORE: Python lists connection metadata without probing the upstream; no business tool has run.")
+	handoff := execute(`await tools.connect(server="tracker")`, true)
+	var action codemode.ConnectionAction
+	require.NoError(t, json.Unmarshal(handoff.Value, &action))
+	require.NotEmpty(t, action.AuthorizationURL)
+	require.False(t, action.ClientReconnectRequired)
+	require.Empty(t, handoff.ToolCalls)
+	upstream.requireNeverCarried(t, "Bearer reconnected-token")
+	route := chi.NewRouteContext()
+	route.URLParams.Add("mcpSlug", slug)
+	entry := httptest.NewRequest(http.MethodGet, action.AuthorizationURL, nil).WithContext(context.WithValue(ctx, chi.RouteCtxKey, route))
+	started := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleFirstPartyConnect(started, entry))
+	require.Equal(t, mock.buildAuthURLResult.String(), started.Header().Get("Location"))
+	callback := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?state="+url.QueryEscape(mock.buildAuthURLParams.State)+"&code=idp-auth-code", nil).WithContext(ctx)
+	identified := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleIDPCallback(identified, callback))
+	landing, err := url.Parse(identified.Header().Get("Location"))
+	require.NoError(t, err)
+	stateID := landing.Query().Get("state")
+	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+	require.NoError(t, err)
+	require.Equal(t, auth.UserID, state.Subject.ID)
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
+	require.NoError(t, err)
+	form := url.Values{"state": {stateID}, "csrf_token": {state.CSRFToken}, "action": {"connect"}, "client_id": {client.String()}, "server": {"tracker"}}
+	connect := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect/remote-session", strings.NewReader(form.Encode())).WithContext(ctx)
+	connect.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	sent := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeConsentAction(sent, connect, endpoint))
+	authorization, err := url.Parse(sent.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, provider.URL, authorization.Scheme+"://"+authorization.Host)
+	remoteCallback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?state="+url.QueryEscape(authorization.Query().Get("state"))+"&code=synthetic-approved-code", nil).WithContext(ctx)
+	completed := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleRemoteLoginCallback(completed, remoteCallback))
+	require.Equal(t, http.StatusSeeOther, completed.Code)
+	require.NotNil(t, exchanged.Load(), "real token POST reached owned OAuth provider")
+	t.Log("HANDOFF: original user identified; member-scoped OAuth callback exchanges a code and stores the upstream grant.")
+	after := execute(`await tools.servers()`, false)
+	require.Contains(t, string(after.Value), `"authentication":"unknown"`)
+	result := execute(`page = await tools.search("", server="tracker")
+path = page["items"][0]["path"]
+details = await tools.describe(path)
+await tools.call(path, {})`, false)
+	require.Contains(t, string(result.Value), `"ok":true`)
+	upstream.requireToolCallAuth(t, "Bearer reconnected-token")
+	require.Len(t, result.ToolCalls, 1)
+	t.Log("AFTER: a fresh Python execution discovers, describes and calls one read tool with the newly connected credential.")
 }

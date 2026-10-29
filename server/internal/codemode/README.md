@@ -435,3 +435,42 @@ settings retains the existing dashboard/API authorization and audit workflow.
 Managed assistants do not receive the external-admin settings tool. No shipped
 Platform MCP skill names a changed tool or procedure. There is no new staff
 capability or admin workflow, so Admin MCP requires no change.
+
+## Connection recovery
+
+`await tools.servers()` reports visible members, including ones needing new
+consent. Each item includes `connection.consent` (`approved`, `required`,
+`not_required`, `unknown`), `connection.authentication` (`unknown`, `verified_at_consent`,
+`not_required`) and instructions. This reads known metadata without probing
+upstreams or resolving/refreshing their credentials. `unknown` does not mean
+disconnected; try permitted tools first. Consent-time verification is not proof
+of current access. Status changes do not invalidate inventory pagination.
+`await tools.connect(server="tracker")` returns a short-lived browser sign-in
+URL, instructions, and `client_reconnect_required`. The link is bound to the
+requesting user, gateway and member; the browser must authenticate that user.
+The same execution reuses its link. Neither helper expands the optional tool
+allowlist, so they also work with `tools=[]`.
+
+An authenticated code-mode connection whose catalogue expired can run these
+recovery helpers, but cannot invoke or discover business tools. Expired or
+revoked gateway credentials still fail normal MCP authentication. Upstream
+sign-in does not replace the immutable catalogue on an existing OAuth grant:
+when `client_reconnect_required` is true, the user must reconnect the gateway
+in their MCP client and approve the member. The agent returns the link, ends
+execution, and checks access in a fresh execution after the user finishes.
+Programs and tool calls are never replayed by the recovery flow.
+
+Platform MCP assessment: the actor is the signed-in gateway caller and the
+target is that caller's member connection. Existing connection-settings tools
+manage server configuration, not this OAuth grant. Recovery therefore belongs
+to the gateway host API, with no new management tool or staff-admin capability.
+Focused host, runner and gateway tests cover helper visibility, expiry and
+identity binding.
+
+`get_my_mcp_connection_status` in Platform MCP intentionally retains its canonical
+endpoint and client-owned OAuth reconnect action. It operates under the Platform
+principal for an exact MCP server, without the gateway execution's credential,
+member admission snapshot, or immutable client catalogue grant. It cannot safely
+mint this user-and-member-bound recovery ticket or renew that client's consent.
+The gateway's `servers` / `connect` helpers own that scoped handoff; the focused
+recovery tests verify its identity and admission boundaries.

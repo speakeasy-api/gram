@@ -355,6 +355,14 @@ func (s *executionState) callback(ctx context.Context, host Host, message runner
 	var value any
 	var err error
 	switch message.Method {
+	case "connect":
+		var args struct {
+			Server string `json:"server"`
+		}
+		if err := decodeStrict(message.Arguments, &args); err != nil {
+			return nil, err
+		}
+		value, err = host.Connect(ctx, args.Server)
 	case "servers":
 		var args PageArgs
 		if err := decodeStrict(message.Arguments, &args); err != nil {
