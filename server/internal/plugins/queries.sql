@@ -87,6 +87,29 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: GetPluginForUpdate :one
+-- GetPlugin that also locks the row for the rest of the transaction.
+SELECT *
+FROM plugins
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: LockPluginPackageContentShared :exec
+-- Taken by every change that requests a publication of the project's plugin
+-- packages. Shared, so those changes never wait on one another, only on a
+-- holder of LockPluginPackageContent.
+SELECT pg_advisory_xact_lock_shared(hashtextextended('plugin-package-content:' || @project_id::text, 0));
+
+-- name: LockPluginPackageContent :exec
+-- Waits for every change that has requested a publication of the project's
+-- plugin packages to finish, and holds off new ones until the transaction
+-- ends, so what the transaction reads of the packages' live state stays
+-- current until it commits.
+SELECT pg_advisory_xact_lock(hashtextextended('plugin-package-content:' || @project_id::text, 0));
+
 -- name: GetPluginWithCounts :one
 SELECT
   sqlc.embed(p),

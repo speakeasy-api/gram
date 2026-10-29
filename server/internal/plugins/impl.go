@@ -591,17 +591,17 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").LogError(ctx, s.logger)
 	}
 
-	if payload.AutoSyncEnabled != nil && !*payload.AutoSyncEnabled {
-		if err := s.requireAutoSyncCanTurnOff(ctx, ac.ActiveOrganizationID, *ac.ProjectID, pluginID, payload); err != nil {
-			return nil, err
-		}
-	}
-
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	if payload.AutoSyncEnabled != nil && !*payload.AutoSyncEnabled {
+		if err := s.requireAutoSyncCanTurnOff(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, pluginID, payload); err != nil {
+			return nil, err
+		}
+	}
 
 	updated, err := NewPluginMetadataCore(s.audit, s.publicationRequests).UpdateInTransaction(ctx, tx, UpdatePluginMutation{
 		OrganizationID:  ac.ActiveOrganizationID,
@@ -653,8 +653,22 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 // it was last published, so anything unsynced would be stranded. Turning it off
 // when it already is off needs no check. A nil payload is an update that
 // changes nothing but auto sync.
-func (s *Service) requireAutoSyncCanTurnOff(ctx context.Context, organizationID string, projectID, pluginID uuid.UUID, payload *gen.UpdatePluginPayload) error {
-	current, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
+//
+// It runs in tx, the transaction that writes the setting, and its locks hold
+// until that transaction ends. A change to the plugin's content that commits
+// before the write is then always one the check saw: every such change requests
+// a publication, which takes the project's package content lock shared, and
+// this takes it exclusively before reading the live state. One that commits
+// after the write is held like any change made while auto sync is off. The
+// locks go in the order the metadata write and most content changes take
+// theirs (the project's admission lock, then the plugin row) with the package
+// content lock last, because content changes take it last too: one holding it
+// shared never waits on a lock held here, so neither side can deadlock.
+func (s *Service) requireAutoSyncCanTurnOff(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID uuid.UUID, payload *gen.UpdatePluginPayload) error {
+	if err := admission.LockProject(ctx, tx, projectID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock plugin selection").LogError(ctx, s.logger)
+	}
+	current, err := s.repo.WithTx(tx).GetPluginForUpdate(ctx, repo.GetPluginForUpdateParams{
 		ID:             pluginID,
 		OrganizationID: organizationID,
 		ProjectID:      projectID,
@@ -673,16 +687,35 @@ func (s *Service) requireAutoSyncCanTurnOff(ctx context.Context, organizationID 
 		conv.PtrValOr(payload.Description, "") != conv.FromPGTextOrEmpty[string](current.Description)) {
 		return oops.E(oops.CodeFailedPrecondition, nil, "%s", autoSyncOffWithOtherChangesMessage)
 	}
-	return s.requirePluginSyncedForPause(ctx, current)
+	if err := s.repo.WithTx(tx).LockPluginPackageContent(ctx, projectID.String()); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock plugin package content").LogError(ctx, s.logger)
+	}
+	return s.requirePluginSyncedForPause(ctx, tx, current)
 }
 
-// RequireAutoSyncCanTurnOff is the check UpdatePlugin makes before turning a
-// plugin's auto sync off, for a caller that changes nothing else about the
-// plugin, such as the Platform MCP. A refusal because the plugin has changes
-// that haven't been synced matches ErrPluginHasUnsyncedChanges. The caller must
-// already have authorized plugin write for the project.
+// RequireAutoSyncCanTurnOffInTransaction is the check UpdatePlugin makes before
+// turning a plugin's auto sync off, for a caller that changes nothing else
+// about the plugin, such as the Platform MCP. Run it in the transaction that
+// writes the setting, before the write: its locks are what keep a change to the
+// plugin from committing unseen between the check and the write. A refusal
+// because the plugin has changes that haven't been synced matches
+// ErrPluginHasUnsyncedChanges. The caller must already have authorized plugin
+// write for the project.
+func (s *Service) RequireAutoSyncCanTurnOffInTransaction(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID uuid.UUID) error {
+	return s.requireAutoSyncCanTurnOff(ctx, tx, organizationID, projectID, pluginID, nil)
+}
+
+// RequireAutoSyncCanTurnOff is RequireAutoSyncCanTurnOffInTransaction in a
+// transaction of its own, for refusing early before any write begins. Passing
+// it doesn't make the write safe; the write must still run the check in its
+// own transaction.
 func (s *Service) RequireAutoSyncCanTurnOff(ctx context.Context, organizationID string, projectID, pluginID uuid.UUID) error {
-	return s.requireAutoSyncCanTurnOff(ctx, organizationID, projectID, pluginID, nil)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	return s.requireAutoSyncCanTurnOff(ctx, tx, organizationID, projectID, pluginID, nil)
 }
 
 func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPayload) error {
@@ -3381,42 +3414,53 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 		return nil, "", oops.E(oops.CodeUnexpected, err, "begin gateway distribution check").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	infos, err := s.resolvePluginInfosInTx(ctx, tx, project.ID, projectID, serverURL, pluginIDs...)
+	if err != nil {
+		return nil, "", err
+	}
+	return infos, serverURL, nil
+}
+
+// resolvePluginInfosInTx is resolvePluginInfos inside the caller's transaction,
+// for a caller that must read the plugins' live state under locks it already
+// holds. It takes the project's admission lock itself.
+func (s *Service) resolvePluginInfosInTx(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, serverURL string, pluginIDs ...uuid.UUID) ([]PluginInfo, error) {
 	if err := admission.LockProject(ctx, tx, projectID); err != nil {
-		return nil, "", oops.E(oops.CodeUnavailable, err, "lock gateway distribution check").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnavailable, err, "lock gateway distribution check").LogError(ctx, s.logger)
 	}
 	lockedRepo := s.repo.WithTx(tx)
 	plugins, err := lockedRepo.ListActivePluginsForProject(ctx, repo.ListActivePluginsForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
-		return nil, "", oops.E(oops.CodeUnexpected, err, "list active plugins").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list active plugins").LogError(ctx, s.logger)
 	}
 	mcpRows, err := listPluginMCPServers(ctx, tx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
-		return nil, "", oops.E(oops.CodeUnexpected, err, "list plugins with mcp servers").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugins with mcp servers").LogError(ctx, s.logger)
 	}
 	gatewayRows, err := lockedRepo.ListPluginsWithGatewaysForProject(ctx, repo.ListPluginsWithGatewaysForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
-		return nil, "", oops.E(oops.CodeUnavailable, err, "list live plugin gateways").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnavailable, err, "list live plugin gateways").LogError(ctx, s.logger)
 	}
 	if len(gatewayRows) > 0 && s.distributionAdmission == nil {
-		return nil, "", mapDistributionAdmissionError(admission.ErrUnavailable)
+		return nil, mapDistributionAdmissionError(admission.ErrUnavailable)
 	}
 	for _, gateway := range gatewayRows {
-		if err := s.distributionAdmission.CheckGatewayAttachment(ctx, tx, project.ID, projectID, gateway.PluginID, gateway.GatewayID); err != nil {
-			return nil, "", mapDistributionAdmissionError(err)
+		if err := s.distributionAdmission.CheckGatewayAttachment(ctx, tx, organizationID, projectID, gateway.PluginID, gateway.GatewayID); err != nil {
+			return nil, mapDistributionAdmissionError(err)
 		}
 	}
 
 	skillRows, err := lockedRepo.ListPluginSkillsForProject(ctx, repo.ListPluginSkillsForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
-		return nil, "", oops.E(oops.CodeUnexpected, err, "list plugin skills").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin skills").LogError(ctx, s.logger)
 	}
 	envRows, err := lockedRepo.ListPluginEnvironmentConfigsForProject(ctx, repo.ListPluginEnvironmentConfigsForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
-		return nil, "", oops.E(oops.CodeUnexpected, err, "list plugin environment configs").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin environment configs").LogError(ctx, s.logger)
 	}
 	compatibilityIssues, err := lockedRepo.ListAgentPluginCompatibilityIssuesForProject(ctx, repo.ListAgentPluginCompatibilityIssuesForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
-		return nil, "", oops.E(oops.CodeUnexpected, err, "list Agent Plugins compatibility issues").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list Agent Plugins compatibility issues").LogError(ctx, s.logger)
 	}
 
 	// serverBuild carries the row's sort_order so the merged server and
@@ -3469,7 +3513,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 
 		mcpURL, isUnproxied, err := remoteServerURL(serverURL, m)
 		if err != nil {
-			return nil, "", oops.E(oops.CodeUnexpected, err, "resolve MCP plugin address").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve MCP plugin address").LogError(ctx, s.logger)
 		}
 
 		var serverEnv []ServerEnvConfig
@@ -3495,7 +3539,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 
 	for _, gateway := range gatewayRows {
 		if !gateway.GatewayIsOauth {
-			return nil, "", oops.E(oops.CodeUnavailable, nil, "gateway plugin member has no OAuth issuer").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnavailable, nil, "gateway plugin member has no OAuth issuer").LogError(ctx, s.logger)
 		}
 		pb := ensurePlugin(gateway.PluginID, gateway.PluginName, gateway.PluginSlug, gateway.PluginDescription)
 		mcpBase := serverURL
@@ -3504,7 +3548,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 		}
 		mcpURL, err := packageMCPURL(gateway.NetworkAccessMode, mcpBase, gateway.EndpointSlug, gateway.PrivateDnsName.String, gateway.PrivateEndpointSlug)
 		if err != nil {
-			return nil, "", oops.E(oops.CodeUnexpected, err, "resolve gateway plugin address").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve gateway plugin address").LogError(ctx, s.logger)
 		}
 		if gateway.EndpointIsDomainRoot && gateway.EndpointCustomDomain.Valid && gateway.NetworkAccessMode.String != "private_only" {
 			mcpURL = mcpBase
@@ -3560,7 +3604,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 	sort.Slice(pluginInfos, func(i, j int) bool {
 		return pluginInfos[i].Slug < pluginInfos[j].Slug
 	})
-	return pluginInfos, serverURL, nil
+	return pluginInfos, nil
 }
 
 func (s *Service) resolveAgentPluginCompatibility(ctx context.Context, projectID uuid.UUID, pluginIDs ...uuid.UUID) (map[string]bool, error) {

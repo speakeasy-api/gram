@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -23,18 +24,30 @@ import (
 )
 
 // stubAutoSyncGuard stands in for the plugins service's turn-off check. It
-// records which plugins were checked and refuses the ones listed in unsynced
-// the way the service does.
+// records which plugins were checked, before the write and inside it, and
+// refuses the ones listed in unsynced the way the service does.
 type stubAutoSyncGuard struct {
-	mu       sync.Mutex
-	unsynced map[uuid.UUID]bool
-	checked  []uuid.UUID
+	mu                   sync.Mutex
+	unsynced             map[uuid.UUID]bool
+	checked              []uuid.UUID
+	checkedInTransaction []uuid.UUID
 }
 
 func (g *stubAutoSyncGuard) RequireAutoSyncCanTurnOff(_ context.Context, _ string, _, pluginID uuid.UUID) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.checked = append(g.checked, pluginID)
+	return g.refusal(pluginID)
+}
+
+func (g *stubAutoSyncGuard) RequireAutoSyncCanTurnOffInTransaction(_ context.Context, _ pgx.Tx, _ string, _, pluginID uuid.UUID) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.checkedInTransaction = append(g.checkedInTransaction, pluginID)
+	return g.refusal(pluginID)
+}
+
+func (g *stubAutoSyncGuard) refusal(pluginID uuid.UUID) error {
 	if g.unsynced[pluginID] {
 		return oops.E(oops.CodeFailedPrecondition, plugindelivery.ErrPluginHasUnsyncedChanges, "This plugin has changes that haven't been synced yet.")
 	}
@@ -45,6 +58,12 @@ func (g *stubAutoSyncGuard) checks() []uuid.UUID {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return slices.Clone(g.checked)
+}
+
+func (g *stubAutoSyncGuard) checksInTransaction() []uuid.UUID {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return slices.Clone(g.checkedInTransaction)
 }
 
 // slugPublicationEvidence answers for exactly the slugs asked about, from a
@@ -158,6 +177,7 @@ func TestSetPluginAutoSyncTurnsItOffAndOn(t *testing.T) {
 	require.Equal(t, pluginMetadataAutoSyncTurnedOff, turnedOff.ResultCategory)
 	require.Equal(t, new(false), turnedOff.Plugin.AutoSyncEnabled)
 	require.Equal(t, []uuid.UUID{plugin.ID}, guard.checks(), "turning auto sync off runs the dashboard's check")
+	require.Equal(t, []uuid.UUID{plugin.ID}, guard.checksInTransaction(), "and runs it again in the transaction that writes the setting")
 
 	after, err := fixture.service.GetPlugin(ctx, fixture.principal, GetPluginInput{ProjectID: fixture.project.ID.String(), Plugin: plugin.ID.String()})
 	require.NoError(t, err)
@@ -184,6 +204,7 @@ func TestSetPluginAutoSyncTurnsItOffAndOn(t *testing.T) {
 	require.True(t, retry.Receipt.Replayed)
 	require.Equal(t, turnedOff.Plugin, retry.Plugin)
 	require.Len(t, guard.checks(), 1)
+	require.Len(t, guard.checksInTransaction(), 1)
 	replayAudit, err := audittest.AuditLogCountByAction(ctx, fixture.conn, audit.ActionPluginUpdate)
 	require.NoError(t, err)
 	require.Equal(t, afterAudit, replayAudit)
@@ -196,6 +217,7 @@ func TestSetPluginAutoSyncTurnsItOffAndOn(t *testing.T) {
 	require.Equal(t, pluginMetadataAutoSyncTurnedOn, turnedOn.ResultCategory)
 	require.Equal(t, new(true), turnedOn.Plugin.AutoSyncEnabled)
 	require.Len(t, guard.checks(), 1)
+	require.Len(t, guard.checksInTransaction(), 1)
 	// Like the dashboard's switch, each change requests an automatic publish,
 	// which once auto sync is back on sends the changes it held.
 	require.Equal(t, string(plugindelivery.ProjectPublicationEmissionDisabled), turnedOn.PublicationRequest)
@@ -238,6 +260,47 @@ func TestSetPluginAutoSyncRefusesTurningOffWithUnsyncedChanges(t *testing.T) {
 	require.Equal(t, beforeAudit, afterAudit)
 	requireNoOperationReceipt(t, ctx, fixture.conn, fixture.principal, fixture.project, operationSetPluginAutoSync, "refused-off")
 	require.Empty(t, fixture.budget.keys, "a refused change is checked before the allowance is charged")
+}
+
+// racingAutoSyncGuard passes the early check and refuses the one in the
+// write's transaction, as the plugins service does when a change to the plugin
+// commits between the two.
+type racingAutoSyncGuard struct{}
+
+func (racingAutoSyncGuard) RequireAutoSyncCanTurnOff(context.Context, string, uuid.UUID, uuid.UUID) error {
+	return nil
+}
+
+func (racingAutoSyncGuard) RequireAutoSyncCanTurnOffInTransaction(context.Context, pgx.Tx, string, uuid.UUID, uuid.UUID) error {
+	return oops.E(oops.CodeFailedPrecondition, plugindelivery.ErrPluginHasUnsyncedChanges, "This plugin has changes that haven't been synced yet.")
+}
+
+// The check in the write's transaction is the one that decides: a change that
+// lands after the early check still refuses turning auto sync off, with
+// nothing written.
+func TestSetPluginAutoSyncRefusesAChangeThatLandsAfterTheEarlyCheck(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_set_plugin_auto_sync_race")
+	plugin := seedPlugin(t, ctx, fixture.conn, fixture.principal.OrganizationID, fixture.project.ID, "Raced", "raced")
+	fixture.service.WithAutoSyncGuard(racingAutoSyncGuard{})
+	beforeAudit, err := audittest.AuditLogCountByAction(ctx, fixture.conn, audit.ActionPluginUpdate)
+	require.NoError(t, err)
+
+	_, err = fixture.service.SetPluginAutoSync(ctx, fixture.principal, SetPluginAutoSyncInput{
+		ProjectID: fixture.project.ID.String(), Plugin: plugin.ID.String(), AutoSyncEnabled: false, IdempotencyKey: "raced-off", Confirmed: true,
+	})
+	var refusal *PluginMetadataMutationError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, pluginMetadataCodeUnsyncedChanges, refusal.Code)
+	require.ErrorIs(t, refusal, plugindelivery.ErrPluginHasUnsyncedChanges)
+
+	got, err := fixture.service.GetPlugin(ctx, fixture.principal, GetPluginInput{ProjectID: fixture.project.ID.String(), Plugin: plugin.ID.String()})
+	require.NoError(t, err)
+	require.Equal(t, new(true), got.Plugin.AutoSyncEnabled, "a refused change leaves auto sync on")
+	afterAudit, err := audittest.AuditLogCountByAction(ctx, fixture.conn, audit.ActionPluginUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeAudit, afterAudit)
+	requireNoOperationReceipt(t, ctx, fixture.conn, fixture.principal, fixture.project, operationSetPluginAutoSync, "raced-off")
 }
 
 // The plugins service's own check refuses through the tool: a stored

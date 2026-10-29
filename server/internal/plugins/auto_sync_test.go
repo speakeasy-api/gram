@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // autoSyncFixture is a project whose marketplace was published by hand with
@@ -539,6 +541,50 @@ func TestAutoSync_TurnOffRefusedWithUnsyncedChanges(t *testing.T) {
 	f.addServer(t, ctx, f.paused, "refuse-paused-three", "Paused Three", 2)
 	_, err = f.setAutoSync(ctx, f.paused, false)
 	require.NoError(t, err)
+}
+
+// Turning auto sync off waits for a change to the plugin that is still
+// committing, and the check then sees it. Otherwise the change would commit
+// unseen between the check and the write, and every automatic publish after
+// would hold it with nothing on screen saying so.
+func TestAutoSync_TurnOffWaitsForAChangeStillCommitting(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newAutoSyncFixture(t, "inflight")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	plugin, err := f.ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: f.paused.ID})
+	require.NoError(t, err)
+	require.Len(t, plugin.Servers, 1)
+	server := plugin.Servers[0]
+
+	// The change renames the plugin's server the way UpdatePluginServer does,
+	// taking no project lock before it requests a publication, and stops
+	// short of committing.
+	change := testenv.BeginTx(t, ctx, f.ti.conn)
+	_, err = pluginsrepo.New(change).UpdatePluginServer(ctx, pluginsrepo.UpdatePluginServerParams{
+		ID: uuid.MustParse(server.ID), PluginID: uuid.MustParse(f.paused.ID), DisplayName: "Renamed In Flight", Policy: server.Policy, SortOrder: server.SortOrder,
+	})
+	require.NoError(t, err)
+	require.NoError(t, plugins.PublicationRequests{Enabled: false}.Project(ctx, change, authCtx.ActiveOrganizationID, f.projectID, f.userID))
+
+	turnOff := make(chan error, 1)
+	go func() {
+		_, err := f.setAutoSync(ctx, f.paused, false)
+		turnOff <- err
+	}()
+	waitRoleSetupBlocked(t, ctx, f.ti, int32(change.Conn().PgConn().PID()))
+	require.NoError(t, change.Commit(ctx))
+
+	select {
+	case err := <-turnOff:
+		require.ErrorIs(t, err, plugins.ErrPluginHasUnsyncedChanges, "the check must see the change that committed while it waited")
+	case <-time.After(10 * time.Second):
+		t.Fatal("turning auto sync off never finished")
+	}
+	got, err := f.ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: f.paused.ID})
+	require.NoError(t, err)
+	require.True(t, got.AutoSyncEnabled, "a refused update leaves auto sync on")
 }
 
 // A rename the marketplace hasn't picked up yet leaves the published files

@@ -138,8 +138,9 @@ type UpdatePluginMutation struct {
 
 	// AutoSyncEnabled turns automatic publishing of the plugin's changes on or
 	// off. Nil keeps the current setting. Callers that turn it off must first
-	// check that the plugin has no unsynced changes, as Service.UpdatePlugin
-	// does.
+	// check, in the same transaction, that the plugin has no unsynced changes,
+	// with Service.RequireAutoSyncCanTurnOffInTransaction or as
+	// Service.UpdatePlugin does.
 	AutoSyncEnabled *bool
 
 	// Actor is who the update is attributed to.

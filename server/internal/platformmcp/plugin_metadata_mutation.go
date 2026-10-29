@@ -202,7 +202,14 @@ func (s *PluginsService) metadataMutationValid() bool {
 // changes that haven't been synced. Implemented by the plugins management
 // service, so the rule is the dashboard's own.
 type pluginAutoSyncGuard interface {
+	// RequireAutoSyncCanTurnOff checks in a transaction of its own, to refuse
+	// before anything is charged or written.
 	RequireAutoSyncCanTurnOff(ctx context.Context, organizationID string, projectID, pluginID uuid.UUID) error
+
+	// RequireAutoSyncCanTurnOffInTransaction checks in the transaction that
+	// writes the setting, so no change to the plugin commits unseen between
+	// the check and the write.
+	RequireAutoSyncCanTurnOffInTransaction(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID uuid.UUID) error
 }
 
 // WithAutoSyncGuard enables set_plugin_auto_sync alongside the other metadata
@@ -419,8 +426,9 @@ func (s *PluginsService) setPluginAutoSync(ctx context.Context, principal Princi
 	}
 	// The target is resolved and checked after the replay lookup, so a retry
 	// of a change that committed replays it rather than being refused over
-	// changes made since, and before the receipt transaction, as the dashboard
-	// checks before its own, so the check holds no transaction open.
+	// changes made since, and before the receipt transaction, so a refusal is
+	// never charged. The write checks again in its own transaction, which is
+	// what keeps a change to the plugin from committing unseen in between.
 	var ref PluginRef
 	precheck := func(ctx context.Context) error {
 		resolved, err := s.resolve(ctx, platformrepo.New(s.db), principal, project.ID, target)
@@ -437,6 +445,11 @@ func (s *PluginsService) setPluginAutoSync(ctx context.Context, principal Princi
 		return nil
 	}
 	return s.executePluginMetadataMutation(ctx, principal, project, operationSetPluginAutoSync, key, normalized, precheck, func(ctx context.Context, tx pgx.Tx) (PluginMetadataReceiptResult, error) {
+		if !input.AutoSyncEnabled {
+			if err := s.autoSyncGuard.RequireAutoSyncCanTurnOffInTransaction(ctx, tx, principal.OrganizationID, project.ID, ref.ID); err != nil {
+				return PluginMetadataReceiptResult{}, pluginMetadataCoreError(fmt.Errorf("check plugin has no unsynced changes: %w", err))
+			}
+		}
 		updated, err := s.metadataCore.UpdateInTransaction(ctx, tx, plugindelivery.UpdatePluginMutation{
 			OrganizationID:  principal.OrganizationID,
 			ProjectID:       project.ID,

@@ -794,6 +794,44 @@ func (q *Queries) GetPlugin(ctx context.Context, arg GetPluginParams) (Plugin, e
 	return i, err
 }
 
+const getPluginForUpdate = `-- name: GetPluginForUpdate :one
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
+FROM plugins
+WHERE id = $1
+  AND organization_id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetPluginForUpdateParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// GetPlugin that also locks the row for the rest of the transaction.
+func (q *Queries) GetPluginForUpdate(ctx context.Context, arg GetPluginForUpdateParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, getPluginForUpdate, arg.ID, arg.OrganizationID, arg.ProjectID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.AutoCreated,
+		&i.AutoSyncEnabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getPluginServerByBackend = `-- name: GetPluginServerByBackend :one
 SELECT id, plugin_id, project_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted FROM plugin_servers
 WHERE plugin_id = $1
@@ -2796,6 +2834,31 @@ func (q *Queries) LockPlatformCleanupMemberships(ctx context.Context, arg LockPl
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockPluginPackageContent = `-- name: LockPluginPackageContent :exec
+SELECT pg_advisory_xact_lock(hashtextextended('plugin-package-content:' || $1::text, 0))
+`
+
+// Waits for every change that has requested a publication of the project's
+// plugin packages to finish, and holds off new ones until the transaction
+// ends, so what the transaction reads of the packages' live state stays
+// current until it commits.
+func (q *Queries) LockPluginPackageContent(ctx context.Context, projectID string) error {
+	_, err := q.db.Exec(ctx, lockPluginPackageContent, projectID)
+	return err
+}
+
+const lockPluginPackageContentShared = `-- name: LockPluginPackageContentShared :exec
+SELECT pg_advisory_xact_lock_shared(hashtextextended('plugin-package-content:' || $1::text, 0))
+`
+
+// Taken by every change that requests a publication of the project's plugin
+// packages. Shared, so those changes never wait on one another, only on a
+// holder of LockPluginPackageContent.
+func (q *Queries) LockPluginPackageContentShared(ctx context.Context, projectID string) error {
+	_, err := q.db.Exec(ctx, lockPluginPackageContentShared, projectID)
+	return err
 }
 
 const lockRoleDeliveryPlugin = `-- name: LockRoleDeliveryPlugin :one

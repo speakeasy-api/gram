@@ -334,8 +334,10 @@ func publishMCPFingerprints(active []PluginInfo, held []heldPlugin, cfg Generate
 // never published, or a project with no marketplace yet, has nothing to
 // compare against, so turning auto sync off is always allowed there. The live
 // fingerprint is computed with the same configuration publishProject uses.
-func (s *Service) requirePluginSyncedForPause(ctx context.Context, plugin repo.Plugin) error {
-	conn, err := s.repo.GetGitHubConnection(ctx, plugin.ProjectID)
+// It reads the plugin's live state in tx, which must hold the locks
+// requireAutoSyncCanTurnOff takes.
+func (s *Service) requirePluginSyncedForPause(ctx context.Context, tx pgx.Tx, plugin repo.Plugin) error {
+	conn, err := s.repo.WithTx(tx).GetGitHubConnection(ctx, plugin.ProjectID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -356,17 +358,18 @@ func (s *Service) requirePluginSyncedForPause(ctx context.Context, plugin repo.P
 		return nil
 	}
 
-	infos, serverURL, err := s.resolvePluginInfos(ctx, plugin.ProjectID, plugin.ID)
+	project, err := projectsrepo.New(tx).GetProjectWithOrganizationMetadata(ctx, plugin.ProjectID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "get project").LogError(ctx, s.logger)
+	}
+	serverURL := s.organizationServerURL(project.DefaultHost)
+	infos, err := s.resolvePluginInfosInTx(ctx, tx, project.ID, plugin.ProjectID, serverURL, plugin.ID)
 	if err != nil {
 		return err
 	}
 	idx := slices.IndexFunc(infos, func(info PluginInfo) bool { return info.Slug == plugin.Slug })
 	if idx < 0 {
 		return oops.C(oops.CodeNotFound)
-	}
-	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, plugin.ProjectID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "get project").LogError(ctx, s.logger)
 	}
 	observabilityEnabled, err := s.projectObservabilityEnabled(ctx, plugin.ProjectID)
 	if err != nil {

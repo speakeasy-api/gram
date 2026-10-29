@@ -8,10 +8,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	publicationv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
+	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
 // PublicationRequests records refresh hints in the same transaction as the
 // package-affecting change. A refresh is only needed for an existing marketplace.
+// Requesting one also takes the project's package content lock shared, which is
+// how turning a plugin's auto sync off serializes with those changes.
 type PublicationRequests struct {
 	Enabled bool
 }
@@ -45,6 +48,12 @@ func (r PublicationRequests) SyncProjectWithOutcome(ctx context.Context, tx pgx.
 }
 
 func (r PublicationRequests) projectWithOutcome(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, actorID string, includePausedPlugins bool) (ProjectPublicationRequestOutcome, error) {
+	// Taken whether or not emission is enabled: it is what turning a plugin's
+	// auto sync off waits on, so that a change committing alongside it is
+	// either seen by its unsynced-changes check or made after it.
+	if err := repo.New(tx).LockPluginPackageContentShared(ctx, projectID.String()); err != nil {
+		return "", fmt.Errorf("lock plugin package content: %w", err)
+	}
 	if !r.Enabled {
 		return ProjectPublicationEmissionDisabled, nil
 	}
