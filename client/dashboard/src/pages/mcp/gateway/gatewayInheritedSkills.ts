@@ -1,5 +1,4 @@
 import { mcpServerRouteParam } from "@/lib/sources";
-import { skillLinkTargetName } from "@/pages/skills/skill-links";
 import type { MetaMcpMember } from "@gram/client/models/components/metamcpmember.js";
 import type { SkillLink } from "@gram/client/models/components/skilllink.js";
 
@@ -40,7 +39,11 @@ export function inheritedSkills(
     const member = membersById.get(link.mcpServerId);
     if (!member) continue;
     const server: InheritedSkillServer = {
-      name: member.mcpServerName || skillLinkTargetName(link),
+      name:
+        member.mcpServerName ||
+        link.targetName ||
+        member.mcpServerSlug ||
+        member.mcpServerId,
       routeParam: mcpServerRouteParam({
         id: member.mcpServerId,
         slug: member.mcpServerSlug,

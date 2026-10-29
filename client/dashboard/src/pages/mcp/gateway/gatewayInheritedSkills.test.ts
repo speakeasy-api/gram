@@ -22,8 +22,16 @@ function serverLink(
 
 describe("inheritedSkills", () => {
   const members = [
-    { mcpServerId: "notion", mcpServerName: "Notion", mcpServerSlug: "notion" },
-    { mcpServerId: "linear", mcpServerName: "Linear", mcpServerSlug: "linear" },
+    {
+      mcpServerId: "notion",
+      mcpServerName: "Notion",
+      mcpServerSlug: "notion-docs",
+    },
+    {
+      mcpServerId: "linear",
+      mcpServerName: "Linear",
+      mcpServerSlug: "linear-issues",
+    },
   ];
 
   it("groups member links by skill and names their servers", () => {
@@ -40,15 +48,15 @@ describe("inheritedSkills", () => {
         skillId: "s1",
         skillName: "release",
         skillDisplayName: "Release",
-        servers: [{ name: "Linear", routeParam: "linear" }],
+        servers: [{ name: "Linear", routeParam: "linear-issues" }],
       },
       {
         skillId: "s2",
         skillName: "triage",
         skillDisplayName: "Triage",
         servers: [
-          { name: "Linear", routeParam: "linear" },
-          { name: "Notion", routeParam: "notion" },
+          { name: "Linear", routeParam: "linear-issues" },
+          { name: "Notion", routeParam: "notion-docs" },
         ],
       },
     ]);
@@ -68,6 +76,23 @@ describe("inheritedSkills", () => {
       members,
     );
     expect(skills).toEqual([]);
+  });
+
+  it("falls back to the member's slug, then its id, for an unnamed member", () => {
+    const skills = inheritedSkills(
+      [
+        serverLink("s1", "Release", "slugged"),
+        serverLink("s1", "Release", "bare"),
+      ],
+      [
+        { mcpServerId: "slugged", mcpServerSlug: "release-tools" },
+        { mcpServerId: "bare" },
+      ],
+    );
+    expect(skills[0]?.servers).toEqual([
+      { name: "bare", routeParam: "bare" },
+      { name: "release-tools", routeParam: "release-tools" },
+    ]);
   });
 
   it("falls back to the link's name and the server id for a bare member", () => {

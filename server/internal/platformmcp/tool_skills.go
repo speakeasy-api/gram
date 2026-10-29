@@ -461,7 +461,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "unlink_skill_from_mcp",
 		Title:       "Stop Serving a Skill from an MCP Server",
-		Description: "Stop one MCP server, gateway, or the organization gateway serving a skill over MCP, undoing link_skill_to_mcp. The skill, its versions, and its plugin and assistant distributions stay. Tell the user which MCP surface stops serving the skill, ask them to confirm out loud, then call this with confirmed: true. Constraints: name the target exactly, on the same terms as link_skill_to_mcp. A surface that is not serving the skill is a no-op reported as removed: false, so a retry with the same idempotency_key is safe.",
+		Description: "Stop one MCP server, gateway, or the organization gateway serving a skill over MCP, undoing link_skill_to_mcp. The skill, its versions, and its plugin and assistant distributions stay. A gateway also serves the skills linked to its member servers, so to stop a gateway serving an inherited skill, unlink it from each member server it is linked to. Tell the user which MCP surface stops serving the skill, ask them to confirm out loud, then call this with confirmed: true. Constraints: name the target exactly, on the same terms as link_skill_to_mcp. A surface that is not serving the skill is a no-op reported as removed: false, so a retry with the same idempotency_key is safe.",
 		Annotations: unlinkSkillFromMCPAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input UnlinkSkillFromMCPToolInput) (*mcp.CallToolResult, UnlinkSkillFromMCPOutput, error) {
 		if !input.Confirmed {
