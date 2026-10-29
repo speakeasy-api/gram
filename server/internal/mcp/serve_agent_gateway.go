@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -206,7 +207,7 @@ func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext
 	}
 	if !server.UserSessionIssuerID.Valid {
 		if member.backend == metaMemberBackendProxied {
-			_, err := s.authorizeAgentMemberClient(ctx, gate, member, uuid.Nil, uuid.NullUUID{}, "")
+			_, err := s.authorizeAgentMemberClient(ctx, gate, member, uuid.Nil, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "")
 			return nil, err
 		}
 		return nil, nil
@@ -215,16 +216,28 @@ func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext
 	// inputs. Proxied members must never turn a missing attachment into an
 	// anonymous upstream request.
 	if member.backend != metaMemberBackendProxied {
-		return s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID))
+		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID))
+		if err != nil {
+			return nil, fmt.Errorf("resolve hosted member credentials: %w", err)
+		}
+		return tokens, nil
 	}
 	clients, err := s.remoteChallengeMgr.ListClients(ctx, member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID)
 	if err != nil {
 		return nil, fmt.Errorf("load agent member clients: %w", err)
 	}
+	associated, err := s.serverAssociatedClients(ctx, gate.organizationID, []uuid.UUID{member.serverID})
+	if err != nil {
+		return nil, err
+	}
+	// An issuer can also bind clients belonging to sibling servers.
+	clients = slices.DeleteFunc(clients, func(client remotesessions.Client) bool {
+		return !associated[member.serverID][client.ID]
+	})
 	if len(clients) == 0 {
 		// Distinguish a legitimate header/no-auth member from a required OAuth
 		// member whose last client was removed. No runtime catalog repairs.
-		_, err := s.authorizeAgentMemberClient(ctx, gate, member, server.UserSessionIssuerID.UUID, uuid.NullUUID{}, "")
+		_, err := s.authorizeAgentMemberClient(ctx, gate, member, server.UserSessionIssuerID.UUID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "")
 		return nil, err
 	}
 	tokens := make(map[uuid.UUID]remotesessions.UpstreamToken, len(clients))
@@ -260,7 +273,7 @@ func agentMemberCredentialError(member metaMember) error {
 // same owner-sensitive permit as selected members.
 func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGateContext, member metaMember, issuer uuid.UUID, registration uuid.NullUUID, clientType string) (uuid.UUID, error) {
 	rows, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
-		Proposed: true, ProposedRegistrationID: registration, CredentialKind: upstreamclients.CredentialKindUserSession,
+		Proposed: true, ProposedAuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ProposedRegistrationID: registration, CredentialKind: upstreamclients.CredentialKindUserSession,
 		CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{member.serverID}, OrganizationID: gate.organizationID,
 	})
 	if err != nil {
@@ -287,6 +300,7 @@ func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGate
 		OrganizationID: gate.organizationID, ProjectID: member.projectID, ServerID: member.serverID,
 		ClientID: res.clientID, ClientType: clientType, RegistrationID: registration,
 		Subject: urn.NewAgentSubject(gate.agentID), UserSessionIssuerID: issuer,
+		CredentialKind: "", CredentialID: uuid.Nil, ConnectionOwner: "",
 	}
 	if res.clientType != "" {
 		permit.ClientType = res.clientType
@@ -295,7 +309,7 @@ func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGate
 	if err != nil {
 		return uuid.Nil, err
 	}
-	if clientType == authClientTypeRemoteSession && connection.attachedSession == uuid.Nil {
+	if permit.ClientType == authClientTypeRemoteSession && connection.attachedSession == uuid.Nil {
 		return uuid.Nil, agentMemberCredentialError(member)
 	}
 	permit.ConnectionOwner = connection.owner
@@ -306,7 +320,7 @@ func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGate
 		}
 		allowed, err := permitter.Permitted(ctx, permit)
 		if err != nil {
-			return uuid.Nil, err
+			return uuid.Nil, fmt.Errorf("authorize agent member client: %w", err)
 		}
 		if !allowed {
 			return uuid.Nil, agentMemberCredentialError(member)

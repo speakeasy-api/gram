@@ -16,6 +16,7 @@ import (
 // These tests deliberately provide no database or challenge manager. A selected
 // proxied member must never fall through to legacy issuer resolution.
 func TestAgentMemberSelectedResolution(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []feature.AuthClientResolverMode{feature.AuthClientResolverOff, feature.AuthClientResolverShadow, feature.AuthClientResolverEnforced} {
 		for _, tc := range []struct {
 			name        string
@@ -33,6 +34,7 @@ func TestAgentMemberSelectedResolution(t *testing.T) {
 			{name: "unavailable member", unavailable: errors.New("member is not permitted"), wantErr: true},
 		} {
 			t.Run(agentMemberModeName(mode)+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
 				flags := new(feature.InMemory)
 				flags.SetFlag(feature.FlagAuthClientResolver, "test-org", mode == feature.AuthClientResolverEnforced)
 				flags.SetFlag(feature.FlagAuthClientResolverShadow, "test-org", mode == feature.AuthClientResolverShadow)
@@ -77,13 +79,19 @@ func agentMemberModeName(mode feature.AuthClientResolverMode) string {
 }
 
 func TestAgentMemberSelectedHeaderAndNoAuth(t *testing.T) {
+	t.Parallel()
 	for _, clientType := range []string{"", authClientTypeStaticCredential, authClientTypePassThrough} {
 		t.Run("no-oauth/"+clientType, func(t *testing.T) {
+			t.Parallel()
 			s := &Service{}
-			member := metaMember{serverID: uuid.New(), backend: metaMemberBackendProxied, upstreamNoAuth: true}
+			member := metaMember{serverID: uuid.New(), backend: metaMemberBackendProxied}
+			resolution := authClientResolution{outcome: authClientNoAuth}
 			if clientType != "" {
-				member.authClient = &authClientResolution{outcome: authClientResolved, clientType: clientType}
+				resolution = authClientResolution{outcome: authClientResolved, clientType: clientType}
 			}
+			s.applyMemberAuthClient(t.Context(), &member, resolution, nil)
+			require.True(t, member.upstreamNoAuth)
+			require.False(t, member.chosenClientID.Valid)
 			choices := &memberChoices{byServer: map[uuid.UUID]*memberTokens{}, resolve: func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 				t.Fatal("header/no-auth member must not resolve OAuth credentials")
 				return nil, nil
@@ -96,6 +104,7 @@ func TestAgentMemberSelectedHeaderAndNoAuth(t *testing.T) {
 }
 
 func TestAgentMemberSelectedAttachmentPin(t *testing.T) {
+	t.Parallel()
 	for _, typed := range []bool{false, true} {
 		for _, replaced := range []bool{false, true} {
 			name := "legacy"
@@ -108,6 +117,7 @@ func TestAgentMemberSelectedAttachmentPin(t *testing.T) {
 				name += "/unchanged"
 			}
 			t.Run(name, func(t *testing.T) {
+				t.Parallel()
 				checked := uuid.New()
 				source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: checked}
 				s := &Service{upstreamTokens: source}
@@ -135,4 +145,38 @@ func TestAgentMemberSelectedAttachmentPin(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestAgentMemberResolvedTypeRequiresAttachment(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "agent_member_resolved_type")
+	require.NoError(t, err)
+	f := newAuthClientFixture(t, pool)
+	f.oauthClient(authClientTypeRemoteSession)
+	f.enforce()
+	member := metaMember{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}
+	gate := &metaGateContext{agentID: uuid.New(), organizationID: f.orgID}
+	// The catalog supplies the personal client type even when the caller has
+	// not supplied one. No attachment lookup is available in this fixture.
+	pin, err := f.service.authorizeAgentMemberClient(t.Context(), gate, member, f.issuerID, validUUID(f.registration), "")
+	require.Error(t, err)
+	require.Equal(t, uuid.Nil, pin)
+}
+
+func TestAgentMemberRoutingPreservesAmbiguity(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "agent_member_route_ambiguity")
+	require.NoError(t, err)
+	f := newAuthClientFixture(t, pool)
+	resource := "https://mcp.example.com/" + f.remoteID.String()[:8]
+	member := metaMember{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied, remoteServerID: validUUID(f.remoteID), chosenClientID: validUUID(f.registration)}
+	choices := &memberChoices{byServer: map[uuid.UUID]*memberTokens{}, resolve: func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+		return map[uuid.UUID]remotesessions.UpstreamToken{
+			uuid.New(): {Token: "first", Resource: resource},
+			uuid.New(): {Token: "second", Resource: resource},
+		}, nil
+	}}
+	_, backend, err := f.service.routeMetaMember(t.Context(), f.service.logger, metaGateContext{agentID: uuid.New(), organizationID: f.orgID, memberChoices: choices}, member, "")
+	require.Equal(t, "remote", backend)
+	require.ErrorIs(t, err, errAmbiguousMemberCredential)
 }

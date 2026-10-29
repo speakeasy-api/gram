@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/keys"
+	"github.com/speakeasy-api/gram/server/internal/mcp/fixtures/fixturerepo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
@@ -49,9 +50,11 @@ import (
 // Auth permissions and the credential ceiling are explicitly approved through
 // management APIs, scoped to this member and its configured auth clients.
 func TestAgentMemberAuthRegression(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"off", "shadow", "enforced"} {
-		for _, state := range []string{"live", "missing_attachment", "revoked_attachment", "same_source_new_generation", "replaced_source_without_reattach", "disabled_agent", "removed_agent_grant", "owner_block", "noauth", "shared_static_client", "deleted_client", "disabled_typed_client", "shared_oauth_registration", "legacy_static_client"} {
+		for _, state := range []string{"live", "missing_attachment", "revoked_attachment", "same_source_new_generation", "replaced_source_without_reattach", "disabled_agent", "removed_agent_grant", "owner_block", "noauth", "shared_static_client", "deleted_client", "disabled_typed_client", "shared_oauth_registration", "sibling_issuer_client", "legacy_static_client"} {
 			t.Run(mode+"/"+state, func(t *testing.T) {
+				t.Parallel()
 				ctx, ti := newTestMCPService(t)
 				ti.service.manual = true
 				fx := seedAgentGateway(t, ctx, ti)
@@ -120,9 +123,7 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 					seedRemoteHeader(t, ctx, ti.conn, projectID, remote.ID, "Authorization", "Bearer configured-shared-key", "", true)
 					// Use the same source-local synchronization as header writes;
 					// no organization backfill or permission grants are inserted.
-					tx, err := ti.conn.Begin(ctx)
-					require.NoError(t, err)
-					defer func() { _ = tx.Rollback(ctx) }()
+					tx := testenv.BeginTx(t, ctx, ti.conn)
 					require.NoError(t, authclientbackfill.SyncRemoteSource(ctx, tx, ac.ActiveOrganizationID, remote.ID))
 					require.NoError(t, tx.Commit(ctx))
 				}
@@ -138,6 +139,26 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 					}
 					clientID = createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "attachment-client", "", issuerIDs)
 					require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, ac.ActiveOrganizationID, projectID, issuerIDs))
+					if state == "sibling_issuer_client" {
+						siblingID := mcpServerBySlug(t, ctx, ti, projectID, fx.denied)
+						_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: siblingID, ProjectID: projectID, Name: conv.ToPGText(fx.denied), Slug: conv.ToPGText(fx.denied), RemoteMcpServerID: conv.ToNullUUID(remote.ID), UserSessionIssuerID: conv.ToNullUUID(issuerID), Visibility: mcpservers.VisibilityPrivate})
+						require.NoError(t, err)
+						siblingClientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "sibling-only-client", "", issuerIDs)
+						require.NotEqual(t, clientID, siblingClientID)
+						require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: projectID, OrganizationID: ac.ActiveOrganizationID, McpServerID: siblingID, RemoteSessionClientID: siblingClientID}))
+						tx := testenv.BeginTx(t, ctx, ti.conn)
+						require.NoError(t, authclientbackfill.SyncServerAssociations(ctx, tx, ac.ActiveOrganizationID, siblingID))
+						require.NoError(t, tx.Commit(ctx))
+						authClients := authclientsrepo.New(ti.conn)
+						for _, member := range []struct{ serverID, clientID uuid.UUID }{{serverID, clientID}, {siblingID, siblingClientID}} {
+							associated, err := authClients.ListServerAuthClients(ctx, authclientsrepo.ListServerAuthClientsParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: projectID, McpServerID: member.serverID})
+							for _, client := range associated {
+								require.Equal(t, member.clientID, client.RemoteSessionClientID.UUID)
+							}
+							require.NoError(t, err)
+							require.Len(t, associated, 1)
+						}
+					}
 					owner := urn.NewUserSubject(ac.UserID)
 					insertQualifiedRemoteSessionToken(t, ctx, ti, sourceIssuerID, clientID, owner, "exact-owner-connection", upstream.url)
 					other := createTestUser(t, ctx, ti, "attachment-decoy-"+uuid.NewString())
@@ -163,16 +184,19 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 							require.NoError(t, err)
 							require.Len(t, deleted, 1)
 							insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, owner, "replacement-source-token", upstream.url)
-							var replacementID uuid.UUID
-							require.NoError(t, ti.conn.QueryRow(ctx, "SELECT id FROM remote_sessions WHERE subject_urn=$1 AND remote_session_client_id=$2 AND NOT deleted", owner.String(), clientID).Scan(&replacementID))
+							replacements, err := q.ListPrincipalRemoteSessionCandidates(ctx, remotesessionsrepo.ListPrincipalRemoteSessionCandidatesParams{ProjectID: projectID, OrganizationID: ac.ActiveOrganizationID, UserSessionIssuerID: sourceIssuerID, SubjectUrn: owner})
+							require.NoError(t, err)
+							require.Len(t, replacements, 1)
+							replacementID := replacements[0].RemoteSession.ID
 							require.NotEqual(t, sessions[0].RemoteSession.ID, replacementID, "a new source requires explicit reattachment")
 						}
 						if state == "same_source_new_generation" {
 							// Same-row reconnect intentionally retains the attachment. Use the
 							// callback's normal upsert, not an invented stale-binding rule.
 							insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, owner, "reconnected-owner-connection", upstream.url)
-							var generation int64
-							require.NoError(t, ti.conn.QueryRow(ctx, "SELECT grant_generation FROM remote_sessions WHERE id=$1", sessions[0].RemoteSession.ID).Scan(&generation))
+							reconnected, err := q.GetRemoteSessionByID(ctx, remotesessionsrepo.GetRemoteSessionByIDParams{ID: sessions[0].RemoteSession.ID, ProjectID: projectID, OrganizationID: ac.ActiveOrganizationID})
+							require.NoError(t, err)
+							generation := reconnected.GrantGeneration
 							require.Equal(t, sessions[0].RemoteSession.GrantGeneration+1, generation)
 						}
 					}
@@ -182,22 +206,34 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 				// Direct lifecycle invalidation fixtures; serving must never repair them.
 				switch state {
 				case "disabled_typed_client":
-					var authClientID uuid.UUID
-					require.NoError(t, ti.conn.QueryRow(ctx, "SELECT ac.id FROM mcp_auth_clients ac JOIN mcp_server_auth_clients link ON link.auth_client_id=ac.id AND link.organization_id=ac.organization_id WHERE ac.organization_id=$1 AND link.mcp_server_id=$2 AND NOT ac.deleted AND NOT link.deleted", ac.ActiveOrganizationID, serverID).Scan(&authClientID))
-					_, err := authclientsrepo.New(ti.conn).UpdateAuthClient(ctx, authclientsrepo.UpdateAuthClientParams{ID: authClientID, OrganizationID: ac.ActiveOrganizationID, Name: "Disabled regression client", Enabled: false})
+					clients, err := authclientsrepo.New(ti.conn).ListServerAuthClients(ctx, authclientsrepo.ListServerAuthClientsParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: projectID, McpServerID: serverID})
+					require.NoError(t, err)
+					require.Len(t, clients, 1)
+					_, err = authclientsrepo.New(ti.conn).UpdateAuthClient(ctx, authclientsrepo.UpdateAuthClientParams{ID: clients[0].ID, OrganizationID: ac.ActiveOrganizationID, Name: "Disabled regression client", Enabled: false})
 					require.NoError(t, err)
 				case "deleted_client":
 					n, err := remotesessionsrepo.New(ti.conn).SoftDeleteRemoteSessionClientFixture(ctx, clientID)
 					require.NoError(t, err)
 					require.EqualValues(t, 1, n)
 				case "disabled_agent":
-					n, err := ti.conn.Exec(ctx, "UPDATE agents SET suspended_at=clock_timestamp() WHERE id=$1", fx.agent.ID)
+					n, err := testrepo.New(ti.conn).SuspendAttachmentAgentFixture(ctx, testrepo.SuspendAttachmentAgentFixtureParams{ID: fx.agent.ID, OrganizationID: ac.ActiveOrganizationID})
 					require.NoError(t, err)
-					require.EqualValues(t, 1, n.RowsAffected())
+					require.EqualValues(t, 1, n)
 				case "removed_agent_grant":
-					n, err := ti.conn.Exec(ctx, "DELETE FROM principal_grants WHERE organization_id=$1 AND principal_urn=$2 AND scope='mcp:connect'", ac.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, fx.agent.ID.String()).String())
+					q := agentsrepo.New(ti.conn)
+					grants, err := q.ListAgentPolicyGrants(ctx, agentsrepo.ListAgentPolicyGrantsParams{OrganizationID: ac.ActiveOrganizationID, AgentID: fx.agent.ID})
 					require.NoError(t, err)
-					require.EqualValues(t, 1, n.RowsAffected())
+					removed := 0
+					for _, grant := range grants {
+						if grant.Scope != string(authz.ScopeMCPConnect) {
+							continue
+						}
+						deleted, err := q.DeleteAgentPolicyGrant(ctx, agentsrepo.DeleteAgentPolicyGrantParams{OrganizationID: ac.ActiveOrganizationID, AgentID: fx.agent.ID, GrantID: grant.ID})
+						require.NoError(t, err)
+						require.Equal(t, grant.ID, deleted.ID)
+						removed++
+					}
+					require.Equal(t, 1, removed)
 				case "owner_block":
 					// Connection-owner blocks are mcp:blocked_auth on the agent,
 					// not an effect=deny mutation to the owner's mcp:connect grant.
@@ -232,8 +268,8 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 					require.True(t, inserted)
 				}
 				snapshot := func() string {
-					var value string
-					require.NoError(t, ti.conn.QueryRow(ctx, "SELECT jsonb_build_object('bindings', (SELECT jsonb_agg(to_jsonb(b) ORDER BY b.id) FROM principal_remote_session_bindings b WHERE principal_id=$1), 'agent', (SELECT to_jsonb(a) FROM agents a WHERE id=$1), 'grants', (SELECT jsonb_agg(to_jsonb(g) ORDER BY g.id) FROM principal_grants g), 'sessions', (SELECT jsonb_agg(jsonb_build_array(s.id,s.grant_generation,s.deleted) ORDER BY s.id) FROM remote_sessions s))::text", fx.agent.ID).Scan(&value))
+					value, err := fixturerepo.New(ti.conn).SnapshotAgentMemberAuthority(ctx, fx.agent.ID)
+					require.NoError(t, err)
 					return value
 				}
 				before := snapshot()
@@ -249,7 +285,7 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 				}
 				// Connection-owner policy remains connect-equivalent: only enforced
 				// mode applies typed-client enablement and mcp:blocked_auth.
-				allowed := state == "live" || state == "same_source_new_generation" || state == "noauth" || state == "shared_static_client" || state == "shared_oauth_registration" || ((state == "owner_block" || state == "disabled_typed_client" || state == "legacy_static_client") && mode != "enforced")
+				allowed := state == "sibling_issuer_client" || state == "live" || state == "same_source_new_generation" || state == "noauth" || state == "shared_static_client" || state == "shared_oauth_registration" || ((state == "owner_block" || state == "disabled_typed_client" || state == "legacy_static_client") && mode != "enforced")
 				if allowed {
 					require.NoError(t, callErr)
 					require.Equal(t, http.StatusOK, response.Code)
@@ -299,23 +335,15 @@ func issueMemberAuthRegressionKey(t *testing.T, ctx context.Context, ti *testIns
 	audience := authclients.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.audit, ti.enc)
 	agents := agentmanagement.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.audit, nil, nil)
 	requested := []*keysgen.AgentPolicyGrantForm{{Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &keysgen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: serverID.String(), ProjectID: &projectID}}}
-	rows, err := ti.conn.Query(ctx, "SELECT auth_client_id FROM mcp_server_auth_clients WHERE organization_id=$1 AND mcp_server_id=$2 AND NOT deleted", ac.ActiveOrganizationID, serverID)
+	clients, err := authclientsrepo.New(ti.conn).ListServerAuthClients(ctx, authclientsrepo.ListServerAuthClientsParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, McpServerID: serverID})
 	require.NoError(t, err)
-	var clients []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		require.NoError(t, rows.Scan(&id))
-		clients = append(clients, id)
-	}
-	require.NoError(t, rows.Err())
-	rows.Close()
-	for _, id := range clients {
+	for _, client := range clients {
+		id := client.ID
 		current, err := audience.GetAuthClientAudience(ctx, &authclientsgen.GetAuthClientAudiencePayload{ID: id.String()})
 		require.NoError(t, err)
 		_, err = audience.SetAuthClientAudience(ctx, &authclientsgen.SetAuthClientAudiencePayload{ID: id.String(), ExpectedVersion: current.Version, Entries: []*authclientsgen.AuthClientAudienceRule{{PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID).String(), Level: authclients.LevelUse}}})
 		require.NoError(t, err)
-		var clientType string
-		require.NoError(t, ti.conn.QueryRow(ctx, "SELECT client_type FROM mcp_auth_clients WHERE id=$1", id).Scan(&clientType))
+		clientType := client.ClientType
 		var owner *string
 		if clientType == authz.AuthClientTypeRemoteSession {
 			owner = new(authz.SelectorValueRepresentedUser)
