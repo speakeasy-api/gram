@@ -87,16 +87,14 @@ it("initializes Elements collection with the production environment alias", asyn
 });
 
 it.each(["dev", "staging"])(
-  "does not send Elements errors with an explicit %s environment",
+  "uses the production host rather than the %s telemetry label to enable Elements collection",
   async (env) => {
     vi.mocked(getServerURL).mockReturnValue("https://app.getgram.ai");
     vi.stubEnv("VITE_DATADOG_ENV", env);
-    const { initErrorTracking, trackError, isErrorTrackingEnabled } =
-      await import("@/elements/lib/errorTracking");
+    const { initErrorTracking } = await import("@/elements/lib/errorTracking");
     initErrorTracking();
-    trackError(new Error("test error"), { source: "custom" });
-    expect(datadogRum.init).not.toHaveBeenCalled();
-    expect(datadogRum.addError).not.toHaveBeenCalled();
-    expect(isErrorTrackingEnabled()).toBe(false);
+    expect(datadogRum.init).toHaveBeenCalledWith(
+      expect.objectContaining({ env, sessionSampleRate: 100 }),
+    );
   },
 );

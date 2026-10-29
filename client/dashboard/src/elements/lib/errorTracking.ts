@@ -23,10 +23,7 @@ export interface ErrorContext {
  */
 export function initErrorTracking(config: ErrorTrackingConfig = {}): void {
   // Only collect production sessions, even when a preview has RUM credentials.
-  if (
-    !isProdHost(getServerURL()) ||
-    !["prod", "production"].includes(DATADOG_CONFIG.env)
-  ) {
+  if (!isProdHost(getServerURL())) {
     enabled = false;
     return;
   }
