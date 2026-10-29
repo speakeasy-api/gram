@@ -404,3 +404,148 @@ func BuildGetCoveragePayload(deviceIntegrationsGetCoverageProvider string, devic
 
 	return v, nil
 }
+
+// BuildListFleetDevicesPayload builds the payload for the deviceIntegrations
+// listFleetDevices endpoint from CLI flags.
+func BuildListFleetDevicesPayload(deviceIntegrationsListFleetDevicesProvider string, deviceIntegrationsListFleetDevicesInInventory string, deviceIntegrationsListFleetDevicesCoverageBucket string, deviceIntegrationsListFleetDevicesPolicyState string, deviceIntegrationsListFleetDevicesUserIds string, deviceIntegrationsListFleetDevicesUserEmails string, deviceIntegrationsListFleetDevicesCursor string, deviceIntegrationsListFleetDevicesLimit string, deviceIntegrationsListFleetDevicesApikeyToken string, deviceIntegrationsListFleetDevicesSessionToken string) (*deviceintegrations.ListFleetDevicesPayload, error) {
+	var err error
+	var provider *string
+	{
+		if deviceIntegrationsListFleetDevicesProvider != "" {
+			provider = &deviceIntegrationsListFleetDevicesProvider
+		}
+	}
+	var inInventory *bool
+	{
+		if deviceIntegrationsListFleetDevicesInInventory != "" {
+			var val bool
+			val, err = strconv.ParseBool(deviceIntegrationsListFleetDevicesInInventory)
+			inInventory = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for inInventory, must be BOOL")
+			}
+		}
+	}
+	var coverageBucket *string
+	{
+		if deviceIntegrationsListFleetDevicesCoverageBucket != "" {
+			coverageBucket = &deviceIntegrationsListFleetDevicesCoverageBucket
+			if !(*coverageBucket == "agent_active" || *coverageBucket == "agent_stale" || *coverageBucket == "agent_other_device" || *coverageBucket == "no_agent" || *coverageBucket == "no_email" || *coverageBucket == "unresolved_email" || *coverageBucket == "missing") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("coverage_bucket", *coverageBucket, []any{"agent_active", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var policyState *string
+	{
+		if deviceIntegrationsListFleetDevicesPolicyState != "" {
+			policyState = &deviceIntegrationsListFleetDevicesPolicyState
+			if !(*policyState == "attested" || *policyState == "outdated" || *policyState == "unreported" || *policyState == "halted") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("policy_state", *policyState, []any{"attested", "outdated", "unreported", "halted"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var userIds []string
+	{
+		if deviceIntegrationsListFleetDevicesUserIds != "" {
+			err = json.Unmarshal([]byte(deviceIntegrationsListFleetDevicesUserIds), &userIds)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for userIds, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+			}
+		}
+	}
+	var userEmails []string
+	{
+		if deviceIntegrationsListFleetDevicesUserEmails != "" {
+			err = json.Unmarshal([]byte(deviceIntegrationsListFleetDevicesUserEmails), &userEmails)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for userEmails, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+			}
+		}
+	}
+	var cursor *string
+	{
+		if deviceIntegrationsListFleetDevicesCursor != "" {
+			cursor = &deviceIntegrationsListFleetDevicesCursor
+		}
+	}
+	var limit int
+	{
+		if deviceIntegrationsListFleetDevicesLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(deviceIntegrationsListFleetDevicesLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if deviceIntegrationsListFleetDevicesApikeyToken != "" {
+			apikeyToken = &deviceIntegrationsListFleetDevicesApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if deviceIntegrationsListFleetDevicesSessionToken != "" {
+			sessionToken = &deviceIntegrationsListFleetDevicesSessionToken
+		}
+	}
+	v := &deviceintegrations.ListFleetDevicesPayload{}
+	v.Provider = provider
+	v.InInventory = inInventory
+	v.CoverageBucket = coverageBucket
+	v.PolicyState = policyState
+	v.UserIds = userIds
+	v.UserEmails = userEmails
+	v.Cursor = cursor
+	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetFleetCoveragePayload builds the payload for the deviceIntegrations
+// getFleetCoverage endpoint from CLI flags.
+func BuildGetFleetCoveragePayload(deviceIntegrationsGetFleetCoverageProvider string, deviceIntegrationsGetFleetCoverageApikeyToken string, deviceIntegrationsGetFleetCoverageSessionToken string) (*deviceintegrations.GetFleetCoveragePayload, error) {
+	var provider *string
+	{
+		if deviceIntegrationsGetFleetCoverageProvider != "" {
+			provider = &deviceIntegrationsGetFleetCoverageProvider
+		}
+	}
+	var apikeyToken *string
+	{
+		if deviceIntegrationsGetFleetCoverageApikeyToken != "" {
+			apikeyToken = &deviceIntegrationsGetFleetCoverageApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if deviceIntegrationsGetFleetCoverageSessionToken != "" {
+			sessionToken = &deviceIntegrationsGetFleetCoverageSessionToken
+		}
+	}
+	v := &deviceintegrations.GetFleetCoveragePayload{}
+	v.Provider = provider
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}

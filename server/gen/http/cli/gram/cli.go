@@ -142,7 +142,7 @@ func UsageCommands() []string {
 		"dashboards (list-dashboards|get-dashboard|create-dashboard|update-dashboard|save-dashboard-layout|add-dashboard-widget|remove-dashboard-widget|save-dashboard-filters|duplicate-dashboard|duplicate-built-in-dashboard|delete-dashboard)",
 		"data-exports (list-destinations|list-for-org|create-destination|update-destination|delete-destination|list-routes|create-route|update-route|delete-route)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs|evaluate-open-ap-iv3|get-deployment-evaluation)",
-		"device-integrations (list-providers|get-config|upsert-config|delete-config|test-connection|list-schedules|set-schedule-enabled|retry-schedule|list-managed-devices|get-coverage)",
+		"device-integrations (list-providers|get-config|upsert-config|delete-config|test-connection|list-schedules|set-schedule-enabled|retry-schedule|list-managed-devices|get-coverage|list-fleet-devices|get-fleet-coverage)",
 		"domains (get-domain|list-domains|create-domain|update-domain|set-root-mcp-endpoint|list-root-mcp-servers|check-health|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
 		"external-credentials (create-aws-iam-credential|update-aws-iam-credential|create-gcp-iam-credential|update-gcp-iam-credential|list-external-credentials|list-aws-iam-credentials|list-gcp-iam-credentials|get-aws-iam-credential|get-gcp-iam-credential|verify-gcp-iam-credential|get-gcp-setup-info|delete-aws-iam-credential|delete-gcp-iam-credential)",
@@ -1418,6 +1418,23 @@ func ParseEndpoint(
 		deviceIntegrationsGetCoverageProviderFlag     = deviceIntegrationsGetCoverageFlags.String("provider", "", "")
 		deviceIntegrationsGetCoverageApikeyTokenFlag  = deviceIntegrationsGetCoverageFlags.String("apikey-token", "", "")
 		deviceIntegrationsGetCoverageSessionTokenFlag = deviceIntegrationsGetCoverageFlags.String("session-token", "", "")
+
+		deviceIntegrationsListFleetDevicesFlags              = flag.NewFlagSet("list-fleet-devices", flag.ExitOnError)
+		deviceIntegrationsListFleetDevicesProviderFlag       = deviceIntegrationsListFleetDevicesFlags.String("provider", "", "")
+		deviceIntegrationsListFleetDevicesInInventoryFlag    = deviceIntegrationsListFleetDevicesFlags.String("in-inventory", "", "")
+		deviceIntegrationsListFleetDevicesCoverageBucketFlag = deviceIntegrationsListFleetDevicesFlags.String("coverage-bucket", "", "")
+		deviceIntegrationsListFleetDevicesPolicyStateFlag    = deviceIntegrationsListFleetDevicesFlags.String("policy-state", "", "")
+		deviceIntegrationsListFleetDevicesUserIdsFlag        = deviceIntegrationsListFleetDevicesFlags.String("user-ids", "", "")
+		deviceIntegrationsListFleetDevicesUserEmailsFlag     = deviceIntegrationsListFleetDevicesFlags.String("user-emails", "", "")
+		deviceIntegrationsListFleetDevicesCursorFlag         = deviceIntegrationsListFleetDevicesFlags.String("cursor", "", "")
+		deviceIntegrationsListFleetDevicesLimitFlag          = deviceIntegrationsListFleetDevicesFlags.String("limit", "50", "")
+		deviceIntegrationsListFleetDevicesApikeyTokenFlag    = deviceIntegrationsListFleetDevicesFlags.String("apikey-token", "", "")
+		deviceIntegrationsListFleetDevicesSessionTokenFlag   = deviceIntegrationsListFleetDevicesFlags.String("session-token", "", "")
+
+		deviceIntegrationsGetFleetCoverageFlags            = flag.NewFlagSet("get-fleet-coverage", flag.ExitOnError)
+		deviceIntegrationsGetFleetCoverageProviderFlag     = deviceIntegrationsGetFleetCoverageFlags.String("provider", "", "")
+		deviceIntegrationsGetFleetCoverageApikeyTokenFlag  = deviceIntegrationsGetFleetCoverageFlags.String("apikey-token", "", "")
+		deviceIntegrationsGetFleetCoverageSessionTokenFlag = deviceIntegrationsGetFleetCoverageFlags.String("session-token", "", "")
 
 		domainsFlags = flag.NewFlagSet("domains", flag.ContinueOnError)
 
@@ -5679,6 +5696,8 @@ func ParseEndpoint(
 	deviceIntegrationsRetryScheduleFlags.Usage = deviceIntegrationsRetryScheduleUsage
 	deviceIntegrationsListManagedDevicesFlags.Usage = deviceIntegrationsListManagedDevicesUsage
 	deviceIntegrationsGetCoverageFlags.Usage = deviceIntegrationsGetCoverageUsage
+	deviceIntegrationsListFleetDevicesFlags.Usage = deviceIntegrationsListFleetDevicesUsage
+	deviceIntegrationsGetFleetCoverageFlags.Usage = deviceIntegrationsGetFleetCoverageUsage
 
 	domainsFlags.Usage = domainsUsage
 	domainsGetDomainFlags.Usage = domainsGetDomainUsage
@@ -7521,6 +7540,12 @@ func ParseEndpoint(
 
 			case "get-coverage":
 				epf = deviceIntegrationsGetCoverageFlags
+
+			case "list-fleet-devices":
+				epf = deviceIntegrationsListFleetDevicesFlags
+
+			case "get-fleet-coverage":
+				epf = deviceIntegrationsGetFleetCoverageFlags
 
 			}
 
@@ -10802,6 +10827,12 @@ func ParseEndpoint(
 			case "get-coverage":
 				endpoint = c.GetCoverage()
 				data, err = deviceintegrationsc.BuildGetCoveragePayload(*deviceIntegrationsGetCoverageProviderFlag, *deviceIntegrationsGetCoverageApikeyTokenFlag, *deviceIntegrationsGetCoverageSessionTokenFlag)
+			case "list-fleet-devices":
+				endpoint = c.ListFleetDevices()
+				data, err = deviceintegrationsc.BuildListFleetDevicesPayload(*deviceIntegrationsListFleetDevicesProviderFlag, *deviceIntegrationsListFleetDevicesInInventoryFlag, *deviceIntegrationsListFleetDevicesCoverageBucketFlag, *deviceIntegrationsListFleetDevicesPolicyStateFlag, *deviceIntegrationsListFleetDevicesUserIdsFlag, *deviceIntegrationsListFleetDevicesUserEmailsFlag, *deviceIntegrationsListFleetDevicesCursorFlag, *deviceIntegrationsListFleetDevicesLimitFlag, *deviceIntegrationsListFleetDevicesApikeyTokenFlag, *deviceIntegrationsListFleetDevicesSessionTokenFlag)
+			case "get-fleet-coverage":
+				endpoint = c.GetFleetCoverage()
+				data, err = deviceintegrationsc.BuildGetFleetCoveragePayload(*deviceIntegrationsGetFleetCoverageProviderFlag, *deviceIntegrationsGetFleetCoverageApikeyTokenFlag, *deviceIntegrationsGetFleetCoverageSessionTokenFlag)
 			}
 		case "domains":
 			c := domainsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -18357,6 +18388,8 @@ func deviceIntegrationsUsage() {
 	fmt.Fprintln(os.Stderr, `    retry-schedule: Make one sync schedule due immediately, lifting any automatic pause and resetting its failure streak.`)
 	fmt.Fprintln(os.Stderr, `    list-managed-devices: Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.`)
 	fmt.Fprintln(os.Stderr, `    get-coverage: Summarize agent coverage across the org's connected MDM inventories, optionally scoped to one provider.`)
+	fmt.Fprintln(os.Stderr, `    list-fleet-devices: Page through every device the org can see, newest first: its connected MDM inventories plus the machines running the agent that no inventory holds, each with its coverage bucket and policy state.`)
+	fmt.Fprintln(os.Stderr, `    get-fleet-coverage: Summarize agent coverage and policy enforcement across every device the org can see, with or without a connected MDM, optionally scoped to one provider's inventory.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s device-integrations COMMAND --help\n", os.Args[0])
@@ -18589,6 +18622,64 @@ func deviceIntegrationsGetCoverageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations get-coverage --provider \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func deviceIntegrationsListFleetDevicesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations list-fleet-devices", os.Args[0])
+	fmt.Fprint(os.Stderr, " -provider STRING")
+	fmt.Fprint(os.Stderr, " -in-inventory BOOL")
+	fmt.Fprint(os.Stderr, " -coverage-bucket STRING")
+	fmt.Fprint(os.Stderr, " -policy-state STRING")
+	fmt.Fprint(os.Stderr, " -user-ids JSON")
+	fmt.Fprint(os.Stderr, " -user-emails JSON")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Page through every device the org can see, newest first: its connected MDM inventories plus the machines running the agent that no inventory holds, each with its coverage bucket and policy state.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
+	fmt.Fprintln(os.Stderr, `    -in-inventory BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -coverage-bucket STRING: `)
+	fmt.Fprintln(os.Stderr, `    -policy-state STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-ids JSON: `)
+	fmt.Fprintln(os.Stderr, `    -user-emails JSON: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations list-fleet-devices --provider \"abc123\" --in-inventory false --coverage-bucket \"agent_stale\" --policy-state \"outdated\" --user-ids '[\n      \"abc123\"\n   ]' --user-emails '[\n      \"abc123\"\n   ]' --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func deviceIntegrationsGetFleetCoverageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations get-fleet-coverage", os.Args[0])
+	fmt.Fprint(os.Stderr, " -provider STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Summarize agent coverage and policy enforcement across every device the org can see, with or without a connected MDM, optionally scoped to one provider's inventory.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations get-fleet-coverage --provider \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 // domainsUsage displays the usage of the domains command and its subcommands.

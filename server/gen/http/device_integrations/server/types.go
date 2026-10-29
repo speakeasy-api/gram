@@ -256,6 +256,69 @@ type GetCoverageResponseBody struct {
 	EnforcementHalted int64 `form:"enforcement_halted" json:"enforcement_halted" xml:"enforcement_halted"`
 }
 
+// ListFleetDevicesResponseBody is the type of the "deviceIntegrations" service
+// "listFleetDevices" endpoint HTTP response body.
+type ListFleetDevicesResponseBody struct {
+	// Devices, newest first.
+	Devices []*FleetDeviceResponseBody `form:"devices" json:"devices" xml:"devices"`
+	// Cursor for the next page. Omitted on the last page.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetFleetCoverageResponseBody is the type of the "deviceIntegrations" service
+// "getFleetCoverage" endpoint HTTP response body.
+type GetFleetCoverageResponseBody struct {
+	// Organization the coverage describes.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Freshness window: an agent counts as active when its heartbeat or state
+	// report is within this many minutes.
+	ActiveWindowMinutes int `form:"active_window_minutes" json:"active_window_minutes" xml:"active_window_minutes"`
+	// True when the organization has a connected MDM integration (the one named by
+	// provider, when set). Without one, the gap buckets are always 0 because
+	// nothing lists the devices that lack the agent.
+	MdmConnected bool `form:"mdm_connected" json:"mdm_connected" xml:"mdm_connected"`
+	// device when every active device was matched on its own hardware serial, user
+	// when at least one counts only because its assigned user runs the agent
+	// somewhere.
+	Attestation string `form:"attestation" json:"attestation" xml:"attestation"`
+	// Devices with an agent heartbeat or state report within the window,
+	// agent-only machines included.
+	AgentActive int64 `form:"agent_active" json:"agent_active" xml:"agent_active"`
+	// How many of agent_active are backed by that machine's own heartbeat or state
+	// report.
+	AgentActiveDeviceAttested int64 `form:"agent_active_device_attested" json:"agent_active_device_attested" xml:"agent_active_device_attested"`
+	// Devices with a known agent that went quiet.
+	AgentStale int64 `form:"agent_stale" json:"agent_stale" xml:"agent_stale"`
+	// MDM devices whose assigned user runs the agent, but not on this machine.
+	// Device-level matching only.
+	AgentOtherDevice int64 `form:"agent_other_device" json:"agent_other_device" xml:"agent_other_device"`
+	// MDM devices whose assigned email resolves to an org member with no agent at
+	// all.
+	NoAgent int64 `form:"no_agent" json:"no_agent" xml:"no_agent"`
+	// MDM devices with no assigned-user email.
+	NoEmail int64 `form:"no_email" json:"no_email" xml:"no_email"`
+	// MDM devices whose assigned email matches neither an agent user nor an org
+	// member.
+	UnresolvedEmail int64 `form:"unresolved_email" json:"unresolved_email" xml:"unresolved_email"`
+	// MDM devices absent from the latest completed inventory snapshot.
+	Missing int64 `form:"missing" json:"missing" xml:"missing"`
+	// Machines running the agent that no connected MDM inventory holds. Always 0
+	// when provider is set.
+	AgentOnlyDevices int64 `form:"agent_only_devices" json:"agent_only_devices" xml:"agent_only_devices"`
+	// Every device counted here, missing and agent-only ones included.
+	TotalDevices int64 `form:"total_devices" json:"total_devices" xml:"total_devices"`
+	// agent_active devices whose latest report applies the policy last served to
+	// the reporting user.
+	PolicyAttested int64 `form:"policy_attested" json:"policy_attested" xml:"policy_attested"`
+	// agent_active devices that report a different policy, or none.
+	PolicyOutdated int64 `form:"policy_outdated" json:"policy_outdated" xml:"policy_outdated"`
+	// agent_active devices with no state report within the window.
+	PolicyUnreported int64 `form:"policy_unreported" json:"policy_unreported" xml:"policy_unreported"`
+	// agent_active devices whose latest state report says the kill switch halted
+	// enforcement.
+	EnforcementHalted int64 `form:"enforcement_halted" json:"enforcement_halted" xml:"enforcement_halted"`
+}
+
 // ListProvidersUnauthorizedResponseBody is the type of the
 // "deviceIntegrations" service "listProviders" endpoint HTTP response body for
 // the "unauthorized" error.
@@ -2129,6 +2192,386 @@ type GetCoverageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListFleetDevicesUnauthorizedResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "unauthorized" error.
+type ListFleetDevicesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesForbiddenResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "forbidden" error.
+type ListFleetDevicesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesBadRequestResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "bad_request" error.
+type ListFleetDevicesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesNotFoundResponseBody is the type of the "deviceIntegrations"
+// service "listFleetDevices" endpoint HTTP response body for the "not_found"
+// error.
+type ListFleetDevicesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesConflictResponseBody is the type of the "deviceIntegrations"
+// service "listFleetDevices" endpoint HTTP response body for the "conflict"
+// error.
+type ListFleetDevicesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesUnsupportedMediaResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ListFleetDevicesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesInvalidResponseBody is the type of the "deviceIntegrations"
+// service "listFleetDevices" endpoint HTTP response body for the "invalid"
+// error.
+type ListFleetDevicesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesInvariantViolationResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "invariant_violation" error.
+type ListFleetDevicesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesUnexpectedResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "unexpected" error.
+type ListFleetDevicesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFleetDevicesGatewayErrorResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "gateway_error" error.
+type ListFleetDevicesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageUnauthorizedResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetFleetCoverageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageForbiddenResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "forbidden" error.
+type GetFleetCoverageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageBadRequestResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "bad_request" error.
+type GetFleetCoverageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageNotFoundResponseBody is the type of the "deviceIntegrations"
+// service "getFleetCoverage" endpoint HTTP response body for the "not_found"
+// error.
+type GetFleetCoverageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageConflictResponseBody is the type of the "deviceIntegrations"
+// service "getFleetCoverage" endpoint HTTP response body for the "conflict"
+// error.
+type GetFleetCoverageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageUnsupportedMediaResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetFleetCoverageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageInvalidResponseBody is the type of the "deviceIntegrations"
+// service "getFleetCoverage" endpoint HTTP response body for the "invalid"
+// error.
+type GetFleetCoverageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageInvariantViolationResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetFleetCoverageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageUnexpectedResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "unexpected" error.
+type GetFleetCoverageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetFleetCoverageGatewayErrorResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetFleetCoverageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeviceIntegrationProviderResponseBody is used to define fields on response
 // body types.
 type DeviceIntegrationProviderResponseBody struct {
@@ -2326,6 +2769,62 @@ type ManagedDeviceRollbackResponseBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 }
 
+// FleetDeviceResponseBody is used to define fields on response body types.
+type FleetDeviceResponseBody struct {
+	// Stable device ID: mdm:<uuid> for an MDM device, agent:<uuid> for an
+	// agent-only machine.
+	ID string `form:"id" json:"id" xml:"id"`
+	// True when a connected MDM's inventory holds this device. False for a machine
+	// only its agent reports.
+	InInventory bool `form:"in_inventory" json:"in_inventory" xml:"in_inventory"`
+	// Provider the device was synced from. Omitted for an agent-only machine.
+	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// The MDM's identifier for the device. Omitted for an agent-only machine.
+	ExternalID *string `form:"external_id,omitempty" json:"external_id,omitempty" xml:"external_id,omitempty"`
+	// Hardware serial number, from the MDM or the agent. Omitted when neither
+	// reported one.
+	SerialNumber *string `form:"serial_number,omitempty" json:"serial_number,omitempty" xml:"serial_number,omitempty"`
+	// Device hostname, from the MDM or the agent.
+	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// Operating system name as the MDM reports it. Omitted for an agent-only
+	// machine; agent_state.os carries the agent's.
+	OsName *string `form:"os_name,omitempty" json:"os_name,omitempty" xml:"os_name,omitempty"`
+	// Operating system version as the MDM reports it.
+	OsVersion *string `form:"os_version,omitempty" json:"os_version,omitempty" xml:"os_version,omitempty"`
+	// The MDM's assigned user, or for an agent-only machine the user its agent
+	// runs as.
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Resolved Speakeasy user for user_email. Omitted when it does not resolve to
+	// an org member.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// Last device check-in as reported by the MDM.
+	MdmLastCheckInAt *string `form:"mdm_last_check_in_at,omitempty" json:"mdm_last_check_in_at,omitempty" xml:"mdm_last_check_in_at,omitempty"`
+	// The latest sign of life that classified this device, a policy poll or a
+	// state report. Omitted when no agent has ever synced.
+	AgentLastSeenAt *string `form:"agent_last_seen_at,omitempty" json:"agent_last_seen_at,omitempty" xml:"agent_last_seen_at,omitempty"`
+	// Coverage classification for the device. An agent-only machine is
+	// agent_active or agent_stale.
+	CoverageBucket string `form:"coverage_bucket" json:"coverage_bucket" xml:"coverage_bucket"`
+	// When the device went absent from the MDM inventory. Omitted while present,
+	// and for an agent-only machine.
+	MissingSince *string `form:"missing_since,omitempty" json:"missing_since,omitempty" xml:"missing_since,omitempty"`
+	// Whether the agent that answers for an agent_active device verifiably applies
+	// its policy; agent_state.attestation says whether that agent runs on this
+	// machine. attested: its latest report applies the policy last served to the
+	// reporting user. outdated: it reports a different policy, or none.
+	// unreported: no report within the window, from an agent that predates
+	// reporting or has stopped sending. halted: the reporting agent's kill switch
+	// stopped enforcement on a blocked build. Omitted for every other bucket.
+	PolicyState *string `form:"policy_state,omitempty" json:"policy_state,omitempty" xml:"policy_state,omitempty"`
+	// The latest state report that classified this device. Omitted when its agent
+	// has never reported.
+	AgentState *ManagedDeviceAgentStateResponseBody `form:"agent_state,omitempty" json:"agent_state,omitempty" xml:"agent_state,omitempty"`
+	// When the MDM or the agent first reported this device.
+	FirstSeenAt string `form:"first_seen_at" json:"first_seen_at" xml:"first_seen_at"`
+	// When the MDM or the agent last reported this device.
+	LastSeenAt string `form:"last_seen_at" json:"last_seen_at" xml:"last_seen_at"`
+}
+
 // NewListProvidersResponseBody builds the HTTP response body from the result
 // of the "listProviders" endpoint of the "deviceIntegrations" service.
 func NewListProvidersResponseBody(res *deviceintegrations.ListDeviceIntegrationProvidersResult) *ListProvidersResponseBody {
@@ -2497,6 +2996,55 @@ func NewGetCoverageResponseBody(res *deviceintegrations.DeviceIntegrationCoverag
 		Missing:                   res.Missing,
 		TotalDevices:              res.TotalDevices,
 		UnmanagedAgentUsers:       res.UnmanagedAgentUsers,
+		PolicyAttested:            res.PolicyAttested,
+		PolicyOutdated:            res.PolicyOutdated,
+		PolicyUnreported:          res.PolicyUnreported,
+		EnforcementHalted:         res.EnforcementHalted,
+	}
+	return body
+}
+
+// NewListFleetDevicesResponseBody builds the HTTP response body from the
+// result of the "listFleetDevices" endpoint of the "deviceIntegrations"
+// service.
+func NewListFleetDevicesResponseBody(res *deviceintegrations.ListFleetDevicesResult) *ListFleetDevicesResponseBody {
+	body := &ListFleetDevicesResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Devices != nil {
+		body.Devices = make([]*FleetDeviceResponseBody, len(res.Devices))
+		for i, val := range res.Devices {
+			if val == nil {
+				body.Devices[i] = nil
+				continue
+			}
+			body.Devices[i] = marshalDeviceintegrationsFleetDeviceToFleetDeviceResponseBody(val)
+		}
+	} else {
+		body.Devices = []*FleetDeviceResponseBody{}
+	}
+	return body
+}
+
+// NewGetFleetCoverageResponseBody builds the HTTP response body from the
+// result of the "getFleetCoverage" endpoint of the "deviceIntegrations"
+// service.
+func NewGetFleetCoverageResponseBody(res *deviceintegrations.FleetCoverage) *GetFleetCoverageResponseBody {
+	body := &GetFleetCoverageResponseBody{
+		OrganizationID:            res.OrganizationID,
+		ActiveWindowMinutes:       res.ActiveWindowMinutes,
+		MdmConnected:              res.MdmConnected,
+		Attestation:               res.Attestation,
+		AgentActive:               res.AgentActive,
+		AgentActiveDeviceAttested: res.AgentActiveDeviceAttested,
+		AgentStale:                res.AgentStale,
+		AgentOtherDevice:          res.AgentOtherDevice,
+		NoAgent:                   res.NoAgent,
+		NoEmail:                   res.NoEmail,
+		UnresolvedEmail:           res.UnresolvedEmail,
+		Missing:                   res.Missing,
+		AgentOnlyDevices:          res.AgentOnlyDevices,
+		TotalDevices:              res.TotalDevices,
 		PolicyAttested:            res.PolicyAttested,
 		PolicyOutdated:            res.PolicyOutdated,
 		PolicyUnreported:          res.PolicyUnreported,
@@ -3961,6 +4509,306 @@ func NewGetCoverageGatewayErrorResponseBody(res *goa.ServiceError) *GetCoverageG
 	return body
 }
 
+// NewListFleetDevicesUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listFleetDevices" endpoint of the
+// "deviceIntegrations" service.
+func NewListFleetDevicesUnauthorizedResponseBody(res *goa.ServiceError) *ListFleetDevicesUnauthorizedResponseBody {
+	body := &ListFleetDevicesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesForbiddenResponseBody builds the HTTP response body from
+// the result of the "listFleetDevices" endpoint of the "deviceIntegrations"
+// service.
+func NewListFleetDevicesForbiddenResponseBody(res *goa.ServiceError) *ListFleetDevicesForbiddenResponseBody {
+	body := &ListFleetDevicesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesBadRequestResponseBody builds the HTTP response body from
+// the result of the "listFleetDevices" endpoint of the "deviceIntegrations"
+// service.
+func NewListFleetDevicesBadRequestResponseBody(res *goa.ServiceError) *ListFleetDevicesBadRequestResponseBody {
+	body := &ListFleetDevicesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesNotFoundResponseBody builds the HTTP response body from
+// the result of the "listFleetDevices" endpoint of the "deviceIntegrations"
+// service.
+func NewListFleetDevicesNotFoundResponseBody(res *goa.ServiceError) *ListFleetDevicesNotFoundResponseBody {
+	body := &ListFleetDevicesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesConflictResponseBody builds the HTTP response body from
+// the result of the "listFleetDevices" endpoint of the "deviceIntegrations"
+// service.
+func NewListFleetDevicesConflictResponseBody(res *goa.ServiceError) *ListFleetDevicesConflictResponseBody {
+	body := &ListFleetDevicesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listFleetDevices" endpoint of the
+// "deviceIntegrations" service.
+func NewListFleetDevicesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListFleetDevicesUnsupportedMediaResponseBody {
+	body := &ListFleetDevicesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesInvalidResponseBody builds the HTTP response body from
+// the result of the "listFleetDevices" endpoint of the "deviceIntegrations"
+// service.
+func NewListFleetDevicesInvalidResponseBody(res *goa.ServiceError) *ListFleetDevicesInvalidResponseBody {
+	body := &ListFleetDevicesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listFleetDevices" endpoint of the
+// "deviceIntegrations" service.
+func NewListFleetDevicesInvariantViolationResponseBody(res *goa.ServiceError) *ListFleetDevicesInvariantViolationResponseBody {
+	body := &ListFleetDevicesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listFleetDevices" endpoint of the "deviceIntegrations"
+// service.
+func NewListFleetDevicesUnexpectedResponseBody(res *goa.ServiceError) *ListFleetDevicesUnexpectedResponseBody {
+	body := &ListFleetDevicesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFleetDevicesGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listFleetDevices" endpoint of the
+// "deviceIntegrations" service.
+func NewListFleetDevicesGatewayErrorResponseBody(res *goa.ServiceError) *ListFleetDevicesGatewayErrorResponseBody {
+	body := &ListFleetDevicesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getFleetCoverage" endpoint of the
+// "deviceIntegrations" service.
+func NewGetFleetCoverageUnauthorizedResponseBody(res *goa.ServiceError) *GetFleetCoverageUnauthorizedResponseBody {
+	body := &GetFleetCoverageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageForbiddenResponseBody builds the HTTP response body from
+// the result of the "getFleetCoverage" endpoint of the "deviceIntegrations"
+// service.
+func NewGetFleetCoverageForbiddenResponseBody(res *goa.ServiceError) *GetFleetCoverageForbiddenResponseBody {
+	body := &GetFleetCoverageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageBadRequestResponseBody builds the HTTP response body from
+// the result of the "getFleetCoverage" endpoint of the "deviceIntegrations"
+// service.
+func NewGetFleetCoverageBadRequestResponseBody(res *goa.ServiceError) *GetFleetCoverageBadRequestResponseBody {
+	body := &GetFleetCoverageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageNotFoundResponseBody builds the HTTP response body from
+// the result of the "getFleetCoverage" endpoint of the "deviceIntegrations"
+// service.
+func NewGetFleetCoverageNotFoundResponseBody(res *goa.ServiceError) *GetFleetCoverageNotFoundResponseBody {
+	body := &GetFleetCoverageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageConflictResponseBody builds the HTTP response body from
+// the result of the "getFleetCoverage" endpoint of the "deviceIntegrations"
+// service.
+func NewGetFleetCoverageConflictResponseBody(res *goa.ServiceError) *GetFleetCoverageConflictResponseBody {
+	body := &GetFleetCoverageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getFleetCoverage" endpoint of the
+// "deviceIntegrations" service.
+func NewGetFleetCoverageUnsupportedMediaResponseBody(res *goa.ServiceError) *GetFleetCoverageUnsupportedMediaResponseBody {
+	body := &GetFleetCoverageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageInvalidResponseBody builds the HTTP response body from
+// the result of the "getFleetCoverage" endpoint of the "deviceIntegrations"
+// service.
+func NewGetFleetCoverageInvalidResponseBody(res *goa.ServiceError) *GetFleetCoverageInvalidResponseBody {
+	body := &GetFleetCoverageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getFleetCoverage" endpoint of the
+// "deviceIntegrations" service.
+func NewGetFleetCoverageInvariantViolationResponseBody(res *goa.ServiceError) *GetFleetCoverageInvariantViolationResponseBody {
+	body := &GetFleetCoverageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getFleetCoverage" endpoint of the "deviceIntegrations"
+// service.
+func NewGetFleetCoverageUnexpectedResponseBody(res *goa.ServiceError) *GetFleetCoverageUnexpectedResponseBody {
+	body := &GetFleetCoverageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetFleetCoverageGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getFleetCoverage" endpoint of the
+// "deviceIntegrations" service.
+func NewGetFleetCoverageGatewayErrorResponseBody(res *goa.ServiceError) *GetFleetCoverageGatewayErrorResponseBody {
+	body := &GetFleetCoverageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListProvidersPayload builds a deviceIntegrations service listProviders
 // endpoint payload.
 func NewListProvidersPayload(apikeyToken *string, sessionToken *string) *deviceintegrations.ListProvidersPayload {
@@ -4094,6 +4942,35 @@ func NewListManagedDevicesPayload(provider *string, coverageBucket *string, poli
 // endpoint payload.
 func NewGetCoveragePayload(provider *string, apikeyToken *string, sessionToken *string) *deviceintegrations.GetCoveragePayload {
 	v := &deviceintegrations.GetCoveragePayload{}
+	v.Provider = provider
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListFleetDevicesPayload builds a deviceIntegrations service
+// listFleetDevices endpoint payload.
+func NewListFleetDevicesPayload(provider *string, inInventory *bool, coverageBucket *string, policyState *string, userIds []string, userEmails []string, cursor *string, limit int, apikeyToken *string, sessionToken *string) *deviceintegrations.ListFleetDevicesPayload {
+	v := &deviceintegrations.ListFleetDevicesPayload{}
+	v.Provider = provider
+	v.InInventory = inInventory
+	v.CoverageBucket = coverageBucket
+	v.PolicyState = policyState
+	v.UserIds = userIds
+	v.UserEmails = userEmails
+	v.Cursor = cursor
+	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewGetFleetCoveragePayload builds a deviceIntegrations service
+// getFleetCoverage endpoint payload.
+func NewGetFleetCoveragePayload(provider *string, apikeyToken *string, sessionToken *string) *deviceintegrations.GetFleetCoveragePayload {
+	v := &deviceintegrations.GetFleetCoveragePayload{}
 	v.Provider = provider
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

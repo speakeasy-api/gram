@@ -256,6 +256,69 @@ type GetCoverageResponseBody struct {
 	EnforcementHalted *int64 `form:"enforcement_halted,omitempty" json:"enforcement_halted,omitempty" xml:"enforcement_halted,omitempty"`
 }
 
+// ListFleetDevicesResponseBody is the type of the "deviceIntegrations" service
+// "listFleetDevices" endpoint HTTP response body.
+type ListFleetDevicesResponseBody struct {
+	// Devices, newest first.
+	Devices []*FleetDeviceResponseBody `form:"devices,omitempty" json:"devices,omitempty" xml:"devices,omitempty"`
+	// Cursor for the next page. Omitted on the last page.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetFleetCoverageResponseBody is the type of the "deviceIntegrations" service
+// "getFleetCoverage" endpoint HTTP response body.
+type GetFleetCoverageResponseBody struct {
+	// Organization the coverage describes.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Freshness window: an agent counts as active when its heartbeat or state
+	// report is within this many minutes.
+	ActiveWindowMinutes *int `form:"active_window_minutes,omitempty" json:"active_window_minutes,omitempty" xml:"active_window_minutes,omitempty"`
+	// True when the organization has a connected MDM integration (the one named by
+	// provider, when set). Without one, the gap buckets are always 0 because
+	// nothing lists the devices that lack the agent.
+	MdmConnected *bool `form:"mdm_connected,omitempty" json:"mdm_connected,omitempty" xml:"mdm_connected,omitempty"`
+	// device when every active device was matched on its own hardware serial, user
+	// when at least one counts only because its assigned user runs the agent
+	// somewhere.
+	Attestation *string `form:"attestation,omitempty" json:"attestation,omitempty" xml:"attestation,omitempty"`
+	// Devices with an agent heartbeat or state report within the window,
+	// agent-only machines included.
+	AgentActive *int64 `form:"agent_active,omitempty" json:"agent_active,omitempty" xml:"agent_active,omitempty"`
+	// How many of agent_active are backed by that machine's own heartbeat or state
+	// report.
+	AgentActiveDeviceAttested *int64 `form:"agent_active_device_attested,omitempty" json:"agent_active_device_attested,omitempty" xml:"agent_active_device_attested,omitempty"`
+	// Devices with a known agent that went quiet.
+	AgentStale *int64 `form:"agent_stale,omitempty" json:"agent_stale,omitempty" xml:"agent_stale,omitempty"`
+	// MDM devices whose assigned user runs the agent, but not on this machine.
+	// Device-level matching only.
+	AgentOtherDevice *int64 `form:"agent_other_device,omitempty" json:"agent_other_device,omitempty" xml:"agent_other_device,omitempty"`
+	// MDM devices whose assigned email resolves to an org member with no agent at
+	// all.
+	NoAgent *int64 `form:"no_agent,omitempty" json:"no_agent,omitempty" xml:"no_agent,omitempty"`
+	// MDM devices with no assigned-user email.
+	NoEmail *int64 `form:"no_email,omitempty" json:"no_email,omitempty" xml:"no_email,omitempty"`
+	// MDM devices whose assigned email matches neither an agent user nor an org
+	// member.
+	UnresolvedEmail *int64 `form:"unresolved_email,omitempty" json:"unresolved_email,omitempty" xml:"unresolved_email,omitempty"`
+	// MDM devices absent from the latest completed inventory snapshot.
+	Missing *int64 `form:"missing,omitempty" json:"missing,omitempty" xml:"missing,omitempty"`
+	// Machines running the agent that no connected MDM inventory holds. Always 0
+	// when provider is set.
+	AgentOnlyDevices *int64 `form:"agent_only_devices,omitempty" json:"agent_only_devices,omitempty" xml:"agent_only_devices,omitempty"`
+	// Every device counted here, missing and agent-only ones included.
+	TotalDevices *int64 `form:"total_devices,omitempty" json:"total_devices,omitempty" xml:"total_devices,omitempty"`
+	// agent_active devices whose latest report applies the policy last served to
+	// the reporting user.
+	PolicyAttested *int64 `form:"policy_attested,omitempty" json:"policy_attested,omitempty" xml:"policy_attested,omitempty"`
+	// agent_active devices that report a different policy, or none.
+	PolicyOutdated *int64 `form:"policy_outdated,omitempty" json:"policy_outdated,omitempty" xml:"policy_outdated,omitempty"`
+	// agent_active devices with no state report within the window.
+	PolicyUnreported *int64 `form:"policy_unreported,omitempty" json:"policy_unreported,omitempty" xml:"policy_unreported,omitempty"`
+	// agent_active devices whose latest state report says the kill switch halted
+	// enforcement.
+	EnforcementHalted *int64 `form:"enforcement_halted,omitempty" json:"enforcement_halted,omitempty" xml:"enforcement_halted,omitempty"`
+}
+
 // ListProvidersUnauthorizedResponseBody is the type of the
 // "deviceIntegrations" service "listProviders" endpoint HTTP response body for
 // the "unauthorized" error.
@@ -2129,6 +2192,386 @@ type GetCoverageGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListFleetDevicesUnauthorizedResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "unauthorized" error.
+type ListFleetDevicesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListFleetDevicesForbiddenResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "forbidden" error.
+type ListFleetDevicesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListFleetDevicesBadRequestResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "bad_request" error.
+type ListFleetDevicesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListFleetDevicesNotFoundResponseBody is the type of the "deviceIntegrations"
+// service "listFleetDevices" endpoint HTTP response body for the "not_found"
+// error.
+type ListFleetDevicesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListFleetDevicesConflictResponseBody is the type of the "deviceIntegrations"
+// service "listFleetDevices" endpoint HTTP response body for the "conflict"
+// error.
+type ListFleetDevicesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListFleetDevicesUnsupportedMediaResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ListFleetDevicesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListFleetDevicesInvalidResponseBody is the type of the "deviceIntegrations"
+// service "listFleetDevices" endpoint HTTP response body for the "invalid"
+// error.
+type ListFleetDevicesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListFleetDevicesInvariantViolationResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "invariant_violation" error.
+type ListFleetDevicesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListFleetDevicesUnexpectedResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "unexpected" error.
+type ListFleetDevicesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListFleetDevicesGatewayErrorResponseBody is the type of the
+// "deviceIntegrations" service "listFleetDevices" endpoint HTTP response body
+// for the "gateway_error" error.
+type ListFleetDevicesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetFleetCoverageUnauthorizedResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetFleetCoverageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetFleetCoverageForbiddenResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "forbidden" error.
+type GetFleetCoverageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetFleetCoverageBadRequestResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "bad_request" error.
+type GetFleetCoverageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetFleetCoverageNotFoundResponseBody is the type of the "deviceIntegrations"
+// service "getFleetCoverage" endpoint HTTP response body for the "not_found"
+// error.
+type GetFleetCoverageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetFleetCoverageConflictResponseBody is the type of the "deviceIntegrations"
+// service "getFleetCoverage" endpoint HTTP response body for the "conflict"
+// error.
+type GetFleetCoverageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetFleetCoverageUnsupportedMediaResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetFleetCoverageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetFleetCoverageInvalidResponseBody is the type of the "deviceIntegrations"
+// service "getFleetCoverage" endpoint HTTP response body for the "invalid"
+// error.
+type GetFleetCoverageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetFleetCoverageInvariantViolationResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetFleetCoverageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetFleetCoverageUnexpectedResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "unexpected" error.
+type GetFleetCoverageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetFleetCoverageGatewayErrorResponseBody is the type of the
+// "deviceIntegrations" service "getFleetCoverage" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetFleetCoverageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DeviceIntegrationProviderResponseBody is used to define fields on response
 // body types.
 type DeviceIntegrationProviderResponseBody struct {
@@ -2324,6 +2767,62 @@ type ManagedDeviceRollbackResponseBody struct {
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// Version the agent rolled back to.
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+}
+
+// FleetDeviceResponseBody is used to define fields on response body types.
+type FleetDeviceResponseBody struct {
+	// Stable device ID: mdm:<uuid> for an MDM device, agent:<uuid> for an
+	// agent-only machine.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// True when a connected MDM's inventory holds this device. False for a machine
+	// only its agent reports.
+	InInventory *bool `form:"in_inventory,omitempty" json:"in_inventory,omitempty" xml:"in_inventory,omitempty"`
+	// Provider the device was synced from. Omitted for an agent-only machine.
+	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// The MDM's identifier for the device. Omitted for an agent-only machine.
+	ExternalID *string `form:"external_id,omitempty" json:"external_id,omitempty" xml:"external_id,omitempty"`
+	// Hardware serial number, from the MDM or the agent. Omitted when neither
+	// reported one.
+	SerialNumber *string `form:"serial_number,omitempty" json:"serial_number,omitempty" xml:"serial_number,omitempty"`
+	// Device hostname, from the MDM or the agent.
+	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// Operating system name as the MDM reports it. Omitted for an agent-only
+	// machine; agent_state.os carries the agent's.
+	OsName *string `form:"os_name,omitempty" json:"os_name,omitempty" xml:"os_name,omitempty"`
+	// Operating system version as the MDM reports it.
+	OsVersion *string `form:"os_version,omitempty" json:"os_version,omitempty" xml:"os_version,omitempty"`
+	// The MDM's assigned user, or for an agent-only machine the user its agent
+	// runs as.
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Resolved Speakeasy user for user_email. Omitted when it does not resolve to
+	// an org member.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// Last device check-in as reported by the MDM.
+	MdmLastCheckInAt *string `form:"mdm_last_check_in_at,omitempty" json:"mdm_last_check_in_at,omitempty" xml:"mdm_last_check_in_at,omitempty"`
+	// The latest sign of life that classified this device, a policy poll or a
+	// state report. Omitted when no agent has ever synced.
+	AgentLastSeenAt *string `form:"agent_last_seen_at,omitempty" json:"agent_last_seen_at,omitempty" xml:"agent_last_seen_at,omitempty"`
+	// Coverage classification for the device. An agent-only machine is
+	// agent_active or agent_stale.
+	CoverageBucket *string `form:"coverage_bucket,omitempty" json:"coverage_bucket,omitempty" xml:"coverage_bucket,omitempty"`
+	// When the device went absent from the MDM inventory. Omitted while present,
+	// and for an agent-only machine.
+	MissingSince *string `form:"missing_since,omitempty" json:"missing_since,omitempty" xml:"missing_since,omitempty"`
+	// Whether the agent that answers for an agent_active device verifiably applies
+	// its policy; agent_state.attestation says whether that agent runs on this
+	// machine. attested: its latest report applies the policy last served to the
+	// reporting user. outdated: it reports a different policy, or none.
+	// unreported: no report within the window, from an agent that predates
+	// reporting or has stopped sending. halted: the reporting agent's kill switch
+	// stopped enforcement on a blocked build. Omitted for every other bucket.
+	PolicyState *string `form:"policy_state,omitempty" json:"policy_state,omitempty" xml:"policy_state,omitempty"`
+	// The latest state report that classified this device. Omitted when its agent
+	// has never reported.
+	AgentState *ManagedDeviceAgentStateResponseBody `form:"agent_state,omitempty" json:"agent_state,omitempty" xml:"agent_state,omitempty"`
+	// When the MDM or the agent first reported this device.
+	FirstSeenAt *string `form:"first_seen_at,omitempty" json:"first_seen_at,omitempty" xml:"first_seen_at,omitempty"`
+	// When the MDM or the agent last reported this device.
+	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 }
 
 // NewUpsertConfigRequestBody builds the HTTP request body from the payload of
@@ -4067,6 +4566,351 @@ func NewGetCoverageGatewayError(body *GetCoverageGatewayErrorResponseBody) *goa.
 	return v
 }
 
+// NewListFleetDevicesResultOK builds a "deviceIntegrations" service
+// "listFleetDevices" endpoint result from a HTTP "OK" response.
+func NewListFleetDevicesResultOK(body *ListFleetDevicesResponseBody) *deviceintegrations.ListFleetDevicesResult {
+	v := &deviceintegrations.ListFleetDevicesResult{
+		NextCursor: body.NextCursor,
+	}
+	v.Devices = make([]*deviceintegrations.FleetDevice, len(body.Devices))
+	for i, val := range body.Devices {
+		if val == nil {
+			v.Devices[i] = nil
+			continue
+		}
+		v.Devices[i] = unmarshalFleetDeviceResponseBodyToDeviceintegrationsFleetDevice(val)
+	}
+
+	return v
+}
+
+// NewListFleetDevicesUnauthorized builds a deviceIntegrations service
+// listFleetDevices endpoint unauthorized error.
+func NewListFleetDevicesUnauthorized(body *ListFleetDevicesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListFleetDevicesForbidden builds a deviceIntegrations service
+// listFleetDevices endpoint forbidden error.
+func NewListFleetDevicesForbidden(body *ListFleetDevicesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListFleetDevicesBadRequest builds a deviceIntegrations service
+// listFleetDevices endpoint bad_request error.
+func NewListFleetDevicesBadRequest(body *ListFleetDevicesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListFleetDevicesNotFound builds a deviceIntegrations service
+// listFleetDevices endpoint not_found error.
+func NewListFleetDevicesNotFound(body *ListFleetDevicesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListFleetDevicesConflict builds a deviceIntegrations service
+// listFleetDevices endpoint conflict error.
+func NewListFleetDevicesConflict(body *ListFleetDevicesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListFleetDevicesUnsupportedMedia builds a deviceIntegrations service
+// listFleetDevices endpoint unsupported_media error.
+func NewListFleetDevicesUnsupportedMedia(body *ListFleetDevicesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListFleetDevicesInvalid builds a deviceIntegrations service
+// listFleetDevices endpoint invalid error.
+func NewListFleetDevicesInvalid(body *ListFleetDevicesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListFleetDevicesInvariantViolation builds a deviceIntegrations service
+// listFleetDevices endpoint invariant_violation error.
+func NewListFleetDevicesInvariantViolation(body *ListFleetDevicesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListFleetDevicesUnexpected builds a deviceIntegrations service
+// listFleetDevices endpoint unexpected error.
+func NewListFleetDevicesUnexpected(body *ListFleetDevicesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListFleetDevicesGatewayError builds a deviceIntegrations service
+// listFleetDevices endpoint gateway_error error.
+func NewListFleetDevicesGatewayError(body *ListFleetDevicesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetFleetCoverageFleetCoverageOK builds a "deviceIntegrations" service
+// "getFleetCoverage" endpoint result from a HTTP "OK" response.
+func NewGetFleetCoverageFleetCoverageOK(body *GetFleetCoverageResponseBody) *deviceintegrations.FleetCoverage {
+	v := &deviceintegrations.FleetCoverage{
+		OrganizationID:            *body.OrganizationID,
+		ActiveWindowMinutes:       *body.ActiveWindowMinutes,
+		MdmConnected:              *body.MdmConnected,
+		Attestation:               *body.Attestation,
+		AgentActive:               *body.AgentActive,
+		AgentActiveDeviceAttested: *body.AgentActiveDeviceAttested,
+		AgentStale:                *body.AgentStale,
+		AgentOtherDevice:          *body.AgentOtherDevice,
+		NoAgent:                   *body.NoAgent,
+		NoEmail:                   *body.NoEmail,
+		UnresolvedEmail:           *body.UnresolvedEmail,
+		Missing:                   *body.Missing,
+		AgentOnlyDevices:          *body.AgentOnlyDevices,
+		TotalDevices:              *body.TotalDevices,
+		PolicyAttested:            *body.PolicyAttested,
+		PolicyOutdated:            *body.PolicyOutdated,
+		PolicyUnreported:          *body.PolicyUnreported,
+		EnforcementHalted:         *body.EnforcementHalted,
+	}
+
+	return v
+}
+
+// NewGetFleetCoverageUnauthorized builds a deviceIntegrations service
+// getFleetCoverage endpoint unauthorized error.
+func NewGetFleetCoverageUnauthorized(body *GetFleetCoverageUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetFleetCoverageForbidden builds a deviceIntegrations service
+// getFleetCoverage endpoint forbidden error.
+func NewGetFleetCoverageForbidden(body *GetFleetCoverageForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetFleetCoverageBadRequest builds a deviceIntegrations service
+// getFleetCoverage endpoint bad_request error.
+func NewGetFleetCoverageBadRequest(body *GetFleetCoverageBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetFleetCoverageNotFound builds a deviceIntegrations service
+// getFleetCoverage endpoint not_found error.
+func NewGetFleetCoverageNotFound(body *GetFleetCoverageNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetFleetCoverageConflict builds a deviceIntegrations service
+// getFleetCoverage endpoint conflict error.
+func NewGetFleetCoverageConflict(body *GetFleetCoverageConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetFleetCoverageUnsupportedMedia builds a deviceIntegrations service
+// getFleetCoverage endpoint unsupported_media error.
+func NewGetFleetCoverageUnsupportedMedia(body *GetFleetCoverageUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetFleetCoverageInvalid builds a deviceIntegrations service
+// getFleetCoverage endpoint invalid error.
+func NewGetFleetCoverageInvalid(body *GetFleetCoverageInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetFleetCoverageInvariantViolation builds a deviceIntegrations service
+// getFleetCoverage endpoint invariant_violation error.
+func NewGetFleetCoverageInvariantViolation(body *GetFleetCoverageInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetFleetCoverageUnexpected builds a deviceIntegrations service
+// getFleetCoverage endpoint unexpected error.
+func NewGetFleetCoverageUnexpected(body *GetFleetCoverageUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetFleetCoverageGatewayError builds a deviceIntegrations service
+// getFleetCoverage endpoint gateway_error error.
+func NewGetFleetCoverageGatewayError(body *GetFleetCoverageGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateListProvidersResponseBody runs the validations defined on
 // ListProvidersResponseBody
 func ValidateListProvidersResponseBody(body *ListProvidersResponseBody) (err error) {
@@ -4295,6 +5139,87 @@ func ValidateGetCoverageResponseBody(body *GetCoverageResponseBody) (err error) 
 	}
 	if body.UnmanagedAgentUsers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("unmanaged_agent_users", "body"))
+	}
+	if body.PolicyAttested == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_attested", "body"))
+	}
+	if body.PolicyOutdated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_outdated", "body"))
+	}
+	if body.PolicyUnreported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_unreported", "body"))
+	}
+	if body.EnforcementHalted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enforcement_halted", "body"))
+	}
+	if body.Attestation != nil {
+		if !(*body.Attestation == "device" || *body.Attestation == "user") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.attestation", *body.Attestation, []any{"device", "user"}))
+		}
+	}
+	return
+}
+
+// ValidateListFleetDevicesResponseBody runs the validations defined on
+// ListFleetDevicesResponseBody
+func ValidateListFleetDevicesResponseBody(body *ListFleetDevicesResponseBody) (err error) {
+	if body.Devices == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("devices", "body"))
+	}
+	for _, e := range body.Devices {
+		if e != nil {
+			if err2 := ValidateFleetDeviceResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetFleetCoverageResponseBody runs the validations defined on
+// GetFleetCoverageResponseBody
+func ValidateGetFleetCoverageResponseBody(body *GetFleetCoverageResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ActiveWindowMinutes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_window_minutes", "body"))
+	}
+	if body.MdmConnected == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mdm_connected", "body"))
+	}
+	if body.Attestation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attestation", "body"))
+	}
+	if body.AgentActive == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_active", "body"))
+	}
+	if body.AgentActiveDeviceAttested == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_active_device_attested", "body"))
+	}
+	if body.AgentStale == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_stale", "body"))
+	}
+	if body.AgentOtherDevice == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_other_device", "body"))
+	}
+	if body.NoAgent == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("no_agent", "body"))
+	}
+	if body.NoEmail == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("no_email", "body"))
+	}
+	if body.UnresolvedEmail == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unresolved_email", "body"))
+	}
+	if body.Missing == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("missing", "body"))
+	}
+	if body.AgentOnlyDevices == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_only_devices", "body"))
+	}
+	if body.TotalDevices == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_devices", "body"))
 	}
 	if body.PolicyAttested == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("policy_attested", "body"))
@@ -6716,6 +7641,486 @@ func ValidateGetCoverageGatewayErrorResponseBody(body *GetCoverageGatewayErrorRe
 	return
 }
 
+// ValidateListFleetDevicesUnauthorizedResponseBody runs the validations
+// defined on listFleetDevices_unauthorized_response_body
+func ValidateListFleetDevicesUnauthorizedResponseBody(body *ListFleetDevicesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListFleetDevicesForbiddenResponseBody runs the validations defined
+// on listFleetDevices_forbidden_response_body
+func ValidateListFleetDevicesForbiddenResponseBody(body *ListFleetDevicesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListFleetDevicesBadRequestResponseBody runs the validations defined
+// on listFleetDevices_bad_request_response_body
+func ValidateListFleetDevicesBadRequestResponseBody(body *ListFleetDevicesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListFleetDevicesNotFoundResponseBody runs the validations defined on
+// listFleetDevices_not_found_response_body
+func ValidateListFleetDevicesNotFoundResponseBody(body *ListFleetDevicesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListFleetDevicesConflictResponseBody runs the validations defined on
+// listFleetDevices_conflict_response_body
+func ValidateListFleetDevicesConflictResponseBody(body *ListFleetDevicesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListFleetDevicesUnsupportedMediaResponseBody runs the validations
+// defined on listFleetDevices_unsupported_media_response_body
+func ValidateListFleetDevicesUnsupportedMediaResponseBody(body *ListFleetDevicesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListFleetDevicesInvalidResponseBody runs the validations defined on
+// listFleetDevices_invalid_response_body
+func ValidateListFleetDevicesInvalidResponseBody(body *ListFleetDevicesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListFleetDevicesInvariantViolationResponseBody runs the validations
+// defined on listFleetDevices_invariant_violation_response_body
+func ValidateListFleetDevicesInvariantViolationResponseBody(body *ListFleetDevicesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListFleetDevicesUnexpectedResponseBody runs the validations defined
+// on listFleetDevices_unexpected_response_body
+func ValidateListFleetDevicesUnexpectedResponseBody(body *ListFleetDevicesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListFleetDevicesGatewayErrorResponseBody runs the validations
+// defined on listFleetDevices_gateway_error_response_body
+func ValidateListFleetDevicesGatewayErrorResponseBody(body *ListFleetDevicesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetFleetCoverageUnauthorizedResponseBody runs the validations
+// defined on getFleetCoverage_unauthorized_response_body
+func ValidateGetFleetCoverageUnauthorizedResponseBody(body *GetFleetCoverageUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetFleetCoverageForbiddenResponseBody runs the validations defined
+// on getFleetCoverage_forbidden_response_body
+func ValidateGetFleetCoverageForbiddenResponseBody(body *GetFleetCoverageForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetFleetCoverageBadRequestResponseBody runs the validations defined
+// on getFleetCoverage_bad_request_response_body
+func ValidateGetFleetCoverageBadRequestResponseBody(body *GetFleetCoverageBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetFleetCoverageNotFoundResponseBody runs the validations defined on
+// getFleetCoverage_not_found_response_body
+func ValidateGetFleetCoverageNotFoundResponseBody(body *GetFleetCoverageNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetFleetCoverageConflictResponseBody runs the validations defined on
+// getFleetCoverage_conflict_response_body
+func ValidateGetFleetCoverageConflictResponseBody(body *GetFleetCoverageConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetFleetCoverageUnsupportedMediaResponseBody runs the validations
+// defined on getFleetCoverage_unsupported_media_response_body
+func ValidateGetFleetCoverageUnsupportedMediaResponseBody(body *GetFleetCoverageUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetFleetCoverageInvalidResponseBody runs the validations defined on
+// getFleetCoverage_invalid_response_body
+func ValidateGetFleetCoverageInvalidResponseBody(body *GetFleetCoverageInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetFleetCoverageInvariantViolationResponseBody runs the validations
+// defined on getFleetCoverage_invariant_violation_response_body
+func ValidateGetFleetCoverageInvariantViolationResponseBody(body *GetFleetCoverageInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetFleetCoverageUnexpectedResponseBody runs the validations defined
+// on getFleetCoverage_unexpected_response_body
+func ValidateGetFleetCoverageUnexpectedResponseBody(body *GetFleetCoverageUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetFleetCoverageGatewayErrorResponseBody runs the validations
+// defined on getFleetCoverage_gateway_error_response_body
+func ValidateGetFleetCoverageGatewayErrorResponseBody(body *GetFleetCoverageGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateDeviceIntegrationProviderResponseBody runs the validations defined
 // on DeviceIntegrationProviderResponseBody
 func ValidateDeviceIntegrationProviderResponseBody(body *DeviceIntegrationProviderResponseBody) (err error) {
@@ -6954,6 +8359,57 @@ func ValidateManagedDeviceRollbackResponseBody(body *ManagedDeviceRollbackRespon
 	}
 	if body.At != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.at", *body.At, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateFleetDeviceResponseBody runs the validations defined on
+// FleetDeviceResponseBody
+func ValidateFleetDeviceResponseBody(body *FleetDeviceResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.InInventory == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("in_inventory", "body"))
+	}
+	if body.CoverageBucket == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("coverage_bucket", "body"))
+	}
+	if body.FirstSeenAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("first_seen_at", "body"))
+	}
+	if body.LastSeenAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("last_seen_at", "body"))
+	}
+	if body.MdmLastCheckInAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mdm_last_check_in_at", *body.MdmLastCheckInAt, goa.FormatDateTime))
+	}
+	if body.AgentLastSeenAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_last_seen_at", *body.AgentLastSeenAt, goa.FormatDateTime))
+	}
+	if body.CoverageBucket != nil {
+		if !(*body.CoverageBucket == "agent_active" || *body.CoverageBucket == "agent_stale" || *body.CoverageBucket == "agent_other_device" || *body.CoverageBucket == "no_agent" || *body.CoverageBucket == "no_email" || *body.CoverageBucket == "unresolved_email" || *body.CoverageBucket == "missing") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.coverage_bucket", *body.CoverageBucket, []any{"agent_active", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing"}))
+		}
+	}
+	if body.MissingSince != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.missing_since", *body.MissingSince, goa.FormatDateTime))
+	}
+	if body.PolicyState != nil {
+		if !(*body.PolicyState == "attested" || *body.PolicyState == "outdated" || *body.PolicyState == "unreported" || *body.PolicyState == "halted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy_state", *body.PolicyState, []any{"attested", "outdated", "unreported", "halted"}))
+		}
+	}
+	if body.AgentState != nil {
+		if err2 := ValidateManagedDeviceAgentStateResponseBody(body.AgentState); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.FirstSeenAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_seen_at", *body.FirstSeenAt, goa.FormatDateTime))
+	}
+	if body.LastSeenAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", *body.LastSeenAt, goa.FormatDateTime))
 	}
 	return
 }

@@ -29,6 +29,8 @@ type Server struct {
 	RetrySchedule      http.Handler
 	ListManagedDevices http.Handler
 	GetCoverage        http.Handler
+	ListFleetDevices   http.Handler
+	GetFleetCoverage   http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -68,6 +70,8 @@ func New(
 			{"RetrySchedule", "POST", "/rpc/deviceIntegrations.retrySchedule"},
 			{"ListManagedDevices", "GET", "/rpc/deviceIntegrations.listManagedDevices"},
 			{"GetCoverage", "GET", "/rpc/deviceIntegrations.getCoverage"},
+			{"ListFleetDevices", "GET", "/rpc/deviceIntegrations.listFleetDevices"},
+			{"GetFleetCoverage", "GET", "/rpc/deviceIntegrations.getFleetCoverage"},
 		},
 		ListProviders:      NewListProvidersHandler(e.ListProviders, mux, decoder, encoder, errhandler, formatter),
 		GetConfig:          NewGetConfigHandler(e.GetConfig, mux, decoder, encoder, errhandler, formatter),
@@ -79,6 +83,8 @@ func New(
 		RetrySchedule:      NewRetryScheduleHandler(e.RetrySchedule, mux, decoder, encoder, errhandler, formatter),
 		ListManagedDevices: NewListManagedDevicesHandler(e.ListManagedDevices, mux, decoder, encoder, errhandler, formatter),
 		GetCoverage:        NewGetCoverageHandler(e.GetCoverage, mux, decoder, encoder, errhandler, formatter),
+		ListFleetDevices:   NewListFleetDevicesHandler(e.ListFleetDevices, mux, decoder, encoder, errhandler, formatter),
+		GetFleetCoverage:   NewGetFleetCoverageHandler(e.GetFleetCoverage, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -97,6 +103,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.RetrySchedule = m(s.RetrySchedule)
 	s.ListManagedDevices = m(s.ListManagedDevices)
 	s.GetCoverage = m(s.GetCoverage)
+	s.ListFleetDevices = m(s.ListFleetDevices)
+	s.GetFleetCoverage = m(s.GetFleetCoverage)
 }
 
 // MethodNames returns the methods served.
@@ -114,6 +122,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountRetryScheduleHandler(mux, h.RetrySchedule)
 	MountListManagedDevicesHandler(mux, h.ListManagedDevices)
 	MountGetCoverageHandler(mux, h.GetCoverage)
+	MountListFleetDevicesHandler(mux, h.ListFleetDevices)
+	MountGetFleetCoverageHandler(mux, h.GetFleetCoverage)
 }
 
 // Mount configures the mux to serve the deviceIntegrations endpoints.
@@ -630,6 +640,114 @@ func NewGetCoverageHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getCoverage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "deviceIntegrations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListFleetDevicesHandler configures the mux to serve the
+// "deviceIntegrations" service "listFleetDevices" endpoint.
+func MountListFleetDevicesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/deviceIntegrations.listFleetDevices", f)
+}
+
+// NewListFleetDevicesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "deviceIntegrations" service "listFleetDevices"
+// endpoint.
+func NewListFleetDevicesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListFleetDevicesRequest(mux, decoder)
+		encodeResponse = EncodeListFleetDevicesResponse(encoder)
+		encodeError    = EncodeListFleetDevicesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listFleetDevices")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "deviceIntegrations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetFleetCoverageHandler configures the mux to serve the
+// "deviceIntegrations" service "getFleetCoverage" endpoint.
+func MountGetFleetCoverageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/deviceIntegrations.getFleetCoverage", f)
+}
+
+// NewGetFleetCoverageHandler creates a HTTP handler which loads the HTTP
+// request and calls the "deviceIntegrations" service "getFleetCoverage"
+// endpoint.
+func NewGetFleetCoverageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetFleetCoverageRequest(mux, decoder)
+		encodeResponse = EncodeGetFleetCoverageResponse(encoder)
+		encodeError    = EncodeGetFleetCoverageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getFleetCoverage")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "deviceIntegrations")
 		payload, err := decodeRequest(r)
 		if err != nil {
