@@ -34,7 +34,7 @@ melange = "0.56.5"
 # Authoritative Node pin. `.node-version` mirrors it and must be kept in sync:
 # aube resolves its own runtime and cannot read this file, so without that
 # mirror it falls through to whatever `node` is first on PATH.
-nodejs = "24.22.1"
+nodejs = "24.22.2"
 aube = "2.8.0"
 # Kept for `changeset publish` only. Changesets v3 asks manypkg for the
 # workspace tool, which answers pnpm because pnpm-workspace.yaml is present.
