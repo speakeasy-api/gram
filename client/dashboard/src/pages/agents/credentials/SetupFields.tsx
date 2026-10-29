@@ -19,6 +19,8 @@ import { ExternalLink } from "lucide-react";
 import type { JSX, ReactNode } from "react";
 import { Link } from "react-router";
 import { ConsoleRow, type ConsoleField } from "./ConsoleRow";
+import { SwitchServerSignIn } from "./SwitchServerSignIn";
+import { useSwitchAvailability } from "./useSwitchAvailability";
 import { variableProblem, type CatalogVariable } from "./workloadCatalog";
 import type { SetupValues, UncoveredServer } from "./workloadTokenEndpoints";
 
@@ -181,8 +183,9 @@ export function ComputedStatus({
 
 /**
  * The agent's servers that refuse the selected issuer's token, each with the
- * one thing that fixes it: selecting the shared issuer it signs in through, or
- * moving it to one in its own sign-in settings.
+ * one thing that fixes it: selecting the shared issuer it signs in through,
+ * switching it to a shared one, or its own sign-in settings when switching
+ * here is not safe or not allowed.
  */
 function LeftOutServers({
   servers,
@@ -193,35 +196,113 @@ function LeftOutServers({
 }): JSX.Element {
   return (
     <ul className="divide-border w-full divide-y">
-      {servers.map(({ server, reason }) => (
+      {servers.map((entry) => (
         <li
-          key={server.id}
+          key={entry.server.id}
           className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2 first:pt-0 last:pb-0"
         >
-          <div className="min-w-0 flex-1">
-            <Text small className="block truncate">
-              {server.name}
-            </Text>
-            <Text muted small className="block">
-              {reason === "another_issuer"
-                ? "Signs in through another user session issuer. A workload needs a separate token from that issuer for it."
-                : "Its user session issuer has no shared authorization server, so a workload can't get a token for it. Move the server to an issuer that has one."}
-            </Text>
-          </div>
-          {reason === "another_issuer" ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => onSelect(server.issuerId!)}
-            >
-              <Button.Text>Use its issuer</Button.Text>
-            </Button>
+          {entry.reason === "another_issuer" ? (
+            <LeftOutRow
+              name={entry.server.name}
+              reason="Signs in through another user session issuer. A workload needs a separate token from that issuer for it."
+              action={
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => onSelect(entry.server.issuerId!)}
+                >
+                  <Button.Text>Use its issuer</Button.Text>
+                </Button>
+              }
+            />
+          ) : entry.switchTo ? (
+            <NotSharedRow server={entry.server} target={entry.switchTo} />
           ) : (
-            <ServerSignInSettingsLink server={server} />
+            <LeftOutRow
+              name={entry.server.name}
+              reason={`${NOT_SHARED} There is no shared user session issuer it could move to yet.`}
+              action={<ServerSignInSettingsLink server={entry.server} />}
+            />
           )}
         </li>
       ))}
     </ul>
+  );
+}
+
+const NOT_SHARED =
+  "Its user session issuer has no shared authorization server, so a workload can't get a token for it.";
+
+/** A server whose issuer is not shared, with a shared one to move it to. */
+function NotSharedRow({
+  server,
+  target,
+}: {
+  server: UncoveredServer["server"];
+  target: { id: string; label: string };
+}): JSX.Element {
+  const availability = useSwitchAvailability(server);
+  switch (availability) {
+    case "ready":
+      return (
+        <LeftOutRow
+          name={server.name}
+          reason={NOT_SHARED}
+          action={<SwitchServerSignIn server={server} target={target} />}
+        />
+      );
+    case "checking":
+      return (
+        <LeftOutRow
+          name={server.name}
+          reason={NOT_SHARED}
+          action={
+            <Button variant="secondary" size="sm" disabled>
+              <Button.Text>Switch to {target.label}</Button.Text>
+            </Button>
+          }
+        />
+      );
+    case "people_connect":
+      return (
+        <LeftOutRow
+          name={server.name}
+          reason={`${NOT_SHARED} People connect their own accounts through its current sign-in, so move it to ${target.label} from its sign-in settings, where their connections can be set up again.`}
+          action={<ServerSignInSettingsLink server={server} />}
+        />
+      );
+    case "no_permission":
+      return (
+        <LeftOutRow
+          name={server.name}
+          reason={`${NOT_SHARED} Ask someone who can edit ${server.name} to switch it to ${target.label}.`}
+          action={<ServerSignInSettingsLink server={server} />}
+        />
+      );
+  }
+}
+
+function LeftOutRow({
+  name,
+  reason,
+  action,
+}: {
+  name: string;
+  reason: string;
+  action: ReactNode;
+}): JSX.Element {
+  return (
+    <>
+      <div className="min-w-0 flex-1">
+        <Text small className="block truncate">
+          {name}
+        </Text>
+        <Text muted small className="block">
+          {reason}
+        </Text>
+      </div>
+      {action}
+    </>
   );
 }
 

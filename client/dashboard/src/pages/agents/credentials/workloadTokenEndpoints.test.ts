@@ -210,7 +210,11 @@ it("explains when none of the agent's servers has a shared issuer instead of off
     /None of the servers below signs in through a user session issuer with a shared authorization server/,
   );
   expect(result.current.uncoveredServers).toEqual([
-    { server: server("gh", "private"), reason: "not_shared" },
+    {
+      server: server("gh", "private"),
+      reason: "not_shared",
+      switchTo: { id: "org", label: "organization" },
+    },
   ]);
 });
 
@@ -237,4 +241,35 @@ it("leaves no server out while the issuers are still loading", () => {
   } finally {
     endpointQuery.pending = false;
   }
+});
+
+it("offers to move a server without a shared issuer to the selected one", () => {
+  endpointQuery.items = [endpoint("org", "organization"), endpoint("p", "p")];
+  const { result } = renderHook(() =>
+    useSetupValues(undefined, [server("a", "p"), server("b", "private")]),
+  );
+  expect(result.current.selectedEndpointId).toBe("p");
+  expect(result.current.uncoveredServers[0]?.switchTo).toEqual({
+    id: "p",
+    label: "p",
+  });
+});
+
+it("never offers to move a server to another project's issuer", () => {
+  endpointQuery.items = [
+    endpoint("other", "other-project", "proj-b"),
+    endpoint("own", "own-project", "proj-a"),
+  ];
+  const lonely = { ...server("gh", "private"), projectId: "proj-a" };
+  const { result } = renderHook(() => useSetupValues(undefined, [lonely]));
+  expect(result.current.uncoveredServers[0]?.switchTo).toEqual({
+    id: "own",
+    label: "own-project",
+  });
+
+  endpointQuery.items = [endpoint("other", "other-project", "proj-b")];
+  const { result: none } = renderHook(() =>
+    useSetupValues(undefined, [lonely]),
+  );
+  expect(none.current.uncoveredServers[0]?.switchTo).toBeUndefined();
 });

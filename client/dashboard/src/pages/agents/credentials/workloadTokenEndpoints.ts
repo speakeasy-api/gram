@@ -21,6 +21,13 @@ export type UncoveredReason = "another_issuer" | "not_shared";
 export interface UncoveredServer {
   server: SetupServer;
   reason: UncoveredReason;
+  /**
+   * For a server whose issuer is not shared, the shared issuer it could be
+   * moved to: the selected one when the server may use it, otherwise the first
+   * at the organization level or in the server's project. Absent when there is
+   * none.
+   */
+  switchTo?: { id: string; label: string };
 }
 
 export interface SetupValues {
@@ -141,14 +148,28 @@ export function useSetupValues(
       !signingIn.includes(server) ||
       server.issuerId === selected?.userSessionIssuerId,
   );
+  // A server may use an issuer at the organization level or in its own project.
+  const switchTarget = (server: SetupServer): UncoveredServer["switchTo"] => {
+    const usable = inScope.filter(
+      (endpoint) =>
+        endpoint.projectId === "" || endpoint.projectId === server.projectId,
+    );
+    const target =
+      usable.find(
+        (endpoint) =>
+          endpoint.userSessionIssuerId === selected?.userSessionIssuerId,
+      ) ?? usable[0];
+    return target === undefined
+      ? undefined
+      : { id: target.userSessionIssuerId, label: endpointLabel(target) };
+  };
   const uncoveredServers = signingIn
     .filter((server) => server.issuerId !== selected?.userSessionIssuerId)
-    .map((server) => ({
-      server,
-      reason: sharedIssuers.has(server.issuerId!)
-        ? ("another_issuer" as const)
-        : ("not_shared" as const),
-    }));
+    .map((server): UncoveredServer =>
+      sharedIssuers.has(server.issuerId!)
+        ? { server, reason: "another_issuer" }
+        : { server, reason: "not_shared", switchTo: switchTarget(server) },
+    );
 
   return {
     coveredServers,

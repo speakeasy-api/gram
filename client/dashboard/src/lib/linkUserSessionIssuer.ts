@@ -14,28 +14,43 @@ async function updateServerIssuer(
   latest: McpServer,
   userSessionIssuerId: string,
   options?: RequestOptions,
+  gramProject?: string,
 ): Promise<McpServer> {
   const { visibility, ...form } = mcpServerUpdateForm(latest);
   if (!visibility) throw new Error(UNSUPPORTED_VISIBILITY);
   return await client.mcpServers.update(
-    { updateMcpServerForm: { ...form, visibility, userSessionIssuerId } },
+    {
+      gramProject,
+      updateMcpServerForm: { ...form, visibility, userSessionIssuerId },
+    },
     undefined,
     options,
   );
 }
 
+/**
+ * Moves a server to another user session issuer. gramProject names the
+ * server's project when it is not the one the dashboard is in.
+ */
 export async function linkMcpServerUserSessionIssuer(
   client: SdkClient,
   mcpServerId: string,
   userSessionIssuerId: string,
   options?: RequestOptions,
+  gramProject?: string,
 ): Promise<McpServer> {
   const latest = await client.mcpServers.get(
-    { id: mcpServerId },
+    { gramProject, id: mcpServerId },
     undefined,
     options,
   );
-  return await updateServerIssuer(client, latest, userSessionIssuerId, options);
+  return await updateServerIssuer(
+    client,
+    latest,
+    userSessionIssuerId,
+    options,
+    gramProject,
+  );
 }
 
 // A toolset's session issuer lives on its canonical MCP server, which shares the toolset's id.

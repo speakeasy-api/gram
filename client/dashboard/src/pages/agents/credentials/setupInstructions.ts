@@ -54,9 +54,12 @@ export type SetupServer = {
    * from that issuer's shared authorization server is accepted by it.
    */
   issuerId?: string;
-  /** Where the server's settings live, to link to them. */
+  /** Where the server's settings live, to link to them and to change them. */
+  projectId?: string;
   projectSlug?: string;
   slug?: string;
+  /** The id a permission check on the server names. */
+  resourceId?: string;
 };
 
 export type SetupStep = {

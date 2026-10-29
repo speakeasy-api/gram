@@ -929,12 +929,18 @@ export function CredentialsWizard({
   // click: the mark is how a glance confirms the choice landed.
   const [highlight, setHighlight] = useState<string | null>(null);
 
+  // A selection holds the server as it was when ticked; read it back from the
+  // inventory so a change made since, such as a switched sign-in, shows.
   const connectionReach = (): InventoryServer[] =>
     allServers
       ? inventory.servers.filter((server) =>
           reachCoversProject(allServersProjectIDs, server.projectId),
         )
-      : selected.map((entry) => entry.server);
+      : selected.map(
+          (entry) =>
+            inventory.servers.find((server) => server.id === entry.server.id) ??
+            entry.server,
+        );
 
   const attachSelectedConnections = async (
     targetId: string,
@@ -975,8 +981,10 @@ export function CredentialsWizard({
               name: server.name,
               mcpUrl: server.mcpUrl,
               issuerId: server.issuerId,
+              projectId: server.projectId,
               projectSlug: server.projectSlug,
               slug: server.slug,
+              resourceId: server.resourceId,
             },
           ]
         : [],
