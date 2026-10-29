@@ -221,7 +221,7 @@ func (c *Core) CreateInTransaction(ctx context.Context, dbtx pgx.Tx, mutation Cr
 			PluginID:            ensured.Plugin.ID,
 			PluginName:          ensured.Plugin.Name,
 			PluginSlug:          ensured.Plugin.Slug,
-			PluginSnapshotAfter: nil,
+			PluginSnapshotAfter: plugins.PluginAuditSnapshot(ensured.Plugin),
 		}); err != nil {
 			return repo.Project{}, fmt.Errorf("log default plugin creation: %w", err)
 		}

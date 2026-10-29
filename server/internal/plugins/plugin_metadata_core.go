@@ -322,7 +322,7 @@ func (c *PluginMetadataCore) CreateInTransaction(ctx context.Context, tx pgx.Tx,
 		PluginID:            plugin.ID,
 		PluginName:          plugin.Name,
 		PluginSlug:          plugin.Slug,
-		PluginSnapshotAfter: pluginAuditSnapshot(plugin),
+		PluginSnapshotAfter: PluginAuditSnapshot(plugin),
 	}); err != nil {
 		return PluginMetadataResult{}, fmt.Errorf("audit log plugin create: %w", err)
 	}
@@ -418,8 +418,8 @@ func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx,
 		PluginID:         plugin.ID,
 		PluginName:       plugin.Name,
 		PluginSlug:       plugin.Slug,
-		SnapshotBefore:   pluginAuditSnapshot(before),
-		SnapshotAfter:    pluginAuditSnapshot(plugin),
+		SnapshotBefore:   PluginAuditSnapshot(before),
+		SnapshotAfter:    PluginAuditSnapshot(plugin),
 	}); err != nil {
 		return PluginMetadataResult{}, fmt.Errorf("audit log plugin update: %w", err)
 	}
@@ -431,7 +431,9 @@ func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx,
 	return PluginMetadataResult{Plugin: plugin, Before: &before, DeliveredToEveryone: false, Publication: outcome}, nil
 }
 
-func pluginAuditSnapshot(plugin repo.Plugin) *audit.PluginSnapshot {
+// PluginAuditSnapshot is the audit log's record of a plugin row, with auto
+// sync resolved to its effective setting.
+func PluginAuditSnapshot(plugin repo.Plugin) *audit.PluginSnapshot {
 	return &audit.PluginSnapshot{
 		Name:            plugin.Name,
 		Slug:            plugin.Slug,

@@ -173,6 +173,9 @@ type AttachToDefaultPluginResult struct {
 	PluginSlug    string
 	PluginCreated bool
 	Server        repo.PluginServer
+
+	// Plugin is the Default plugin's row, for the creation audit entry.
+	Plugin repo.Plugin
 }
 
 // AttachToDefaultPlugin idempotently adds a server (toolset- or mcp_server-
@@ -358,6 +361,7 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 		PluginSlug:    plugin.Slug,
 		PluginCreated: pluginCreated,
 		Server:        server,
+		Plugin:        plugin,
 	}, nil
 }
 
@@ -515,7 +519,7 @@ func AttachToDefaultPluginAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, a
 			PluginID:            attached.PluginID,
 			PluginName:          attached.PluginName,
 			PluginSlug:          attached.PluginSlug,
-			PluginSnapshotAfter: nil,
+			PluginSnapshotAfter: PluginAuditSnapshot(attached.Plugin),
 		}); err != nil {
 			return DefaultPluginAttachOutcome{}, fmt.Errorf("audit log default plugin create: %w", err)
 		}
