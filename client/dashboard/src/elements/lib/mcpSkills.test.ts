@@ -94,13 +94,11 @@ describe("listServedSkills", () => {
       `data: ${JSON.stringify({ jsonrpc: "2.0", id: "skills-list-0", result: { skills: [skillEntry("a", "Does A.")] } })}`,
       "",
     ].join("\n\n");
-    const fetchFn = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        new Response(stream, {
-          headers: { "content-type": "text/event-stream" },
-        }),
-      );
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(stream, {
+        headers: { "content-type": "text/event-stream" },
+      }),
+    );
 
     const skills = await listServedSkills({
       url: "https://example.test/mcp/slug",
