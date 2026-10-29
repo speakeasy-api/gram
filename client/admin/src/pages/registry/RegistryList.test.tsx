@@ -180,3 +180,61 @@ it("keeps accessible headers and a spanning cell while loading and empty", async
     ).getAttribute("colspan"),
   ).toBe("4");
 });
+
+it("restores filters from the address and links entry pages with them", async () => {
+  list.mockResolvedValue({
+    entries: [
+      {
+        id: "00000000-0000-4000-8000-000000000001",
+        name: "example.test/demo",
+        published: false,
+        updatedAt: "opaque",
+        issues: [],
+      },
+    ],
+  });
+  await renderWithApp(<RegistryList />, {
+    initialPath: "/registry?q=demo&publication=unpublished",
+  });
+  const edit = await screen.findByRole("link", {
+    name: "Edit example.test/demo",
+  });
+  expect(list).toHaveBeenCalledWith(
+    expect.objectContaining({ query: "demo", published: false }),
+  );
+  expect(
+    (
+      screen.getByRole("textbox", {
+        name: "Search registry",
+      }) as HTMLInputElement
+    ).value,
+  ).toBe("demo");
+  expect(edit.getAttribute("href")).toBe(
+    "/registry/00000000-0000-4000-8000-000000000001?q=demo&publication=unpublished",
+  );
+  expect(
+    screen.getByRole("link", { name: "New entry" }).getAttribute("href"),
+  ).toBe("/registry/new?q=demo&publication=unpublished");
+});
+
+it("keeps a mid-string search edit in place while the address catches up, and follows outside navigation", async () => {
+  list.mockResolvedValue({ entries: [] });
+  const { router } = await renderWithApp(<RegistryList />, {
+    initialPath: "/registry?q=example",
+  });
+  const input = screen.getByRole("textbox", {
+    name: "Search registry",
+  }) as HTMLInputElement;
+  // The address updates in a transition, after the keystroke's event. The box
+  // must already hold the edit, or the caret jumps to the end.
+  fireEvent.change(input, { target: { value: "exaXmple" } });
+  expect(input.value).toBe("exaXmple");
+  fireEvent.change(input, { target: { value: "exaXYmple" } });
+  expect(input.value).toBe("exaXYmple");
+  await waitFor(() =>
+    expect(router.state.location.search).toEqual({ q: "exaXYmple" }),
+  );
+  expect(input.value).toBe("exaXYmple");
+  await act(() => router.navigate({ to: "/registry", search: {} }));
+  await waitFor(() => expect(input.value).toBe(""));
+});

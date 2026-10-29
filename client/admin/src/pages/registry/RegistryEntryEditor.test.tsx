@@ -59,7 +59,7 @@ vi.mock(
     }),
   }),
 );
-import { RegistryEntrySheet } from "./RegistryEntrySheet";
+import { RegistryEntryEditor } from "./RegistryEntryEditor";
 
 const id = "00000000-0000-4000-8000-000000000001";
 const raw =
@@ -92,11 +92,7 @@ afterEach(() => {
 
 async function mount() {
   return renderWithApp(
-    <RegistryEntrySheet
-      id={id}
-      open
-      onOpenChange={vi.fn<(open: boolean) => void>()}
-    />,
+    <RegistryEntryEditor id={id} onClose={vi.fn<() => void>()} />,
     { queryClient: client },
   );
 }
@@ -339,11 +335,7 @@ it("creates from unchanged raw text then saves rather than creating again", asyn
   mutations.create.mockResolvedValue({ ...entry, published: true });
   mutations.save.mockResolvedValue({ ...entry, published: true });
   await renderWithApp(
-    <RegistryEntrySheet
-      id={null}
-      open
-      onOpenChange={vi.fn<(open: boolean) => void>()}
-    />,
+    <RegistryEntryEditor id={null} onClose={vi.fn<() => void>()} />,
     { queryClient: client },
   );
   fireEvent.change(await screen.findByLabelText("Record JSON"), {
@@ -482,13 +474,13 @@ it("does not prompt to discard while existing detail is loading", async () => {
   client.removeQueries({ queryKey: registryEntryQuery(id).queryKey });
   vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
   vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
-  const onOpenChange = vi.fn<(open: boolean) => void>();
+  const onClose = vi.fn<() => void>();
   const { router } = await renderWithApp(
-    <RegistryEntrySheet id={id} open onOpenChange={onOpenChange} />,
+    <RegistryEntryEditor id={id} onClose={onClose} />,
     { queryClient: client },
   );
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-  expect(onOpenChange).toHaveBeenCalledWith(false);
+  expect(onClose).toHaveBeenCalledWith();
   expect(window.confirm).not.toHaveBeenCalled();
   const unload = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(unload);
@@ -533,7 +525,7 @@ it("opens create without fetching or retrying the disabled detail query", async 
   const fetch = vi.fn();
   vi.stubGlobal("fetch", fetch);
   await renderWithApp(
-    <RegistryEntrySheet id={null} open onOpenChange={vi.fn<() => void>()} />,
+    <RegistryEntryEditor id={null} onClose={vi.fn<() => void>()} />,
     { queryClient: client },
   );
   await screen.findByLabelText("Record JSON");
