@@ -123,9 +123,9 @@ function recipes(url: string, key: string, secret: string | null): Recipe[] {
 }
 
 /**
- * Exchanges the key for a single-use install code. The key never goes into the
- * command that way. Until redeemed or expired, the code can retrieve the
- * key and must stay out of chat and shared transcripts.
+ * Exchanges the key for a short-lived install code. The key never goes into the
+ * command that way. Until it expires, the code can retrieve the key and must
+ * stay out of chat and shared transcripts.
  */
 async function mintInstallCommand(
   gatewayURL: string,
@@ -229,8 +229,8 @@ export function AgentGatewayInstall({
               </Button>
             </div>
           )}
-          {/* Always available: a code is spent on first fetch and expires in
-              15 minutes, so a delayed or failed install needs a fresh one. */}
+          {/* Always available: a code expires in 15 minutes, so a delayed
+              install needs a fresh one. */}
           <Button
             variant="secondary"
             size="sm"
@@ -256,14 +256,14 @@ export function AgentGatewayInstall({
             project. Session attribution depends on the active hooks credential.
             Models OpenClaw routes through the Claude CLI bypass those hooks and
             are recorded only if Claude Code hooks are installed too. The
-            command carries a single-use code that can retrieve the key for 15
-            minutes. Run it in a trusted shell; do not paste it into chat.
+            command carries a code that can retrieve the key for 15 minutes. Run
+            it in a trusted shell; do not paste it into chat.
           </Text>
           {command && (
             <Text muted small>
               Piping to a shell runs whatever this deployment returns. To read
-              it first, fetch it to a file and run that instead — but the code
-              is spent by the fetch, so generate a new command afterwards. The
+              it first, fetch it to a file and run that instead. The code stays
+              valid for 15 minutes, so you can rerun the command until then. The
               saved file carries the key: treat it as a secret and delete it
               once you have run it.{" "}
               <code className="text-xs">

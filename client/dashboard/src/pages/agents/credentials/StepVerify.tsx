@@ -112,7 +112,7 @@ export function StepVerify({
         <ul className="space-y-1 text-sm">
           <li>
             <code className="text-xs">401</code> — the credential was rejected.
-            Run the setup command again; a code is spent on first use.
+            Run the setup command again with a fresh setup link.
           </li>
           <li>
             <code className="text-xs">403</code> — the tool is not granted.

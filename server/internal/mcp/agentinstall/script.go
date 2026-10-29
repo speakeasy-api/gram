@@ -1,4 +1,4 @@
-// Package agentinstall renders the single-use shell script behind an agent's
+// Package agentinstall renders the shell script behind an agent's
 // install command. The script connects the MCP clients it finds on a machine
 // to the agent's gateway and, for OpenClaw, also installs the Speakeasy
 // observability plugin so the agent's sessions are recorded under its name.
@@ -183,7 +183,7 @@ const scriptHeader = `#!/bin/sh
 # Connects this machine's MCP clients to a Speakeasy agent gateway. On
 # OpenClaw it also installs Speakeasy observability hooks, so the agent's
 # sessions are recorded under its name.
-# Generated for one use. The key below is live: treat this file as a secret.
+# Generated for this agent. The key below is live: treat this file as a secret.
 #
 # Every step is a function and the last line runs them, so a download cut
 # short defines a few functions and runs nothing.
