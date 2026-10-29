@@ -26,7 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalkeys/repo"
-	"github.com/speakeasy-api/gram/server/internal/managedrows"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -250,7 +250,7 @@ func (s *Service) UpdateAwsKmsKey(ctx context.Context, payload *gen.UpdateAwsKms
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading aws kms key").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(current.ExternalKey.IdentityProviderConnectionID, "this external key"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(current.ExternalKey.IdentityProviderConnectionID, "this external key"); err != nil {
 		return nil, err
 	}
 
@@ -423,7 +423,7 @@ func (s *Service) UpdateGcpKmsKey(ctx context.Context, payload *gen.UpdateGcpKms
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading gcp kms key").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(current.ExternalKey.IdentityProviderConnectionID, "this external key"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(current.ExternalKey.IdentityProviderConnectionID, "this external key"); err != nil {
 		return nil, err
 	}
 
@@ -614,7 +614,7 @@ func (s *Service) deleteExternalKey(ctx context.Context, provider, rawID string)
 		return oops.E(oops.CodeUnexpected, err, "error deleting external key").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, locked.IdentityProviderConnectionID, "this external key"); err != nil {
+	if err := idpmanagedresources.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, locked.IdentityProviderConnectionID, "this external key"); err != nil {
 		return err
 	}
 

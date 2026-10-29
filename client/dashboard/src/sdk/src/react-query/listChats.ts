@@ -115,6 +115,7 @@ export function setListChatsData(
       userId?: string | undefined;
       source?: string | undefined;
       assistantId?: string | undefined;
+      agentId?: string | undefined;
       sourceKind?: string | undefined;
       excludeSourceKind?: string | undefined;
       hasRisk?: HasRisk | undefined;
@@ -148,6 +149,7 @@ export function invalidateListChats(
       userId?: string | undefined;
       source?: string | undefined;
       assistantId?: string | undefined;
+      agentId?: string | undefined;
       sourceKind?: string | undefined;
       excludeSourceKind?: string | undefined;
       hasRisk?: HasRisk | undefined;

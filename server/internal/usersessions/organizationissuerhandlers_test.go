@@ -90,6 +90,7 @@ func TestOrganizationUserSessionIssuerTrustedRemoteSessionIssuer(t *testing.T) {
 		TrustedRemoteSessionClientID: &organizationClientID,
 	})
 	require.NoError(t, err)
+	require.Equal(t, "endpoint", created.AuthorizationServerMode)
 	require.Equal(t, organizationTargetID, *created.TrustedRemoteSessionIssuerID)
 	require.Equal(t, organizationClientID, *created.TrustedRemoteSessionClientID)
 	createAudit, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionUserSessionIssuerCreate)
@@ -689,16 +690,9 @@ func TestOrganizationUserSessionIssuerDeletePreflight(t *testing.T) {
 		Slug:                   "preflight-toolset",
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
-	_, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           siblingID,
-	})
-	require.NoError(t, err)
+	hostToolset(t, ctx, ti, toolset, uuid.NullUUID{UUID: issuerID, Valid: true})
 
 	serverID := uuid.New()
 	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{

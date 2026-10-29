@@ -4,7 +4,6 @@ import type { Role } from "@gram/client/models/components/role.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import {
   buildEmployees,
-  foldSummariesForMembers,
   isUnattributedEmployee,
 } from "./insightsEmployeesData";
 
@@ -500,57 +499,5 @@ describe("buildEmployees most recent account", () => {
     ]);
 
     expect(employees[0]!.mostRecentAccount).toBeNull();
-  });
-});
-
-describe("foldSummariesForMembers", () => {
-  it("folds a member's split summaries into one keyed by the member id", () => {
-    const member = makeMember({
-      id: "member-1",
-      email: "ada@example.com",
-      name: "Ada",
-    });
-    const folded = foldSummariesForMembers(
-      [member],
-      [
-        makeSummary({
-          userId: "ada@example.com",
-          userEmail: "ada@example.com",
-          totalInputTokens: 700,
-          totalOutputTokens: 20,
-          accounts: [
-            {
-              provider: "anthropic",
-              email: "ada.personal@gmail.com",
-              accountType: "personal",
-              userId: "member-1",
-            },
-          ],
-        }),
-        makeSummary({
-          userId: "ada.personal@gmail.com",
-          userEmail: "ada.personal@gmail.com",
-          totalInputTokens: 300,
-          totalOutputTokens: 30,
-        }),
-        makeSummary({ userId: "ghost@example.com", totalInputTokens: 5 }),
-      ],
-    );
-
-    expect(folded).toHaveLength(2);
-    const ada = folded.find((u) => u.userId === "member-1");
-    expect(ada).toBeDefined();
-    expect(ada!.totalInputTokens).toBe(1000);
-    expect(ada!.userEmail).toBe("ada@example.com");
-    expect(folded.find((u) => u.userId === "ghost@example.com")).toBeDefined();
-  });
-
-  it("drops nothing and adds nothing for members without usage", () => {
-    const member = makeMember({
-      id: "member-1",
-      email: "ada@example.com",
-      name: "Ada",
-    });
-    expect(foldSummariesForMembers([member], [])).toHaveLength(0);
   });
 });

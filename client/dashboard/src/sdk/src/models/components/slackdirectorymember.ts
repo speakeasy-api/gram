@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -24,7 +25,7 @@ export const MappingStatus = {
 /**
  * Mapping state, separate from source state and freshness.
  */
-export type MappingStatus = ClosedEnum<typeof MappingStatus>;
+export type MappingStatus = OpenEnum<typeof MappingStatus>;
 
 /**
  * Observed account type.
@@ -39,7 +40,7 @@ export const MemberType = {
 /**
  * Observed account type.
  */
-export type MemberType = ClosedEnum<typeof MemberType>;
+export type MemberType = OpenEnum<typeof MemberType>;
 
 /**
  * Observed account state.
@@ -53,7 +54,7 @@ export const SlackDirectoryMemberStatus = {
 /**
  * Observed account state.
  */
-export type SlackDirectoryMemberStatus = ClosedEnum<
+export type SlackDirectoryMemberStatus = OpenEnum<
   typeof SlackDirectoryMemberStatus
 >;
 
@@ -126,17 +127,20 @@ export type SlackDirectoryMember = {
 };
 
 /** @internal */
-export const MappingStatus$inboundSchema: z.ZodMiniEnum<typeof MappingStatus> =
-  z.enum(MappingStatus);
+export const MappingStatus$inboundSchema: z.ZodMiniType<
+  MappingStatus,
+  unknown
+> = openEnums.inboundSchema(MappingStatus);
 
 /** @internal */
-export const MemberType$inboundSchema: z.ZodMiniEnum<typeof MemberType> = z
-  .enum(MemberType);
+export const MemberType$inboundSchema: z.ZodMiniType<MemberType, unknown> =
+  openEnums.inboundSchema(MemberType);
 
 /** @internal */
-export const SlackDirectoryMemberStatus$inboundSchema: z.ZodMiniEnum<
-  typeof SlackDirectoryMemberStatus
-> = z.enum(SlackDirectoryMemberStatus);
+export const SlackDirectoryMemberStatus$inboundSchema: z.ZodMiniType<
+  SlackDirectoryMemberStatus,
+  unknown
+> = openEnums.inboundSchema(SlackDirectoryMemberStatus);
 
 /** @internal */
 export const SlackDirectoryMember$inboundSchema: z.ZodMiniType<

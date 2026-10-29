@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -129,7 +130,6 @@ func EvalPromptGuardrail(
 			}
 			result.Verdicts[pos] = out
 		},
-		nil,
 	)
 	return result, nil
 }
@@ -164,4 +164,53 @@ func messageVerdictSkeleton(idx int, msg batchMessage) MessageVerdict {
 
 func applyFailClosedFallback(verdict *MessageVerdict, err error) {
 	verdict.Verdict = promptpolicy.FailClosedVerdict(err)
+}
+
+// judgeConcurrency bounds the number of in-flight judge calls per replay.
+const judgeConcurrency = 8
+
+// judgeFanout evaluates the given message indices against a guardrail prompt
+// with at most judgeConcurrency calls in flight, invoking apply for each result
+// (pos is the position within indices, idx the original message index, verdict
+// nil when the judge skipped, err non-nil when it degraded, latency the
+// wall-clock call time).
+func judgeFanout(
+	ctx context.Context,
+	judge promptpolicy.Evaluator,
+	orgID, projectID, prompt string,
+	cfg promptpolicy.Config,
+	msgs []batchMessage,
+	indices []int,
+	apply func(pos, idx int, verdict *promptpolicy.Verdict, err error, latency time.Duration),
+) {
+	for start := 0; start < len(indices); start += judgeConcurrency {
+		if err := ctx.Err(); err != nil {
+			for pos := start; pos < len(indices); pos++ {
+				idx := indices[pos]
+				apply(pos, idx, nil, err, 0)
+			}
+			return
+		}
+
+		end := min(start+judgeConcurrency, len(indices))
+		var wg sync.WaitGroup
+		for pos := start; pos < end; pos++ {
+			wg.Add(1)
+			go func(pos int) {
+				defer wg.Done()
+				idx := indices[pos]
+				started := time.Now()
+				verdict, err := judge(ctx, promptpolicy.Input{
+					OrgID:     orgID,
+					ProjectID: projectID,
+					UserID:    msgs[idx].UserID,
+					Prompt:    prompt,
+					Message:   batchJudgeMessage(msgs[idx]),
+					Config:    cfg,
+				})
+				apply(pos, idx, verdict, err, time.Since(started))
+			}(pos)
+		}
+		wg.Wait()
+	}
 }

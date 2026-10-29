@@ -53,6 +53,12 @@ function parseDateRange(
     preset,
     customRange,
     customLabel: label ? safeBase64Decode(label) : null,
+    calendarEnd:
+      customRange &&
+      params.get("calendarEnd") &&
+      !isNaN(Date.parse(params.get("calendarEnd")!))
+        ? new Date(params.get("calendarEnd")!)
+        : undefined,
   };
 }
 
@@ -84,9 +90,18 @@ function parseValue(dim: FilterDimension, params: URLSearchParams): AnyValue {
 }
 
 /** The search parameters a date range dimension is kept in. */
-export const DATE_RANGE_PARAMS = ["range", "from", "to", "label"] as const;
+export const DATE_RANGE_PARAMS = [
+  "range",
+  "from",
+  "to",
+  "label",
+  "calendarEnd",
+] as const;
 
 function writeDateRange(next: URLSearchParams, value: DateRangeValue): void {
+  if (value.customRange && value.calendarEnd)
+    next.set("calendarEnd", value.calendarEnd.toISOString());
+  else next.delete("calendarEnd");
   if (value.customRange) {
     next.set("from", value.customRange.from.toISOString());
     next.set("to", value.customRange.to.toISOString());

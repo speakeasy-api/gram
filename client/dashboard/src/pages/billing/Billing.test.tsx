@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +21,9 @@ const mocks = vi.hoisted(() => ({
   periodUsage: vi.fn(),
   inferenceCaps: vi.fn(),
   usageTiers: vi.fn(),
+  sdk: { usage: { createCheckout: vi.fn() } },
+  telemetry: { capture: vi.fn() },
+  polarInit: vi.fn(),
 }));
 
 vi.mock("@/hooks/useProductTier", () => ({
@@ -37,9 +46,13 @@ vi.mock("@/contexts/Auth", () => ({
   }),
 }));
 
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({ usage: {} }) }));
+vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => mocks.sdk }));
 vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetry: () => ({ capture: vi.fn() }),
+  useTelemetry: () => mocks.telemetry,
+}));
+
+vi.mock("@polar-sh/checkout/embed", () => ({
+  PolarEmbedCheckout: { init: mocks.polarInit },
 }));
 
 vi.mock("@gram/client/react-query/createStripeCheckout.js", () => ({
@@ -215,6 +228,9 @@ function renderBilling() {
 describe("Billing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.sdk.usage.createCheckout.mockResolvedValue(
+      "https://checkout.example.com/session",
+    );
     mocks.productTier.mockReturnValue("base");
     mocks.flagResult.mockReturnValue({ status: "enabled" });
     mocks.hasScope.mockReturnValue(true);
@@ -287,6 +303,8 @@ describe("Billing", () => {
     expect(cta()).not.toBeNull();
     // The rates for the plan the CTA starts sit on this branch too.
     expect(screen.getByText("Pay as you go pricing")).toBeTruthy();
+    expect(mocks.sdk.usage.createCheckout).not.toHaveBeenCalled();
+    expect(mocks.polarInit).not.toHaveBeenCalled();
   });
 
   it.each(["success", "404"])(
@@ -334,6 +352,8 @@ describe("Billing", () => {
       expect(screen.queryByRole("alert")).toBeNull();
       expect(cta() !== null).toBe(outcome === "404");
       expect(paymentSection() !== null).toBe(outcome === "404");
+      expect(mocks.sdk.usage.createCheckout).not.toHaveBeenCalled();
+      expect(mocks.polarInit).not.toHaveBeenCalled();
     },
   );
 
@@ -371,6 +391,8 @@ describe("Billing", () => {
     // The pricing section states rates; the plan's product features are not
     // one of them.
     expect(screen.queryByText("Enterprise feature set")).toBeNull();
+    expect(mocks.sdk.usage.createCheckout).not.toHaveBeenCalled();
+    expect(mocks.polarInit).not.toHaveBeenCalled();
   });
 
   it("shows no checkout CTA to a member", () => {
@@ -591,6 +613,8 @@ describe("Billing", () => {
     expect(screen.getByText("meter usage")).toBeTruthy();
     expect(inferenceCapsSection()).toBeNull();
     expect(mocks.inferenceCaps).not.toHaveBeenCalled();
+    expect(mocks.sdk.usage.createCheckout).not.toHaveBeenCalled();
+    expect(mocks.polarInit).not.toHaveBeenCalled();
   });
 
   it.each<ProductTier>(["base", "base_PAID", "__deprecated__pro"])(
@@ -605,6 +629,27 @@ describe("Billing", () => {
       expect(meterUsageSection()).toBeNull();
       expect(spendBreakdownSection()).toBeNull();
       expect(mocks.inferenceCaps).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each<ProductTier>(["base_PAID", "__deprecated__pro"])(
+    "initializes Polar checkout for the legacy %s billing view",
+    async (tier) => {
+      mocks.productTier.mockReturnValue(tier);
+      renderBilling();
+
+      await waitFor(() =>
+        expect(mocks.polarInit).toHaveBeenCalledExactlyOnceWith(),
+      );
+      expect(mocks.sdk.usage.createCheckout).toHaveBeenCalledExactlyOnceWith();
+      expect(
+        screen.getByRole("button", { name: "MANAGE BILLING" }),
+      ).toBeTruthy();
+      expect(screen.queryByRole("link", { name: "ADD CARD" })).toBeNull();
+      expect(mocks.telemetry.capture).not.toHaveBeenCalledWith(
+        "checkout_link_error",
+        expect.anything(),
+      );
     },
   );
 
@@ -634,5 +679,7 @@ describe("Billing", () => {
 
     expect(cta()).toBeNull();
     expect(screen.queryByText("Pay as you go pricing")).toBeNull();
+    expect(mocks.sdk.usage.createCheckout).not.toHaveBeenCalled();
+    expect(mocks.polarInit).not.toHaveBeenCalled();
   });
 });

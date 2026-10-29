@@ -38,6 +38,7 @@ export function reviewSortRank(server: ShadowMCPInventoryServer): number {
     case undefined:
       return 2;
   }
+  return 2;
 }
 
 export function matchesReviewFilter(

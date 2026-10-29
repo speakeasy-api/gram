@@ -19,12 +19,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -37,6 +40,7 @@ type hostedFixture struct {
 	toolsets  *toolsets.Service
 	projectID uuid.UUID
 	toolset   toolsetsrepo.Toolset
+	slug      string
 }
 
 func newHostedFixture(t *testing.T) (context.Context, *hostedFixture) {
@@ -57,9 +61,9 @@ func newHostedFixture(t *testing.T) (context.Context, *hostedFixture) {
 	require.True(t, ok)
 	toolset, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
-	require.True(t, toolset.McpSlug.Valid)
+	require.NotNil(t, created.McpSlug)
 
-	return ctx, &hostedFixture{ti: ti, toolsets: toolsetsSvc, projectID: *authCtx.ProjectID, toolset: toolset}
+	return ctx, &hostedFixture{ti: ti, toolsets: toolsetsSvc, projectID: *authCtx.ProjectID, toolset: toolset, slug: string(*created.McpSlug)}
 }
 
 func (f *hostedFixture) payload(visibility types.McpServerVisibility, mutate func(*gen.UpdateMcpServerPayload)) *gen.UpdateMcpServerPayload {
@@ -70,37 +74,32 @@ func (f *hostedFixture) payload(visibility types.McpServerVisibility, mutate fun
 	return payload
 }
 
-// requireProjected asserts the wrapper and its endpoint are exactly what the toolset columns project to.
+// requireProjected asserts the wrapper shares the toolset's name and tool variations group, keeps its single
+// platform endpoint, and that the toolset has no legacy alias.
 func (f *hostedFixture) requireProjected(t *testing.T, ctx context.Context) (toolsetsrepo.Toolset, mcpserversrepo.McpServer) {
 	t.Helper()
 
 	toolset, err := toolsetsrepo.New(f.ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.toolset.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
+	alias, err := legacyalias.Get(ctx, f.ti.conn, f.projectID, f.toolset.ID)
+	require.NoError(t, err)
+	require.Equal(t, legacyalias.None(), alias, "hosting writes never give the toolset a legacy alias")
 	server, err := mcpserversrepo.New(f.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.toolset.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
 	require.Equal(t, toolset.Name, server.Name.String)
-	require.Equal(t, toolset.McpSlug, server.Slug)
-	require.Equal(t, toolset.UserSessionIssuerID, server.UserSessionIssuerID)
+	require.Equal(t, f.slug, server.Slug.String, "the server slug does not follow the name")
 	require.Equal(t, toolset.ToolVariationsGroupID, server.ToolVariationsGroupID)
-	switch {
-	case !toolset.McpEnabled:
-		require.Equal(t, "disabled", server.Visibility)
-	case toolset.McpIsPublic:
-		require.Equal(t, "public", server.Visibility)
-	default:
-		require.Equal(t, "private", server.Visibility)
-	}
 	endpoints, err := mcpendpointsrepo.New(f.ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: f.projectID, McpServerID: f.toolset.ID})
 	require.NoError(t, err)
 	require.Len(t, endpoints, 1)
-	require.Equal(t, toolset.McpSlug.String, endpoints[0].Slug)
+	require.Equal(t, f.slug, endpoints[0].Slug)
 	return toolset, server
 }
 
 func (f *hostedFixture) resolve(t *testing.T, ctx context.Context) mcpendpoints.ResolutionResult {
 	t.Helper()
 
-	input, err := mcpendpoints.FromContext(ctx, f.toolset.McpSlug.String)
+	input, err := mcpendpoints.FromContext(ctx, f.slug)
 	require.NoError(t, err)
 	result, err := mcpendpoints.Resolve(ctx, f.ti.conn, testenv.NewLogger(t), input)
 	require.NoError(t, err)
@@ -108,7 +107,7 @@ func (f *hostedFixture) resolve(t *testing.T, ctx context.Context) mcpendpoints.
 	return result
 }
 
-func TestUpdateMcpServerHostedWrapperWritesThroughToolset(t *testing.T) {
+func TestUpdateMcpServerHostedWrapperWritesWrapper(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedFixture(t)
 	groupID := seedToolVariationsGroup(t, ctx, f.ti.conn, f.projectID)
@@ -121,22 +120,23 @@ func TestUpdateMcpServerHostedWrapperWritesThroughToolset(t *testing.T) {
 	require.Equal(t, "public", string(view.Visibility))
 	require.NotNil(t, view.Toolset)
 	require.Equal(t, f.toolset.ID.String(), view.Toolset.ID)
-	require.Equal(t, conv.PtrEmpty(f.toolset.McpSlug.String), view.PlatformEndpointSlug)
+	require.Equal(t, conv.PtrEmpty(f.slug), view.PlatformEndpointSlug)
 	require.NotNil(t, view.PrimaryEndpointID)
 
 	toolset, server := f.requireProjected(t, ctx)
-	require.Equal(t, "Renamed hosted", toolset.Name)
-	require.True(t, toolset.McpEnabled)
-	require.True(t, toolset.McpIsPublic)
-	require.Equal(t, groupID, toolset.ToolVariationsGroupID.UUID)
-	require.Equal(t, f.toolset.McpSlug, server.Slug, "the hosted address does not follow the name")
-	require.True(t, f.resolve(t, ctx).Allowed, "serving drift checks see matching toolset columns")
+	require.Equal(t, "Renamed hosted", toolset.Name, "a rename renames the toolset too")
+	require.Equal(t, "public", server.Visibility)
+	require.Equal(t, groupID, server.ToolVariationsGroupID.UUID)
+	require.True(t, f.resolve(t, ctx).Allowed)
+	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, f.ti.conn, audit.ActionMcpServerUpdate, f.toolset.ID.String())
+	require.NoError(t, err)
+	require.Contains(t, string(record.AfterSnapshot), "Renamed hosted")
 
 	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("disabled"), nil))
 	require.NoError(t, err)
-	toolset, _ = f.requireProjected(t, ctx)
-	require.False(t, toolset.McpEnabled)
-	require.False(t, toolset.ToolVariationsGroupID.Valid, "omitted tool variations group clears it")
+	_, server = f.requireProjected(t, ctx)
+	require.Equal(t, "disabled", server.Visibility)
+	require.False(t, server.ToolVariationsGroupID.Valid, "omitted tool variations group clears it")
 	require.False(t, f.resolve(t, ctx).Allowed)
 }
 
@@ -144,13 +144,15 @@ func TestUpdateMcpServerHostedWrapperStaysConsistentWithToolsetWrites(t *testing
 	t.Parallel()
 	ctx, f := newHostedFixture(t)
 
-	_, err := f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) { p.Name = new("Via server") }))
+	_, err := f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("public"), func(p *gen.UpdateMcpServerPayload) { p.Name = new("Via server") }))
 	require.NoError(t, err)
 	f.requireProjected(t, ctx)
 
-	// A pod that only knows the toolset API keeps working against the same rows.
-	_, err = f.toolsets.UpdateToolset(ctx, &toolsetsgen.UpdateToolsetPayload{Slug: types.Slug(f.toolset.Slug), Name: new("Via toolset"), McpIsPublic: new(true)})
+	// The toolset API still renames; its hosting fields are rejected.
+	_, err = f.toolsets.UpdateToolset(ctx, &toolsetsgen.UpdateToolsetPayload{Slug: types.Slug(f.toolset.Slug), Name: new("Via toolset")})
 	require.NoError(t, err)
+	_, err = f.toolsets.UpdateToolset(ctx, &toolsetsgen.UpdateToolsetPayload{Slug: types.Slug(f.toolset.Slug), McpIsPublic: new(false)})
+	require.ErrorIs(t, err, toolsets.ErrHostingFieldsMoved)
 	toolset, server := f.requireProjected(t, ctx)
 	require.Equal(t, "Via toolset", toolset.Name)
 	require.Equal(t, "public", server.Visibility)
@@ -177,7 +179,7 @@ func TestUpdateMcpServerHostedWrapperRejectsShapeChanges(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedFixture(t)
 	remoteID := seedRemoteMcpServer(t, ctx, f.ti.conn, f.projectID)
-	before, _ := f.requireProjected(t, ctx)
+	_, before := f.requireProjected(t, ctx)
 
 	_, err := f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) {
 		p.ToolsetID = nil
@@ -188,9 +190,8 @@ func TestUpdateMcpServerHostedWrapperRejectsShapeChanges(t *testing.T) {
 	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) { p.EnvironmentID = new(uuid.NewString()) }))
 	requireOopsCode(t, err, oops.CodeInvalid)
 
-	after, _ := f.requireProjected(t, ctx)
-	require.Equal(t, before.Name, after.Name)
-	require.Equal(t, before.McpEnabled, after.McpEnabled)
+	_, after := f.requireProjected(t, ctx)
+	require.Equal(t, before, after)
 }
 
 func TestUpdateMcpServerHostedWrapperRejectedWithoutWriter(t *testing.T) {
@@ -199,7 +200,7 @@ func TestUpdateMcpServerHostedWrapperRejectedWithoutWriter(t *testing.T) {
 	f.ti.service.WithHostedServerWriter(nil)
 
 	_, err := f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) { p.Name = new("Unwired") }))
-	requireOopsCode(t, err, oops.CodeInvalid)
+	requireOopsCode(t, err, oops.CodeUnexpected)
 	toolset, _ := f.requireProjected(t, ctx)
 	require.Equal(t, f.toolset.Name, toolset.Name)
 }
@@ -222,13 +223,13 @@ func TestUpdateMcpServerHostedWrapperLinksIssuerAndKeepsItWhenOmitted(t *testing
 		p.UserSessionIssuerID = new(issuer.ID.String())
 	}))
 	require.NoError(t, err)
-	toolset, _ := f.requireProjected(t, ctx)
-	require.Equal(t, issuer.ID, toolset.UserSessionIssuerID.UUID)
+	_, server := f.requireProjected(t, ctx)
+	require.Equal(t, issuer.ID, server.UserSessionIssuerID.UUID)
 
 	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) { p.Name = new("Kept issuer") }))
 	require.NoError(t, err)
-	toolset, _ = f.requireProjected(t, ctx)
-	require.Equal(t, issuer.ID, toolset.UserSessionIssuerID.UUID)
+	_, server = f.requireProjected(t, ctx)
+	require.Equal(t, issuer.ID, server.UserSessionIssuerID.UUID)
 	require.True(t, f.resolve(t, ctx).Allowed)
 }
 
@@ -248,15 +249,60 @@ func TestUpdateMcpServerHostedWrapperRejectsPublicFlipWithExternalOAuth(t *testi
 
 	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), nil))
 	requireOopsCode(t, err, oops.CodeInvalid)
-	toolset, _ := f.requireProjected(t, ctx)
-	require.True(t, toolset.McpIsPublic)
+	toolset, server := f.requireProjected(t, ctx)
+	require.Equal(t, "public", server.Visibility)
 	require.True(t, toolset.ExternalOauthServerID.Valid, "the external OAuth server is not silently detached")
 
 	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("disabled"), nil))
 	require.NoError(t, err)
-	toolset, _ = f.requireProjected(t, ctx)
-	require.False(t, toolset.McpEnabled)
-	require.True(t, toolset.McpIsPublic, "disabling leaves the public flag alone")
+	_, server = f.requireProjected(t, ctx)
+	require.Equal(t, "disabled", server.Visibility)
+}
+
+func TestUpdateMcpServerHostedWrapperFlipsIssuerGatedVisibility(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedFixture(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	issuer, err := usersessionsrepo.New(f.ti.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          f.projectID,
+		OrganizationID:     pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true},
+		Slug:               "proxy-link-issuer-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: 24 * 60 * 60 * 1_000_000, Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) {
+		p.UserSessionIssuerID = new(issuer.ID.String())
+	}))
+	require.NoError(t, err)
+
+	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("public"), nil))
+	require.NoError(t, err)
+	_, server := f.requireProjected(t, ctx)
+	require.Equal(t, "public", server.Visibility)
+	require.Equal(t, issuer.ID, server.UserSessionIssuerID.UUID)
+
+	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), nil))
+	require.NoError(t, err)
+	_, server = f.requireProjected(t, ctx)
+	require.Equal(t, "private", server.Visibility)
+	require.Equal(t, issuer.ID, server.UserSessionIssuerID.UUID)
+	require.True(t, f.resolve(t, ctx).Allowed)
+
+	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("disabled"), nil))
+	require.NoError(t, err)
+	toolset, server := f.requireProjected(t, ctx)
+	require.Equal(t, "disabled", server.Visibility)
+	require.False(t, hostedmcp.ServerHosting(toolset, &server).Public)
+
+	tx := testenv.BeginTx(t, ctx, f.ti.conn)
+	enabled, err := hostedmcp.Enable(ctx, tx, audit.NewLogger(), hostedmcp.SystemActor("re-enable-test"), toolset)
+	require.NoError(t, err)
+	require.True(t, enabled)
+	require.NoError(t, tx.Commit(ctx))
+	_, server = f.requireProjected(t, ctx)
+	require.Equal(t, "private", server.Visibility, "re-enabling an issuer-gated server restores private")
 }
 
 func TestUpdateMcpServerHostedWrapperRejectsNameOverToolsetLimit(t *testing.T) {
@@ -282,6 +328,7 @@ func TestUpdateMcpServerHostedWrapperIgnoresDeletedToolsetWithSameSlug(t *testin
 	recreated, err := f.toolsets.CreateToolset(ctx, &toolsetsgen.CreateToolsetPayload{Name: "Hosted wrapper", ToolUrns: []string{}})
 	require.NoError(t, err)
 	require.Equal(t, f.toolset.Slug, string(recreated.Slug))
+	f.slug = string(*recreated.McpSlug)
 	f.toolset, err = queries.GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: uuid.MustParse(recreated.ID), ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 
@@ -295,16 +342,15 @@ func TestUpdateMcpServerHostedWrapperIgnoresDeletedToolsetWithSameSlug(t *testin
 	require.Equal(t, "Hosted wrapper", deleted.Name, "the deleted twin is not rewritten")
 }
 
-func (f *hostedFixture) pluginMemberships(t *testing.T, ctx context.Context) int {
+func (f *hostedFixture) pluginMemberships(t *testing.T, ctx context.Context) int64 {
 	t.Helper()
 
-	var count int
-	err := f.ti.conn.QueryRow(ctx, `SELECT count(*) FROM plugin_servers WHERE deleted IS FALSE AND (toolset_id = $1 OR mcp_server_id = $1)`, f.toolset.ID).Scan(&count) //nolint:glint // notestingrawsql: counts memberships under either key
+	count, err := pluginsrepo.New(f.ti.conn).CountLivePluginServersByMCPServerIDFixture(ctx, pluginsrepo.CountLivePluginServersByMCPServerIDFixtureParams{ProjectID: f.projectID, McpServerID: uuid.NullUUID{UUID: f.toolset.ID, Valid: true}})
 	require.NoError(t, err)
 	return count
 }
 
-func TestDeleteMcpServerHostedWrapperDisablesThroughToolset(t *testing.T) {
+func TestDeleteMcpServerHostedWrapperDisablesWrapper(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedFixture(t)
 	groupID := seedToolVariationsGroup(t, ctx, f.ti.conn, f.projectID)
@@ -328,9 +374,7 @@ func TestDeleteMcpServerHostedWrapperDisablesThroughToolset(t *testing.T) {
 	require.NoError(t, f.ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: f.toolset.ID.String()}))
 
 	toolset, server := f.requireProjected(t, ctx)
-	require.False(t, toolset.McpEnabled)
-	require.True(t, toolset.McpIsPublic, "disabling keeps the public flag, as a toolset disable does")
-	require.Equal(t, f.toolset.McpSlug, toolset.McpSlug)
+	require.Equal(t, "disabled", server.Visibility)
 	require.Equal(t, groupID, toolset.ToolVariationsGroupID.UUID, "the tool filtering group is kept")
 	require.Equal(t, before.ID, server.ID, "the wrapper stays live")
 	require.False(t, f.resolve(t, ctx).Allowed)
@@ -359,30 +403,18 @@ func TestDeleteMcpServerHostedWrapperDisablesThroughToolset(t *testing.T) {
 	require.True(t, f.resolve(t, ctx).Allowed)
 }
 
-func TestDeleteMcpServerHostedWrapperMatchesToolsetDisable(t *testing.T) {
+func TestDeleteMcpServerHostedWrapperIsRepeatable(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedFixture(t)
 
 	require.NoError(t, f.ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: f.toolset.ID.String()}))
-	viaServer, serverRow := f.requireProjected(t, ctx)
+	_, first := f.requireProjected(t, ctx)
+	require.Equal(t, "disabled", first.Visibility)
+	require.False(t, first.Deleted)
 
-	_, err := f.toolsets.UpdateToolset(ctx, &toolsetsgen.UpdateToolsetPayload{Slug: types.Slug(f.toolset.Slug), McpEnabled: new(true)})
-	require.NoError(t, err)
-	_, err = f.toolsets.UpdateToolset(ctx, &toolsetsgen.UpdateToolsetPayload{Slug: types.Slug(f.toolset.Slug), McpEnabled: new(false)})
-	require.NoError(t, err)
-	viaToolset, toolsetRow := f.requireProjected(t, ctx)
-
-	require.Equal(t, viaServer.McpEnabled, viaToolset.McpEnabled)
-	require.Equal(t, viaServer.McpIsPublic, viaToolset.McpIsPublic)
-	require.Equal(t, viaServer.McpSlug, viaToolset.McpSlug)
-	require.Equal(t, viaServer.CustomDomainID, viaToolset.CustomDomainID)
-	require.Equal(t, serverRow.Visibility, toolsetRow.Visibility)
-	require.Equal(t, serverRow.NetworkAccessMode, toolsetRow.NetworkAccessMode)
-	require.False(t, serverRow.Deleted)
-
-	// Deleting an already disabled server succeeds again, as a repeated toolset disable does.
 	require.NoError(t, f.ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: f.toolset.ID.String()}))
-	f.requireProjected(t, ctx)
+	_, second := f.requireProjected(t, ctx)
+	require.Equal(t, first, second, "deleting an already disabled server changes nothing")
 }
 
 func TestDeleteMcpServerHostedWrapperRejectedWithoutWriter(t *testing.T) {
@@ -390,10 +422,12 @@ func TestDeleteMcpServerHostedWrapperRejectedWithoutWriter(t *testing.T) {
 	ctx, f := newHostedFixture(t)
 	f.ti.service.WithHostedServerWriter(nil)
 
+	_, before := f.requireProjected(t, ctx)
+
 	err := f.ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: f.toolset.ID.String()})
-	requireOopsCode(t, err, oops.CodeInvalid)
-	toolset, _ := f.requireProjected(t, ctx)
-	require.Equal(t, f.toolset.McpEnabled, toolset.McpEnabled)
+	requireOopsCode(t, err, oops.CodeUnexpected)
+	_, after := f.requireProjected(t, ctx)
+	require.Equal(t, before, after)
 }
 
 func (f *hostedFixture) requireAuditDelta(t *testing.T, ctx context.Context, action audit.Action, before int64, delta int64) {

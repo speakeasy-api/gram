@@ -1,5 +1,9 @@
+vi.mock("@gram/client/react-query/members.js", () => ({
+  useMembers: () => ({ data: { members: [] } }),
+}));
 import { useState } from "react";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -25,13 +29,16 @@ const mocks = vi.hoisted(() => ({
   bindings: vi.fn(),
   attach: vi.fn(),
   detach: vi.fn(),
+  beginRefresh: vi.fn(),
+  completeRefresh: vi.fn(),
+  userId: "user_example",
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
     id: "org_example",
     projects: [{ id: "project_one", name: "Project one", slug: "project-one" }],
   }),
-  useSession: () => ({ user: { id: "user_example" } }),
+  useSession: () => ({ user: { id: mocks.userId } }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
@@ -40,9 +47,28 @@ vi.mock("@/contexts/Sdk", () => ({
     mcpEndpoints: { list: mocks.endpoints },
     remoteSessionClients: { list: mocks.clients },
     remoteSessions: {
+      beginBindingRefresh: mocks.beginRefresh,
+      completeBindingRefresh: mocks.completeRefresh,
       list: async (request: { principalId: string }) => [
         { result: { items: await mocks.candidates(request.principalId) } },
       ],
+      attachBinding: (request: {
+        attachBindingRequestBody: {
+          principalId: string;
+          remoteSessionId: string;
+        };
+      }) =>
+        mocks.attach(
+          request.attachBindingRequestBody.principalId,
+          request.attachBindingRequestBody.remoteSessionId,
+        ),
+      detachBinding: (request: {
+        detachBindingRequestBody: { principalId: string; id: string };
+      }) =>
+        mocks.detach(
+          request.detachBindingRequestBody.principalId,
+          request.detachBindingRequestBody.id,
+        ),
       listBindings: async (request: { principalId: string }) => ({
         items: await mocks.bindings(request.principalId),
       }),
@@ -63,7 +89,11 @@ vi.mock("@gram/client/react-query/listMcpServersForOrg.js", () => ({
   useListMcpServersForOrg: (_r: unknown, _s: unknown, options: object) =>
     useQuery({ queryKey: ["modern"], queryFn: mocks.modern, ...options }),
 }));
-const agent = { id: "agent_example" } as ManagedAgent;
+const agent = {
+  id: "agent_example",
+  ownerUserId: "user_example",
+  permissions: { write: true },
+} as ManagedAgent;
 const server: KeyServer = {
   id: "remote",
   resourceId: "remote",
@@ -116,19 +146,27 @@ function setup(
       />
     );
   }
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
+    <QueryClientProvider client={queryClient}>
       <Harness />
     </QueryClientProvider>,
   );
-  return { ready, changed, inventory };
+  return { ready, changed, inventory, queryClient };
 }
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.beginRefresh.mockResolvedValue({ attemptId: "attempt_example" });
+  mocks.completeRefresh.mockResolvedValue({ completed: false });
+  vi.spyOn(window, "open").mockReturnValue({
+    location: { href: "about:blank" },
+    focus: vi.fn(),
+    close: vi.fn(),
+    closed: false,
+    opener: window,
+  } as unknown as Window);
   mocks.domains.mockResolvedValue({
     domains: [{ id: "domain_example", domain: "mcp.example.test" }],
   });
@@ -191,13 +229,19 @@ beforeEach(() => {
       id: "account_example",
       remoteSessionClientId: "client_example",
       scopes: ["read"],
+      accessExpiresAt: new Date(Date.now() + 3 * 86_400_000),
+      hasRefreshToken: false,
     },
   ]);
+  mocks.userId = "user_example";
   mocks.bindings.mockResolvedValue([]);
   mocks.attach.mockResolvedValue(undefined);
   mocks.detach.mockResolvedValue(undefined);
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 describe("Agent key MCP servers", () => {
   it("explains unavailable inventory when only disabled or unproxied servers exist", async () => {
     mocks.toolsets.mockResolvedValue({
@@ -265,7 +309,7 @@ describe("Agent key MCP servers", () => {
     await screen.findByRole("button", { name: "Use account" });
     expect(screen.getByText("Identity unavailable")).toBeTruthy();
     expect(
-      screen.getByText(/they stay connected for its other keys/),
+      screen.getByText(/Each connection is shared by this agent’s keys/),
     ).toBeTruthy();
     expect(screen.queryByText(/account_example|client_example/)).toBeNull();
     expect(screen.getByText("Access: read")).toBeTruthy();
@@ -385,7 +429,8 @@ describe("Agent key MCP servers", () => {
     expect(mocks.endpoints).not.toHaveBeenCalled();
   });
   it("reuses an account through attachment APIs and waits for confirmed active bindings", async () => {
-    const { ready } = setup(1, [server]);
+    const { ready, queryClient } = setup(1, [server]);
+    queryClient.setQueryData(["owner-connections", "bindings", agent.id], []);
     fireEvent.click(await screen.findByRole("button", { name: "Use account" }));
     await waitFor(() =>
       expect(mocks.attach).toHaveBeenCalledWith(
@@ -393,9 +438,16 @@ describe("Agent key MCP servers", () => {
         "account_example",
       ),
     );
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryState(["owner-connections", "bindings", agent.id])
+          ?.isInvalidated,
+      ).toBe(true),
+    );
     expect(ready).not.toHaveBeenCalledWith(true);
     mocks.bindings.mockResolvedValue([
       {
+        id: "binding_example",
         remoteSessionId: "account_example",
         remoteSessionClientId: "client_example",
         remoteSession: {
@@ -408,19 +460,16 @@ describe("Agent key MCP servers", () => {
       expect(
         (
           screen.getByRole("button", {
-            name: "Refresh accounts",
+            name: "Refresh connection status",
           }) as HTMLButtonElement
         ).disabled,
       ).toBe(false),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Refresh accounts" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Refresh connection status" }),
+    );
     await screen.findByText("Accounts ready.");
     expect(ready).toHaveBeenLastCalledWith(true);
-    expect(
-      screen
-        .getByRole("link", { name: "Connect an account" })
-        .getAttribute("target"),
-    ).toBe("_blank");
   });
   it.each(["account_example", "revoked_account"])(
     "keeps tombstone %s detach-only even if a new grant has the same session ID",
@@ -452,6 +501,289 @@ describe("Agent key MCP servers", () => {
       expect(ready).not.toHaveBeenCalledWith(true);
     },
   );
+  it("says when an account expires", async () => {
+    setup(1, [server]);
+    expect(await screen.findByText(/^Expires .* \(in 3 days\)$/)).toBeTruthy();
+  });
+  it("allows an authorized editor to assign their own connection", async () => {
+    mocks.userId = "user_manager";
+    setup(1, [server]);
+    fireEvent.click(await screen.findByRole("button", { name: "Use account" }));
+    await waitFor(() => expect(mocks.attach).toHaveBeenCalled());
+  });
+  it.each(["user:user_example", "user:other"])(
+    "allows an editor to remove another person’s assignment (%s)",
+    async (subjectUrn) => {
+      mocks.userId = "user_manager";
+      mocks.bindings.mockResolvedValue([
+        {
+          id: "other_binding",
+          remoteSessionId: "other_session",
+          remoteSessionClientId: "client_example",
+          remoteSession: {
+            id: "other_session",
+            subjectUrn,
+            subjectDisplayName: "Jordan Example",
+            remoteSessionClientId: "client_example",
+            scopes: [],
+            hasRefreshToken: false,
+            accessExpiresAt: new Date(Date.now() + 86_400_000),
+          },
+        },
+      ]);
+      const { ready } = setup(1, [server]);
+      expect(
+        await screen.findByText("Jordan Example's connection"),
+      ).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Remove" })).toBeTruthy();
+      expect(
+        screen.queryByRole("button", { name: "Reauthenticate" }),
+      ).toBeNull();
+      await waitFor(() => expect(ready).toHaveBeenCalledWith(true));
+      expect(mocks.detach).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["access", "authorization"])(
+    "preserves reauthentication through focus while OAuth is open and binds after it closes (%s)",
+    async (expiry) => {
+      const expired = {
+        id: "expired",
+        subjectUrn: "user:user_example",
+        subjectDisplayName: "Alex Example",
+        remoteSessionClientId: "client_example",
+        scopes: [],
+        hasRefreshToken: false,
+        accessExpiresAt: new Date(
+          Date.now() + (expiry === "access" ? -86_400_000 : 86_400_000),
+        ),
+        authorizationExpiresAt:
+          expiry === "authorization"
+            ? new Date(Date.now() - 86_400_000)
+            : undefined,
+      };
+      mocks.bindings.mockResolvedValue([
+        {
+          id: "expired_binding",
+          remoteSessionId: expired.id,
+          remoteSessionClientId: "client_example",
+          remoteSession: expired,
+        },
+      ]);
+      mocks.candidates.mockResolvedValue([expired]);
+      const { ready } = setup(1, [server]);
+      expect(
+        await screen.findByRole("button", { name: "Reauthenticate" }),
+      ).toBeTruthy();
+      expect(ready).not.toHaveBeenCalledWith(true);
+      const refreshLink = screen.getByRole("button", {
+        name: "Reauthenticate",
+      });
+      fireEvent.click(refreshLink);
+      expect(window.open).toHaveBeenCalledWith(
+        "about:blank",
+        "speakeasy-connection",
+        "popup=yes,width=560,height=720",
+      );
+      await waitFor(() =>
+        expect(mocks.beginRefresh).toHaveBeenCalledWith({
+          gramProject: server.projectSlug,
+          beginBindingRefreshRequestBody: {
+            principalId: agent.id,
+            userSessionIssuerId: server.issuerId,
+            bindingId: "expired_binding",
+          },
+        }),
+      );
+      const opened = vi.mocked(window.open).mock.results[0]?.value as Window;
+      expect(
+        new URL(opened.location.href).searchParams.get(
+          "binding_refresh_attempt",
+        ),
+      ).toBe("attempt_example");
+      expect(screen.getByText(/^Expired ·/)).toBeTruthy();
+      expect(mocks.detach).not.toHaveBeenCalled();
+      const callsBeforeFocus = mocks.candidates.mock.calls.length;
+      await act(async () => {
+        fireEvent(window, new Event("focus"));
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 0);
+        });
+      });
+      expect(mocks.candidates.mock.calls.length).toBe(callsBeforeFocus);
+      expect(mocks.attach).not.toHaveBeenCalled();
+      const renewed = {
+        ...expired,
+        id: "renewed",
+        authorizationExpiresAt: undefined,
+        accessExpiresAt: new Date(Date.now() + 3_600_000),
+      };
+      mocks.candidates.mockResolvedValue([renewed]);
+      mocks.completeRefresh.mockImplementation(async () => {
+        mocks.bindings.mockResolvedValue([
+          {
+            id: "renewed_binding",
+            remoteSessionId: renewed.id,
+            remoteSessionClientId: renewed.remoteSessionClientId,
+            remoteSession: renewed,
+          },
+        ]);
+        return { completed: true };
+      });
+      const popup = vi.mocked(window.open).mock.results[0]?.value as {
+        closed: boolean;
+      };
+      popup.closed = true;
+      fireEvent(window, new Event("focus"));
+      await waitFor(() =>
+        expect(mocks.completeRefresh).toHaveBeenCalledWith({
+          gramProject: server.projectSlug,
+          completeBindingRefreshRequestBody: {
+            principalId: agent.id,
+            userSessionIssuerId: server.issuerId,
+            attemptId: "attempt_example",
+          },
+        }),
+      );
+      expect(mocks.completeRefresh).toHaveBeenCalledTimes(1);
+      expect(mocks.attach).not.toHaveBeenCalled();
+      expect(mocks.detach).not.toHaveBeenCalled();
+      await waitFor(() => expect(ready).toHaveBeenCalledWith(true));
+    },
+  );
+  it("does not attach concurrent or later unrelated grants when the popup has no completion receipt", async () => {
+    const old = {
+      id: "old",
+      subjectUrn: "user:user_example",
+      remoteSessionClientId: "client_example",
+      scopes: [],
+      hasRefreshToken: false,
+      accessExpiresAt: new Date(Date.now() - 1000),
+    };
+    const live = {
+      ...old,
+      id: "already_live",
+      accessExpiresAt: new Date(Date.now() + 3600000),
+    };
+    mocks.bindings.mockResolvedValue([
+      {
+        id: "binding",
+        remoteSessionId: old.id,
+        remoteSessionClientId: "client_example",
+        remoteSession: old,
+      },
+    ]);
+    mocks.candidates.mockResolvedValue([live]);
+    setup(1, [server]);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Reauthenticate" }),
+    );
+    await waitFor(() => expect(mocks.beginRefresh).toHaveBeenCalledTimes(1));
+    expect(mocks.attach).not.toHaveBeenCalled();
+    // An unrelated login changed the candidate while this popup was open.
+    mocks.candidates.mockResolvedValue([{ ...live, id: "concurrent_login" }]);
+    const calls = mocks.candidates.mock.calls.length;
+    const popup = vi.mocked(window.open).mock.results[0]?.value as {
+      closed: boolean;
+    };
+    popup.closed = true;
+    fireEvent(window, new Event("focus"));
+    await waitFor(() =>
+      expect(mocks.candidates.mock.calls.length).toBeGreaterThan(calls),
+    );
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("button", {
+            name: "Reauthenticate",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(false),
+    );
+    expect(mocks.detach).not.toHaveBeenCalled();
+    expect(mocks.completeRefresh).toHaveBeenCalledTimes(1);
+    mocks.candidates.mockResolvedValue([
+      { ...live, id: "unrelated_later_login" },
+    ]);
+    const callsBeforeLaterFocus = mocks.candidates.mock.calls.length;
+    fireEvent(window, new Event("focus"));
+    await waitFor(() =>
+      expect(mocks.candidates.mock.calls.length).toBeGreaterThan(
+        callsBeforeLaterFocus,
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("button", {
+            name: "Reauthenticate",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(false),
+    );
+    expect(mocks.attach).not.toHaveBeenCalled();
+  });
+  it("keeps sign-in available for a second required upstream account", async () => {
+    mocks.clients.mockResolvedValue([
+      {
+        result: {
+          items: [
+            { id: "client_example", clientId: "First upstream" },
+            { id: "client_second", clientId: "Second upstream" },
+          ],
+        },
+      },
+    ]);
+    mocks.bindings.mockResolvedValue([
+      {
+        id: "first_binding",
+        remoteSessionClientId: "client_example",
+        remoteSessionId: "first_session",
+        remoteSession: {
+          id: "first_session",
+          subjectUrn: "user:user_example",
+          remoteSessionClientId: "client_example",
+          hasRefreshToken: false,
+          accessExpiresAt: new Date(Date.now() + 86_400_000),
+        },
+      },
+    ]);
+    mocks.candidates.mockResolvedValue([]);
+    const { ready } = setup(1, [server]);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Connect an account" }),
+    );
+    expect(window.open).toHaveBeenCalled();
+    expect(mocks.detach).not.toHaveBeenCalled();
+    expect(ready).not.toHaveBeenCalledWith(true);
+  });
+  it("reports blocked popups without detaching an account", async () => {
+    vi.mocked(window.open).mockReturnValue(null);
+    setup(1, [server]);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Connect an account" }),
+    );
+    expect(await screen.findByText(/Allow popups/)).toBeTruthy();
+    expect(mocks.detach).not.toHaveBeenCalled();
+  });
+  it("reloads connections automatically when the sign-in popup closes", async () => {
+    const popup = {
+      location: { href: "" },
+      focus: vi.fn(),
+      closed: false,
+      opener: window as Window | null,
+    };
+    vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
+    setup(1, [server]);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Connect an account" }),
+    );
+    expect(popup.opener).toBeNull();
+    const calls = mocks.candidates.mock.calls.length;
+    popup.closed = true;
+    await waitFor(() =>
+      expect(mocks.candidates.mock.calls.length).toBeGreaterThan(calls),
+    );
+  });
   it("does not accept missing or stale bindings as ready", async () => {
     mocks.bindings.mockResolvedValue([
       {

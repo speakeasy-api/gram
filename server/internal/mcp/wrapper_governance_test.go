@@ -35,7 +35,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
@@ -96,7 +95,7 @@ func TestServePublic_WrapperGovernance_PrivateWrapperOverPublicToolset(t *testin
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "wg-public-ts-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "wg-public-ts-"+uuid.NewString()[:8])
 	endpointSlug := "wg-endpoint-" + uuid.NewString()
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "private", uuid.NullUUID{}, uuid.Nil)
 
@@ -107,27 +106,20 @@ func TestServePublic_WrapperGovernance_PrivateWrapperOverPublicToolset(t *testin
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 }
 
-// The issuer gate keys on mcp_servers.user_session_issuer_id: a toolset-side
-// issuer with no wrapper issuer must NOT gate a wrapper-resolved request.
-// Before AIS-633 the in-toolset gate ran off the toolset column and 401'd.
+// The issuer gate keys on the resolved wrapper's issuer: the canonical
+// server's issuer must NOT gate a request resolved through another wrapper.
 func TestServePublic_WrapperGovernance_ToolsetIssuerIgnoredWhenWrapperUngated(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "wg-ts-issuer-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "wg-ts-issuer-"+uuid.NewString()[:8])
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
-	_, err := toolsetsRepo.UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, toolset.ProjectID, toolset, issuerID)
 
 	endpointSlug := "wg-endpoint-" + uuid.NewString()
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, uuid.Nil)
@@ -148,7 +140,7 @@ func TestServePublic_WrapperGovernance_WrapperIssuerGatesToolsetBacked(t *testin
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "wg-gated-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "wg-gated-"+uuid.NewString()[:8])
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	endpointSlug := "wg-endpoint-" + uuid.NewString()
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, issuerID)
@@ -189,7 +181,7 @@ func TestServePublic_WrapperGovernance_RBACKeysOnWrapperID(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "wg-rbac-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "wg-rbac-"+uuid.NewString()[:8])
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	endpointSlug := "wg-endpoint-" + uuid.NewString()
 	mcpServer := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "private", uuid.NullUUID{}, issuerID)
@@ -227,7 +219,7 @@ func TestServePublic_WrapperGovernance_LegacyToolsetAudienceAccepted(t *testing.
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "wg-legacyaud-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "wg-legacyaud-"+uuid.NewString()[:8])
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	endpointSlug := "wg-endpoint-" + uuid.NewString()
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, issuerID)
@@ -295,14 +287,13 @@ func TestServePublic_WrapperGovernance_FallbackCounterByEntryPoint(t *testing.T)
 
 	reader := sdkmetric.NewManualReader()
 	ctx, ti := newTestMCPServiceWithMeterProvider(t, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
 	// Legacy-only toolset: no mcp_endpoints row, resolves via mcp_slug.
-	legacyToolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "wg-legacy-"+uuid.NewString()[:8])
+	legacyToolset := createPublicMCPToolset(t, ctx, ti, authCtx, "wg-legacy-"+uuid.NewString()[:8])
 
 	w, err := servePublicHTTP(t, ctx, ti, legacyToolset.McpSlug.String, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
@@ -318,7 +309,7 @@ func TestServePublic_WrapperGovernance_FallbackCounterByEntryPoint(t *testing.T)
 	_ = ti.service.HandleGetProtectedResource(httptest.NewRecorder(), req)
 
 	// Wrapper-resolved request: must not count.
-	wrappedToolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "wg-wrapped-"+uuid.NewString()[:8])
+	wrappedToolset := createPublicMCPToolset(t, ctx, ti, authCtx, "wg-wrapped-"+uuid.NewString()[:8])
 	endpointSlug := "wg-endpoint-" + uuid.NewString()
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, wrappedToolset.ID, endpointSlug, "public", uuid.NullUUID{}, uuid.Nil)
 	w2, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), "", nil)
@@ -360,18 +351,16 @@ func TestServePublic_WrapperGovernance_FallbackAttributionLog(t *testing.T) {
 
 	buf := &syncBuffer{}
 	ctx, ti := newTestMCPServiceWithLogger(t, slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	legacy := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "wg-log-legacy-"+uuid.NewString()[:8])
-	wrapped := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "wg-log-wrapped-"+uuid.NewString()[:8])
-	createToolsetMcpEndpointWithID(t, ctx, ti.conn, wrapped.ID, *authCtx.ProjectID, wrapped.ID, "wg-log-canonical-"+uuid.NewString(), "public", uuid.NullUUID{}, uuid.Nil)
+	wrapped := createPublicMCPToolset(t, ctx, ti, authCtx, "wg-log-wrapped-"+uuid.NewString()[:8])
+	exposeCanonicalWrapper(t, ctx, ti, wrapped.ProjectID, wrapped.ID, "wg-log-canonical-"+uuid.NewString(), "public")
 	aliased, domain := createPublicMCPToolsetWithCustomDomain(t, ctx, ti, authCtx, "wg-log-alias-"+uuid.NewString()[:8], "wg-log-"+uuid.NewString()[:8]+".example.com")
 
-	for _, slug := range []string{legacy.McpSlug.String, wrapped.McpSlug.String, aliased.McpSlug.String} {
+	for _, slug := range []string{wrapped.McpSlug.String, aliased.McpSlug.String} {
 		_, _ = servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), "", nil)
 	}
 	domainCtx := customdomains.WithContext(ctx, &customdomains.Context{OrganizationID: domain.OrganizationID, Domain: domain.Domain, DomainID: domain.ID})
@@ -384,19 +373,18 @@ func TestServePublic_WrapperGovernance_FallbackAttributionLog(t *testing.T) {
 	_, _ = servePublicHTTP(t, ctx, ti, aliased.McpSlug.String, makeInitializeBody(), "", nil)
 
 	lines := fallbackLogLines(t, buf)
-	require.Len(t, lines, 6)
+	require.Len(t, lines, 5)
 	expect := []struct {
-		toolset      toolsets_repo.Toolset
+		toolset      hostedToolset
 		wrapper      bool
 		host         string
 		customDomain string
 	}{
-		{legacy, false, "platform", "none"},
 		{wrapped, true, "platform", "none"},
-		{aliased, false, "platform", "live"},
-		{aliased, false, "custom_domain", "live"},
-		{aliased, false, "platform", "inactive"},
-		{aliased, false, "platform", "deleted"},
+		{aliased, true, "platform", "live"},
+		{aliased, true, "custom_domain", "live"},
+		{aliased, true, "platform", "inactive"},
+		{aliased, true, "platform", "deleted"},
 	}
 	for i, want := range expect {
 		got := lines[i]
@@ -416,7 +404,7 @@ func TestWellKnown_FallbackAttributionLogsSlugOnce(t *testing.T) {
 	ctx, ti := newTestMCPServiceWithLogger(t, slog.New(slog.NewJSONHandler(buf, nil)))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "well-known-log-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "well-known-log-"+uuid.NewString()[:8])
 	for _, handler := range []func(http.ResponseWriter, *http.Request) error{
 		ti.service.HandleGetProtectedResource,
 		ti.service.HandleGetAuthorizationServer,
@@ -443,8 +431,8 @@ func TestLegacyFallback_DisabledCanonicalWrapper(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "disabled-legacy-"+uuid.NewString()[:8])
-	createToolsetMcpEndpointWithID(t, ctx, ti.conn, toolset.ID, *authCtx.ProjectID, toolset.ID, "canonical-"+uuid.NewString(), "disabled", uuid.NullUUID{}, uuid.Nil)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "disabled-legacy-"+uuid.NewString()[:8])
+	exposeCanonicalWrapper(t, ctx, ti, toolset.ProjectID, toolset.ID, "canonical-"+uuid.NewString(), "disabled")
 	// Another enabled wrapper must not resurrect the canonical legacy route.
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, "alternate-"+uuid.NewString(), "public", uuid.NullUUID{}, uuid.Nil)
 	_, err := servePublicHTTP(t, context.Background(), ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)

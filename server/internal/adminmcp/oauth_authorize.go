@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"goa.design/goa/v3/security"
 
@@ -19,6 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -91,57 +94,57 @@ func (s *StaffOAuthAuthorization) AuthorizeHandler() http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		if r.Method != http.MethodGet {
 			w.Header().Set("Allow", http.MethodGet)
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			staffBrowserError(w, r, http.StatusMethodNotAllowed, oautherr.CodeInvalidRequest, "method not allowed", oauthui.ReasonInvalidLink)
 			return
 		}
 		if !s.ready() {
-			staffOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "authorization unavailable")
+			staffBrowserError(w, r, http.StatusServiceUnavailable, "temporarily_unavailable", "authorization unavailable", oauthui.ReasonDefault)
 			return
 		}
 		request := usersessions.AuthorizationRequestFromQuery(r.URL.Query())
 		if err := request.ValidateRedirectableFields(); err != nil {
-			staffRequestError(w, err)
+			staffBrowserRequestError(w, r, err)
 			return
 		}
 		if err := oauthwire.ValidateRedirectURI(request.RedirectURI); err != nil {
-			staffRequestError(w, err)
+			staffBrowserRequestError(w, r, err)
 			return
 		}
 		client, err := s.clients.GetClient(r.Context(), request.ClientID)
 		if err != nil || !slices.Contains(client.RedirectURIs, request.RedirectURI) {
-			staffOAuthError(w, http.StatusUnauthorized, "invalid_client", "unknown client_id or redirect_uri")
+			staffBrowserError(w, r, http.StatusBadRequest, oautherr.CodeInvalidClient, "unknown client_id or redirect_uri", oauthui.ReasonInvalidClient)
 			return
 		}
 		if err := request.ValidatePostRedirect(); err != nil {
-			staffRedirectError(w, r, request.RedirectURI, request.State, err)
+			staffPreAuthenticationError(w, r, client, request.RedirectURI, request.State, err)
 			return
 		}
 		if err := oauthwire.ValidateResourceIndicators(request.Resources, s.resource); err != nil {
-			staffRedirectError(w, r, request.RedirectURI, request.State, err)
+			staffPreAuthenticationError(w, r, client, request.RedirectURI, request.State, err)
 			return
 		}
 		if !validStaffPKCEChallenge(request.CodeChallenge) {
-			staffRedirectError(w, r, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_request", Description: "invalid PKCE S256 challenge"})
+			staffPreAuthenticationError(w, r, client, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_request", Description: "invalid PKCE S256 challenge"})
 			return
 		}
 		scopes, ok := normalizeRequestedScopes(r.URL.Query().Get("scope"), s.writes.WritesAvailable())
 		if !ok {
-			staffRedirectError(w, r, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_scope", Description: "requested scope is not available"})
+			staffPreAuthenticationError(w, r, client, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_scope", Description: "requested scope is not available"})
 			return
 		}
 		csrf, err := staffOpaqueToken()
 		if err != nil {
-			staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not start authorization")
+			staffBrowserError(w, r, http.StatusInternalServerError, "server_error", "could not start authorization", oauthui.ReasonDefault)
 			return
 		}
 		proof, err := staffOpaqueToken()
 		if err != nil {
-			staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not start authorization")
+			staffBrowserError(w, r, http.StatusInternalServerError, "server_error", "could not start authorization", oauthui.ReasonDefault)
 			return
 		}
 		challenge := staffChallenge{ID: uuid.NewString(), ClientID: client.ID, RedirectURI: request.RedirectURI, State: request.State, CodeChallenge: request.CodeChallenge, CSRFToken: csrf, BrowserProof: staffTokenHash(proof), SessionHash: "", ResourceURI: s.resource, Scopes: scopes, CreatedAt: time.Now()}
 		if err := s.cache.Store(r.Context(), challenge); err != nil {
-			staffOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not start authorization")
+			staffBrowserError(w, r, http.StatusServiceUnavailable, "temporarily_unavailable", "could not start authorization", oauthui.ReasonDefault)
 			return
 		}
 		http.SetCookie(w, &http.Cookie{Name: staffBrowserProofCookie + "-" + challenge.ID, Value: proof, Path: "/", MaxAge: int(staffCodeLifetime.Seconds()), Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:exhaustruct // Host-only session proof; Domain and Expires intentionally omitted.
@@ -154,7 +157,7 @@ func (s *StaffOAuthAuthorization) ConnectHandler() http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
 		if !s.ready() {
-			staffOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "authorization unavailable")
+			staffBrowserError(w, r, http.StatusServiceUnavailable, "temporarily_unavailable", "authorization unavailable", oauthui.ReasonDefault)
 			return
 		}
 		switch r.Method {
@@ -164,31 +167,31 @@ func (s *StaffOAuthAuthorization) ConnectHandler() http.Handler {
 			s.connectPost(w, r)
 		default:
 			w.Header().Set("Allow", "GET, POST")
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			staffBrowserError(w, r, http.StatusMethodNotAllowed, oautherr.CodeInvalidRequest, "method not allowed", oauthui.ReasonInvalidLink)
 		}
 	})
 }
 
 func (s *StaffOAuthAuthorization) connectGet(w http.ResponseWriter, r *http.Request) {
 	challenge, err := s.cache.Get(r.Context(), staffChallengePrefix+r.URL.Query().Get("state"))
-	if err != nil || challenge.ID == "" || time.Since(challenge.CreatedAt) >= staffCodeLifetime || challenge.ResourceURI != s.resource {
-		staffOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+	if reason := staffChallengeErrorReason(challenge, err, s.resource); reason != oauthui.ReasonDefault {
+		staffBrowserError(w, r, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired", reason)
 		return
 	}
 	if !staffBrowserProofMatches(r, challenge) {
-		staffOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization browser is invalid")
+		staffBrowserError(w, r, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization browser is invalid", oauthui.ReasonSessionChanged)
 		return
 	}
 	client, err := s.clients.GetClient(r.Context(), challenge.ClientID)
 	if err != nil || !slices.Contains(client.RedirectURIs, challenge.RedirectURI) {
-		staffOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
+		staffBrowserError(w, r, http.StatusBadRequest, oautherr.CodeInvalidClient, "authorization client is unavailable", oauthui.ReasonInvalidClient)
 		return
 	}
 	_, sessionID, err := s.staffSession(r)
 	if err != nil {
 		var authErr *oops.ShareableError
 		if !errors.Is(err, errMissingStaffCookie) && (!errors.As(err, &authErr) || authErr.Code != oops.CodeUnauthorized) {
-			staffOAuthError(w, http.StatusUnauthorized, "access_denied", "staff login is required")
+			staffBrowserError(w, r, http.StatusBadRequest, oautherr.CodeAccessDenied, "staff login is required", oauthui.ReasonDefault)
 			return
 		}
 		// A logged-out session can leave a path-scoped browser cookie behind.
@@ -204,7 +207,7 @@ func (s *StaffOAuthAuthorization) connectGet(w http.ResponseWriter, r *http.Requ
 	}
 	challenge.SessionHash = staffTokenHash(sessionID)
 	if err := s.cache.Store(r.Context(), challenge); err != nil {
-		staffOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not prepare authorization")
+		staffBrowserError(w, r, http.StatusServiceUnavailable, "temporarily_unavailable", "could not prepare authorization", oauthui.ReasonDefault)
 		return
 	}
 	view := staffConsentView{
@@ -216,14 +219,14 @@ func (s *StaffOAuthAuthorization) connectGet(w http.ResponseWriter, r *http.Requ
 	}
 	var page strings.Builder
 	if err := staffConsentPage.Execute(&page, view); err != nil {
-		staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not render authorization page")
+		staffBrowserError(w, r, http.StatusInternalServerError, "server_error", "could not render authorization page", oauthui.ReasonDefault)
 		return
 	}
 	// Chrome also checks form-action on the 303 after consent. Only this
 	// registered callback may receive the resulting browser navigation.
 	callback, err := url.Parse(challenge.RedirectURI)
 	if err != nil {
-		staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not render authorization page")
+		staffBrowserError(w, r, http.StatusInternalServerError, "server_error", "could not render authorization page", oauthui.ReasonDefault)
 		return
 	}
 	callbackSource := callback.Scheme + ":"
@@ -272,34 +275,34 @@ var staffConsentPage = template.Must(template.New("staff-consent").Parse(`<!doct
 func (s *StaffOAuthAuthorization) connectPost(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := r.ParseForm(); err != nil {
-		staffOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse authorization")
+		staffBrowserError(w, r, http.StatusBadRequest, "invalid_request", "could not parse authorization", oauthui.ReasonDefault)
 		return
 	}
 	challenge, err := s.cache.GetAndDelete(r.Context(), staffChallengePrefix+r.PostForm.Get("state"))
-	if err != nil || challenge.ID == "" || time.Since(challenge.CreatedAt) >= staffCodeLifetime || challenge.ResourceURI != s.resource {
-		staffOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+	if reason := staffChallengeErrorReason(challenge, err, s.resource); reason != oauthui.ReasonDefault {
+		staffBrowserError(w, r, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired", reason)
 		return
 	}
 	if !staffBrowserProofMatches(r, challenge) {
-		staffOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization browser is invalid")
+		staffBrowserError(w, r, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization browser is invalid", oauthui.ReasonSessionChanged)
 		return
 	}
 	if challenge.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challenge.CSRFToken)) != 1 {
-		staffOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization confirmation is invalid")
+		staffBrowserError(w, r, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization confirmation is invalid", oauthui.ReasonSessionChanged)
 		return
 	}
 	client, err := s.clients.GetClient(r.Context(), challenge.ClientID)
 	if err != nil || !slices.Contains(client.RedirectURIs, challenge.RedirectURI) {
-		staffOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
+		staffBrowserError(w, r, http.StatusBadRequest, oautherr.CodeInvalidClient, "authorization client is unavailable", oauthui.ReasonInvalidClient)
 		return
 	}
 	staff, sessionID, err := s.staffSession(r)
 	if err != nil {
-		staffOAuthError(w, http.StatusUnauthorized, "access_denied", "staff login is required")
+		staffBrowserError(w, r, http.StatusBadRequest, oautherr.CodeAccessDenied, "staff login is required", oauthui.ReasonDefault)
 		return
 	}
 	if challenge.SessionHash == "" || subtle.ConstantTimeCompare([]byte(challenge.SessionHash), []byte(staffTokenHash(sessionID))) != 1 {
-		staffOAuthError(w, http.StatusUnauthorized, "access_denied", "staff session changed during authorization")
+		staffBrowserError(w, r, http.StatusBadRequest, oautherr.CodeAccessDenied, "staff session changed during authorization", oauthui.ReasonSessionChanged)
 		return
 	}
 	if r.PostForm.Get("action") != "approve" {
@@ -308,12 +311,12 @@ func (s *StaffOAuthAuthorization) connectPost(w http.ResponseWriter, r *http.Req
 	}
 	code, err := staffOpaqueToken()
 	if err != nil {
-		staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not complete authorization")
+		staffBrowserError(w, r, http.StatusInternalServerError, "server_error", "could not complete authorization", oauthui.ReasonDefault)
 		return
 	}
 	encryptedSession, err := s.cipher.Encrypt([]byte(sessionID))
 	if err != nil {
-		staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not complete authorization")
+		staffBrowserError(w, r, http.StatusInternalServerError, "server_error", "could not complete authorization", oauthui.ReasonDefault)
 		return
 	}
 	// Revalidate against the current switch: writes may have been turned off
@@ -332,15 +335,15 @@ func (s *StaffOAuthAuthorization) connectPost(w http.ResponseWriter, r *http.Req
 	}
 	if err := s.store.Authorize(r.Context(), input); err != nil {
 		if errors.Is(err, errStaffGrant) {
-			staffOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
+			staffBrowserError(w, r, http.StatusBadRequest, oautherr.CodeInvalidClient, "authorization client is unavailable", oauthui.ReasonInvalidClient)
 		} else {
-			staffOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not complete authorization")
+			staffBrowserError(w, r, http.StatusServiceUnavailable, "temporarily_unavailable", "could not complete authorization", oauthui.ReasonDefault)
 		}
 		return
 	}
 	callback, err := url.Parse(challenge.RedirectURI)
 	if err != nil {
-		staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not complete authorization")
+		staffBrowserError(w, r, http.StatusInternalServerError, "server_error", "could not complete authorization", oauthui.ReasonDefault)
 		return
 	}
 	query := callback.Query()
@@ -360,6 +363,9 @@ func staffBrowserProofMatches(r *http.Request, challenge staffChallenge) bool {
 
 var errMissingStaffCookie = errors.New("missing admin session cookie")
 
+// errStaffIdentityMismatch identifies a verified session with an unusable staff identity.
+var errStaffIdentityMismatch = errors.New("staff session identity mismatch")
+
 func (s *StaffOAuthAuthorization) staffSession(r *http.Request) (*contextvalues.AdminAuthContext, string, error) {
 	cookie, err := r.Cookie(constants.AdminSessionCookie)
 	if err != nil || cookie.Value == "" {
@@ -371,7 +377,7 @@ func (s *StaffOAuthAuthorization) staffSession(r *http.Request) (*contextvalues.
 	}
 	staff, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || staff == nil || staff.SessionID != cookie.Value || staff.OIDCSubject == "" || staff.Email == "" {
-		return nil, "", errors.New("staff session identity mismatch")
+		return nil, "", errStaffIdentityMismatch
 	}
 	return staff, cookie.Value, nil
 }
@@ -380,32 +386,75 @@ func (s *StaffOAuthAuthorization) ready() bool {
 	return s != nil && s.clients != nil && s.store != nil && s.verifier != nil && s.cipher != nil && s.resource != ""
 }
 
-func staffRequestError(w http.ResponseWriter, err error) {
-	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
-		staffOAuthError(w, http.StatusBadRequest, oauthErr.Code, oauthErr.Description)
-	} else {
-		staffOAuthError(w, http.StatusBadRequest, "invalid_request", "invalid request")
+// staffChallengeErrorReason distinguishes proven expiry from invalid links and
+// cache outages without changing the authorization failure's wire contract.
+func staffChallengeErrorReason(challenge staffChallenge, err error, resource string) oauthui.Reason {
+	switch {
+	case err != nil && !errors.Is(err, redisCache.ErrCacheMiss):
+		return oauthui.ReasonUnavailable
+	case err != nil || challenge.ID == "" || challenge.ResourceURI != resource:
+		return oauthui.ReasonInvalidLink
+	case time.Since(challenge.CreatedAt) >= staffCodeLifetime:
+		return oauthui.ReasonExpired
+	default:
+		return oauthui.ReasonDefault
 	}
 }
 
+func staffPreAuthenticationError(w http.ResponseWriter, r *http.Request, client staffOAuthClient, redirectURI, state string, err error) {
+	callback, oauthErr, buildErr := staffErrorCallback(redirectURI, state, err)
+	if buildErr != nil {
+		staffBrowserError(w, r, http.StatusBadRequest, oauthErr.Code, oauthErr.Description, oauthui.ReasonDefault)
+		return
+	}
+	if oauthwire.MayAutoRedirectBeforeAuthentication(redirectURI) {
+		http.Redirect(w, r, callback, http.StatusSeeOther)
+		return
+	}
+	page := oauthui.AuthorizationError{
+		Recovery:       nil,
+		Setup:          false,
+		Status:         http.StatusBadRequest,
+		Reason:         oauthui.ReasonDefault,
+		Approval:       false,
+		ErrorID:        "",
+		CallbackURL:    callback,
+		Code:           oauthErr.Code,
+		Description:    oauthErr.Description,
+		ClientName:     client.Name,
+		ClientID:       client.ID,
+		ClientIDOrigin: "",
+		ServerName:     "Speakeasy Admin",
+	}
+	_ = oauthui.WriteAuthorizationError(r.Context(), w, page)
+}
+
 func staffRedirectError(w http.ResponseWriter, r *http.Request, redirectURI, state string, err error) {
-	var oauthErr *oauthwire.Error
-	if !errors.As(err, &oauthErr) {
-		oauthErr = &oauthwire.Error{Code: "invalid_request", Description: "invalid request"}
+	callback, oauthErr, buildErr := staffErrorCallback(redirectURI, state, err)
+	if buildErr != nil {
+		staffBrowserError(w, r, http.StatusBadRequest, oauthErr.Code, oauthErr.Description, oauthui.ReasonDefault)
+		return
+	}
+	http.Redirect(w, r, callback, http.StatusSeeOther)
+}
+
+func staffErrorCallback(redirectURI, state string, err error) (string, *oauthwire.Error, error) {
+	oauthErr, ok := errors.AsType[*oauthwire.Error](err)
+	if !ok {
+		oauthErr = &oauthwire.Error{Code: oautherr.CodeInvalidRequest, Description: "invalid request"}
 	}
 	callback, parseErr := url.Parse(redirectURI)
 	if parseErr != nil {
-		staffOAuthError(w, http.StatusBadRequest, oauthErr.Code, oauthErr.Description)
-		return
+		return "", oauthErr, fmt.Errorf("parse authorization error callback: %w", parseErr)
 	}
 	query := callback.Query()
-	query.Set("error", oauthErr.Code)
-	query.Set("error_description", oauthErr.Description)
+	query.Set(oauthwire.ParamError, oauthErr.Code)
+	query.Set(oauthwire.ParamErrorDescription, oauthErr.Description)
 	if state != "" {
-		query.Set("state", state)
+		query.Set(oauthwire.ParamState, state)
 	}
 	callback.RawQuery = query.Encode()
-	http.Redirect(w, r, callback.String(), http.StatusSeeOther)
+	return callback.String(), oauthErr, nil
 }
 
 func validStaffPKCEChallenge(challenge string) bool {
@@ -424,4 +473,30 @@ func validStaffPKCEChallenge(challenge string) bool {
 		}
 	}
 	return true
+}
+
+func staffBrowserError(w http.ResponseWriter, r *http.Request, status int, code, description string, reason oauthui.Reason) {
+	_ = oauthui.WriteAuthorizationError(r.Context(), w, oauthui.AuthorizationError{
+		Recovery:       nil,
+		Setup:          false,
+		Status:         status,
+		Reason:         reason,
+		Approval:       false,
+		ErrorID:        "",
+		Code:           code,
+		Description:    description,
+		CallbackURL:    "",
+		ClientName:     "",
+		ClientID:       "",
+		ClientIDOrigin: "",
+		ServerName:     "Speakeasy Admin",
+	})
+}
+
+func staffBrowserRequestError(w http.ResponseWriter, r *http.Request, err error) {
+	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
+		staffBrowserError(w, r, http.StatusBadRequest, oauthErr.Code, oauthErr.Description, oauthui.ReasonInvalidLink)
+		return
+	}
+	staffBrowserError(w, r, http.StatusBadRequest, oautherr.CodeInvalidRequest, "invalid request", oauthui.ReasonInvalidLink)
 }

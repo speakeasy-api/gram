@@ -28,7 +28,8 @@ func main() {
 func run(ctx context.Context, args []string) error {
 	flags := flag.NewFlagSet("directory-id-backfill", flag.ContinueOnError)
 	organizationID := flags.String("organization-id", "", "Exact Speakeasy organization ID to process")
-	apply := flags.Bool("apply", false, "Commit matched directory ID attribution; default is dry-run")
+	apply := flags.Bool("apply", false, "Commit the writes; default is dry-run")
+	fillNames := flags.Bool("fill-names", false, "Fill first and last names on directory users that have none, instead of attributing directory IDs")
 	if err := flags.Parse(args); err != nil {
 		return fmt.Errorf("parse flags: %w", err)
 	}
@@ -65,17 +66,25 @@ func run(ctx context.Context, args []string) error {
 	}
 
 	client := workos.NewClient(policy, apiKey, workos.ClientOpts{Endpoint: endpoint, ClientID: "", RetryConfig: nil})
-	report, err := directory.AttributeDirectorySources(ctx, pool, client, *organizationID, org.WorkosID.String, !*apply)
-	if err != nil {
-		return fmt.Errorf("attribute directory sources: %w", err)
+	var report any
+	if *fillNames {
+		report, err = directory.FillDirectoryUserNames(ctx, pool, client, *organizationID, org.WorkosID.String, !*apply)
+		if err != nil {
+			return fmt.Errorf("fill directory user names: %w", err)
+		}
+	} else {
+		report, err = directory.AttributeDirectorySources(ctx, pool, client, *organizationID, org.WorkosID.String, !*apply)
+		if err != nil {
+			return fmt.Errorf("attribute directory sources: %w", err)
+		}
 	}
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(report); err != nil {
-		if !report.DryRun {
-			return fmt.Errorf("encode attribution report (attribution writes already committed): %w", err)
+		if *apply {
+			return fmt.Errorf("encode report (writes already committed): %w", err)
 		}
-		return fmt.Errorf("encode attribution report (dry-run rolled back): %w", err)
+		return fmt.Errorf("encode report (dry-run rolled back): %w", err)
 	}
 	return nil
 }

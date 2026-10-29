@@ -10,19 +10,28 @@
 package mcp
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
-	"strings"
+	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/mcp/agentinstall"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 // AgentInstallCodeRoute mints a code; AgentInstallScriptRoute spends it.
@@ -42,6 +51,21 @@ type agentInstallCode struct {
 	AgentID string `json:"agent_id"`
 	Key     string `json:"key"`
 	URL     string `json:"url"`
+
+	// ServerURL is the origin the code was minted on, which the OpenClaw
+	// hooks plugin reports to.
+	ServerURL string `json:"server_url"`
+
+	// OrganizationID is the agent's organization.
+	OrganizationID string `json:"organization_id"`
+
+	// ProjectSlug is the project the agent's hooks are recorded in, empty
+	// when the agent has no live project.
+	ProjectSlug string `json:"project_slug"`
+
+	// InstallFailOpen is the organization's hooks install-failure policy when
+	// the code was minted.
+	InstallFailOpen bool `json:"install_fail_open"`
 }
 
 var _ cache.CacheableObject[agentInstallCode] = (*agentInstallCode)(nil)
@@ -69,9 +93,24 @@ func (s *Service) HandleAgentInstallCode(w http.ResponseWriter, r *http.Request)
 	if err != nil || agentID == uuid.Nil {
 		return oops.C(oops.CodeNotFound)
 	}
-	keyCtx, _, err := s.authenticateAgentGatewayKey(ctx, r, agentID)
+	keyCtx, authCtx, err := s.authenticateAgentGatewayKey(ctx, r, agentID)
 	if err != nil {
 		return err
+	}
+	organizationID := authCtx.ActiveOrganizationID
+
+	// The command fetches the script from this origin, and the code is a
+	// bearer of the key until spent: never hand it out for a plain-HTTP fetch.
+	serverURL := s.BaseURLForRequest(r)
+	if base, err := url.Parse(serverURL); err != nil || base.Scheme != "https" {
+		return oops.E(oops.CodeBadRequest, nil, "install commands require an HTTPS server URL")
+	}
+
+	// Resolved now, while the request is authenticated by the key: spending
+	// the code is not.
+	projectSlug, err := s.agentHooksProjectSlug(ctx, organizationID, agentID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "prepare install command").LogError(ctx, s.logger)
 	}
 
 	code, err := newInstallCode()
@@ -79,10 +118,14 @@ func (s *Service) HandleAgentInstallCode(w http.ResponseWriter, r *http.Request)
 		return oops.E(oops.CodeUnexpected, err, "prepare install command").LogError(ctx, s.logger)
 	}
 	record := agentInstallCode{
-		Code:    code,
-		AgentID: agentID.String(),
-		Key:     httpheaders.AuthorizationBearerToken(r),
-		URL:     s.BaseURLForRequest(r) + "/agent-mcp/" + agentID.String(),
+		Code:            code,
+		AgentID:         agentID.String(),
+		Key:             httpheaders.AuthorizationBearerToken(r),
+		URL:             serverURL + "/agent-mcp/" + agentID.String(),
+		ServerURL:       serverURL,
+		OrganizationID:  organizationID,
+		ProjectSlug:     projectSlug,
+		InstallFailOpen: s.hooksInstallFailOpen(ctx, organizationID),
 	}
 	if err := s.agentInstallCache.Store(keyCtx, record); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "store install command").LogError(ctx, s.logger)
@@ -94,6 +137,50 @@ func (s *Service) HandleAgentInstallCode(w http.ResponseWriter, r *http.Request)
 		return oops.E(oops.CodeUnexpected, err, "write install command").LogError(ctx, s.logger)
 	}
 	return nil
+}
+
+// agentHooksProjectSlug returns the slug of the project the agent's hooks are
+// recorded in, or "" when the agent has no project or its project is deleted.
+// Neither fails the install: the gateway still works without hooks, and the
+// script says why they are missing.
+func (s *Service) agentHooksProjectSlug(ctx context.Context, organizationID string, agentID uuid.UUID) (string, error) {
+	agent, err := agentsrepo.New(s.db).GetAgentByID(ctx, agentsrepo.GetAgentByIDParams{OrganizationID: organizationID, ID: agentID})
+	if err != nil {
+		return "", fmt.Errorf("get agent: %w", err)
+	}
+	if !agent.ProjectID.Valid {
+		return "", nil
+	}
+
+	project, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
+		ID:             agent.ProjectID.UUID,
+		OrganizationID: organizationID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("get agent project: %w", err)
+	}
+	return project.Slug, nil
+}
+
+// hooksInstallFailOpen reads the organization's hooks install-failure policy,
+// which every generated observability plugin bakes in. An unreadable flag
+// keeps the fail-closed default, as the plugins page does.
+func (s *Service) hooksInstallFailOpen(ctx context.Context, organizationID string) bool {
+	enabled, err := pluginsrepo.New(s.db).IsOrganizationFeatureEnabled(ctx, pluginsrepo.IsOrganizationFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureHooksFailOpen),
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "read hooks fail-open flag for agent install, defaulting to fail closed",
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogError(err),
+		)
+		return false
+	}
+	return enabled
 }
 
 // HandleAgentInstallScript spends a code and returns the shell script that
@@ -109,7 +196,7 @@ func (s *Service) HandleAgentInstallScript(w http.ResponseWriter, r *http.Reques
 	// GetAndDelete, not Get: a code that has been read is spent, whether or not
 	// the script that follows reaches its target.
 	// Only the key matters for the lookup; the rest comes back from the cache.
-	lookup := agentInstallCode{Code: code, AgentID: "", Key: "", URL: ""}
+	lookup := agentInstallCode{Code: code, AgentID: "", Key: "", URL: "", ServerURL: "", OrganizationID: "", ProjectSlug: "", InstallFailOpen: false}
 	record, err := s.agentInstallCache.GetAndDelete(ctx, lookup.CacheKey())
 	if err != nil || record.Key == "" {
 		// An expired, unknown or already-spent code are the same thing to the
@@ -117,67 +204,23 @@ func (s *Service) HandleAgentInstallScript(w http.ResponseWriter, r *http.Reques
 		return oops.C(oops.CodeNotFound)
 	}
 
+	script, err := agentinstall.Script(agentinstall.Params{
+		GatewayURL:      record.URL,
+		Key:             record.Key,
+		ServerURL:       record.ServerURL,
+		OrganizationID:  record.OrganizationID,
+		ProjectSlug:     record.ProjectSlug,
+		InstallFailOpen: record.InstallFailOpen,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "render install script").LogError(ctx, s.logger)
+	}
+
 	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
 	// The body is a credential. Nothing may keep a copy.
 	w.Header().Set("Cache-Control", "no-store")
-	if _, err := w.Write([]byte(agentInstallScript(record.URL, record.Key))); err != nil {
+	if _, err := w.Write([]byte(script)); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "write install script").LogError(ctx, s.logger)
 	}
 	return nil
-}
-
-// shellSingleQuote renders a value as a POSIX single-quoted word. Both the URL
-// and the key are interpolated into a script that runs on someone's machine,
-// so neither may be allowed to end the quoting and start a command.
-func shellSingleQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
-}
-
-// agentInstallScript writes the gateway into whichever MCP clients are
-// installed. It configures what it finds and says what it did; it never
-// installs a client, and it is idempotent, so re-running after a grant change
-// is safe.
-func agentInstallScript(url, key string) string {
-	return `#!/bin/sh
-# Connects this machine's MCP clients to a Speakeasy agent gateway.
-# Generated for one use. The key below is live: treat this file as a secret.
-set -eu
-
-GRAM_AGENT_URL=` + shellSingleQuote(url) + `
-GRAM_AGENT_KEY=` + shellSingleQuote(key) + `
-export GRAM_AGENT_KEY
-
-configured=0
-
-if command -v claude >/dev/null 2>&1; then
-  # Idempotent: remove any previous entry before adding this one.
-  claude mcp remove gram >/dev/null 2>&1 || true
-  claude mcp add --transport http gram "$GRAM_AGENT_URL" \
-    --header "Authorization: Bearer $GRAM_AGENT_KEY"
-  echo "Configured Claude Code."
-  configured=$((configured + 1))
-fi
-
-if command -v codex >/dev/null 2>&1; then
-  codex mcp remove gram >/dev/null 2>&1 || true
-  codex mcp add gram --url "$GRAM_AGENT_URL" \
-    --bearer-token-env-var GRAM_AGENT_KEY
-  echo "Configured Codex."
-  configured=$((configured + 1))
-fi
-
-if [ "$configured" -eq 0 ]; then
-  echo "No supported MCP client found on PATH."
-  echo "Connect one manually with:"
-  echo "  URL:    $GRAM_AGENT_URL"
-  echo "  Header: Authorization: Bearer \$GRAM_AGENT_KEY"
-  echo
-  echo "GRAM_AGENT_KEY is set in this shell only. Store it before closing."
-  exit 1
-fi
-
-echo
-echo "Done. GRAM_AGENT_KEY was exported for this run only — store it if a"
-echo "client you use reads it from the environment."
-`
 }

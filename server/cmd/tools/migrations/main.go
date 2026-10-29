@@ -8,8 +8,8 @@
 //     confirmation.
 //   - pro-entitlements: PostgreSQL application-data backfill; see
 //     PRO_ENTITLEMENTS_BACKFILL.md. It defaults to a non-writing dry run.
-//   - hosted-mcp-wrappers: PostgreSQL application-data backfill; see
-//     HOSTED_MCP_WRAPPERS_MIGRATION.md. It defaults to a dry run.
+//   - auth-permission-defaults: PostgreSQL application-data backfill; see
+//     AUTH_PERMISSION_DEFAULTS_BACKFILL.md. It defaults to a dry run.
 //
 // Each guide documents its own connectivity, secret environment variables,
 // invocation modes, output, and recovery procedure. Flags are subcommand-local;
@@ -64,6 +64,7 @@ type config struct {
 	from          *time.Time
 	to            *time.Time
 	cursor        uuid.NullUUID
+	gapFillCursor riskfindings.GapFillCursor
 	batchSize     int
 	bufferSize    int
 	dryRun        bool
@@ -94,11 +95,11 @@ func run() int {
 		return runOpenRouterDisableCauses(args, os.Stdin, os.Stdout, os.Getenv)
 	case "pro-entitlements":
 		return runProEntitlements(args, os.Stdout, os.Getenv)
-	case "hosted-mcp-wrappers":
-		return runHostedMCPWrappers(args, os.Stdout, os.Getenv)
+	case authPermissionDefaultsName:
+		return runAuthPermissionDefaults(args, os.Stdout, os.Getenv)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, hosted-mcp-wrappers)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, auth-permission-defaults)")
 		return 2
 	}
 }
@@ -158,13 +159,17 @@ func runRiskFindings(args []string) int {
 		ctx, source, transformer, sink, cfg.criteria(), cfg.bufferSize,
 	)
 
+	committed := sink.LastCommitted().String()
+	if cfg.gapFill {
+		committed = sink.LastCommittedGapFill().String()
+	}
 	if reportErr := printReport(
 		os.Stdout,
 		cfg,
 		source.Scanned(),
 		source.ScannedBySource(),
 		sink.StatsBySource(),
-		sink.LastCommitted(),
+		committed,
 	); reportErr != nil {
 		if runErr == nil {
 			runErr = fmt.Errorf("write migration report: %w", reportErr)
@@ -179,8 +184,15 @@ func runRiskFindings(args []string) int {
 		// at the cursor to resume from so shell automation never treats a partial
 		// run as done.
 		resumeHint := ""
-		if committed := sink.LastCommitted(); committed != uuid.Nil {
-			resumeHint = fmt.Sprintf("; resume with -cursor %s and repeat the same mode, -from, -to, -org, -project, -policy, and -sources", committed)
+		resumeFlag := ""
+		switch {
+		case cfg.gapFill && !sink.LastCommittedGapFill().IsZero():
+			resumeFlag = "-gap-fill-cursor " + sink.LastCommittedGapFill().String()
+		case !cfg.gapFill && sink.LastCommitted() != uuid.Nil:
+			resumeFlag = "-cursor " + sink.LastCommitted().String()
+		}
+		if resumeFlag != "" {
+			resumeHint = fmt.Sprintf("; resume with %s and repeat the same mode, -from, -to, -org, -project, -policy, and -sources", resumeFlag)
 			if cfg.from != nil {
 				resumeHint += fmt.Sprintf(" (effective -from %s)", cfg.from.Format(time.RFC3339Nano))
 			}
@@ -219,6 +231,12 @@ func (c config) criteria() pipeline.Criteria {
 	}
 	if c.cursor.Valid {
 		crit[riskfindings.CriteriaCursor] = c.cursor.UUID
+	}
+	if c.gapFill {
+		crit[riskfindings.CriteriaGapFill] = true
+		if !c.gapFillCursor.IsZero() {
+			crit[riskfindings.CriteriaGapFillCursor] = c.gapFillCursor
+		}
 	}
 	return crit
 }
@@ -289,6 +307,7 @@ func parseFlags(args []string, now time.Time) (config, error) {
 		fromStr           = fs.String("from", "", "lower time bound, RFC3339")
 		toStr             = fs.String("to", "", "upper time bound, RFC3339 (optional)")
 		cursorStr         = fs.String("cursor", "", "resume after this risk_results id (exclusive)")
+		gapFillCursorStr  = fs.String("gap-fill-cursor", "", "resume a -gap-fill run after <project_id>/<created_at>/<risk_results id> (exclusive)")
 		batchSize         = fs.Int("batch-size", riskfindings.DefaultBatchSize, "rows per source page and sink batch")
 		bufferSize        = fs.Int("buffer", riskfindings.DefaultBatchSize, "channel buffer between pipeline stages")
 		dryRun            = fs.Bool("dry-run", true, "read and report without writing")
@@ -327,6 +346,7 @@ func parseFlags(args []string, now time.Time) (config, error) {
 		from:          nil,
 		to:            nil,
 		cursor:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		gapFillCursor: riskfindings.GapFillCursor{ProjectID: uuid.Nil, CreatedAt: time.Time{}, ID: uuid.Nil},
 		batchSize:     *batchSize,
 		bufferSize:    *bufferSize,
 		dryRun:        *dryRun,
@@ -346,6 +366,12 @@ func parseFlags(args []string, now time.Time) (config, error) {
 	if cfg.gapFill && cfg.orgID == "" {
 		return cfg, errors.New("-org is required with -gap-fill")
 	}
+	if cfg.gapFill && *cursorStr != "" {
+		return cfg, errors.New("-cursor does not apply to -gap-fill, which pages by project; resume with -gap-fill-cursor")
+	}
+	if !cfg.gapFill && *gapFillCursorStr != "" {
+		return cfg, errors.New("-gap-fill-cursor requires -gap-fill")
+	}
 
 	if *projectID != "" {
 		pid, err := uuid.Parse(*projectID)
@@ -364,8 +390,8 @@ func parseFlags(args []string, now time.Time) (config, error) {
 	effectiveFrom := *fromStr
 	if !fromSet {
 		if cfg.gapFill {
-			if *cursorStr != "" {
-				return cfg, errors.New("-from is required with -cursor and -gap-fill because the default window moves with the clock")
+			if *gapFillCursorStr != "" {
+				return cfg, errors.New("-from is required with -gap-fill-cursor because the default window moves with the clock")
 			}
 			from := now.Add(-clickhouseRetention)
 			cfg.from = &from
@@ -396,6 +422,16 @@ func parseFlags(args []string, now time.Time) (config, error) {
 			return cfg, fmt.Errorf("invalid -cursor: %w", err)
 		}
 		cfg.cursor = uuid.NullUUID{UUID: cur, Valid: true}
+	}
+	if *gapFillCursorStr != "" {
+		cur, err := riskfindings.ParseGapFillCursor(*gapFillCursorStr)
+		if err != nil {
+			return cfg, fmt.Errorf("invalid -gap-fill-cursor: %w", err)
+		}
+		if cfg.projectID.Valid && cfg.projectID.UUID != cur.ProjectID {
+			return cfg, errors.New("-gap-fill-cursor names a different project than -project")
+		}
+		cfg.gapFillCursor = cur
 	}
 
 	return cfg, nil
@@ -433,7 +469,7 @@ func printReport(
 	scanned int64,
 	scannedBySource map[string]int64,
 	statsBySource map[string]riskfindings.SourceStats,
-	lastCursor uuid.UUID,
+	lastCursor string,
 ) error {
 	mode := "DRY RUN (no writes)"
 	if !cfg.dryRun {

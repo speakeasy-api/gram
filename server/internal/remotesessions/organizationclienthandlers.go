@@ -19,7 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/managedrows"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -328,6 +328,11 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		secretCiphertext = conv.ToPGText(ciphertext)
 	}
 
+	callbackBaseURL, err := s.newClientCallbackBaseURL(ctx, authCtx.ActiveOrganizationID, owner)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization callback origin").LogError(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -402,7 +407,7 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		LegacyCallbackUrl:               false,
 		JsonWebKeySetID:                 keySetID,
 		IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		CallbackBaseUrl:                 s.newClientCallbackBaseURL(owner),
+		CallbackBaseUrl:                 callbackBaseURL,
 		GrantTypes:                      clientCreateGrantTypes(owner),
 		CredentialOwner:                 conv.ToPGText(string(owner)),
 	})
@@ -503,6 +508,11 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_issuer_id").LogError(ctx, logger)
 	}
 
+	callbackBaseURL, err := s.newClientCallbackBaseURL(ctx, authCtx.ActiveOrganizationID, CredentialOwnerSubject)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization callback origin").LogError(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -551,7 +561,6 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 		return nil, oops.E(oops.CodeUnexpected, err, "generate client id").LogError(ctx, logger)
 	}
 
-	callbackBaseURL := s.origins.NewClientBaseURL(true)
 	created, err := txRepo.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
 		ID:                    clientID,
 		ProjectID:             clientProjectID,
@@ -679,7 +688,7 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, oops.E(oops.CodeConflict, nil, "remote session client moved to another issuer; reload and retry").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
 		return nil, err
 	}
 
@@ -698,11 +707,18 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, err
 	}
 
+	newClientID, err := correctedClientID(existing.RemoteSessionClient, payload.ClientID)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.ProjectID.UUID, clientID); err != nil {
 		return nil, err
 	}
 
 	updated, err := txRepo.UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{
+		ClientID:                        newClientID,
+		DisplayName:                     updatedDisplayName(payload.DisplayName),
 		ClientSecretEncrypted:           clientSecretEncrypted,
 		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
@@ -717,6 +733,16 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 			return nil, oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update organization admin remote session client").LogError(ctx, logger)
+	}
+
+	// Sessions obtained through the old client_id hold tokens the issuer bound
+	// to it, so they cannot be refreshed under the corrected one.
+	var revokedSessions []repo.SoftDeleteRemoteSessionsByClientIDRow
+	if newClientID.Valid {
+		revokedSessions, err = txRepo.SoftDeleteRemoteSessionsByClientID(ctx, updated.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "revoke remote sessions of the corrected client").LogError(ctx, logger)
+		}
 	}
 
 	trustedReferenceCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionClientID(ctx, updated.ID)
@@ -759,6 +785,9 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	// Best effort and post-commit, as on delete.
+	s.revoker.RevokeAllIssuedToDetached(ctx, revokedCredentials(revokedSessions), issuingClientAuth(existing.RemoteSessionClient))
 
 	// Set after the audit snapshot so it matches the snapshot before.
 	afterView.CallbackURL = s.clientCallbackURL(updated)
@@ -803,7 +832,7 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
 		return nil, err
 	}
 
@@ -815,6 +844,7 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 		ActorDisplayName:         authCtx.Email,
 		ConfirmUpstreamRejection: false,
 		OrganizationID:           authCtx.ActiveOrganizationID,
+		RegistrationScope:        nil,
 	})
 	if err != nil {
 		if conflict, ok := errors.AsType[*oops.ShareableError](err); ok && conflict.Code == oops.CodeConflict {
@@ -907,7 +937,7 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 		return oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+	if err := idpmanagedresources.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
 		return err
 	}
 

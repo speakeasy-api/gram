@@ -71,7 +71,7 @@ func Tools(executeToolSchema json.RawMessage) []Tool {
 		},
 		{
 			Name:        ToolConnectionStatus,
-			Description: "Show which member servers the user is signed in to, with a link to sign in to the rest when this gateway has a sign-in page. Call it when a server reports it needs authentication, or when the user asks what they are connected to. Call it again after the user signs in to refresh.",
+			Description: "Show member connection status. Live connections check current sign-in; cached connections report verification at consent without a new probe. Tool calls check current authorization. Follow the result’s directions to sign in or give consent again.",
 			InputSchema: connectionStatusSchema,
 		},
 	}

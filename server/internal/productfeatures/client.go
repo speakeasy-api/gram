@@ -198,6 +198,18 @@ func setFeatureEnabled(ctx context.Context, queries *repo.Queries, organizationI
 		return nil
 	}
 
+	if feature == FeatureOrganizationGatewayDisabled {
+		current, err := queries.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: organizationID, FeatureName: string(feature)})
+		if err != nil {
+			return fmt.Errorf("read gateway opt-in: %w", err)
+		}
+		if !current {
+			return nil
+		}
+		if _, err := queries.EnableFeature(ctx, repo.EnableFeatureParams{OrganizationID: organizationID, FeatureName: string(feature)}); err != nil {
+			return fmt.Errorf("record gateway opt-in: %w", err)
+		}
+	}
 	_, err := queries.DeleteFeature(ctx, repo.DeleteFeatureParams{OrganizationID: organizationID, FeatureName: string(feature)})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("disable feature: %w", err)

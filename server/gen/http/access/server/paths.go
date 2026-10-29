@@ -37,6 +37,11 @@ func ListDirectoryRoleMappingsAccessPath() string {
 	return "/rpc/access.listDirectoryRoleMappings"
 }
 
+// ListDirectoryPeopleAccessPath returns the URL path to the access service listDirectoryPeople HTTP endpoint.
+func ListDirectoryPeopleAccessPath() string {
+	return "/rpc/access.listDirectoryPeople"
+}
+
 // SyncDirectoryGroupsAccessPath returns the URL path to the access service syncDirectoryGroups HTTP endpoint.
 func SyncDirectoryGroupsAccessPath() string {
 	return "/rpc/access.syncDirectoryGroups"

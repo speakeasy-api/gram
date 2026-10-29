@@ -1,3 +1,4 @@
+import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import {
   createDefaultMcpEndpoint,
@@ -18,6 +19,7 @@ import {
   type RemoteMcpCreationIdentity,
 } from "@/pages/sources/remote-mcp/configureCreatedIdentity";
 import type { Gram } from "@gram/client";
+import type { ServiceAccountClientSpec } from "@/lib/remote-identity";
 import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
 import type { ExternalMCPRemoteHeader } from "@gram/client/models/components/externalmcpremoteheader.js";
@@ -70,6 +72,8 @@ export interface ServerConfig {
   headerValues: Record<string, string>;
   identityMode: RemoteMcpCreationIdentity;
   agentAuthorization: string;
+  /** An OAuth service account client to bind instead of agentAuthorization. */
+  serviceAccountClient: ServiceAccountClientSpec | null;
 }
 
 /** Configuration for a server with multiple remotes during the selectRemotes phase */
@@ -88,6 +92,8 @@ type GuardrailOutcome =
 export interface ServerInstallStatus {
   key: string;
   name: string;
+  /** The catalog entry this server was installed from, for its logo. */
+  server?: PulseMCPServer;
   status: "pending" | "creating" | "completed" | "failed";
   /** mcp_servers row id — used by callers that bundle installs (e.g. plugins). */
   mcpServerId?: string;
@@ -138,7 +144,10 @@ export interface ConfigurePhase extends WorkflowBase {
   updateServerConfig: (
     index: number,
     updates: Partial<
-      Pick<ServerConfig, "name" | "identityMode" | "agentAuthorization">
+      Pick<
+        ServerConfig,
+        "name" | "identityMode" | "agentAuthorization" | "serviceAccountClient"
+      >
     >,
   ) => void;
   setHeaderValue: (
@@ -254,8 +263,9 @@ function buildServerConfig(
     name: `${server.title ?? server.registrySpecifier}${serverNameSuffix}`,
     remotes: server.remotes ?? [],
     headerValues: {},
-    identityMode: server.supportsDcr ? "user" : "none",
+    identityMode: supportsAutomaticOAuth(server) ? "user" : "none",
     agentAuthorization: "",
+    serviceAccountClient: null,
   };
 }
 
@@ -271,6 +281,7 @@ interface InstallTarget {
   headers: Array<{ header: ExternalMCPRemoteHeader; value: string }>;
   identityMode: RemoteMcpCreationIdentity;
   agentAuthorization: string;
+  serviceAccountClient: ServiceAccountClientSpec | null;
 }
 
 function buildInstallTargets(config: ServerConfig): InstallTarget[] {
@@ -288,6 +299,7 @@ function buildInstallTargets(config: ServerConfig): InstallTarget[] {
     }),
     identityMode: config.identityMode,
     agentAuthorization: config.agentAuthorization,
+    serviceAccountClient: config.serviceAccountClient,
   }));
 }
 
@@ -536,7 +548,13 @@ export function useRemoteMcpInstallWorkflow({
     (
       index: number,
       updates: Partial<
-        Pick<ServerConfig, "name" | "identityMode" | "agentAuthorization">
+        Pick<
+          ServerConfig,
+          | "name"
+          | "identityMode"
+          | "agentAuthorization"
+          | "serviceAccountClient"
+        >
       >,
     ) => {
       setServerConfigs((prev) =>
@@ -615,8 +633,11 @@ export function useRemoteMcpInstallWorkflow({
             currentConfig.selectedRemoteUrls.has(r.url),
           ),
           headerValues: {},
-          identityMode: currentConfig.server.supportsDcr ? "user" : "none",
+          identityMode: supportsAutomaticOAuth(currentConfig.server)
+            ? "user"
+            : "none",
           agentAuthorization: "",
+          serviceAccountClient: null,
         },
       ]);
     }
@@ -647,7 +668,10 @@ export function useRemoteMcpInstallWorkflow({
       installBlockedReason === undefined &&
       serverConfigs.every((c) => c.name.trim() !== "") &&
       serverConfigs.every(
-        (c) => c.identityMode !== "agent" || c.agentAuthorization.trim() !== "",
+        (c) =>
+          c.identityMode !== "agent" ||
+          c.agentAuthorization.trim() !== "" ||
+          c.serviceAccountClient !== null,
       ) &&
       serverConfigs.some((c) => c.remotes.length > 0)
     );
@@ -802,6 +826,10 @@ export function useRemoteMcpInstallWorkflow({
           target.identityMode === "agent"
             ? target.agentAuthorization.trim()
             : undefined,
+        serviceAccountClient:
+          target.identityMode === "agent"
+            ? (target.serviceAccountClient ?? undefined)
+            : undefined,
         // Organization issuers are administered at the organization level;
         // setup must not attach this project's upstream client to one.
         organizationOwnedUserSessionIssuer:
@@ -832,7 +860,13 @@ export function useRemoteMcpInstallWorkflow({
         mcpEndpointUrl: endpoint
           ? `${getServerURL()}/mcp/${endpoint.slug}`
           : undefined,
-        authConfigured: !!identityConfiguration.userIdentity?.status,
+        // A bound service account client is new auth state too, so the
+        // session-client lists are refreshed for it as well.
+        authConfigured:
+          !!identityConfiguration.userIdentity?.status ||
+          (target.identityMode === "agent" &&
+            !!target.serviceAccountClient &&
+            identityConfiguration.status === "configured"),
         identityConfiguration,
         iconPersistence,
       };
@@ -884,6 +918,7 @@ export function useRemoteMcpInstallWorkflow({
         ...targets.map((target, index) => ({
           key: `${index}-${target.remote.url}`,
           name: target.name,
+          server: target.server,
           status: "pending" as const,
         })),
         ...uninstallable.map((config, index) => ({
@@ -1160,7 +1195,7 @@ function guardrailServerSummary(config: ServerConfig): GuardrailServerSummary {
     destructiveTools: tools
       .filter((tool) => tool.destructive)
       .map((tool) => tool.name),
-    oauth: config.server.supportsDcr,
+    oauth: supportsAutomaticOAuth(config.server),
   };
 }
 

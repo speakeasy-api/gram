@@ -29,7 +29,7 @@ var chatGPTToolAllowlist = []string{
 	"get_setup_handoff",
 	"get_mcp_readiness",
 	"get_my_install_instructions",
-	"search_gram_docs",
+	"search_speakeasy_docs",
 	"list_projects",
 }
 

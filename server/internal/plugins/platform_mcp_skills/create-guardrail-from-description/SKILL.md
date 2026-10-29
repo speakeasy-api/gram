@@ -5,6 +5,8 @@ description: Use when an administrator of a Speakeasy AI Control Plane project s
 
 # Create a guardrail from a description
 
+If this connection lists `call_platform_tool` instead of the tools this workflow names, find each named tool with `search_platform_tools`, describe it with `describe_platform_tool`, then run it with `call_platform_tool` and the same arguments. Whether a tool exists for you is decided by `describe_platform_tool` with its exact name, not by `tools/list` or one page of search results: a name returned in `not_found` is unavailable to you, so say so rather than guess. The call itself still checks your access. When `execute` is also listed, a multi-step read may run in `execute` with `tools.search`, `tools.describe` and `tools.call` on `platform--<tool name>` paths. End each `execute` run at a confirmation point and ask the user before any write.
+
 Turn "stop agents deleting anything in production" into a reviewed policy: map the description to a preset, show the administrator exactly what the policy will do, and create it only after they confirm.
 
 ## Scope and prerequisites

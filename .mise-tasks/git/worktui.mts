@@ -20,6 +20,7 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { promisify } from "node:util";
+import { createPRLookup, type PrInfo } from "./worktree-prs.mts";
 
 const execFile = promisify(execFileCb);
 
@@ -49,51 +50,18 @@ const strip = (s: string) => s.replace(ANSI_RE, "");
 const link = (text: string, url: string) =>
   `\x1b]8;;${url}\x07${text}\x1b]8;;\x07`;
 
-// Open PR per branch, fetched from `gh pr list` — one call maps the whole
-// repo, refreshed on a slow cadence (PRs churn far less than boot state).
-type PrInfo = { number: number; url: string; state: string };
-const prByBranch = new Map<string, PrInfo>();
+const lookupPRs = createPRLookup();
+let prByBranch = new Map<string, PrInfo>();
 let prLoaded = false;
-// open > merged > closed when a branch has several PRs (gh lists newest
-// first, so within the same state the newest wins).
-const PR_RANK: Record<string, number> = {
-  open: 0,
-  draft: 0,
-  merged: 1,
-  closed: 2,
-};
-async function fetchPRs(): Promise<void> {
+let prFetching = false;
+async function fetchPRs(rows: Row[]): Promise<void> {
+  if (prFetching) return;
+  prFetching = true;
   try {
-    const { stdout } = await execFile(
-      "gh",
-      [
-        "pr",
-        "list",
-        "--state",
-        "all",
-        "--json",
-        "number,url,headRefName,state,isDraft",
-        "--limit",
-        "200",
-      ],
-      { maxBuffer: 8 * 1024 * 1024 },
-    );
-    prByBranch.clear();
-    for (const pr of JSON.parse(stdout)) {
-      const state =
-        pr.state === "OPEN"
-          ? pr.isDraft
-            ? "draft"
-            : "open"
-          : pr.state.toLowerCase();
-      const existing = prByBranch.get(pr.headRefName);
-      if (existing && PR_RANK[existing.state] <= PR_RANK[state]) continue;
-      prByBranch.set(pr.headRefName, { number: pr.number, url: pr.url, state });
-    }
-  } catch {
-    /* gh missing or offline — column stays empty */
+    prByBranch = await lookupPRs(rows.map((row) => row.branch));
   } finally {
     prLoaded = true; // stop the loader either way
+    prFetching = false;
   }
 }
 
@@ -395,8 +363,9 @@ function paneFrame(
 // --- main --------------------------------------------------------------------
 
 async function run() {
+  let rows: Row[] = await collect();
   if (process.env["usage_once"] === "true" || !process.stdout.isTTY) {
-    const [rows] = await Promise.all([collect(), fetchPRs()]);
+    await fetchPRs(rows);
     for (const r of rows) {
       const pr = prByBranch.get(r.branch);
       console.log(
@@ -408,11 +377,10 @@ async function run() {
 
   // PRs load in the background — first frame renders without the column
   // filled, then it appears on the next draw.
-  void fetchPRs();
-  const prPoll = setInterval(() => void fetchPRs(), 60_000);
+  void fetchPRs(rows);
+  const prPoll = setInterval(() => void fetchPRs(rows), 60_000);
   prPoll.unref?.();
 
-  let rows: Row[] = await collect();
   let cursor = 0;
   const selected = new Set<string>();
   let view: "list" | "logs" | "remove" = "list";

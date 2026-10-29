@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -549,6 +550,11 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		return oops.E(oops.CodeUnexpected, err, "delete remote mcp server").LogError(ctx, logger)
 	}
 
+	// Retire the auth clients derived from the deleted source's headers.
+	if err := authclientbackfill.SyncRemoteSource(ctx, dbtx, authCtx.ActiveOrganizationID, deleted.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync remote mcp server auth clients").LogError(ctx, logger)
+	}
+
 	// Deliberately no per-header audit event for the cascade. The parent's
 	// remote-mcp:delete entry already accounts for the headers going away, and
 	// one entry per header would bury that signal under detail nobody asked for.
@@ -705,6 +711,10 @@ func (s *Service) CreateServerHeader(ctx context.Context, payload *gen.CreateSer
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote mcp server header").LogError(ctx, logger)
 	}
 
+	if err := authclientbackfill.SyncRemoteSource(ctx, dbtx, authCtx.ActiveOrganizationID, server.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync remote mcp server auth clients").LogError(ctx, logger)
+	}
+
 	if err := s.audit.LogRemoteMcpServerHeaderCreate(ctx, dbtx, audit.LogRemoteMcpServerHeaderCreateEvent{
 		OrganizationID:            authCtx.ActiveOrganizationID,
 		ProjectID:                 *authCtx.ProjectID,
@@ -826,6 +836,10 @@ func (s *Service) UpdateServerHeader(ctx context.Context, payload *gen.UpdateSer
 		return nil, oops.E(oops.CodeUnexpected, err, "update remote mcp server header").LogError(ctx, logger)
 	}
 
+	if err := authclientbackfill.SyncRemoteSource(ctx, dbtx, authCtx.ActiveOrganizationID, server.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync remote mcp server auth clients").LogError(ctx, logger)
+	}
+
 	afterView := mv.BuildRemoteMcpServerHeaderView(header)
 
 	if err := s.audit.LogRemoteMcpServerHeaderUpdate(ctx, dbtx, audit.LogRemoteMcpServerHeaderUpdateEvent{
@@ -876,6 +890,32 @@ func (s *Service) DeleteServerHeader(ctx context.Context, payload *gen.DeleteSer
 
 	txRepo := repo.New(dbtx)
 
+	// Lock the parent before the header, as the other header writers and the
+	// parent's own deletion do, so the auth client sync below sees every write
+	// and never waits on a lock in the opposite order. Read unredacted through
+	// the repo: only the parent's id is wanted, so no value is revealed.
+	located, err := txRepo.GetServerHeader(ctx, repo.GetServerHeaderParams{
+		ID:        headerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+
+		return oops.E(oops.CodeUnexpected, err, "get remote mcp server header").LogError(ctx, logger)
+	}
+	if _, err := txRepo.GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{
+		ID:        located.RemoteMcpServerID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+
+		return oops.E(oops.CodeUnexpected, err, "lock remote mcp server").LogError(ctx, logger)
+	}
+
 	deleted, err := txRepo.DeleteServerHeader(ctx, repo.DeleteServerHeaderParams{
 		ID:        headerID,
 		ProjectID: *authCtx.ProjectID,
@@ -894,6 +934,10 @@ func (s *Service) DeleteServerHeader(ctx context.Context, payload *gen.DeleteSer
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "get remote mcp server").LogError(ctx, logger)
+	}
+
+	if err := authclientbackfill.SyncRemoteSource(ctx, dbtx, authCtx.ActiveOrganizationID, server.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync remote mcp server auth clients").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogRemoteMcpServerHeaderDelete(ctx, dbtx, audit.LogRemoteMcpServerHeaderDeleteEvent{
