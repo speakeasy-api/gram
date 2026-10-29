@@ -3167,6 +3167,31 @@ type McpAuthClientEma struct {
 	Deleted bool
 }
 
+type McpAuthClientGithubApp struct {
+	// @access: confidential
+	AuthClientID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ClientType string
+	// @access: restricted
+	InstanceUrl string
+	// @access: confidential
+	AppID int64
+	// @access: confidential
+	InstallationID int64
+	// @access: secret-restricted
+	PrivateKeyEncrypted string
+	// @access: restricted
+	UpstreamOrigin string
+	// @access: confidential
+	CredentialVersion uuid.UUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type McpAuthClientHeader struct {
 	// @access: confidential
 	ID uuid.UUID
