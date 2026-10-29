@@ -409,6 +409,11 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			fail:  postflightMustEqual(1, "expected 1 removed gateway member, found %d"),
 		},
 		{
+			what:  "mcp skill links",
+			count: byProject(s.q.PostflightCountMCPSkillLinks),
+			fail:  postflightMustEqual(5, "expected 5 MCP skill links, found %d"),
+		},
+		{
 			what:  "approvals server",
 			count: byProject(s.q.PostflightCountApprovalsServers),
 			fail:  postflightMustEqual(1, "expected 1 approvals server with an endpoint in the Default plugin, found %d"),
@@ -416,7 +421,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "hosted toolset wrappers",
 			count: byProject(s.q.PostflightCountHostedToolsetDrift),
-			fail:  postflightMustBeZero("%d toolsets carry hosting columns or have a canonical wrapper out of step with them"),
+			fail:  postflightMustBeZero("%d toolsets have a canonical wrapper out of step with them"),
 		},
 		{
 			what:  "canonical wrappers",

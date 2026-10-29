@@ -255,6 +255,8 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	}
 	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["distribute_skill"])
 	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["undistribute_skill"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["link_skill_to_mcp"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["unlink_skill_from_mcp"])
 	for _, name := range []string{"list_skill_insights", "compare_skill_versions"} {
 		require.Equal(t, ExternalAuthorizationOrgAdmin, byName[name], "session cost is organization spend: %s", name)
 	}

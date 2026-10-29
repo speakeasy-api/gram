@@ -281,7 +281,7 @@ func (f delegableFixture) toolset(t *testing.T, org, slug string) toolsetsrepo.T
 	})
 	require.NoError(t, err)
 	toolset, err := toolsetsrepo.New(f.db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{
-		OrganizationID: org, ProjectID: project.ID, Name: slug, Slug: slug, McpEnabled: true,
+		OrganizationID: org, ProjectID: project.ID, Name: slug, Slug: slug,
 	})
 	require.NoError(t, err)
 	return toolset

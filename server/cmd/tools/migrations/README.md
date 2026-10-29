@@ -10,7 +10,6 @@ the shared harness. The migrations shipped today:
 | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | Postgres `risk_results` → ClickHouse `risk_findings`                                | [RISK_RESULTS_MIGRATION.md](./RISK_RESULTS_MIGRATION.md)                       |
 | `risk_findings` `message_created_at`/`assistant_id` column backfill (via mutations) | [RISKFINDINGS_COLS_MIGRATION.md](./RISKFINDINGS_COLS_MIGRATION.md)             |
-| Canonical hosted MCP wrappers for legacy toolsets                                   | [HOSTED_MCP_WRAPPERS_MIGRATION.md](./HOSTED_MCP_WRAPPERS_MIGRATION.md)         |
 | Default auth permissions (`mcp:auth` defaults and legacy API key policies)          | [AUTH_PERMISSION_DEFAULTS_BACKFILL.md](./AUTH_PERMISSION_DEFAULTS_BACKFILL.md) |
 
 ## Concepts
@@ -90,9 +89,7 @@ go run ./server/cmd/tools/migrations [migration] [flags]
 ```
 
 `-dry-run` defaults to **true** for every pipeline migration: a plain run reads
-and transforms but writes nothing. Pass `-dry-run=false` to write. The hosted MCP
-wrapper backfill is not a pipeline migration: it is a dry run by default and
-writes only with `-apply`.
+and transforms but writes nothing. Pass `-dry-run=false` to write.
 
 ## Adding a new migration
 

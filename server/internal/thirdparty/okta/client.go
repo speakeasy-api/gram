@@ -46,7 +46,7 @@ const (
 const hardMaxPages = 500
 
 // defaultScopes are requested on every normal token mint.
-var defaultScopes = []string{"okta.apps.read", "okta.users.read", "okta.groups.read"}
+var defaultScopes = []string{"okta.apps.read"}
 
 // Config identifies the Okta org and the remote session client whose
 // credential authenticates against it.
@@ -370,32 +370,6 @@ func (c *httpClient) ListAppGroups(ctx context.Context, req ListAppGroupsRequest
 		out = append(out, AppGroup(g))
 	}
 	return out, err
-}
-
-func (c *httpClient) ListGroups(ctx context.Context, req ListGroupsRequest) ([]Group, error) {
-	q := url.Values{}
-	if req.Search != "" {
-		prefix, _ := json.Marshal(req.Search)
-		q.Set("search", "profile.name sw "+string(prefix))
-	}
-	setLimit(q, req.Limit)
-
-	raw, err := listAll[groupJSON](ctx, c, "/api/v1/groups", q, 0)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]Group, 0, len(raw))
-	for _, g := range raw {
-		out = append(out, Group{
-			ID:          g.ID,
-			Type:        g.Type,
-			Name:        g.Profile.Name,
-			Description: g.Profile.Description,
-			Created:     g.Created,
-			LastUpdated: g.LastUpdated,
-		})
-	}
-	return out, nil
 }
 
 // VerifyScopes always mints a fresh token for the required scopes. The
@@ -1015,12 +989,4 @@ func newAPIError(method, path string, status int, body []byte) *APIError {
 		summary = parsed.ErrorDescription
 	}
 	return &APIError{Method: method, Path: "/" + strings.TrimLeft(path, "/"), StatusCode: status, ErrorCode: code, Summary: summary}
-}
-
-// ListUsers reads a single page; pagination links are deliberately not followed.
-func (c *httpClient) ListUsers(ctx context.Context, req ListUsersRequest) ([]User, error) {
-	q := url.Values{}
-	setLimit(q, req.Limit)
-	users, _, err := getJSON[[]User](ctx, c, c.apiURL("/api/v1/users", "", q))
-	return users, err
 }

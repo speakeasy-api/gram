@@ -121,3 +121,18 @@ func GetSharedSkillsPath() string {
 func ListDistributionsSkillsPath() string {
 	return "/rpc/skills.listDistributions"
 }
+
+// LinkSkillsPath returns the URL path to the skills service link HTTP endpoint.
+func LinkSkillsPath() string {
+	return "/rpc/skills.link"
+}
+
+// UnlinkSkillsPath returns the URL path to the skills service unlink HTTP endpoint.
+func UnlinkSkillsPath() string {
+	return "/rpc/skills.unlink"
+}
+
+// ListLinksSkillsPath returns the URL path to the skills service listLinks HTTP endpoint.
+func ListLinksSkillsPath() string {
+	return "/rpc/skills.listLinks"
+}
