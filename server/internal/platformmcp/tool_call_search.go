@@ -301,6 +301,7 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 		MetaMCPMatchers:    matchers.meta,
 		TargetTypes:        nil,
 		HostedToolsetSlugs: server.hostedToolsetSlugs,
+		MCPServerIDs:       nil,
 		MCPServerTargetIDs: server.mcpServerTargetIDs,
 		// Never set from a configured server: a shadow row is named by the
 		// calling app, so selecting one by name would fold an unrelated

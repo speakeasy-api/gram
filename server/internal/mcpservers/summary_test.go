@@ -44,7 +44,7 @@ func seedSummaryToolset(t *testing.T, ctx context.Context, ti *testInstance, org
 	toolsets := toolsetsrepo.New(ti.conn)
 	slug := "summary-" + uuid.NewString()[:8]
 	toolset, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
-		OrganizationID: organizationID, ProjectID: projectID, Name: slug, Slug: slug, McpEnabled: true,
+		OrganizationID: organizationID, ProjectID: projectID, Name: slug, Slug: slug,
 	})
 	require.NoError(t, err)
 	predecessor := uuid.NullUUID{}
@@ -173,6 +173,11 @@ func TestMcpServerSummary_HostedAcrossReads(t *testing.T) {
 			urn.NewTool(urn.ToolKindExternalMCP, "acme", "proxy"),
 		},
 	)
+	deployment := seedSummaryDeployment(t, ctx, ti, orgID, projectID)
+	seedSummaryHTTPTool(t, ctx, ti, projectID, deployment, urn.NewTool(urn.ToolKindHTTP, "petstore", "list_pets"), "list_pets")
+	seedSummaryHTTPTool(t, ctx, ti, projectID, deployment, urn.NewTool(urn.ToolKindHTTP, "petstore", "get_pet"), "get_pet")
+	seedSummaryExternalTools(t, ctx, ti, deployment, "acme", urn.NewTool(urn.ToolKindExternalMCP, "acme", "search"), urn.NewTool(urn.ToolKindExternalMCP, "acme", "proxy"))
+	seedSummaryExternalTools(t, ctx, ti, deployment, "zeta", urn.NewTool(urn.ToolKindExternalMCP, "zeta", "proxy"))
 	_, err := toolsetsrepo.New(ti.conn).CreateToolsetOrigin(ctx, toolsetsrepo.CreateToolsetOriginParams{
 		OrganizationID: orgID, ToolsetID: toolset.ID, RegistrySpecifier: "io.example/acme",
 	})
@@ -188,7 +193,7 @@ func TestMcpServerSummary_HostedAcrossReads(t *testing.T) {
 		require.Equal(t, toolset.ID.String(), got.Toolset.ID)
 		require.Equal(t, toolset.Slug, got.Toolset.Slug)
 		require.Equal(t, toolset.Name, got.Toolset.Name)
-		require.Equal(t, 3, got.Toolset.ToolCount, "latest version, distinct, proxies excluded")
+		require.Equal(t, 3, got.Toolset.ToolCount, "latest version, live, distinct, proxies excluded")
 		require.Equal(t, toolset.ToolSelectionMode, got.Toolset.ToolSelectionMode)
 		require.Equal(t, []string{"acme", "zeta"}, got.Toolset.ExternalMcpSlugs)
 		require.False(t, got.Toolset.ExternalMcpProxyOnly)
@@ -317,7 +322,7 @@ func TestMcpServerSummary_CarriesToolsetDescription(t *testing.T) {
 	toolsets := toolsetsrepo.New(ti.conn)
 	slug := "summary-" + uuid.NewString()[:8]
 	described, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
-		OrganizationID: orgID, ProjectID: projectID, Name: slug, Slug: slug, McpEnabled: true,
+		OrganizationID: orgID, ProjectID: projectID, Name: slug, Slug: slug,
 		Description: conv.ToPGText("Answers support questions"),
 	})
 	require.NoError(t, err)
@@ -339,6 +344,11 @@ func TestListMcpServersForOrg_SummariesAcrossProjects(t *testing.T) {
 
 	toolsetA := seedSummaryToolset(t, ctx, ti, orgID, projectID, []urn.Tool{urn.NewTool(urn.ToolKindHTTP, "a", "one")})
 	toolsetB := seedSummaryToolset(t, ctx, ti, orgID, otherProjectID, []urn.Tool{urn.NewTool(urn.ToolKindHTTP, "b", "one"), urn.NewTool(urn.ToolKindHTTP, "b", "two")})
+	deploymentA := seedSummaryDeployment(t, ctx, ti, orgID, projectID)
+	seedSummaryHTTPTool(t, ctx, ti, projectID, deploymentA, urn.NewTool(urn.ToolKindHTTP, "a", "one"), "a_one")
+	deploymentB := seedSummaryDeployment(t, ctx, ti, orgID, otherProjectID)
+	seedSummaryHTTPTool(t, ctx, ti, otherProjectID, deploymentB, urn.NewTool(urn.ToolKindHTTP, "b", "one"), "b_one")
+	seedSummaryHTTPTool(t, ctx, ti, otherProjectID, deploymentB, urn.NewTool(urn.ToolKindHTTP, "b", "two"), "b_two")
 	serverA := seedSummaryServer(t, ctx, ti, projectID, toolsetA.ID)
 	serverB := seedSummaryServer(t, ctx, ti, otherProjectID, toolsetB.ID)
 	endpointA := seedSummaryEndpoint(t, ctx, ti, projectID, serverA.ID, uuid.NullUUID{})
@@ -469,6 +479,8 @@ func TestCreateAndUpdateMcpServer_ResponsesCarrySummary(t *testing.T) {
 		urn.NewTool(urn.ToolKindHTTP, "petstore", "list_pets"),
 		urn.NewTool(urn.ToolKindExternalMCP, "acme", "proxy"),
 	})
+	deployment := seedSummaryDeployment(t, ctx, ti, orgID, projectID)
+	seedSummaryHTTPTool(t, ctx, ti, projectID, deployment, urn.NewTool(urn.ToolKindHTTP, "petstore", "list_pets"), "list_pets")
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
 		Name: "summary create", ToolsetID: conv.PtrEmpty(toolset.ID.String()), Visibility: types.McpServerVisibility("private"),
 	})

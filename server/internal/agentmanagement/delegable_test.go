@@ -250,7 +250,6 @@ func TestListDelegableGrantsRejectsCrossOrganizationAndNonhumanContexts(t *testi
 		"api key":                 contextvalues.WithValidatedGramSession(contextvalues.SetAuthContext(t.Context(), &apiKey), &apiKey, false),
 		"assistant":               contextvalues.SetAssistantPrincipal(valid, contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()}),
 		"oauth":                   contextvalues.SetOAuthClientID(valid, "client-id"),
-		"scope override":          contextvalues.SetRBACScopeOverride(valid, "root"),
 		"legacy impersonation":    contextvalues.WithValidatedGramSession(t.Context(), mustAuthContext(t, valid), true),
 	}
 	for name, ctx := range contexts {
@@ -282,7 +281,7 @@ func (f delegableFixture) toolset(t *testing.T, org, slug string) toolsetsrepo.T
 	})
 	require.NoError(t, err)
 	toolset, err := toolsetsrepo.New(f.db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{
-		OrganizationID: org, ProjectID: project.ID, Name: slug, Slug: slug, McpEnabled: true,
+		OrganizationID: org, ProjectID: project.ID, Name: slug, Slug: slug,
 	})
 	require.NoError(t, err)
 	return toolset

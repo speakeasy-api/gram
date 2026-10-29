@@ -4,6 +4,18 @@ Run `./zero` until it succeeds. This script is what you will use to run the dash
 
 The main dependencies for this project are Mise and Docker. The `./zero` script will guide you to install these if they are not found.
 
+### Agentation
+
+Optional dashboard annotation toolbar. From your worktree, run:
+
+```sh
+mise run start:agentation
+```
+
+Setup and any needed dashboard restart are handled for you. Refresh the page. You can close the terminal.
+
+Stop with `pitchfork stop agentation` (clears annotations). It won't start again automatically.
+
 ### Development over Tailscale
 
 With the Tailscale CLI installed, logged in, and a Tailnet DNS name assigned to this machine, `./zero` offers to configure remote development before generating TLS certificates. Accepting saves the DNS name as `GRAM_HOST`, switches `GRAM_BIND_IP` to the machine's Tailnet IP (preferring IPv4), and refreshes their dependent settings in `mise.local.toml`. Assigned ports and explicit per-service listener overrides are preserved. The machine's DNS name and IPs are also included in the mkcert certificate. Other devices must trust the local mkcert CA.

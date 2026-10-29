@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -256,6 +257,20 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 
 	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), replayed) {
 		ctx = withHookDuplicate(ctx)
+	}
+
+	if isDeliveryFailureReport(payload) {
+		// A sender's report on its own delivery is not agent activity: no
+		// enforcement, skill, MCP, or transcript state is touched. The org
+		// settings still ride on the response so a reconnecting sender's
+		// cached copy refreshes on this exchange like any other.
+		if !s.isHookDuplicate(ctx) {
+			s.recordDeliveryFailure(context.WithoutCancel(ctx), payload, authCtx, actor, replayed)
+		}
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), nil),
+			Actor:  ResolvedActor(actor),
+		}, nil
 	}
 
 	blockReason, userReason := s.evaluateCanonicalHook(ctx, payload, authCtx, actor, timestamp)
@@ -567,11 +582,17 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	if adapter == "" {
 		return oops.E(oops.CodeInvalid, nil, "source.adapter is required")
 	}
-	// The assistant surface is derived from the observation provider, and only
-	// server-side assistant runs may claim it. Reserve those values so a client
-	// hook cannot forge assistant-attributed skill activity.
-	if isReservedAssistantAdapter(adapter) {
+	// The assistant and MCP surfaces are derived from the observation provider,
+	// and only server-side assistant runs and hosted MCP reads may claim them.
+	// Reserve those values so a client hook cannot forge assistant-attributed
+	// skill activity or an MCP load.
+	if isReservedServerAdapter(adapter) {
 		return oops.E(oops.CodeInvalid, nil, "source.adapter is reserved")
+	}
+	// Hosted MCP reads dedupe on keys with this prefix. A hook claiming one
+	// first would make the real read a silent duplicate.
+	if strings.HasPrefix(strings.TrimSpace(conv.PtrValOr(payload.IdempotencyKey, "")), mcpskills.IdempotencyKeyPrefix) {
+		return oops.E(oops.CodeInvalid, nil, "idempotency_key prefix is reserved")
 	}
 	if strings.TrimSpace(payload.Event.Type) == "" {
 		return oops.E(oops.CodeInvalid, nil, "event.type is required")
@@ -579,12 +600,12 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	if strings.TrimSpace(payload.SchemaVersion) != hookIngestSchemaV1 {
 		return oops.E(oops.CodeInvalid, nil, "unsupported hook schema_version")
 	}
-	return nil
+	return validateDeliveryFailurePayload(payload)
 }
 
-func isReservedAssistantAdapter(adapter string) bool {
+func isReservedServerAdapter(adapter string) bool {
 	switch strings.ToLower(strings.Join(strings.Fields(adapter), "")) {
-	case "assistant", "assistants":
+	case "assistant", "assistants", mcpskills.ObservationProvider:
 		return true
 	default:
 		return false
@@ -2128,21 +2149,31 @@ const maxEventBackdate = 14 * 24 * time.Hour
 // enforcement evaluation) agrees on one time for one event; a skewed device
 // clock must never make the stores diverge.
 func canonicalEventTime(payload *gen.IngestPayload) time.Time {
-	now := time.Now()
+	raw := ""
 	if payload != nil && payload.Event != nil {
-		if raw := strings.TrimSpace(conv.PtrValOr(payload.Event.OccurredAt, "")); raw != "" {
-			if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
-				if t.After(now) {
-					return now
-				}
-				if floor := now.Add(-maxEventBackdate); t.Before(floor) {
-					return floor
-				}
-				return t
-			}
-		}
+		raw = conv.PtrValOr(payload.Event.OccurredAt, "")
 	}
-	return now
+	return clampEventTime(raw, time.Now())
+}
+
+// clampEventTime parses a sender-supplied RFC3339 time and clamps it to
+// [now-maxEventBackdate, now]; an empty or unparseable value is now.
+func clampEventTime(raw string, now time.Time) time.Time {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return now
+	}
+	t, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		return now
+	}
+	if t.After(now) {
+		return now
+	}
+	if floor := now.Add(-maxEventBackdate); t.Before(floor) {
+		return floor
+	}
+	return t
 }
 
 func canonicalSessionID(payload *gen.IngestPayload) string {

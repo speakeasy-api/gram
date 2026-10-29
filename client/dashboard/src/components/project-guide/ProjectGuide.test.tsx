@@ -17,6 +17,7 @@ import {
 } from "./journeys";
 import {
   LISTEN_TIMEOUT_SECONDS,
+  MCP_SETUP_CONFIRMATION_DELAY_MS,
   PROJECT_GUIDE_MICRO_STEP_DELAY_MS,
 } from "./projectGuideMachine";
 import type {
@@ -107,7 +108,8 @@ function render(ui: React.ReactNode) {
 }
 
 async function advanceGuideDelay(count = 1): Promise<void> {
-  await act(() =>
+  // Timer-driven updates also queue microtasks; keep act open until they flush.
+  await act(async () =>
     vi.advanceTimersByTime(count * PROJECT_GUIDE_MICRO_STEP_DELAY_MS),
   );
 }
@@ -231,10 +233,10 @@ describe("ProjectGuide", () => {
     const { rerender } = render(<ProjectGuide />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
     expect(
-      screen.getByRole("heading", { name: "Govern a third-party MCP" }),
+      screen.getByRole("heading", { name: "Deploy an MCP gateway" }),
     ).toBeTruthy();
 
     slugs.current = { orgSlug: "org", projectSlug: "another-project" };
@@ -246,7 +248,7 @@ describe("ProjectGuide", () => {
       }),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("heading", { name: "Govern a third-party MCP" }),
+      screen.queryByRole("heading", { name: "Deploy an MCP gateway" }),
     ).toBeNull();
   });
 
@@ -267,7 +269,9 @@ describe("ProjectGuide", () => {
       }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("button", {
+        name: "Govern AI data access: Deploy an MCP gateway",
+      }),
     ).toBeTruthy();
     expect(
       screen.getByTestId("project-guide-secret-block-card").textContent,
@@ -289,7 +293,24 @@ describe("ProjectGuide", () => {
     }
   });
 
-  it("animates only journeys that have not started", () => {
+  it("preserves the original eyebrow typography on every graphic node", () => {
+    render(<ProjectGuide />);
+
+    for (const label of [
+      "Your agent",
+      "Your client",
+      "Secrets policy",
+      "Your endpoint",
+      "Model provider",
+      "Upstream",
+    ]) {
+      const eyebrow = screen.getByText(label);
+      expect(eyebrow.classList.contains("text-eyebrow")).toBe(true);
+      expect(eyebrow.classList.contains("text-muted-foreground")).toBe(true);
+    }
+  });
+
+  it("animates both chooser visuals regardless of journey progress", () => {
     const { rerender } = render(<ProjectGuide />);
 
     expect(
@@ -308,7 +329,7 @@ describe("ProjectGuide", () => {
       screen
         .getByTestId("project-guide-graphic-third-party-mcp")
         .getAttribute("data-animated"),
-    ).toBe("false");
+    ).toBe("true");
     expect(
       screen
         .getByTestId("project-guide-graphic-secret-block")
@@ -320,7 +341,7 @@ describe("ProjectGuide", () => {
     render(<ProjectGuide />);
 
     const openingControl = screen.getByRole("button", {
-      name: /Govern a third-party MCP/,
+      name: /Deploy an MCP gateway/,
     });
     const controlledRegionId = openingControl.getAttribute("aria-controls");
     expect(openingControl.getAttribute("aria-expanded")).toBe("false");
@@ -328,7 +349,7 @@ describe("ProjectGuide", () => {
     fireEvent.click(openingControl);
 
     const activeRegion = screen.getByRole("region", {
-      name: "Govern a third-party MCP",
+      name: "Deploy an MCP gateway",
     });
     expect(activeRegion.id).toBe(controlledRegionId);
     expect(
@@ -355,7 +376,7 @@ describe("ProjectGuide", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "Govern a third-party MCP" }),
+      screen.getByRole("heading", { name: "Deploy an MCP gateway" }),
     ).toBeTruthy();
     expect(
       screen.getByRole("button", {
@@ -367,8 +388,9 @@ describe("ProjectGuide", () => {
         "The catalog lists servers from the official MCP Registry. Installing one creates a governed endpoint in front of the vendor's server — the vendor's URL is already known, and nothing upstream changes.",
       ),
     ).toBeTruthy();
-    expect(screen.getByText("Read the server's tool list")).toBeTruthy();
-    expect(screen.getByText("Install it into this project")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Pick and set up a server" }),
+    ).toBeTruthy();
     expect(
       screen.getByRole("log", { name: "Journey A activity" }).textContent,
     ).toContain("Ready to start");
@@ -397,7 +419,7 @@ describe("ProjectGuide", () => {
     render(<ProjectGuide />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
 
@@ -453,7 +475,7 @@ describe("ProjectGuide", () => {
     render(<ProjectGuide />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
 
@@ -466,25 +488,41 @@ describe("ProjectGuide", () => {
     ).toBe(true);
 
     const activity = screen.getByRole("log", { name: "Journey A activity" });
-    await act(() => vi.advanceTimersByTime(0));
+    await act(async () => vi.advanceTimersByTime(0));
     expect(activity.textContent).toContain("Read the server's tool list");
     expect(activity.textContent).not.toContain(
       "Adding Linear MCP server to this project",
     );
-    await act(() =>
+    await act(async () =>
       vi.advanceTimersByTime(PROJECT_GUIDE_MICRO_STEP_DELAY_MS - 1),
     );
     expect(activity.textContent).not.toContain(
       "Adding Linear MCP server to this project",
     );
-    await act(() => vi.advanceTimersByTime(1));
+    await act(async () => vi.advanceTimersByTime(1));
     expect(activity.textContent).toContain(
       "Adding Linear MCP server to this project",
     );
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "running",
     );
-    await act(() => vi.advanceTimersByTime(PROJECT_GUIDE_MICRO_STEP_DELAY_MS));
+    await act(async () =>
+      vi.advanceTimersByTime(PROJECT_GUIDE_MICRO_STEP_DELAY_MS),
+    );
+    expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
+      "confirming",
+    );
+    expect(activity.textContent).toContain("Linear mcp server is now setup");
+    expect(screen.getByText("server ready")).toBeTruthy();
+    expect(screen.getByText("0 of 4 done")).toBeTruthy();
+
+    await act(async () =>
+      vi.advanceTimersByTime(MCP_SETUP_CONFIRMATION_DELAY_MS - 1),
+    );
+    expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
+      "confirming",
+    );
+    await act(async () => vi.advanceTimersByTime(1));
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "checkpoint",
     );
@@ -529,7 +567,7 @@ describe("ProjectGuide", () => {
     const view = render(<ProjectGuide />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
@@ -634,7 +672,7 @@ describe("ProjectGuide", () => {
 
     render(<ProjectGuide />);
     fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
@@ -660,13 +698,14 @@ describe("ProjectGuide", () => {
       screen.getByRole("log", { name: "Journey A activity" }).textContent,
     ).toContain("Linear mcp server is now setup");
 
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Server is installed",
-      }),
+    expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
+      "confirming",
+    );
+    await act(async () =>
+      vi.advanceTimersByTime(MCP_SETUP_CONFIRMATION_DELAY_MS),
     );
     expect(
-      screen.getByRole("heading", { name: "Ask the agent to list the tools" }),
+      screen.getByRole("heading", { name: "Connect your client" }),
     ).toBeTruthy();
     expect(
       mcpOperations.current.prepareActivityBaseline,
@@ -679,7 +718,7 @@ describe("ProjectGuide", () => {
     render(<ProjectGuide />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
     fireEvent.click(
       screen.getByRole("button", {
@@ -789,7 +828,7 @@ describe("ProjectGuide", () => {
 
     const view = render(<ProjectGuide />);
     fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
@@ -853,7 +892,7 @@ describe("ProjectGuide", () => {
 
     const view = render(<ProjectGuide />);
     fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
@@ -951,7 +990,7 @@ describe("ProjectGuide", () => {
     );
     expect(
       screen.getByText(
-        "Run the command below to install the observability plugin, then restart your agent so its activity can stream into this project.",
+        "Run the command below to install the observability plugin, then restart your agent so prompts can be inspected by this project's policies.",
       ),
     ).toBeTruthy();
     expect(screen.queryByText(/Your turn · Add it to your agent/)).toBeNull();
@@ -983,7 +1022,7 @@ describe("ProjectGuide", () => {
     render(<ProjectGuide />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
@@ -1029,7 +1068,7 @@ describe("ProjectGuide", () => {
     expect(screen.getByText("Coordinator output line")).toBeTruthy();
     expect(screen.getByText("Coordinator event card")).toBeTruthy();
     expect(
-      screen.getByRole("region", { name: "Govern a third-party MCP" }).id,
+      screen.getByRole("region", { name: "Deploy an MCP gateway" }).id,
     ).toBe("fixture-run");
 
     fireEvent.click(screen.getByRole("button", { name: "Continue run" }));
@@ -1081,7 +1120,7 @@ describe("ProjectGuide", () => {
   it.each([
     {
       journey: PROJECT_GUIDE_JOURNEYS[1]!,
-      title: "Govern a third-party MCP",
+      title: "Deploy an MCP gateway",
     },
     {
       journey: PROJECT_GUIDE_JOURNEYS[0]!,
@@ -1093,7 +1132,9 @@ describe("ProjectGuide", () => {
       statusByJourney.current[journey.id] = "in-progress";
       render(<ProjectGuide />);
 
-      fireEvent.click(screen.getByRole("button", { name: title }));
+      fireEvent.click(
+        screen.getByRole("button", { name: `${journey.headline}: ${title}` }),
+      );
       fireEvent.click(
         screen.getByRole("button", {
           name: `Rewind to ${journey.steps[0]}`,
@@ -1185,7 +1226,7 @@ describe("ProjectGuide", () => {
     render(<ProjectGuide />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
 
     expect(
@@ -1249,7 +1290,7 @@ describe("ProjectGuide", () => {
     render(<ProjectGuide />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
 
     expect(
@@ -1273,7 +1314,7 @@ describe("ProjectGuide", () => {
     render(<ProjectGuide />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
 
     expect(screen.queryByRole("link", { name: "Open tool logs" })).toBeNull();
@@ -1288,7 +1329,7 @@ describe("ProjectGuide", () => {
     mcpOperations.current.projectStatePending = true;
     const view = render(<ProjectGuide />);
     fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
 
     expect(
@@ -1470,7 +1511,7 @@ describe("ProjectGuide", () => {
 
     const view = render(<ProjectGuide />);
     fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Linear.*2 tools/ }));
@@ -1637,7 +1678,7 @@ describe("ProjectGuide", () => {
     );
     expect(
       screen.getByText(
-        "Run the command below to install the observability plugin, then restart your agent so its activity can stream into this project.",
+        "Run the command below to install the observability plugin, then restart your agent so prompts can be inspected by this project's policies.",
       ),
     ).toBeTruthy();
     expect(
@@ -1944,7 +1985,7 @@ describe("ProjectGuide", () => {
 
     const view = render(<ProjectGuide />);
     fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();

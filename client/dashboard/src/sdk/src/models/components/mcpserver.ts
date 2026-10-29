@@ -5,13 +5,25 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
   McpServerToolsetSummary,
   McpServerToolsetSummary$inboundSchema,
 } from "./mcpservertoolsetsummary.js";
+
+/**
+ * A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.
+ */
+export const BuiltinBackend = {
+  Approvals: "approvals",
+} as const;
+/**
+ * A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.
+ */
+export type BuiltinBackend = OpenEnum<typeof BuiltinBackend>;
 
 /**
  * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
@@ -24,7 +36,7 @@ export const McpServerNetworkAccessMode = {
 /**
  * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
-export type McpServerNetworkAccessMode = ClosedEnum<
+export type McpServerNetworkAccessMode = OpenEnum<
   typeof McpServerNetworkAccessMode
 >;
 
@@ -39,12 +51,16 @@ export const McpServerVisibility = {
 /**
  * The visibility of an MCP server
  */
-export type McpServerVisibility = ClosedEnum<typeof McpServerVisibility>;
+export type McpServerVisibility = OpenEnum<typeof McpServerVisibility>;
 
 /**
  * An MCP server configuration: authentication, environment, and backend selection for an MCP server.
  */
 export type McpServer = {
+  /**
+   * A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.
+   */
+  builtinBackend?: BuiltinBackend | undefined;
   /**
    * When the MCP server was created
    */
@@ -61,6 +77,10 @@ export type McpServer = {
    * The ID of the MCP server
    */
   id: string;
+  /**
+   * The slug of an older Speakeasy-hosted address of this hosted server: its legacy custom-domain address, which the Speakeasy domain also answers under the same access rules. Absent when a platform endpoint or another alias holds that slug.
+   */
+  legacyPlatformSlug?: string | undefined;
   /**
    * A human-readable display name for the server
    */
@@ -128,19 +148,28 @@ export type McpServer = {
 };
 
 /** @internal */
-export const McpServerNetworkAccessMode$inboundSchema: z.ZodMiniEnum<
-  typeof McpServerNetworkAccessMode
-> = z.enum(McpServerNetworkAccessMode);
+export const BuiltinBackend$inboundSchema: z.ZodMiniType<
+  BuiltinBackend,
+  unknown
+> = openEnums.inboundSchema(BuiltinBackend);
 
 /** @internal */
-export const McpServerVisibility$inboundSchema: z.ZodMiniEnum<
-  typeof McpServerVisibility
-> = z.enum(McpServerVisibility);
+export const McpServerNetworkAccessMode$inboundSchema: z.ZodMiniType<
+  McpServerNetworkAccessMode,
+  unknown
+> = openEnums.inboundSchema(McpServerNetworkAccessMode);
+
+/** @internal */
+export const McpServerVisibility$inboundSchema: z.ZodMiniType<
+  McpServerVisibility,
+  unknown
+> = openEnums.inboundSchema(McpServerVisibility);
 
 /** @internal */
 export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
   .pipe(
     z.object({
+      builtin_backend: z.optional(BuiltinBackend$inboundSchema),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -148,6 +177,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       environment_id: z.optional(z.string()),
       has_endpoint: z.optional(z.boolean()),
       id: z.string(),
+      legacy_platform_slug: z.optional(z.string()),
       name: z.optional(z.string()),
       network_access_mode: McpServerNetworkAccessMode$inboundSchema,
       platform_endpoint_slug: z.optional(z.string()),
@@ -170,9 +200,11 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "builtin_backend": "builtinBackend",
         "created_at": "createdAt",
         "environment_id": "environmentId",
         "has_endpoint": "hasEndpoint",
+        "legacy_platform_slug": "legacyPlatformSlug",
         "network_access_mode": "networkAccessMode",
         "platform_endpoint_slug": "platformEndpointSlug",
         "primary_endpoint_id": "primaryEndpointId",

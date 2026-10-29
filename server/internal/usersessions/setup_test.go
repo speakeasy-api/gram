@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -74,6 +75,7 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
+	codeModeEnabled     *atomic.Bool
 	service             *usersessions.Service
 	conn                *pgxpool.Pool
 	sessionManager      *sessions.Manager
@@ -132,6 +134,8 @@ func newTestServiceWithHosts(t *testing.T, hosts authserver.Hosts, revoker users
 		tokenRevoker = revoker
 	}
 
+	codeModeEnabled := &atomic.Bool{}
+	codeModeSelection := func(context.Context, string) bool { return codeModeEnabled.Load() }
 	svc := usersessions.NewService(
 		logger,
 		tracerProvider,
@@ -148,9 +152,11 @@ func newTestServiceWithHosts(t *testing.T, hosts authserver.Hosts, revoker users
 		testServerURL,
 		hosts,
 		ratelimit.NewRedisStore(redisClient),
+		codeModeSelection,
 	)
 
 	return ctx, &testInstance{
+		codeModeEnabled:     codeModeEnabled,
 		service:             svc,
 		conn:                conn,
 		sessionManager:      sessionManager,

@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   scopes: [] as string[],
+  gatewayCandidateOptions: [] as Array<{ enabled: boolean }>,
+  includeNewResourceFixtures: false,
   /**
    * When set, the mcp:write grant is selector-scoped to these server ids:
    * `hasScope("mcp:write")` with no resource still passes (an existential
@@ -23,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   }>,
   toolsets: [] as unknown[],
   mcpServers: [] as unknown[],
+  gateways: [] as unknown[],
   catalogServers: [] as unknown[],
   publishStatus: undefined as unknown,
   deployment: undefined as unknown,
@@ -36,6 +39,7 @@ const mocks = vi.hoisted(() => ({
   goToPlugins: vi.fn(),
   goToToolsetDetails: vi.fn(),
   goToMcpServerOverview: vi.fn(),
+  goToGatewayOverview: vi.fn(),
   goToCatalogDetail: vi.fn(),
   goToSourceDetail: vi.fn(),
   goToSources: vi.fn(),
@@ -55,6 +59,13 @@ const mocks = vi.hoisted(() => ({
   calls: {} as Record<string, unknown[]>,
 }));
 
+vi.mock("./useGatewayConnectionCandidates", () => ({
+  useGatewayConnectionCandidates: (options: { enabled: boolean }) => {
+    mocks.gatewayCandidateOptions.push(options);
+    return [];
+  },
+}));
+
 function record(name: string, args: unknown[]) {
   (mocks.calls[name] ??= []).push(args);
 }
@@ -71,6 +82,12 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
     return { data: { mcpServers: mocks.mcpServers } };
   },
   invalidateAllMcpServers: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
+  useMetaMcpServers: (...args: unknown[]) => {
+    record("useMetaMcpServers", args);
+    return { data: { metaMcpServers: mocks.gateways } };
+  },
 }));
 vi.mock("@gram/client/react-query/listMCPCatalog.js", () => ({
   useListMCPCatalog: (...args: unknown[]) => {
@@ -181,12 +198,20 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-acme", slug: "acme" }),
+  useSession: () => ({ user: { id: "user_example" } }),
+  useIsPlatformAdmin: () => false,
   useProject: () => ({ id: "project-default", slug: "default" }),
 }));
 vi.mock("@/hooks/usePluginWriteAccess", () => ({
   usePluginWriteAccess: () => mocks.pluginWriteAccess,
 }));
 vi.mock("@/contexts/Telemetry", () => ({
+  useTelemetryContext: () => ({
+    featureFlags: { status: "ready" },
+    telemetry: {
+      isFeatureEnabled: (flag: string) => mocks.flags.includes(flag),
+    },
+  }),
   useTelemetry: () => ({
     isFeatureEnabled: (flag: string) => mocks.flags.includes(flag),
   }),
@@ -220,6 +245,63 @@ vi.mock("@/hooks/useRBAC", () => ({
     },
   }),
 }));
+// The source hooks have their own query/navigation tests. Keep this suite
+// focused on launcher wiring and permission gates.
+vi.mock("./useSkillCandidates", () => ({
+  useSkillCandidates: vi.fn(({ enabled }: { enabled: boolean }) =>
+    enabled && mocks.includeNewResourceFixtures
+      ? [
+          {
+            id: "skill:test",
+            kind: "skill",
+            title: "Test skill",
+            detail: "Skill",
+            keywords: [],
+            verbs: ["open"],
+            group: "Skills",
+            run: () => {},
+          },
+        ]
+      : [],
+  ),
+}));
+vi.mock("./useAgentIdentityCandidates", () => ({
+  useAgentIdentityCandidates: vi.fn(({ enabled }: { enabled: boolean }) =>
+    enabled && mocks.includeNewResourceFixtures
+      ? [
+          {
+            id: "agent-identity:test",
+            kind: "person",
+            title: "Test agent",
+            detail: "Agent identity",
+            keywords: [],
+            verbs: ["open"],
+            group: "Identities",
+            run: () => {},
+          },
+        ]
+      : [],
+  ),
+}));
+vi.mock("./useManagedDeviceCandidates", () => ({
+  useManagedDeviceCandidates: vi.fn(({ enabled }: { enabled: boolean }) =>
+    enabled && mocks.includeNewResourceFixtures
+      ? [
+          {
+            id: "managed-device:test",
+            kind: "page",
+            title: "Test device",
+            detail: "Device",
+            keywords: [],
+            verbs: ["open"],
+            fuzzyOnly: true,
+            group: "Devices",
+            run: () => {},
+          },
+        ]
+      : [],
+  ),
+}));
 vi.mock("@/contexts/CommandPalette", () => ({
   useCommandPalette: () => ({ actions: mocks.actions }),
 }));
@@ -231,15 +313,19 @@ vi.mock("../recentlyVisited", () => ({
   getRecentLabelOverride: () => undefined,
 }));
 vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({
+    access: { roles: { href: () => "/acme/access/roles" } },
+  }),
   useRoutes: () => ({
+    toolset: { goTo: mocks.goToToolsetDetails },
     plugins: {
       goTo: mocks.goToPlugins,
       href: () => "/acme/projects/default/plugins",
     },
     mcp: {
       goTo: vi.fn(),
-      details: { goTo: mocks.goToToolsetDetails },
-      x: { overview: { goTo: mocks.goToMcpServerOverview } },
+      details: { overview: { goTo: mocks.goToMcpServerOverview } },
+      gateway: { overview: { goTo: mocks.goToGatewayOverview } },
       catalog: { detail: { goTo: mocks.goToCatalogDetail } },
       sources: {
         goTo: mocks.goToSources,
@@ -265,6 +351,9 @@ vi.mock("@/routes", () => ({
 }));
 
 import { useLauncherCandidates } from "./index";
+import { useSkillCandidates } from "./useSkillCandidates";
+import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
+import { useManagedDeviceCandidates } from "./useManagedDeviceCandidates";
 import type { LauncherCandidate } from "./types";
 
 const REMOTE = { remoteMcpServerId: "remote-1" };
@@ -345,6 +434,7 @@ function acme(projects: ReturnType<typeof project>[]) {
 
 beforeEach(() => {
   mocks.scopes = [];
+  mocks.includeNewResourceFixtures = false;
   mocks.mcpWriteResourceIds = null;
   mocks.inProject = true;
   mocks.orgSlug = "acme";
@@ -354,6 +444,7 @@ beforeEach(() => {
   mocks.rbacCalls = [];
   mocks.toolsets = [];
   mocks.mcpServers = [];
+  mocks.gateways = [];
   mocks.catalogServers = [];
   mocks.publishStatus = undefined;
   mocks.deployment = undefined;
@@ -380,6 +471,63 @@ beforeEach(() => {
   mocks.invalidateAllPublishStatus.mockResolvedValue(undefined);
 });
 afterEach(cleanup);
+
+describe("useGatewayCandidates", () => {
+  beforeEach(() => {
+    mocks.scopes = ["mcp:read"];
+  });
+
+  it("lists each gateway by name, findable by id, and opens its overview", () => {
+    mocks.gateways = [
+      { id: "gateway-1", name: "Support Gateway", memberCount: 3 },
+      { id: "gateway-2", name: "Empty Gateway", memberCount: 1 },
+    ];
+    const { result } = renderCandidates();
+
+    const gateways = byKind(result.current, "gateway");
+    expect(gateways.map((c) => [c.title, c.detail])).toEqual([
+      ["Support Gateway", "MCP gateway · 3 servers"],
+      ["Empty Gateway", "MCP gateway · 1 server"],
+    ]);
+    expect(gateways[0]?.keywords).toContain("gateway-1");
+    expect(gateways[0]?.verbs).toEqual(["open"]);
+    void gateways[0]?.run("open");
+    expect(mocks.goToGatewayOverview).toHaveBeenCalledWith("gateway-1");
+  });
+
+  it("stays hidden, and does not fetch, without mcp:read or mcp:write", () => {
+    mocks.scopes = ["project:read"];
+    mocks.gateways = [{ id: "gateway-1", name: "Support Gateway" }];
+    const { result } = renderCandidates();
+
+    expect(byKind(result.current, "gateway")).toHaveLength(0);
+    for (const args of mocks.calls["useMetaMcpServers"] ?? []) {
+      expect(optionsOf(args).enabled).toBe(false);
+    }
+  });
+
+  it("checks MCP access on the active project, not on any resource", () => {
+    mocks.gateways = [{ id: "gateway-1", name: "Support Gateway" }];
+    renderCandidates();
+
+    expect(mocks.rbacCalls).toContainEqual({
+      fn: "hasAnyScope",
+      scopes: ["mcp:read", "mcp:write"],
+      resourceId: "project-default",
+    });
+  });
+
+  it("is absent outside a project", () => {
+    mocks.inProject = false;
+    mocks.gateways = [{ id: "gateway-1", name: "Support Gateway" }];
+    const { result } = renderCandidates();
+
+    expect(byKind(result.current, "gateway")).toHaveLength(0);
+    for (const args of mocks.calls["useMetaMcpServers"] ?? []) {
+      expect(optionsOf(args).enabled).toBe(false);
+    }
+  });
+});
 
 describe("useMcpServerCandidates", () => {
   // The MCP page opens for mcp:read or mcp:write; every test here holds the
@@ -431,13 +579,14 @@ describe("useMcpServerCandidates", () => {
     expect(jira?.verbs).toEqual(["open"]);
   });
 
-  it("names a canonical wrapper by its toolset and opens the toolset page", async () => {
+  it("names a canonical wrapper by its toolset and opens its server page", async () => {
     mocks.mcpServers = [
       {
         ...HOSTED_ROW,
         id: "toolset-1",
         name: "Hosted wrapper",
         toolset: { ...HOSTED_ROW.toolset, name: "Hosted tools" },
+        platformEndpointSlug: "acme-renamed-address",
         visibility: "private",
       },
     ];
@@ -446,10 +595,36 @@ describe("useMcpServerCandidates", () => {
 
     expect(hosted?.title).toBe("Hosted tools");
     expect(hosted?.keywords).toContain("hosted");
+    expect(hosted?.keywords).toContain("acme-renamed-address");
     await act(async () => {
       await hosted?.run("open");
     });
-    expect(mocks.goToToolsetDetails).toHaveBeenCalledWith("hosted");
+    expect(mocks.goToMcpServerOverview).toHaveBeenCalledWith("hosted-x1");
+    expect(mocks.goToToolsetDetails).not.toHaveBeenCalled();
+  });
+
+  it("opens the hosting server of a toolset with no canonical wrapper under its own name", async () => {
+    mocks.mcpServers = [
+      {
+        ...HOSTED_ROW,
+        name: "Hosted wrapper",
+        toolset: {
+          ...HOSTED_ROW.toolset,
+          name: "Hosted tools",
+          hostingMcpServerId: "server-hosted",
+        },
+        visibility: "private",
+      },
+    ];
+    const { result } = renderCandidates();
+    const [hosted] = byKind(result.current, "mcp_server");
+
+    expect(hosted?.title).toBe("Hosted wrapper");
+    await act(async () => {
+      await hosted?.run("open");
+    });
+    expect(mocks.goToMcpServerOverview).toHaveBeenCalledWith("hosted-x1");
+    expect(mocks.goToToolsetDetails).not.toHaveBeenCalled();
   });
 
   // Without the summary there is no toolset slug; the server page redirects.
@@ -516,7 +691,7 @@ describe("useMcpServerCandidates", () => {
     );
   });
 
-  it("sends hosted server enables to the toolset page", async () => {
+  it("sends hosted server enables to the server page", async () => {
     mocks.scopes = ["mcp:write"];
     mocks.mcpServers = [
       {
@@ -534,7 +709,8 @@ describe("useMcpServerCandidates", () => {
       await hosted?.run("enable");
     });
     expect(mocks.updateMcpServer).not.toHaveBeenCalled();
-    expect(mocks.goToToolsetDetails).toHaveBeenCalledWith("hosted");
+    expect(mocks.goToMcpServerOverview).toHaveBeenCalledWith("hosted-x1");
+    expect(mocks.goToToolsetDetails).not.toHaveBeenCalled();
   });
 
   // A hosted server is granted under its toolset id (the server resolves the
@@ -1455,7 +1631,13 @@ describe("useRuleCandidates", () => {
 });
 
 describe("useLauncherCandidates", () => {
-  it("orders sources: actions, recents, marketplace, mcp servers, catalog, …, people", () => {
+  it("registers gateway discovery with the palette open state", () => {
+    renderCandidates({ enabled: false });
+    expect(mocks.gatewayCandidateOptions.at(-1)).toMatchObject({
+      enabled: false,
+    });
+  });
+  it("orders sources: actions, recents, marketplace, mcp servers, gateways, catalog, …, people", () => {
     mocks.scopes = ["org:read", "org:admin", "mcp:write", "project:read"];
     mocks.actions = [
       { id: "a", label: "A", group: "Pages", onSelect: vi.fn() },
@@ -1463,6 +1645,7 @@ describe("useLauncherCandidates", () => {
     mocks.recents = [{ label: "R", href: "/r", visitedAt: 1 }];
     mocks.publishStatus = { configured: true, connected: true, upToDate: true };
     mocks.mcpServers = [mcpServer("Slack", "slack-a1", "private")];
+    mocks.gateways = [{ id: "gateway-1", name: "Support Gateway" }];
     mocks.catalogServers = [catalogServer("Datadog", "com.datadoghq/datadog")];
     mocks.members = [
       {
@@ -1482,6 +1665,7 @@ describe("useLauncherCandidates", () => {
       "recent",
       "marketplace",
       "mcp_server",
+      "gateway",
       "catalog",
       "rule",
       "person",
@@ -1498,6 +1682,7 @@ describe("useLauncherCandidates", () => {
       expect.arrayContaining([
         "useListToolsets",
         "useMcpServers",
+        "useMetaMcpServers",
         "useListMCPCatalog",
         "usePublishStatus",
         "usePlugins",
@@ -1545,6 +1730,7 @@ describe("useLauncherCandidates", () => {
     for (const name of [
       "useListToolsets",
       "useMcpServers",
+      "useMetaMcpServers",
       "useListMCPCatalog",
       "usePublishStatus",
       "usePlugins",
@@ -1630,5 +1816,85 @@ describe("useLauncherCandidates", () => {
         expect(options?.enabled, name).toBe(false);
       }
     }
+  });
+});
+
+describe("new resource source wiring", () => {
+  beforeEach(() => {
+    mocks.includeNewResourceFixtures = true;
+  });
+  it("includes skills only with project skill:read access", () => {
+    mocks.scopes = ["skill:read"];
+    const { result } = renderCandidates();
+    expect(result.current.some((c) => c.id === "skill:test")).toBe(true);
+    expect(result.current.some((c) => c.id === "agent-identity:test")).toBe(
+      true,
+    );
+    expect(useSkillCandidates).toHaveBeenLastCalledWith({ enabled: true });
+    expect(mocks.rbacCalls).toContainEqual({
+      fn: "hasScope",
+      scopes: ["skill:read"],
+      resourceId: "project-default",
+    });
+  });
+
+  it.each([false, true])(
+    "includes devices with organization read access (in a project: %s)",
+    (inProject) => {
+      mocks.scopes = ["org:read"];
+      const { result } = renderCandidates({ inProject });
+      expect(result.current.some((c) => c.id === "managed-device:test")).toBe(
+        true,
+      );
+      expect(useManagedDeviceCandidates).toHaveBeenLastCalledWith({
+        enabled: true,
+      });
+      expect(mocks.rbacCalls).toContainEqual({
+        fn: "hasAnyScope",
+        scopes: ["org:read", "org:admin"],
+        resourceId: "org-acme",
+      });
+    },
+  );
+
+  it("does not request devices without organization read access", () => {
+    const { result } = renderCandidates();
+    expect(result.current.some((c) => c.id === "managed-device:test")).toBe(
+      false,
+    );
+    expect(useManagedDeviceCandidates).toHaveBeenLastCalledWith({
+      enabled: false,
+    });
+  });
+
+  it("does not request skills without read access", () => {
+    const { result } = renderCandidates();
+    expect(result.current.some((c) => c.id === "skill:test")).toBe(false);
+    expect(useSkillCandidates).toHaveBeenLastCalledWith({ enabled: false });
+  });
+
+  it("does not request project skills from the organization shell", () => {
+    mocks.scopes = ["skill:read"];
+    const { result } = renderCandidates({ inProject: false });
+    expect(result.current.some((c) => c.id === "skill:test")).toBe(false);
+    expect(useSkillCandidates).toHaveBeenLastCalledWith({ enabled: false });
+    expect(result.current.some((c) => c.id === "agent-identity:test")).toBe(
+      true,
+    );
+    expect(useAgentIdentityCandidates).toHaveBeenLastCalledWith({
+      enabled: true,
+    });
+  });
+
+  it("disables the new sources while the palette is closed", () => {
+    mocks.scopes = ["skill:read", "org:read"];
+    renderCandidates({ enabled: false });
+    expect(useSkillCandidates).toHaveBeenLastCalledWith({ enabled: false });
+    expect(useAgentIdentityCandidates).toHaveBeenLastCalledWith({
+      enabled: false,
+    });
+    expect(useManagedDeviceCandidates).toHaveBeenLastCalledWith({
+      enabled: false,
+    });
   });
 });

@@ -55,11 +55,9 @@ func fixtureApp(id, label, name string) okta.App {
 
 func setFixtures(si *serviceInstance, apps []okta.App, users map[string][]okta.AppUser, groups map[string][]okta.AppGroup) {
 	si.oktaFakes.Fake(fullOrgURL).SetFixtures(okta.Fixtures{
-		Users:         nil,
 		Apps:          apps,
 		AppUsers:      users,
 		AppGroups:     groups,
-		Groups:        nil,
 		GrantedScopes: allScopes(),
 	})
 }

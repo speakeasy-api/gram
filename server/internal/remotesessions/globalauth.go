@@ -32,6 +32,7 @@ func authorizeGlobalOperation(ctx context.Context, logger *slog.Logger) (globalA
 func NewGlobalService(logger *slog.Logger, tp trace.TracerProvider, mp metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 	return &Service{
+		bindingRefresh:            nil,
 		bindingAuthorizer:         nil,
 		speakeasySigningAvailable: false,
 		speakeasyReadiness:        nil,
@@ -42,7 +43,7 @@ func NewGlobalService(logger *slog.Logger, tp trace.TracerProvider, mp metric.Me
 		environments:              nil,
 		auditLogger:               nil,
 		// Global operations never register a client or build its callback.
-		origins:               CallbackOrigins{Outbound: nil, Registration: nil},
+		origins:               CallbackOrigins{Outbound: nil, Registration: nil, OrganizationHosts: nil},
 		identity:              nil,
 		refresher:             nil,
 		registrationTelemetry: nil,

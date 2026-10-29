@@ -14,8 +14,7 @@ import { isProviderVisible, isSink } from "./provider-role";
 // fleet, coverage is computed against agent heartbeats, and evidence
 // destinations push that coverage out. The layout mirrors that flow — a
 // pipeline banner over two role-labeled groups — so the two opposite roles
-// never read as interchangeable. The tab is gated behind the
-// gram-device-integrations flag by the Device Agent tab shell.
+// never read as interchangeable.
 export function MdmIntegrationsTab(): React.JSX.Element {
   const { data, isLoading } = useDeviceIntegrationProviders(
     undefined,

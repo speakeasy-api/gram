@@ -80,6 +80,12 @@ vi.mock("@gram/client/react-query/listScopes.js", () => ({
           description: "Read projects",
           exclusionScope: "project:blocked_read",
         },
+        {
+          slug: "inference:execute",
+          resourceType: "inference",
+          visibility: "user_visible",
+          description: "Run inference",
+        },
         ...(["connect", "read", "write"] as const).map((action) => ({
           slug: `mcp:${action}`,
           resourceType: "mcp",
@@ -501,4 +507,17 @@ describe("the access grid", () => {
         .getAttribute("aria-pressed"),
     ).toBe("true");
   });
+});
+
+it("names the inference project selector for its permission, not View", () => {
+  renderEditor();
+  openPlatformTab();
+  fireEvent.click(screen.getByRole("button", { name: "Run inference" }));
+  expect(
+    screen.queryByRole("button", { name: "Change where View applies" }),
+  ).toBeNull();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Change where Run inference applies" }),
+  );
+  expect(screen.getByRole("button", { name: "Select project A" })).toBeTruthy();
 });

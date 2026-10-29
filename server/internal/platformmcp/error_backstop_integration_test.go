@@ -28,6 +28,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/sigint"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -102,6 +104,9 @@ func composeRegistryOnPool(t *testing.T, logger *slog.Logger, pool, live *pgxpoo
 	// Stateless, so tools can run concurrently against one composition.
 	budget := allowBudget()
 	auditLogger := audit.NewLogger()
+	chConn, err := platformMCPInfra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	findings := chrepo.New(chConn)
 	flags := &feature.InMemory{}
 	slugs := NewPostgresOrganizationSlugResolver(pool)
 	authorizer := NewLiveOrgAdminAuthorizer(live, liveEngine)
@@ -122,10 +127,10 @@ func composeRegistryOnPool(t *testing.T, logger *slog.Logger, pool, live *pgxpoo
 		WithDataExportMutations(auditLogger, dashboardURL).
 		WithDataExportRouteToggle(routeToggle).
 		WithNetworkIngressStatus(dashboardURL).
-		WithRiskAnalysisStatus(NewRiskAnalysisStatusService(logger, pool, nil, flags, slugs)).
-		WithRiskFindings(NewRiskFindingsService(pool, nil, flags, slugs, key), budget).
+		WithRiskAnalysisStatus(NewRiskAnalysisStatusService(logger, pool, nil)).
+		WithRiskFindings(NewRiskFindingsService(pool, nil, key), budget).
 		WithRiskFindingList(NewRiskFindingListService(pool, nil, key), budget).
-		WithChatMetadata(NewChatMetadataService(pool, budget, key)).
+		WithChatMetadata(NewChatMetadataService(pool, chatfindings.New(pool, findings), budget, key)).
 		WithToolExposure(toolExposure).
 		WithProjectLifecycle(projectLifecycle)
 
@@ -179,7 +184,7 @@ func composeRegistryOnPool(t *testing.T, logger *slog.Logger, pool, live *pgxpoo
 	accessReads := NewAccessReadService(logger, pool, budget, key)
 	accessRoleMutations, err := NewAccessRoleMutationService(accessReads, flags, budget, key, access.NewRoleManager(logger, pool, workos.NewStubClient(), auditLogger, publication, nil))
 	require.NoError(t, err)
-	sessionRecall := NewSessionRecallService(logger, pool, platformrepo.New(pool), auditLogger, func(context.Context, string) (bool, error) { return true, nil }, nil, nil, nil, budget)
+	sessionRecall := NewSessionRecallService(logger, pool, platformrepo.New(pool), auditLogger, func(context.Context, string) (bool, error) { return true, nil }, findings, budget)
 	controls, err := NewRiskMutationControls(pool, flags, slugs, budget, key)
 	require.NoError(t, err)
 	riskMutations, err := NewRiskMutationHandlers(pool, controls,

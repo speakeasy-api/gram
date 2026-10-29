@@ -1,4 +1,5 @@
 import { unixNanoToDate } from "@/components/chart/chartUtils";
+import { customDateRangeBounds } from "@/components/filters/filter-schema";
 import {
   defineFilters,
   useFilterState,
@@ -65,7 +66,7 @@ const KIND_OPTIONS = [
   { label: "Spans", value: EventLogEntryKind.Span },
 ];
 
-function isEventKind(value: string): value is EventLogEntryKind {
+function isEventKind(value: string): value is "log" | "span" {
   return value === EventLogEntryKind.Log || value === EventLogEntryKind.Span;
 }
 
@@ -104,8 +105,7 @@ function EventFeedWorkbench(): JSX.Element {
   const { from, to } = useMemo(() => {
     void rangeEpoch;
     const d = values.date;
-    if (d.customRange) return d.customRange;
-    return getPresetRange(d.preset ?? "1d");
+    return customDateRangeBounds(d) ?? getPresetRange(d.preset ?? "1d");
   }, [values.date, rangeEpoch]);
   const fromIso = from.toISOString();
   const toIso = to.toISOString();

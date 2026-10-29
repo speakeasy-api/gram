@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -44,7 +45,12 @@ func EncodeCallbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 			return goahttp.ErrInvalidType("auth", "callback", "*auth.CallbackPayload", v)
 		}
 		values := req.URL.Query()
-		values.Add("code", p.Code)
+		if p.Code != nil {
+			values.Add("code", *p.Code)
+		}
+		if p.Error != nil {
+			values.Add("error", *p.Error)
+		}
 		if p.State != nil {
 			values.Add("state", *p.State)
 		}
@@ -2255,6 +2261,9 @@ func EncodeTransferInRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 		}
 		if p.Redirect != nil {
 			values.Add("redirect", *p.Redirect)
+		}
+		if p.ReplaceSession != nil {
+			values.Add("replace_session", fmt.Sprintf("%v", *p.ReplaceSession))
 		}
 		req.URL.RawQuery = values.Encode()
 		return nil

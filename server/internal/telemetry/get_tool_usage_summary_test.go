@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcpRepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -172,15 +173,23 @@ func TestGetToolUsageSummary_ClassifiesHookObservedHostedMCP(t *testing.T) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
 	toolsets := toolsetsRepo.New(ti.conn)
-	_, err := toolsets.CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
+	toolset, err := toolsets.CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Hosted Payments",
 		Slug:                   "hosted-payments",
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "acme-hosted-payments", Valid: true},
-		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, "acme-hosted-payments", uuid.NullUUID{})
+	// The canonical server, without endpoints, is what makes the aliased toolset hosted.
+	_, err = mcpserversRepo.New(ti.conn).CreateMCPServer(ctx, mcpserversRepo.CreateMCPServerParams{
+		ID:         toolset.ID,
+		ProjectID:  toolset.ProjectID,
+		Name:       pgtype.Text{String: toolset.Name, Valid: true},
+		ToolsetID:  uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		Visibility: "private",
 	})
 	require.NoError(t, err)
 	now := time.Now().UTC()
@@ -373,6 +382,55 @@ func TestGetToolUsageFilterOptions_ReturnsUncappedShadowServersAndUsers(t *testi
 	require.Len(t, summary.Targets, 30)
 }
 
+func TestGetToolUsageFilterOptions_NarrowsEachGroupByTheOtherFilters(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	for i, event := range []struct{ user, server string }{
+		{"alice@example.com", "shadow-a"},
+		{"alice@example.com", "shadow-a"},
+		{"bob@example.com", "shadow-b"},
+	} {
+		insertHookEvent(t, ctx, hookEventParams{
+			projectID:      projectID,
+			deploymentID:   uuid.New().String(),
+			timestamp:      now.Add(time.Duration(-i) * time.Minute),
+			traceID:        uuid.New().String(),
+			userEmail:      event.user,
+			hookSource:     "mcp",
+			toolSource:     event.server,
+			toolName:       "query",
+			result:         `"ok"`,
+			conversationID: fmt.Sprintf("conv-narrow-%d", i),
+		})
+	}
+
+	res, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{
+		From:              now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:                now.Add(1 * time.Hour).Format(time.RFC3339),
+		ShadowServerNames: []string{"shadow-a"},
+	})
+	require.NoError(t, err)
+
+	// Users narrow to those with calls on the picked server, counted there.
+	require.Len(t, res.Users, 1)
+	require.Equal(t, "alice@example.com", res.Users[0].UserKey)
+	require.Equal(t, int64(2), res.Users[0].EventCount)
+
+	// The server group ignores its own selection, so the other server stays
+	// on offer with its full count.
+	servers := map[string]int64{}
+	for _, server := range res.ShadowServers {
+		servers[server.ServerName] = server.EventCount
+	}
+	require.Equal(t, map[string]int64{"shadow-a": 2, "shadow-b": 1}, servers)
+}
+
 func TestGetToolUsageFilterOptions_ClassifiesHookObservedHostedMCP(t *testing.T) {
 	t.Parallel()
 
@@ -381,17 +439,16 @@ func TestGetToolUsageFilterOptions_ClassifiesHookObservedHostedMCP(t *testing.T)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
 	toolsets := toolsetsRepo.New(ti.conn)
-	_, err := toolsets.CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
+	toolset, err := toolsets.CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Hosted Payments",
 		Slug:                   "hosted-payments",
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "acme-hosted-payments", Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, "acme-hosted-payments", uuid.NullUUID{})
 
 	now := time.Now().UTC()
 	insertHookEvent(t, ctx, hookEventParams{
@@ -447,6 +504,10 @@ type hostedToolEventParams struct {
 	agentID        string
 	externalUserID string
 	userID         string
+	// outcome is gram.outcome; error on a 2xx models an isError result.
+	outcome string
+	// mcpServerID is gram.mcp_server.id; empty models rows recorded before hosted servers stamped it.
+	mcpServerID string
 }
 
 func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, p hostedToolEventParams) {
@@ -476,6 +537,12 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 		attrs["gram.event.source"] = "tool_call"
 		attrs["gram.authorization.actor.type"] = "agent"
 		attrs["gram.authorization.actor.id"] = p.agentID
+	}
+	if p.outcome != "" {
+		attrs["gram.outcome"] = p.outcome
+	}
+	if p.mcpServerID != "" {
+		attrs["gram.mcp_server.id"] = p.mcpServerID
 	}
 	attrs["gram.external_user.id"] = p.externalUserID
 	attrs["user.id"] = p.userID

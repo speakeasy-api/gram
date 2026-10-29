@@ -16,7 +16,7 @@ import {
 } from "@/components/observe/ObserveFilterBar";
 import {
   encodeGatewayServerFilter,
-  encodeHostedServerFilter,
+  hostedServerFilterValue,
   encodeShadowServerFilter,
   parseTargetFilter,
   isDefaultToolUsageTypeSelection,
@@ -41,12 +41,22 @@ import {
 } from "@/components/observe/LogsFacetRail";
 import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
 import { LogsTimelineStrip } from "@/components/observe/LogsTimelineStrip";
+import {
+  SKILL_LOAD_CHANNEL_LABELS,
+  selectedLoadedVia,
+  skillLoadChannel,
+  withLoadedVia,
+  type SkillLoadChannel,
+} from "@/components/observe/skillLoadChannel";
+import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/Sheet";
 import { useToolUsagePayload } from "@/components/observe/toolUsagePayload";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useServerNameMappings } from "@/hooks/useServerNameMappings";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
+import { ToolUsageIdentity } from "@/components/tool-usage-identity";
 import { HooksEmptyState } from "@/pages/hooks/HooksEmptyState";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { hasAgentProviderIcon } from "@/components/agent-providers/agent-provider-icon-kind";
@@ -58,6 +68,7 @@ import {
   applyFilterAdd,
   type ActiveLogFilter,
 } from "@/pages/logs/log-filter-types";
+import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
 import { TraceLogsList } from "@/pages/logs/TraceLogsList";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
@@ -68,6 +79,7 @@ import { telemetryGetToolUsageTargetTimeSeries } from "@gram/client/funcs/teleme
 import { telemetryGetToolUsageTotals } from "@gram/client/funcs/telemetryGetToolUsageTotals";
 import { telemetryListToolUsageTraces } from "@gram/client/funcs/telemetryListToolUsageTraces";
 import type { LogFilter } from "@gram/client/models/components/logfilter.js";
+import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusageuserfilter.js";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import type { ToolUsageTargetTimeSeriesPoint } from "@gram/client/models/components/toolusagetargettimeseriespoint.js";
 import type { ToolUsageTotals } from "@gram/client/models/components/toolusagetotals.js";
@@ -86,7 +98,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Settings } from "lucide-react";
+import { Bot, Settings } from "lucide-react";
 import { DateGroupHeader } from "@/components/auditlogs/feed";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -113,7 +125,26 @@ function toSdkFilters(filters: ActiveLogFilter[]): LogFilter[] {
   });
 }
 
-export function LogsTools(): JSX.Element {
+/** Pins the view to one identity's calls, for embedding on its page. */
+export type LogsToolsScope = {
+  /** Never empty: an empty list would show every identity's calls. */
+  userFilters: ToolUsageUserFilter[];
+  /**
+   * The host page's account filter ("" for every account), which replaces
+   * the view's own so its rows match the page around it.
+   */
+  accountType?: string;
+};
+
+/** Facets that pick identities, which a scoped view has already chosen. */
+const IDENTITY_FACETS = new Set(["role", "user", "agent"]);
+
+export function LogsTools({
+  scope,
+}: {
+  /** Embedded on an identity's page: no page header, identity facets hidden. */
+  scope?: LogsToolsScope;
+} = {}): JSX.Element {
   const { projectSlug } = useSlugs();
   const queryClient = useQueryClient();
   const client = useGramContext();
@@ -148,12 +179,14 @@ export function LogsTools(): JSX.Element {
     handleRoleSelectionChange,
     roleEmails,
     roleFilterPending,
-    accountType,
+    accountType: pickedAccountType,
     handleAccountTypeChange,
   } = useObserveFilters<ToolUsageType>({
     defaultTypes: TOOL_USAGE_DEFAULT_TYPES,
     validTypes: TOOL_USAGE_VALID_TYPES,
   });
+  const accountType =
+    scope?.accountType !== undefined ? scope.accountType : pickedAccountType;
 
   const {
     attributeSearchInput,
@@ -186,6 +219,59 @@ export function LogsTools(): JSX.Element {
     },
     [setSearchParams],
   );
+  const selectedAgentIds = useMemo(
+    () => (searchParams.get("agent") ?? "").split(",").filter(Boolean),
+    [searchParams],
+  );
+  const setAgentIds = useCallback(
+    (values: string[]) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (values.length > 0) {
+            next.set("agent", values.join(","));
+          } else {
+            next.delete("agent");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const skillsOverMcpEnabled = useSkillsOverMcpEnabled();
+  const selectedSkillChannel = useMemo(
+    () => selectedLoadedVia(attributeFilters),
+    [attributeFilters],
+  );
+  // One URL write for both params: two functional updates in the same tick
+  // each start from the same location, so the second would drop the first.
+  // Picking a channel also narrows the type to skills, since "loaded via"
+  // means nothing for a tool call and the event-source filter alone would let
+  // hosted tool calls through as "MCP".
+  const setLoadedVia = useCallback(
+    (channel: SkillLoadChannel | null) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          const serialized = serializeFilters(
+            withLoadedVia(parseFilters(prev.get("af")), channel),
+          );
+          if (serialized) {
+            next.set("af", serialized);
+          } else {
+            next.delete("af");
+          }
+          if (channel) next.set("hookTypes", "skill");
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const { summaryPayload, sharedQueryKey } = useToolUsagePayload({
     activeFilters,
@@ -193,6 +279,8 @@ export function LogsTools(): JSX.Element {
     selectedHookTypes,
     accountType,
     clientKeys: selectedClientKeys,
+    agentIds: selectedAgentIds,
+    scopedUserFilters: scope?.userFilters,
     from,
     to,
   });
@@ -239,21 +327,21 @@ export function LogsTools(): JSX.Element {
     [sharedQueryKey, statuses, attributeSearchQuery, queryFilters],
   );
 
+  // The server counts each facet under every applied filter but its own, so
+  // picking an agent narrows the users and servers on offer while the other
+  // agents stay selectable beside it.
   const { data: filterOptionsData } = useQuery({
-    queryKey: [
-      "tool-usage-filter-options",
-      from.toISOString(),
-      to.toISOString(),
-    ],
+    queryKey: ["tool-usage-filter-options", ...narrowedQueryKey],
     queryFn: () =>
       unwrapAsync(
         telemetryGetToolUsageFilterOptions(client, {
-          getToolUsageFilterOptionsPayload: {
-            from,
-            to,
-          },
+          getToolUsageFilterOptionsPayload: narrowedPayload,
         }),
       ),
+    enabled: !roleFilterPending,
+    // Holds the rail in place while the narrowed counts load, rather than
+    // emptying every group under the pointer.
+    placeholderData: keepPreviousData,
     throwOnError: false,
   });
 
@@ -283,11 +371,10 @@ export function LogsTools(): JSX.Element {
   // The rail is a second view over the same params the toolbar writes: every
   // toggle below routes into the same handlers, so the two cannot disagree.
   //
-  // Counts come from the filter-options endpoint, which is keyed on the window
-  // alone and is deliberately blind to the other applied filters — a
-  // self-narrowing list dead-ends the moment a reader picks a value that
-  // excludes everything else. Groups whose source has no counts show none
-  // rather than inventing them.
+  // Counts come from the filter-options endpoint, narrowed by every applied
+  // filter except the group's own — a group narrowed by its own selection
+  // would offer only what is already picked. Groups whose source has no
+  // counts show none rather than inventing them.
   const selectedServerValues = useMemo(
     () => selectedTargetValues(activeFilters),
     [activeFilters],
@@ -300,17 +387,38 @@ export function LogsTools(): JSX.Element {
     () => selectedHookSources(activeFilters),
     [activeFilters],
   );
+  const agentOptions = useMemo(
+    () =>
+      (filterOptionsData?.users ?? []).filter(
+        (user) => user.userKind === "agent_id",
+      ),
+    [filterOptionsData],
+  );
+  // Same query the table's rows read, so the names resolve once for both.
+  const readableAgents = useReadableAgents(
+    agentOptions.length > 0 || selectedAgentIds.length > 0,
+  );
+  const agentNamesById = useMemo(
+    () =>
+      new Map(
+        (readableAgents.isError ? [] : (readableAgents.data ?? [])).map(
+          (agent) => [agent.id, agent.name],
+        ),
+      ),
+    [readableAgents.data, readableAgents.isError],
+  );
 
   const facetGroups = useMemo<FacetGroup[]>(() => {
     const serverValues: FacetValue[] = [
-      ...(filterOptionsData?.hostedServers ?? []).map((server) => ({
-        value: encodeHostedServerFilter(server.toolsetSlug),
-        label: server.toolsetName || server.toolsetSlug,
-        count: Number(server.eventCount),
-        selected: selectedServerValues.includes(
-          encodeHostedServerFilter(server.toolsetSlug),
-        ),
-      })),
+      ...(filterOptionsData?.hostedServers ?? []).map((server) => {
+        const value = hostedServerFilterValue(server, selectedServerValues);
+        return {
+          value,
+          label: server.toolsetName || server.toolsetSlug,
+          count: Number(server.eventCount),
+          selected: selectedServerValues.includes(value),
+        };
+      }),
       ...(filterOptionsData?.gateways ?? []).map((gateway) => ({
         value: encodeGatewayServerFilter(gateway.metaMcpServerId),
         label: gateway.name,
@@ -409,9 +517,25 @@ export function LogsTools(): JSX.Element {
           selected: selectedHookTypes.includes(option.value as ToolUsageType),
         })),
       },
+      ...(skillsOverMcpEnabled
+        ? [
+            {
+              id: "loaded_via",
+              label: "Loaded via",
+              // MCP before hooks: the served path is the one this filter is
+              // here to find.
+              keepValueOrder: true,
+              values: (["mcp", "hook"] as const).map((channel) => ({
+                value: channel,
+                label: SKILL_LOAD_CHANNEL_LABELS[channel],
+                selected: selectedSkillChannel === channel,
+              })),
+            },
+          ]
+        : []),
       {
         id: "source",
-        label: "Agent",
+        label: "Harness",
         values: hookSourceOptions.map((source) => ({
           value: source,
           label: formatPlatform(source),
@@ -465,20 +589,42 @@ export function LogsTools(): JSX.Element {
           selectedEmails,
         ),
       },
+      {
+        id: "agent",
+        label: "Agent",
+        // Combined with User by AND on the server: an agent and a person
+        // select the calls that agent made on that person's behalf.
+        values: withSelected(
+          agentOptions.map((user) => ({
+            value: user.userKey,
+            label: agentNamesById.get(user.userKey) ?? user.userLabel,
+            count: Number(user.eventCount),
+            icon: <Bot className="text-muted-foreground size-4" />,
+            selected: selectedAgentIds.includes(user.userKey),
+          })),
+          selectedAgentIds,
+          (id) => agentNamesById.get(id) ?? id,
+        ),
+      },
     ];
   }, [
     accountType,
+    agentNamesById,
+    agentOptions,
     filterOptionsData,
     hookSourceOptions,
     roleOptions,
+    selectedAgentIds,
     selectedClientKeys,
     selectedRoleIds,
     selectedEmails,
     selectedHookTypes,
     selectedServerValues,
+    selectedSkillChannel,
     selectedSources,
     selectedStatuses,
     serverNameMappings,
+    skillsOverMcpEnabled,
   ]);
 
   const onFacetToggle = useCallback(
@@ -514,8 +660,15 @@ export function LogsTools(): JSX.Element {
         case "account_type":
           handleAccountTypeChange(nextSelected ? value : "");
           break;
+        case "loaded_via":
+          // One channel at a time: both together is the same as neither.
+          setLoadedVia(nextSelected ? (value as SkillLoadChannel) : null);
+          break;
         case "user":
           handleUserEmailSelectionChange(next(selectedEmails));
+          break;
+        case "agent":
+          setAgentIds(next(selectedAgentIds));
           break;
       }
     },
@@ -534,7 +687,10 @@ export function LogsTools(): JSX.Element {
       selectedServerValues,
       selectedSources,
       selectedStatuses,
+      selectedAgentIds,
+      setAgentIds,
       setClientKeys,
+      setLoadedVia,
     ],
   );
 
@@ -562,12 +718,19 @@ export function LogsTools(): JSX.Element {
         case "account_type":
           handleAccountTypeChange("");
           break;
+        case "loaded_via":
+          setLoadedVia(null);
+          break;
         case "user":
           handleUserEmailSelectionChange([]);
+          break;
+        case "agent":
+          setAgentIds([]);
           break;
       }
     },
     [
+      setLoadedVia,
       handleAccountTypeChange,
       handleRoleSelectionChange,
       handleHookSourceSelectionChange,
@@ -575,6 +738,7 @@ export function LogsTools(): JSX.Element {
       handleServerSelectionChange,
       handleStatusesChange,
       handleUserEmailSelectionChange,
+      setAgentIds,
       setClientKeys,
     ],
   );
@@ -773,21 +937,40 @@ export function LogsTools(): JSX.Element {
     ? new Error("Unable to load tool logs. Please try again.")
     : null;
 
+  const visibleFacetGroups = scope
+    ? facetGroups.filter(
+        (group) =>
+          !IDENTITY_FACETS.has(group.id) &&
+          !(group.id === "account_type" && scope.accountType !== undefined),
+      )
+    : facetGroups;
+
   return (
     <>
-      <InsightsConfig
-        mcpConfig={mcpConfig}
-        title="Explore Tool Logs"
-        subtitle="Ask me about your tool logs! Powered by Elements + platform MCP"
-        hideTrigger={isLogsDisabled}
-        suggestions={INSIGHTS_SUGGESTIONS["logs/tools"]}
-      />
+      {scope ? null : (
+        <InsightsConfig
+          mcpConfig={mcpConfig}
+          title="Explore Tool Logs"
+          subtitle="Ask me about your tool logs! Powered by Elements + platform MCP"
+          // Hide the docked assistant on this page — it floats over the last
+          // rows of the table, which is the primary surface here.
+          hideTrigger
+          suggestions={INSIGHTS_SUGGESTIONS["logs/tools"]}
+        />
+      )}
       {isLogsDisabled ? (
-        <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-          <LoggingPageHeader
-            title="Tool Logs"
-            description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
-          />
+        <div
+          className={cn(
+            "min-h-0 w-full flex-1 space-y-6 overflow-y-auto",
+            !scope && "p-8 pb-24",
+          )}
+        >
+          {scope ? null : (
+            <LoggingPageHeader
+              title="Tool Logs"
+              description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
+            />
+          )}
           <div className="flex-1">
             <EnableLoggingOverlay
               onEnabled={refetch}
@@ -810,7 +993,8 @@ export function LogsTools(): JSX.Element {
             totals={totalsData?.totals}
             timeSeries={timeSeriesData?.targetTimeSeries ?? []}
             timeSeriesPending={timeSeriesPending}
-            facetGroups={facetGroups}
+            facetGroups={visibleFacetGroups}
+            embedded={!!scope}
             onFacetToggle={onFacetToggle}
             onFacetClearGroup={onFacetClearGroup}
             onRangeSelect={setRangeFromBrush}
@@ -821,6 +1005,7 @@ export function LogsTools(): JSX.Element {
             selectedStatuses={selectedStatuses}
             selectedRoleIds={selectedRoleIds}
             selectedClientKeys={selectedClientKeys}
+            selectedAgentIds={selectedAgentIds}
             expandedTraceId={expandedTraceId}
             openingTraceId={openingTraceId}
             toggleExpand={toggleExpand}
@@ -885,11 +1070,11 @@ const RAIL_WIDTH_STORAGE_KEY = "gram.observe.logs.railWidth";
 // address without truncation — past that the rail is just eating the table.
 const RAIL_WIDTH_MIN = 180;
 const RAIL_WIDTH_MAX = 340;
-const RAIL_WIDTH_DEFAULT = 280;
+const RAIL_WIDTH_DEFAULT = 220;
 // The rail may not take more than this share of the window. The table needs
 // six columns and the rail needs one, so a fixed width that reads as generous
 // at 1600px is most of the reader's tool names at 1000px.
-const RAIL_WIDTH_VIEWPORT_SHARE = 0.22;
+const RAIL_WIDTH_VIEWPORT_SHARE = 0.15;
 
 /** The widest the rail may be in this window, whatever the reader last chose. */
 function railWidthCeiling(): number {
@@ -990,11 +1175,11 @@ function SummaryStat({
   tone?: "default" | "destructive" | "warning";
 }) {
   return (
-    <div className="flex flex-col gap-1 px-4 py-3 short:py-2">
+    <div className="flex flex-col justify-center gap-1.5 px-5 py-3 whitespace-nowrap short:py-2">
       <span className="text-eyebrow">{label}</span>
       <span
         className={cn(
-          "font-mono text-2xl leading-none tabular-nums",
+          "font-mono text-xl leading-none tabular-nums",
           tone === "destructive" && "text-destructive",
           // Amber, matching the blocked status dot: a denial is the policy
           // working, not the call breaking.
@@ -1019,6 +1204,7 @@ function LogsToolsContent({
   selectedStatuses,
   selectedRoleIds,
   selectedClientKeys,
+  selectedAgentIds,
   expandedTraceId,
   openingTraceId,
   toggleExpand,
@@ -1059,6 +1245,7 @@ function LogsToolsContent({
   onRangeSelect,
   onResetRange,
   isZoomed,
+  embedded = false,
 }: {
   isLoading: boolean;
   isFetching: boolean;
@@ -1070,6 +1257,7 @@ function LogsToolsContent({
   selectedStatuses: ObserveStatusFilterValue[];
   selectedRoleIds: string[];
   selectedClientKeys: string[];
+  selectedAgentIds: string[];
   expandedTraceId: string | null;
   openingTraceId: string | null;
   toggleExpand: (trace: ToolUsageTraceSummary) => Promise<void>;
@@ -1113,6 +1301,8 @@ function LogsToolsContent({
   onRangeSelect: (from: Date, to: Date) => void;
   onResetRange: () => void;
   isZoomed: boolean;
+  /** Inside another page: that page supplies the heading and the inset. */
+  embedded?: boolean;
 }) {
   const orgRoutes = useOrgRoutes();
   // Below xl the rail does not fit beside the table. It is the only filter
@@ -1120,31 +1310,10 @@ function LogsToolsContent({
   const [facetsOpen, setFacetsOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useSummaryPanelOpen();
   const [railWidth, setRailWidth] = useRailWidth();
-  const stripHeight = useIsShortViewport() ? 64 : 88;
+  const stripHeight = useIsShortViewport() ? 40 : 56;
 
   const rail = (
     <LogsFacetRail
-      header={
-        <TimeRangePicker
-          preset={customRange ? null : dateRange}
-          customRange={customRange}
-          // The badge is a fixed-width slot for "1w" or "3mo". A brushed range
-          // arrives with a full "11 Sept, 7:28 - 16 Sept, 1:28" label, which
-          // bursts it; the picker falls back to "Custom" without one, and the
-          // field beside it already spells the range out.
-          customRangeLabel={null}
-          onPresetChange={(preset) => onDateRangeChange(preset)}
-          onCustomRangeChange={onCustomRangeChange}
-          onClearCustomRange={onClearCustomRange}
-          projectSlug={projectSlug}
-          // The rail is narrower than the picker's intrinsic width, so without
-          // letting the free-text input shrink the trigger overflows and the
-          // chevron sits outside its own border.
-          // White against the rail's grey: it is a control you type into, not
-          // part of the panel behind it.
-          className="bg-card w-full [&_input]:min-w-0"
-        />
-      }
       groups={facetGroups}
       onToggle={onFacetToggle}
       onClearGroup={onFacetClearGroup}
@@ -1162,17 +1331,29 @@ function LogsToolsContent({
       </Sheet>
 
       <div className="flex min-h-0 w-full flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8 short:gap-3 short:px-5 short:pt-4">
-          <div className="flex shrink-0 items-start justify-between gap-4">
-            <LoggingPageHeader
-              title="Tool Logs"
-              description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
-            />
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col gap-6 short:gap-3",
+            !embedded && "px-8 pt-8 short:px-5 short:pt-4",
+          )}
+        >
+          <div
+            className={cn(
+              "flex shrink-0 items-start gap-4",
+              embedded ? "justify-end" : "justify-between",
+            )}
+          >
+            {embedded ? null : (
+              <LoggingPageHeader
+                title="Tool Logs"
+                description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
+              />
+            )}
             <div className="flex items-center gap-2">
               <Button
                 variant="secondary"
                 size="sm"
-                className="xl:hidden"
+                className={embedded ? undefined : "xl:hidden"}
                 onClick={() => setFacetsOpen(true)}
               >
                 <Icon name="filter" className="size-4" />
@@ -1190,19 +1371,22 @@ function LogsToolsContent({
                 />
                 Refresh
               </Button>
-              <Button variant="secondary" size="sm" asChild>
-                <Link to={orgRoutes.logs.href()}>
-                  <Settings className="h-4 w-4" />
-                  Configure settings
-                </Link>
-              </Button>
+              {embedded ? null : (
+                <Button variant="secondary" size="sm" asChild>
+                  <Link to={orgRoutes.logs.href()}>
+                    <Settings className="h-4 w-4" />
+                    Configure settings
+                  </Link>
+                </Button>
+              )}
             </div>
           </div>
 
           {/* Summary and the window's shape are one statement about the range,
-              so they share a panel: four numbers, then the silhouette they
-              came from. It folds because on a laptop those ~300px are the
-              difference between five rows of the list and eighteen. */}
+              so they share a panel: the numbers, then beside them the
+              silhouette they came from. One band rather than two stacked rows,
+              because every pixel of height it takes is a row of the list. It
+              still folds for laptops. */}
           <div className="border-border bg-card shrink-0 border">
             <button
               type="button"
@@ -1233,91 +1417,124 @@ function LogsToolsContent({
             </button>
             {summaryOpen && (
               <>
-                <div className="divide-border border-border grid grid-cols-2 divide-x border-t md:grid-cols-3 lg:grid-cols-5">
-                  <SummaryStat
-                    label="Tool calls"
-                    value={
-                      totals ? Number(totals.eventCount).toLocaleString() : "—"
-                    }
-                  />
-                  <SummaryStat
-                    label="Failures"
-                    value={
-                      totals
-                        ? Number(totals.failureCount).toLocaleString()
-                        : "—"
-                    }
-                    tone={
-                      totals && Number(totals.failureCount) > 0
-                        ? "destructive"
-                        : "default"
-                    }
-                  />
-                  <SummaryStat
-                    label="Failure rate"
-                    value={
-                      totals ? `${(totals.failureRate * 100).toFixed(1)}%` : "—"
-                    }
-                    tone={
-                      totals && totals.failureRate > 0
-                        ? "destructive"
-                        : "default"
-                    }
-                  />
-                  <SummaryStat
-                    label="Blocked rate"
-                    value={
-                      totals ? `${(totals.blockedRate * 100).toFixed(1)}%` : "—"
-                    }
-                    tone={
-                      totals && totals.blockedRate > 0 ? "warning" : "default"
-                    }
-                  />
-                  <SummaryStat
-                    label="Tools"
-                    value={
-                      totals ? Number(totals.uniqueTools).toLocaleString() : "—"
-                    }
-                  />
-                </div>
+                <div className="border-border flex flex-col border-t 2xl:flex-row">
+                  <div className="divide-border border-border grid shrink-0 grid-cols-2 divide-x sm:grid-cols-5 max-2xl:border-b 2xl:border-r">
+                    <SummaryStat
+                      label="Tool calls"
+                      value={
+                        totals
+                          ? Number(totals.eventCount).toLocaleString()
+                          : "—"
+                      }
+                    />
+                    <SummaryStat
+                      label="Failures"
+                      value={
+                        totals
+                          ? Number(totals.failureCount).toLocaleString()
+                          : "—"
+                      }
+                      tone={
+                        totals && Number(totals.failureCount) > 0
+                          ? "destructive"
+                          : "default"
+                      }
+                    />
+                    <SummaryStat
+                      label="Failure rate"
+                      value={
+                        totals
+                          ? `${(totals.failureRate * 100).toFixed(1)}%`
+                          : "—"
+                      }
+                      tone={
+                        totals && totals.failureRate > 0
+                          ? "destructive"
+                          : "default"
+                      }
+                    />
+                    <SummaryStat
+                      label="Blocked rate"
+                      value={
+                        totals
+                          ? `${(totals.blockedRate * 100).toFixed(1)}%`
+                          : "—"
+                      }
+                      tone={
+                        totals && totals.blockedRate > 0 ? "warning" : "default"
+                      }
+                    />
+                    <SummaryStat
+                      label="Tools"
+                      value={
+                        totals
+                          ? Number(totals.uniqueTools).toLocaleString()
+                          : "—"
+                      }
+                    />
+                  </div>
 
-                {/* Graph paper: faint vertical rules on a grey ground, which
+                  {/* Graph paper: faint vertical rules on a grey ground, which
                     is what a time axis looks like when it is furniture. A
                     diagonal hatch reads as "unavailable" instead. */}
-                <div className="border-border bg-background relative isolate border-t bg-[length:24px_100%] px-4 pt-3 pb-2 [background-image:repeating-linear-gradient(to_right,rgba(0,0,0,0.035)_0,rgba(0,0,0,0.035)_1px,transparent_1px,transparent_24px)]">
-                  <LogsTimelineStrip
-                    height={stripHeight}
-                    loading={timeSeriesPending}
-                    timeSeries={timeSeries}
-                    from={from}
-                    to={to}
-                    onRangeSelect={onRangeSelect}
-                    onResetRange={onResetRange}
-                    isZoomed={isZoomed}
-                  />
+                  <div className="bg-background relative isolate min-w-0 flex-1 bg-[length:24px_100%] px-4 pt-2 pb-1 [background-image:repeating-linear-gradient(to_right,rgba(0,0,0,0.035)_0,rgba(0,0,0,0.035)_1px,transparent_1px,transparent_24px)]">
+                    <LogsTimelineStrip
+                      height={stripHeight}
+                      loading={timeSeriesPending}
+                      timeSeries={timeSeries}
+                      from={from}
+                      to={to}
+                      onRangeSelect={onRangeSelect}
+                      onResetRange={onResetRange}
+                      isZoomed={isZoomed}
+                    />
+                  </div>
                 </div>
               </>
             )}
           </div>
 
           <div className="border-border bg-card flex min-h-0 flex-1 flex-col overflow-hidden border">
-            {/* Search reads across both columns — it narrows the rows, not the
-                facet list — so it spans them rather than sitting in one. */}
-            <div className="border-border shrink-0 border-b p-3">
-              <LogFilterBar
-                filters={attributeFilters}
-                onChange={onAttributeFiltersChange}
-                attributeKeys={attributeKeys}
-                isLoadingKeys={isLoadingAttributeKeys}
-                searchInput={attributeSearchInput}
-                onSearchInputChange={onAttributeSearchInputChange}
-                onSearchSubmit={onAttributeSearchSubmit}
+            {/* Search and the window read across both columns — they narrow
+                the rows and the facet counts alike — so they span them rather
+                than sitting in one. */}
+            <div className="border-border flex shrink-0 items-start gap-2 border-b p-3">
+              <div className="min-w-0 flex-1">
+                <LogFilterBar
+                  filters={attributeFilters}
+                  onChange={onAttributeFiltersChange}
+                  attributeKeys={attributeKeys}
+                  isLoadingKeys={isLoadingAttributeKeys}
+                  searchInput={attributeSearchInput}
+                  onSearchInputChange={onAttributeSearchInputChange}
+                  onSearchSubmit={onAttributeSearchSubmit}
+                />
+              </div>
+              <TimeRangePicker
+                preset={customRange ? null : dateRange}
+                customRange={customRange}
+                // The badge is a fixed-width slot for "1w" or "3mo". A brushed
+                // range arrives with a full "11 Sept, 7:28 - 16 Sept, 1:28"
+                // label, which bursts it; the picker falls back to "Custom"
+                // without one, and the field beside it already spells the
+                // range out.
+                customRangeLabel={null}
+                onPresetChange={(preset) => onDateRangeChange(preset)}
+                onCustomRangeChange={onCustomRangeChange}
+                onClearCustomRange={onClearCustomRange}
+                projectSlug={projectSlug}
+                className="bg-card shrink-0"
               />
             </div>
 
             <div className="flex min-h-0 flex-1 overflow-hidden">
               <div
-                className="border-border bg-background relative hidden shrink-0 border-r xl:flex"
+                className={cn(
+                  "border-border bg-background relative hidden shrink-0 border-r",
+                  // Embedded, the host page's own rail already takes the
+                  // side, so filters stay behind the Filters button.
+                  !embedded && "xl:flex",
+                )}
                 style={{ width: railWidth }}
               >
                 {rail}
@@ -1378,7 +1595,9 @@ function LogsToolsContent({
                     <div className="min-w-0 flex-1">Server</div>
                     <div className="min-w-0 flex-1">Tool</div>
                     <div className="w-20 shrink-0">Type</div>
-                    <div className="min-w-[180px] flex-1 text-left">User</div>
+                    <div className="min-w-[180px] flex-1 text-left">
+                      Identity
+                    </div>
                     <div className="w-32 shrink-0">Client</div>
                   </div>
 
@@ -1408,6 +1627,7 @@ function LogsToolsContent({
                         selectedStatuses.length > 0 ||
                         selectedRoleIds.length > 0 ||
                         selectedClientKeys.length > 0 ||
+                        selectedAgentIds.length > 0 ||
                         attributeFilters.length > 0 ||
                         accountType !== "" ||
                         Boolean(attributeSearchQuery)
@@ -1481,7 +1701,29 @@ function LogsToolsTableContent({
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
   to: Date;
+  /** Resolved when this row's caller is an agent; its name is not on the row. */
+  agent?: { id: string; name: string };
 }) {
+  // Agent names are not on a trace — the row carries "agent:<uuid>" and
+  // nothing else — so they are read once here rather than per row. Asked for
+  // only when a trace on screen actually names an agent.
+  //
+  // Above the error and empty returns below, because a hook that runs only on
+  // the rendering path changes the hook order between renders.
+  const agents = useReadableAgents(
+    traces.some((trace) => trace.userKind === "agent_id"),
+  );
+  const agentsById = useMemo(
+    () =>
+      new Map(
+        (agents.isError ? [] : (agents.data ?? [])).map((agent) => [
+          agent.id,
+          agent,
+        ]),
+      ),
+    [agents.data, agents.isError],
+  );
+
   if (error) {
     return (
       <ErrorAlert
@@ -1585,6 +1827,11 @@ function LogsToolsTableContent({
               serverNameMappings={serverNameMappings}
               from={from}
               to={to}
+              agent={
+                trace.userKind === "agent_id"
+                  ? agentsById.get(trace.userKey)
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -1616,6 +1863,7 @@ function LogsToolsTraceRow({
   serverNameMappings,
   from,
   to,
+  agent,
 }: {
   trace: ToolUsageTraceSummary;
   isExpanded: boolean;
@@ -1625,6 +1873,8 @@ function LogsToolsTraceRow({
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
   to: Date;
+  /** Resolved when this row's caller is an agent; a trace carries no name. */
+  agent?: { id: string; name: string };
 }) {
   const routes = useRoutes();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -1675,6 +1925,8 @@ function LogsToolsTraceRow({
 
   const statusConfig = getStatusConfig(trace);
   const targetConfig = getTargetConfig(trace.targetType);
+  const skillsOverMcpEnabled = useSkillsOverMcpEnabled();
+  const skillChannel = skillsOverMcpEnabled ? skillLoadChannel(trace) : null;
   const userLabel = trace.userLabel || "—";
 
   return (
@@ -1785,7 +2037,7 @@ function LogsToolsTraceRow({
           </span>
         </div>
 
-        <div className="w-20 shrink-0">
+        <div className="flex w-20 shrink-0 items-center gap-1">
           <span
             title={targetConfig.label}
             className={cn(
@@ -1795,16 +2047,52 @@ function LogsToolsTraceRow({
           >
             {targetConfig.shortLabel}
           </span>
+          {skillChannel && (
+            // How the skill reached the agent. Uncoloured: the Skill badge
+            // beside it already carries the hue, and this only qualifies it.
+            <span
+              title={
+                skillChannel === "mcp"
+                  ? "Loaded over MCP from a server or gateway"
+                  : "Reported by an agent hook"
+              }
+              className="bg-muted text-muted-foreground inline-flex items-center px-1 py-0.5 font-mono text-[10px] tracking-wide uppercase"
+            >
+              {SKILL_LOAD_CHANNEL_LABELS[skillChannel]}
+            </span>
+          )}
         </div>
 
+        {/* An agent is not a person: its own icon and its own link, never
+            a set of initials struck from the string "agent:<uuid>" beside a
+            label nothing can resolve. */}
         <div className="flex min-w-[180px] flex-1 items-center gap-2 text-xs">
-          <IdentityAvatar label={userLabel} />
-          <IdentityLink
-            identifier={identityRefForKind(trace.userKind, trace.userKey)}
-            className="text-muted-foreground min-w-0 truncate"
-          >
-            {userLabel || "—"}
-          </IdentityLink>
+          {trace.userKind === "agent_id" ? (
+            <ToolUsageIdentity
+              kind={trace.userKind}
+              identityKey={trace.userKey}
+              label={userLabel}
+              agent={agent}
+              authorizer={
+                trace.authorizerUserId
+                  ? {
+                      userId: trace.authorizerUserId,
+                      label: trace.authorizerLabel,
+                    }
+                  : undefined
+              }
+            />
+          ) : (
+            <>
+              <IdentityAvatar label={userLabel} />
+              <IdentityLink
+                identifier={identityRefForKind(trace.userKind, trace.userKey)}
+                className="text-muted-foreground min-w-0 truncate"
+              >
+                {userLabel || "—"}
+              </IdentityLink>
+            </>
+          )}
         </div>
 
         {/* The MCP client that made the call — the same dimension the Client

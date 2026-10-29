@@ -2,6 +2,9 @@ package demoseed
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -9,6 +12,9 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // chPurgeAndTelemetry regenerates the tenant's telemetry, ClickHouse side.
@@ -73,6 +79,7 @@ func (s *seeder) chPurgeAndTelemetry(ctx context.Context, ch driver.Conn) error 
 		{"claude api requests", s.chClaudeAPIRows},
 		{"claude tool results", s.chClaudeToolResultRows},
 		{"skill hook rows", s.chSkillRows},
+		{"mcp skill loads", s.chMCPSkillLoadRows},
 		{"blocked hook rows", s.chBlockedRows},
 		{"cursor usage metrics", s.chCursorUsageRows},
 		{"cursor hook rows", s.chCursorHookRows},
@@ -100,6 +107,7 @@ var chPurgeProjectTables = []string{
 	"attribute_keys",
 	"shadow_mcp_inventory_urls",
 	"mcp_network_traffic_hourly_summaries",
+	"tunnel_metric_snapshots",
 }
 
 // chPurgeOrgTables are deleted by organization_id.
@@ -110,6 +118,8 @@ var chPurgeOrgTables = []string{
 	// Target of authz_challenge_bucket_summaries_mv.
 	"authz_challenge_bucket_summaries",
 	"risk_findings",
+	// Target of risk_finding_states_mv.
+	"risk_finding_states",
 	"skill_session_versions",
 	"skill_efficacy_scores",
 	"billing_meter_daily_summaries",
@@ -385,6 +395,15 @@ func (s *seeder) chToolName(i, k int) string {
 	return toolNames[chClientToolSlots[cidx-1][hash64("toolslot", i-1, k)%16]-1]
 }
 
+// chChatAgentID is the managed agent that drove chat i, or "" when a person
+// did. Every row a chat's calls produce, gateway or hook, names the same one.
+func (s *seeder) chChatAgentID(i int) string {
+	if i%4 != 0 {
+		return ""
+	}
+	return s.det("managed-agent-" + strconv.Itoa(1+i%3)).String()
+}
+
 // chToolCallRows are the tool-execution rows: 3-12 per chat (hash-picked, so
 // busy chats and quick ones both exist). gram.toolset.slug makes the Insights
 // CTE's direct branch classify each trace as hosted MCP traffic; unique
@@ -405,7 +424,7 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 		clientName := chClientNames[cidx-1]
 		clientVersion := chClientVersions[cidx-1][s.chChatByte(i, 16)%5]
 		clientSeen := hash64("cliseen", i-1)%8 > 0
-		managedAgentID := s.det("managed-agent-" + strconv.Itoa(1+i%3)).String()
+		managedAgentID := s.chChatAgentID(i)
 		dayOff := s.chatDayOff(i)
 
 		for k := 1; k <= calls; k++ {
@@ -414,10 +433,17 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 			// call that returns 500 must not also carry a success body.
 			failed := (toolName == "process_refund" && dayOff <= 2 && hash64("err", i, k)%2 == 0) ||
 				hash64("errbg", i, k)%30 == 0
+			// A tool error the upstream answered inside a 200 (isError): only
+			// gram.outcome marks it, as on real hosted and proxied rows.
+			toolError := !failed && hash64("toolerr", i, k)%25 == 0
 			// Short per-call ids so two calls to the same tool do not read as
 			// one request replayed.
 			ioID := md5Hex(s.name(fmt.Sprintf("toolio-%d-%d", i, k)))[:8]
 			ioMag := hash64("iomag", i, k) % 900
+			result := chToolResult(toolName, failed, ioID, ioMag)
+			if toolError {
+				result = `{\"isError\":true,\"error\":\"insufficient permissions for this resource\"}`
+			}
 
 			ts := nano + int64(k)*75000000000 + int64(hash64("gap", i, k)%45000000000)
 
@@ -425,18 +451,34 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 				`,"gram.tool.name":"` + toolName + `"`
 			// Managed-agent calls retain the approving human email too: the
 			// actor must win.
-			if i%4 == 0 {
+			//
+			// The authorizer rides along beside the actor. An agent acts
+			// under someone's authority, and a call that records only the
+			// machine cannot be read back to the person accountable for it —
+			// which is what the log detail sheet shows as "<agent> on behalf
+			// of <person>". Not every agent call has one: a key or a
+			// federated platform signs the agent in as itself, so a third of
+			// them deliberately carry no authorizer.
+			if managedAgentID != "" {
 				attrs += `,"gram.event.source":"tool_call","gram.authorization.actor.type":"agent","gram.authorization.actor.id":"` + managedAgentID + `"`
+				if hash64("authz", i)%3 != 0 {
+					attrs += `,"gram.authorization.authorizer_user_id":"` + s.userID(u.handle) + `"`
+				}
 			}
-			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "acme-ops", "acme-support-tools") + `"` +
-				`,"http.response.status_code":` + chIf(failed, "500", "200") +
+			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "acme-ops", "acme-support-tools") + `"`
+			// The serving wrapper's id; every seventh chat models calls recorded before stamping.
+			if i%7 != 0 {
+				attrs += `,"gram.mcp_server.id":"` + chIf(i%5 == 0, s.det("mcpserver-ops").String(), s.toolset1().String()) + `"`
+			}
+			attrs += `,"http.response.status_code":` + chIf(failed, "500", "200") +
+				`,"gram.outcome":"` + chIf(failed || toolError, "error", "ok") + `"` +
 				`,"http.server.request.duration":` + chRound(0.05+float64(hash64(i, k)%200)/100, 3) +
 				// The arguments and the result, as a real tool call records
 				// them. Without these the log detail sheet has nothing to show
 				// but the tool's name, and reports the payload as withheld by
 				// tool_io_logs.
 				`,"gen_ai.tool.call.arguments":"` + chToolArgs(toolName, ioID, ioMag) + `"` +
-				`,"gen_ai.tool.call.result":"` + chToolResult(toolName, failed, ioID, ioMag) + `"` +
+				`,"gen_ai.tool.call.result":"` + result + `"` +
 				`,"gen_ai.conversation.id":"` + chatID + `"` +
 				`,"gram.project.id":"` + s.projectID().String() + `"` +
 				`,"user.email":"` + email + `"` +
@@ -774,6 +816,91 @@ func (s *seeder) chSkillRows() []chTelemetryRow {
 	return rows
 }
 
+// demoProjectSlug is the slug the org phase gives the tenant's one project
+// (OrgInsertProject), the authority of its skill:// URIs.
+const demoProjectSlug = "default"
+
+// chMCPSkillLoadRows are skill:// reads served over the support server, one
+// in every third chat, shaped like the rows the hosted MCP skill read path
+// writes: a resource_read named Skill with the skill name as its argument, so
+// skill_name materializes and the tool-usage queries classify it as a skill
+// next to the hook rows above. Without them every skill on Logs and MCP &
+// Tools reads as hook-only and the "Loaded via" MCP filter is empty.
+func (s *seeder) chMCPSkillLoadRows() []chTelemetryRow {
+	var rows []chTelemetryRow
+	for i := 3; i <= bulkChats; i += 3 {
+		uidx := s.chChatOwnerIdx(i)
+		u := demoUsers[uidx]
+		chatID := s.chatID(i).String()
+		pos := 1 + int(hash64("mcpskl", i)%3)
+		name := skillNames[pos-1]
+		// Loads come early in a chat: the agent reads the skill before it
+		// starts calling tools.
+		at := s.chatTS(i).Add(20*time.Second + time.Duration(hash64("mcpsklt", i)%40)*time.Second)
+		ts := at.UnixNano()
+		// Recent runbook loads served v2, on the same cutoff as the runbook
+		// activations in seedSkills.
+		versionID := s.skillVersionID(pos)
+		content := skillsManual[pos-1].content
+		if pos == 3 && s.chatDayOff(i) <= 4 {
+			versionID = s.skillsRunbookV2()
+			content = skillContentRunbookV2
+		}
+		digest := sha256.Sum256([]byte(content))
+		uri := mcpskills.SkillURI(demoProjectSlug, name)
+		cidx := s.chClientIdx(i)
+		rows = append(rows, chTelemetryRow{
+			timeNano:     ts,
+			observedNano: ts,
+			severity:     "INFO",
+			body:         "Skill read: " + name,
+			traceID:      s.chTrace(fmt.Sprintf("mcpskilltrace-%d", i)),
+			attributes: `{"gram.event.source":"resource_read"` +
+				`,"gram.tool.name":"Skill"` +
+				`,"gen_ai.tool.call.arguments":"{\"skill\":\"` + name + `\"}"` +
+				`,"gram.resource.uri":"` + uri + `"` +
+				`,"gram.mcp.skill.id":"` + s.skillID(pos).String() + `"` +
+				`,"gram.mcp.skill.version_id":"` + versionID.String() + `"` +
+				`,"gram.mcp.skill.digest":"sha256:` + hex.EncodeToString(digest[:]) + `"` +
+				`,"gram.toolset.slug":"acme-support-tools"` +
+				`,"gram.mcp_server.id":"` + s.toolset1().String() + `"` +
+				`,"gram.mcp_endpoint.id":"` + s.det("endpoint-hosted-acme-support-tools").String() + `"` +
+				`,"http.response.status_code":200` +
+				`,"http.response.body":` + strconv.Itoa(skillReadResponseSize(uri, content)) +
+				`,"gram.mcp.client.name":"` + chClientNames[cidx-1] + `"` +
+				`,"gram.mcp.client.version":"` + chClientVersions[cidx-1][s.chChatByte(i, 16)%5] + `"` +
+				`,"gen_ai.conversation.id":"` + chatID + `"` +
+				`,"gram.project.id":"` + s.projectID().String() + `"` +
+				`,"user.email":"` + s.email(u.handle) + `"` +
+				chIdentityAttrs(uidx) + `}`,
+			resource: s.chResource(),
+			urn:      urn.NewSkill(s.skillID(pos)).String(),
+			service:  "gram-server",
+			chatID:   new(chatID),
+		})
+	}
+	return rows
+}
+
+// skillReadResponseSize is the size of the resources/read response a hosted
+// skill read serves for content, which is what the live row records.
+func skillReadResponseSize(uri, content string) int {
+	type resourceContent struct {
+		URI      string `json:"uri"`
+		MimeType string `json:"mimeType"`
+		Text     string `json:"text"`
+	}
+	bs, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"result":  map[string]any{"contents": []resourceContent{{URI: uri, MimeType: "text/markdown", Text: content}}},
+	})
+	if err != nil {
+		return len(content)
+	}
+	return len(bs)
+}
+
 // chBlockedRows are calls the Speakeasy hook denied before they ran
 // (PreToolUse). These are the only rows that carry gram.hook.block_reason, so
 // without them the blocked status filter on Tool Logs and the blocked
@@ -896,11 +1023,18 @@ func (s *seeder) chCursorUsageRows() []chTelemetryRow {
 // Insights hook branch as shadow-MCP-sourced traffic; result/error attrs
 // drive success/failure classification. Even chats ran in Cursor, so the
 // client (and the tool draw) is the Cursor pair's.
+//
+// In an agent's chat the hooks were sent with that agent's key, so the row
+// names the agent as its actor and carries no user.email: the hooks service
+// stamps the one and strips the other.
 func (s *seeder) chCursorHookRows() []chTelemetryRow {
 	var rows []chTelemetryRow
 	for i := 2; i <= bulkChats; i += 2 {
 		uidx := s.chChatOwnerIdx(i)
-		email := s.email(demoUsers[uidx].handle)
+		sender := `,"user.email":"` + s.email(demoUsers[uidx].handle) + `"`
+		if agentID := s.chChatAgentID(i); agentID != "" {
+			sender = `,"gram.authorization.actor.type":"agent","gram.authorization.actor.id":"` + agentID + `"`
+		}
 		chatID := s.chatID(i).String()
 		nano := s.chatTS(i).UnixNano()
 		for k := 1; k <= 2; k++ {
@@ -922,7 +1056,7 @@ func (s *seeder) chCursorHookRows() []chTelemetryRow {
 					`,"gen_ai.tool.call.id":"call_demo_` + strconv.Itoa(i) + `_` + strconv.Itoa(k) + `"` +
 					`,"gen_ai.conversation.id":"` + chatID + `"` +
 					`,"gram.project.id":"` + s.projectID().String() + `"` +
-					`,"user.email":"` + email + `"` +
+					sender +
 					chIdentityAttrs(uidx) + `}`,
 				resource: s.chResource(),
 				urn:      "",

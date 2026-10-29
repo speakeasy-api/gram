@@ -445,10 +445,12 @@ func TestKeysService_AgentKeyValidation(t *testing.T) {
 		code   oops.Code
 	}{
 		{name: "project binding", mutate: func(p *gen.CreateKeyPayload) { p.ProjectID = new(projectID.String()) }, code: oops.CodeBadRequest},
-		{name: "unsupported policy version", mutate: func(p *gen.CreateKeyPayload) { p.DelegatedGrantsVersion = new(5) }, code: oops.CodeBadRequest},
+		{name: "unsupported policy version", mutate: func(p *gen.CreateKeyPayload) {
+			p.DelegatedGrantsVersion = new(int(runtimepolicy.IssuedDelegatedPolicyVersion) + 1)
+		}, code: oops.CodeBadRequest},
 		{name: "deny effect", mutate: func(p *gen.CreateKeyPayload) { p.RequestedGrants[0].Effect = "deny" }, code: oops.CodeBadRequest},
 		{name: "blocklist only", mutate: func(p *gen.CreateKeyPayload) {
-			p.DelegatedGrantsVersion = new(int(runtimepolicy.CurrentDelegatedPolicyVersion))
+			p.DelegatedGrantsVersion = new(int(runtimepolicy.IssuedDelegatedPolicyVersion))
 			p.RequestedGrants[0].Scope = string(authz.ScopeProjectBlockedRead)
 		}, code: oops.CodeBadRequest},
 		{name: "duplicate grant", mutate: func(p *gen.CreateKeyPayload) {

@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -18,6 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -25,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -61,7 +66,7 @@ func (s *Service) handleMetaDescribeServerCall(
 
 	member, ok := findMetaMember(members, args.Server)
 	if !ok {
-		return nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", args.Server).LogWarn(ctx, logger)
+		return nil, unknownMetaMemberError(ctx, logger, gate, args.Server)
 	}
 	catalog, err := s.describeMetaMember(ctx, logger, gate, member)
 	if err != nil {
@@ -225,15 +230,36 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
 	}
+	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
+		found := false
+		for _, tool := range gate.catalog.Tools {
+			if tool.Name == qualified {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return marshalMetaToolError(ctx, logger, req.ID, remotemcp.ToolNotApprovedMessage)
+		}
+	}
 	member, ok := findMetaMember(members, serverSlug)
 	if !ok {
-		return nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", serverSlug).LogWarn(ctx, logger)
+		return nil, unknownMetaMemberError(ctx, logger, gate, serverSlug)
+	}
+	if err := s.validateCatalogMember(ctx, gate, member); err != nil {
+		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
+			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
+		}
+		if denied, ok := errors.AsType[*oops.ShareableError](err); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {
+			return nil, err
+		}
+		return nil, oops.E(oops.CodeUnavailable, err, "could not verify the approved server; retry shortly").LogError(ctx, logger)
 	}
 	if member.backend != metaMemberBackendHosted {
 		return s.executeProxiedMemberTool(ctx, logger, gate, member, req, toolName, arguments, meta)
 	}
 
-	toolset, inputs, err := s.buildMemberDispatch(ctx, logger, gate, member)
+	toolset, hosting, inputs, err := s.buildMemberDispatch(ctx, logger, gate, member)
 	if err != nil {
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
@@ -242,10 +268,9 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	}
 
 	// Pre-dispatch security check so an unsatisfied member surfaces as a
-	// member-scoped result (as in serveToolsetResolved). Members keep the
-	// toolset's own publicness; the meta surface is outside wrapper
-	// governance.
-	satisfied, err := s.checkToolsetSecurity(ctx, toolset, toolset.McpIsPublic, inputs)
+	// member-scoped result (as in serveToolsetResolved). Members keep their
+	// toolset's hosting publicness.
+	satisfied, err := s.checkToolsetSecurity(ctx, toolset, hosting.Public, inputs)
 	if err != nil {
 		return nil, err
 	}
@@ -294,6 +319,12 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 					deepest = innerShareable
 				}
 			}
+			// An unknown tool or invalid call refused before dispatch is one
+			// the program can correct.
+			if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok && !invocation.dispatched &&
+				(shareable.Code == oops.CodeNotFound || shareable.Code == oops.CodeInvalid) {
+				invocation.rejected = true
+			}
 			return marshalMetaToolError(ctx, logger, req.ID,
 				fmt.Sprintf("server %q failed to execute %q: %s", member.slug, toolName, deepest.Error()))
 		}
@@ -302,7 +333,7 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	return body, nil
 }
 
-// memberCatalog is one hosted member's described tool inventory.
+// memberCatalog is one member's permission-filtered tool inventory.
 type memberCatalog struct {
 	entries    []*toolListEntry
 	byName     map[string]*toolListEntry
@@ -318,7 +349,7 @@ func (s *Service) describeMemberToolset(
 	gate *metaGateContext,
 	member metaMember,
 ) (*memberCatalog, error) {
-	toolset, _, err := s.loadMemberToolset(ctx, logger, gate, member)
+	toolset, hosting, _, err := s.loadMemberToolset(ctx, logger, gate, member)
 	if err != nil {
 		return nil, err
 	}
@@ -335,13 +366,6 @@ func (s *Service) describeMemberToolset(
 	described, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(conv.ToLower(toolset.Slug)), &s.toolsetCache, variationsGroupID, s.platformExtras...)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "describe member toolset").LogError(ctx, logger)
-	}
-
-	// The consent-screen tool selection narrows describe exactly as
-	// buildMemberDispatch narrows execute, so the two surfaces agree on the
-	// session's visible tools (parity with rpc_tools_list.go).
-	if gate.toolSelection != nil {
-		described.Tools = toolfilter.FilterToolsBySelection(described.Tools, gate.toolSelection)
 	}
 
 	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false}
@@ -374,21 +398,17 @@ func (s *Service) describeMemberToolset(
 	// Parity with the direct surface's tools/list: private authenticated
 	// toolsets filter per-tool mcp:connect with tools/call's dimensions, so
 	// describe never discloses a tool the member endpoint would hide.
-	if gate.authenticated && !toolset.McpIsPublic {
-		for name, entry := range catalog.byName {
-			err := s.authz.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
-				Tool:        name,
-				Disposition: dispositionFromAnnotations(entry.Annotations),
-				ProjectID:   toolset.ProjectID.String(),
-			}))
-			if err != nil {
-				var oopsErr *oops.ShareableError
-				if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
-					delete(catalog.byName, name)
-					continue
-				}
-				return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for describe").LogError(ctx, logger)
-			}
+	if gate.authenticated && !hosting.Public {
+		allowed, err := filterToolsByMCPConnect(ctx, logger, s.authz, toolset.ID.String(), toolset.ProjectID.String(), slices.Collect(maps.Values(catalog.byName)))
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, &metaMemberError{message: fmt.Sprintf("server %q did not answer in time", member.slug)}
+		}
+		if err != nil {
+			return nil, err
+		}
+		catalog.byName = make(map[string]*toolListEntry, len(allowed))
+		for _, entry := range allowed {
+			catalog.byName[entry.Name] = entry
 		}
 	}
 
@@ -413,10 +433,10 @@ func (s *Service) buildMemberDispatch(
 	logger *slog.Logger,
 	gate *metaGateContext,
 	member metaMember,
-) (*toolsets_repo.Toolset, *mcpInputs, error) {
-	toolset, projectID, err := s.loadMemberToolset(ctx, logger, gate, member)
+) (*toolsets_repo.Toolset, hostingstate.Hosting, *mcpInputs, error) {
+	toolset, hosting, projectID, err := s.loadMemberToolset(ctx, logger, gate, member)
 	if err != nil {
-		return nil, nil, err
+		return nil, hostingstate.NotHosted(), nil, err
 	}
 
 	// A hosted member records no upstream resource, so its credential is the
@@ -424,17 +444,17 @@ func (s *Service) buildMemberDispatch(
 	// consented for a specific member must never reach another member's
 	// tools. No entry degrades to no token rather than an error, so partially
 	// connected meta sessions keep hosted members callable.
-	tokens, err := gate.memberTokens(ctx, member)
+	tokens, err := s.resolveMemberTokens(ctx, gate, member)
 	if err != nil {
-		return nil, nil, err
+		return nil, hostingstate.NotHosted(), nil, err
 	}
 	hostedTokens, err := hostedMemberTokens(tokens, member)
 	if err != nil {
-		return nil, nil, err
+		return nil, hostingstate.NotHosted(), nil, err
 	}
 	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedTokens)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for meta MCP member").LogError(ctx, logger)
+		return nil, hostingstate.NotHosted(), nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for meta MCP member").LogError(ctx, logger)
 	}
 
 	var environment string
@@ -449,7 +469,7 @@ func (s *Service) buildMemberDispatch(
 			case errors.Is(err, pgx.ErrNoRows):
 				// Dangling environment: keep the toolset default.
 			case err != nil:
-				return nil, nil, oops.E(oops.CodeUnexpected, err, "load member environment").LogError(ctx, logger)
+				return nil, hostingstate.NotHosted(), nil, oops.E(oops.CodeUnexpected, err, "load member environment").LogError(ctx, logger)
 			default:
 				environment = row.Slug
 			}
@@ -486,19 +506,21 @@ func (s *Service) buildMemberDispatch(
 		attributionServerID:   nil,
 		// Meta members keep their toolset-keyed per-tool checks; the meta
 		// surface's RBAC model is outside the wrapper-governance cutover.
+		// Publicness is the hosting state the member was admitted under.
 		wrapperRBACResourceID:    "",
-		wrapperIsPublic:          nil,
+		wrapperIsPublic:          new(hosting.Public),
 		metaMcpServerID:          gate.metaServerID.String(),
 		clientInfoScope:          metaClientInfoScope(gate.metaServerID),
 		skipProxyTools:           true,
 		toolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		toolsetIsPublic:          new(toolset.McpIsPublic),
+		toolsetIsPublic:          new(hosting.Public),
 		tags:                     nil,
 		protocolVersion:          gate.protocolVersion,
 		identityCoverageRecorded: false,
-		toolSelection:            gate.toolSelection,
+		toolSelection:            nil,
+		skillsOverMCP:            nil,
 	}
-	return toolset, inputs, nil
+	return toolset, hosting, inputs, nil
 }
 
 // hostedMemberTokens narrows a gate's token map to what a hosted member may
@@ -531,9 +553,9 @@ func (s *Service) loadMemberToolset(
 	logger *slog.Logger,
 	gate *metaGateContext,
 	member metaMember,
-) (*toolsets_repo.Toolset, uuid.UUID, error) {
+) (*toolsets_repo.Toolset, hostingstate.Hosting, uuid.UUID, error) {
 	if !member.toolsetID.Valid {
-		return nil, uuid.Nil, oops.E(oops.CodeUnexpected, nil, "hosted member %q has no toolset", member.slug).LogError(ctx, logger)
+		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, nil, "hosted member %q has no toolset", member.slug).LogError(ctx, logger)
 	}
 	toolset, err := toolsets_repo.New(s.db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
 		ID: member.toolsetID.UUID,
@@ -544,38 +566,47 @@ func (s *Service) loadMemberToolset(
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
+		return nil, hostingstate.NotHosted(), uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	case err != nil:
-		return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member toolset").LogError(ctx, logger)
+		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member toolset").LogError(ctx, logger)
 	}
-	// Match direct wrapper dispatch: only the legacy canonical wrapper uses
-	// the toolset's enablement flag. Independently configured servers use
-	// their own visibility, already checked during member admission.
-	if member.serverID == toolset.ID && !toolset.McpEnabled {
-		return nil, uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
-	}
-	allowed, err := s.memberToolsetConnectAllowed(ctx, gate.authenticated, &toolset)
+	hosting, _, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
 	if err != nil {
-		return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "check toolset-level authz").LogError(ctx, logger)
+		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member hosting state").LogError(ctx, logger)
+	}
+	// Match direct wrapper dispatch: only the canonical wrapper gates on the
+	// toolset's hosting state. Independently configured servers use their own
+	// visibility, already checked during member admission.
+	if member.serverID == toolset.ID && !hosting.Enabled {
+		return nil, hostingstate.NotHosted(), uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
+	}
+	allowed, err := s.memberToolsetConnectAllowed(ctx, s.newMandatoryShadow(ctx, toolset.OrganizationID), mandatorySurfaceGatewayMember, gate.authenticated, &toolset, hosting.Public)
+	if err != nil {
+		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "check toolset-level authz").LogError(ctx, logger)
 	}
 	if !allowed {
 		// Unauthorized reads as nonexistent (as in ServeToolsetResolved).
-		return nil, uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogWarn(ctx, logger)
+		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogWarn(ctx, logger)
 	}
-	return &toolset, toolset.ProjectID, nil
+	return &toolset, hosting, toolset.ProjectID, nil
 }
 
 // memberToolsetConnectAllowed applies a non-public toolset's own mcp:connect
 // gate, matching ServeToolsetResolved's connection check. Grants context was
 // prepared when the member snapshot was resolved.
-func (s *Service) memberToolsetConnectAllowed(ctx context.Context, authenticated bool, toolset *toolsets_repo.Toolset) (bool, error) {
-	if toolset.McpIsPublic {
+func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public bool) (bool, error) {
+	connect := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())
+	if public {
+		shadow.recordServer(ctx, shadowSurface, true, authz.MandatoryServerPublic, connect)
 		return true, nil
 	}
 	if !authenticated {
+		shadow.recordServer(ctx, shadowSurface, false, authz.MandatoryServerPrivate, connect)
 		return false, nil
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
+	err := s.authz.Require(ctx, connect)
+	shadow.shadowRequireServer(ctx, shadowSurface, err, authz.MandatoryServerPrivate, connect)
+	if err != nil {
 		if oopsErr, ok := errors.AsType[*oops.ShareableError](err); ok && oopsErr.Code == oops.CodeForbidden {
 			return false, nil
 		}
@@ -616,6 +647,16 @@ func marshalMetaToolCallResult(ctx context.Context, logger *slog.Logger, id mcpj
 // marshalMetaToolError emits a member-scoped failure as an isError tool
 // result rather than a protocol error.
 func marshalMetaToolError(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, message string) (json.RawMessage, error) {
+	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
+		invocation.message = message
+		return nil, invocation.failure()
+	}
+	return marshalToolErrorResult(ctx, logger, id, message, serverInfoMetaServer)
+}
+
+// marshalToolErrorResult serializes a tools/call result with isError set and
+// one text block, under the given server identity.
+func marshalToolErrorResult(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, message string, identity serverInfo) (json.RawMessage, error) {
 	chunk, err := json.Marshal(contentChunk[string, json.RawMessage]{
 		Type:     "text",
 		MimeType: nil,
@@ -633,11 +674,23 @@ func marshalMetaToolError(ctx context.Context, logger *slog.Logger, id mcpjsonrp
 			StructuredContent: nil,
 			IsError:           true,
 		},
-		serverIdentity: serverInfoMetaServer,
+		serverIdentity: identity,
 		cacheHints:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call response").LogError(ctx, logger)
 	}
 	return bs, nil
+}
+
+// unknownMetaMemberError says when the server is one the caller hid, so the
+// model can point them at the connect page instead of calling it missing.
+func unknownMetaMemberError(ctx context.Context, logger *slog.Logger, gate *metaGateContext, slug string) error {
+	if _, hidden := findMetaMember(gate.hiddenMembers, slug); hidden {
+		if gate.connectURL != "" {
+			return oops.E(oops.CodeNotFound, nil, "server %q is hidden by the user; they can show it again at %s", slug, gate.connectURL).LogWarn(ctx, logger)
+		}
+		return oops.E(oops.CodeNotFound, nil, "server %q is hidden by the user", slug).LogWarn(ctx, logger)
+	}
+	return oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", slug).LogWarn(ctx, logger)
 }
