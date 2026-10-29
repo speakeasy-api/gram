@@ -239,6 +239,7 @@ func heldPluginEntry(slug string, files map[string][]byte) (sharedPluginEntry, e
 	// without them would list a plugin that cannot install.
 	for _, required := range []string{
 		path.Join(cursorPluginRoot, slug+"-cursor", ".cursor-plugin/plugin.json"),
+		path.Join(cursorPluginRoot, slug+"-cursor", "mcp.json"),
 		path.Join(slug+"-codex", ".codex-plugin/plugin.json"),
 	} {
 		if _, ok := files[required]; !ok {

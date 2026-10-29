@@ -349,26 +349,40 @@ func TestAutoSync_NeverPublishedPausedPluginIsOmitted(t *testing.T) {
 
 // When a held plugin's published files can't be read back from the repo, the
 // publish falls back to the plugin's live state rather than dropping it from
-// the marketplace.
+// the marketplace, or listing a package that can't install.
 func TestAutoSync_UnreadablePublishedFilesFallBackToLiveState(t *testing.T) {
 	t.Parallel()
 
-	ctx, f := newAutoSyncFixture(t, "fallback")
-	_, err := f.setAutoSync(ctx, f.paused, false)
-	require.NoError(t, err)
-	f.addServer(t, ctx, f.paused, "fallback-paused-two", "Paused Two", 1)
-	f.addServer(t, ctx, f.active, "fallback-active-two", "Active Two", 1)
+	for _, tc := range []struct {
+		name    string
+		missing string
+	}{
+		{name: "claude plugin.json", missing: "%s/.claude-plugin/plugin.json"},
+		{name: "cursor mcp.json", missing: "cursor-plugins/%s-cursor/mcp.json"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	repo := maps.Clone(f.mock.lastPushedFiles)
-	delete(repo, f.paused.Slug+"/.claude-plugin/plugin.json")
-	f.mock.repoFiles = repo
+			ctx, f := newAutoSyncFixture(t, "fallback")
+			_, err := f.setAutoSync(ctx, f.paused, false)
+			require.NoError(t, err)
+			f.addServer(t, ctx, f.paused, "fallback-paused-two", "Paused Two", 1)
+			f.addServer(t, ctx, f.active, "fallback-active-two", "Active Two", 1)
 
-	result := f.automaticPublish(t, ctx)
-	require.False(t, result.Skipped)
-	pushed := f.mock.lastPushedFiles
-	require.Contains(t, string(pushed[f.paused.Slug+"/.mcp.json"]), "Paused Two", "an unreadable held plugin publishes its live state")
-	require.Contains(t, string(pushed[f.paused.Slug+"/.claude-plugin/plugin.json"]), f.paused.Slug)
-	require.Contains(t, claudeMarketplaceEntries(t, pushed), f.paused.Slug)
+			missing := fmt.Sprintf(tc.missing, f.paused.Slug)
+			repo := maps.Clone(f.mock.lastPushedFiles)
+			require.Contains(t, repo, missing)
+			delete(repo, missing)
+			f.mock.repoFiles = repo
+
+			result := f.automaticPublish(t, ctx)
+			require.False(t, result.Skipped)
+			pushed := f.mock.lastPushedFiles
+			require.Contains(t, string(pushed[f.paused.Slug+"/.mcp.json"]), "Paused Two", "an unreadable held plugin publishes its live state")
+			require.NotEmpty(t, pushed[missing], "the live state restores the missing file")
+			require.Contains(t, claudeMarketplaceEntries(t, pushed), f.paused.Slug)
+		})
+	}
 }
 
 func TestAutoSync_TurnOffRefusedWithUnsyncedChanges(t *testing.T) {
