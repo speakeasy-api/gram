@@ -86,9 +86,9 @@ func TestAgentInstall_CodeExchangesForAScriptCarryingTheKey(t *testing.T) {
 	require.Equal(t, "no-store", script.Result().Header.Get("Cache-Control"))
 }
 
-// The code is reusable until it expires, so fetching the script twice returns
-// the same key both times. An unknown code gets nothing.
-func TestAgentInstall_CodeIsReusableUntilExpiry(t *testing.T) {
+// Fetching the script does not spend the code, so a second fetch returns the
+// same key. An unknown code gets nothing. Expiry is the cache TTL.
+func TestAgentInstall_CodeIsReusable(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	fx := seedAgentGateway(t, ctx, ti)

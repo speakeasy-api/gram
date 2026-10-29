@@ -112,7 +112,8 @@ export function StepVerify({
         <ul className="space-y-1 text-sm">
           <li>
             <code className="text-xs">401</code> — the credential was rejected.
-            Run the setup command again with a fresh setup link.
+            Check that the API key is still active, or issue a new key and run
+            its setup command.
           </li>
           <li>
             <code className="text-xs">403</code> — the tool is not granted.
