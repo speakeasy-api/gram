@@ -189,8 +189,9 @@ type Service interface {
 	// token_endpoint, and authorization_endpoint. One source per call. Requires
 	// platform admin.
 	MigrateToGlobalIssuer(context.Context, *MigrateToGlobalIssuerPayload) (res *MigrateRemoteSessionIssuerResult, err error)
-	// Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.
-	UploadPlatformImage(context.Context, *UploadPlatformImagePayload, io.ReadCloser) (res *UploadImageResult, err error)
+	// Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static
+	// SVG.
+	UploadPlatformImage(context.Context, *UploadPlatformImagePayload, io.ReadCloser) (res *AdminUploadImageResult, err error)
 	// Serve a public image, preserving the existing image serving contract.
 
 	// If body implements [io.WriterTo], that implementation will be used instead.
@@ -1583,6 +1584,15 @@ type AdminStripeSubscriptionCandidate struct {
 	CustomerID string
 	// Stripe subscription status.
 	Status string
+}
+
+// AdminUploadImageResult is the result type of the admin service
+// uploadPlatformImage method.
+type AdminUploadImageResult struct {
+	// The uploaded platform image asset
+	Asset *Asset
+	// Canonical public URL for the uploaded image
+	URL string
 }
 
 // One organization's upstream auth enforcement.
@@ -3110,6 +3120,8 @@ type ServeImageResult struct {
 	LastModified              string
 	AccessControlAllowOrigin  *string
 	CrossOriginResourcePolicy string
+	ContentSecurityPolicy     *string
+	XContentTypeOptions       *string
 }
 
 // SetAdoptionDashboardURLPayload is the payload type of the admin service
@@ -3467,13 +3479,6 @@ type UpdateSupportMatrixPayload struct {
 	AdminSessionToken *string
 	Revision          string
 	Draft             *SupportDraft
-}
-
-// UploadImageResult is the result type of the admin service
-// uploadPlatformImage method.
-type UploadImageResult struct {
-	// The asset entry that was created in Speakeasy
-	Asset *Asset
 }
 
 // UploadPlatformImagePayload is the payload type of the admin service

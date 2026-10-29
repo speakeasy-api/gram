@@ -3,13 +3,21 @@ package assets_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
+	admingen "github.com/speakeasy-api/gram/server/gen/admin_assets"
+	assethttp "github.com/speakeasy-api/gram/server/gen/http/assets/server"
+	goahttp "goa.design/goa/v3/http"
 	"image"
+	"image/jpeg"
 	"image/png"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -140,5 +148,109 @@ func TestNewPlatformImageUploads_RequiresHTTPSExceptOnLoopback(t *testing.T) {
 		require.NoError(t, err)
 		_, err = assetsvc.NewPlatformImageUploads(nil, testenv.NewMemoryCache(), parsed, site, testenv.NewLogger(t))
 		require.Error(t, err, base)
+	}
+}
+
+func TestPlatformImageUploads_SVGCanonicalPublicResponse(t *testing.T) {
+	ctx, ti := newTestAssetsService(t)
+	raw := `<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"><!-- removed --><path fill="#123456" d="M0 0 L1 1"/></svg>`
+	canonical := `<svg xmlns="http://www.w3.org/2000/svg"><path fill="#123456" d="M0 0 L1 1"></path></svg>`
+	uploaded, err := ti.service.UploadPlatformImage(withAdmin(t, ctx), &admingen.UploadPlatformImageForm{ContentType: "image/svg+xml", ContentLength: int64(len(raw))}, io.NopCloser(strings.NewReader(raw)))
+	require.NoError(t, err)
+	require.Equal(t, "image/svg+xml", uploaded.Asset.ContentType)
+	require.Equal(t, int64(len(canonical)), uploaded.Asset.ContentLength)
+	require.Equal(t, fmt.Sprintf("%x", sha256.Sum256([]byte(canonical))), uploaded.Asset.Sha256)
+	uploads, handler := newPlatformImageUploads(t, ti)
+	for range 2 {
+		grant, err := uploads.Issue(ctx, "staff@example.test")
+		require.NoError(t, err)
+		response := putUpload(t, handler, grant, []byte(raw))
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		var stored assetsvc.StoredPlatformImage
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &stored))
+		require.Equal(t, uploaded.Asset.ID, stored.AssetID)
+		require.Equal(t, uploaded.Asset.Sha256, stored.SHA256)
+		require.Equal(t, int64(len(canonical)), stored.Size)
+		require.Equal(t, "image/svg+xml", stored.ContentType)
+		require.Equal(t, http.StatusUnauthorized, putUpload(t, handler, grant, []byte(raw)).Code)
+	}
+	mux := goahttp.NewMuxer()
+	assethttp.MountServeImageHandler(mux, assethttp.NewServeImageHandler(assets.NewServeImageEndpoint(ti.service), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/rpc/assets.serveImage?id="+uploaded.Asset.ID, nil))
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Empty(t, response.Header().Get("Location"))
+	require.Equal(t, "image/svg+xml", response.Header().Get("Content-Type"))
+	require.Equal(t, "nosniff", response.Header().Get("X-Content-Type-Options"))
+	require.Equal(t, "default-src 'none'; script-src 'none'; style-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox", response.Header().Get("Content-Security-Policy"))
+	require.Equal(t, "cross-origin", response.Header().Get("Cross-Origin-Resource-Policy"))
+	require.Equal(t, "*", response.Header().Get("Access-Control-Allow-Origin"))
+	require.Equal(t, canonical, response.Body.String())
+}
+
+func TestPlatformImageUploads_InvalidBodies(t *testing.T) {
+	ctx, ti := newTestAssetsService(t)
+	uploads, mux := newPlatformImageUploads(t, ti)
+	for _, tc := range []struct {
+		name   string
+		body   []byte
+		mime   string
+		size   int64
+		status int
+	}{
+		{"empty", nil, "image/svg+xml", 0, http.StatusUnsupportedMediaType},
+		{"oversize", bytes.Repeat([]byte("x"), 4*1024*1024+1), "image/svg+xml", 4*1024*1024 + 1, http.StatusRequestEntityTooLarge},
+		{"forged", testPNG(t), "image/svg+xml", -1, http.StatusUnsupportedMediaType},
+		{"mismatch", testPNG(t), "image/png", 1, http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			grant, err := uploads.Issue(ctx, "staff@example.test")
+			require.NoError(t, err)
+			req := httptest.NewRequest(http.MethodPut, grant.URL, bytes.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer "+grant.Token)
+			req.Header.Set("Content-Type", tc.mime)
+			req.ContentLength = tc.size
+			response := httptest.NewRecorder()
+			mux.ServeHTTP(response, req)
+			require.Equal(t, tc.status, response.Code, response.Body.String())
+		})
+	}
+}
+
+type expiredGrantCache struct{ cache.Cache }
+
+func (c expiredGrantCache) GetAndDelete(ctx context.Context, key string, value any) error {
+	if err := c.Cache.GetAndDelete(ctx, key, value); err != nil {
+		return err
+	}
+	return json.Unmarshal([]byte(`{"operator_email":"staff@example.test","expires_at":"2000-01-01T00:00:00Z"}`), value)
+}
+func TestPlatformImageUploads_ExpiredGrant(t *testing.T) {
+	ctx, ti := newTestAssetsService(t)
+	uploads, mux := newPlatformImageUploadsWithCache(t, ti, expiredGrantCache{testenv.NewMemoryCache()})
+	grant, err := uploads.Issue(ctx, "staff@example.test")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusUnauthorized, putUpload(t, mux, grant, testPNG(t)).Code)
+}
+
+func TestServeImage_MountedRasterHeaders(t *testing.T) {
+	ctx, ti := newTestAssetsService(t)
+	var jpegData bytes.Buffer
+	require.NoError(t, jpeg.Encode(&jpegData, image.NewRGBA(image.Rect(0, 0, 2, 2)), nil))
+	for mime, data := range map[string][]byte{"image/png": testPNG(t), "image/jpeg": jpegData.Bytes()} {
+		t.Run(mime, func(t *testing.T) {
+			uploaded, err := ti.service.UploadPlatformImage(withAdmin(t, ctx), &admingen.UploadPlatformImageForm{ContentType: mime, ContentLength: int64(len(data))}, io.NopCloser(bytes.NewReader(data)))
+			require.NoError(t, err)
+			mux := goahttp.NewMuxer()
+			assethttp.MountServeImageHandler(mux, assethttp.NewServeImageHandler(assets.NewServeImageEndpoint(ti.service), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+			response := httptest.NewRecorder()
+			mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/rpc/assets.serveImage?id="+uploaded.Asset.ID, nil))
+			require.Equal(t, http.StatusOK, response.Code)
+			require.Equal(t, mime, response.Header().Get("Content-Type"))
+			require.Equal(t, "nosniff", response.Header().Get("X-Content-Type-Options"))
+			require.Empty(t, response.Header().Get("Content-Security-Policy"))
+			require.Empty(t, response.Header().Get("Location"))
+			require.Equal(t, data, response.Body.Bytes())
+		})
 	}
 }
