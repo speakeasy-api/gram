@@ -558,7 +558,7 @@ export function RemoteMcpIdentitySectionBody({
           // edit still goes through.
           const binding = clientDraft.canSave(oauthFormat);
           if (binding && !(await clientDraft.save(oauthFormat))) return;
-          replacedGitHub = binding;
+          replacedGitHub = binding || clientDraft.showingBound(oauthFormat);
           if (replacingCredential) await deleteStaticCredential();
           if (binding) setFormatPick(null);
         } else if (selectedMode === "user" && leavingAgent) {
@@ -652,7 +652,9 @@ export function RemoteMcpIdentitySectionBody({
   } else if (selectedMode === "user") {
     identityCanSave = userDraft.canSave;
   } else if (oauthFormat) {
-    identityCanSave = clientDraft.canSave(oauthFormat);
+    identityCanSave =
+      clientDraft.canSave(oauthFormat) ||
+      (leavingGitHub && clientDraft.showingBound(oauthFormat));
   } else if (selectedMode === "agent") {
     // Moving to Agent needs a credential; without one there is nothing for
     // the mode to actually be. One already on the server counts: in the
@@ -754,6 +756,11 @@ export function RemoteMcpIdentitySectionBody({
               <Alert variant="error" dismissible={false}>
                 Could not determine the current identity configuration
                 {identityError?.message ? `: ${identityError.message}` : "."}
+                {githubDraft.error ? (
+                  <Button variant="secondary" onClick={githubDraft.retry}>
+                    Retry identity lookup
+                  </Button>
+                ) : null}
               </Alert>
             ) : null}
 

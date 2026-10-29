@@ -19,6 +19,7 @@ type GitHubAppDraftState = {
   detach: () => Promise<void>;
   loading: boolean;
   error: boolean;
+  retry: () => void;
 };
 
 export function useGitHubAppDraft(
@@ -120,5 +121,8 @@ export function useGitHubAppDraft(
     detach,
     loading: enabled && (query.isLoading || !!incomplete),
     error: enabled && (query.isError || query.isFetchNextPageError),
+    retry: () => {
+      void query.refetch().catch(() => undefined);
+    },
   };
 }
