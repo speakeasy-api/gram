@@ -1,0 +1,16 @@
+client/dashboard/src/contexts/rumCollection.test.tsx
+  h_2620cc60cfd1e9 90,94,96-98
+client/dashboard/src/elements/lib/errorTracking.ts
+  h_2620cc60cfd1e9 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fd679e9717404f6fe1ee9733feb6b6fb1bd58e65",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
