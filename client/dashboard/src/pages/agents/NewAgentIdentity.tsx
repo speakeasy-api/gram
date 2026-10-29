@@ -45,7 +45,7 @@ export default function NewAgentIdentity(): JSX.Element {
       width="full"
       title={
         inference ? (
-          "Set up inference workload identity"
+          "Set up inference with platform tokens"
         ) : claudeTag ? (
           <span className="flex items-center gap-3">
             <img
@@ -61,7 +61,7 @@ export default function NewAgentIdentity(): JSX.Element {
       }
       description={
         inference
-          ? "Trust a workload issuer and explicitly authorize inference in this project."
+          ? "Trust the issuer that signs your platform's tokens, then explicitly authorize inference in this project."
           : claudeTag
             ? "Choose the servers Claude can reach, then connect it to your Anthropic organization."
             : "Name it, choose the servers it can reach, then connect it to its runtime."

@@ -599,7 +599,7 @@ describe("Federating a platform's own tokens", () => {
     const apiKey = screen.getByRole("radio", { name: /API key/ });
     expect(apiKey.getAttribute("data-disabled")).toBeNull();
     expect(
-      screen.getByText(/need permission to manage workload identities/),
+      screen.getByText(/need permission to manage trusted platforms/),
     ).toBeTruthy();
   });
 
@@ -618,7 +618,7 @@ describe("Federating a platform's own tokens", () => {
     const apiKey = screen.getByRole("radio", { name: /API key/ });
     expect(apiKey.getAttribute("data-disabled")).toBeNull();
     expect(
-      screen.getByText(/need permission to manage workload identities/),
+      screen.getByText(/need permission to manage trusted platforms/),
     ).toBeTruthy();
   });
 

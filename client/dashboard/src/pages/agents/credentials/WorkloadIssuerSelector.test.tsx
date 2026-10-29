@@ -67,7 +67,7 @@ function setup(
 }
 function openAndFill() {
   fireEvent.click(
-    screen.getByRole("button", { name: "Create new workload issuer" }),
+    screen.getByRole("button", { name: "Create new token issuer" }),
   );
   for (const [label, value] of [
     ["Name", "New issuer"],
@@ -78,9 +78,7 @@ function openAndFill() {
   }
 }
 function submit() {
-  fireEvent.click(
-    screen.getByRole("button", { name: "Create workload issuer" }),
-  );
+  fireEvent.click(screen.getByRole("button", { name: "Create token issuer" }));
 }
 afterEach(cleanup);
 beforeEach(() => {
@@ -93,12 +91,12 @@ describe("WorkloadIssuerSelector", () => {
   it("offers existing trust and creation, selecting without a mutation", () => {
     const { props, rerender } = setup();
     expect(
-      screen.getByRole("button", { name: "Create new workload issuer" }),
+      screen.getByRole("button", { name: "Create new token issuer" }),
     ).toBeTruthy();
     expect(
       screen.getByRole("option", { name: "Existing issuer — Organization" }),
     ).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Workload issuer"), {
+    fireEvent.change(screen.getByLabelText("Token issuer"), {
       target: { value: issuer.id },
     });
     expect(props.onSelect).toHaveBeenCalledWith(issuer);
@@ -198,13 +196,13 @@ describe("WorkloadIssuerSelector", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(mocks.register).not.toHaveBeenCalled();
     fireEvent.click(
-      screen.getByRole("button", { name: "Create new workload issuer" }),
+      screen.getByRole("button", { name: "Create new token issuer" }),
     );
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("");
     expect(
       (
         screen.getByRole("button", {
-          name: "Create workload issuer",
+          name: "Create token issuer",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -212,15 +210,15 @@ describe("WorkloadIssuerSelector", () => {
   it("renders loading and retryable query errors instead of selection", () => {
     const { props, rerender } = setup({ loading: true });
     expect(screen.getByRole("status").textContent).toContain(
-      "Loading workload issuers",
+      "Loading token issuers",
     );
     expect(screen.queryByRole("combobox")).toBeNull();
     rerender(<WorkloadIssuerSelector {...props} loading={false} failed />);
     expect(screen.getByRole("alert").textContent).toContain(
-      "Could not load workload issuers",
+      "Could not load token issuers",
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "Retry workload issuers" }),
+      screen.getByRole("button", { name: "Retry token issuers" }),
     );
     expect(props.onRetry).toHaveBeenCalledOnce();
   });
@@ -255,7 +253,7 @@ describe("WorkloadIssuerSelector", () => {
     },
     {
       failure: "unexpected",
-      message: "Could not register the workload issuer.",
+      message: "Could not register the token issuer.",
     },
   ])(
     "keeps failed creation open for retry: $message",
@@ -285,12 +283,12 @@ describe("WorkloadIssuerSelector", () => {
     mocks.canCreate = false;
     const { props } = setup();
     const button = screen.getByRole("button", {
-      name: "Create new workload issuer",
+      name: "Create new token issuer",
     }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
     fireEvent.click(button);
     expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.change(screen.getByLabelText("Workload issuer"), {
+    fireEvent.change(screen.getByLabelText("Token issuer"), {
       target: { value: issuer.id },
     });
     expect(props.onSelect).toHaveBeenCalledWith(issuer);
@@ -303,7 +301,7 @@ describe("WorkloadIssuerSelector", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Create workload issuer",
+          name: "Create token issuer",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);

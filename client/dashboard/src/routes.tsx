@@ -172,6 +172,7 @@ const SetupTaskRedirect = React.lazy(
 
 type AppRouteBasic = {
   title: string;
+  keywords?: string[];
   url: string;
   external?: boolean;
   icon?: IconName;
@@ -215,6 +216,7 @@ export type AppRoute = Omit<AppRouteBasic, "icon" | "subPages"> & {
 
 type RouteEntry = {
   title: string;
+  keywords?: string[];
   url: string;
   icon?: IconName;
   customIcon?: React.ComponentType<{ className?: string }>;
@@ -1615,6 +1617,7 @@ const ORG_ROUTE_STRUCTURE = {
   },
   access: {
     title: "Roles & Permissions",
+    keywords: ["trusted platforms", "workload identities"],
     url: "access",
     icon: "shield",
     component: Access,

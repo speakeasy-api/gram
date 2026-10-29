@@ -324,8 +324,8 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeAgentWrite, description: "Create, configure, and manage agents.", resourceType: "agent"},
 		{scope: authz.ScopeAgentAuthorize, description: "Authorize and manage agent credentials.", resourceType: "agent"},
 		{scope: authz.ScopeAgentTransfer, description: "Transfer agent ownership.", resourceType: "agent"},
-		{scope: authz.ScopeWorkloadRead, description: "View workload identity trust policy: issuers, admitted subjects, and assigned agents.", resourceType: "workload"},
-		{scope: authz.ScopeWorkloadWrite, description: "Register workload issuers, admit and withdraw subjects, and assign agents to workloads.", resourceType: "workload"},
+		{scope: authz.ScopeWorkloadRead, description: "View trusted platforms: the token issuers Speakeasy trusts, the jobs allowed to sign in, and the agents they act as.", resourceType: "workload"},
+		{scope: authz.ScopeWorkloadWrite, description: "Trust token issuers, allow and withdraw jobs, and choose the agent each job acts as.", resourceType: "workload"},
 		{scope: authz.ScopeOrgDeviceAgentSync, description: "Let an agent's device agent sync the plugins assigned to it.", resourceType: "org"},
 		{scope: authz.ScopeOrgHooksIngest, description: "Let an agent send AI-tool hook events and telemetry.", resourceType: "org"},
 	}

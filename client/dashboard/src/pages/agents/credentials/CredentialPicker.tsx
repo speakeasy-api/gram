@@ -253,7 +253,7 @@ export function CredentialPicker({
         {planned.length > 0 &&
           ` Coming soon: ${planned.map((plan) => plan.displayName).join(", ")}.`}
         {!canFederate &&
-          " Presets and custom issuers need permission to manage workload identities."}
+          " Presets and custom issuers need permission to manage trusted platforms."}
       </Text>
       <Collapsible
         open={advancedShown}
@@ -279,10 +279,10 @@ export function CredentialPicker({
             className="p-3"
           >
             <Text muted small>
-              Only when your platform already mints signed OIDC tokens for its
-              workloads, such as a CI provider, a cluster or your own identity
-              service. Reuse an issuer you already trust or register a new one.
-              If it mints none, use an API key.
+              Only when your platform already mints signed OIDC tokens for the
+              jobs it runs, such as a CI provider, a cluster or your own
+              identity service. Reuse an issuer you already trust or register a
+              new one. If it mints none, use an API key.
             </Text>
             <CredentialMeta>
               No key minted · reuse or register an issuer

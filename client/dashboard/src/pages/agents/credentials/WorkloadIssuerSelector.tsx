@@ -79,7 +79,7 @@ export function WorkloadIssuerSelector({
       );
       if (!issuer)
         throw new Error(
-          "The issuer was registered but could not be selected. Reload the workload issuers before trying again.",
+          "The issuer was registered but could not be selected. Reload the token issuers before trying again.",
         );
       onCreated(policy, issuer);
       setOpen(false);
@@ -88,19 +88,19 @@ export function WorkloadIssuerSelector({
       setError(
         failure instanceof Error
           ? failure.message
-          : "Could not register the workload issuer.",
+          : "Could not register the token issuer.",
       );
     } finally {
       setBusy(false);
     }
   };
-  if (loading) return <p role="status">Loading workload issuers…</p>;
+  if (loading) return <p role="status">Loading token issuers…</p>;
   if (failed)
     return (
       <div role="alert">
-        <p>Could not load workload issuers.</p>
+        <p>Could not load token issuers.</p>
         <Button variant="secondary" onClick={onRetry}>
-          Retry workload issuers
+          Retry token issuers
         </Button>
       </div>
     );
@@ -109,7 +109,7 @@ export function WorkloadIssuerSelector({
     <div className="space-y-3">
       {issuers.length > 0 && (
         <>
-          <Label htmlFor="workload-issuer-choice">Workload issuer</Label>
+          <Label htmlFor="workload-issuer-choice">Token issuer</Label>
           <select
             id="workload-issuer-choice"
             className="border-input bg-background block h-9 w-full border px-2"
@@ -122,7 +122,7 @@ export function WorkloadIssuerSelector({
             }}
           >
             <option value="" disabled>
-              Select a workload issuer
+              Select a token issuer
             </option>
             {issuers.map((issuer) => (
               <option key={issuer.id} value={issuer.id}>
@@ -142,8 +142,10 @@ export function WorkloadIssuerSelector({
         </dl>
       )}
       <p className="text-muted-foreground text-sm">
-        Reuse issuer trust across agents. Assign this agent’s subject separately
-        below; inference permission belongs to the agent, not the issuer.
+        A token issuer is the service that signs your platform’s tokens. Trust
+        it once and reuse it for other agents. Which jobs act as this agent is
+        set separately; inference permission belongs to the agent, not the
+        issuer.
       </p>
       <Button
         variant="secondary"
@@ -155,11 +157,12 @@ export function WorkloadIssuerSelector({
           setOpen(true);
         }}
       >
-        Create new workload issuer
+        Create new token issuer
       </Button>
       {!canCreate && (
         <p className="text-sm">
-          Creating workload issuers requires workload:write.
+          Creating a token issuer needs permission to manage trusted platforms
+          (workload:write).
         </p>
       )}
       <Dialog
@@ -170,7 +173,7 @@ export function WorkloadIssuerSelector({
       >
         <Dialog.Content>
           <Dialog.Header>
-            <Dialog.Title>Create workload issuer</Dialog.Title>
+            <Dialog.Title>Create token issuer</Dialog.Title>
             <Dialog.Description>
               Register an external JWT issuer and its signing keys once. No
               agent, subject assignment, or inference grant is created here.
@@ -213,7 +216,7 @@ export function WorkloadIssuerSelector({
               }
               onClick={() => void create()}
             >
-              {busy ? "Creating issuer…" : "Create workload issuer"}
+              {busy ? "Creating issuer…" : "Create token issuer"}
             </Button>
           </Dialog.Footer>
         </Dialog.Content>

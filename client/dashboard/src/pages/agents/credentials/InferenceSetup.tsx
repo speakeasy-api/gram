@@ -96,14 +96,14 @@ function ProjectInferenceSetup({
   return (
     <div className="max-w-3xl space-y-6">
       <p>
-        Connect any workload that can obtain a signed JWT. No Kubernetes
-        cluster, cloud provider, MCP server, or managed assistant is required.
+        Connect any job that can obtain a signed JWT. No Kubernetes cluster,
+        cloud provider, MCP server, or managed assistant is required.
       </p>
       {!completionEndpoint && (
         <p role="alert">
           The inference endpoint must use HTTPS. Configure the deployment with a
-          secure server URL before provisioning workloads. HTTP is supported
-          only on loopback addresses in local development.
+          secure server URL before connecting any jobs. HTTP is supported only
+          on loopback addresses in local development.
         </p>
       )}
       {!canConfigure && (
@@ -207,7 +207,7 @@ function ProjectInferenceSetup({
       ) : (
         <>
           <p role="status">
-            Identity and workload admission created. Inference is limited to{" "}
+            Agent identity and access rule created. Inference is limited to{" "}
             {project.name} and the owner’s live permissions.
           </p>
           {setup.steps

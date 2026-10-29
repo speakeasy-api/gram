@@ -367,7 +367,7 @@ export function AgentLifecycle({
             {agent.lifecycle !== "revoked" && (
               <DangerAction
                 title="Revoke agent"
-                description="Permanently prevent this agent from becoming active again. Applies to both API keys and federated access."
+                description="Permanently prevent this agent from becoming active again. Applies to both API keys and platform sign-in."
                 confirm={confirm === "revoke"}
                 disabled={!canWrite || pending}
                 pending={revoke.isPending}

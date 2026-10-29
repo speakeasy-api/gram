@@ -4,6 +4,7 @@ import type { ReleaseStage } from "@/components/release-stage-badge";
 export interface CommandAction {
   id: string;
   label: string;
+  keywords?: string[];
   icon?: string;
   shortcut?: string;
   onSelect: () => void;
