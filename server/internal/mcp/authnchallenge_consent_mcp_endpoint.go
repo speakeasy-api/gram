@@ -456,6 +456,9 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 
 	if hasGitHubApp {
+		if !serverRow.RemoteMcpServerID.Valid {
+			return oops.E(oops.CodeFailedPrecondition, nil, "GitHub App credentials require a remote MCP destination")
+		}
 		res, err := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, serverRow.ID, endpoint.ProjectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, subject)
 		if err != nil {
 			return fmt.Errorf("resolve consent GitHub App identity: %w", err)

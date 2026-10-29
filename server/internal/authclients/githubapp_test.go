@@ -67,6 +67,8 @@ func TestGitHubAppConfiguration(t *testing.T) {
 	plain, err := enc.Decrypt(stored.PrivateKeyEncrypted)
 	require.NoError(t, err)
 	require.Equal(t, payload.PrivateKey, plain)
+	createdAt, updatedAt := stored.CreatedAt, stored.UpdatedAt
+	require.Equal(t, "service_account", stored.ClientType)
 	version := stored.CredentialVersion
 	payload.ID = &created.ID
 	payload.PrivateKey = "TEST_PRIVATE_KEY_TWO"
@@ -75,6 +77,8 @@ func TestGitHubAppConfiguration(t *testing.T) {
 	require.Equal(t, created.ID, rotated.ID)
 	stored, err = queries.GetGitHubAppCredential(ctx, repo.GetGitHubAppCredentialParams{AuthClientID: uuid.MustParse(created.ID), OrganizationID: ti.organizationID})
 	require.NoError(t, err)
+	require.Equal(t, createdAt, stored.CreatedAt)
+	require.True(t, stored.UpdatedAt.Time.After(updatedAt.Time))
 	require.NotEqual(t, version, stored.CredentialVersion)
 	version = stored.CredentialVersion
 	reject = true

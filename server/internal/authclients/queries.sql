@@ -228,7 +228,7 @@ VALUES (@auth_client_id, @organization_id, @instance_url, @app_id, @installation
 ON CONFLICT (auth_client_id) DO UPDATE SET
 instance_url = EXCLUDED.instance_url, app_id = EXCLUDED.app_id,
 installation_id = EXCLUDED.installation_id, private_key_encrypted = EXCLUDED.private_key_encrypted,
-upstream_origin = EXCLUDED.upstream_origin, credential_version = generate_uuidv7()
+upstream_origin = EXCLUDED.upstream_origin, credential_version = generate_uuidv7(), updated_at = clock_timestamp()
 WHERE mcp_auth_client_github_apps.organization_id = EXCLUDED.organization_id;
 
 -- name: AttachGitHubAppAuthClient :exec

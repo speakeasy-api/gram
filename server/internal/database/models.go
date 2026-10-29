@@ -3172,6 +3172,8 @@ type McpAuthClientGithubApp struct {
 	AuthClientID uuid.UUID
 	// @access: confidential
 	OrganizationID string
+	// @access: confidential
+	ClientType string
 	// @access: restricted
 	InstanceUrl string
 	// @access: confidential
@@ -3184,6 +3186,10 @@ type McpAuthClientGithubApp struct {
 	UpstreamOrigin string
 	// @access: confidential
 	CredentialVersion uuid.UUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type McpAuthClientHeader struct {

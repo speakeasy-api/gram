@@ -187,7 +187,7 @@ func (q *Queries) GetGitHubAppConfiguration(ctx context.Context, arg GetGitHubAp
 }
 
 const getGitHubAppCredential = `-- name: GetGitHubAppCredential :one
-SELECT g.auth_client_id, g.organization_id, g.instance_url, g.app_id, g.installation_id, g.private_key_encrypted, g.upstream_origin, g.credential_version
+SELECT g.auth_client_id, g.organization_id, g.client_type, g.instance_url, g.app_id, g.installation_id, g.private_key_encrypted, g.upstream_origin, g.credential_version, g.created_at, g.updated_at
 FROM mcp_auth_client_github_apps g
 JOIN mcp_auth_clients ac ON ac.id = g.auth_client_id AND ac.organization_id = g.organization_id
 WHERE g.auth_client_id = $1 AND g.organization_id = $2
@@ -207,12 +207,15 @@ func (q *Queries) GetGitHubAppCredential(ctx context.Context, arg GetGitHubAppCr
 	err := row.Scan(
 		&i.AuthClientID,
 		&i.OrganizationID,
+		&i.ClientType,
 		&i.InstanceUrl,
 		&i.AppID,
 		&i.InstallationID,
 		&i.PrivateKeyEncrypted,
 		&i.UpstreamOrigin,
 		&i.CredentialVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -833,7 +836,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (auth_client_id) DO UPDATE SET
 instance_url = EXCLUDED.instance_url, app_id = EXCLUDED.app_id,
 installation_id = EXCLUDED.installation_id, private_key_encrypted = EXCLUDED.private_key_encrypted,
-upstream_origin = EXCLUDED.upstream_origin, credential_version = generate_uuidv7()
+upstream_origin = EXCLUDED.upstream_origin, credential_version = generate_uuidv7(), updated_at = clock_timestamp()
 WHERE mcp_auth_client_github_apps.organization_id = EXCLUDED.organization_id
 `
 

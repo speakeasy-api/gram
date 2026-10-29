@@ -59,7 +59,7 @@ func (d *fixtureDB) QueryRow(_ context.Context, sql string, args ...any) pgx.Row
 		if d.disabled || args[0] != c.AuthClientID || args[1] != c.OrganizationID {
 			return fixtureRow{err: pgx.ErrNoRows}
 		}
-		return fixtureRow{values: []any{c.AuthClientID, c.OrganizationID, c.InstanceUrl, c.AppID, c.InstallationID, c.PrivateKeyEncrypted, c.UpstreamOrigin, c.CredentialVersion}}
+		return fixtureRow{values: []any{c.AuthClientID, c.OrganizationID, c.ClientType, c.InstanceUrl, c.AppID, c.InstallationID, c.PrivateKeyEncrypted, c.UpstreamOrigin, c.CredentialVersion, c.CreatedAt, c.UpdatedAt}}
 	}
 	if strings.Contains(sql, "GetGitHubAppServerURL") {
 		if args[0] != c.OrganizationID || args[1] != d.serverID {
