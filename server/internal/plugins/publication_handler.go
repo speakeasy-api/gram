@@ -42,11 +42,13 @@ func NewPublicationHandler(logger *slog.Logger, db *pgxpool.Pool, signaler Plugi
 
 func (h *PublicationHandler) HandleBatchWithResult(ctx context.Context, messages []streams.BatchMessage[*publicationv1.PublicationRequested]) error {
 	// Each project is signalled once per batch, so a manual sync must not be
-	// lost to an ordinary request for the same project that came first.
-	includePaused := make(map[publicationRequestKey]bool)
+	// lost to an ordinary request for the same project that came first, and
+	// the sync is attributed to whoever asked for it.
+	syncActors := make(map[publicationRequestKey]string)
 	for _, message := range messages {
-		if requestKey, ok := publicationRequestKeyOf(message.Message); ok && message.Message.GetIncludePausedPlugins() {
-			includePaused[requestKey] = true
+		requestKey, ok := publicationRequestKeyOf(message.Message)
+		if _, seen := syncActors[requestKey]; ok && !seen && message.Message.GetIncludePausedPlugins() {
+			syncActors[requestKey] = message.Message.GetCreatedByUserId()
 		}
 	}
 
@@ -83,11 +85,11 @@ func (h *PublicationHandler) HandleBatchWithResult(ctx context.Context, messages
 			message.Fail(err)
 			continue
 		}
-		signal := h.signaler.SignalPluginPublish
-		if includePaused[requestKey] {
-			signal = h.signaler.SignalPluginSync
+		signal, actor := h.signaler.SignalPluginPublish, request.GetCreatedByUserId()
+		if syncActor, ok := syncActors[requestKey]; ok {
+			signal, actor = h.signaler.SignalPluginSync, syncActor
 		}
-		if err := signal(ctx, requestKey.projectID, request.GetCreatedByUserId()); err != nil {
+		if err := signal(ctx, requestKey.projectID, actor); err != nil {
 			err = fmt.Errorf("signal plugin publication: %w", err)
 			results[requestKey] = err
 			message.Fail(err)
