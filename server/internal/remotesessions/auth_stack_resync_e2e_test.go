@@ -14,12 +14,14 @@ import (
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 // A successful binding write must leave usable typed configuration without a
 // subsequent binding change, manual reconcile, or migration backfill. A failed
 // capture must reject and roll back the binding, permitting a caller retry.
 func TestAuthStackE2E_PostCommitBindingResync(t *testing.T) {
+	t.Parallel()
 	for _, operation := range []string{"create", "attach"} {
 		for _, injectFailure := range []bool{false, true} {
 			name := "normal"
@@ -27,6 +29,7 @@ func TestAuthStackE2E_PostCommitBindingResync(t *testing.T) {
 				name = "reconcile_failure"
 			}
 			t.Run(operation+"/"+name, func(t *testing.T) {
+				t.Parallel()
 				ctx, ti := newTestService(t)
 				auth, ok := contextvalues.GetAuthContext(ctx)
 				require.True(t, ok)
@@ -36,8 +39,9 @@ func TestAuthStackE2E_PostCommitBindingResync(t *testing.T) {
 				userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "resync-signin")
 				attachRemoteMcpServerToIssuer(t, ctx, ti.conn, projectID, userIssuerID, "resync-server", "https://resync.example.com/mcp")
 				var serverID uuid.UUID
-				require.NoError(t, ti.conn.QueryRow(ctx, `SELECT id FROM mcp_servers
-					WHERE project_id=$1 AND user_session_issuer_id=$2 AND NOT deleted`, projectID, userIssuerID).Scan(&serverID))
+				fixtureValue1, err := repo.New(ti.conn).LockingFixtureFindIssuerServer(ctx, repo.LockingFixtureFindIssuerServerParams{ProjectID: projectID, UserIssuerID: userIssuerID})
+				require.NoError(t, err)
+				serverID = fixtureValue1
 
 				// The external client ID is unique and lets the trigger target create
 				// before the service allocates the registration's database ID.
@@ -74,22 +78,25 @@ func TestAuthStackE2E_PostCommitBindingResync(t *testing.T) {
 					require.Nil(t, result)
 					require.True(t, failureObserved(), "the targeted capture fault must execute")
 					var registrations, bindings, associations, typed int
-					require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM remote_session_clients
-                  WHERE project_id=$1 AND client_id=$2 AND NOT deleted`, projectID, externalID).Scan(&registrations))
+					fixtureValue2, err := repo.New(ti.conn).LockingFixtureCountRegistrations(ctx, repo.LockingFixtureCountRegistrationsParams{ProjectID: projectID, ExternalID: externalID})
+					require.NoError(t, err)
+					registrations = int(fixtureValue2)
 					wantRegistrations := 0
 					if operation == "attach" {
 						wantRegistrations = 1
 					}
 					require.Equal(t, wantRegistrations, registrations, "failed create must not persist a registration")
-					require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM remote_session_client_user_session_issuers AS binding
-                  JOIN remote_session_clients AS client ON client.id=binding.remote_session_client_id
-                  WHERE client.project_id=$1 AND client.client_id=$2 AND binding.user_session_issuer_id=$3`, projectID, externalID, userIssuerID).Scan(&bindings))
+					fixtureValue3, err := repo.New(ti.conn).LockingFixtureCountExternalBindings(ctx, repo.LockingFixtureCountExternalBindingsParams{ProjectID: projectID, ExternalID: externalID, UserIssuerID: userIssuerID})
+					require.NoError(t, err)
+					bindings = int(fixtureValue3)
 					require.Zero(t, bindings, "failed capture must roll back the binding")
-					require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM mcp_server_remote_session_clients
-                  WHERE project_id=$1 AND organization_id=$2 AND mcp_server_id=$3 AND NOT deleted`, projectID, auth.ActiveOrganizationID, serverID).Scan(&associations))
+					fixtureValue4, err := repo.New(ti.conn).LockingFixtureCountServerLegacyChoices(ctx, repo.LockingFixtureCountServerLegacyChoicesParams{ProjectID: projectID, OrganizationID: auth.ActiveOrganizationID, ServerID: serverID})
+					require.NoError(t, err)
+					associations = int(fixtureValue4)
 					require.Zero(t, associations)
-					require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM mcp_server_auth_clients
-                  WHERE project_id=$1 AND organization_id=$2 AND mcp_server_id=$3 AND NOT deleted`, projectID, auth.ActiveOrganizationID, serverID).Scan(&typed))
+					fixtureValue5, err := repo.New(ti.conn).LockingFixtureCountServerTypedChoices(ctx, repo.LockingFixtureCountServerTypedChoicesParams{ProjectID: projectID, OrganizationID: auth.ActiveOrganizationID, ServerID: serverID})
+					require.NoError(t, err)
+					typed = int(fixtureValue5)
 					require.Zero(t, typed)
 					removeFailure()
 				}
@@ -105,16 +112,12 @@ func TestAuthStackE2E_PostCommitBindingResync(t *testing.T) {
 				}
 
 				var legacy, typed int
-				require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM mcp_server_remote_session_clients
-					WHERE project_id=$1 AND organization_id=$2 AND mcp_server_id=$3
-					AND remote_session_client_id=$4 AND NOT deleted`, projectID, auth.ActiveOrganizationID, serverID, registrationID).Scan(&legacy))
-				require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*)
-					FROM mcp_server_auth_clients AS link
-					JOIN mcp_auth_clients AS client ON client.id=link.auth_client_id
-					WHERE link.project_id=$1 AND link.organization_id=$2 AND link.mcp_server_id=$3
-					AND client.organization_id=$2 AND client.remote_session_client_id=$4
-					AND NOT link.deleted AND NOT client.deleted AND client.enabled
-					AND client.client_type='remote_session'`, projectID, auth.ActiveOrganizationID, serverID, registrationID).Scan(&typed))
+				fixtureValue6, err := repo.New(ti.conn).LockingFixtureCountRegistrationLegacyChoices(ctx, repo.LockingFixtureCountRegistrationLegacyChoicesParams{ProjectID: projectID, OrganizationID: auth.ActiveOrganizationID, ServerID: serverID, ClientID: registrationID})
+				require.NoError(t, err)
+				legacy = int(fixtureValue6)
+				fixtureValue7, err := repo.New(ti.conn).LockingFixtureCountEnabledOAuthChoices(ctx, repo.LockingFixtureCountEnabledOAuthChoicesParams{ProjectID: projectID, OrganizationID: auth.ActiveOrganizationID, ServerID: serverID, ClientID: registrationID})
+				require.NoError(t, err)
+				typed = int(fixtureValue7)
 				t.Logf("successful %s: binding=1 legacy_associations=%d typed_associations=%d injected_failure=%t", operation, legacy, typed, injectFailure)
 				// This is configuration readiness only. The caller retries the failed
 				// database operation, never a separate reconciliation or migration.
@@ -137,10 +140,12 @@ func rejectAuthStackAssociation(t *testing.T, ctx context.Context, db *pgxpool.P
 	t.Cleanup(func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+		//nolint:glint // notestingrawsql: scoped trigger fault injection requires dynamic identifiers.
 		_, err := db.Exec(cleanupCtx, fmt.Sprintf(`DROP TRIGGER IF EXISTS %s ON mcp_server_remote_session_clients;
 			DROP FUNCTION IF EXISTS %s(); DROP SEQUENCE IF EXISTS %s;`, trigger, function, sequence))
 		require.NoError(t, err)
 	})
+	//nolint:glint // notestingrawsql: scoped trigger fault injection requires dynamic identifiers.
 	_, err := db.Exec(ctx, fmt.Sprintf(`CREATE SEQUENCE %s;
 		CREATE FUNCTION %s() RETURNS trigger LANGUAGE plpgsql AS $$
 		BEGIN
@@ -158,15 +163,19 @@ func rejectAuthStackAssociation(t *testing.T, ctx context.Context, db *pgxpool.P
 	require.NoError(t, err)
 	// Quote literals with PostgreSQL itself rather than interpolating tenant data.
 	var args string
+	//nolint:glint // notestingrawsql: scoped trigger fault injection requires dynamic identifiers.
 	require.NoError(t, db.QueryRow(ctx, `SELECT format('%L, %L, %L, %L, %L', $1::text, $2::text, $3::text, $4::text, $5::text)`, projectID.String(), organizationID, serverID.String(), externalID, sequence).Scan(&args))
+	//nolint:glint // notestingrawsql: scoped trigger fault injection requires dynamic identifiers.
 	_, err = db.Exec(ctx, fmt.Sprintf(`CREATE TRIGGER %s BEFORE INSERT OR UPDATE ON mcp_server_remote_session_clients
 		FOR EACH ROW EXECUTE FUNCTION %s(%s)`, trigger, function, args))
 	require.NoError(t, err)
 	return func() bool {
 			var called bool
+			//nolint:glint // notestingrawsql: scoped trigger fault injection requires dynamic identifiers.
 			require.NoError(t, db.QueryRow(ctx, "SELECT is_called FROM "+sequence).Scan(&called))
 			return called
 		}, func() {
+			//nolint:glint // notestingrawsql: scoped trigger fault injection requires dynamic identifiers.
 			_, err := db.Exec(ctx, fmt.Sprintf("DROP TRIGGER %s ON mcp_server_remote_session_clients", trigger))
 			require.NoError(t, err)
 		}

@@ -54,7 +54,7 @@ func SyncEMARegistrations(ctx context.Context, tx pgx.Tx, organizationID string,
 	if err != nil {
 		return err
 	}
-	opts := Options{OrganizationID: organizationID, Apply: true}
+	opts := Options{OrganizationID: organizationID, Apply: true, PageSize: 0}
 	report, want, plan := newReport(true), newExpected(), newEMAPlan()
 	if err := decideEMABindings(ctx, tx, q, opts, &report, want, plan, bindings); err != nil {
 		return err
@@ -189,11 +189,11 @@ func LockEMAWriterScope(ctx context.Context, tx pgx.Tx, organizationID string, p
 	params := ListEMAWriterLockScopeParams{OrganizationID: organizationID, ProjectIds: projectIDs}
 	for {
 		if err := ctx.Err(); err != nil {
-			return err
+			return fmt.Errorf("check scope lock context: %w", err)
 		}
 		attempt, err := tx.Begin(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("begin scope lock attempt: %w", err)
 		}
 		q := New(attempt)
 		before, err := q.ListEMAWriterLockScope(ctx, params)
@@ -236,10 +236,13 @@ func LockEMAWriterScope(ctx context.Context, tx pgx.Tx, organizationID string, p
 			return err
 		}
 		if slices.Equal(before, after) {
-			return attempt.Commit(ctx)
+			if err := attempt.Commit(ctx); err != nil {
+				return fmt.Errorf("commit scope locks: %w", err)
+			}
+			return nil
 		}
 		if err = attempt.Rollback(ctx); err != nil {
-			return err
+			return fmt.Errorf("rollback scope lock attempt: %w", err)
 		}
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,9 +26,11 @@ import (
 func waitForPreparationSourceWait(t *testing.T, ctx context.Context, ti *testInstance, writer pgx.Tx) {
 	t.Helper()
 	var pid int32
+	//nolint:glint // notestingrawsql: observe PostgreSQL transaction lock ownership; this is concurrency instrumentation, not fixture data.
 	require.NoError(t, writer.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&pid))
 	require.Eventually(t, func() bool {
 		var waiting bool
+		//nolint:glint // notestingrawsql: observe PostgreSQL transaction lock ownership; this is concurrency instrumentation, not fixture data.
 		err := ti.conn.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_stat_activity a WHERE a.datname = current_database() AND $1 = ANY(pg_blocking_pids(a.pid)))`, pid).Scan(&waiting)
 		return err == nil && waiting
 	}, 5*time.Second, 10*time.Millisecond, "preparation never reached the source lock")
@@ -36,10 +39,10 @@ func waitForPreparationSourceWait(t *testing.T, ctx context.Context, ti *testIns
 func lockPreparationHeaderSource(t *testing.T, ctx context.Context, ti *testInstance, serverID uuid.UUID) (pgx.Tx, uuid.UUID) {
 	t.Helper()
 	var sourceID uuid.UUID
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT remote_mcp_server_id FROM mcp_servers WHERE id = $1`, serverID).Scan(&sourceID))
-	writer, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = writer.Rollback(context.Background()) })
+	fixture1, fixtureErr := repo.New(ti.conn).GetPreparationServerSourceFixture(ctx, serverID)
+	require.NoError(t, fixtureErr)
+	sourceID = fixture1.UUID
+	writer := testenv.BeginTx(t, ctx, ti.conn)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	require.NoError(t, authclientbackfill.LockRemoteSource(ctx, writer, auth.ActiveOrganizationID, sourceID))
 	return writer, sourceID
@@ -50,7 +53,7 @@ func finishPreparationHeaderWrite(t *testing.T, ctx context.Context, ti *testIns
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	// This is the source header mutation's actual transactional synchronization
 	// path: hold source, mutate header evidence, then synchronize typed copies.
-	_, err := writer.Exec(ctx, `INSERT INTO remote_mcp_server_headers (remote_mcp_server_id,name,is_secret,value) VALUES ($1,'X-Lock-Test',true,'encrypted-test-value')`, sourceID)
+	err := repo.New(writer).InsertPreparationSourceHeaderFixtureLock(ctx, repo.InsertPreparationSourceHeaderFixtureLockParams{SourceID: sourceID, ProjectID: *auth.ProjectID})
 	require.NoError(t, err)
 	require.NoError(t, authclientbackfill.SyncRemoteSource(ctx, writer, auth.ActiveOrganizationID, sourceID))
 	require.NoError(t, writer.Commit(ctx))
@@ -80,7 +83,9 @@ func TestPrepareEMA_OpposingHeaderWriterCompletes(t *testing.T) {
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	typed := assertPreparationTypedClient(t, ctx, ti, in.ClientID, in.Resource)
 	var copies int
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM mcp_auth_client_headers WHERE auth_client_id = $1 AND organization_id = $2 AND NOT deleted`, typed, auth.ActiveOrganizationID).Scan(&copies))
+	fixture2, fixtureErr := repo.New(ti.conn).CountPreparationHeaderCopiesFixture(ctx, repo.CountPreparationHeaderCopiesFixtureParams{ClientID: typed, OrganizationID: auth.ActiveOrganizationID})
+	require.NoError(t, fixtureErr)
+	copies = int(fixture2)
 	require.Equal(t, 1, copies)
 }
 

@@ -48,6 +48,7 @@ import (
 // copy synchronization acquires registration/client/link locks; acquiring the
 // complete source/server scope here would be too late for earlier writes.
 func SyncServerAssociations(ctx context.Context, tx pgx.Tx, organizationID string, serverIDs ...uuid.UUID) error {
+	ctx = withAtomicHeaderSync(ctx)
 	if organizationID == "" {
 		return errors.New("sync server associations: no tenant scope")
 	}
@@ -80,9 +81,16 @@ func SyncServerAssociations(ctx context.Context, tx pgx.Tx, organizationID strin
 			return oops.E(oops.CodeUnavailable, errRace, "upstream OAuth associations changed concurrently; retry the transaction")
 		}
 	}
-	// After the OAuth clients and links, decide copies against the clients
-	// the servers now offer. The outer writer scope protects the subsequent
-	// EMA registration locks from opposing source/reach writers.
+	// Administrator detach locks clients before links. Keep that order and
+	// retire only backfilled OAuth links whose legacy evidence is gone.
+	if err := q.LockServerOAuthClientsForRetirement(ctx, LockServerOAuthClientsForRetirementParams{OrganizationID: organizationID, McpServerIds: servers}); err != nil {
+		return fmt.Errorf("lock stale OAuth clients: %w", err)
+	}
+	if err := q.RetireServerStaleBackfillLinks(ctx, RetireServerStaleBackfillLinksParams{OrganizationID: organizationID, McpServerIds: servers}); err != nil {
+		return fmt.Errorf("retire stale OAuth links: %w", err)
+	}
+	// After all OAuth client/link writes, decide copies. Tombstoned typed
+	// links still name registrations whose final legacy association was pruned.
 	return syncDerivedCopies(ctx, tx, q, opts, &report, servers)
 }
 

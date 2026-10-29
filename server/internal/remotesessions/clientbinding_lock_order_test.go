@@ -2,6 +2,7 @@ package remotesessions_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -12,14 +13,18 @@ import (
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // The normal binding entrypoints must wait for the complete writer scope
 // before locking an issuer/client, not acquire that scope during late resync.
 func TestClientBindingWriterScopeBeforeIssuerLocks(t *testing.T) {
+	t.Parallel()
 	for _, operation := range []string{"create", "cimd", "attach", "detach"} {
 		for _, gate := range []string{"project", "source", "server"} {
 			t.Run(operation+"/"+gate, func(t *testing.T) {
+				t.Parallel()
 				ctx, ti := newTestService(t)
 				ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 				defer cancel()
@@ -38,18 +43,16 @@ func TestClientBindingWriterScopeBeforeIssuerLocks(t *testing.T) {
 					require.NoError(t, err)
 					clientID = created.ID
 				}
-				blocker, err := ti.conn.Begin(ctx)
-				require.NoError(t, err)
-				defer func() { _ = blocker.Rollback(context.Background()) }()
-				var blockerPID int32
-				require.NoError(t, blocker.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&blockerPID))
+				var err error
+				blocker := testenv.BeginTx(t, ctx, ti.conn)
+				blockerPID := int32(blocker.Conn().PgConn().PID())
 				switch gate {
 				case "project":
 					require.NoError(t, authclientbackfill.New(blocker).LockEMAProjectScope(ctx, authclientbackfill.LockEMAProjectScopeParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: projectID}))
 				case "source":
 					require.NoError(t, authclientbackfill.LockRemoteSource(ctx, blocker, auth.ActiveOrganizationID, sourceID))
 				case "server":
-					_, err = blocker.Exec(ctx, "SELECT id FROM mcp_servers WHERE project_id=$1 AND id=$2 FOR UPDATE NOWAIT", projectID, serverID)
+					err = repo.New(blocker).LockingFixtureLockServer(ctx, repo.LockingFixtureLockServerParams{ProjectID: projectID, ServerID: serverID})
 					require.NoError(t, err)
 				}
 				done := make(chan error, 1)
@@ -75,26 +78,27 @@ func TestClientBindingWriterScopeBeforeIssuerLocks(t *testing.T) {
 						t.Fatal("binding writer returned before acquiring its writer scope")
 					default:
 					}
+					//nolint:glint // notestingrawsql: observe the live PostgreSQL backend wait edge.
 					err := ti.conn.QueryRow(ctx, `SELECT pid FROM pg_stat_activity WHERE datname=current_database() AND $1=ANY(pg_blocking_pids(pid)) LIMIT 1`, blockerPID).Scan(&blockedPID)
-					if err != nil && err != pgx.ErrNoRows {
+					if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 						require.NoError(t, err)
 					}
 				}
 				// An old post-commit resync also waits here, but only after it
 				// has published the binding. Prove no mutation escaped early.
 				var bindings int
-				require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM remote_session_client_user_session_issuers AS binding
-                 JOIN remote_session_clients AS client ON client.id=binding.remote_session_client_id
-                 WHERE client.project_id=$1 AND binding.user_session_issuer_id=$2`, projectID, userIssuerID).Scan(&bindings))
+				fixtureValue1, err := repo.New(ti.conn).LockingFixtureCountIssuerBindings(ctx, repo.LockingFixtureCountIssuerBindingsParams{ProjectID: projectID, UserIssuerID: userIssuerID})
+				require.NoError(t, err)
+				bindings = int(fixtureValue1)
 				expectedBindings := 0
 				if operation == "detach" {
 					expectedBindings = 1
 				}
 				require.Equal(t, expectedBindings, bindings, "binding mutation must follow writer scope acquisition")
-				_, err = blocker.Exec(ctx, "SELECT id FROM user_session_issuers WHERE id=$1 FOR UPDATE NOWAIT", userIssuerID)
+				err = repo.New(blocker).LockingFixtureLockUserIssuer(ctx, repo.LockingFixtureLockUserIssuerParams{UserIssuerID: userIssuerID, ProjectID: projectID})
 				require.NoError(t, err, "issuer lock must follow the complete writer scope")
 				if clientID != "" {
-					_, err = blocker.Exec(ctx, "SELECT id FROM remote_session_clients WHERE project_id=$1 AND id=$2 FOR UPDATE NOWAIT", projectID, uuid.MustParse(clientID))
+					err = repo.New(blocker).LockingFixtureLockRegistration(ctx, repo.LockingFixtureLockRegistrationParams{ProjectID: projectID, ClientID: uuid.MustParse(clientID)})
 					require.NoError(t, err, "client lock must follow the complete writer scope")
 				}
 				require.NoError(t, blocker.Commit(ctx))

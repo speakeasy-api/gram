@@ -9,26 +9,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/stretchr/testify/require"
 )
 
 func assertPreparationTypedClient(t *testing.T, ctx context.Context, ti *testInstance, clientID uuid.UUID, resource string) uuid.UUID {
 	t.Helper()
 	auth, _ := contextvalues.GetAuthContext(ctx)
-	var ids []uuid.UUID
-	rows, err := ti.conn.Query(ctx, `SELECT c.id FROM mcp_auth_clients c
- JOIN mcp_auth_client_emas e ON e.auth_client_id = c.id
- WHERE c.organization_id = $1 AND c.remote_session_client_id = $2
- AND c.client_type = 'ema' AND NOT c.deleted AND NOT e.deleted
- AND rtrim(e.resource, '/') = rtrim($3, '/')`, auth.ActiveOrganizationID, clientID, resource)
+	ids, err := repo.New(ti.conn).ListPreparationTypedClientsFixture(ctx, repo.ListPreparationTypedClientsFixtureParams{OrganizationID: auth.ActiveOrganizationID, ClientID: conv.ToNullUUID(clientID), Resource: resource})
 	require.NoError(t, err)
-	defer rows.Close()
-	for rows.Next() {
-		var id uuid.UUID
-		require.NoError(t, rows.Scan(&id))
-		ids = append(ids, id)
-	}
-	require.NoError(t, rows.Err())
 	require.Len(t, ids, 1, "normal preparation must publish exactly one typed EMA client without migration backfill")
 	return ids[0]
 }
@@ -45,7 +34,9 @@ func TestPrepareEMA_NormalTypedCatalog(t *testing.T) {
 	}
 	grants := func() int {
 		var count int
-		require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM principal_grants WHERE organization_id = $1`, auth.ActiveOrganizationID).Scan(&count))
+		fixture1, fixtureErr := repo.New(ti.conn).CountPreparationPrincipalGrantsFixture(ctx, auth.ActiveOrganizationID)
+		require.NoError(t, fixtureErr)
+		count = int(fixture1)
 		return count
 	}
 	before := grants()
@@ -54,7 +45,9 @@ func TestPrepareEMA_NormalTypedCatalog(t *testing.T) {
 	require.Equal(t, "ready", first.State)
 	id := assertPreparationTypedClient(t, ctx, ti, in.ClientID, in.Resource)
 	var linkID uuid.UUID
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT id FROM mcp_server_auth_clients WHERE organization_id = $1 AND mcp_server_id = $2 AND auth_client_id = $3 AND NOT deleted`, auth.ActiveOrganizationID, serverID, id).Scan(&linkID))
+	fixture2, fixtureErr := repo.New(ti.conn).GetPreparationLiveLinkFixture(ctx, repo.GetPreparationLiveLinkFixtureParams{OrganizationID: auth.ActiveOrganizationID, ServerID: serverID, ClientID: id})
+	require.NoError(t, fixtureErr)
+	linkID = fixture2
 	again, err := ti.service.PrepareEMA(ctx, payload)
 	require.NoError(t, err)
 	require.Equal(t, first, again)
@@ -62,18 +55,22 @@ func TestPrepareEMA_NormalTypedCatalog(t *testing.T) {
 	require.Equal(t, before, grants(), "publishing a choice must not authorize any principal")
 
 	// An administrator's disabled client and detached link are not undone by preparation.
-	_, err = ti.conn.Exec(ctx, `UPDATE mcp_auth_clients SET enabled = false WHERE organization_id = $1 AND id = $2`, auth.ActiveOrganizationID, id)
+	err = repo.New(ti.conn).DisablePreparationTypedClientFixture(ctx, repo.DisablePreparationTypedClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ClientID: id, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, `UPDATE mcp_server_auth_clients SET source = 'admin', deleted_at = clock_timestamp() WHERE organization_id = $1 AND id = $2`, auth.ActiveOrganizationID, linkID)
+	err = repo.New(ti.conn).DetachPreparationTypedLinkFixture(ctx, repo.DetachPreparationTypedLinkFixtureParams{OrganizationID: auth.ActiveOrganizationID, LinkID: linkID, ProjectID: *auth.ProjectID})
 	require.NoError(t, err)
 	_, err = ti.service.PrepareEMA(ctx, payload)
 	require.NoError(t, err)
 	var enabled, detached bool
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT c.enabled, l.deleted FROM mcp_auth_clients c JOIN mcp_server_auth_clients l ON l.auth_client_id = c.id WHERE c.organization_id = $1 AND c.id = $2 AND l.id = $3`, auth.ActiveOrganizationID, id, linkID).Scan(&enabled, &detached))
+	fixture3, fixtureErr := repo.New(ti.conn).GetPreparationTypedLinkStateFixture(ctx, repo.GetPreparationTypedLinkStateFixtureParams{OrganizationID: auth.ActiveOrganizationID, ClientID: id, LinkID: linkID})
+	require.NoError(t, fixtureErr)
+	enabled, detached = fixture3.Enabled, fixture3.Deleted
 	require.False(t, enabled)
 	require.True(t, detached)
 	var liveLinks int
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM mcp_server_auth_clients WHERE organization_id = $1 AND mcp_server_id = $2 AND auth_client_id = $3 AND NOT deleted`, auth.ActiveOrganizationID, serverID, id).Scan(&liveLinks))
+	fixture4, fixtureErr := repo.New(ti.conn).CountPreparationLiveLinksFixture(ctx, repo.CountPreparationLiveLinksFixtureParams{OrganizationID: auth.ActiveOrganizationID, ServerID: serverID, ClientID: id})
+	require.NoError(t, fixtureErr)
+	liveLinks = int(fixture4)
 	require.Zero(t, liveLinks, "preparation must not create a replacement for an administrator-detached link")
 	require.Equal(t, id, assertPreparationTypedClient(t, ctx, ti, in.ClientID, in.Resource))
 	require.Equal(t, before, grants())
@@ -85,6 +82,7 @@ func TestPrepareEMA_TypedCatalogFailureRollsBack(t *testing.T) {
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "rollback-ema", in.Resource)
 	// Each fixture owns an isolated database. Reject only typed EMA insertion.
+	//nolint:glint // notestingrawsql: inject or remove a test-only constraint failure in an isolated database; SQLc cannot model DDL.
 	_, err := ti.conn.Exec(ctx, `ALTER TABLE mcp_auth_clients ADD CONSTRAINT reject_test_ema CHECK (client_type <> 'ema')`)
 	require.NoError(t, err)
 	result, err := ti.service.PrepareEMA(ctx, &clientsgen.PrepareEMAPayload{
@@ -95,9 +93,13 @@ func TestPrepareEMA_TypedCatalogFailureRollsBack(t *testing.T) {
 	require.Error(t, err, "sync errors must reach the caller, not become postcommit warnings")
 	require.Nil(t, result)
 	var bindings int
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM remote_session_ema_bindings WHERE organization_id = $1 AND project_id = $2 AND user_session_issuer_id = $3`, auth.ActiveOrganizationID, *auth.ProjectID, in.UserSessionIssuerID).Scan(&bindings))
+	fixture5, fixtureErr := repo.New(ti.conn).CountPreparationBindingsFixtureForUser(ctx, repo.CountPreparationBindingsFixtureForUserParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, UserIssuerID: in.UserSessionIssuerID})
+	require.NoError(t, fixtureErr)
+	bindings = int(fixture5)
 	require.Zero(t, bindings, "the ready binding must roll back with typed-client failure")
 	var grants []string
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT grant_types FROM remote_session_clients WHERE id = $1`, in.ClientID).Scan(&grants))
+	fixture6, fixtureErr := repo.New(ti.conn).GetPreparationClientGrantsFixture(ctx, in.ClientID)
+	require.NoError(t, fixtureErr)
+	grants = fixture6
 	require.NotContains(t, grants, oauthwire.GrantTypeJWTBearer, "grant confirmation must also roll back")
 }

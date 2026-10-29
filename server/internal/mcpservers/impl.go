@@ -212,7 +212,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
 	}
 
-	server, err := CreateProjectMCPServerInTransaction(ctx, dbtx, s.audit, MCPServerTransactionInput{
+	server, err := createProjectMCPServerInTransaction(ctx, dbtx, s.audit, MCPServerTransactionInput{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		ProjectID:             *authCtx.ProjectID,
 		ActorUserID:           authCtx.UserID,
@@ -227,7 +227,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		ToolsetID:             ids.ToolsetID,
 		UnproxiedMCPServerID:  ids.UnproxiedMcpServerID,
 		ToolVariationsGroupID: ids.ToolVariationsGroupID,
-	})
+	}, true)
 	if err != nil {
 		if errors.Is(err, ErrServerReferenceOutsideProject) {
 			return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
@@ -245,19 +245,6 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	if ids.UserSessionIssuerID.Valid {
-		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{ids.UserSessionIssuerID.UUID})
-		refreshed, refreshErr := repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
-			ID:        server.ID,
-			ProjectID: *authCtx.ProjectID,
-		})
-		if refreshErr != nil {
-			logger.ErrorContext(ctx, "reload MCP server after issuer sync", attr.SlogError(refreshErr))
-		} else {
-			server = refreshed
-		}
-	}
-
 	s.scheduleDefaultServerIcon(ctx, *authCtx.ProjectID, server.ID, ids)
 
 	view, _ := s.buildMcpServerView(ctx, authCtx.ActiveOrganizationID, server)

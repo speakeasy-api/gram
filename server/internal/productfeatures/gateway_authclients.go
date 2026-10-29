@@ -2,6 +2,7 @@ package productfeatures
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
@@ -13,7 +14,7 @@ import (
 func prepareGatewayAuthClients(ctx context.Context, tx pgx.Tx, organizationID string) (func() error, error) {
 	servers, err := authclientbackfill.LockEMAGatewayScope(ctx, tx, organizationID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("lock gateway EMA scope: %w", err)
 	}
 	return func() error { return authclientbackfill.SyncEMAServers(ctx, tx, organizationID, servers) }, nil
 }

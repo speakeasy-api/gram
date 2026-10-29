@@ -51,7 +51,7 @@ func ResyncMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserversrep
 		var err error
 		tx, err = beginner.Begin(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("begin issuer resynchronization: %w", err)
 		}
 		defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	}
@@ -74,7 +74,9 @@ func ResyncMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserversrep
 		return fmt.Errorf("resync mcp server remote session issuers: %w", err)
 	}
 	if !existing {
-		return tx.Commit(ctx)
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit issuer resynchronization: %w", err)
+		}
 	}
 	return nil
 }

@@ -1,6 +1,6 @@
 -- name: ListEMARegistrationBindings :many
 -- The organization's ready, client-bound identity chaining bindings in live
--- projects, as the runtime selects them, with the exact and trimmed resource.
+-- projects, with the exact resource used for grouping and stable typed keys.
 -- in_reach reports that the binding's registration and its issuer are live
 -- and belong to the binding's project, its organization or the platform.
 SELECT b.id AS binding_id,
@@ -8,7 +8,7 @@ SELECT b.id AS binding_id,
        b.user_session_issuer_id,
        b.remote_session_issuer_id,
        b.resource AS exact_resource,
-       rtrim(b.resource, '/')::text AS resource,
+       b.resource::text AS resource,
        b.requested_scopes,
        b.remote_session_client_id::uuid AS remote_session_client_id,
        rsi.name AS issuer_name,

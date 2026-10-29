@@ -2,6 +2,7 @@ package authclientbackfill
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -23,19 +24,27 @@ func TestSyncEMABinding_SerializesSharedRegistration(t *testing.T) {
 	require.NoError(t, SyncEMABinding(t.Context(), first, f.orgID, binding))
 
 	second := testenv.BeginTx(t, t.Context(), f.pool)
-	bounded, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	firstPID := first.Conn().PgConn().PID()
+	secondPID := second.Conn().PgConn().PID()
+	bounded, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	// The first transaction has not committed its typed client. The helper must
-	// wait on the source scope before taking the shared registration lock.
-	err := SyncEMABinding(bounded, second, f.orgID, binding)
-	require.ErrorContains(t, err, "lock EMA preparation scope")
-	require.ErrorIs(t, bounded.Err(), context.DeadlineExceeded)
-	_ = second.Rollback(t.Context()) // Cancellation can close the connection.
+	done := make(chan error, 1)
+	go func() {
+		err := SyncEMABinding(bounded, second, f.orgID, binding)
+		if err == nil {
+			err = second.Commit(bounded)
+		}
+		done <- err
+	}()
+	// Observe the second writer blocked by the first transaction, rather than
+	// assuming it reached the preparation lock before a short deadline.
+	require.Eventually(t, func() bool {
+		var waiting bool
+		err := f.pool.QueryRow(bounded, "SELECT $1::int = ANY(pg_blocking_pids($2::int))", firstPID, secondPID).Scan(&waiting) //nolint:glint // notestingrawsql: live backend lock instrumentation, not application data.
+		return err == nil && waiting
+	}, 5*time.Second, 10*time.Millisecond, "second preparation never blocked on the first writer")
 	require.NoError(t, first.Commit(t.Context()))
-
-	retry := testenv.BeginTx(t, t.Context(), f.pool)
-	require.NoError(t, SyncEMABinding(t.Context(), retry, f.orgID, binding))
-	require.NoError(t, retry.Commit(t.Context()))
+	require.NoError(t, <-done)
 	require.Len(t, f.live(TypeEMA), 1)
 }
 
@@ -71,7 +80,11 @@ func (q refusedHeaderRetirement) Exec(ctx context.Context, query string, args ..
 	if strings.Contains(query, "-- name: RetireHeaderCopy") {
 		return pgconn.NewCommandTag("UPDATE 0"), nil
 	}
-	return q.DBTX.Exec(ctx, query, args...)
+	tag, err := q.DBTX.Exec(ctx, query, args...) //nolint:glint // notestingrawsql: fault injector delegates dynamically intercepted SQLc statements.
+	if err != nil {
+		return tag, fmt.Errorf("execute injected query: %w", err)
+	}
+	return tag, nil
 }
 
 func TestAtomicHeaderSync_RejectsSkippedRetirement(t *testing.T) {
@@ -92,4 +105,29 @@ func TestAtomicHeaderSync_RejectsSkippedRetirement(t *testing.T) {
 	require.ErrorContains(t, err, "credential copy ownership changed concurrently")
 	require.NoError(t, tx.Rollback(t.Context()))
 	require.Len(t, f.headers(id), 1)
+}
+
+func TestCopyOntoEMAClient_RetiresCopiesOfDeletedProject(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	usi := f.userSessionIssuer()
+	source, server := f.emaSourceAt(gatewayResource, usi)
+	f.staticHeader(source, "X-Enterprise-Key")
+	client, issuer := f.emaClient()
+	binding := f.binding(usi, issuer, client, gatewayResource, []string{"read"})
+	tx := testenv.BeginTx(t, t.Context(), f.pool)
+	require.NoError(t, SyncEMABinding(t.Context(), tx, f.orgID, binding))
+	require.NoError(t, tx.Commit(t.Context()))
+	id := EMAClientID(f.orgID, issuer, client, gatewayResource)
+	require.Len(t, f.headers(id), 1)
+
+	require.NoError(t, f.q.SoftDeleteProjectFixture(t.Context(), f.projectID))
+	tx = testenv.BeginTx(t, t.Context(), f.pool)
+	report := newReport(true)
+	// A previously read owner list must not retain credentials after its
+	// project disappears while the server itself remains undeleted.
+	require.NoError(t, copyOntoEMAClient(withAtomicHeaderSync(t.Context()), tx, New(tx),
+		Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, &report, id, true, []uuid.UUID{server}))
+	require.NoError(t, tx.Commit(t.Context()))
+	require.Empty(t, f.headers(id), "deleted project's copied credentials survived the owner reload")
 }

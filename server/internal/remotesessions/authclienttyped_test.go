@@ -3,6 +3,7 @@ package remotesessions_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -152,7 +154,14 @@ func TestCommitServerIdentityConfigurationRecordsNothingForAnotherServer(t *test
 	migrateOrganization(t, ctx, ti)
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "typed-scope-issuer")
 	target, _ := sourceBackedTarget(t, ctx, ti, "typed-scope-target", userIssuerID)
-	bystander, _ := sourceBackedTarget(t, ctx, ti, "typed-scope-bystander", createUserSessionIssuer(t, ctx, ti.conn, "typed-scope-other"))
+	otherOrg := createOrganization(t, ctx, ti.conn, "typed-scope-other-org")
+	otherAuth := &contextvalues.AuthContext{ActiveOrganizationID: otherOrg}
+	otherCtx := contextvalues.SetAuthContext(ctx, otherAuth)
+	otherProject := createProject(t, otherCtx, ti.conn, "typed-scope-other-project")
+	otherAuth.ProjectID = &otherProject
+	require.NotEqual(t, activeOrganizationID(t, ctx), otherOrg)
+	require.NotEqual(t, projectIDFromContext(t, ctx), otherProject)
+	bystander, _ := sourceBackedTarget(t, otherCtx, ti, "typed-scope-bystander", createUserSessionIssuer(t, otherCtx, ti.conn, "typed-scope-other"))
 	providerID := createServerIdentityProvider(t, ctx, ti, "typed-scope-provider", "", false, []string{"none"})
 
 	_, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(target, providerID, "typed-scope-client"))
@@ -172,9 +181,9 @@ type failedAssociationPool struct {
 }
 
 func (p *failedAssociationPool) Begin(ctx context.Context) (pgx.Tx, error) {
-	tx, err := p.Pool.Begin(ctx)
+	tx, err := p.Pool.Begin(ctx) //nolint:glint // notestingrawsql: transaction decorator injects a conditional association-write failure.
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("begin intercepted association transaction: %w", err)
 	}
 	return &failedAssociationTx{Tx: tx, pool: p}, nil
 }
@@ -189,7 +198,11 @@ func (tx *failedAssociationTx) Exec(ctx context.Context, sql string, args ...any
 		tx.pool.attempts++
 		return pgconn.NewCommandTag("INSERT 0 0"), tx.pool.linkErr
 	}
-	return tx.Tx.Exec(ctx, sql, args...)
+	tag, err := tx.Tx.Exec(ctx, sql, args...) //nolint:glint // notestingrawsql: forwards generated SQL unchanged outside the injected association failure.
+	if err != nil {
+		return tag, fmt.Errorf("execute intercepted association transaction: %w", err)
+	}
+	return tag, nil
 }
 
 func TestReconcileCaptureRollsBackWhenTypedStateFails(t *testing.T) {

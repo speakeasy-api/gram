@@ -25,11 +25,14 @@ func recordDocument(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgI
 		// the attempted document before recording its safe fetch-error fallback.
 		attempt, err := tx.Begin(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("record protected resource: %w", err)
 		}
 		err = upsert(ctx, attempt, projectID, orgID, resourceURL, doc, onlyIfChanged)
 		if err == nil {
-			return attempt.Commit(ctx)
+			if err := attempt.Commit(ctx); err != nil {
+				return fmt.Errorf("commit protected resource document: %w", err)
+			}
+			return nil
 		}
 		if rollbackErr := attempt.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil {
 			return errors.Join(err, rollbackErr)
@@ -37,12 +40,12 @@ func recordDocument(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgI
 		if isDataError(err) {
 			return recordError(ctx, tx, projectID, orgID, resourceURL, doc.MetadataURL, "The metadata document contains values that cannot be stored.")
 		}
-		return err
+		return fmt.Errorf("record protected resource: %w", err)
 	})
 }
 
-// This mirrors the persisted metadata-location match used by EMA reach SQL,
-// including its treatment of trailing slashes. Full validation is separate.
+// Diagnostic locations identify former sources that need reconciliation.
+// They are not resource identities; document validation remains exact.
 var metadataLocationPattern = regexp.MustCompile(`^(https?://[^/?#]+)(.*)$`)
 
 func recordWithEMASync(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL, metadataURL string, write func(pgx.Tx) error) error {
@@ -60,12 +63,12 @@ func recordWithEMASync(ctx context.Context, db repo.DBTX, projectID uuid.UUID, o
 	// This precedes the resource mutation, registration locks, and all source
 	// reads. The writer scope includes shared-registration sibling projects.
 	if err = authclientbackfill.LockEMAWriterScope(ctx, tx, orgID, []uuid.UUID{projectID}); err != nil {
-		return err
+		return fmt.Errorf("record protected resource: %w", err)
 	}
 	q := repo.New(tx)
 	old, err := q.GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: projectID, ResourceIdentifier: resourceURL})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
+		return fmt.Errorf("record protected resource: %w", err)
 	}
 	oldMetadata := ""
 	if err == nil {
@@ -73,21 +76,24 @@ func recordWithEMASync(ctx context.Context, db repo.DBTX, projectID uuid.UUID, o
 	}
 	sources, err := q.ListServersByProjectID(ctx, projectID)
 	if err != nil {
-		return err
+		return fmt.Errorf("record protected resource: %w", err)
 	}
 	affected := make([]uuid.UUID, 0)
 	for _, source := range sources {
-		location := strings.TrimRight(metadataLocationPattern.ReplaceAllString(source.Url, `${1}/.well-known/oauth-protected-resource${2}`), "/")
-		if strings.TrimRight(source.Url, "/") == strings.TrimRight(resourceURL, "/") ||
+		location := strings.TrimRight(urls.DiagnosticURL(metadataLocationPattern.ReplaceAllString(source.Url, `${1}/.well-known/oauth-protected-resource${2}`)), "/")
+		if source.Url == resourceURL ||
 			location == strings.TrimRight(oldMetadata, "/") || location == strings.TrimRight(urls.DiagnosticURL(metadataURL), "/") {
 			affected = append(affected, source.ID)
 		}
 	}
 	if err = write(tx); err != nil {
-		return err
+		return fmt.Errorf("record protected resource: %w", err)
 	}
 	if err = authclientbackfill.SyncEMASources(ctx, tx, orgID, affected); err != nil {
 		return fmt.Errorf("sync protected resource EMA reach: %w", err)
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit protected resource reconciliation: %w", err)
+	}
+	return nil
 }

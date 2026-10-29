@@ -10,13 +10,16 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestSetMCPNetworkAccessPreflightsBeforeIngress(t *testing.T) {
+	t.Parallel()
 	testConnectionMutationPreflightsBeforeIngress(t, false)
 }
 
 func TestSetMCPAddressPreflightsBeforeIngress(t *testing.T) {
+	t.Parallel()
 	testConnectionMutationPreflightsBeforeIngress(t, true)
 }
 
@@ -28,18 +31,16 @@ func testConnectionMutationPreflightsBeforeIngress(t *testing.T, address bool) {
 			name = "confirmed"
 		}
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			kind := "network"
 			if address {
 				kind = "address"
 			}
 			ctx, f := seedConnectionMutationFixture(t, "platform_mcp_"+kind+"_lock_order_"+name, allowConnectionNetworkAccess{})
 			before := f.settings(t, ctx, MCPConnectionSettingsMCPServer, f.hostedID)
-			holder, err := f.conn.Begin(ctx)
-			require.NoError(t, err)
-			defer func() { _ = holder.Rollback(context.WithoutCancel(ctx)) }()
+			holder := testenv.BeginTx(t, ctx, f.conn)
 			require.NoError(t, authclientbackfill.LockEMAWriterScope(ctx, holder, f.principal.OrganizationID, []uuid.UUID{f.project.ID}))
-			var holderPID int32
-			require.NoError(t, holder.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&holderPID))
+			holderPID := holder.Conn().PgConn().PID()
 
 			mutationCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 			defer cancel()
@@ -62,6 +63,7 @@ func testConnectionMutationPreflightsBeforeIngress(t *testing.T, address bool) {
 			// the fix it waits at preflight without holding ingress.
 			require.Eventually(t, func() bool {
 				var waiting bool
+				//nolint:glint // notestingrawsql: PostgreSQL lock instrumentation observes the live blocking backend.
 				err := f.conn.QueryRow(ctx, `SELECT EXISTS (
 					SELECT 1 FROM pg_stat_activity
 					WHERE datname = current_database() AND $1 = ANY(pg_blocking_pids(pid))
@@ -70,7 +72,7 @@ func testConnectionMutationPreflightsBeforeIngress(t *testing.T, address bool) {
 			}, 5*time.Second, 10*time.Millisecond)
 
 			probeCtx, stopProbe := context.WithTimeout(ctx, time.Second)
-			err = networkingressrepo.New(holder).AcquireNetworkIngressOrganizationLock(probeCtx, f.principal.OrganizationID)
+			err := networkingressrepo.New(holder).AcquireNetworkIngressOrganizationLock(probeCtx, f.principal.OrganizationID)
 			stopProbe()
 			require.NoError(t, err, "a mutation waiting for EMA scope must not hold ingress")
 			require.NoError(t, holder.Commit(ctx))

@@ -452,6 +452,7 @@ func copyOntoEMAClient(ctx context.Context, tx pgx.Tx, q *Queries, opts Options,
 		if _, err := q.LockEMARegistrationForSync(ctx, LockEMARegistrationForSyncParams{
 			OrganizationID: opts.OrganizationID,
 			AuthClientID:   uuid.NullUUID{UUID: clientID, Valid: true},
+			BindingID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		}); err != nil {
 			return fmt.Errorf("lock EMA credential registration: %w", err)
 		}
@@ -477,7 +478,7 @@ func copyOntoEMAClient(ctx context.Context, tx pgx.Tx, q *Queries, opts Options,
 		}
 		if len(servers) == 0 {
 			return retireClientCopies(ctx, tx, q, opts, report, KindEMA, clientID,
-				uuid.NullUUID{}, uuid.NullUUID{UUID: clientID, Valid: true})
+				uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: clientID, Valid: true})
 		}
 	}
 	used, err := q.ListServerCredentialSources(ctx, ListServerCredentialSourcesParams{OrganizationID: opts.OrganizationID, McpServerIds: servers})

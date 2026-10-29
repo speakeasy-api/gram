@@ -65,7 +65,7 @@ func (p *emaPlan) reachesDirectly(serverID uuid.UUID) bool {
 // plan for the header phase and the warnings after it.
 func runEMA(ctx context.Context, tx pgx.Tx, opts Options, report *Report, want *expected, plan *emaPlan) error {
 	q := New(tx)
-	bindings, err := q.ListEMABackfillBindings(ctx, ListEMABackfillBindingsParams{OrganizationID: opts.OrganizationID})
+	bindings, err := q.ListEMABackfillBindings(ctx, ListEMABackfillBindingsParams{OrganizationID: opts.OrganizationID, OnlyBindingID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, OnlyProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 	if err != nil {
 		return fmt.Errorf("list identity chaining bindings: %w", err)
 	}

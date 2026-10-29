@@ -920,3 +920,11 @@ LEFT JOIN remote_mcp_servers AS r ON r.id = m.remote_mcp_server_id
 LEFT JOIN tunneled_mcp_servers AS t ON t.id = m.tunneled_mcp_server_id
  AND t.project_id = m.project_id AND t.deleted IS FALSE
 WHERE m.id = ANY(@mcp_server_ids::uuid[]) AND m.deleted IS FALSE;
+
+-- name: CountEMAClientHeadersFixture :one
+SELECT count(*) FROM mcp_auth_client_headers
+WHERE auth_client_id = @auth_client_id AND organization_id = @organization_id AND NOT deleted;
+
+-- name: SetEMABindingGatewayIssuerFixture :exec
+UPDATE remote_session_ema_bindings SET user_session_issuer_id = @user_session_issuer_id
+WHERE remote_session_client_id = @remote_session_client_id AND project_id = @project_id;

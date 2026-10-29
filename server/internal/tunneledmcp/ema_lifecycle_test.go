@@ -15,13 +15,12 @@ import (
 )
 
 type tunneledEMAFixture struct {
-	ctx                               context.Context
 	ti                                *testInstance
 	source, server, typed, standalone uuid.UUID
 	resource                          string
 }
 
-func prepareTunneledEMA(t *testing.T) tunneledEMAFixture {
+func prepareTunneledEMA(t *testing.T) (context.Context, tunneledEMAFixture) {
 	t.Helper()
 	ctx, ti := newTestService(t)
 	auth := requireAuthContext(t, ctx)
@@ -45,18 +44,18 @@ func prepareTunneledEMA(t *testing.T) tunneledEMAFixture {
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, backfill.SyncEMABinding(ctx, tx, auth.ActiveOrganizationID, binding))
 	require.NoError(t, tx.Commit(ctx))
-	return tunneledEMAFixture{ctx: ctx, ti: ti, source: source, server: server, typed: backfill.EMAClientID(auth.ActiveOrganizationID, issuer, client, resource), standalone: backfill.SourceClientID(auth.ActiveOrganizationID, backfill.SourceKindTunneled, source, backfill.TypeStaticCredential), resource: resource}
+	return ctx, tunneledEMAFixture{ti: ti, source: source, server: server, typed: backfill.EMAClientID(auth.ActiveOrganizationID, issuer, client, resource), standalone: backfill.SourceClientID(auth.ActiveOrganizationID, backfill.SourceKindTunneled, source, backfill.TypeStaticCredential), resource: resource}
 }
 
-func (f tunneledEMAFixture) assertEMA(t *testing.T, live bool) {
+func (f tunneledEMAFixture) assertEMA(t *testing.T, ctx context.Context, live bool) {
 	t.Helper()
 	q := backfill.New(f.ti.conn)
-	client, err := q.GetAuthClientFixture(f.ctx, f.typed)
+	client, err := q.GetAuthClientFixture(ctx, f.typed)
 	require.NoError(t, err)
 	require.Equal(t, !live, client.Deleted)
-	links, err := q.ListBackfillLinkedServersFixture(f.ctx, f.typed)
+	links, err := q.ListBackfillLinkedServersFixture(ctx, f.typed)
 	require.NoError(t, err)
-	headers, err := q.ListAuthClientHeadersFixture(f.ctx, f.typed)
+	headers, err := q.ListAuthClientHeadersFixture(ctx, f.typed)
 	require.NoError(t, err)
 	if live {
 		require.Equal(t, []uuid.UUID{f.server}, links)
@@ -69,29 +68,29 @@ func (f tunneledEMAFixture) assertEMA(t *testing.T, live bool) {
 
 func TestUpdateServer_ReconcilesTunneledEMAResourceReach(t *testing.T) {
 	t.Parallel()
-	f := prepareTunneledEMA(t)
-	f.assertEMA(t, true)
-	_, err := f.ti.service.UpdateServer(f.ctx, &gen.UpdateServerPayload{ID: f.source.String(), ResourceIdentifier: new(f.resource + "/different")})
+	ctx, f := prepareTunneledEMA(t)
+	f.assertEMA(t, ctx, true)
+	_, err := f.ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{ID: f.source.String(), ResourceIdentifier: new(f.resource + "/different")})
 	require.NoError(t, err)
-	f.assertEMA(t, false)
-	links, err := backfill.New(f.ti.conn).ListBackfillLinkedServersFixture(f.ctx, f.standalone)
+	f.assertEMA(t, ctx, false)
+	links, err := backfill.New(f.ti.conn).ListBackfillLinkedServersFixture(ctx, f.standalone)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{f.server}, links)
-	_, err = f.ti.service.UpdateServer(f.ctx, &gen.UpdateServerPayload{ID: f.source.String(), ResourceIdentifier: new(f.resource)})
+	_, err = f.ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{ID: f.source.String(), ResourceIdentifier: new(f.resource)})
 	require.NoError(t, err)
-	f.assertEMA(t, true)
-	links, err = backfill.New(f.ti.conn).ListBackfillLinkedServersFixture(f.ctx, f.standalone)
+	f.assertEMA(t, ctx, true)
+	links, err = backfill.New(f.ti.conn).ListBackfillLinkedServersFixture(ctx, f.standalone)
 	require.NoError(t, err)
 	require.Empty(t, links)
 }
 
 func TestDeleteServer_RetiresTunneledEMAOwnership(t *testing.T) {
 	t.Parallel()
-	f := prepareTunneledEMA(t)
-	f.assertEMA(t, true)
-	require.NoError(t, f.ti.service.DeleteServer(f.ctx, &gen.DeleteServerPayload{ID: f.source.String()}))
-	f.assertEMA(t, false)
-	links, err := backfill.New(f.ti.conn).ListBackfillLinkedServersFixture(f.ctx, f.standalone)
+	ctx, f := prepareTunneledEMA(t)
+	f.assertEMA(t, ctx, true)
+	require.NoError(t, f.ti.service.DeleteServer(ctx, &gen.DeleteServerPayload{ID: f.source.String()}))
+	f.assertEMA(t, ctx, false)
+	links, err := backfill.New(f.ti.conn).ListBackfillLinkedServersFixture(ctx, f.standalone)
 	require.NoError(t, err)
 	require.Empty(t, links)
 }

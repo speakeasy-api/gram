@@ -2,7 +2,6 @@ package mcpservers_test
 
 import (
 	"context"
-	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
@@ -11,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	backfill "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -64,8 +64,8 @@ func TestEMA_PreparedBeforeNormalServerCreateAndRetarget(t *testing.T) {
 	old, err := q.GetAuthClientFixture(ctx, id)
 	require.NoError(t, err)
 	require.True(t, old.Deleted)
-	var headers int
-	require.NoError(t, ti.conn.QueryRow(ctx, "SELECT count(*) FROM mcp_auth_client_headers WHERE auth_client_id=$1 AND NOT deleted", id).Scan(&headers))
+	headers, err := mcpserversrepo.New(ti.conn).CountEMAClientHeadersFixture(ctx, mcpserversrepo.CountEMAClientHeadersFixtureParams{AuthClientID: id, OrganizationID: auth.ActiveOrganizationID})
+	require.NoError(t, err)
 	require.Zero(t, headers)
 }
 
@@ -80,7 +80,7 @@ func TestEMA_NormalGatewayOptInAddsExistingServerReach(t *testing.T) {
 	// the member with a different direct issuer and no previous gateway choice.
 	gatewayIssuer := uuid.New()
 	require.NoError(t, q.SeedOrganizationUserSessionIssuerFixture(ctx, backfill.SeedOrganizationUserSessionIssuerFixtureParams{ID: gatewayIssuer, OrganizationID: pgtype.Text{String: auth.ActiveOrganizationID, Valid: true}, Slug: "gateway-" + gatewayIssuer.String()}))
-	_, err := ti.conn.Exec(ctx, "UPDATE remote_session_ema_bindings SET user_session_issuer_id=$1 WHERE remote_session_client_id=$2", gatewayIssuer, client)
+	err := mcpserversrepo.New(ti.conn).SetEMABindingGatewayIssuerFixture(ctx, mcpserversrepo.SetEMABindingGatewayIssuerFixtureParams{UserSessionIssuerID: gatewayIssuer, RemoteSessionClientID: uuid.NullUUID{UUID: client, Valid: true}, ProjectID: *auth.ProjectID})
 	require.NoError(t, err)
 	source := uuid.New()
 	require.NoError(t, q.SeedRemoteMCPServerFixture(ctx, backfill.SeedRemoteMCPServerFixtureParams{ID: source, ProjectID: *auth.ProjectID, Url: resource}))
@@ -92,7 +92,7 @@ func TestEMA_NormalGatewayOptInAddsExistingServerReach(t *testing.T) {
 	require.Empty(t, links)
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	features := productfeatures.NewClient(slog.Default(), testenv.NewTracerProvider(t), ti.conn, redisClient)
+	features := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), ti.conn, redisClient)
 	require.NoError(t, features.SetFeatureEnabled(ctx, auth.ActiveOrganizationID, productfeatures.FeatureOrganizationGatewayDisabled, false))
 	links, err = q.ListBackfillLinkedServersFixture(ctx, id)
 	require.NoError(t, err)

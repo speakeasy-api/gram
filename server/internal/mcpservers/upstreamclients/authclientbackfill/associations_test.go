@@ -178,3 +178,26 @@ func TestSyncServerAssociations_CopiesNoHeadersOntoAClientSharedAcrossSources(t 
 	require.Len(t, clients, 1)
 	require.Empty(t, f.headers(clients[0].ID), "a client shared across sources carries one source's credentials")
 }
+
+func TestSyncServerAssociations_RetiresLastPrunedAssociation(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	source := f.source()
+	server := f.serverOn(source)
+	f.header(source, "X-Tenant-Key", true, secretValue, "")
+	registration := f.client("subject")
+	association := f.associate(server, registration)
+	f.syncAssociations(f.orgID, server)
+	id := OAuthClientID(f.orgID, registration, TypeRemoteSession)
+	require.Equal(t, []uuid.UUID{id}, f.links(server))
+	require.Len(t, f.headers(id), 1)
+
+	// Mirror reconciliation pruning the final legacy association, then
+	// publishing its affected server in the same transaction.
+	tx := testenv.BeginTx(t, t.Context(), f.pool)
+	require.NoError(t, New(tx).SoftDeleteAssociationFixture(t.Context(), association))
+	require.NoError(t, SyncServerAssociations(t.Context(), tx, f.orgID, server))
+	require.NoError(t, tx.Commit(t.Context()))
+	require.Empty(t, f.links(server), "pruned association retained its typed link")
+	require.Empty(t, f.headers(id), "pruned association retained copied credentials")
+}

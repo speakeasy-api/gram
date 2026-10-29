@@ -28,11 +28,11 @@ func LockEMAPreparationScope(ctx context.Context, tx pgx.Tx, organizationID stri
 	params := ListEMAPreparationLockScopeParams{OrganizationID: organizationID, ProjectID: projectID, IssuerID: issuerID}
 	for {
 		if err := ctx.Err(); err != nil {
-			return err
+			return fmt.Errorf("check scope lock context: %w", err)
 		}
 		attempt, err := tx.Begin(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("begin scope lock attempt: %w", err)
 		}
 		q := New(attempt)
 		before, err := q.ListEMAPreparationLockScope(ctx, params)
@@ -76,12 +76,15 @@ func LockEMAPreparationScope(ctx context.Context, tx pgx.Tx, organizationID stri
 			return fmt.Errorf("lock EMA preparation scope: %w", err)
 		}
 		if slices.Equal(before, after) {
-			return attempt.Commit(ctx)
+			if err := attempt.Commit(ctx); err != nil {
+				return fmt.Errorf("commit scope locks: %w", err)
+			}
+			return nil
 		}
 		// A source/server appeared or moved while locks were acquired. Releasing
 		// the savepoint's locks lets us restart in order, without caller retries.
 		if err := attempt.Rollback(ctx); err != nil {
-			return err
+			return fmt.Errorf("rollback scope lock attempt: %w", err)
 		}
 	}
 }

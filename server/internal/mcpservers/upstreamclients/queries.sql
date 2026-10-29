@@ -205,7 +205,7 @@ WHERE (f.issuer_id = ANY(@user_session_issuer_ids::uuid[]) OR s.user_session_iss
 ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING
 RETURNING mcp_server_id;
 
--- name: PruneUnservableAssociations :execrows
+-- name: PruneUnservableAssociations :many
 -- Removes the project's associations no issuer can serve: the server is gone,
 -- the client is deleted, or the client is bound neither to the server's own
 -- user session issuer nor to the live issuer of a gateway fronting the server
@@ -267,7 +267,8 @@ WHERE a.mcp_server_id = s.id
           )
         )
     )
-  );
+  )
+RETURNING a.mcp_server_id;
 
 -- name: PruneRemoteSessionClientAssociations :execrows
 -- The client-keyed form of PruneUnservableAssociations, for a change to one

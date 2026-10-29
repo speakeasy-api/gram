@@ -286,6 +286,7 @@ func syncSourceClient(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, 
 		bindings, err := q.ListEMABackfillBindings(ctx, ListEMABackfillBindingsParams{
 			OrganizationID: opts.OrganizationID,
 			OnlyProjectID:  uuid.NullUUID{UUID: row.ProjectID, Valid: true},
+			OnlyBindingID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		})
 		if err != nil {
 			return fmt.Errorf("read source EMA ownership: %w", err)

@@ -140,7 +140,7 @@ func (c *Client) SetFeatureEnabled(ctx context.Context, organizationID string, f
 		if feature == FeatureOrganizationGatewayDisabled {
 			tx, err := conn.Begin(ctx)
 			if err != nil {
-				return err
+				return fmt.Errorf("begin feature update: %w", err)
 			}
 			defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 			syncGateway, err := prepareGatewayAuthClients(ctx, tx, organizationID)
@@ -154,9 +154,11 @@ func (c *Client) SetFeatureEnabled(ctx context.Context, organizationID string, f
 				return err
 			}
 			if err = tx.Commit(ctx); err != nil {
-				return err
+				return fmt.Errorf("commit feature update: %w", err)
 			}
-			_ = c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache")
+			cacheCtx, cancel := mutationCacheContext(ctx)
+			defer cancel()
+			_ = c.storeFeatureCache(cacheCtx, organizationID, feature, enabled, "failed to update feature flag cache")
 			return nil
 		}
 		if err := setFeatureEnabled(ctx, repo.New(conn), organizationID, feature, enabled); err != nil {

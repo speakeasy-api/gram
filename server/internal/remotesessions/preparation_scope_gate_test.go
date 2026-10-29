@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/stretchr/testify/require"
@@ -24,10 +25,9 @@ import (
 
 func holdPreparationRegistration(t *testing.T, ctx context.Context, ti *testInstance, id uuid.UUID) (pgx.Tx, int32) {
 	t.Helper()
-	tx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	tx := testenv.BeginTx(t, ctx, ti.conn)
 	var pid int32
+	//nolint:glint // notestingrawsql: hold the registration row lock and return its backend PID for concurrency instrumentation.
 	require.NoError(t, tx.QueryRow(ctx, `SELECT pg_backend_pid() FROM remote_session_clients WHERE id=$1 FOR UPDATE`, id).Scan(&pid))
 	return tx, pid
 }
@@ -36,6 +36,7 @@ func waitForBlockedPreparationPID(t *testing.T, ctx context.Context, ti *testIns
 	t.Helper()
 	var pid int32
 	require.Eventually(t, func() bool {
+		//nolint:glint // notestingrawsql: observe PostgreSQL transaction lock ownership; this is concurrency instrumentation, not fixture data.
 		return ti.conn.QueryRow(ctx, `SELECT a.pid FROM pg_stat_activity a WHERE a.datname=current_database() AND $1=ANY(pg_blocking_pids(a.pid)) LIMIT 1`, blocker).Scan(&pid) == nil
 	}, 5*time.Second, 10*time.Millisecond)
 	return pid
@@ -64,11 +65,14 @@ func TestPrepareEMA_ProjectGateBlocksActualSourceCreation(t *testing.T) {
 	}()
 	require.Eventually(t, func() bool {
 		var waiting bool
+		//nolint:glint // notestingrawsql: observe PostgreSQL transaction lock ownership; this is concurrency instrumentation, not fixture data.
 		err := ti.conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity a WHERE a.datname=current_database() AND a.wait_event='advisory' AND $1=ANY(pg_blocking_pids(a.pid)))`, prepPID).Scan(&waiting)
 		return err == nil && waiting
 	}, 5*time.Second, 10*time.Millisecond, "actual source creation did not wait on preparation's project gate")
 	var count int
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM remote_mcp_servers WHERE project_id=$1`, *auth.ProjectID).Scan(&count))
+	fixture1, fixtureErr := repo.New(ti.conn).CountPreparationRemoteServersFixture(ctx, *auth.ProjectID)
+	require.NoError(t, fixtureErr)
+	count = int(fixture1)
 	require.Zero(t, count, "source inserted before acquiring the scope gate")
 	require.NoError(t, blocker.Commit(ctx))
 	for _, done := range []chan error{prepared, created} {
@@ -79,7 +83,9 @@ func TestPrepareEMA_ProjectGateBlocksActualSourceCreation(t *testing.T) {
 			t.Fatal(ctx.Err())
 		}
 	}
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM remote_mcp_servers WHERE project_id=$1`, *auth.ProjectID).Scan(&count))
+	fixture2, fixtureErr := repo.New(ti.conn).CountPreparationRemoteServersFixture(ctx, *auth.ProjectID)
+	require.NoError(t, fixtureErr)
+	count = int(fixture2)
 	require.Equal(t, 1, count)
 }
 
@@ -94,7 +100,7 @@ func TestPrepareEMA_ActualAdminEnableCompletesUnderContention(t *testing.T) {
 	require.NoError(t, err)
 	typed := assertPreparationTypedClient(t, ctx, ti, in.ClientID, in.Resource)
 	auth, _ := contextvalues.GetAuthContext(ctx)
-	_, err = ti.conn.Exec(ctx, `UPDATE mcp_auth_clients SET enabled=false WHERE organization_id=$1 AND id=$2`, auth.ActiveOrganizationID, typed)
+	err = repo.New(ti.conn).DisablePreparationTypedClientFixture(ctx, repo.DisablePreparationTypedClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ClientID: typed, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 	require.NoError(t, err)
 	blocker, blockerPID := holdPreparationRegistration(t, ctx, ti, in.ClientID)
 	prepared := make(chan error, 1)
@@ -121,7 +127,9 @@ func TestPrepareEMA_ActualAdminEnableCompletesUnderContention(t *testing.T) {
 		}
 	}
 	var enabled bool
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT enabled FROM mcp_auth_clients WHERE organization_id=$1 AND id=$2`, auth.ActiveOrganizationID, typed).Scan(&enabled))
+	fixture3, fixtureErr := repo.New(ti.conn).GetPreparationTypedClientEnabledFixture(ctx, repo.GetPreparationTypedClientEnabledFixtureParams{OrganizationID: auth.ActiveOrganizationID, ClientID: typed})
+	require.NoError(t, fixtureErr)
+	enabled = fixture3
 	require.True(t, enabled)
 	require.Equal(t, typed, assertPreparationTypedClient(t, ctx, ti, in.ClientID, in.Resource))
 }

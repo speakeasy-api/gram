@@ -1085,7 +1085,7 @@ func (q *Queries) PruneRemoteSessionClientAssociations(ctx context.Context, arg 
 	return result.RowsAffected(), nil
 }
 
-const pruneUnservableAssociations = `-- name: PruneUnservableAssociations :execrows
+const pruneUnservableAssociations = `-- name: PruneUnservableAssociations :many
 DELETE FROM mcp_server_remote_session_clients AS a
 USING mcp_servers AS s
 WHERE a.mcp_server_id = s.id
@@ -1140,6 +1140,7 @@ WHERE a.mcp_server_id = s.id
         )
     )
   )
+RETURNING a.mcp_server_id
 `
 
 type PruneUnservableAssociationsParams struct {
@@ -1155,12 +1156,24 @@ type PruneUnservableAssociationsParams struct {
 // than soft-deleted: a soft-deleted row records an explicit detach, which
 // capture and the backfill keep, and automatic cleanup must not read as one,
 // so a server that regains its binding or rejoins a gateway is captured again.
-func (q *Queries) PruneUnservableAssociations(ctx context.Context, arg PruneUnservableAssociationsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, pruneUnservableAssociations, arg.ProjectID, arg.OrganizationID)
+func (q *Queries) PruneUnservableAssociations(ctx context.Context, arg PruneUnservableAssociationsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, pruneUnservableAssociations, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var mcp_server_id uuid.UUID
+		if err := rows.Scan(&mcp_server_id); err != nil {
+			return nil, err
+		}
+		items = append(items, mcp_server_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const removeGlobalClientAssociations = `-- name: RemoveGlobalClientAssociations :execrows

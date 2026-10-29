@@ -1,10 +1,10 @@
 package remotesessions_test
 
 import (
-	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/stretchr/testify/require"
 
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
@@ -25,11 +25,13 @@ func TestPrepareEMA_TypedOwnershipLifecycle(t *testing.T) {
 			auth, _ := contextvalues.GetAuthContext(ctx)
 			server := seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "lifecycle-ema", in.Resource)
 			var source uuid.UUID
-			require.NoError(t, ti.conn.QueryRow(ctx, `SELECT remote_mcp_server_id FROM mcp_servers WHERE id=$1`, server).Scan(&source))
+			fixture1, fixtureErr := repo.New(ti.conn).GetPreparationServerSourceFixture(ctx, server)
+			require.NoError(t, fixtureErr)
+			source = fixture1.UUID
 			secret, err := testenv.NewEncryptionClient(t).Encrypt([]byte("lifecycle-header-secret"))
 			require.NoError(t, err)
 			// Seed only the source configuration. Typed state must come from normal preparation.
-			_, err = ti.conn.Exec(ctx, `INSERT INTO remote_mcp_server_headers(remote_mcp_server_id,name,is_secret,value) VALUES($1,'X-Enterprise-Key',true,$2)`, source, secret)
+			err = repo.New(ti.conn).InsertPreparationSourceHeaderFixtureEnterprise(ctx, repo.InsertPreparationSourceHeaderFixtureEnterpriseParams{SourceID: source, EncryptedValue: conv.ToPGText(secret), ProjectID: *auth.ProjectID})
 			require.NoError(t, err)
 			payload := &clientsgen.PrepareEMAPayload{
 				UserSessionIssuerID: in.UserSessionIssuerID.String(), RemoteSessionIssuerID: in.RemoteSessionIssuerID.String(),
@@ -44,7 +46,7 @@ func TestPrepareEMA_TypedOwnershipLifecycle(t *testing.T) {
 			copies, err := q.ListAuthClientHeadersFixture(ctx, old)
 			require.NoError(t, err)
 			require.Len(t, copies, 1)
-			governor := identitychaining.NewGovernor(slog.Default(), ti.conn, testenv.NewEncryptionClient(t), nil)
+			governor := identitychaining.NewGovernor(testenv.NewLogger(t), ti.conn, testenv.NewEncryptionClient(t), nil)
 			request := identitychaining.Request{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, UserSessionIssuerID: in.UserSessionIssuerID, UpstreamResource: in.Resource, RemoteSessionClientID: conv.ToNullUUID(in.ClientID)}
 			require.True(t, governor.Governs(ctx, request))
 			payload.ExpectedGeneration = first.Generation
@@ -67,7 +69,9 @@ func TestPrepareEMA_TypedOwnershipLifecycle(t *testing.T) {
 				require.Equal(t, "manual_setup_required", result.State)
 			}
 			var deleted bool
-			require.NoError(t, ti.conn.QueryRow(ctx, `SELECT deleted FROM mcp_auth_clients WHERE id=$1`, old).Scan(&deleted))
+			fixture2, fixtureErr := repo.New(ti.conn).GetPreparationTypedClientDeletedFixture(ctx, old)
+			require.NoError(t, fixtureErr)
+			deleted = fixture2
 			require.True(t, deleted, "old typed EMA ownership survived a normal binding transition")
 			links, err := q.ListBackfillLinkedServersFixture(ctx, old)
 			require.NoError(t, err)
@@ -123,7 +127,7 @@ func TestPrepareEMA_ResourceOwnershipTransitionKeepsSibling(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{secondServer}, newLinks)
 	require.NotContains(t, newLinks, firstServer)
-	governor := identitychaining.NewGovernor(slog.Default(), ti.conn, testenv.NewEncryptionClient(t), nil)
+	governor := identitychaining.NewGovernor(testenv.NewLogger(t), ti.conn, testenv.NewEncryptionClient(t), nil)
 	request := identitychaining.Request{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, UserSessionIssuerID: in.UserSessionIssuerID, UpstreamResource: firstResource, RemoteSessionClientID: conv.ToNullUUID(in.ClientID)}
 	require.False(t, governor.Governs(ctx, request))
 	request.UpstreamResource = secondResource

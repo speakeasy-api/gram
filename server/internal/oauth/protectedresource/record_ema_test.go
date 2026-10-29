@@ -6,17 +6,21 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	backfill "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
+	remoterepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/stretchr/testify/require"
 )
 
 type metadataEMAFixture struct {
-	env                                   proberEnv
-	source, server, client, issuer, typed uuid.UUID
-	resource, issuerURL                   string
+	env                                                  proberEnv
+	source, server, client, issuer, typed, sessionIssuer uuid.UUID
+	resource, issuerURL                                  string
 }
 
 func seedMetadataEMA(t *testing.T, ctx context.Context, env proberEnv, resource string) metadataEMAFixture {
@@ -34,7 +38,7 @@ func seedMetadataEMA(t *testing.T, ctx context.Context, env proberEnv, resource 
 	require.NoError(t, err)
 	_, err = q.SeedEMABindingFixture(ctx, backfill.SeedEMABindingFixtureParams{ProjectID: env.projectID, OrganizationID: env.organizationID, UserSessionIssuerID: usi, RemoteSessionIssuerID: issuer, RemoteSessionClientID: uuid.NullUUID{UUID: client, Valid: true}, Resource: resource, RequestedScopes: []string{"read"}})
 	require.NoError(t, err)
-	return metadataEMAFixture{env: env, source: source, server: server, client: client, issuer: issuer, typed: backfill.EMAClientID(env.organizationID, issuer, client, resource), resource: resource, issuerURL: issuerURL}
+	return metadataEMAFixture{env: env, source: source, server: server, client: client, issuer: issuer, typed: backfill.EMAClientID(env.organizationID, issuer, client, resource), sessionIssuer: usi, resource: resource, issuerURL: issuerURL}
 }
 
 func (f metadataEMAFixture) doc(allowed bool) wellknown.OAuthProtectedResourceMetadata {
@@ -48,18 +52,22 @@ func (f metadataEMAFixture) doc(allowed bool) wellknown.OAuthProtectedResourceMe
 
 func (f metadataEMAFixture) assertTyped(t *testing.T, ctx context.Context, live bool) {
 	t.Helper()
-	var clients, links, headers int
-	require.NoError(t, f.env.conn.QueryRow(ctx, "SELECT count(*) FROM mcp_auth_clients WHERE id=$1 AND NOT deleted", f.typed).Scan(&clients))
-	require.NoError(t, f.env.conn.QueryRow(ctx, "SELECT count(*) FROM mcp_server_auth_clients WHERE auth_client_id=$1 AND NOT deleted", f.typed).Scan(&links))
-	require.NoError(t, f.env.conn.QueryRow(ctx, "SELECT count(*) FROM mcp_auth_client_headers WHERE auth_client_id=$1 AND NOT deleted", f.typed).Scan(&headers))
+	q := authclientsrepo.New(f.env.conn)
+	client, clientErr := q.GetAuthClient(ctx, authclientsrepo.GetAuthClientParams{ID: f.typed, OrganizationID: f.env.organizationID})
+	links, err := q.ListAuthClientServers(ctx, authclientsrepo.ListAuthClientServersParams{AuthClientIds: []uuid.UUID{f.typed}, OrganizationID: f.env.organizationID})
+	require.NoError(t, err)
+	headers, err := q.ListAuthClientHeaders(ctx, authclientsrepo.ListAuthClientHeadersParams{AuthClientIds: []uuid.UUID{f.typed}, OrganizationID: f.env.organizationID})
+	require.NoError(t, err)
 	if live {
-		require.Equal(t, 1, clients)
-		require.Equal(t, 1, links)
-		require.Equal(t, 1, headers)
+		require.NoError(t, clientErr)
+		require.Equal(t, f.typed, client.ID)
+		require.Len(t, links, 1)
+		require.Equal(t, f.server, links[0].ID)
+		require.Len(t, headers, 1)
 	} else {
-		require.Zero(t, clients)
-		require.Zero(t, links)
-		require.Zero(t, headers)
+		require.ErrorIs(t, clientErr, pgx.ErrNoRows)
+		require.Empty(t, links)
+		require.Empty(t, headers)
 	}
 }
 
@@ -96,28 +104,46 @@ func TestRecordEMA_RollbackAndInvalidDataRecovery(t *testing.T) {
 	require.NoError(t, Record(ctx, tx, env.projectID, env.organizationID, f.resource, f.doc(true)))
 	require.NoError(t, tx.Rollback(ctx))
 	f.assertTyped(t, ctx, false)
-	var records int
-	require.NoError(t, env.conn.QueryRow(ctx, "SELECT count(*) FROM remote_protected_resources WHERE project_id=$1", env.projectID).Scan(&records))
-	require.Zero(t, records)
+	_, err := remoterepo.New(env.conn).GetRemoteProtectedResource(ctx, remoterepo.GetRemoteProtectedResourceParams{ProjectID: env.projectID, ResourceIdentifier: f.resource})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 	bad := f.doc(true)
 	bad.Raw = []byte(`{"resource":"https://resource.example.test/mcp","unsafe":"\u0000"}`)
 	require.NoError(t, Record(ctx, env.conn, env.projectID, env.organizationID, f.resource, bad))
 	f.assertTyped(t, ctx, true)
-	var message string
-	require.NoError(t, env.conn.QueryRow(ctx, "SELECT metadata_last_error FROM remote_protected_resources WHERE project_id=$1 AND resource_identifier=$2", env.projectID, f.resource).Scan(&message))
-	require.Equal(t, "The metadata document contains values that cannot be stored.", message)
+	record, err := remoterepo.New(env.conn).GetRemoteProtectedResource(ctx, remoterepo.GetRemoteProtectedResourceParams{ProjectID: env.projectID, ResourceIdentifier: f.resource})
+	require.NoError(t, err)
+	require.Equal(t, "The metadata document contains values that cannot be stored.", record.MetadataLastError.String)
 }
 
 func TestRecordEMA_ReconcilesOldAndNewMetadataLocations(t *testing.T) {
 	t.Parallel()
+	for _, suffix := range []string{"", "?tenant=one", "#section"} {
+		t.Run(suffix, func(t *testing.T) {
+			t.Parallel()
+			ctx, env := newProberEnv(t)
+			current := seedMetadataEMA(t, ctx, env, "https://resource.example.test/current")
+			former := seedMetadataEMA(t, ctx, env, "https://resource.example.test/former"+suffix)
+			// Legacy evidence may occupy another source's diagnostic location.
+			// Query and fragment redaction must not hide that former source.
+			q := backfill.New(env.conn)
+			require.NoError(t, q.SeedValidProtectedResourceFixture(ctx, backfill.SeedValidProtectedResourceFixtureParams{ProjectID: env.projectID, OrganizationID: env.organizationID, ResourceIdentifier: current.resource, MetadataUrl: pgtype.Text{String: urls.DiagnosticURL(former.doc(true).MetadataURL), Valid: true}, AuthorizationServers: []string{"https://unrelated-issuer.example.test"}}))
+			require.NoError(t, Record(ctx, env.conn, env.projectID, env.organizationID, current.resource, current.doc(true)))
+			current.assertTyped(t, ctx, true)
+			former.assertTyped(t, ctx, true)
+		})
+	}
+}
+
+func TestRecordEMA_PreservesExactResourceIdentity(t *testing.T) {
+	t.Parallel()
 	ctx, env := newProberEnv(t)
-	current := seedMetadataEMA(t, ctx, env, "https://resource.example.test/current")
-	former := seedMetadataEMA(t, ctx, env, "https://resource.example.test/former")
-	// Legacy persisted evidence can identify one resource while occupying
-	// another source's discovery location. Replacing it must reconcile both.
+	f := seedMetadataEMA(t, ctx, env, "https://resource.example.test/mcp")
 	q := backfill.New(env.conn)
-	require.NoError(t, q.SeedValidProtectedResourceFixture(ctx, backfill.SeedValidProtectedResourceFixtureParams{ProjectID: env.projectID, OrganizationID: env.organizationID, ResourceIdentifier: current.resource, MetadataUrl: pgtype.Text{String: former.doc(true).MetadataURL, Valid: true}, AuthorizationServers: []string{"https://unrelated-issuer.example.test"}}))
-	require.NoError(t, Record(ctx, env.conn, env.projectID, env.organizationID, current.resource, current.doc(true)))
-	current.assertTyped(t, ctx, true)
-	former.assertTyped(t, ctx, true)
+	source, server := uuid.New(), uuid.New()
+	require.NoError(t, q.SeedRemoteMCPServerFixture(ctx, backfill.SeedRemoteMCPServerFixtureParams{ID: source, ProjectID: env.projectID, Url: f.resource + "/"}))
+	require.NoError(t, q.SeedMCPServerFixture(ctx, backfill.SeedMCPServerFixtureParams{ID: server, ProjectID: env.projectID, Slug: pgtype.Text{String: "server-" + server.String(), Valid: true}, RemoteMcpServerID: uuid.NullUUID{UUID: source, Valid: true}}))
+	require.NoError(t, q.SetServerUserSessionIssuerFixture(ctx, backfill.SetServerUserSessionIssuerFixtureParams{ID: server, UserSessionIssuerID: uuid.NullUUID{UUID: f.sessionIssuer, Valid: true}}))
+	require.NoError(t, Record(ctx, env.conn, env.projectID, env.organizationID, f.resource, f.doc(true)))
+	// The same inbound issuer must not make a slash-distinct upstream eligible.
+	f.assertTyped(t, ctx, true)
 }

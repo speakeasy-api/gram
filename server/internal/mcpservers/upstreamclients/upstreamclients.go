@@ -53,46 +53,64 @@ func Reconcile(ctx context.Context, dbtx repo.DBTX, organizationID string, proje
 		if err := authclientbackfill.LockEMAWriterScope(ctx, tx, organizationID, []uuid.UUID{projectID}); err != nil {
 			return fmt.Errorf("lock upstream association writer scope: %w", err)
 		}
-		q := repo.New(tx)
-		if len(userIssuerIDs) == 0 {
-			return prune(ctx, q, organizationID, projectID)
-		}
-		sole, err := q.CaptureSoleConsumerAssociations(ctx, repo.CaptureSoleConsumerAssociationsParams{
-			OrganizationID:       organizationID,
-			ProjectID:            projectID,
-			UserSessionIssuerIds: userIssuerIDs,
-		})
-		if err != nil {
-			return fmt.Errorf("capture mcp server upstream clients: %w", err)
-		}
-		gateway, err := q.CaptureGatewayDerivedAssociations(ctx, repo.CaptureGatewayDerivedAssociationsParams{
-			ProjectID:            projectID,
-			OrganizationID:       organizationID,
-			UserSessionIssuerIds: userIssuerIDs,
-		})
-		if err != nil {
-			return fmt.Errorf("capture gateway upstream clients: %w", err)
-		}
-		if err := prune(ctx, q, organizationID, projectID); err != nil {
-			return err
-		}
-		// After pruning, publish only the captured associations that remain.
-		// The writer scope predates capture and protects OAuth and EMA copies.
-		if err := authclientbackfill.SyncServerAssociations(ctx, tx, organizationID, append(sole, gateway...)...); err != nil {
-			return fmt.Errorf("record auth clients of captured upstream clients: %w", err)
-		}
-		return nil
+		return ReconcileInLockedTransaction(ctx, tx, organizationID, projectID, userIssuerIDs)
 	})
 }
 
-func prune(ctx context.Context, q *repo.Queries, organizationID string, projectID uuid.UUID) error {
-	if _, err := q.PruneUnservableAssociations(ctx, repo.PruneUnservableAssociationsParams{
-		ProjectID:      projectID,
-		OrganizationID: organizationID,
-	}); err != nil {
-		return fmt.Errorf("prune mcp server upstream clients: %w", err)
+// ReconcileInLockedTransaction captures and prunes associations atomically.
+// The caller must hold LockEMAWriterScope before its first mutation or row lock.
+func ReconcileInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) error {
+	if organizationID == "" || projectID == uuid.Nil || tx == nil {
+		return errors.New("reconcile mcp server upstream clients: no transaction or tenant scope")
+	}
+	q := repo.New(tx)
+	if len(userIssuerIDs) == 0 {
+		servers, err := prune(ctx, q, organizationID, projectID)
+		if err != nil {
+			return err
+		}
+		if err := authclientbackfill.SyncServerAssociations(ctx, tx, organizationID, servers...); err != nil {
+			return fmt.Errorf("sync pruned upstream clients: %w", err)
+		}
+		return nil
+	}
+	sole, err := q.CaptureSoleConsumerAssociations(ctx, repo.CaptureSoleConsumerAssociationsParams{
+		OrganizationID:       organizationID,
+		ProjectID:            projectID,
+		UserSessionIssuerIds: userIssuerIDs,
+	})
+	if err != nil {
+		return fmt.Errorf("capture mcp server upstream clients: %w", err)
+	}
+	gateway, err := q.CaptureGatewayDerivedAssociations(ctx, repo.CaptureGatewayDerivedAssociationsParams{
+		ProjectID:            projectID,
+		OrganizationID:       organizationID,
+		UserSessionIssuerIds: userIssuerIDs,
+	})
+	if err != nil {
+		return fmt.Errorf("capture gateway upstream clients: %w", err)
+	}
+	pruned, err := prune(ctx, q, organizationID, projectID)
+	if err != nil {
+		return err
+	}
+	// After pruning, publish only the captured associations that remain.
+	// The writer scope predates capture and protects OAuth and EMA copies.
+	if err := authclientbackfill.SyncServerAssociations(ctx, tx, organizationID, append(append(sole, gateway...), pruned...)...); err != nil {
+		return fmt.Errorf("record auth clients of captured upstream clients: %w", err)
 	}
 	return nil
+}
+
+func prune(ctx context.Context, q *repo.Queries, organizationID string, projectID uuid.UUID) ([]uuid.UUID, error) {
+	servers, err := q.PruneUnservableAssociations(ctx, repo.PruneUnservableAssociationsParams{
+		ProjectID:      projectID,
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("prune mcp server upstream clients: %w", err)
+	}
+	return servers, nil
 }
 
 // inTx runs fn in dbtx when it is a transaction, and otherwise in a

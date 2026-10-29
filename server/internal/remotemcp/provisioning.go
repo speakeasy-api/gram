@@ -90,7 +90,7 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
-		return RemoteMCPProvisioningResult{}, err
+		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeUnexpected, err, "lock provisioning writer scope")
 	}
 	if err := requireLiveProjectForActiveOrganization(ctx, tx, authCtx); err != nil {
 		return RemoteMCPProvisioningResult{}, err

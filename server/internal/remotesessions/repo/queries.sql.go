@@ -7202,7 +7202,7 @@ SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_i
 WHERE project_id = $1 AND organization_id = $2
   AND user_session_issuer_id = $3
   AND ($4::uuid IS NULL OR remote_session_issuer_id = $4::uuid)
-  AND rtrim(resource, '/') = $5::text
+  AND resource = $5::text
   AND state IS DISTINCT FROM 'unlinked'
 ORDER BY id
 `
@@ -7264,7 +7264,7 @@ const listEMAChainingBindings = `-- name: ListEMAChainingBindings :many
 SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, remote_session_client_id, generation, state, grant_source, requested_scopes, claim_id, claimed_at, created_at, updated_at FROM remote_session_ema_bindings
 WHERE project_id = $1 AND organization_id = $2
   AND user_session_issuer_id = $3
-  AND rtrim(resource, '/') = $4::text
+  AND resource = $4::text
   AND ($5::uuid IS NULL OR remote_session_issuer_id = $5::uuid)
   AND ($6::uuid IS NULL OR remote_session_client_id = $6::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL
@@ -7281,9 +7281,8 @@ type ListEMAChainingBindingsParams struct {
 	RemoteSessionClientID uuid.NullUUID
 }
 
-// Ready bindings whose canonical resource names an endpoint's upstream.
-// Endpoint upstreams are recorded without a trailing slash while a binding
-// keeps the exact RFC 9728 identifier, so both compare under the routing trim.
+// Ready bindings whose exact resource names the resolved authorization resource.
+// RFC 8707 resource identity preserves trailing slashes; callers must not trim.
 // Unlinked tombstones and unfinished preparations never select or conflict.
 // A tunneled upstream passes its own derived issuer: its resource identifier is
 // operator supplied, so only a binding for that issuer may serve it. A caller

@@ -204,6 +204,10 @@ func (s *Service) writeHostedServer(ctx context.Context, toolsetID uuid.UUID, ch
 		return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "log hosted toolset update").LogError(ctx, logger)
 	}
 
+	if err := authclientbackfill.SyncEMAServers(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{written.After.ID}); err != nil {
+		return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "sync hosted server EMA reach").LogError(ctx, logger)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "commit hosted MCP server update").LogError(ctx, logger)
 	}

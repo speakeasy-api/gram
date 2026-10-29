@@ -826,7 +826,7 @@ WHERE s.id = @mcp_server_id::uuid
                    AND db.project_id = gs.project_id
                    AND db.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND db.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(db.resource, '/') = rtrim(gx.resource, '/')
+                   AND db.resource = gx.resource
                    AND db.state = 'ready'
                    AND db.user_session_issuer_id = gs.user_session_issuer_id
                )
@@ -836,7 +836,7 @@ WHERE s.id = @mcp_server_id::uuid
                    AND gb.project_id = gs.project_id
                    AND gb.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND gb.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(gb.resource, '/') = rtrim(gx.resource, '/')
+                   AND gb.resource = gx.resource
                    AND gb.state = 'ready'
                    AND gb.user_session_issuer_id = (
                      -- The gateways' issuer, as ListEMABindingServers reads it.
@@ -877,6 +877,7 @@ JOIN mcp_auth_clients AS ac
  AND ac.client_type = 'ema'
  AND ac.source = 'backfill'
 JOIN mcp_servers AS s ON s.id = l.mcp_server_id AND s.project_id = l.project_id AND s.deleted IS FALSE
+JOIN projects AS p ON p.id = s.project_id AND p.organization_id = l.organization_id AND p.deleted IS FALSE
 WHERE l.auth_client_id = @auth_client_id::uuid
   AND l.organization_id = @organization_id::text
   AND l.deleted IS FALSE
@@ -1015,6 +1016,8 @@ ORDER BY ac.id;
 -- Serialize EMA binding and credential-copy decisions on their registration.
 -- The caller must read bindings and links again after taking this lock. Lock
 -- strength allows concurrent binding inserts' foreign-key checks to finish.
+-- Existing typed clients can lock registrations in deleted projects so stale
+-- credential copies can be retired; live-owner queries decide serving reach.
 SELECT c.id
 FROM remote_session_clients AS c
 WHERE (EXISTS (
@@ -1035,7 +1038,7 @@ WHERE (EXISTS (
     AND ac.remote_session_client_id = c.id
     AND (c.project_id IS NULL OR EXISTS (
       SELECT 1 FROM projects AS p WHERE p.id = c.project_id
-        AND p.organization_id = ac.organization_id AND p.deleted IS FALSE
+        AND p.organization_id = ac.organization_id
     ))
     AND (c.project_id IS NOT NULL OR c.organization_id IS NULL
          OR c.organization_id = ac.organization_id)
@@ -1044,7 +1047,7 @@ FOR NO KEY UPDATE OF c;
 
 -- name: ListEMABackfillBindings :many
 -- The organization's ready, client-bound identity chaining bindings in live
--- projects, as the runtime selects them, with the exact and trimmed resource.
+-- projects, with the exact resource used for grouping and stable typed keys.
 -- in_reach reports that the binding's registration and its issuer are live
 -- and belong to the binding's project, its organization or the platform.
 SELECT b.id AS binding_id,
@@ -1052,7 +1055,7 @@ SELECT b.id AS binding_id,
        b.user_session_issuer_id,
        b.remote_session_issuer_id,
        b.resource AS exact_resource,
-       rtrim(b.resource, '/')::text AS resource,
+       b.resource::text AS resource,
        b.requested_scopes,
        b.remote_session_client_id::uuid AS remote_session_client_id,
        rsi.name AS issuer_name,
@@ -1085,7 +1088,7 @@ WHERE b.organization_id = @organization_id::text
       AND selected.organization_id = b.organization_id
       AND selected.remote_session_issuer_id = b.remote_session_issuer_id
       AND selected.remote_session_client_id = b.remote_session_client_id
-      AND rtrim(selected.resource, '/') = rtrim(b.resource, '/')
+      AND selected.resource = b.resource
   ))
   AND (sqlc.narg('only_project_id')::uuid IS NULL OR EXISTS (
     SELECT 1 FROM remote_session_ema_bindings AS selected
@@ -1094,11 +1097,13 @@ WHERE b.organization_id = @organization_id::text
       AND selected.state = 'ready'
       AND selected.remote_session_issuer_id = b.remote_session_issuer_id
       AND selected.remote_session_client_id = b.remote_session_client_id
-      AND rtrim(selected.resource, '/') = rtrim(b.resource, '/')
+      AND selected.resource = b.resource
   ))
 ORDER BY b.id;
 
 -- name: ListEMABindingServers :many
+-- Resource identity is byte-exact. Metadata location normalization may locate
+-- a distinct parent resource, but must not alias slash-distinct resources.
 -- The live servers a ready binding reaches, as the runtime matches them: in
 -- the binding's project and signed in through its user session issuer, either
 -- directly or as the issuer of the organization and project gateways, which
@@ -1170,8 +1175,9 @@ LEFT JOIN LATERAL (
     AND rp.deleted IS FALSE
     AND rp.metadata_fetched_at IS NOT NULL
     AND rp.metadata_last_error IS NULL
-    AND (rtrim(rp.resource_identifier, '/') = rtrim(r.url, '/')
-         OR rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/'))
+    AND (rp.resource_identifier = r.url
+         OR (rtrim(rp.resource_identifier, '/') <> rtrim(r.url, '/')
+             AND rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/')))
   ORDER BY rp.metadata_fetched_at DESC, rp.id
   LIMIT 1
 ) AS rp ON TRUE
@@ -1181,12 +1187,12 @@ WHERE b.id = @binding_id::uuid
   AND b.remote_session_client_id IS NOT NULL
   AND (
     (r.id IS NOT NULL AND (
-      (rp.id IS NOT NULL AND rtrim(rp.resource_identifier, '/') = rtrim(b.resource, '/'))
-      OR (rp.id IS NULL AND rtrim(r.url, '/') = rtrim(b.resource, '/'))
+      (rp.id IS NOT NULL AND rp.resource_identifier = b.resource)
+      OR (rp.id IS NULL AND r.url = b.resource)
     ))
     OR (t.id IS NOT NULL
         AND s.remote_session_issuer_id = b.remote_session_issuer_id
-        AND rtrim(t.resource_identifier, '/') = rtrim(b.resource, '/'))
+        AND t.resource_identifier = b.resource)
   )
 ORDER BY s.id;
 
@@ -1228,8 +1234,9 @@ LEFT JOIN LATERAL (
     AND rp.deleted IS FALSE
     AND rp.metadata_fetched_at IS NOT NULL
     AND rp.metadata_last_error IS NULL
-    AND (rtrim(rp.resource_identifier, '/') = rtrim(r.url, '/')
-         OR rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/'))
+    AND (rp.resource_identifier = r.url
+         OR (rtrim(rp.resource_identifier, '/') <> rtrim(r.url, '/')
+             AND rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/')))
   ORDER BY rp.metadata_fetched_at DESC, rp.id
   LIMIT 1
 ) AS rp ON TRUE
@@ -1238,7 +1245,7 @@ WHERE b.id = @binding_id::uuid
   AND b.state = 'ready'
   AND b.remote_session_client_id IS NOT NULL
   AND lower(substring(r.url from '^https://[^/?#]+')) = lower(substring(b.resource from '^https://[^/?#]+'))
-  AND (rp.id IS NULL OR rtrim(rp.resource_identifier, '/') = rtrim(b.resource, '/'))
+  AND (rp.id IS NULL OR rp.resource_identifier = b.resource)
 ORDER BY s.id;
 
 -- name: FindEMAAuthClient :one
@@ -1377,8 +1384,9 @@ LEFT JOIN LATERAL (
     AND rp.deleted IS FALSE
     AND rp.metadata_fetched_at IS NOT NULL
     AND rp.metadata_last_error IS NULL
-    AND (rtrim(rp.resource_identifier, '/') = rtrim(r.url, '/')
-         OR rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/'))
+    AND (rp.resource_identifier = r.url
+         OR (rtrim(rp.resource_identifier, '/') <> rtrim(r.url, '/')
+             AND rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/')))
   ORDER BY rp.metadata_fetched_at DESC, rp.id
   LIMIT 1
 ) AS rp ON TRUE
@@ -1409,16 +1417,16 @@ WHERE s.id = @mcp_server_id::uuid
            ))
       AND b.remote_session_issuer_id = e.remote_session_issuer_id
       AND b.remote_session_client_id = e.remote_session_client_id
-      AND rtrim(b.resource, '/') = rtrim(e.resource, '/')
+      AND b.resource = e.resource
       AND b.state = 'ready'
       AND (
         (r.id IS NOT NULL AND (
-          (rp.id IS NOT NULL AND rtrim(rp.resource_identifier, '/') = rtrim(b.resource, '/'))
-          OR (rp.id IS NULL AND rtrim(r.url, '/') = rtrim(b.resource, '/'))
+          (rp.id IS NOT NULL AND rp.resource_identifier = b.resource)
+          OR (rp.id IS NULL AND r.url = b.resource)
         ))
         OR (t.id IS NOT NULL
             AND s.remote_session_issuer_id = b.remote_session_issuer_id
-            AND rtrim(t.resource_identifier, '/') = rtrim(b.resource, '/'))
+            AND t.resource_identifier = b.resource)
       )
   )
   AND NOT EXISTS (
@@ -1500,7 +1508,7 @@ WITH retired AS (
         ON b.organization_id = e.organization_id
        AND b.remote_session_issuer_id = e.remote_session_issuer_id
        AND b.remote_session_client_id = e.remote_session_client_id
-       AND rtrim(b.resource, '/') = rtrim(e.resource, '/')
+       AND b.resource = e.resource
       WHERE e.auth_client_id = ac.id
         AND GREATEST(b.created_at, b.updated_at) >= @evidence_since::timestamptz
     )
@@ -1580,7 +1588,16 @@ SELECT DISTINCT a.remote_session_client_id
 FROM mcp_server_remote_session_clients AS a
 WHERE a.organization_id = @organization_id::text
   AND a.mcp_server_id = ANY(@mcp_server_ids::uuid[])
-ORDER BY a.remote_session_client_id;
+UNION
+SELECT ac.remote_session_client_id
+FROM mcp_server_auth_clients AS l
+JOIN mcp_auth_clients AS ac ON ac.id = l.auth_client_id AND ac.organization_id = l.organization_id
+WHERE l.organization_id = @organization_id::text
+  AND l.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND ac.client_type IN ('remote_session', 'service_account')
+  AND ac.source = 'backfill'
+  AND ac.remote_session_client_id IS NOT NULL
+ORDER BY remote_session_client_id;
 
 -- name: ListEMAClientsOfServers :many
 -- Every live backfilled EMA client the given servers are linked to, with the
@@ -1604,6 +1621,7 @@ LEFT JOIN mcp_servers AS ls
   ON ls.id = live.mcp_server_id
  AND ls.project_id = live.project_id
  AND ls.deleted IS FALSE
+ AND EXISTS (SELECT 1 FROM projects AS p WHERE p.id = ls.project_id AND p.organization_id = ac.organization_id AND p.deleted IS FALSE)
 WHERE ac.organization_id = @organization_id::text
   AND ac.client_type = 'ema'
   AND ac.source = 'backfill'
@@ -1730,8 +1748,9 @@ WHERE s.id = ANY(@mcp_server_ids::uuid[])
         AND rp.deleted IS FALSE
         AND rp.metadata_fetched_at IS NOT NULL
         AND rp.metadata_last_error IS NULL
-        AND (rtrim(rp.resource_identifier, '/') = rtrim(r.url, '/')
-             OR rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/'))
+        AND (rp.resource_identifier = r.url
+             OR (rtrim(rp.resource_identifier, '/') <> rtrim(r.url, '/')
+             AND rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/')))
       ORDER BY rp.metadata_fetched_at DESC, rp.id
       LIMIT 1
     ) AS rp ON TRUE
@@ -1760,12 +1779,12 @@ WHERE s.id = ANY(@mcp_server_ids::uuid[])
       ))
       AND (
         (r.id IS NOT NULL AND (
-          (rp.id IS NOT NULL AND rtrim(rp.resource_identifier, '/') = rtrim(b.resource, '/'))
-          OR (rp.id IS NULL AND rtrim(r.url, '/') = rtrim(b.resource, '/'))
+          (rp.id IS NOT NULL AND rp.resource_identifier = b.resource)
+          OR (rp.id IS NULL AND r.url = b.resource)
         ))
         OR (t.id IS NOT NULL
             AND s.remote_session_issuer_id = b.remote_session_issuer_id
-            AND rtrim(t.resource_identifier, '/') = rtrim(b.resource, '/'))
+            AND t.resource_identifier = b.resource)
       )
   ))
 ORDER BY s.id;
@@ -1843,8 +1862,9 @@ WHERE p.id = s.project_id
             AND rp.deleted IS FALSE
             AND rp.metadata_fetched_at IS NOT NULL
             AND rp.metadata_last_error IS NULL
-            AND (rtrim(rp.resource_identifier, '/') = rtrim(r.url, '/')
-                 OR rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/'))
+            AND (rp.resource_identifier = r.url
+                 OR (rtrim(rp.resource_identifier, '/') <> rtrim(r.url, '/')
+             AND rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/')))
           ORDER BY rp.metadata_fetched_at DESC, rp.id
           LIMIT 1
         ) AS rp ON TRUE
@@ -1873,7 +1893,7 @@ WHERE p.id = s.project_id
               AND e.deleted IS FALSE
               AND e.remote_session_issuer_id = b.remote_session_issuer_id
               AND e.remote_session_client_id = b.remote_session_client_id
-              AND rtrim(e.resource, '/') = rtrim(b.resource, '/')
+              AND e.resource = b.resource
           )
           AND (rp.id IS NULL OR rp.authorization_servers IS NULL OR EXISTS (
             SELECT 1 FROM unnest(rp.authorization_servers) AS allowed(server)
@@ -1881,12 +1901,12 @@ WHERE p.id = s.project_id
           ))
           AND (
             (r.id IS NOT NULL AND (
-              (rp.id IS NOT NULL AND rtrim(rp.resource_identifier, '/') = rtrim(b.resource, '/'))
-              OR (rp.id IS NULL AND rtrim(r.url, '/') = rtrim(b.resource, '/'))
+              (rp.id IS NOT NULL AND rp.resource_identifier = b.resource)
+              OR (rp.id IS NULL AND r.url = b.resource)
             ))
             OR (t.id IS NOT NULL
                 AND s.remote_session_issuer_id = b.remote_session_issuer_id
-                AND rtrim(t.resource_identifier, '/') = rtrim(b.resource, '/'))
+                AND t.resource_identifier = b.resource)
           )
       )))
   )
@@ -2073,7 +2093,7 @@ SELECT sel.id,
                    AND db.project_id = gs.project_id
                    AND db.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND db.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(db.resource, '/') = rtrim(gx.resource, '/')
+                   AND db.resource = gx.resource
                    AND db.state = 'ready'
                    AND db.user_session_issuer_id = gs.user_session_issuer_id
                )
@@ -2083,7 +2103,7 @@ SELECT sel.id,
                    AND gb.project_id = gs.project_id
                    AND gb.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND gb.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(gb.resource, '/') = rtrim(gx.resource, '/')
+                   AND gb.resource = gx.resource
                    AND gb.state = 'ready'
                    AND gb.user_session_issuer_id = (
                      -- The gateways' issuer, as ListEMABindingServers reads it.
@@ -2118,7 +2138,7 @@ SELECT sel.id,
           AND gb2.project_id = sel.project_id
           AND gb2.remote_session_issuer_id = x.remote_session_issuer_id
           AND gb2.remote_session_client_id = x.remote_session_client_id
-          AND rtrim(gb2.resource, '/') = rtrim(x.resource, '/')
+          AND gb2.resource = x.resource
           AND gb2.state = 'ready'
           AND gb2.user_session_issuer_id = (
             -- The gateways' issuer, as ListEMABindingServers reads it.
@@ -2153,7 +2173,7 @@ SELECT sel.id,
                    AND db.project_id = gs.project_id
                    AND db.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND db.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(db.resource, '/') = rtrim(gx.resource, '/')
+                   AND db.resource = gx.resource
                    AND db.state = 'ready'
                    AND db.user_session_issuer_id = gs.user_session_issuer_id
                )
@@ -2163,7 +2183,7 @@ SELECT sel.id,
                    AND gb.project_id = gs.project_id
                    AND gb.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND gb.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(gb.resource, '/') = rtrim(gx.resource, '/')
+                   AND gb.resource = gx.resource
                    AND gb.state = 'ready'
                    AND gb.user_session_issuer_id = (
                      -- The gateways' issuer, as ListEMABindingServers reads it.
@@ -2925,3 +2945,77 @@ SELECT pg_advisory_xact_lock_shared(hashtextextended('authclient-ema-gateway-rea
 -- A setting change must exclude first preparations before discovering their
 -- project set, including when no gateway bindings have committed yet.
 SELECT pg_advisory_xact_lock(hashtextextended('authclient-ema-gateway-reach:' || @organization_id::text, 0));
+
+-- name: GetEMALinkSourceFixture :one
+SELECT source FROM mcp_server_auth_clients
+WHERE auth_client_id = @auth_client_id AND mcp_server_id = @mcp_server_id AND project_id = @project_id
+ORDER BY updated_at DESC LIMIT 1;
+
+-- name: SetEMAClientAdministratorStateFixture :exec
+UPDATE mcp_auth_clients SET enabled = @enabled, source = @source
+WHERE id = @id AND organization_id = @organization_id;
+
+-- name: ClearEMABindingClientFixture :exec
+UPDATE remote_session_ema_bindings SET state = 'manual_setup_required', remote_session_client_id = NULL
+WHERE id = @id AND project_id = @project_id;
+
+-- name: GetEMAClientAdministratorStateFixture :one
+SELECT deleted, enabled, source FROM mcp_auth_clients
+WHERE id = @id AND organization_id = @organization_id;
+
+-- name: RetireServerStaleBackfillLinks :exec
+-- Soft-deletes the links ListStaleBackfillLinks reports, rechecking the same
+-- evidence.
+UPDATE mcp_server_auth_clients AS target
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE target.id IN (
+  SELECT l.id
+FROM mcp_server_auth_clients AS l
+JOIN mcp_auth_clients AS ac
+  ON ac.id = l.auth_client_id
+ AND ac.organization_id = l.organization_id
+WHERE l.organization_id = @organization_id::text
+  AND l.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND l.source = 'backfill'
+  AND l.deleted IS FALSE
+  AND ac.source = 'backfill'
+  AND ac.client_type IN ('remote_session', 'service_account')
+  AND (ac.deleted IS TRUE OR NOT EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS a
+    JOIN projects AS p
+      ON p.id = a.project_id
+     AND p.organization_id = a.organization_id
+     AND p.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.id = a.mcp_server_id
+     AND s.project_id = a.project_id
+     AND s.deleted IS FALSE
+    JOIN remote_session_clients AS c
+      ON c.id = a.remote_session_client_id
+     AND c.attachment_scope = a.client_attachment_scope
+     AND c.deleted IS FALSE
+    JOIN remote_session_issuers AS rsi
+      ON rsi.id = c.remote_session_issuer_id
+     AND rsi.deleted IS FALSE
+     AND (rsi.project_id = a.project_id
+          OR (rsi.project_id IS NULL AND rsi.organization_id = a.organization_id)
+          OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL))
+    WHERE a.organization_id = l.organization_id
+      AND a.mcp_server_id = l.mcp_server_id
+      AND a.remote_session_client_id = ac.remote_session_client_id
+      AND a.deleted IS FALSE
+  ))
+)
+;
+
+
+-- name: LockServerOAuthClientsForRetirement :exec
+SELECT ac.id FROM mcp_auth_clients AS ac
+WHERE ac.organization_id = @organization_id::text
+  AND ac.source = 'backfill'
+  AND ac.client_type IN ('remote_session', 'service_account')
+  AND EXISTS (SELECT 1 FROM mcp_server_auth_clients AS l
+    WHERE l.auth_client_id = ac.id AND l.organization_id = ac.organization_id
+      AND l.mcp_server_id = ANY(@mcp_server_ids::uuid[]))
+ORDER BY ac.id FOR UPDATE OF ac;

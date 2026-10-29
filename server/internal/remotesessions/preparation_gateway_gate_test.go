@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
@@ -27,15 +28,16 @@ import (
 func pauseEMACommit(t *testing.T, ctx context.Context, ti *testInstance, table string) (pgx.Tx, int32) {
 	t.Helper()
 	require.Contains(t, []string{"remote_session_ema_bindings", "organization_features"}, table)
+	//nolint:glint // notestingrawsql: install a deferred pause trigger on a dynamic test table to instrument the commit boundary.
 	_, err := ti.conn.Exec(ctx, fmt.Sprintf(`CREATE FUNCTION pause_ema_test_commit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(79182351::bigint); RETURN NEW; END $$;
  CREATE CONSTRAINT TRIGGER pause_ema_test_commit AFTER INSERT OR UPDATE ON %s DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION pause_ema_test_commit()`, table))
 	require.NoError(t, err)
-	tx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	//nolint:glint // notestingrawsql: hold the test-only advisory gate used by the deferred commit trigger.
 	_, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(79182351::bigint)`)
 	require.NoError(t, err)
 	var pid int32
+	//nolint:glint // notestingrawsql: observe PostgreSQL transaction lock ownership; this is concurrency instrumentation, not fixture data.
 	require.NoError(t, tx.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&pid))
 	return tx, pid
 }
@@ -55,7 +57,7 @@ func TestPreparationGateway_FirstBindingAndOptInSerializeBeforeDiscovery(t *test
 	defer cancel()
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	server := seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "first-gateway-member", in.Resource)
-	_, err := ti.conn.Exec(ctx, `INSERT INTO remote_mcp_server_headers(remote_mcp_server_id,name,is_secret,value) SELECT remote_mcp_server_id,'X-Gateway-Test',true,'encrypted-test-value' FROM mcp_servers WHERE id=$1`, server)
+	err := repo.New(ti.conn).InsertPreparationSourceHeaderFixtureGateway(ctx, repo.InsertPreparationSourceHeaderFixtureGatewayParams{ServerID: server, ProjectID: *auth.ProjectID})
 	require.NoError(t, err)
 	in.UserSessionIssuerID = seedPreparationGatewayIssuer(t, ctx, ti)
 	in.ConfirmGrants = []string{oauthwire.GrantTypeJWTBearer}
@@ -66,7 +68,9 @@ func TestPreparationGateway_FirstBindingAndOptInSerializeBeforeDiscovery(t *test
 	// This first binding is uncommitted and has already decided there is no
 	// configured gateway reach. A project-only toggle lock would discover nothing.
 	var count int
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM remote_session_ema_bindings WHERE organization_id=$1`, auth.ActiveOrganizationID).Scan(&count))
+	fixture1, fixtureErr := repo.New(ti.conn).CountPreparationBindingsFixtureForOrganization(ctx, auth.ActiveOrganizationID)
+	require.NoError(t, fixtureErr)
+	count = int(fixture1)
 	require.Zero(t, count)
 	toggled := make(chan error, 1)
 	go func() {
@@ -86,10 +90,14 @@ func TestPreparationGateway_FirstBindingAndOptInSerializeBeforeDiscovery(t *test
 	links, err := backfill.New(ti.conn).ListBackfillLinkedServersFixture(ctx, typed)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{server}, links)
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM mcp_auth_client_headers WHERE auth_client_id=$1 AND organization_id=$2 AND NOT deleted`, typed, auth.ActiveOrganizationID).Scan(&count))
+	fixture2, fixtureErr := repo.New(ti.conn).CountPreparationHeaderCopiesFixture(ctx, repo.CountPreparationHeaderCopiesFixtureParams{ClientID: typed, OrganizationID: auth.ActiveOrganizationID})
+	require.NoError(t, fixtureErr)
+	count = int(fixture2)
 	require.Equal(t, 1, count, "committed gateway reach must carry its source credential copy")
 	var disabled bool
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT NOT deleted FROM organization_features WHERE organization_id=$1 AND feature_name='organization_gateway_disabled'`, auth.ActiveOrganizationID).Scan(&disabled))
+	fixture3, fixtureErr := repo.New(ti.conn).GetPreparationGatewayDisabledFixture(ctx, auth.ActiveOrganizationID)
+	require.NoError(t, fixtureErr)
+	disabled = fixture3.Bool
 	require.False(t, disabled)
 }
 
