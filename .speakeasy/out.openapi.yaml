@@ -70248,7 +70248,7 @@ paths:
         type: query
   /rpc/telemetry.getMetaMcpServerUsage:
     post:
-      description: Discovery funnel and per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.
+      description: Discovery versus execution across every discovery mode, the Progressive discovery funnel, and the per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.
       operationId: getMetaMcpServerUsage
       parameters:
         - allowEmptyValue: true
@@ -95876,8 +95876,11 @@ components:
           items:
             $ref: '#/components/schemas/MetaMcpMemberUsage'
           description: Per-member execution breakdown, most active first
-      description: Discovery funnel plus per-member execution breakdown for one gateway (meta MCP server). Zero counts mean no rows were observed in the window within telemetry retention — they do not distinguish an idle gateway from traffic outside the window or the 90-day retention; telemetry-disabled organizations get a not-found error instead of zeros.
+        phases:
+          $ref: '#/components/schemas/MetaMcpCallPhases'
+      description: Discovery versus execution by discovery mode, the Progressive discovery funnel, and the per-member execution breakdown for one gateway (meta MCP server). Zero counts mean no rows were observed in the window within telemetry retention — they do not distinguish an idle gateway from traffic outside the window or the 90-day retention; telemetry-disabled organizations get a not-found error instead of zeros.
       required:
+        - phases
         - funnel
         - members
     GetMetricsSummaryResult:
@@ -102150,6 +102153,39 @@ components:
         - tool_selection_mode
         - external_mcp_slugs
         - external_mcp_proxy_only
+    MetaMcpCallPhases:
+      type: object
+      properties:
+        calls_without_session:
+          type: integer
+          description: Discovery and execution calls in the window with neither an MCP session nor a chat, which positions leave out
+          format: int64
+        interval_seconds:
+          type: integer
+          description: 'Width of each series bucket in seconds: a day for windows of a week or more, finer for shorter windows'
+          format: int64
+        modes:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetaMcpModePhases'
+          description: Counts by discovery mode, for each mode with calls in the window or the previous window
+        positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetaMcpPositionPhases'
+          description: Counts by position within the session, for calls whose session is known. Positions count from the first call in the window, so a session that began earlier starts again at 1.
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetaMcpPhaseBucket'
+          description: Buckets with calls, in ascending time order. Buckets start at the window start and step by interval_seconds; a bucket with no calls is omitted.
+      description: How a gateway's calls divide between discovery and execution, by discovery mode. A gateway serves each connection in the mode it was approved with, so one gateway can carry several modes at once.
+      required:
+        - modes
+        - positions
+        - interval_seconds
+        - series
+        - calls_without_session
     MetaMcpDiscoveryFunnel:
       type: object
       properties:
@@ -102169,7 +102205,7 @@ components:
           type: integer
           description: list_servers calls
           format: int64
-      description: Counts of each gateway drill-down stage in the window. Discovery stages come from meta_discovery events; executions from gateway-attributed tool calls.
+      description: Counts of each Progressive drill-down stage in the window. Discovery stages come from meta_discovery events; executions from gateway-attributed tool calls in every discovery mode.
       required:
         - list_servers
         - describe_server
@@ -102225,6 +102261,118 @@ components:
         - mcp_server_id
         - tool_calls
         - error_count
+    MetaMcpModePhases:
+      type: object
+      properties:
+        discovery_calls:
+          type: integer
+          description: 'Discovery calls: Progressive list_servers, describe_server and describe_tools, and Code Mode tools.servers, tools.search and tools.describe'
+          format: int64
+        execute_runs:
+          type: integer
+          description: Code Mode execute runs. Each run contains discovery and execution calls and is counted as neither
+          format: int64
+        execution_calls:
+          type: integer
+          description: Member tool calls, however the connection reached them
+          format: int64
+        mode:
+          type: string
+          description: 'The discovery mode of the gateway connection that served a call. unrecorded marks a call whose row names no mode this server knows: member calls written before gateways recorded their connection''s mode, and modes a newer release recorded.'
+          enum:
+            - progressive
+            - direct
+            - code_mode
+            - unrecorded
+        previous_discovery_calls:
+          type: integer
+          description: Discovery calls in the previous window
+          format: int64
+        previous_execute_runs:
+          type: integer
+          description: Code Mode execute runs in the previous window
+          format: int64
+        previous_execution_calls:
+          type: integer
+          description: Member tool calls in the previous window
+          format: int64
+      description: Discovery and execution counts for one discovery mode, in the window and in the window of equal length before it.
+      required:
+        - mode
+        - discovery_calls
+        - execution_calls
+        - execute_runs
+        - previous_discovery_calls
+        - previous_execution_calls
+        - previous_execute_runs
+    MetaMcpPhaseBucket:
+      type: object
+      properties:
+        bucket_time_unix_nano:
+          type: string
+          description: Bucket start time in Unix nanoseconds (string for JS precision)
+        discovery_calls:
+          type: integer
+          description: Discovery calls in this bucket
+          format: int64
+        execute_runs:
+          type: integer
+          description: Code Mode execute runs in this bucket
+          format: int64
+        execution_calls:
+          type: integer
+          description: Member tool calls in this bucket
+          format: int64
+        mode:
+          type: string
+          description: 'The discovery mode of the gateway connection that served a call. unrecorded marks a call whose row names no mode this server knows: member calls written before gateways recorded their connection''s mode, and modes a newer release recorded.'
+          enum:
+            - progressive
+            - direct
+            - code_mode
+            - unrecorded
+      description: Discovery and execution calls for one discovery mode during one time bucket.
+      required:
+        - bucket_time_unix_nano
+        - mode
+        - discovery_calls
+        - execution_calls
+        - execute_runs
+    MetaMcpPositionPhases:
+      type: object
+      properties:
+        discovery_calls:
+          type: integer
+          description: Discovery calls at these positions
+          format: int64
+        execution_calls:
+          type: integer
+          description: Member tool calls at these positions
+          format: int64
+        mode:
+          type: string
+          description: 'The discovery mode of the gateway connection that served a call. unrecorded marks a call whose row names no mode this server knows: member calls written before gateways recorded their connection''s mode, and modes a newer release recorded.'
+          enum:
+            - progressive
+            - direct
+            - code_mode
+            - unrecorded
+        position:
+          type: string
+          description: A range of positions of a call within its session, counting the session's discovery and execution calls in order from 1.
+          enum:
+            - "1"
+            - "2"
+            - 3-5
+            - 6-10
+            - 11-20
+            - 21+
+      description: Discovery and execution calls at one range of positions within their sessions, for one discovery mode.
+      required:
+        - mode
+        - position
+        - discovery_calls
+        - execution_calls
     MetaMcpServer:
       type: object
       properties:

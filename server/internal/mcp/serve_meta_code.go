@@ -128,7 +128,7 @@ func codeExecutionScope(ctx context.Context, gate *metaGateContext, id mcpjsonrp
 	return codemode.Scope{Organization: gate.organizationID, Project: gate.projectID, OrganizationWide: gate.organizationGateway, Gateway: gate.metaServerID, Caller: []string{gate.userID, gate.externalUserID, gate.apiKeyID, credential}, Session: session, Request: raw}, nil
 }
 
-func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endpoint *endpointrepo.McpEndpoint, server *metamcprepo.MetaMcpServer, gate *metaGateContext, members []metaMember, req *rawRequest, params toolsCallParams) (json.RawMessage, error) {
+func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endpoint *endpointrepo.McpEndpoint, server *metamcprepo.MetaMcpServer, gate *metaGateContext, members []metaMember, req *rawRequest, params toolsCallParams) (body json.RawMessage, err error) {
 	started := time.Now()
 	if !s.codeExecutor.Enabled() || gate.discoveryMode != metamcp.DiscoveryModeCode {
 		return nil, oops.E(oops.CodeUnavailable, nil, "code mode is unavailable")
@@ -152,6 +152,17 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 			return nil, oops.E(oops.CodeInvalid, nil, "tools must be an array of exact qualified paths")
 		}
 	}
+	// Each run records one row of its own, as a container for the discovery
+	// helper and member calls it makes, which record theirs. A run the runtime
+	// refused records the refusal.
+	var refused error
+	defer func() {
+		failure := err
+		if refused != nil {
+			failure = refused
+		}
+		s.logMetaDiscovery(ctx, gate, metamcp.ToolCodeExecute, started, failure)
+	}()
 	scope, err := codeExecutionScope(ctx, gate, req.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid execution request ID")
@@ -163,7 +174,11 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 	}
 	defer backend.sessions.end(ctx)
 	factory := codemode.HostFactory(func(runCtx context.Context) (codemode.Host, error) {
-		return codemode.NewHost(runCtx, backend, gate.metaServerID.String(), selected)
+		host, err := codemode.NewHost(runCtx, backend, gate.metaServerID.String(), selected)
+		if err != nil {
+			return nil, fmt.Errorf("bind code host: %w", err)
+		}
+		return &metaCodeTelemetryHost{Host: host, service: s, gate: gate}, nil
 	})
 	execution, err := s.codeExecutor.Execute(ctx, scope, args.Code, factory)
 	if err != nil {
@@ -171,13 +186,15 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 		if refusal.Error.Code == codeRefusalUnexpected {
 			logger.WarnContext(ctx, "code execution was not admitted", attr.SlogError(err))
 		}
+		refused = oops.E(oops.CodeUnavailable, err, "code execution was not admitted")
 		return marshalCodeAdmissionRefusal(ctx, logger, req.ID, refusal, newCodeExecutionTiming(started, nil))
 	}
 	// The runner refused before the program started: report it in the same
 	// structured, retryable shape as a coordinator refusal.
 	if execution.Error != nil && len(execution.ToolCalls) == 0 {
-		if refused := runnerRefusal(execution.Error.Code); refused != nil {
-			return marshalCodeAdmissionRefusal(ctx, logger, req.ID, newCodeAdmissionRefusal(refused), newCodeExecutionTiming(started, execution))
+		if runnerErr := runnerRefusal(execution.Error.Code); runnerErr != nil {
+			refused = oops.E(oops.CodeUnavailable, runnerErr, "code execution was not admitted")
+			return marshalCodeAdmissionRefusal(ctx, logger, req.ID, newCodeAdmissionRefusal(runnerErr), newCodeExecutionTiming(started, execution))
 		}
 	}
 	structured, err := json.Marshal(execution)
@@ -188,7 +205,7 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize code content").LogError(ctx, logger)
 	}
-	body, err := json.Marshal(&result[codeToolCallResult]{ID: req.ID, Result: codeToolCallResult{toolCallResult: toolCallResult{Content: []json.RawMessage{chunk}, StructuredContent: structured, IsError: execution.Error != nil}, Meta: map[string]codeExecutionTiming{codeTimingMetaKey: newCodeExecutionTiming(started, execution)}}, serverIdentity: serverInfoMetaServer, cacheHints: nil})
+	body, err = json.Marshal(&result[codeToolCallResult]{ID: req.ID, Result: codeToolCallResult{toolCallResult: toolCallResult{Content: []json.RawMessage{chunk}, StructuredContent: structured, IsError: execution.Error != nil}, Meta: map[string]codeExecutionTiming{codeTimingMetaKey: newCodeExecutionTiming(started, execution)}}, serverIdentity: serverInfoMetaServer, cacheHints: nil})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize code response").LogError(ctx, logger)
 	}

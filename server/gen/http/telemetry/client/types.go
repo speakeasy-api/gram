@@ -1018,6 +1018,7 @@ type GetMcpNetworkTrafficResponseBody struct {
 // GetMetaMcpServerUsageResponseBody is the type of the "telemetry" service
 // "getMetaMcpServerUsage" endpoint HTTP response body.
 type GetMetaMcpServerUsageResponseBody struct {
+	Phases *MetaMcpCallPhasesResponseBody      `form:"phases,omitempty" json:"phases,omitempty" xml:"phases,omitempty"`
 	Funnel *MetaMcpDiscoveryFunnelResponseBody `form:"funnel,omitempty" json:"funnel,omitempty" xml:"funnel,omitempty"`
 	// Per-member execution breakdown, most active first
 	Members []*MetaMcpMemberUsageResponseBody `form:"members,omitempty" json:"members,omitempty" xml:"members,omitempty"`
@@ -8515,6 +8516,72 @@ type McpNetworkTrafficPointResponseBody struct {
 	PrivateRequests *int64 `form:"private_requests,omitempty" json:"private_requests,omitempty" xml:"private_requests,omitempty"`
 }
 
+// MetaMcpCallPhasesResponseBody is used to define fields on response body
+// types.
+type MetaMcpCallPhasesResponseBody struct {
+	// Counts by discovery mode, for each mode with calls in the window or the
+	// previous window
+	Modes []*MetaMcpModePhasesResponseBody `form:"modes,omitempty" json:"modes,omitempty" xml:"modes,omitempty"`
+	// Counts by position within the session, for calls whose session is known.
+	// Positions count from the first call in the window, so a session that began
+	// earlier starts again at 1.
+	Positions []*MetaMcpPositionPhasesResponseBody `form:"positions,omitempty" json:"positions,omitempty" xml:"positions,omitempty"`
+	// Width of each series bucket in seconds: a day for windows of a week or more,
+	// finer for shorter windows
+	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
+	// Buckets with calls, in ascending time order. Buckets start at the window
+	// start and step by interval_seconds; a bucket with no calls is omitted.
+	Series []*MetaMcpPhaseBucketResponseBody `form:"series,omitempty" json:"series,omitempty" xml:"series,omitempty"`
+	// Discovery and execution calls in the window with neither an MCP session nor
+	// a chat, which positions leave out
+	CallsWithoutSession *int64 `form:"calls_without_session,omitempty" json:"calls_without_session,omitempty" xml:"calls_without_session,omitempty"`
+}
+
+// MetaMcpModePhasesResponseBody is used to define fields on response body
+// types.
+type MetaMcpModePhasesResponseBody struct {
+	Mode *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
+	// Discovery calls: Progressive list_servers, describe_server and
+	// describe_tools, and Code Mode tools.servers, tools.search and tools.describe
+	DiscoveryCalls *int64 `form:"discovery_calls,omitempty" json:"discovery_calls,omitempty" xml:"discovery_calls,omitempty"`
+	// Member tool calls, however the connection reached them
+	ExecutionCalls *int64 `form:"execution_calls,omitempty" json:"execution_calls,omitempty" xml:"execution_calls,omitempty"`
+	// Code Mode execute runs. Each run contains discovery and execution calls and
+	// is counted as neither
+	ExecuteRuns *int64 `form:"execute_runs,omitempty" json:"execute_runs,omitempty" xml:"execute_runs,omitempty"`
+	// Discovery calls in the previous window
+	PreviousDiscoveryCalls *int64 `form:"previous_discovery_calls,omitempty" json:"previous_discovery_calls,omitempty" xml:"previous_discovery_calls,omitempty"`
+	// Member tool calls in the previous window
+	PreviousExecutionCalls *int64 `form:"previous_execution_calls,omitempty" json:"previous_execution_calls,omitempty" xml:"previous_execution_calls,omitempty"`
+	// Code Mode execute runs in the previous window
+	PreviousExecuteRuns *int64 `form:"previous_execute_runs,omitempty" json:"previous_execute_runs,omitempty" xml:"previous_execute_runs,omitempty"`
+}
+
+// MetaMcpPositionPhasesResponseBody is used to define fields on response body
+// types.
+type MetaMcpPositionPhasesResponseBody struct {
+	Mode     *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
+	Position *string `form:"position,omitempty" json:"position,omitempty" xml:"position,omitempty"`
+	// Discovery calls at these positions
+	DiscoveryCalls *int64 `form:"discovery_calls,omitempty" json:"discovery_calls,omitempty" xml:"discovery_calls,omitempty"`
+	// Member tool calls at these positions
+	ExecutionCalls *int64 `form:"execution_calls,omitempty" json:"execution_calls,omitempty" xml:"execution_calls,omitempty"`
+}
+
+// MetaMcpPhaseBucketResponseBody is used to define fields on response body
+// types.
+type MetaMcpPhaseBucketResponseBody struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano *string `form:"bucket_time_unix_nano,omitempty" json:"bucket_time_unix_nano,omitempty" xml:"bucket_time_unix_nano,omitempty"`
+	Mode               *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
+	// Discovery calls in this bucket
+	DiscoveryCalls *int64 `form:"discovery_calls,omitempty" json:"discovery_calls,omitempty" xml:"discovery_calls,omitempty"`
+	// Member tool calls in this bucket
+	ExecutionCalls *int64 `form:"execution_calls,omitempty" json:"execution_calls,omitempty" xml:"execution_calls,omitempty"`
+	// Code Mode execute runs in this bucket
+	ExecuteRuns *int64 `form:"execute_runs,omitempty" json:"execute_runs,omitempty" xml:"execute_runs,omitempty"`
+}
+
 // MetaMcpDiscoveryFunnelResponseBody is used to define fields on response body
 // types.
 type MetaMcpDiscoveryFunnelResponseBody struct {
@@ -12562,6 +12629,7 @@ func NewGetMcpNetworkTrafficGatewayError(body *GetMcpNetworkTrafficGatewayErrorR
 // "getMetaMcpServerUsage" endpoint result from a HTTP "OK" response.
 func NewGetMetaMcpServerUsageResultOK(body *GetMetaMcpServerUsageResponseBody) *telemetry.GetMetaMcpServerUsageResult {
 	v := &telemetry.GetMetaMcpServerUsageResult{}
+	v.Phases = unmarshalMetaMcpCallPhasesResponseBodyToTelemetryMetaMcpCallPhases(body.Phases)
 	v.Funnel = unmarshalMetaMcpDiscoveryFunnelResponseBodyToTelemetryMetaMcpDiscoveryFunnel(body.Funnel)
 	v.Members = make([]*telemetry.MetaMcpMemberUsage, len(body.Members))
 	for i, val := range body.Members {
@@ -17259,11 +17327,19 @@ func ValidateGetMcpNetworkTrafficResponseBody(body *GetMcpNetworkTrafficResponse
 // ValidateGetMetaMcpServerUsageResponseBody runs the validations defined on
 // GetMetaMcpServerUsageResponseBody
 func ValidateGetMetaMcpServerUsageResponseBody(body *GetMetaMcpServerUsageResponseBody) (err error) {
+	if body.Phases == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("phases", "body"))
+	}
 	if body.Funnel == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("funnel", "body"))
 	}
 	if body.Members == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("members", "body"))
+	}
+	if body.Phases != nil {
+		if err2 := ValidateMetaMcpCallPhasesResponseBody(body.Phases); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	if body.Funnel != nil {
 		if err2 := ValidateMetaMcpDiscoveryFunnelResponseBody(body.Funnel); err2 != nil {
@@ -27269,6 +27345,134 @@ func ValidateMcpNetworkTrafficPointResponseBody(body *McpNetworkTrafficPointResp
 	}
 	if body.BucketStart != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.bucket_start", *body.BucketStart, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateMetaMcpCallPhasesResponseBody runs the validations defined on
+// MetaMcpCallPhasesResponseBody
+func ValidateMetaMcpCallPhasesResponseBody(body *MetaMcpCallPhasesResponseBody) (err error) {
+	if body.Modes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("modes", "body"))
+	}
+	if body.Positions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("positions", "body"))
+	}
+	if body.IntervalSeconds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("interval_seconds", "body"))
+	}
+	if body.Series == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("series", "body"))
+	}
+	if body.CallsWithoutSession == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("calls_without_session", "body"))
+	}
+	for _, e := range body.Modes {
+		if e != nil {
+			if err2 := ValidateMetaMcpModePhasesResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Positions {
+		if e != nil {
+			if err2 := ValidateMetaMcpPositionPhasesResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Series {
+		if e != nil {
+			if err2 := ValidateMetaMcpPhaseBucketResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateMetaMcpModePhasesResponseBody runs the validations defined on
+// MetaMcpModePhasesResponseBody
+func ValidateMetaMcpModePhasesResponseBody(body *MetaMcpModePhasesResponseBody) (err error) {
+	if body.Mode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
+	}
+	if body.DiscoveryCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("discovery_calls", "body"))
+	}
+	if body.ExecutionCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("execution_calls", "body"))
+	}
+	if body.ExecuteRuns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("execute_runs", "body"))
+	}
+	if body.PreviousDiscoveryCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_discovery_calls", "body"))
+	}
+	if body.PreviousExecutionCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_execution_calls", "body"))
+	}
+	if body.PreviousExecuteRuns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_execute_runs", "body"))
+	}
+	if body.Mode != nil {
+		if !(*body.Mode == "progressive" || *body.Mode == "direct" || *body.Mode == "code_mode" || *body.Mode == "unrecorded") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"progressive", "direct", "code_mode", "unrecorded"}))
+		}
+	}
+	return
+}
+
+// ValidateMetaMcpPositionPhasesResponseBody runs the validations defined on
+// MetaMcpPositionPhasesResponseBody
+func ValidateMetaMcpPositionPhasesResponseBody(body *MetaMcpPositionPhasesResponseBody) (err error) {
+	if body.Mode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
+	}
+	if body.Position == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("position", "body"))
+	}
+	if body.DiscoveryCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("discovery_calls", "body"))
+	}
+	if body.ExecutionCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("execution_calls", "body"))
+	}
+	if body.Mode != nil {
+		if !(*body.Mode == "progressive" || *body.Mode == "direct" || *body.Mode == "code_mode" || *body.Mode == "unrecorded") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"progressive", "direct", "code_mode", "unrecorded"}))
+		}
+	}
+	if body.Position != nil {
+		if !(*body.Position == "1" || *body.Position == "2" || *body.Position == "3-5" || *body.Position == "6-10" || *body.Position == "11-20" || *body.Position == "21+") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.position", *body.Position, []any{"1", "2", "3-5", "6-10", "11-20", "21+"}))
+		}
+	}
+	return
+}
+
+// ValidateMetaMcpPhaseBucketResponseBody runs the validations defined on
+// MetaMcpPhaseBucketResponseBody
+func ValidateMetaMcpPhaseBucketResponseBody(body *MetaMcpPhaseBucketResponseBody) (err error) {
+	if body.BucketTimeUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_time_unix_nano", "body"))
+	}
+	if body.Mode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
+	}
+	if body.DiscoveryCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("discovery_calls", "body"))
+	}
+	if body.ExecutionCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("execution_calls", "body"))
+	}
+	if body.ExecuteRuns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("execute_runs", "body"))
+	}
+	if body.Mode != nil {
+		if !(*body.Mode == "progressive" || *body.Mode == "direct" || *body.Mode == "code_mode" || *body.Mode == "unrecorded") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"progressive", "direct", "code_mode", "unrecorded"}))
+		}
 	}
 	return
 }

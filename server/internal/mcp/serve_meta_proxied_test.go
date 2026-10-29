@@ -427,8 +427,10 @@ func TestServePublic_MetaEndpoint_ExecuteTool_ForwardsEachMembersOwnBearer(t *te
 	upstreamA.requireNeverCarried(t, "Bearer token-member-b", "member A's upstream must never see member B's bearer")
 	upstreamB.requireNeverCarried(t, "Bearer token-member-a", "member B's upstream must never see member A's bearer")
 
-	// The proxied members' tool_call rows carry the gateway id.
-	requireTelemetryRowCount(t, `meta_mcp_server_id = ? AND event_source = 'tool_call' AND tool_name = 'ping'`, 2, meta.ID.String())
+	// The proxied members' tool_call rows carry the gateway id and the
+	// connection's discovery mode.
+	requireTelemetryRowCount(t, `meta_mcp_server_id = ? AND event_source = 'tool_call' AND tool_name = 'ping'
+		   AND toString(attributes.gram.meta_mcp_server.discovery_mode) = 'progressive'`, 2, meta.ID.String())
 }
 
 // A caller's _meta must not reach a proxied member: WireMeta re-serializes

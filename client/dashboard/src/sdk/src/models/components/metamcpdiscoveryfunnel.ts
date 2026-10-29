@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Counts of each gateway drill-down stage in the window. Discovery stages come from meta_discovery events; executions from gateway-attributed tool calls.
+ * Counts of each Progressive drill-down stage in the window. Discovery stages come from meta_discovery events; executions from gateway-attributed tool calls in every discovery mode.
  */
 export type MetaMcpDiscoveryFunnel = {
   /**

@@ -7,6 +7,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  MetaMcpCallPhases,
+  MetaMcpCallPhases$inboundSchema,
+} from "./metamcpcallphases.js";
+import {
   MetaMcpDiscoveryFunnel,
   MetaMcpDiscoveryFunnel$inboundSchema,
 } from "./metamcpdiscoveryfunnel.js";
@@ -16,17 +20,21 @@ import {
 } from "./metamcpmemberusage.js";
 
 /**
- * Discovery funnel plus per-member execution breakdown for one gateway (meta MCP server). Zero counts mean no rows were observed in the window within telemetry retention — they do not distinguish an idle gateway from traffic outside the window or the 90-day retention; telemetry-disabled organizations get a not-found error instead of zeros.
+ * Discovery versus execution by discovery mode, the Progressive discovery funnel, and the per-member execution breakdown for one gateway (meta MCP server). Zero counts mean no rows were observed in the window within telemetry retention — they do not distinguish an idle gateway from traffic outside the window or the 90-day retention; telemetry-disabled organizations get a not-found error instead of zeros.
  */
 export type GetMetaMcpServerUsageResult = {
   /**
-   * Counts of each gateway drill-down stage in the window. Discovery stages come from meta_discovery events; executions from gateway-attributed tool calls.
+   * Counts of each Progressive drill-down stage in the window. Discovery stages come from meta_discovery events; executions from gateway-attributed tool calls in every discovery mode.
    */
   funnel: MetaMcpDiscoveryFunnel;
   /**
    * Per-member execution breakdown, most active first
    */
   members: Array<MetaMcpMemberUsage>;
+  /**
+   * How a gateway's calls divide between discovery and execution, by discovery mode. A gateway serves each connection in the mode it was approved with, so one gateway can carry several modes at once.
+   */
+  phases: MetaMcpCallPhases;
 };
 
 /** @internal */
@@ -36,6 +44,7 @@ export const GetMetaMcpServerUsageResult$inboundSchema: z.ZodMiniType<
 > = z.object({
   funnel: MetaMcpDiscoveryFunnel$inboundSchema,
   members: z.array(MetaMcpMemberUsage$inboundSchema),
+  phases: MetaMcpCallPhases$inboundSchema,
 });
 
 export function getMetaMcpServerUsageResultFromJSON(

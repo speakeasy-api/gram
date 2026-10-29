@@ -189,6 +189,9 @@ func (i *ToolsCallClickHouseLogInterceptor) emit(ctx context.Context, request *p
 	}
 	if i.identity.MetaMCPServerID != "" {
 		logAttrs[attr.MetaMcpServerIDKey] = i.identity.MetaMCPServerID
+		if connection, ok := contextvalues.GetGatewayConnection(ctx); ok {
+			logAttrs.RecordGatewayConnection(connection)
+		}
 	}
 	logAttrs.RecordDuration(durationSec)
 	logAttrs.RecordStatusCode(statusCode)

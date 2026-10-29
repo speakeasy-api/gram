@@ -308,7 +308,7 @@ var _ = Service("telemetry", func() {
 	})
 
 	Method("getMetaMcpServerUsage", func() {
-		Description("Discovery funnel and per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.")
+		Description("Discovery versus execution across every discovery mode, the Progressive discovery funnel, and the per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.")
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("producer")
 		})
@@ -3063,7 +3063,7 @@ var GetMetaMcpServerUsagePayload = Type("GetMetaMcpServerUsagePayload", func() {
 })
 
 var MetaMcpDiscoveryFunnel = Type("MetaMcpDiscoveryFunnel", func() {
-	Description("Counts of each gateway drill-down stage in the window. Discovery stages come from meta_discovery events; executions from gateway-attributed tool calls.")
+	Description("Counts of each Progressive drill-down stage in the window. Discovery stages come from meta_discovery events; executions from gateway-attributed tool calls in every discovery mode.")
 
 	Attribute("list_servers", Int64, "list_servers calls")
 	Attribute("describe_server", Int64, "describe_server calls")
@@ -3088,13 +3088,73 @@ var MetaMcpMemberUsage = Type("MetaMcpMemberUsage", func() {
 	Required("mcp_server_id", "tool_calls", "error_count")
 })
 
-var GetMetaMcpServerUsageResult = Type("GetMetaMcpServerUsageResult", func() {
-	Description("Discovery funnel plus per-member execution breakdown for one gateway (meta MCP server). Zero counts mean no rows were observed in the window within telemetry retention — they do not distinguish an idle gateway from traffic outside the window or the 90-day retention; telemetry-disabled organizations get a not-found error instead of zeros.")
+var MetaMcpDiscoveryMode = Type("MetaMcpDiscoveryMode", String, func() {
+	Description("The discovery mode of the gateway connection that served a call. unrecorded marks a call whose row names no mode this server knows: member calls written before gateways recorded their connection's mode, and modes a newer release recorded.")
+	Enum("progressive", "direct", "code_mode", "unrecorded")
+})
 
+var MetaMcpCallPosition = Type("MetaMcpCallPosition", String, func() {
+	Description("A range of positions of a call within its session, counting the session's discovery and execution calls in order from 1.")
+	Enum("1", "2", "3-5", "6-10", "11-20", "21+")
+})
+
+var MetaMcpModePhases = Type("MetaMcpModePhases", func() {
+	Description("Discovery and execution counts for one discovery mode, in the window and in the window of equal length before it.")
+
+	Attribute("mode", MetaMcpDiscoveryMode)
+	Attribute("discovery_calls", Int64, "Discovery calls: Progressive list_servers, describe_server and describe_tools, and Code Mode tools.servers, tools.search and tools.describe")
+	Attribute("execution_calls", Int64, "Member tool calls, however the connection reached them")
+	Attribute("execute_runs", Int64, "Code Mode execute runs. Each run contains discovery and execution calls and is counted as neither")
+	Attribute("previous_discovery_calls", Int64, "Discovery calls in the previous window")
+	Attribute("previous_execution_calls", Int64, "Member tool calls in the previous window")
+	Attribute("previous_execute_runs", Int64, "Code Mode execute runs in the previous window")
+
+	Required("mode", "discovery_calls", "execution_calls", "execute_runs", "previous_discovery_calls", "previous_execution_calls", "previous_execute_runs")
+})
+
+var MetaMcpPositionPhases = Type("MetaMcpPositionPhases", func() {
+	Description("Discovery and execution calls at one range of positions within their sessions, for one discovery mode.")
+
+	Attribute("mode", MetaMcpDiscoveryMode)
+	Attribute("position", MetaMcpCallPosition)
+	Attribute("discovery_calls", Int64, "Discovery calls at these positions")
+	Attribute("execution_calls", Int64, "Member tool calls at these positions")
+
+	Required("mode", "position", "discovery_calls", "execution_calls")
+})
+
+var MetaMcpPhaseBucket = Type("MetaMcpPhaseBucket", func() {
+	Description("Discovery and execution calls for one discovery mode during one time bucket.")
+
+	Attribute("bucket_time_unix_nano", String, "Bucket start time in Unix nanoseconds (string for JS precision)")
+	Attribute("mode", MetaMcpDiscoveryMode)
+	Attribute("discovery_calls", Int64, "Discovery calls in this bucket")
+	Attribute("execution_calls", Int64, "Member tool calls in this bucket")
+	Attribute("execute_runs", Int64, "Code Mode execute runs in this bucket")
+
+	Required("bucket_time_unix_nano", "mode", "discovery_calls", "execution_calls", "execute_runs")
+})
+
+var MetaMcpCallPhases = Type("MetaMcpCallPhases", func() {
+	Description("How a gateway's calls divide between discovery and execution, by discovery mode. A gateway serves each connection in the mode it was approved with, so one gateway can carry several modes at once.")
+
+	Attribute("modes", ArrayOf(MetaMcpModePhases), "Counts by discovery mode, for each mode with calls in the window or the previous window")
+	Attribute("positions", ArrayOf(MetaMcpPositionPhases), "Counts by position within the session, for calls whose session is known. Positions count from the first call in the window, so a session that began earlier starts again at 1.")
+	Attribute("interval_seconds", Int64, "Width of each series bucket in seconds: a day for windows of a week or more, finer for shorter windows")
+	Attribute("series", ArrayOf(MetaMcpPhaseBucket), "Buckets with calls, in ascending time order. Buckets start at the window start and step by interval_seconds; a bucket with no calls is omitted.")
+	Attribute("calls_without_session", Int64, "Discovery and execution calls in the window with neither an MCP session nor a chat, which positions leave out")
+
+	Required("modes", "positions", "interval_seconds", "series", "calls_without_session")
+})
+
+var GetMetaMcpServerUsageResult = Type("GetMetaMcpServerUsageResult", func() {
+	Description("Discovery versus execution by discovery mode, the Progressive discovery funnel, and the per-member execution breakdown for one gateway (meta MCP server). Zero counts mean no rows were observed in the window within telemetry retention — they do not distinguish an idle gateway from traffic outside the window or the 90-day retention; telemetry-disabled organizations get a not-found error instead of zeros.")
+
+	Attribute("phases", MetaMcpCallPhases)
 	Attribute("funnel", MetaMcpDiscoveryFunnel)
 	Attribute("members", ArrayOf(MetaMcpMemberUsage), "Per-member execution breakdown, most active first")
 
-	Required("funnel", "members")
+	Required("phases", "funnel", "members")
 })
 
 var McpServerActivityTargetType = Type("McpServerActivityTargetType", String, func() {

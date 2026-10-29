@@ -9347,6 +9347,88 @@ func unmarshalMcpNetworkTrafficPointResponseBodyToTelemetryMcpNetworkTrafficPoin
 	return res
 }
 
+// unmarshalMetaMcpCallPhasesResponseBodyToTelemetryMetaMcpCallPhases builds a
+// value of type *telemetry.MetaMcpCallPhases from a value of type
+// *MetaMcpCallPhasesResponseBody.
+func unmarshalMetaMcpCallPhasesResponseBodyToTelemetryMetaMcpCallPhases(v *MetaMcpCallPhasesResponseBody) *telemetry.MetaMcpCallPhases {
+	res := &telemetry.MetaMcpCallPhases{
+		IntervalSeconds:     *v.IntervalSeconds,
+		CallsWithoutSession: *v.CallsWithoutSession,
+	}
+	res.Modes = make([]*telemetry.MetaMcpModePhases, len(v.Modes))
+	for i, val := range v.Modes {
+		if val == nil {
+			res.Modes[i] = nil
+			continue
+		}
+		res.Modes[i] = unmarshalMetaMcpModePhasesResponseBodyToTelemetryMetaMcpModePhases(val)
+	}
+	res.Positions = make([]*telemetry.MetaMcpPositionPhases, len(v.Positions))
+	for i, val := range v.Positions {
+		if val == nil {
+			res.Positions[i] = nil
+			continue
+		}
+		res.Positions[i] = unmarshalMetaMcpPositionPhasesResponseBodyToTelemetryMetaMcpPositionPhases(val)
+	}
+	res.Series = make([]*telemetry.MetaMcpPhaseBucket, len(v.Series))
+	for i, val := range v.Series {
+		if val == nil {
+			res.Series[i] = nil
+			continue
+		}
+		res.Series[i] = unmarshalMetaMcpPhaseBucketResponseBodyToTelemetryMetaMcpPhaseBucket(val)
+	}
+
+	return res
+}
+
+// unmarshalMetaMcpModePhasesResponseBodyToTelemetryMetaMcpModePhases builds a
+// value of type *telemetry.MetaMcpModePhases from a value of type
+// *MetaMcpModePhasesResponseBody.
+func unmarshalMetaMcpModePhasesResponseBodyToTelemetryMetaMcpModePhases(v *MetaMcpModePhasesResponseBody) *telemetry.MetaMcpModePhases {
+	res := &telemetry.MetaMcpModePhases{
+		Mode:                   telemetry.MetaMcpDiscoveryMode(*v.Mode),
+		DiscoveryCalls:         *v.DiscoveryCalls,
+		ExecutionCalls:         *v.ExecutionCalls,
+		ExecuteRuns:            *v.ExecuteRuns,
+		PreviousDiscoveryCalls: *v.PreviousDiscoveryCalls,
+		PreviousExecutionCalls: *v.PreviousExecutionCalls,
+		PreviousExecuteRuns:    *v.PreviousExecuteRuns,
+	}
+
+	return res
+}
+
+// unmarshalMetaMcpPositionPhasesResponseBodyToTelemetryMetaMcpPositionPhases
+// builds a value of type *telemetry.MetaMcpPositionPhases from a value of type
+// *MetaMcpPositionPhasesResponseBody.
+func unmarshalMetaMcpPositionPhasesResponseBodyToTelemetryMetaMcpPositionPhases(v *MetaMcpPositionPhasesResponseBody) *telemetry.MetaMcpPositionPhases {
+	res := &telemetry.MetaMcpPositionPhases{
+		Mode:           telemetry.MetaMcpDiscoveryMode(*v.Mode),
+		Position:       telemetry.MetaMcpCallPosition(*v.Position),
+		DiscoveryCalls: *v.DiscoveryCalls,
+		ExecutionCalls: *v.ExecutionCalls,
+	}
+
+	return res
+}
+
+// unmarshalMetaMcpPhaseBucketResponseBodyToTelemetryMetaMcpPhaseBucket builds
+// a value of type *telemetry.MetaMcpPhaseBucket from a value of type
+// *MetaMcpPhaseBucketResponseBody.
+func unmarshalMetaMcpPhaseBucketResponseBodyToTelemetryMetaMcpPhaseBucket(v *MetaMcpPhaseBucketResponseBody) *telemetry.MetaMcpPhaseBucket {
+	res := &telemetry.MetaMcpPhaseBucket{
+		BucketTimeUnixNano: *v.BucketTimeUnixNano,
+		Mode:               telemetry.MetaMcpDiscoveryMode(*v.Mode),
+		DiscoveryCalls:     *v.DiscoveryCalls,
+		ExecutionCalls:     *v.ExecutionCalls,
+		ExecuteRuns:        *v.ExecuteRuns,
+	}
+
+	return res
+}
+
 // unmarshalMetaMcpDiscoveryFunnelResponseBodyToTelemetryMetaMcpDiscoveryFunnel
 // builds a value of type *telemetry.MetaMcpDiscoveryFunnel from a value of
 // type *MetaMcpDiscoveryFunnelResponseBody.

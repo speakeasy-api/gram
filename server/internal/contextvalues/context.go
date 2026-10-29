@@ -428,6 +428,37 @@ func GetMCPClientInfo(ctx context.Context) (MCPClientInfo, bool) {
 	return value, ok && value.Name != ""
 }
 
+type gatewayConnectionContextKey struct{}
+
+// GatewayConnection is the gateway connection a member tool call was
+// dispatched through. Attribution only, never authorization.
+type GatewayConnection struct {
+	// DiscoveryMode is the connection's effective discovery mode.
+	DiscoveryMode string
+
+	// SessionID is the MCP session the client named in its Mcp-Session-Id
+	// header. Empty when it named none: a session id minted for a single
+	// request would make every call look like the first of its session.
+	SessionID string
+
+	// ChatID is the Speakeasy chat the call belongs to, when one is known.
+	ChatID string
+}
+
+// SetGatewayConnection carries the gateway connection down to the tool-call
+// emitters that run below the gateway, which never see its request state: the
+// hosted dispatch and the proxy interceptor.
+func SetGatewayConnection(ctx context.Context, value GatewayConnection) context.Context {
+	return context.WithValue(ctx, gatewayConnectionContextKey{}, value)
+}
+
+// GetGatewayConnection returns the gateway connection a call was dispatched
+// through. The second result is false outside a gateway dispatch.
+func GetGatewayConnection(ctx context.Context) (GatewayConnection, bool) {
+	value, ok := ctx.Value(gatewayConnectionContextKey{}).(GatewayConnection)
+	return value, ok
+}
+
 // SetActingSurface marks the surface a request arrives through, for surfaces
 // that cannot be told apart from the auth context alone.
 //

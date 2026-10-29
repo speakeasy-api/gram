@@ -33,3 +33,20 @@ const (
 // ToolCodeExecute is the one tool Code Mode serves: it runs a Python program
 // against the connection's member servers.
 const ToolCodeExecute = "execute"
+
+// The Code Mode discovery helpers a program calls, under the names gateway
+// telemetry records them by. They differ from the Progressive tool names so
+// each mode's discovery stays apart.
+const (
+	// ToolCodeServers is the tools.servers helper, which pages through the
+	// member prefixes.
+	ToolCodeServers = "tools.servers"
+
+	// ToolCodeSearch is the tools.search helper, which ranks member tools for
+	// a query.
+	ToolCodeSearch = "tools.search"
+
+	// ToolCodeDescribe is the tools.describe helper, which returns one tool's
+	// full definition.
+	ToolCodeDescribe = "tools.describe"
+)

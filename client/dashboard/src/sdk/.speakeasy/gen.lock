@@ -1589,9 +1589,13 @@ trackedFiles:
   src/models/components/mcpservertoolsetsummary.ts: {}
   src/models/components/mcpsetupguide.ts: {}
   src/models/components/mcpsetupguideremote.ts: {}
+  src/models/components/metamcpcallphases.ts: {}
   src/models/components/metamcpdiscoveryfunnel.ts: {}
   src/models/components/metamcpmember.ts: {}
   src/models/components/metamcpmemberusage.ts: {}
+  src/models/components/metamcpmodephases.ts: {}
+  src/models/components/metamcpphasebucket.ts: {}
+  src/models/components/metamcppositionphases.ts: {}
   src/models/components/metamcpserver.ts: {}
   src/models/components/meterusagebreakdown.ts: {}
   src/models/components/meterusagebucket.ts: {}
@@ -7802,7 +7806,7 @@ examples:
         application/json: {"from": "2026-06-16T21:32:13.467Z", "meta_mcp_server_id": "c3d6a51c-c4ca-46c0-b018-7c92b1817afd", "to": "2025-05-22T02:21:17.518Z"}
       responses:
         "200":
-          application/json: {"funnel": {"describe_server": 284078, "describe_tools": 906068, "execute_tool": 625714, "list_servers": 910919}, "members": []}
+          application/json: {"funnel": {"describe_server": 284078, "describe_tools": 906068, "execute_tool": 625714, "list_servers": 910919}, "members": [], "phases": {"calls_without_session": 819250, "interval_seconds": 789363, "modes": [], "positions": [{"discovery_calls": 389785, "execution_calls": 647335, "mode": "direct", "position": "1"}], "series": [{"bucket_time_unix_nano": "<value>", "discovery_calls": 812009, "execute_runs": 312454, "execution_calls": 807936, "mode": "code_mode"}]}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

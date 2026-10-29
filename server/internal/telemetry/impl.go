@@ -2085,6 +2085,18 @@ func (s *Service) GetMetaMcpServerUsage(ctx context.Context, payload *telem_gen.
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching meta mcp server usage")
 	}
 
+	intervalSeconds := metaMCPPhaseInterval(timeStart, timeEnd)
+	phases, err := s.chRepo.GetMetaMCPServerPhases(ctx, repo.GetMetaMCPServerPhasesParams{
+		GramProjectID:   authCtx.ProjectID.String(),
+		MetaMCPServerID: metaMCPServerID.String(),
+		TimeStart:       timeStart,
+		TimeEnd:         timeEnd,
+		IntervalSeconds: intervalSeconds,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching meta mcp server call phases")
+	}
+
 	// The funnel keeps every dispatch; the breakdown only lists members still on the gateway.
 	currentMembers, err := metamcpRepo.New(s.db).ListMetaMCPMembers(ctx, metamcpRepo.ListMetaMCPMembersParams{
 		MetaMcpServerID: metaMCPServerID,
@@ -2117,6 +2129,7 @@ func (s *Service) GetMetaMcpServerUsage(ctx context.Context, payload *telem_gen.
 	}
 
 	return &telem_gen.GetMetaMcpServerUsageResult{
+		Phases: buildMetaMCPCallPhases(phases, intervalSeconds),
 		Funnel: &telem_gen.MetaMcpDiscoveryFunnel{
 			ListServers:    uint64ToInt64(usage.Funnel.ListServers),
 			DescribeServer: uint64ToInt64(usage.Funnel.DescribeServer),

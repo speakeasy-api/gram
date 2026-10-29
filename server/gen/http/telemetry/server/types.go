@@ -1018,6 +1018,7 @@ type GetMcpNetworkTrafficResponseBody struct {
 // GetMetaMcpServerUsageResponseBody is the type of the "telemetry" service
 // "getMetaMcpServerUsage" endpoint HTTP response body.
 type GetMetaMcpServerUsageResponseBody struct {
+	Phases *MetaMcpCallPhasesResponseBody      `form:"phases" json:"phases" xml:"phases"`
 	Funnel *MetaMcpDiscoveryFunnelResponseBody `form:"funnel" json:"funnel" xml:"funnel"`
 	// Per-member execution breakdown, most active first
 	Members []*MetaMcpMemberUsageResponseBody `form:"members" json:"members" xml:"members"`
@@ -8410,6 +8411,72 @@ type McpNetworkTrafficPointResponseBody struct {
 	PrivateRequests int64 `form:"private_requests" json:"private_requests" xml:"private_requests"`
 }
 
+// MetaMcpCallPhasesResponseBody is used to define fields on response body
+// types.
+type MetaMcpCallPhasesResponseBody struct {
+	// Counts by discovery mode, for each mode with calls in the window or the
+	// previous window
+	Modes []*MetaMcpModePhasesResponseBody `form:"modes" json:"modes" xml:"modes"`
+	// Counts by position within the session, for calls whose session is known.
+	// Positions count from the first call in the window, so a session that began
+	// earlier starts again at 1.
+	Positions []*MetaMcpPositionPhasesResponseBody `form:"positions" json:"positions" xml:"positions"`
+	// Width of each series bucket in seconds: a day for windows of a week or more,
+	// finer for shorter windows
+	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
+	// Buckets with calls, in ascending time order. Buckets start at the window
+	// start and step by interval_seconds; a bucket with no calls is omitted.
+	Series []*MetaMcpPhaseBucketResponseBody `form:"series" json:"series" xml:"series"`
+	// Discovery and execution calls in the window with neither an MCP session nor
+	// a chat, which positions leave out
+	CallsWithoutSession int64 `form:"calls_without_session" json:"calls_without_session" xml:"calls_without_session"`
+}
+
+// MetaMcpModePhasesResponseBody is used to define fields on response body
+// types.
+type MetaMcpModePhasesResponseBody struct {
+	Mode string `form:"mode" json:"mode" xml:"mode"`
+	// Discovery calls: Progressive list_servers, describe_server and
+	// describe_tools, and Code Mode tools.servers, tools.search and tools.describe
+	DiscoveryCalls int64 `form:"discovery_calls" json:"discovery_calls" xml:"discovery_calls"`
+	// Member tool calls, however the connection reached them
+	ExecutionCalls int64 `form:"execution_calls" json:"execution_calls" xml:"execution_calls"`
+	// Code Mode execute runs. Each run contains discovery and execution calls and
+	// is counted as neither
+	ExecuteRuns int64 `form:"execute_runs" json:"execute_runs" xml:"execute_runs"`
+	// Discovery calls in the previous window
+	PreviousDiscoveryCalls int64 `form:"previous_discovery_calls" json:"previous_discovery_calls" xml:"previous_discovery_calls"`
+	// Member tool calls in the previous window
+	PreviousExecutionCalls int64 `form:"previous_execution_calls" json:"previous_execution_calls" xml:"previous_execution_calls"`
+	// Code Mode execute runs in the previous window
+	PreviousExecuteRuns int64 `form:"previous_execute_runs" json:"previous_execute_runs" xml:"previous_execute_runs"`
+}
+
+// MetaMcpPositionPhasesResponseBody is used to define fields on response body
+// types.
+type MetaMcpPositionPhasesResponseBody struct {
+	Mode     string `form:"mode" json:"mode" xml:"mode"`
+	Position string `form:"position" json:"position" xml:"position"`
+	// Discovery calls at these positions
+	DiscoveryCalls int64 `form:"discovery_calls" json:"discovery_calls" xml:"discovery_calls"`
+	// Member tool calls at these positions
+	ExecutionCalls int64 `form:"execution_calls" json:"execution_calls" xml:"execution_calls"`
+}
+
+// MetaMcpPhaseBucketResponseBody is used to define fields on response body
+// types.
+type MetaMcpPhaseBucketResponseBody struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano string `form:"bucket_time_unix_nano" json:"bucket_time_unix_nano" xml:"bucket_time_unix_nano"`
+	Mode               string `form:"mode" json:"mode" xml:"mode"`
+	// Discovery calls in this bucket
+	DiscoveryCalls int64 `form:"discovery_calls" json:"discovery_calls" xml:"discovery_calls"`
+	// Member tool calls in this bucket
+	ExecutionCalls int64 `form:"execution_calls" json:"execution_calls" xml:"execution_calls"`
+	// Code Mode execute runs in this bucket
+	ExecuteRuns int64 `form:"execute_runs" json:"execute_runs" xml:"execute_runs"`
+}
+
 // MetaMcpDiscoveryFunnelResponseBody is used to define fields on response body
 // types.
 type MetaMcpDiscoveryFunnelResponseBody struct {
@@ -9520,6 +9587,9 @@ func NewGetMcpNetworkTrafficResponseBody(res *telemetry.GetMcpNetworkTrafficResu
 // result of the "getMetaMcpServerUsage" endpoint of the "telemetry" service.
 func NewGetMetaMcpServerUsageResponseBody(res *telemetry.GetMetaMcpServerUsageResult) *GetMetaMcpServerUsageResponseBody {
 	body := &GetMetaMcpServerUsageResponseBody{}
+	if res.Phases != nil {
+		body.Phases = marshalTelemetryMetaMcpCallPhasesToMetaMcpCallPhasesResponseBody(res.Phases)
+	}
 	if res.Funnel != nil {
 		body.Funnel = marshalTelemetryMetaMcpDiscoveryFunnelToMetaMcpDiscoveryFunnelResponseBody(res.Funnel)
 	}

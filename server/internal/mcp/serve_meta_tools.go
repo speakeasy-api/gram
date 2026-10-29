@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
@@ -224,8 +225,12 @@ func (s *Service) handleMetaExecuteToolCall(
 	return s.executeMetaMemberTool(ctx, logger, gate, members, req, qualified, arguments, meta)
 }
 
-// executeMetaMemberTool is shared by Direct calls and Progressive execute_tool.
+// executeMetaMemberTool is shared by Direct calls, Progressive execute_tool,
+// and Code Mode tools.call.
 func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, req *rawRequest, qualified string, arguments json.RawMessage, meta *mcprequests.WireMeta) (json.RawMessage, error) {
+	// The member's tool_call row is written below the gateway, by the hosted
+	// dispatch or the proxy interceptor, so carry the connection down to it.
+	ctx = contextvalues.SetGatewayConnection(ctx, gate.connection())
 	serverSlug, toolName, err := metamcp.SplitQualifiedName(qualified)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
