@@ -747,16 +747,20 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 // sharedPluginEntry is everything the shared marketplace manifests and README
 // read from one plugin. A publish builds it from the plugin's live state, or,
 // for a plugin whose auto sync is off, from the files it was last published
-// with (see heldPluginEntry), so the manifests keep listing it as published.
+// with, so the manifests keep listing it as published.
 type sharedPluginEntry struct {
 	Slug        string
 	Name        string
 	Description string
+
 	// ServerCount is shown in the README's plugin table.
 	ServerCount int
+
 	// CodexAuthentication is the plugin's Codex marketplace authentication
-	// policy (see codexAuthPolicy).
+	// policy: ON_INSTALL when installing it prompts for a credential,
+	// otherwise ON_USE.
 	CodexAuthentication string
+
 	// AgentPluginsPackage reports whether the plugin ships the portable Agent
 	// Plugins package, which is what Copilot lists.
 	AgentPluginsPackage bool

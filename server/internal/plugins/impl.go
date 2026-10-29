@@ -2210,8 +2210,7 @@ type publishProjectInput struct {
 	// IncludePausedPlugins publishes the pending changes of plugins whose auto
 	// sync is off. Only the dashboard's manual sync (PublishPlugins) sets it.
 	// Every other publish is automatic and keeps each such plugin as it was
-	// last published, or leaves it out if it was never published (see
-	// planPausedPlugins).
+	// last published, or leaves it out if it was never published.
 	IncludePausedPlugins bool
 	// RotateHooksKey makes this a hooks-only publish: the hooks subtree
 	// regenerates so HooksKeyCandidate is baked into the published observability

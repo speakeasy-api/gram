@@ -177,22 +177,14 @@ func (s *Service) planPausedPlugins(
 // that owns it.
 type pluginPrefixOwners map[string]string
 
-func newPluginPrefixOwners(slugs []string) pluginPrefixOwners {
+func ownersOfPlugins(plugins []PluginInfo) pluginPrefixOwners {
 	owners := make(pluginPrefixOwners)
-	for _, slug := range slugs {
-		for _, prefix := range pluginSubtreePrefixes(slug) {
-			owners[prefix] = slug
+	for _, p := range plugins {
+		for _, prefix := range pluginSubtreePrefixes(p.Slug) {
+			owners[prefix] = p.Slug
 		}
 	}
 	return owners
-}
-
-func ownersOfPlugins(plugins []PluginInfo) pluginPrefixOwners {
-	slugs := make([]string, 0, len(plugins))
-	for _, p := range plugins {
-		slugs = append(slugs, p.Slug)
-	}
-	return newPluginPrefixOwners(slugs)
 }
 
 // ownerOf returns the plugin whose directory holds filePath. The longest
