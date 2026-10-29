@@ -3010,12 +3010,20 @@ WHERE l.organization_id = @organization_id::text
 ;
 
 
--- name: LockServerOAuthClientsForRetirement :exec
+-- name: LockServerOAuthClientsForSync :exec
 SELECT ac.id FROM mcp_auth_clients AS ac
 WHERE ac.organization_id = @organization_id::text
   AND ac.source = 'backfill'
   AND ac.client_type IN ('remote_session', 'service_account')
-  AND EXISTS (SELECT 1 FROM mcp_server_auth_clients AS l
+  AND (ac.remote_session_client_id = ANY(@registration_ids::uuid[])
+    OR EXISTS (SELECT 1 FROM mcp_server_auth_clients AS l
     WHERE l.auth_client_id = ac.id AND l.organization_id = ac.organization_id
-      AND l.mcp_server_id = ANY(@mcp_server_ids::uuid[]))
+      AND l.mcp_server_id = ANY(@mcp_server_ids::uuid[])))
 ORDER BY ac.id FOR UPDATE OF ac;
+
+-- name: LockOAuthRegistrationSyncScope :exec
+-- A registration gate also covers prospective typed clients with no row yet.
+-- Ordered gates precede typed client locks and every server-link mutation.
+SELECT pg_advisory_xact_lock(hashtextextended('oauth-authclient-sync:' || @organization_id::text || ':' || registration_id::text, 0))
+FROM unnest(@registration_ids::uuid[]) AS registration_id
+ORDER BY registration_id;

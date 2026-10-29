@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -172,9 +173,7 @@ func TestGatewayConsentDiscoversChainedMember(t *testing.T) {
 	}
 	// Finish the same reconciliation as a normal EMA preparation writer before
 	// consent captures the server's authentication requirement.
-	tx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(ctx) }()
+	tx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, authclientbackfill.SyncEMABinding(ctx, tx, auth.ActiveOrganizationID, bindingID))
 	require.NoError(t, tx.Commit(ctx))
 	ti.service.manual = true

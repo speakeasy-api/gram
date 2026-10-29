@@ -4143,6 +4143,24 @@ func (q *Queries) LockEMARegistrationForSync(ctx context.Context, arg LockEMAReg
 	return id, err
 }
 
+const lockOAuthRegistrationSyncScope = `-- name: LockOAuthRegistrationSyncScope :exec
+SELECT pg_advisory_xact_lock(hashtextextended('oauth-authclient-sync:' || $1::text || ':' || registration_id::text, 0))
+FROM unnest($2::uuid[]) AS registration_id
+ORDER BY registration_id
+`
+
+type LockOAuthRegistrationSyncScopeParams struct {
+	OrganizationID  string
+	RegistrationIds []uuid.UUID
+}
+
+// A registration gate also covers prospective typed clients with no row yet.
+// Ordered gates precede typed client locks and every server-link mutation.
+func (q *Queries) LockOAuthRegistrationSyncScope(ctx context.Context, arg LockOAuthRegistrationSyncScopeParams) error {
+	_, err := q.db.Exec(ctx, lockOAuthRegistrationSyncScope, arg.OrganizationID, arg.RegistrationIds)
+	return err
+}
+
 const lockOrganizationBackfill = `-- name: LockOrganizationBackfill :exec
 SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || $1::text))
 `
@@ -4275,24 +4293,26 @@ func (q *Queries) LockSelectionTunneledSource(ctx context.Context, mcpServerID u
 	return err
 }
 
-const lockServerOAuthClientsForRetirement = `-- name: LockServerOAuthClientsForRetirement :exec
+const lockServerOAuthClientsForSync = `-- name: LockServerOAuthClientsForSync :exec
 SELECT ac.id FROM mcp_auth_clients AS ac
 WHERE ac.organization_id = $1::text
   AND ac.source = 'backfill'
   AND ac.client_type IN ('remote_session', 'service_account')
-  AND EXISTS (SELECT 1 FROM mcp_server_auth_clients AS l
+  AND (ac.remote_session_client_id = ANY($2::uuid[])
+    OR EXISTS (SELECT 1 FROM mcp_server_auth_clients AS l
     WHERE l.auth_client_id = ac.id AND l.organization_id = ac.organization_id
-      AND l.mcp_server_id = ANY($2::uuid[]))
+      AND l.mcp_server_id = ANY($3::uuid[])))
 ORDER BY ac.id FOR UPDATE OF ac
 `
 
-type LockServerOAuthClientsForRetirementParams struct {
-	OrganizationID string
-	McpServerIds   []uuid.UUID
+type LockServerOAuthClientsForSyncParams struct {
+	OrganizationID  string
+	RegistrationIds []uuid.UUID
+	McpServerIds    []uuid.UUID
 }
 
-func (q *Queries) LockServerOAuthClientsForRetirement(ctx context.Context, arg LockServerOAuthClientsForRetirementParams) error {
-	_, err := q.db.Exec(ctx, lockServerOAuthClientsForRetirement, arg.OrganizationID, arg.McpServerIds)
+func (q *Queries) LockServerOAuthClientsForSync(ctx context.Context, arg LockServerOAuthClientsForSyncParams) error {
+	_, err := q.db.Exec(ctx, lockServerOAuthClientsForSync, arg.OrganizationID, arg.RegistrationIds, arg.McpServerIds)
 	return err
 }
 

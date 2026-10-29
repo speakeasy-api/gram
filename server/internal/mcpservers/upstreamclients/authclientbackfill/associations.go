@@ -65,6 +65,22 @@ func SyncServerAssociations(ctx context.Context, tx pgx.Tx, organizationID strin
 		return nil
 	}
 	q := New(tx)
+	// The writer scope expands shared EMA registrations, not organization-wide
+	// OAuth registrations. Serialize the complete OAuth registration set before
+	// any typed client/link write, including clients that do not exist yet.
+	registrations, err := q.ListOAuthClientsOfServers(ctx, ListOAuthClientsOfServersParams{OrganizationID: organizationID, McpServerIds: servers})
+	if err != nil {
+		return fmt.Errorf("list OAuth synchronization scope: %w", err)
+	}
+	if err := q.LockOAuthRegistrationSyncScope(ctx, LockOAuthRegistrationSyncScopeParams{OrganizationID: organizationID, RegistrationIds: registrations}); err != nil {
+		return fmt.Errorf("lock OAuth registration synchronization scope: %w", err)
+	}
+	// Lock every existing candidate and stale client in UUID order before any
+	// link insert can acquire a foreign-key lock. Administrator detaches use
+	// this same client-before-link order. The registration gates cover new rows.
+	if err := q.LockServerOAuthClientsForSync(ctx, LockServerOAuthClientsForSyncParams{OrganizationID: organizationID, McpServerIds: servers, RegistrationIds: registrations}); err != nil {
+		return fmt.Errorf("lock OAuth clients for synchronization: %w", err)
+	}
 	opts := Options{OrganizationID: organizationID, Apply: true, PageSize: 0}
 	// The report is the decision log the backfill keeps for its operator; a
 	// sync writes the same records and discards the account of them.
@@ -80,11 +96,6 @@ func SyncServerAssociations(ctx context.Context, tx pgx.Tx, organizationID strin
 		if attempt == serverAssociationAttempts-1 {
 			return oops.E(oops.CodeUnavailable, errRace, "upstream OAuth associations changed concurrently; retry the transaction")
 		}
-	}
-	// Administrator detach locks clients before links. Keep that order and
-	// retire only backfilled OAuth links whose legacy evidence is gone.
-	if err := q.LockServerOAuthClientsForRetirement(ctx, LockServerOAuthClientsForRetirementParams{OrganizationID: organizationID, McpServerIds: servers}); err != nil {
-		return fmt.Errorf("lock stale OAuth clients: %w", err)
 	}
 	if err := q.RetireServerStaleBackfillLinks(ctx, RetireServerStaleBackfillLinksParams{OrganizationID: organizationID, McpServerIds: servers}); err != nil {
 		return fmt.Errorf("retire stale OAuth links: %w", err)
