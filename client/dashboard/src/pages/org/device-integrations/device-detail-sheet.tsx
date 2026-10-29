@@ -92,6 +92,13 @@ function DeviceDetails({ device }: { device: ManagedDevice }): JSX.Element {
           {state ? (
             <DetailRow label="Last report">
               <Timestamp date={state.reportedAt} />
+              {/* Everything below describes that agent, not this machine. */}
+              {state.attestation === "user" ? (
+                <Text small muted className="mt-1 block">
+                  From the assigned user's agent, which may run on another
+                  machine.
+                </Text>
+              ) : null}
             </DetailRow>
           ) : (
             // Without a report, the heartbeat is the only sign of the agent.
@@ -349,6 +356,8 @@ function layerLabel(layer: string): string {
       return "Managed settings";
     case "user":
       return "User settings";
+    case "off":
+      return "Turned off on this device";
     default:
       return "Unknown settings layer";
   }

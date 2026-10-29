@@ -31,11 +31,11 @@ export type DeviceIntegrationCoverage = {
    */
   activeWindowMinutes: number;
   /**
-   * Devices with an agent heartbeat within the window. What that attests depends on the matching mode and, per device, on whether the match was by serial or by email — compare against agent_active_device_attested.
+   * Devices with an agent heartbeat or state report within the window. What that attests depends on the matching mode and, per device, on whether the match was by serial or by email — compare against agent_active_device_attested.
    */
   agentActive: number;
   /**
-   * How many of agent_active are backed by that machine's OWN heartbeat (serial match). Under user-level matching this is 0; under device-level matching a value below agent_active means some devices fell back to the assigned-user email, which is the weaker claim.
+   * How many of agent_active are backed by that machine's OWN heartbeat or state report (serial match). Under user-level matching this is 0; under device-level matching a value below agent_active means some devices fell back to the assigned-user email, which is the weaker claim.
    */
   agentActiveDeviceAttested: number;
   /**
@@ -51,7 +51,7 @@ export type DeviceIntegrationCoverage = {
    */
   attestation: Attestation;
   /**
-   * agent_active devices whose agent build is blocked, so the kill switch has halted enforcement.
+   * agent_active devices whose latest state report says the kill switch halted enforcement, because the reporting agent's build was blocked when it reported.
    */
   enforcementHalted: number;
   /**

@@ -472,6 +472,7 @@ SELECT
     -- report.
   , coalesce(pol.policy_state, '')::text AS policy_state
   , (rpt.id IS NOT NULL)::boolean AS has_report
+  , coalesce(rpt.by_serial, false)::boolean AS report_by_serial
   , rpt.reported_at AS report_reported_at
   , rpt.applied_etag AS report_applied_etag
   , rpt.applied_at AS report_applied_at

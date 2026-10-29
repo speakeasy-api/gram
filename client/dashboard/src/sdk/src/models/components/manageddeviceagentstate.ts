@@ -5,6 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -15,6 +17,20 @@ import {
   ManagedDeviceTool,
   ManagedDeviceTool$inboundSchema,
 } from "./manageddevicetool.js";
+
+/**
+ * device when this machine's own agent sent the report, matched by serial. user when the assigned user's agent sent it, which may run on another machine.
+ */
+export const ManagedDeviceAgentStateAttestation = {
+  Device: "device",
+  User: "user",
+} as const;
+/**
+ * device when this machine's own agent sent the report, matched by serial. user when the assigned user's agent sent it, which may run on another machine.
+ */
+export type ManagedDeviceAgentStateAttestation = OpenEnum<
+  typeof ManagedDeviceAgentStateAttestation
+>;
 
 /**
  * What a device's agent last reported it enforces. Carries no error text or user-facing message.
@@ -32,6 +48,10 @@ export type ManagedDeviceAgentState = {
    * CPU architecture, e.g. arm64.
    */
   arch?: string | undefined;
+  /**
+   * device when this machine's own agent sent the report, matched by serial. user when the assigned user's agent sent it, which may run on another machine.
+   */
+  attestation: ManagedDeviceAgentStateAttestation;
   /**
    * Resolved update mode: automatic, notify, or disabled.
    */
@@ -87,6 +107,12 @@ export type ManagedDeviceAgentState = {
 };
 
 /** @internal */
+export const ManagedDeviceAgentStateAttestation$inboundSchema: z.ZodMiniType<
+  ManagedDeviceAgentStateAttestation,
+  unknown
+> = openEnums.inboundSchema(ManagedDeviceAgentStateAttestation);
+
+/** @internal */
 export const ManagedDeviceAgentState$inboundSchema: z.ZodMiniType<
   ManagedDeviceAgentState,
   unknown
@@ -97,6 +123,7 @@ export const ManagedDeviceAgentState$inboundSchema: z.ZodMiniType<
     ),
     applied_etag: z.optional(z.string()),
     arch: z.optional(z.string()),
+    attestation: ManagedDeviceAgentStateAttestation$inboundSchema,
     auto_update: z.optional(z.string()),
     current_blocked: z.boolean(),
     drift_counting_since: z.optional(

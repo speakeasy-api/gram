@@ -214,14 +214,14 @@ type GetCoverageResponseBody struct {
 	// set as a whole supports only the weaker claim that assigned users ran the
 	// agent somewhere.
 	Attestation *string `form:"attestation,omitempty" json:"attestation,omitempty" xml:"attestation,omitempty"`
-	// Devices with an agent heartbeat within the window. What that attests depends
-	// on the matching mode and, per device, on whether the match was by serial or
-	// by email — compare against agent_active_device_attested.
+	// Devices with an agent heartbeat or state report within the window. What that
+	// attests depends on the matching mode and, per device, on whether the match
+	// was by serial or by email — compare against agent_active_device_attested.
 	AgentActive *int64 `form:"agent_active,omitempty" json:"agent_active,omitempty" xml:"agent_active,omitempty"`
-	// How many of agent_active are backed by that machine's OWN heartbeat (serial
-	// match). Under user-level matching this is 0; under device-level matching a
-	// value below agent_active means some devices fell back to the assigned-user
-	// email, which is the weaker claim.
+	// How many of agent_active are backed by that machine's OWN heartbeat or state
+	// report (serial match). Under user-level matching this is 0; under
+	// device-level matching a value below agent_active means some devices fell
+	// back to the assigned-user email, which is the weaker claim.
 	AgentActiveDeviceAttested *int64 `form:"agent_active_device_attested,omitempty" json:"agent_active_device_attested,omitempty" xml:"agent_active_device_attested,omitempty"`
 	// Devices with a known agent that went quiet — the drift/disable case.
 	AgentStale *int64 `form:"agent_stale,omitempty" json:"agent_stale,omitempty" xml:"agent_stale,omitempty"`
@@ -250,8 +250,9 @@ type GetCoverageResponseBody struct {
 	// agent_active devices with no state report within the window, typically an
 	// agent that predates reporting.
 	PolicyUnreported *int64 `form:"policy_unreported,omitempty" json:"policy_unreported,omitempty" xml:"policy_unreported,omitempty"`
-	// agent_active devices whose agent build is blocked, so the kill switch has
-	// halted enforcement.
+	// agent_active devices whose latest state report says the kill switch halted
+	// enforcement, because the reporting agent's build was blocked when it
+	// reported.
 	EnforcementHalted *int64 `form:"enforcement_halted,omitempty" json:"enforcement_halted,omitempty" xml:"enforcement_halted,omitempty"`
 }
 
@@ -2232,12 +2233,13 @@ type ManagedDeviceResponseBody struct {
 	CoverageBucket *string `form:"coverage_bucket,omitempty" json:"coverage_bucket,omitempty" xml:"coverage_bucket,omitempty"`
 	// When the device went absent from the MDM inventory. Omitted while present.
 	MissingSince *string `form:"missing_since,omitempty" json:"missing_since,omitempty" xml:"missing_since,omitempty"`
-	// Whether an agent_active device verifiably applies its policy. attested: its
-	// latest report applies the policy last served to the reporting user.
-	// outdated: it reports a different or no policy. unreported: no report within
-	// the window, from an agent that predates reporting or has stopped sending.
-	// halted: the kill switch stopped enforcement on a blocked agent build.
-	// Omitted for every other bucket.
+	// Whether the agent that answers for an agent_active device verifiably applies
+	// its policy; agent_state.attestation says whether that agent runs on this
+	// machine. attested: its latest report applies the policy last served to the
+	// reporting user. outdated: it reports a different policy, or none.
+	// unreported: no report within the window, from an agent that predates
+	// reporting or has stopped sending. halted: the reporting agent's kill switch
+	// stopped enforcement on a blocked build. Omitted for every other bucket.
 	PolicyState *string `form:"policy_state,omitempty" json:"policy_state,omitempty" xml:"policy_state,omitempty"`
 	// The latest state report that classified this device. Omitted when its agent
 	// has never reported.
@@ -2251,6 +2253,10 @@ type ManagedDeviceResponseBody struct {
 type ManagedDeviceAgentStateResponseBody struct {
 	// When the control plane received the report.
 	ReportedAt *string `form:"reported_at,omitempty" json:"reported_at,omitempty" xml:"reported_at,omitempty"`
+	// device when this machine's own agent sent the report, matched by serial.
+	// user when the assigned user's agent sent it, which may run on another
+	// machine.
+	Attestation *string `form:"attestation,omitempty" json:"attestation,omitempty" xml:"attestation,omitempty"`
 	// Etag of the policy the agent last applied.
 	AppliedEtag *string `form:"applied_etag,omitempty" json:"applied_etag,omitempty" xml:"applied_etag,omitempty"`
 	// When the agent first applied that etag.
@@ -6878,6 +6884,9 @@ func ValidateManagedDeviceAgentStateResponseBody(body *ManagedDeviceAgentStateRe
 	if body.ReportedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reported_at", "body"))
 	}
+	if body.Attestation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attestation", "body"))
+	}
 	if body.EnforcementHalted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("enforcement_halted", "body"))
 	}
@@ -6889,6 +6898,11 @@ func ValidateManagedDeviceAgentStateResponseBody(body *ManagedDeviceAgentStateRe
 	}
 	if body.ReportedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.reported_at", *body.ReportedAt, goa.FormatDateTime))
+	}
+	if body.Attestation != nil {
+		if !(*body.Attestation == "device" || *body.Attestation == "user") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.attestation", *body.Attestation, []any{"device", "user"}))
+		}
 	}
 	if body.AppliedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.applied_at", *body.AppliedAt, goa.FormatDateTime))

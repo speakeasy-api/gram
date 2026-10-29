@@ -137,13 +137,16 @@ var ManagedDevice = Type("ManagedDevice", func() {
 // enforces (ADR-0029 in the device agent). They never apply to another bucket.
 var policyStates = []any{"attested", "outdated", "unreported", "halted"}
 
-const policyStateDescription = "Whether an agent_active device verifiably applies its policy. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different or no policy. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the kill switch stopped enforcement on a blocked agent build. Omitted for every other bucket."
+const policyStateDescription = "Whether the agent that answers for an agent_active device verifiably applies its policy; agent_state.attestation says whether that agent runs on this machine. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different policy, or none. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the reporting agent's kill switch stopped enforcement on a blocked build. Omitted for every other bucket."
 
 var ManagedDeviceAgentState = Type("ManagedDeviceAgentState", func() {
 	Description("What a device's agent last reported it enforces. Carries no error text or user-facing message.")
-	Required("reported_at", "enforcement_halted", "current_blocked", "tools")
+	Required("reported_at", "attestation", "enforcement_halted", "current_blocked", "tools")
 	Attribute("reported_at", String, "When the control plane received the report.", func() {
 		Format(FormatDateTime)
+	})
+	Attribute("attestation", String, "device when this machine's own agent sent the report, matched by serial. user when the assigned user's agent sent it, which may run on another machine.", func() {
+		Enum("device", "user")
 	})
 	Attribute("applied_etag", String, "Etag of the policy the agent last applied.")
 	Attribute("applied_at", String, "When the agent first applied that etag.", func() {
@@ -207,8 +210,8 @@ var Coverage = Type("DeviceIntegrationCoverage", func() {
 	Attribute("attestation", String, "The strongest claim that holds for EVERY active device in this response — not merely the org's matching mode. \"device\": every active device was matched on its own hardware serial, so each one ran the agent. \"user\": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere.", func() {
 		Enum("device", "user")
 	})
-	Attribute("agent_active", Int64, "Devices with an agent heartbeat within the window. What that attests depends on the matching mode and, per device, on whether the match was by serial or by email — compare against agent_active_device_attested.")
-	Attribute("agent_active_device_attested", Int64, "How many of agent_active are backed by that machine's OWN heartbeat (serial match). Under user-level matching this is 0; under device-level matching a value below agent_active means some devices fell back to the assigned-user email, which is the weaker claim.")
+	Attribute("agent_active", Int64, "Devices with an agent heartbeat or state report within the window. What that attests depends on the matching mode and, per device, on whether the match was by serial or by email — compare against agent_active_device_attested.")
+	Attribute("agent_active_device_attested", Int64, "How many of agent_active are backed by that machine's OWN heartbeat or state report (serial match). Under user-level matching this is 0; under device-level matching a value below agent_active means some devices fell back to the assigned-user email, which is the weaker claim.")
 	Attribute("agent_stale", Int64, "Devices with a known agent that went quiet — the drift/disable case.")
 	Attribute("agent_other_device", Int64, "Device-level matching only: devices whose assigned user runs the agent, but not on this machine. Always 0 under user-level matching, which cannot distinguish this from agent_active.")
 	Attribute("no_agent", Int64, "Devices whose assigned email resolves to an org member with no agent at all.")
@@ -221,7 +224,7 @@ var Coverage = Type("DeviceIntegrationCoverage", func() {
 	Attribute("policy_attested", Int64, "agent_active devices whose latest report applies the policy last served to the reporting user.")
 	Attribute("policy_outdated", Int64, "agent_active devices that report a different policy, or none.")
 	Attribute("policy_unreported", Int64, "agent_active devices with no state report within the window, typically an agent that predates reporting.")
-	Attribute("enforcement_halted", Int64, "agent_active devices whose agent build is blocked, so the kill switch has halted enforcement.")
+	Attribute("enforcement_halted", Int64, "agent_active devices whose latest state report says the kill switch halted enforcement, because the reporting agent's build was blocked when it reported.")
 })
 
 var _ = Service("deviceIntegrations", func() {
