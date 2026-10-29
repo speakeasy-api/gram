@@ -201,6 +201,8 @@ func TestAutoSync_CreatePluginDefaultsOnAndAcceptsOff(t *testing.T) {
 	for _, p := range listed.Plugins {
 		bySlug[p.Slug] = p.AutoSyncEnabled
 	}
+	require.Contains(t, bySlug, created.Slug)
+	require.Contains(t, bySlug, paused.Slug, "the list must include a plugin created with auto sync off")
 	require.True(t, bySlug[created.Slug])
 	require.False(t, bySlug[paused.Slug])
 }
