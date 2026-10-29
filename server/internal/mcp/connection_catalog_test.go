@@ -136,15 +136,17 @@ type catalogConnection struct {
 func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		kind  string
-		mode  toolfilter.CatalogMode
-		oauth string
+		kind   string
+		mode   toolfilter.CatalogMode
+		oauth  string
+		source string
 	}{
-		{"remote_session", toolfilter.CatalogModeCached, ""}, {"static_credential", toolfilter.CatalogModeCached, ""},
-		{"remote_session", toolfilter.CatalogModeLive, ""}, {"static_credential", toolfilter.CatalogModeLive, ""},
-		{"static_credential", toolfilter.CatalogModeCached, "bound"}, {"static_credential", toolfilter.CatalogModeCached, "unbound"},
+		{"remote_session", toolfilter.CatalogModeCached, "", "backfill"}, {"static_credential", toolfilter.CatalogModeCached, "", "backfill"},
+		{"remote_session", toolfilter.CatalogModeLive, "", "backfill"}, {"static_credential", toolfilter.CatalogModeLive, "", "backfill"},
+		{"static_credential", toolfilter.CatalogModeCached, "bound", "backfill"}, {"static_credential", toolfilter.CatalogModeCached, "unbound", "backfill"},
+		{"remote_session", toolfilter.CatalogModeCached, "", "admin"}, {"static_credential", toolfilter.CatalogModeCached, "", "admin"},
 	} {
-		t.Run(tc.kind+"/"+string(tc.mode)+"/"+tc.oauth, func(t *testing.T) {
+		t.Run(tc.kind+"/"+string(tc.mode)+"/"+tc.oauth+"/"+tc.source, func(t *testing.T) {
 			kind := tc.kind
 			t.Parallel()
 			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
@@ -171,7 +173,7 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 				require.NoError(t, err)
 			}
 			fixtures := authclientfixtures.New(ti.conn)
-			authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: kind, Source: "admin", RemoteSessionClientID: registration})
+			authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: kind, Source: tc.source, RemoteSessionClientID: registration})
 			require.NoError(t, err)
 			if kind == "static_credential" {
 				server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: *auth.ProjectID})
@@ -180,7 +182,7 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, fixtures.SeedAuthClientHeaderFixture(ctx, authclientfixtures.SeedAuthClientHeaderFixtureParams{AuthClientID: authClientID, OrganizationID: auth.ActiveOrganizationID, Name: "X-Fixture-Key", Value: pgtype.Text{String: "fixture-key", Valid: true}}))
 			}
-			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: authClientID}))
+			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: authClientID, Source: tc.source}))
 			ti.service.manual = true
 			connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, tc.mode, metamcp.DiscoveryModeDirect, nil)
 			claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(issuer.ID).String())
@@ -225,11 +227,13 @@ func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) 
 				require.NoError(t, err)
 				insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", upstream.url)
 				fixtures := authclientfixtures.New(ti.conn)
-				seedClient := func(value string) uuid.UUID {
-					id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
+				// A backfilled client carries copies of the server's headers,
+				// which go stale when the server's headers change.
+				seedClient := func(value, origin string) uuid.UUID {
+					id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: "remote_session", Source: origin, RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
 					require.NoError(t, err)
 					require.NoError(t, fixtures.SeedAuthClientHeaderFixture(ctx, authclientfixtures.SeedAuthClientHeaderFixtureParams{AuthClientID: id, OrganizationID: auth.ActiveOrganizationID, Name: "X-Typed-Key", Value: pgtype.Text{String: value, Valid: true}}))
-					require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id}))
+					require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id, Source: origin}))
 					return id
 				}
 				source, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: *auth.ProjectID})
@@ -240,7 +244,7 @@ func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) 
 				if staleHeaders {
 					copiedValue = "stale-key"
 				}
-				original := seedClient(copiedValue)
+				original := seedClient(copiedValue, "backfill")
 				var permitted atomic.Bool
 				permitted.Store(true)
 				ti.service.SetAuthClientPermission(permitted.Load)
@@ -264,7 +268,7 @@ func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) 
 				require.Contains(t, call(), "don't have access")
 				require.Equal(t, before, upstream.requests.Load(), "revocation must refuse before any upstream request")
 				permitted.Store(true)
-				replacement := seedClient("replacement-key")
+				replacement := seedClient("replacement-key", "admin")
 				require.NotEqual(t, original, replacement)
 				claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(issuer.ID).String())
 				require.NoError(t, err)
@@ -295,7 +299,7 @@ func TestGatewayConsentAmbiguousTypedClientRequiresSetup(t *testing.T) {
 	for range 2 {
 		id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
 		require.NoError(t, err)
-		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id}))
+		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id, Source: "admin"}))
 	}
 	ti.service.manual = true
 	stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)

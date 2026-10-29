@@ -1030,6 +1030,11 @@ type issuerGateAuthentication struct {
 	// keeps the upstream client choice.
 	authClient *authClientResolution
 
+	// chainingAuthClient is the typed auth client whose registration the
+	// upstream client choice serves because it may chain an identity; the
+	// request sends its headers in place of the server's.
+	chainingAuthClient *authClientResolution
+
 	// attachedSession is the exact remote session an attached agent's auth
 	// client permit was decided for. It is kept apart from authClient, which
 	// selects how the request is served, so a compatibility handback to the
@@ -1170,6 +1175,7 @@ func (s *Service) authenticateIssuerGate(
 		chosenClient:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		chosenNoAuth:           false,
 		authClient:             nil,
+		chainingAuthClient:     nil,
 		attachedSession:        uuid.Nil,
 	}, toolSelection, nil
 }

@@ -21,6 +21,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -50,6 +52,7 @@ func TestMain(m *testing.M) {
 type testInstance struct {
 	service        *authclients.Service
 	conn           *pgxpool.Pool
+	enc            *encryption.Client
 	organizationID string
 	projectID      uuid.UUID
 }
@@ -76,11 +79,13 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
-	svc := authclients.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger())
+	enc := testenv.NewEncryptionClient(t)
+	svc := authclients.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), enc)
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
+		enc:            enc,
 		organizationID: authCtx.ActiveOrganizationID,
 		projectID:      *authCtx.ProjectID,
 	}
@@ -189,4 +194,54 @@ func seedOtherOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	require.NoError(t, err)
 
 	return organizationID, projectID
+}
+
+// seedRegistration creates an OAuth registration in projectID. owner is the
+// registration's credential owner: subject or self.
+func seedRegistration(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, owner string) uuid.UUID {
+	t.Helper()
+
+	queries := remotesessionsrepo.New(conn)
+	suffix := uuid.NewString()[:8]
+	issuer, err := queries.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{UUID: projectID, Valid: true},
+		OrganizationID:                    conv.ToPGText(organizationID),
+		Slug:                              "upstream-" + suffix,
+		Issuer:                            "https://" + suffix + ".upstream.example.com",
+		AuthorizationEndpoint:             conv.ToPGText("https://" + suffix + ".upstream.example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://" + suffix + ".upstream.example.com/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token", "client_credentials"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_post"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
+	})
+	require.NoError(t, err)
+
+	registration, err := queries.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:               uuid.NullUUID{UUID: projectID, Valid: true},
+		OrganizationID:          conv.ToPGText(organizationID),
+		RemoteSessionIssuerID:   issuer.ID,
+		ClientID:                "client-" + suffix,
+		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now()),
+		TokenEndpointAuthMethod: conv.ToPGText("client_secret_post"),
+		CredentialOwner:         conv.ToPGText(owner),
+	})
+	require.NoError(t, err)
+
+	return registration.ID
+}
+
+func seedProject(t *testing.T, ctx context.Context, ti *testInstance) uuid.UUID {
+	t.Helper()
+
+	slug := "p-" + uuid.NewString()[:8]
+	projectID, err := testrepo.New(ti.conn).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+		ID:             uuid.New(),
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: ti.organizationID,
+	})
+	require.NoError(t, err)
+	return projectID
 }

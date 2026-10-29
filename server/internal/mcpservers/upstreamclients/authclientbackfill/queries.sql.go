@@ -5059,7 +5059,7 @@ INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id,
 VALUES (
     $1, $2, $3, $4,
     (SELECT ac.attachment_scope FROM mcp_auth_clients AS ac WHERE ac.id = $4),
-    'admin'
+    $5
 )
 `
 
@@ -5068,6 +5068,7 @@ type SeedServerAuthClientLinkFixtureParams struct {
 	OrganizationID string
 	McpServerID    uuid.UUID
 	AuthClientID   uuid.UUID
+	Source         string
 }
 
 func (q *Queries) SeedServerAuthClientLinkFixture(ctx context.Context, arg SeedServerAuthClientLinkFixtureParams) error {
@@ -5076,6 +5077,7 @@ func (q *Queries) SeedServerAuthClientLinkFixture(ctx context.Context, arg SeedS
 		arg.OrganizationID,
 		arg.McpServerID,
 		arg.AuthClientID,
+		arg.Source,
 	)
 	return err
 }

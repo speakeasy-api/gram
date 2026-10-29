@@ -4243,6 +4243,21 @@ func (q *Queries) LockExternalOAuthMetadataNowaitFixture(ctx context.Context, ar
 	return id, err
 }
 
+const lockMCPServerForUpdateFixture = `-- name: LockMCPServerForUpdateFixture :one
+SELECT id
+FROM mcp_servers
+WHERE id = $1
+FOR UPDATE
+`
+
+// Test-only synchronization: holds an MCP server's row lock.
+func (q *Queries) LockMCPServerForUpdateFixture(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockMCPServerForUpdateFixture, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const lockMCPServerRowFixture = `-- name: LockMCPServerRowFixture :one
 SELECT id FROM mcp_servers WHERE id = $1 AND project_id = $2 AND deleted IS FALSE FOR UPDATE
 `
