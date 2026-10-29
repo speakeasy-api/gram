@@ -76,6 +76,16 @@ describe.each(["dashboard", "elements"] as const)(
   },
 );
 
+it("initializes Elements collection with the production environment alias", async () => {
+  vi.mocked(getServerURL).mockReturnValue("https://app.getgram.ai");
+  vi.stubEnv("VITE_DATADOG_ENV", "production");
+  const { initErrorTracking } = await import("@/elements/lib/errorTracking");
+  initErrorTracking();
+  expect(datadogRum.init).toHaveBeenCalledWith(
+    expect.objectContaining({ env: "production", sessionSampleRate: 100 }),
+  );
+});
+
 it.each(["dev", "staging"])(
   "does not send Elements errors with an explicit %s environment",
   async (env) => {
