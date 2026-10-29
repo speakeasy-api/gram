@@ -256,14 +256,14 @@ func TestMCPServerSchema_ConfigurationVersusUse(t *testing.T) {
 				}
 			}
 
-			explanation, err := ExplainMCPServer(ctx, engine, MCPServerConnect, tc.server)
+			decision, err := ExplainMCPServer(ctx, engine, MCPServerConnect, tc.server)
 			require.NoError(t, err)
-			require.Equal(t, tc.want.Connect, explanation.Allowed)
-			require.Len(t, explanation.Policies, 1)
-			trace := explanation.trace()
+			require.Equal(t, tc.want.Connect, decision.Allowed)
+			require.Len(t, decision.Policies, 1)
+			trace := decision.trace()
 			require.Equal(t, tc.legacy, strings.Contains(trace, "legacy broad grant"), trace)
 			if tc.because != "" {
-				require.Contains(t, explanation.Policies[0].Reason, tc.because, trace)
+				require.Contains(t, decision.Policies[0].Reason, tc.because, trace)
 			}
 		})
 	}
@@ -323,10 +323,10 @@ func TestMCPServerSchema_UnboundPoliciesAreUndetermined(t *testing.T) {
 	t.Parallel()
 
 	set := authz.PolicySet{Enforced: true, OrganizationID: "", Policies: [][]authz.Grant{{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)}}}
-	explanation, err := explainMCPServer(set, MCPServerConnect, refS1)
+	decision, err := decideMCPServer(set, MCPServerConnect, refS1)
 	require.NoError(t, err)
-	require.False(t, explanation.Allowed)
-	require.Equal(t, "undetermined", explanation.Policies[0].Outcome)
+	require.False(t, decision.Allowed)
+	require.Equal(t, "undetermined", decision.Policies[0].Outcome)
 }
 
 func TestMCPServerSchema_EveryPolicyMustAllow(t *testing.T) {
@@ -336,19 +336,19 @@ func TestMCPServerSchema_EveryPolicyMustAllow(t *testing.T) {
 		{serverGrant(fxUser, authz.ScopeMCPConnect, onServer(fxS1)...)},
 		{serverGrant(fxUser, authz.ScopeMCPConnect, onServer(fxS2)...)},
 	}}
-	explanation, err := explainMCPServer(set, MCPServerConnect, refS1)
+	decision, err := decideMCPServer(set, MCPServerConnect, refS1)
 	require.NoError(t, err)
-	require.False(t, explanation.Allowed)
+	require.False(t, decision.Allowed)
 
 	set.Policies[1] = []authz.Grant{serverGrant(fxUser, authz.ScopeMCPConnect, onServer(authz.WildcardResource)...)}
-	explanation, err = explainMCPServer(set, MCPServerConnect, refS1)
+	decision, err = decideMCPServer(set, MCPServerConnect, refS1)
 	require.NoError(t, err)
-	require.True(t, explanation.Allowed)
+	require.True(t, decision.Allowed)
 
 	set.Policies = nil
-	explanation, err = explainMCPServer(set, MCPServerConnect, refS1)
+	decision, err = decideMCPServer(set, MCPServerConnect, refS1)
 	require.NoError(t, err)
-	require.False(t, explanation.Allowed, "no policy allows nothing")
+	require.False(t, decision.Allowed, "no policy allows nothing")
 }
 
 func TestMCPServerSchema_IncompleteReferenceFails(t *testing.T) {

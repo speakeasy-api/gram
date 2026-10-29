@@ -28,21 +28,22 @@ type Capabilities struct {
 	Connect bool
 }
 
-// MCPServerPolicyDecision is one admitted policy's answer, with its trace.
-type MCPServerPolicyDecision struct {
+// MCPServerPolicyOutcome is one admitted policy's answer, with the
+// relationships that produced it.
+type MCPServerPolicyOutcome struct {
 	Outcome string
 	Reason  string
 	Path    []string
 }
 
-// MCPServerExplanation is the full request-to-decision trace for one
-// permission: every policy the caller acts under must allow.
-type MCPServerExplanation struct {
+// MCPServerDecision is the answer for one permission on one server, with the
+// trace that produced it: every policy the caller acts under must allow.
+type MCPServerDecision struct {
 	Permission     MCPServerPermission
 	Object         string
 	OrganizationID string
 	Allowed        bool
-	Policies       []MCPServerPolicyDecision
+	Policies       []MCPServerPolicyOutcome
 }
 
 var errMCPServerRefInvalid = errors.New("mcp server reference is incomplete")
@@ -71,11 +72,11 @@ func RequireMCPServer(ctx context.Context, engine *authz.Engine, permission MCPS
 	if !set.Enforced {
 		return nil
 	}
-	explanation, err := explainMCPServer(set, permission, server)
+	decision, err := decideMCPServer(set, permission, server)
 	if err != nil {
 		return engine.RecordDecision(ctx, legacy, authz.ExternalDecision{Allowed: false, DenyReason: "", Trace: "", Err: err}) //nolint:wrapcheck // authz errors carry their response code.
 	}
-	return engine.RecordDecision(ctx, legacy, authz.ExternalDecision{Allowed: explanation.Allowed, DenyReason: explanation.denyReason(), Trace: explanation.trace(), Err: nil}) //nolint:wrapcheck // authz errors carry their response code.
+	return engine.RecordDecision(ctx, legacy, authz.ExternalDecision{Allowed: decision.Allowed, DenyReason: decision.denyReason(), Trace: decision.trace(), Err: nil}) //nolint:wrapcheck // authz errors carry their response code.
 }
 
 // MCPServerCapabilities reports what the caller may do with server, from the
@@ -102,11 +103,11 @@ func MCPServerCapabilities(ctx context.Context, engine *authz.Engine, server MCP
 		if !set.Enforced {
 			return true, nil
 		}
-		explanation, err := explainMCPServer(set, permission, server)
+		decision, err := decideMCPServer(set, permission, server)
 		if err != nil {
 			return false, err
 		}
-		return explanation.Allowed, nil
+		return decision.Allowed, nil
 	}
 	var caps Capabilities
 	for _, p := range []struct {
@@ -120,23 +121,28 @@ func MCPServerCapabilities(ctx context.Context, engine *authz.Engine, server MCP
 	return caps, nil
 }
 
-// ExplainMCPServer returns the request-to-decision trace for permission on
-// server through the schema, whether or not it is active.
-func ExplainMCPServer(ctx context.Context, engine *authz.Engine, permission MCPServerPermission, server MCPServerRef) (MCPServerExplanation, error) {
+// ExplainMCPServer is for inspection, not enforcement: it returns the
+// decision and trace for permission on server through the schema, whether or
+// not the schema is active, so the access-explain screen (today
+// access/explain_access.go, which still explains the legacy rules) can show
+// why someone has or lacks access.
+func ExplainMCPServer(ctx context.Context, engine *authz.Engine, permission MCPServerPermission, server MCPServerRef) (MCPServerDecision, error) {
 	set, err := engine.PolicySet(ctx)
 	if err != nil {
-		return MCPServerExplanation{}, fmt.Errorf("load policies: %w", err)
+		return MCPServerDecision{}, fmt.Errorf("load policies: %w", err)
 	}
 	if !set.Enforced {
-		return MCPServerExplanation{Permission: permission, Object: typeMCPServer + ":" + server.ID, OrganizationID: "", Allowed: true, Policies: nil}, nil
+		return MCPServerDecision{Permission: permission, Object: typeMCPServer + ":" + server.ID, OrganizationID: "", Allowed: true, Policies: nil}, nil
 	}
-	return explainMCPServer(set, permission, server)
+	return decideMCPServer(set, permission, server)
 }
 
-// explainMCPServer evaluates permission on server for every policy in set.
-// It performs no I/O.
-func explainMCPServer(set authz.PolicySet, permission MCPServerPermission, server MCPServerRef) (MCPServerExplanation, error) {
-	explanation := MCPServerExplanation{
+// decideMCPServer is the single decision behind RequireMCPServer,
+// MCPServerCapabilities and ExplainMCPServer: it evaluates permission on
+// server for every policy in set and allows only if all allow. It performs no
+// I/O.
+func decideMCPServer(set authz.PolicySet, permission MCPServerPermission, server MCPServerRef) (MCPServerDecision, error) {
+	decision := MCPServerDecision{
 		Permission:     permission,
 		Object:         typeMCPServer + ":" + server.ID,
 		OrganizationID: set.OrganizationID,
@@ -144,20 +150,20 @@ func explainMCPServer(set authz.PolicySet, permission MCPServerPermission, serve
 		Policies:       nil,
 	}
 	if _, err := permission.legacyScope(); err != nil {
-		return explanation, err
+		return decision, err
 	}
 	if server.ID == "" || server.ID == authz.WildcardResource || server.ProjectID == "" || server.OrganizationID == "" {
-		return explanation, errMCPServerRefInvalid
+		return decision, errMCPServerRefInvalid
 	}
 	if set.OrganizationID == "" {
 		// The policies were loaded or admitted for another organization than
 		// the request is in, or the binding was lost. Nothing they say applies.
-		explanation.Policies = []MCPServerPolicyDecision{{
+		decision.Policies = []MCPServerPolicyOutcome{{
 			Outcome: relschema.Undetermined.String(),
 			Reason:  "policies are not bound to the request's organization",
 			Path:    nil,
 		}}
-		return explanation, nil
+		return decision, nil
 	}
 
 	object := relschema.Object{
@@ -168,23 +174,23 @@ func explainMCPServer(set authz.PolicySet, permission MCPServerPermission, serve
 			{Type: typeOrganization, ID: server.OrganizationID},
 		},
 	}
-	explanation.Allowed = len(set.Policies) > 0
+	decision.Allowed = len(set.Policies) > 0
 	for _, policy := range set.Policies {
 		relationships, err := decodeMCPServerPolicy(set.OrganizationID, policy)
 		if err != nil {
-			return explanation, err
+			return decision, err
 		}
-		decision := mcpServerSchema.Evaluate(set.OrganizationID, relationships, object, string(permission), relschema.Request{Facts: nil})
-		explanation.Policies = append(explanation.Policies, MCPServerPolicyDecision{
-			Outcome: decision.Outcome.String(),
-			Reason:  decision.Reason,
-			Path:    decision.Path,
+		result := mcpServerSchema.Evaluate(set.OrganizationID, relationships, object, string(permission), relschema.Request{Facts: nil})
+		decision.Policies = append(decision.Policies, MCPServerPolicyOutcome{
+			Outcome: result.Outcome.String(),
+			Reason:  result.Reason,
+			Path:    result.Path,
 		})
-		if decision.Outcome != relschema.Allowed {
-			explanation.Allowed = false
+		if result.Outcome != relschema.Allowed {
+			decision.Allowed = false
 		}
 	}
-	return explanation, nil
+	return decision, nil
 }
 
 // decodeMCPServerPolicy maps one policy's stored grants onto the schema. Rows
@@ -209,7 +215,7 @@ func decodeMCPServerPolicy(organizationID string, grants []authz.Grant) ([]relsc
 	return relationships, nil
 }
 
-func (x MCPServerExplanation) trace() string {
+func (x MCPServerDecision) trace() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s %s allowed=%t", x.Object, x.Permission, x.Allowed)
 	for i, p := range x.Policies {
@@ -221,7 +227,7 @@ func (x MCPServerExplanation) trace() string {
 	return b.String()
 }
 
-func (x MCPServerExplanation) denyReason() authzrepo.Reason {
+func (x MCPServerDecision) denyReason() authzrepo.Reason {
 	if len(x.Policies) == 0 {
 		return authzrepo.ReasonNoGrants
 	}

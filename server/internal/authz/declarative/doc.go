@@ -13,10 +13,11 @@
 //     turns each stored row into a relationship or an error, and eval.go
 //     answers one permission on one object with a trace.
 //  3. mcp_server_access.go is what services call. RequireMCPServer enforces
-//     a permission, MCPServerCapabilities reports all three from the same
-//     evaluation, and ExplainMCPServer returns the trace. Each reads the
-//     caller's admitted policies from the authz engine (Engine.PolicySet) and
-//     requires every policy to allow.
+//     a permission and MCPServerCapabilities reports all three; both use the
+//     one decision function, decideMCPServer, which reads the caller's
+//     admitted policies from the authz engine (Engine.PolicySet) and requires
+//     every policy to allow. ExplainMCPServer exposes the same decision with
+//     its trace for inspection, not enforcement.
 //  4. Activation is per organization (authz EngineOpts.MCPServerSchemaActive).
 //     An organization that is not active keeps the legacy authz check
 //     unchanged.
