@@ -90,11 +90,11 @@ JOIN toolsets t ON t.id = s.id AND t.project_id = s.project_id AND t.deleted IS 
 WHERE s.project_id = @project_id::uuid AND s.toolset_id = s.id AND s.deleted IS FALSE;
 
 -- Check Access scenarios on GitHub. Contractors blocks connecting, which
--- wins over every other role's grant: Mateo (a contractor through the
--- directory) is blocked even though Engineer reaches every server, and his
--- own grant covering every server cannot outrank the block. Priya holds the
--- role too, but a grant made to her by name for GitHub outranks it. The
--- user grants are cleared by id at the top of the seed.
+-- wins over every other grant: Mateo (a contractor through the directory) is
+-- blocked even though Engineer reaches every server, and his own grant
+-- covering every server cannot outrank the block. Priya holds the role too,
+-- and a block on an MCP permission wins even over a grant made to her by name
+-- for GitHub. The user grants are cleared by id at the top of the seed.
 -- name: ServersInsertGitHubContractorsBlock :exec
 INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
 SELECT @id::uuid, @org_id::text,
@@ -133,7 +133,7 @@ VALUES
 
 -- Distribute these servers to the seeded organization roles holding
 -- mcp:connect, including disposition-limited connect. mcp:read and
--- mcp:write still allow connecting at the endpoint but do not deliver
+-- mcp:write configure servers; they neither allow connecting nor deliver
 -- servers. Store server identities, not legacy toolset memberships. Content
 -- has no manual/automatic distinction and never widens a plugin's audience.
 -- name: ServersInsertRoleServerMemberships :execrows

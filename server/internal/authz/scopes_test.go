@@ -282,8 +282,9 @@ func TestCheckExpand_mcpConnect(t *testing.T) {
 
 	require.Contains(t, checks, Check{Scope: ScopeRoot, ResourceID: "tool_a"})
 	require.Contains(t, checks, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"})
-	require.Contains(t, checks, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"})
-	require.Contains(t, checks, Check{Scope: ScopeMCPWrite, ResourceID: "tool_a"})
+	// Configuring or viewing a server never satisfies using it.
+	require.NotContains(t, checks, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"})
+	require.NotContains(t, checks, Check{Scope: ScopeMCPWrite, ResourceID: "tool_a"})
 	require.NotContains(t, checks, Check{Scope: ScopeMCPConnect, ResourceID: WildcardResource})
 }
 
@@ -335,20 +336,20 @@ func TestGrantsHasAccess_mcpConnectDoesNotSatisfyMCPRead(t *testing.T) {
 	require.Nil(t, grant)
 }
 
-func TestGrantsHasAccess_mcpReadSatisfiesMCPConnect(t *testing.T) {
+func TestGrantsHasAccess_mcpReadDoesNotSatisfyMCPConnect(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeMCPRead, "tool_a")}
 	grant, _ := matchingGrant(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
-	require.NotNil(t, grant)
+	require.Nil(t, grant)
 }
 
-func TestGrantsHasAccess_mcpWriteSatisfiesMCPConnect(t *testing.T) {
+func TestGrantsHasAccess_mcpWriteDoesNotSatisfyMCPConnect(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeMCPWrite, "tool_a")}
 	grant, _ := matchingGrant(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
-	require.NotNil(t, grant)
+	require.Nil(t, grant)
 }
 
 func TestGrantsHasAccess_mcpWriteSatisfiesMCPRead(t *testing.T) {
@@ -534,8 +535,8 @@ func TestCalculateSubScopes(t *testing.T) {
 	}{
 		{scope: string(ScopeOrgAdmin), want: []string{string(ScopeOrgDeviceAgentSync), string(ScopeOrgHooksIngest), string(ScopeOrgRead)}},
 		{scope: string(ScopeProjectWrite), want: []string{string(ScopeProjectRead)}},
-		{scope: string(ScopeMCPWrite), want: []string{string(ScopeMCPConnect), string(ScopeMCPRead)}},
-		{scope: string(ScopeMCPRead), want: []string{string(ScopeMCPConnect)}},
+		{scope: string(ScopeMCPWrite), want: []string{string(ScopeMCPRead)}},
+		{scope: string(ScopeMCPRead), want: []string{}},
 		{scope: string(ScopeOrgRead), want: []string{}},
 		{scope: string(ScopeProjectRead), want: []string{}},
 		{scope: string(ScopeRoot), want: []string{}},

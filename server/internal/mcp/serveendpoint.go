@@ -1052,7 +1052,8 @@ func (s *Service) authorizeProxyBackendAccess(
 ) (context.Context, error) {
 	// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), projectID.String())
-	authorized, err := s.requireProxyBackendAccess(ctx, logger, connect, mcpServer)
+	target := authz.MCPServerTarget(organizationID, projectID.String(), mcpServer.ID.String())
+	authorized, err := s.requireProxyBackendAccess(ctx, logger, target, mcpServer)
 	shadowCtx := ctx
 	if authorized != nil {
 		shadowCtx = authorized
@@ -1064,36 +1065,41 @@ func (s *Service) authorizeProxyBackendAccess(
 	return authorized, nil
 }
 
+// requireProxyBackendAccess enforces what using the server requires. Managing
+// the server never satisfies it.
 func (s *Service) requireProxyBackendAccess(
 	ctx context.Context,
 	logger *slog.Logger,
-	connect authz.Check,
+	target authz.Target,
 	mcpServer *mcpserversrepo.McpServer,
 ) (context.Context, error) {
-	switch mcpServer.Visibility {
-	case mcpservers.VisibilityPrivate:
-		var prepErr error
-		ctx, prepErr = s.authz.PrepareContext(ctx)
-		if prepErr != nil {
-			var shareable *oops.ShareableError
-			if errors.As(prepErr, &shareable) && shareable.Code != oops.CodeUnexpected {
-				return nil, fmt.Errorf("principal credential admission: %w", prepErr)
-			}
-			return nil, oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
-		}
-		if err := s.authz.Require(ctx, connect); err != nil {
-			serverName := ""
-			if mcpServer.Name.Valid {
-				serverName = mcpServer.Name.String
-			}
-			return ctx, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, mcpServer.ID.String(), serverName)))
-		}
-		return ctx, nil
-	case mcpservers.VisibilityPublic:
-		return ctx, nil
-	default:
-		return nil, oops.E(oops.CodeUnexpected, nil, "unrecognized mcp server visibility %q", mcpServer.Visibility).LogError(ctx, logger)
+	requests, err := authz.MCPServerUse(target, authz.MCPServerVisibility(mcpServer.Visibility))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unrecognized mcp server visibility %q", mcpServer.Visibility).LogError(ctx, logger)
 	}
+	if len(requests) == 0 {
+		return ctx, nil
+	}
+	ctx, prepErr := s.authz.PrepareContext(ctx)
+	if prepErr != nil {
+		var shareable *oops.ShareableError
+		if errors.As(prepErr, &shareable) && shareable.Code != oops.CodeUnexpected {
+			return nil, fmt.Errorf("principal credential admission: %w", prepErr)
+		}
+		return nil, oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
+	}
+	decision, err := authz.NewEngineClient(s.authz).Require(ctx, requests...)
+	if err != nil {
+		serverName := ""
+		if mcpServer.Name.Valid {
+			serverName = mcpServer.Name.String
+		}
+		return ctx, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, mcpServer.ID.String(), serverName)))
+	}
+	if decision.Basis == authz.BasisLegacyBroadGrant {
+		logger.InfoContext(ctx, "mcp server use allowed by a legacy broad connect grant", attr.SlogMcpServerID(mcpServer.ID.String()))
+	}
+	return ctx, nil
 }
 
 func setProxyBackendProjectContext(ctx context.Context, authCtx *contextvalues.AuthContext, projectID uuid.UUID, projectSlug string) context.Context {

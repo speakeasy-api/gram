@@ -67,7 +67,7 @@ A request's effective grants are normally loaded from both:
 - the authenticated user principal, such as `user:user_01abc`
 - the user's canonical role principal, such as `role:global:<role-uuid>` or `role:organization:<role-uuid>`
 
-This lets us give most access through roles while still allowing direct user grants when needed. A direct grant naming a concrete resource also outranks a block the user inherits from a role or `user:all`; see [Principal Precedence](#principal-precedence).
+This lets us give most access through roles while still allowing direct user grants when needed. Outside the MCP server permissions, a direct grant naming a concrete resource also outranks a block the user inherits from a role or `user:all`; see [Principal Precedence](#principal-precedence).
 
 An agent-authenticated request loads the same way but from the agent's own set: the agent principal, such as `agent:<agent-uuid>`, plus the role principals recorded for it in `agent_role_assignments`. It never loads `user:all`, its owner's user principal, or its owner's roles into that set — those are evaluated as a separate policy the request is also bounded by.
 
@@ -147,7 +147,7 @@ That is deliberate. Adding a scope changes the product contract: it affects role
 
 For example, prefer `mcp:connect` plus a `tool` selector dimension over a scope like `mcp:call-search-docs`. Prefer `project:write` for project-owned mutations unless customers genuinely need to delegate that mutation separately. In practice, a new scope should exist only when admins need to assign it independently.
 
-Some scopes imply lower-privilege scopes. The expansion rules also live in `server/internal/authz/scopes.go`:
+Some scopes imply lower-privilege scopes. The expansion rules live in `server/internal/authz/scopes.go`, except for the MCP server permissions (`mcp:read`, `mcp:write`, `mcp:connect`), whose implications, blocks and block precedence are declared once in `server/internal/authz/permissions.go` and merged into the same maps:
 
 ```go
 var scopeExpansions = map[Scope][]Scope{
@@ -158,9 +158,8 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeProjectWrite:       nil,
 	ScopeAssistantRead:      {ScopeAssistantWrite},
 	ScopeAssistantWrite:     nil,
-	ScopeMCPRead:            {ScopeMCPWrite},
-	ScopeMCPWrite:           nil,
-	ScopeMCPConnect:         {ScopeMCPRead, ScopeMCPWrite},
+	// mcp:read, mcp:write and mcp:connect come from permissions.go:
+	// mcp:read is implied by mcp:write; nothing implies mcp:connect.
 	ScopeEnvironmentRead:    {ScopeEnvironmentWrite},
 	ScopeEnvironmentWrite:   nil,
 	ScopeSkillRead:          {ScopeSkillWrite},
@@ -173,7 +172,7 @@ var scopeExpansions = map[Scope][]Scope{
 }
 ```
 
-Read this map as "if a handler requires the key scope, any scope in the value list also satisfies the check." A `project:write` grant satisfies a `project:read` check. An `assistant:write` grant satisfies `assistant:read`. An `mcp:write` grant satisfies `mcp:read`, and both `mcp:read` and `mcp:write` satisfy `mcp:connect`. `environment:write` satisfies `environment:read`, `skill:write` satisfies `skill:read`, and `chat:write` satisfies `chat:read`. `org:admin` satisfies `org:read`, and `root` satisfies every check.
+Read this map as "if a handler requires the key scope, any scope in the value list also satisfies the check." A `project:write` grant satisfies a `project:read` check. An `assistant:write` grant satisfies `assistant:read`. An `mcp:write` grant satisfies `mcp:read`. Neither `mcp:read` nor `mcp:write` satisfies `mcp:connect`: configuring or inspecting a server never grants using it, so using a private server always needs an `mcp:connect` grant. `environment:write` satisfies `environment:read`, `skill:write` satisfies `skill:read`, and `chat:write` satisfies `chat:read`. `org:admin` satisfies `org:read`, and `root` satisfies every check.
 
 Expansion happens when the engine evaluates a check. If code asks for `project:read`, the engine checks for `root`, `project:read`, and `project:write` against the same resource selector. The API also exposes the inverse relationship as `sub_scopes` so role UIs can show what a broader grant implies; those sub-scopes are derived from code and are not additional database rows.
 
@@ -426,7 +425,10 @@ matching base grant never grants anything.
 A caller's grants come from principals of different specificity: `user:all`
 (everyone), the roles they hold, and the user or agent itself. Allows from all
 of them combine, and a blocklist exclusion (`*:blocked_*`) from any of them
-normally subtracts. One case is decided by specificity instead:
+normally subtracts. For the MCP server permissions (`mcp:read`, `mcp:write`,
+`mcp:connect`) a matching block always wins, whichever principal holds the
+allow. For other scopes with a blocklist, one case is decided by specificity
+instead:
 
 > A grant made directly to the user that names a concrete resource outranks a
 > blocklist exclusion that reaches them only through a role or `user:all`.
@@ -435,14 +437,17 @@ This lets an administrator block a server for a role, including a
 directory-synced one, and still give individual members of that role access to
 it by name, without changing role membership.
 
-| Grants held                                                                         | `mcp:connect` on `server_1` |
-| ----------------------------------------------------------------------------------- | --------------------------- |
-| role: `mcp:connect *`, `mcp:blocked_connect server_1`                               | Denied                      |
-| role: `mcp:connect *`, `mcp:blocked_connect server_1`; user: `mcp:connect server_1` | Allowed                     |
-| `user:all`: `mcp:blocked_connect server_1`; user: `mcp:connect server_1`            | Allowed                     |
-| role: `mcp:blocked_connect server_1`; user: `mcp:connect *`                         | Denied                      |
-| user: `mcp:connect server_1`, `mcp:blocked_connect server_1`                        | Denied                      |
-| `user:all`: `mcp:blocked_connect server_1`; role: `mcp:connect server_1`            | Denied                      |
+| Grants held                                                                                 | `project:read` on `project_1` |
+| ------------------------------------------------------------------------------------------- | ----------------------------- |
+| role: `project:read *`, `project:blocked_read project_1`                                    | Denied                        |
+| role: `project:read *`, `project:blocked_read project_1`; user: `project:read project_1`    | Allowed                       |
+| `user:all`: `project:blocked_read project_1`; user: `project:read project_1`                | Allowed                       |
+| role: `project:blocked_read project_1`; user: `project:read *`                              | Denied                        |
+| user: `project:read project_1`, `project:blocked_read project_1`                            | Denied                        |
+| `user:all`: `project:blocked_read project_1`; role: `project:read project_1`                | Denied                        |
+
+The same rows with `mcp:connect` and `mcp:blocked_connect` on `server_1` are all
+Denied: an MCP block cannot be outranked.
 
 The rules behind that table:
 
@@ -458,9 +463,6 @@ The rules behind that table:
   `user:all` block, and the reverse. The built-in member role grants
   `mcp:connect` on every server, so letting roles outrank `user:all` would
   silently lift every "everyone: no access" rule for ordinary members.
-- A narrowed direct grant outranks only as far as it reaches. A direct grant for
-  one tool proves server-level access and that tool; every other tool stays
-  blocked.
 - Non-blocklist exclusions are unaffected. `risk_policy:bypass` exempts a
   principal from a policy rather than taking access away, so a direct
   `risk_policy:evaluate` grant never cancels it.

@@ -278,10 +278,16 @@ func TestGrantExpressionEvaluate_mcpConnectBlocklistLeavesMCPWrite(t *testing.T)
 	require.True(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
 
-	// Connect, which mcp:write would otherwise satisfy, is the one it takes.
+	// mcp:write never satisfies connect, so there is no base for the block to take.
 	connect := write
 	connect.Scope = ScopeMCPConnect
 	result, err = expressionForCheck(connect).Evaluate(grants)
+	require.NoError(t, err)
+	require.False(t, result.Satisfied)
+	require.Equal(t, GrantExpressionReasonMissingBase, result.Reason)
+
+	// With a connect grant as well, the block is what takes connect away.
+	result, err = expressionForCheck(connect).Evaluate(append(grants, NewGrant(ScopeMCPConnect, WildcardResource)))
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)

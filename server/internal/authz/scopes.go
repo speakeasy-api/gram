@@ -267,7 +267,12 @@ func ScopeVisibilityFor(scope Scope) (string, bool) {
 //
 // mcp:auth is independent of every other scope: server access, authoring and
 // administration imply no use of an auth client.
-var scopeExpansions = map[Scope][]Scope{
+//
+// Permissions with a PermissionDefinition (permissions.go) take their
+// expansions from it and are not listed here: mcp:read, mcp:write and
+// mcp:connect. In particular neither mcp:read nor mcp:write satisfies
+// mcp:connect: configuring or inspecting a server never grants its use.
+var scopeExpansions = withDefinedExpansions(map[Scope][]Scope{
 	ScopeRoot:                    nil,
 	ScopeOrgRead:                 {ScopeOrgAdmin},
 	ScopeOrgBlockedRead:          nil,
@@ -277,11 +282,8 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeProjectBlockedRead:      nil,
 	ScopeProjectWrite:            nil,
 	ScopeProjectBlockedWrite:     {ScopeProjectBlockedRead},
-	ScopeMCPRead:                 {ScopeMCPWrite},
 	ScopeMCPBlockedRead:          nil,
-	ScopeMCPWrite:                nil,
 	ScopeMCPBlockedWrite:         nil,
-	ScopeMCPConnect:              {ScopeMCPRead, ScopeMCPWrite},
 	ScopeMCPBlockedConnect:       nil,
 	ScopeMCPAuth:                 nil,
 	ScopeMCPBlockedAuth:          nil,
@@ -316,12 +318,13 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeWorkloadBlockedWrite:    {ScopeWorkloadBlockedRead},
 	ScopeOrgDeviceAgentSync:      {ScopeOrgAdmin},
 	ScopeOrgHooksIngest:          {ScopeOrgAdmin},
-}
+})
 
 // scopeExclusions maps a checked base scope to the direct blocklist scope that
 // stores exception grants for it. Broader blocklist scopes are handled by
-// scopeExpansions on the blocklist scope itself.
-var scopeExclusions = map[Scope]Scope{
+// scopeExpansions on the blocklist scope itself. Defined permissions take
+// their exclusion from their PermissionDefinition.
+var scopeExclusions = withDefinedExclusions(map[Scope]Scope{
 	ScopeRoot:                    "",
 	ScopeOrgRead:                 ScopeOrgBlockedRead,
 	ScopeOrgBlockedRead:          "",
@@ -331,11 +334,8 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeProjectBlockedRead:      "",
 	ScopeProjectWrite:            ScopeProjectBlockedWrite,
 	ScopeProjectBlockedWrite:     "",
-	ScopeMCPRead:                 ScopeMCPBlockedRead,
 	ScopeMCPBlockedRead:          "",
-	ScopeMCPWrite:                ScopeMCPBlockedWrite,
 	ScopeMCPBlockedWrite:         "",
-	ScopeMCPConnect:              ScopeMCPBlockedConnect,
 	ScopeMCPBlockedConnect:       "",
 	ScopeMCPAuth:                 ScopeMCPBlockedAuth,
 	ScopeMCPBlockedAuth:          "",
@@ -370,7 +370,7 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeWorkloadBlockedWrite:    "",
 	ScopeOrgDeviceAgentSync:      "",
 	ScopeOrgHooksIngest:          "",
-}
+})
 
 // ExclusionScopeFor returns the scope that stores exception grants for the
 // provided base scope.

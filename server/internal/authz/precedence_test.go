@@ -41,22 +41,31 @@ func principalPrecedenceCases() []principalPrecedenceCase {
 	serverCheck := MCPCheck(ScopeMCPConnect, "server-1", "project-1")
 	return []principalPrecedenceCase{
 		{
-			name: "direct user grant outranks role block",
+			name: "direct user grant does not outrank role block on an MCP permission",
 			grants: []Grant{
 				heldBy(precedenceRole, NewGrant(ScopeMCPConnect, WildcardResource)),
 				heldBy(precedenceRole, NewGrant(ScopeMCPBlockedConnect, "server-1")),
 				heldBy(precedenceUser, NewGrant(ScopeMCPConnect, "server-1")),
 			},
 			check:   serverCheck,
-			allowed: true,
+			allowed: false,
 		},
 		{
-			name: "direct user grant outranks everyone block",
+			name: "direct user grant does not outrank everyone block on an MCP permission",
 			grants: []Grant{
 				heldBy(precedenceEveryone, NewGrant(ScopeMCPBlockedConnect, "server-1")),
 				heldBy(precedenceUser, NewGrant(ScopeMCPConnect, "server-1")),
 			},
 			check:   serverCheck,
+			allowed: false,
+		},
+		{
+			name: "direct user grant outranks everyone block",
+			grants: []Grant{
+				heldBy(precedenceEveryone, NewGrant(ScopeProjectBlockedRead, "project-1")),
+				heldBy(precedenceUser, NewGrant(ScopeProjectRead, "project-1")),
+			},
+			check:   Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "project-1", Dimensions: nil},
 			allowed: true,
 		},
 		{
@@ -69,12 +78,21 @@ func principalPrecedenceCases() []principalPrecedenceCase {
 			allowed: false,
 		},
 		{
-			name: "direct grant through scope expansion outranks role block",
+			name: "direct write grant does not reach use past a role block",
 			grants: []Grant{
 				heldBy(precedenceRole, NewGrant(ScopeMCPBlockedConnect, "server-1")),
 				heldBy(precedenceUser, NewGrant(ScopeMCPWrite, "server-1")),
 			},
 			check:   serverCheck,
+			allowed: false,
+		},
+		{
+			name: "direct grant through scope expansion outranks role block",
+			grants: []Grant{
+				heldBy(precedenceRole, NewGrant(ScopeProjectBlockedRead, "project-1")),
+				heldBy(precedenceUser, NewGrant(ScopeProjectWrite, "project-1")),
+			},
+			check:   Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "project-1", Dimensions: nil},
 			allowed: true,
 		},
 		{
@@ -176,7 +194,7 @@ func principalPrecedenceCases() []principalPrecedenceCase {
 			allowed: false,
 		},
 		{
-			name: "direct grant outranks project-scoped role block",
+			name: "direct grant does not outrank project-scoped role block on an MCP permission",
 			grants: []Grant{
 				heldBy(precedenceRole, NewGrant(ScopeMCPConnect, WildcardResource)),
 				heldBy(precedenceRole, NewGrantWithSelector(ScopeMCPBlockedConnect, Selector{
@@ -187,7 +205,7 @@ func principalPrecedenceCases() []principalPrecedenceCase {
 				heldBy(precedenceUser, NewGrant(ScopeMCPConnect, "server-1")),
 			},
 			check:   serverCheck,
-			allowed: true,
+			allowed: false,
 		},
 		{
 			name: "direct evaluate grant does not outrank role bypass",
@@ -215,7 +233,7 @@ func TestGrantsAuthorizePrincipalPrecedence(t *testing.T) {
 	}
 }
 
-func TestGrantsAuthorizeNarrowedDirectGrantOutranksRoleBlockOnlyAsFarAsItReaches(t *testing.T) {
+func TestGrantsAuthorizeNarrowedDirectGrantDoesNotOutrankRoleBlock(t *testing.T) {
 	t.Parallel()
 
 	grants := []Grant{
@@ -224,17 +242,15 @@ func TestGrantsAuthorizeNarrowedDirectGrantOutranksRoleBlockOnlyAsFarAsItReaches
 		heldBy(precedenceUser, mcpToolGrant(ScopeMCPConnect, "server-1", "tool-a")),
 	}
 
-	allowed, err := GrantsAuthorize(grants, MCPCheck(ScopeMCPConnect, "server-1", "project-1"))
-	require.NoError(t, err)
-	require.True(t, allowed, "a tool-scoped direct grant proves server-level access")
-
-	allowed, err = GrantsAuthorize(grants, MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "tool-a", Disposition: "", ProjectID: "project-1"}))
-	require.NoError(t, err)
-	require.True(t, allowed)
-
-	allowed, err = GrantsAuthorize(grants, MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "tool-b", Disposition: "", ProjectID: "project-1"}))
-	require.NoError(t, err)
-	require.False(t, allowed, "tools outside the direct grant stay blocked")
+	for _, check := range []Check{
+		MCPCheck(ScopeMCPConnect, "server-1", "project-1"),
+		MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "tool-a", Disposition: "", ProjectID: "project-1"}),
+		MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "tool-b", Disposition: "", ProjectID: "project-1"}),
+	} {
+		allowed, err := GrantsAuthorize(grants, check)
+		require.NoError(t, err)
+		require.False(t, allowed, "a block on an MCP permission wins over a direct grant at any reach")
+	}
 }
 
 func TestGrantsAuthorizeInferredDirectGrantNeverOutranksInheritedBlock(t *testing.T) {
@@ -259,7 +275,7 @@ func TestGrantsAuthorizeInferredDirectGrantNeverOutranksInheritedBlock(t *testin
 	require.True(t, allowed, "the same grant written by name outranks the block")
 }
 
-func TestGrantsAuthorizeDispositionDirectGrantReachesOnlyMatchingTools(t *testing.T) {
+func TestGrantsAuthorizeDispositionDirectGrantDoesNotOutrankRoleBlock(t *testing.T) {
 	t.Parallel()
 
 	direct := NewSelector(ScopeMCPConnect, "server-1")
@@ -272,7 +288,7 @@ func TestGrantsAuthorizeDispositionDirectGrantReachesOnlyMatchingTools(t *testin
 
 	allowed, err := GrantsAuthorize(grants, MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "list", Disposition: DispositionReadOnly, ProjectID: "project-1"}))
 	require.NoError(t, err)
-	require.True(t, allowed)
+	require.False(t, allowed, "a block on an MCP permission wins over a matching direct grant")
 
 	allowed, err = GrantsAuthorize(grants, MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "unannotated", Disposition: "", ProjectID: "project-1"}))
 	require.NoError(t, err)
@@ -296,10 +312,37 @@ func TestEngineFilterPrincipalPrecedence(t *testing.T) {
 		MCPCheck(ScopeMCPConnect, "server-3", ""),
 	})
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"server-1", "server-3"}, allowed)
+	require.ElementsMatch(t, []string{"server-3"}, allowed, "a direct grant does not outrank a block on an MCP permission")
 }
 
 func TestEngineRequirePrincipalPrecedenceAppliesPerPolicy(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	credentialPolicy := []Grant{NewGrant(ScopeProjectRead, "project-1")}
+	agentPolicy := []Grant{heldBy(precedenceAgent, NewGrant(ScopeProjectRead, "project-1"))}
+	ownerPolicy := []Grant{
+		heldBy(precedenceRole, NewGrant(ScopeProjectRead, WildcardResource)),
+		heldBy(precedenceRole, NewGrant(ScopeProjectBlockedRead, "project-1")),
+	}
+	check := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "project-1", Dimensions: nil}
+
+	ctx := principalPolicyTestContext(t, credentialPolicy, agentPolicy, ownerPolicy)
+	var forbidden *oops.ShareableError
+	require.ErrorAs(t, engine.Require(ctx, check), &forbidden, "every admitted policy must allow, so the owner's role block still denies")
+	require.Equal(t, oops.CodeForbidden, forbidden.Code)
+
+	ownerPolicy = append(ownerPolicy, heldBy(precedenceUser, NewGrant(ScopeProjectRead, "project-1")))
+	ctx = principalPolicyTestContext(t, credentialPolicy, agentPolicy, ownerPolicy)
+	require.NoError(t, engine.Require(ctx, check), "the owner's direct grant outranks the owner's role block")
+
+	agentPolicy = append(agentPolicy, heldBy(precedenceRole, NewGrant(ScopeProjectBlockedRead, "project-1")))
+	ctx = principalPolicyTestContext(t, credentialPolicy, agentPolicy, ownerPolicy)
+	require.ErrorAs(t, engine.Require(ctx, check), &forbidden, "the agent's own grant does not outrank its role's block")
+	require.Equal(t, oops.CodeForbidden, forbidden.Code)
+}
+
+func TestEngineRequireMCPBlockWinsInEveryPolicy(t *testing.T) {
 	t.Parallel()
 
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
@@ -308,21 +351,12 @@ func TestEngineRequirePrincipalPrecedenceAppliesPerPolicy(t *testing.T) {
 	ownerPolicy := []Grant{
 		heldBy(precedenceRole, NewGrant(ScopeMCPConnect, WildcardResource)),
 		heldBy(precedenceRole, NewGrant(ScopeMCPBlockedConnect, "server-1")),
+		heldBy(precedenceUser, NewGrant(ScopeMCPConnect, "server-1")),
 	}
-	check := MCPCheck(ScopeMCPConnect, "server-1", "project-1")
 
 	ctx := principalPolicyTestContext(t, credentialPolicy, agentPolicy, ownerPolicy)
 	var forbidden *oops.ShareableError
-	require.ErrorAs(t, engine.Require(ctx, check), &forbidden, "every admitted policy must allow, so the owner's role block still denies")
-	require.Equal(t, oops.CodeForbidden, forbidden.Code)
-
-	ownerPolicy = append(ownerPolicy, heldBy(precedenceUser, NewGrant(ScopeMCPConnect, "server-1")))
-	ctx = principalPolicyTestContext(t, credentialPolicy, agentPolicy, ownerPolicy)
-	require.NoError(t, engine.Require(ctx, check), "the owner's direct grant outranks the owner's role block")
-
-	agentPolicy = append(agentPolicy, heldBy(precedenceRole, NewGrant(ScopeMCPBlockedConnect, "server-1")))
-	ctx = principalPolicyTestContext(t, credentialPolicy, agentPolicy, ownerPolicy)
-	require.ErrorAs(t, engine.Require(ctx, check), &forbidden, "the agent's own grant does not outrank its role's block")
+	require.ErrorAs(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, "server-1", "project-1")), &forbidden, "the owner's direct grant does not outrank a block on an MCP permission")
 	require.Equal(t, oops.CodeForbidden, forbidden.Code)
 }
 

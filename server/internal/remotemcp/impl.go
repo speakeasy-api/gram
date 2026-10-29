@@ -51,6 +51,7 @@ type Service struct {
 	db                    *pgxpool.Pool
 	auth                  *auth.Auth
 	authz                 *authz.Engine
+	authzClient           *authz.Client
 	headers               *Headers
 	policy                *guardian.Policy
 	audit                 *audit.Logger
@@ -91,6 +92,7 @@ func NewService(
 		db:                    db,
 		auth:                  auth.New(logger, db, sessions, authzEngine),
 		authz:                 authzEngine,
+		authzClient:           authz.NewEngineClient(authzEngine),
 		headers:               NewHeaders(logger, db, enc),
 		policy:                policy,
 		audit:                 auditLogger,

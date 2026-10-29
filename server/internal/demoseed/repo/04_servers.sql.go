@@ -732,11 +732,11 @@ type ServersInsertGitHubContractorsBlockParams struct {
 }
 
 // Check Access scenarios on GitHub. Contractors blocks connecting, which
-// wins over every other role's grant: Mateo (a contractor through the
-// directory) is blocked even though Engineer reaches every server, and his
-// own grant covering every server cannot outrank the block. Priya holds the
-// role too, but a grant made to her by name for GitHub outranks it. The
-// user grants are cleared by id at the top of the seed.
+// wins over every other grant: Mateo (a contractor through the directory) is
+// blocked even though Engineer reaches every server, and his own grant
+// covering every server cannot outrank the block. Priya holds the role too,
+// and a block on an MCP permission wins even over a grant made to her by name
+// for GitHub. The user grants are cleared by id at the top of the seed.
 func (q *Queries) ServersInsertGitHubContractorsBlock(ctx context.Context, arg ServersInsertGitHubContractorsBlockParams) error {
 	_, err := q.db.Exec(ctx, serversInsertGitHubContractorsBlock, arg.ID, arg.OrgID, arg.GithubServerID)
 	return err
@@ -1543,7 +1543,7 @@ type ServersInsertRoleServerMembershipsParams struct {
 
 // Distribute these servers to the seeded organization roles holding
 // mcp:connect, including disposition-limited connect. mcp:read and
-// mcp:write still allow connecting at the endpoint but do not deliver
+// mcp:write configure servers; they neither allow connecting nor deliver
 // servers. Store server identities, not legacy toolset memberships. Content
 // has no manual/automatic distinction and never widens a plugin's audience.
 func (q *Queries) ServersInsertRoleServerMemberships(ctx context.Context, arg ServersInsertRoleServerMembershipsParams) (int64, error) {
