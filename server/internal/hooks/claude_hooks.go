@@ -133,7 +133,7 @@ func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.D
 			err := oops.E(oops.CodeRequestTooLarge, errHooksRequestBodyTooLarge, "hooks request %s exceeds %d bytes", what, limit).AsGoa(ctx)
 			return decoderFunc(func(_ any) error {
 				logDecodeFailure(ctx, logger, err, nil, contentType, contentEncoding)
-				return err
+				return err //nolint:wrapcheck // Goa keeps the 413 status only for an unwrapped service error.
 			})
 		}
 
