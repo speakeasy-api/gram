@@ -10,7 +10,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -22,9 +24,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -180,23 +185,146 @@ func (s *Service) authenticateAgentGatewayKey(
 	return s.identityValidator.StampAgent(keyCtx, agentID), authCtx, nil
 }
 
-// resolveMemberTokens resolves agent attachments against the member's own
-// issuer. Agent gateways have no issuer of their own; using the gateway's
-// empty token map would silently drop every owner-assigned connection.
+// resolveMemberTokens honors a selected member before falling back to the
+// member issuer for legacy agent keys. An agent gateway has no issuer itself.
 func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-	if gate.agentID == uuid.Nil {
-		return gate.memberTokens(ctx, member)
+	if gate.agentID == uuid.Nil || (gate.memberChoices != nil && member.backend == metaMemberBackendProxied && gate.memberChoices.serves(member)) {
+		tokens, err := gate.memberTokens(ctx, member)
+		if err == nil && gate.agentID != uuid.Nil && member.chosenClientID.Valid {
+			usable := false
+			for _, token := range tokens {
+				usable = usable || token.Token != ""
+			}
+			if !usable {
+				return nil, agentMemberCredentialError(member)
+			}
+		}
+		return tokens, err
 	}
 	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: member.serverID, ProjectID: member.projectID})
 	if err != nil {
 		return nil, fmt.Errorf("load agent member issuer: %w", err)
 	}
 	if !server.UserSessionIssuerID.Valid {
+		if member.backend == metaMemberBackendProxied {
+			_, err := s.authorizeAgentMemberClient(ctx, gate, member, uuid.Nil, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "")
+			return nil, err
+		}
 		return nil, nil
 	}
-	tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID))
+	// Hosted members retain partial credentials: their tools declare their own
+	// inputs. Proxied members must never turn a missing attachment into an
+	// anonymous upstream request.
+	if member.backend != metaMemberBackendProxied {
+		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID))
+		if err != nil {
+			return nil, fmt.Errorf("resolve hosted member credentials: %w", err)
+		}
+		return tokens, nil
+	}
+	clients, err := s.remoteChallengeMgr.ListClients(ctx, member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID)
 	if err != nil {
-		return nil, fmt.Errorf("resolve agent member attachments: %w", err)
+		return nil, fmt.Errorf("load agent member clients: %w", err)
+	}
+	associated, err := s.serverAssociatedClients(ctx, gate.organizationID, []uuid.UUID{member.serverID})
+	if err != nil {
+		return nil, err
+	}
+	// An issuer can also bind clients belonging to sibling servers.
+	clients = slices.DeleteFunc(clients, func(client remotesessions.Client) bool {
+		return !associated[member.serverID][client.ID]
+	})
+	if len(clients) == 0 {
+		// Distinguish a legitimate header/no-auth member from a required OAuth
+		// member whose last client was removed. No runtime catalog repairs.
+		_, err := s.authorizeAgentMemberClient(ctx, gate, member, server.UserSessionIssuerID.UUID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "")
+		return nil, err
+	}
+	tokens := make(map[uuid.UUID]remotesessions.UpstreamToken, len(clients))
+	for _, client := range clients {
+		clientType := authClientTypeRemoteSession
+		if client.CredentialOwner == remotesessions.CredentialOwnerSelf {
+			clientType = authClientTypeServiceAccount
+		}
+		pinned, err := s.authorizeAgentMemberClient(ctx, gate, member, server.UserSessionIssuerID.UUID, uuid.NullUUID{UUID: client.ID, Valid: true}, clientType)
+		if err != nil {
+			return nil, err
+		}
+		resolved, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID), client.ID, false)
+		if err != nil {
+			return nil, agentMemberCredentialError(member)
+		}
+		resolved, err = pinAttachedSession(resolved, pinned, false)
+		if err != nil {
+			return nil, agentMemberCredentialError(member)
+		}
+		maps.Copy(tokens, resolved)
 	}
 	return tokens, nil
+}
+
+func agentMemberCredentialError(member metaMember) error {
+	return &metaMemberError{message: fmt.Sprintf("server %q's connection is unavailable or not permitted; reconnect it before retrying", member.slug)}
+}
+
+// authorizeAgentMemberClient checks the existing catalog and the exact attached
+// source before acquiring a legacy agent credential. It does not create a choice
+// or grant. Off/shadow keep their connect-equivalent policy; enforced uses the
+// same owner-sensitive permit as selected members.
+func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGateContext, member metaMember, issuer uuid.UUID, registration uuid.NullUUID, clientType string) (uuid.UUID, error) {
+	rows, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
+		Proposed: true, ProposedAuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ProposedRegistrationID: registration, CredentialKind: upstreamclients.CredentialKindUserSession,
+		CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{member.serverID}, OrganizationID: gate.organizationID,
+	})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("load agent member auth client: %w", err)
+	}
+	if len(rows) != 1 {
+		return uuid.Nil, agentMemberCredentialError(member)
+	}
+	res := decideAuthClient(rows[0])
+	mode, err := s.authClientMode(ctx, gate.organizationID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	// Before typed enforcement, configured legacy credential headers remain
+	// served by the proxy even when no catalog client has been provisioned.
+	// This does not waive the enforced catalog/permit barrier.
+	if mode != feature.AuthClientResolverEnforced && !registration.Valid && (rows[0].CredentialHeadersUncovered || (rows[0].ServerHasHeaderClients && !rows[0].ServerHasOauthClients && !rows[0].HeadersStale)) {
+		return uuid.Nil, nil
+	}
+	if (res.outcome == authClientGap && (mode == feature.AuthClientResolverEnforced || !registration.Valid)) || (res.outcome == authClientLegacy && res.clientID == uuid.Nil && mode == feature.AuthClientResolverEnforced) {
+		return uuid.Nil, agentMemberCredentialError(member)
+	}
+	permit := authClientPermitRequest{
+		OrganizationID: gate.organizationID, ProjectID: member.projectID, ServerID: member.serverID,
+		ClientID: res.clientID, ClientType: clientType, RegistrationID: registration,
+		Subject: urn.NewAgentSubject(gate.agentID), UserSessionIssuerID: issuer,
+		CredentialKind: "", CredentialID: uuid.Nil, ConnectionOwner: "",
+	}
+	if res.clientType != "" {
+		permit.ClientType = res.clientType
+	}
+	connection, err := s.authClientConnection(ctx, permit)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if permit.ClientType == authClientTypeRemoteSession && connection.attachedSession == uuid.Nil {
+		return uuid.Nil, agentMemberCredentialError(member)
+	}
+	permit.ConnectionOwner = connection.owner
+	if res.clientID != uuid.Nil {
+		permitter, err := s.authClientPermitFor(ctx, gate.organizationID)
+		if err != nil {
+			return uuid.Nil, err
+		}
+		allowed, err := permitter.Permitted(ctx, permit)
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("authorize agent member client: %w", err)
+		}
+		if !allowed {
+			return uuid.Nil, agentMemberCredentialError(member)
+		}
+	}
+	return connection.attachedSession, nil
 }

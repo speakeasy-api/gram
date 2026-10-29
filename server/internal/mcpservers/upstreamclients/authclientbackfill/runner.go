@@ -858,9 +858,10 @@ func runOAuth(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, pageSize
 	cursor := uuid.Nil
 	for {
 		rows, err := q.ListAuthClientBackfillCandidates(ctx, ListAuthClientBackfillCandidatesParams{
-			Cursor:         cursor,
-			OrganizationID: opts.OrganizationID,
-			PageSize:       pageSize,
+			Cursor:           cursor,
+			OrganizationID:   opts.OrganizationID,
+			OnlyMcpServerIds: nil,
+			PageSize:         pageSize,
 		})
 		if err != nil {
 			return fmt.Errorf("list auth client backfill candidates after %s: %w", cursor, err)
