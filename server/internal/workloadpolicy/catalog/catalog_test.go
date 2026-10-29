@@ -89,6 +89,60 @@ func TestEmbeddedGKEPinsOneClusterAndServiceAccount(t *testing.T) {
 	}
 }
 
+func TestEmbeddedGitHubActionsPinsOneRepository(t *testing.T) {
+	t.Parallel()
+
+	platforms, err := catalog.Embedded().Platforms(t.Context())
+	require.NoError(t, err)
+
+	var github *catalog.Platform
+	for i := range platforms {
+		if platforms[i].Key == "github-actions" {
+			github = &platforms[i]
+		}
+	}
+	require.NotNil(t, github)
+	require.True(t, github.Enabled)
+	require.Equal(t, "https://token.actions.githubusercontent.com", github.Issuer.Value)
+	require.Equal(t, "https://token.actions.githubusercontent.com/.well-known/jwks", github.JWKSURI.Value)
+	require.Equal(t, "repo:{owner}/{repo}:", github.Subject.Template)
+	require.True(t, github.Subject.Wildcard)
+
+	patterns := make(map[string]*regexp.Regexp, len(github.Variables))
+	for _, variable := range github.Variables {
+		require.Equal(t, catalog.TierRule, variable.Tier, "%s varies per repository, not per platform", variable.Key)
+		patterns[variable.Key] = regexp.MustCompile("^(?:" + variable.Pattern + ")$")
+	}
+	require.Len(t, patterns, 2)
+
+	// A value holding a delimiter could reach past its segment: an owner of
+	// "acme/app" or a repository of "app:ref" would move the stem, and a "*"
+	// would read as a second wildcard.
+	for key, pattern := range patterns {
+		for _, delimiter := range []string{":", "/", "*", " "} {
+			require.False(t, pattern.MatchString("ab"+delimiter+"cd"), "%s admits %q", key, delimiter)
+		}
+		// GitHub names never contain "@", so it may only introduce an ID.
+		require.False(t, pattern.MatchString("ab@cd"), "%s admits a non-numeric ID", key)
+		require.False(t, pattern.MatchString("ab@"), "%s admits an empty ID", key)
+		require.False(t, pattern.MatchString("ab@1@2"), "%s admits two IDs", key)
+	}
+
+	owner, repo := patterns["owner"], patterns["repo"]
+	for _, valid := range []string{"octo-org", "Octo-Org", "a", "octo-org@123456", strings.Repeat("a", 39)} {
+		require.True(t, owner.MatchString(valid), "owner refuses %q", valid)
+	}
+	for _, invalid := range []string{"", "-octo", "octo_org", "octo.org", strings.Repeat("a", 40)} {
+		require.False(t, owner.MatchString(invalid), "owner admits %q", invalid)
+	}
+	for _, valid := range []string{"octo-repo", "Octo.Repo_2", ".github", "octo-repo@456789", strings.Repeat("a", 100)} {
+		require.True(t, repo.MatchString(valid), "repository refuses %q", valid)
+	}
+	for _, invalid := range []string{"", strings.Repeat("a", 101)} {
+		require.False(t, repo.MatchString(invalid), "repository admits %q", invalid)
+	}
+}
+
 func TestParseAcceptsAValidPlatform(t *testing.T) {
 	t.Parallel()
 
