@@ -292,6 +292,54 @@ func TestSetAuthClientHeadersRotatesAndKeepsUnchangedSecrets(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
+func TestSetAuthClientHeadersKeepsStoredNonSecretValues(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
+
+	client, err := ti.service.CreateAuthClient(ctx, &gen.CreateAuthClientPayload{
+		ClientType: authz.AuthClientTypeStaticCredential,
+		Name:       "Token",
+		Headers: []*gen.AuthClientHeaderInput{
+			{Name: "X-Api-Key", IsSecret: true, Value: new("api-secret")},
+			{Name: "X-Api-Version", Value: new("2026-01-01")},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetAuthClientHeaders(ctx, &gen.SetAuthClientHeadersPayload{
+		ID: client.ID,
+		Headers: []*gen.AuthClientHeaderInput{
+			{Name: "X-Api-Key", IsSecret: true},
+			{Name: "X-Api-Version"},
+		},
+	})
+	require.NoError(t, err)
+
+	stored, err := repo.New(ti.conn).ListAuthClientStoredHeaders(ctx, repo.ListAuthClientStoredHeadersParams{AuthClientID: uuid.MustParse(client.ID), OrganizationID: ti.organizationID})
+	require.NoError(t, err)
+	values := map[string]string{}
+	for _, h := range stored {
+		if h.IsSecret {
+			plain, err := ti.enc.Decrypt(h.Value.String)
+			require.NoError(t, err)
+			values[h.Name] = plain
+			continue
+		}
+		values[h.Name] = h.Value.String
+	}
+	require.Equal(t, map[string]string{"X-Api-Key": "api-secret", "X-Api-Version": "2026-01-01"}, values)
+
+	for _, flipped := range []*gen.AuthClientHeaderInput{
+		{Name: "X-Api-Key"},
+		{Name: "X-Api-Version", IsSecret: true},
+	} {
+		_, err = ti.service.SetAuthClientHeaders(ctx, &gen.SetAuthClientHeadersPayload{ID: client.ID, Headers: []*gen.AuthClientHeaderInput{flipped}})
+		requireOopsCode(t, err, oops.CodeBadRequest)
+	}
+}
+
 func TestSetAuthClientHeadersLeavesBackfilledClientsToServerSettings(t *testing.T) {
 	t.Parallel()
 

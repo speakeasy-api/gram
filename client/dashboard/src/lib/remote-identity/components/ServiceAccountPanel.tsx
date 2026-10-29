@@ -101,7 +101,7 @@ export function ServiceAccountPanel({
         >
           <FormatGroup
             compact={compact}
-            label="Static"
+            label="Static credential"
             value={format}
             onChange={choose}
             disabled={disabled}
@@ -125,7 +125,7 @@ export function ServiceAccountPanel({
           />
           <FormatGroup
             compact={compact}
-            label="OAuth"
+            label="Service account"
             value={format}
             onChange={choose}
             disabled={disabled}
@@ -206,7 +206,7 @@ function FormatGroup({
     <div className={cn("flex flex-col", compact ? "gap-1.5" : "gap-2")}>
       <span className="text-eyebrow">{label}</span>
       <RadioCardGroup
-        aria-label={`${label} credential`}
+        aria-label={label}
         size="sm"
         showIndicator={false}
         className={

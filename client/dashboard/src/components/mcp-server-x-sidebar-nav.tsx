@@ -103,7 +103,7 @@ function remoteIdentityLabel(mode: IdentityMode): string {
     case "user":
       return "User";
     case "agent":
-      return "Service Account";
+      return "Shared credential";
     case "none":
       return "Manual";
   }
@@ -139,7 +139,7 @@ export function RemoteIdentitySummary({
       "A legacy pass-through Authorization header is still configured. Remove it under Custom Headers so this server's identity is the only thing sending a credential.";
   } else if (authenticationRequired) {
     problem =
-      "This server answers with an authentication challenge, but no identity is configured. Requests will keep failing until User Identity or a Service Account is set up.";
+      "This server answers with an authentication challenge, but no identity is configured. Requests will keep failing until User Identity or a shared credential is set up.";
   }
 
   let status: React.JSX.Element;
