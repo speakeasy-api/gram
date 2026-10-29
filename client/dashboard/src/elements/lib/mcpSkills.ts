@@ -151,7 +151,11 @@ async function readJSONRPCResponse(
 ): Promise<SkillsListMessage> {
   const body = await response.text();
   if (!response.headers.get("content-type")?.includes("text/event-stream")) {
-    return JSON.parse(body) as SkillsListMessage;
+    const message = JSON.parse(body) as SkillsListMessage;
+    if (message.id !== id) {
+      throw new Error("skills/list returned a response to another request");
+    }
+    return message;
   }
   for (const line of body.split("\n")) {
     if (!line.startsWith("data:")) continue;

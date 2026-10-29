@@ -110,13 +110,15 @@ describe("listServedSkills", () => {
   });
 
   it("fails on a repeated cursor instead of returning a partial catalog", async () => {
-    const fetchFn = vi.fn<typeof fetch>().mockImplementation(async () =>
-      jsonResponse({
-        jsonrpc: "2.0",
-        id: "skills-list-0",
-        result: { skills: [skillEntry("a", "Does A.")], nextCursor: "same" },
-      }),
-    );
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (_url, init) =>
+        jsonResponse({
+          jsonrpc: "2.0",
+          id: JSON.parse(init?.body as string).id,
+          result: { skills: [skillEntry("a", "Does A.")], nextCursor: "same" },
+        }),
+      );
 
     await expect(
       listServedSkills({
@@ -126,6 +128,23 @@ describe("listServedSkills", () => {
         fetchFn,
       }),
     ).rejects.toThrow("repeated a cursor");
+  });
+
+  it("rejects a JSON response to another request", async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ jsonrpc: "2.0", id: "other", result: { skills: [] } }),
+      );
+
+    await expect(
+      listServedSkills({
+        url: "https://example.test/mcp/slug",
+        headers: {},
+        protocolVersion: undefined,
+        fetchFn,
+      }),
+    ).rejects.toThrow("another request");
   });
 
   it("throws on a JSON-RPC error", async () => {
