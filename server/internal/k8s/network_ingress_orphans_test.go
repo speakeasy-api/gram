@@ -163,6 +163,8 @@ func TestNetworkIngressOrphanScanInventoriesDisruptionBudgets(t *testing.T) {
 	t.Parallel()
 	provisioner, _, _, desired := newTestTailscaleProvisioner(t)
 	provisioner.config.DisruptionBudgets = true
+	provisioner.config.ProxyReplicas = 2
+	provisioner.config.AttestorReplicas = 2
 	client := newOrphanInventoryClient()
 	createInventoryObject(t, client, namespaceObject(desired.Resources))
 	createInventoryObject(t, client, ownedInventoryObject(disruptionBudgetTestGVR, "PodDisruptionBudget", desired.Resources.Namespace, desired.Resources.AttestorDeployment, desired.ID))
@@ -178,6 +180,23 @@ func TestNetworkIngressOrphanScanInventoriesDisruptionBudgets(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []NetworkIngressOrphan{{OwnerID: orphanID, Kind: "poddisruptionbudgets"}}, orphans)
 	assertNamespacedInventoryIsScoped(t, client.Actions(), desired.Resources.Namespace, provisioner.config.OperatorNamespace)
+}
+
+func TestNetworkIngressOrphanScanFlagsSingleReplicaDisruptionBudgets(t *testing.T) {
+	t.Parallel()
+	provisioner, _, _, desired := newTestTailscaleProvisioner(t)
+	provisioner.config.DisruptionBudgets = true
+	provisioner.config.ProxyReplicas = 2
+	provisioner.config.AttestorReplicas = 1
+	client := newOrphanInventoryClient()
+	createInventoryObject(t, client, namespaceObject(desired.Resources))
+	createInventoryObject(t, client, ownedInventoryObject(disruptionBudgetTestGVR, "PodDisruptionBudget", desired.Resources.Namespace, desired.Resources.AttestorDeployment, desired.ID))
+	createInventoryObject(t, client, ownedInventoryObject(disruptionBudgetTestGVR, "PodDisruptionBudget", "tailscale", desired.Resources.ProxyNetworkPolicy, desired.ID))
+
+	provisioner.dynamic = client
+	orphans, err := provisioner.FindOrphans(t.Context(), []NetworkIngressResourceNames{desired.Resources})
+	require.NoError(t, err)
+	require.Equal(t, []NetworkIngressOrphan{{OwnerID: desired.ID, Kind: "poddisruptionbudgets"}}, orphans)
 }
 
 var disruptionBudgetTestGVR = schema.GroupVersionResource{Group: "policy", Version: "v1", Resource: "poddisruptionbudgets"}

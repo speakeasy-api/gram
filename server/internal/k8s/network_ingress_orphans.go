@@ -75,8 +75,12 @@ func (p *TailscaleNetworkIngressProvisioner) FindOrphans(ctx context.Context, kn
 			key.name = name
 			expected[key] = names.OwnerID
 		}
-		if p.config.DisruptionBudgets {
+		// Apply removes a component's budget at one replica, so only budgets
+		// for multi-replica components are expected.
+		if p.config.DisruptionBudgets && p.config.AttestorReplicas > 1 {
 			expected[resourceKey{kind: "poddisruptionbudgets", namespace: names.Namespace, name: names.AttestorDeployment}] = names.OwnerID
+		}
+		if p.config.DisruptionBudgets && p.config.ProxyReplicas > 1 {
 			expected[resourceKey{kind: "poddisruptionbudgets", namespace: p.config.OperatorNamespace, name: names.ProxyNetworkPolicy}] = names.OwnerID
 		}
 	}
