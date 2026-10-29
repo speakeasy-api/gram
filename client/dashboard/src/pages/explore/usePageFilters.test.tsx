@@ -1,16 +1,19 @@
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { usePageFilters, type PageFilterConfig } from "./usePageFilters";
+
+afterEach(cleanup);
 
 const testState = vi.hoisted(() => ({
   /** Every dimension asked for values, as dataset/dimension. */
   asked: [] as string[],
   /** How many days each dataset/dimension's values were read over. */
   days: {} as Record<string, number>,
+  ranges: {} as Record<string, { from: Date; to: Date }>,
 }));
 
 const sessions: AnalyticsDataset = {
@@ -79,6 +82,7 @@ vi.mock("@gram/client/funcs/analyticsDimensionValues.js", () => ({
   ) => {
     const { dataset, dimension, from, to } = request.dimensionValuesRequestBody;
     testState.asked.push(`${dataset}/${dimension}`);
+    testState.ranges[`${dataset}/${dimension}`] = { from, to };
     testState.days[`${dataset}/${dimension}`] = Math.round(
       (to.getTime() - from.getTime()) / 86_400_000,
     );
@@ -111,6 +115,32 @@ function wrapper(entry: string) {
 }
 
 describe("usePageFilters", () => {
+  it("reads filter choices over the calendar boundary restored from the URL", async () => {
+    const from = new Date("2026-11-01T05:00:00Z");
+    const calendarEnd = new Date("2026-11-02T06:00:00Z");
+    const params = new URLSearchParams({
+      from: from.toISOString(),
+      to: from.toISOString(),
+      calendarEnd: calendarEnd.toISOString(),
+    });
+    const { result } = renderHook(() => usePageFilters(CONFIG), {
+      wrapper: wrapper(`/page?${params}`),
+    });
+    expect(result.current.context.window?.calendarEnd).toEqual(calendarEnd);
+    await waitFor(() =>
+      expect(testState.ranges["sessions/user"]).toEqual({
+        from,
+        to: calendarEnd,
+      }),
+    );
+    const to = new Date("2026-11-01T07:45:00Z");
+    act(() => result.current.context.onRangeSelect?.(from, to));
+    expect(result.current.context.window?.calendarEnd).toBeUndefined();
+    await waitFor(() =>
+      expect(testState.ranges["sessions/user"]).toEqual({ from, to }),
+    );
+  });
+
   it("offers the date range and only the fields the page names, in order", () => {
     const { result } = renderHook(() => usePageFilters(CONFIG), {
       wrapper: wrapper("/page"),

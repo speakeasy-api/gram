@@ -7273,6 +7273,219 @@ func EncodeSetStripeCustomerError(encoder func(context.Context, http.ResponseWri
 	}
 }
 
+// EncodeSetAdoptionDashboardURLResponse returns an encoder for responses
+// returned by the admin setAdoptionDashboardUrl endpoint.
+func EncodeSetAdoptionDashboardURLResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminOrganization)
+		enc := encoder(ctx, w)
+		body := NewSetAdoptionDashboardURLResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeSetAdoptionDashboardURLRequest returns a decoder for requests sent to
+// the admin setAdoptionDashboardUrl endpoint.
+func DecodeSetAdoptionDashboardURLRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.SetAdoptionDashboardURLPayload, error) {
+	return func(r *http.Request) (*admin.SetAdoptionDashboardURLPayload, error) {
+		var payload *admin.SetAdoptionDashboardURLPayload
+		var (
+			body SetAdoptionDashboardURLRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateSetAdoptionDashboardURLRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			adminSessionToken *string
+		)
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		payload = NewSetAdoptionDashboardURLPayload(&body, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeSetAdoptionDashboardURLError returns an encoder for errors returned by
+// the setAdoptionDashboardUrl admin endpoint.
+func EncodeSetAdoptionDashboardURLError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAdoptionDashboardURLUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAdoptionDashboardURLForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAdoptionDashboardURLBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAdoptionDashboardURLNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAdoptionDashboardURLConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAdoptionDashboardURLUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAdoptionDashboardURLInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAdoptionDashboardURLInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAdoptionDashboardURLUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAdoptionDashboardURLGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeGetStripeSubscriptionResponse returns an encoder for responses
 // returned by the admin getStripeSubscription endpoint.
 func EncodeGetStripeSubscriptionResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -21922,6 +22135,199 @@ func EncodeDisableUpstreamAuthEnforcementError(encoder func(context.Context, htt
 	}
 }
 
+// EncodeBackfillMcpAuthGrantsResponse returns an encoder for responses
+// returned by the admin backfillMcpAuthGrants endpoint.
+func EncodeBackfillMcpAuthGrantsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminBackfillMCPAuthGrantsResult)
+		enc := encoder(ctx, w)
+		body := NewBackfillMcpAuthGrantsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeBackfillMcpAuthGrantsRequest returns a decoder for requests sent to
+// the admin backfillMcpAuthGrants endpoint.
+func DecodeBackfillMcpAuthGrantsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.BackfillMcpAuthGrantsPayload, error) {
+	return func(r *http.Request) (*admin.BackfillMcpAuthGrantsPayload, error) {
+		var payload *admin.BackfillMcpAuthGrantsPayload
+		var (
+			adminSessionToken *string
+		)
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		payload = NewBackfillMcpAuthGrantsPayload(adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeBackfillMcpAuthGrantsError returns an encoder for errors returned by
+// the backfillMcpAuthGrants admin endpoint.
+func EncodeBackfillMcpAuthGrantsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpAuthGrantsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpAuthGrantsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpAuthGrantsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpAuthGrantsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpAuthGrantsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpAuthGrantsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpAuthGrantsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpAuthGrantsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpAuthGrantsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewBackfillMcpAuthGrantsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // marshalAdminAdminOrganizationMemberToAdminOrganizationMemberResponseBody
 // builds a value of type *AdminOrganizationMemberResponseBody from a value of
 // type *admin.AdminOrganizationMember.
@@ -22064,6 +22470,7 @@ func marshalAdminAdminOrganizationToAdminOrganizationResponseBody(v *admin.Admin
 		TrialEndsAt:                    v.TrialEndsAt,
 		TrialConvertedAt:               v.TrialConvertedAt,
 		TrialDemotedAt:                 v.TrialDemotedAt,
+		AdoptionDashboardURL:           v.AdoptionDashboardURL,
 		MemberCount:                    v.MemberCount,
 		CreationSource:                 v.CreationSource,
 		CreatedAt:                      v.CreatedAt,
@@ -23201,6 +23608,9 @@ func marshalAdminAdminRegistryPromotionCandidateToAdminRegistryPromotionCandidat
 	if v.SuggestedMetadata != nil {
 		res.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(v.SuggestedMetadata)
 	}
+	if v.AuthDiscovery != nil {
+		res.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(v.AuthDiscovery)
+	}
 
 	return res
 }
@@ -23220,6 +23630,23 @@ func marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSugges
 		DocumentationURL:  v.DocumentationURL,
 		DocsSlug:          v.DocsSlug,
 		AuthMode:          v.AuthMode,
+	}
+
+	return res
+}
+
+// marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody
+// builds a value of type *AdminRegistryPromotionAuthDiscoveryResponseBody from
+// a value of type *admin.AdminRegistryPromotionAuthDiscovery.
+func marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(v *admin.AdminRegistryPromotionAuthDiscovery) *AdminRegistryPromotionAuthDiscoveryResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AdminRegistryPromotionAuthDiscoveryResponseBody{
+		SupportsDcr:  v.SupportsDcr,
+		SupportsCimd: v.SupportsCimd,
+		AuthSetup:    v.AuthSetup,
+		Status:       v.Status,
 	}
 
 	return res
@@ -23635,6 +24062,7 @@ func marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigra
 		SelectionsComplete:       v.SelectionsComplete,
 		PendingSelectionMappings: v.PendingSelectionMappings,
 		PendingGrants:            v.PendingGrants,
+		AttachmentsWaiting:       v.AttachmentsWaiting,
 		SelectionGapCount:        v.SelectionGapCount,
 	}
 	if v.UnresolvedAssociations != nil {

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   scopes: [] as string[],
+  gatewayCandidateOptions: [] as Array<{ enabled: boolean }>,
   includeNewResourceFixtures: false,
   /**
    * When set, the mcp:write grant is selector-scoped to these server ids:
@@ -56,6 +57,13 @@ const mocks = vi.hoisted(() => ({
   // Every SDK list hook records the options it was called with so the test can
   // prove nothing fetches while the palette is closed.
   calls: {} as Record<string, unknown[]>,
+}));
+
+vi.mock("./useGatewayConnectionCandidates", () => ({
+  useGatewayConnectionCandidates: (options: { enabled: boolean }) => {
+    mocks.gatewayCandidateOptions.push(options);
+    return [];
+  },
 }));
 
 function record(name: string, args: unknown[]) {
@@ -198,6 +206,12 @@ vi.mock("@/hooks/usePluginWriteAccess", () => ({
   usePluginWriteAccess: () => mocks.pluginWriteAccess,
 }));
 vi.mock("@/contexts/Telemetry", () => ({
+  useTelemetryContext: () => ({
+    featureFlags: { status: "ready" },
+    telemetry: {
+      isFeatureEnabled: (flag: string) => mocks.flags.includes(flag),
+    },
+  }),
   useTelemetry: () => ({
     isFeatureEnabled: (flag: string) => mocks.flags.includes(flag),
   }),
@@ -269,6 +283,25 @@ vi.mock("./useAgentIdentityCandidates", () => ({
       : [],
   ),
 }));
+vi.mock("./useManagedDeviceCandidates", () => ({
+  useManagedDeviceCandidates: vi.fn(({ enabled }: { enabled: boolean }) =>
+    enabled && mocks.includeNewResourceFixtures
+      ? [
+          {
+            id: "managed-device:test",
+            kind: "page",
+            title: "Test device",
+            detail: "Device",
+            keywords: [],
+            verbs: ["open"],
+            fuzzyOnly: true,
+            group: "Devices",
+            run: () => {},
+          },
+        ]
+      : [],
+  ),
+}));
 vi.mock("@/contexts/CommandPalette", () => ({
   useCommandPalette: () => ({ actions: mocks.actions }),
 }));
@@ -320,6 +353,7 @@ vi.mock("@/routes", () => ({
 import { useLauncherCandidates } from "./index";
 import { useSkillCandidates } from "./useSkillCandidates";
 import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
+import { useManagedDeviceCandidates } from "./useManagedDeviceCandidates";
 import type { LauncherCandidate } from "./types";
 
 const REMOTE = { remoteMcpServerId: "remote-1" };
@@ -552,6 +586,7 @@ describe("useMcpServerCandidates", () => {
         id: "toolset-1",
         name: "Hosted wrapper",
         toolset: { ...HOSTED_ROW.toolset, name: "Hosted tools" },
+        platformEndpointSlug: "acme-renamed-address",
         visibility: "private",
       },
     ];
@@ -560,6 +595,7 @@ describe("useMcpServerCandidates", () => {
 
     expect(hosted?.title).toBe("Hosted tools");
     expect(hosted?.keywords).toContain("hosted");
+    expect(hosted?.keywords).toContain("acme-renamed-address");
     await act(async () => {
       await hosted?.run("open");
     });
@@ -1595,6 +1631,12 @@ describe("useRuleCandidates", () => {
 });
 
 describe("useLauncherCandidates", () => {
+  it("registers gateway discovery with the palette open state", () => {
+    renderCandidates({ enabled: false });
+    expect(mocks.gatewayCandidateOptions.at(-1)).toMatchObject({
+      enabled: false,
+    });
+  });
   it("orders sources: actions, recents, marketplace, mcp servers, gateways, catalog, …, people", () => {
     mocks.scopes = ["org:read", "org:admin", "mcp:write", "project:read"];
     mocks.actions = [
@@ -1796,6 +1838,35 @@ describe("new resource source wiring", () => {
     });
   });
 
+  it.each([false, true])(
+    "includes devices with organization read access (in a project: %s)",
+    (inProject) => {
+      mocks.scopes = ["org:read"];
+      const { result } = renderCandidates({ inProject });
+      expect(result.current.some((c) => c.id === "managed-device:test")).toBe(
+        true,
+      );
+      expect(useManagedDeviceCandidates).toHaveBeenLastCalledWith({
+        enabled: true,
+      });
+      expect(mocks.rbacCalls).toContainEqual({
+        fn: "hasAnyScope",
+        scopes: ["org:read", "org:admin"],
+        resourceId: "org-acme",
+      });
+    },
+  );
+
+  it("does not request devices without organization read access", () => {
+    const { result } = renderCandidates();
+    expect(result.current.some((c) => c.id === "managed-device:test")).toBe(
+      false,
+    );
+    expect(useManagedDeviceCandidates).toHaveBeenLastCalledWith({
+      enabled: false,
+    });
+  });
+
   it("does not request skills without read access", () => {
     const { result } = renderCandidates();
     expect(result.current.some((c) => c.id === "skill:test")).toBe(false);
@@ -1815,11 +1886,14 @@ describe("new resource source wiring", () => {
     });
   });
 
-  it("disables both new sources while the palette is closed", () => {
-    mocks.scopes = ["skill:read"];
+  it("disables the new sources while the palette is closed", () => {
+    mocks.scopes = ["skill:read", "org:read"];
     renderCandidates({ enabled: false });
     expect(useSkillCandidates).toHaveBeenLastCalledWith({ enabled: false });
     expect(useAgentIdentityCandidates).toHaveBeenLastCalledWith({
+      enabled: false,
+    });
+    expect(useManagedDeviceCandidates).toHaveBeenLastCalledWith({
       enabled: false,
     });
   });

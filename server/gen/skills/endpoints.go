@@ -39,6 +39,9 @@ type Endpoints struct {
 	Unshare                goa.Endpoint
 	GetShared              goa.Endpoint
 	ListDistributions      goa.Endpoint
+	Link                   goa.Endpoint
+	Unlink                 goa.Endpoint
+	ListLinks              goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "skills" service with endpoints.
@@ -69,6 +72,9 @@ func NewEndpoints(s Service) *Endpoints {
 		Unshare:                NewUnshareEndpoint(s, a.APIKeyAuth),
 		GetShared:              NewGetSharedEndpoint(s),
 		ListDistributions:      NewListDistributionsEndpoint(s, a.APIKeyAuth),
+		Link:                   NewLinkEndpoint(s, a.APIKeyAuth),
+		Unlink:                 NewUnlinkEndpoint(s, a.APIKeyAuth),
+		ListLinks:              NewListLinksEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -97,6 +103,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Unshare = m(e.Unshare)
 	e.GetShared = m(e.GetShared)
 	e.ListDistributions = m(e.ListDistributions)
+	e.Link = m(e.Link)
+	e.Unlink = m(e.Unlink)
+	e.ListLinks = m(e.ListLinks)
 }
 
 // NewCreateEndpoint returns an endpoint function that calls the method
@@ -1403,5 +1412,182 @@ func NewListDistributionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return s.ListDistributions(ctx, p)
+	}
+}
+
+// NewLinkEndpoint returns an endpoint function that calls the method "link" of
+// service "skills".
+func NewLinkEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*LinkPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.Link(ctx, p)
+	}
+}
+
+// NewUnlinkEndpoint returns an endpoint function that calls the method
+// "unlink" of service "skills".
+func NewUnlinkEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UnlinkPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.Unlink(ctx, p)
+	}
+}
+
+// NewListLinksEndpoint returns an endpoint function that calls the method
+// "listLinks" of service "skills".
+func NewListLinksEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListLinksPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListLinks(ctx, p)
 	}
 }

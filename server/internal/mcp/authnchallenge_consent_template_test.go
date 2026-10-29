@@ -129,6 +129,7 @@ func TestShouldAutoCloseFirstParty(t *testing.T) {
 	t.Parallel()
 
 	connected := remoteSessionCard{Connected: true}
+	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{{Connected: true, AttachmentReconnect: true}}), "an attachment refresh needs its own OAuth callback")
 	disconnected := remoteSessionCard{Connected: false}
 	expired := remoteSessionCard{Connected: false, Expired: true}
 
@@ -1031,6 +1032,7 @@ func TestConsentTemplateExplainsWhyThePersonCannotApproveForThemselves(t *testin
 	require.NoError(t, err)
 
 	html := normalizeWhitespace(page.String())
+	require.NotContains(t, html, "Connect a service above to enable access.")
 	require.Contains(t, html, `<div role="alert" data-agent-self-only data-self-approval-error`, "hidden once the page approves for an agent")
 	require.Contains(t, html, "You don&#39;t have access to any of the ways this server signs in.")
 	require.Contains(t, html, `<a class="underline" href="https://example.com/request-access">Request access</a>`)
@@ -1075,4 +1077,15 @@ func TestConsentTemplatePrefillsStoredCodeModeOnlyWhenOffered(t *testing.T) {
 		require.NotContains(t, html, `value="direct" selected`)
 		require.Equal(t, !code, strings.Contains(html, "The code runtime is unavailable. Progressive discovery is available for this connection."))
 	}
+}
+
+func TestConsentTemplateOffersAttachmentReconnect(t *testing.T) {
+	t.Parallel()
+	var page bytes.Buffer
+	card := remoteSessionCard{ClientID: "client-id", Connected: true, AttachmentReconnect: true}
+	require.NoError(t, consentTemplate.Execute(&page, consentTemplateData{FirstParty: true, RemoteSessionCards: []remoteSessionCard{card}}))
+	html := normalizeWhitespace(page.String())
+	require.Contains(t, html, "Sign in again to choose the account for this agent")
+	require.Contains(t, html, "> Reconnect </button>")
+	require.NotContains(t, html, "data-auto-close")
 }

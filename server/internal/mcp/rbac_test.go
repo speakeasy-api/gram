@@ -82,8 +82,7 @@ func TestServePublic_RBAC_PublicMCP_AllowedWithoutGrants(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "rbac-public-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "rbac-public-"+uuid.NewString()[:8])
 
 	ctx = authztest.WithExactGrants(t, ctx)
 
@@ -263,7 +262,7 @@ func TestServePublic_RBAC_ProjectScopedGrant_AllowsToolCallInProject(t *testing.
 	require.NoError(t, err)
 }
 
-func createPrivateMCPToolset(t *testing.T, ctx context.Context, ti *testInstance, slug string) toolsets_repo.Toolset {
+func createPrivateMCPToolset(t *testing.T, ctx context.Context, ti *testInstance, slug string) hostedToolset {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -271,17 +270,16 @@ func createPrivateMCPToolset(t *testing.T, ctx context.Context, ti *testInstance
 
 	toolsetsRepo := toolsets_repo.New(ti.conn)
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Test Private MCP " + slug,
 		Slug:                   slug,
 		Description:            conv.ToPGText("A test private MCP for RBAC testing"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, slug, "private", noIssuer())
 
 	return toolset
 }

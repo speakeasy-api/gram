@@ -230,7 +230,8 @@ function AgentAPIKeysContent({
   const create = useCreateAPIKeyMutation({ gcTime: 0, retry: false });
   // Resetting mutation state after issuance must not unlock header navigation
   // while the post-issue inventory refresh is still in flight.
-  const navigationBusy = create.isPending || (issued && keys.isFetching);
+  const navigationBusy =
+    checkingChoices || create.isPending || (issued && keys.isFetching);
   useEffect(() => {
     onBusy?.(navigationBusy);
   }, [navigationBusy, onBusy]);
@@ -338,6 +339,7 @@ function AgentAPIKeysContent({
   const issue = (review = false) => {
     if (
       !canIssue ||
+      checkingChoices ||
       create.isPending ||
       issued ||
       !accountsReady ||
@@ -482,7 +484,7 @@ function AgentAPIKeysContent({
     setCheckingChoices(true);
     void keyCredentialChoices(sdk, servers).then(
       (authClientChoices) => {
-        setCheckingChoices(false);
+        if (!mounted.current) return;
         create.mutate(
           {
             security,
@@ -528,6 +530,7 @@ function AgentAPIKeysContent({
               );
               create.reset();
             },
+            onSettled: () => setCheckingChoices(false),
           },
         );
       },
@@ -664,7 +667,9 @@ function AgentAPIKeysContent({
                     <button
                       type="button"
                       aria-current={step === index ? "step" : undefined}
-                      disabled={index >= step || create.isPending}
+                      disabled={
+                        index >= step || create.isPending || checkingChoices
+                      }
                       onClick={() => {
                         returnToStep(index);
                         setError(null);
@@ -757,7 +762,7 @@ function AgentAPIKeysContent({
                     <Select
                       value={expiryDays}
                       onValueChange={setExpiryDays}
-                      disabled={create.isPending}
+                      disabled={create.isPending || checkingChoices}
                     >
                       <SelectTrigger id="agent-key-expiry">
                         <SelectValue />
@@ -778,7 +783,7 @@ function AgentAPIKeysContent({
                           type="date"
                           value={customExpiry}
                           onChange={setCustomExpiry}
-                          disabled={create.isPending}
+                          disabled={create.isPending || checkingChoices}
                         />
                       </label>
                     )}
@@ -793,7 +798,7 @@ function AgentAPIKeysContent({
                     grants={scopedGrants}
                     narrowings={narrowings}
                     onChangeNarrowings={setNarrowings}
-                    disabled={create.isPending}
+                    disabled={create.isPending || checkingChoices}
                     onRetry={() => void delegable.refetch()}
                   />
                 </>
@@ -806,7 +811,7 @@ function AgentAPIKeysContent({
                   onEditServers={() => returnToStep(0)}
                   onEditAccounts={() => returnToStep(1)}
                   onEditAccess={() => returnToStep(2)}
-                  disabled={create.isPending}
+                  disabled={create.isPending || checkingChoices}
                 />
               )}
             </form>
@@ -817,7 +822,7 @@ function AgentAPIKeysContent({
                 {step > 0 && (
                   <Button
                     variant="secondary"
-                    disabled={create.isPending}
+                    disabled={create.isPending || checkingChoices}
                     onClick={() => {
                       returnToStep(step - 1);
                       setError(null);
@@ -828,7 +833,7 @@ function AgentAPIKeysContent({
                 )}
                 <Button
                   variant="tertiary"
-                  disabled={create.isPending}
+                  disabled={create.isPending || checkingChoices}
                   onClick={close}
                 >
                   Cancel
@@ -874,13 +879,15 @@ function AgentAPIKeysContent({
                     else issue(step === 2);
                   }}
                 >
-                  {create.isPending || checkingChoices
-                    ? "Creating…"
-                    : step < 2
-                      ? "Continue"
-                      : step === 2
-                        ? "Review key"
-                        : "Create key"}
+                  {checkingChoices && step === 0
+                    ? "Checking…"
+                    : create.isPending || checkingChoices
+                      ? "Creating…"
+                      : step < 2
+                        ? "Continue"
+                        : step === 2
+                          ? "Review key"
+                          : "Create key"}
                 </Button>
               </div>
             </div>

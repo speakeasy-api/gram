@@ -188,19 +188,27 @@ func TestGetServerIdentityImpactOrganizationIssuerAcrossProjects(t *testing.T) {
 	}
 
 	// Binding an organization-level client would reach every project on the
-	// issuer, which the commit refuses, so the preview refuses it too.
+	// issuer, which the commit refuses a project editor, so the preview
+	// refuses it too.
 	orgClientID := createServerIdentityClient(t, ctx, ti, "impact-org-shared-client", nextProviderID, true)
+	editorCtx := withoutOrganizationAdmin(t, ctx)
 	for _, change := range []string{"attach", "replace"} {
-		_, err = ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, change, nil, &orgClientID))
-		requireOopsCode(t, err, oops.CodeConflict)
+		_, err = ti.service.GetServerIdentityImpact(editorCtx, impactPayload(userIssuerID, &targetID, change, nil, &orgClientID))
+		requireOopsCode(t, err, oops.CodeForbidden)
 		require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
 	}
-	_, err = ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(targetID, nextProviderID, orgClientID))
-	requireOopsCode(t, err, oops.CodeConflict)
+	_, err = ti.service.CommitServerIdentityConfiguration(editorCtx, existingServerIdentityPayload(targetID, nextProviderID, orgClientID))
+	requireOopsCode(t, err, oops.CodeForbidden)
 	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
+
+	// An organization admin may, and the preview lists the other project's
+	// server among those it reaches.
+	result, err = ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "attach", nil, &orgClientID))
+	require.NoError(t, err)
+	require.Contains(t, impactsByServer(result), otherServerID.String())
 }
 
-func TestGetServerIdentityImpactRefusesUnbindingOrgClientOnOrgIssuer(t *testing.T) {
+func TestGetServerIdentityImpactRefusesUnbindingOrgClientOnOrgIssuerWithoutOrganizationAdmin(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -215,8 +223,8 @@ func TestGetServerIdentityImpactRefusesUnbindingOrgClientOnOrgIssuer(t *testing.
 		if change == "replace" {
 			providerID = &nextProviderID
 		}
-		_, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, change, providerID, nil))
-		requireOopsCode(t, err, oops.CodeConflict)
+		_, err := ti.service.GetServerIdentityImpact(withoutOrganizationAdmin(t, ctx), impactPayload(userIssuerID, &targetID, change, providerID, nil))
+		requireOopsCode(t, err, oops.CodeForbidden)
 		require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
 	}
 

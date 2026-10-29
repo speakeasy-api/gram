@@ -102,6 +102,10 @@ vi.mock("@/contexts/Sdk", () => ({
   }),
 }));
 
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org-1" }),
+}));
+
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => mocks.rbac(),
 }));
@@ -2895,6 +2899,42 @@ describe("RemoteMcpIdentitySectionBody", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
+  });
+
+  it("leaves an organization client on an organization-wide issuer editable for an organization admin", () => {
+    mocks.hasScope.mockImplementation(
+      (scope: string, resourceId?: string) =>
+        resourceId === "mcp-server-1" ||
+        (scope === "org:admin" && resourceId === "org-1"),
+    );
+    mocks.userSessionIssuer.mockReturnValue({
+      data: { id: "user-session-issuer-1", projectId: "" },
+    });
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "org-client",
+          projectId: "",
+          remoteSessionIssuerId: "provider-1",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderIdentity();
+
+    expect(screen.queryByText(/shared by every project/i)).toBeNull();
+    expect(
+      (
+        screen.getByRole("radio", {
+          name: /Shared credential/,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
   });
 
   it("locks identity only when an organization-wide issuer holds an organization client", () => {

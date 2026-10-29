@@ -198,15 +198,25 @@ func TestAgentKeyChoiceServesAServerWithoutAnIssuerGate(t *testing.T) {
 	keyCtx := contextvalues.WithPrincipalAPIKeyAuthorization(ctx, &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, APIKeyID: keyID.String()}, agent, contextvalues.PrincipalCredential{AuthorizerUserID: "user_1"})
 	endpoint := &mcpendpointsrepo.McpEndpoint{ProjectID: f.projectID}
 	server := &mcpserversrepo.McpServer{ID: f.serverID, ProjectID: f.projectID, RemoteMcpServerID: validUUID(f.remoteID)}
-	serve := func(ctx context.Context) []remotemcp.BuildOption {
+	sentinel := []remotemcp.BuildOption{remotemcp.WithAnonymousCaller()}
+	serve := func(ctx context.Context, preserved bool) []remotemcp.BuildOption {
 		t.Helper()
-		_, options, err := f.service.agentKeyUngatedUpstream(ctx, httptest.NewRecorder(), testenv.NewLogger(t), endpoint, server, f.orgID, remotesessions.UpstreamToken{}, nil)
+		upstream := remotesessions.UpstreamToken{Token: "existing-token"}
+		got, options, err := f.service.agentKeyUngatedUpstream(ctx, httptest.NewRecorder(), testenv.NewLogger(t), "https://mcp.example.com", endpoint, server, f.orgID, upstream, sentinel)
 		require.NoError(t, err)
+		if preserved {
+			require.Equal(t, upstream, got)
+			require.Same(t, &sentinel[0], &options[0], "existing options must be preserved")
+		}
 		return options
 	}
 
-	require.Empty(t, serve(keyCtx), "before enforcement the server's own headers serve the key")
+	require.Len(t, serve(keyCtx, true), 1, "before enforcement the server's own headers serve the key")
 	f.enforce()
-	require.Len(t, serve(keyCtx), 1, "the key's chosen credential replaces the server's headers")
-	require.Empty(t, serve(ctx), "a caller with no agent key keeps the server's headers")
+	require.Len(t, serve(keyCtx, false), 1, "the key's chosen credential replaces the server's headers")
+	require.Len(t, serve(ctx, true), 1, "a caller with no agent key keeps the server's headers")
+	omittedChoiceCtx := contextvalues.WithPrincipalAPIKeyAuthorization(ctx, &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, APIKeyID: uuid.NewString()}, agent, contextvalues.PrincipalCredential{AuthorizerUserID: "user_1"})
+	require.Len(t, serve(omittedChoiceCtx, true), 1, "an agent key with no recorded choice keeps legacy headers")
+	server.UserSessionIssuerID = validUUID(uuid.New())
+	require.Len(t, serve(keyCtx, true), 1, "the issuer-gated path keeps its already-resolved options")
 }

@@ -1035,9 +1035,15 @@ type ExternalMCPServerEntryResponseBody struct {
 	// Whether every tool on the server is read-only
 	IsReadOnly bool `form:"is_read_only" json:"is_read_only" xml:"is_read_only"`
 	// Whether the server's OAuth authorization server advertises a dynamic client
-	// registration endpoint (RFC 7591). When false, connecting requires manual
-	// setup (static OAuth client credentials or API keys).
+	// registration endpoint (RFC 7591). False alone does not establish that manual
+	// setup is required.
 	SupportsDcr bool `form:"supports_dcr" json:"supports_dcr" xml:"supports_dcr"`
+	// Whether issuer metadata advertises compatible Client ID Metadata Document
+	// support.
+	SupportsCimd *bool `form:"supports_cimd,omitempty" json:"supports_cimd,omitempty" xml:"supports_cimd,omitempty"`
+	// Advertised authentication setup; unknown means evidence is insufficient, not
+	// that manual setup is required.
+	AuthSetup *string `form:"auth_setup,omitempty" json:"auth_setup,omitempty" xml:"auth_setup,omitempty"`
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 	// The source repository the registry links for this server, when it declares
