@@ -5,6 +5,8 @@ description: Review proposed improvements to the skills in an explicit Speakeasy
 
 # Review skill suggestions
 
+If this connection lists `call_platform_tool` instead of the tools this workflow names, find each named tool with `search_platform_tools`, describe it with `describe_platform_tool`, then run it with `call_platform_tool` and the same arguments. Whether a tool exists for you is decided by `describe_platform_tool` with its exact name, not by `tools/list` or one page of search results: a name returned in `not_found` is unavailable to you, so say so rather than guess. The call itself still checks your access. When `execute` is also listed, a multi-step read may run in `execute` with `tools.search`, `tools.describe` and `tools.call` on `platform--<tool name>` paths. End each `execute` run at a confirmation point and ask the user before any write.
+
 The AI Control Plane turns feedback that agents leave on a skill into a suggestion: one or more proposed edits to that skill's SKILL.md, each with a rationale and the feedback it came from. A suggestion changes nothing until someone approves it. Approving records a new version of the skill, which every plugin and assistant that follows the skill's latest version then loads.
 
 This workflow mirrors reviewing suggestions in the AICP dashboard: choose a project, read the queue, read the evidence behind a suggestion, decide per change, confirm, apply, and verify.

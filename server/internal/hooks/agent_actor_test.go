@@ -346,6 +346,10 @@ func (a stubAuthorizer) Authorize(context.Context, string, *security.APIKeySchem
 	return a()
 }
 
+func (a stubAuthorizer) AuthorizeWithHandlerProjectAccess(context.Context, string, *security.APIKeyScheme) (context.Context, error) {
+	return a()
+}
+
 func claudePluginPrompt(sessionID string) *gen.ClaudePayload {
 	key := "gram_local_test"
 	slug := "project"

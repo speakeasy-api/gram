@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -127,7 +126,7 @@ func TestServePublic_UserSessionIssuerRemoteSessionAnonymousSubjectResolves(t *t
 }
 
 type remoteSessionResolverFixture struct {
-	Toolset             toolsets_repo.Toolset
+	Toolset             hostedToolset
 	UserSessionIssuer   usersessions_repo.UserSessionIssuer
 	RemoteSessionClient remotesessions_repo.RemoteSessionClient
 }
@@ -157,13 +156,8 @@ func createRemoteSessionResolverFixture(
 	})
 	require.NoError(t, err)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, slug)
-	toolset, err = toolsets_repo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: userIssuer.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, toolset.ProjectID, toolset, userIssuer.ID)
 	ti.addToolWithDualSecurity(ctx, t, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 
 	remoteRepo := remotesessions_repo.New(ti.conn)
@@ -240,7 +234,7 @@ func insertRemoteSessionAccessToken(
 func mintUserSessionBearerForSubject(
 	t *testing.T,
 	ti *testInstance,
-	toolset toolsets_repo.Toolset,
+	toolset hostedToolset,
 	subject urn.SessionSubject,
 ) string {
 	t.Helper()

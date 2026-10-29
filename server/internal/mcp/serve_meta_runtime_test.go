@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -64,7 +65,7 @@ func seedHostedMetaMember(
 	require.True(t, ok)
 
 	toolsetSlug := "member-ts-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, toolsetSlug)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, toolsetSlug)
 	toolURNs := addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, toolNames...)
 
 	serverID, err := uuid.NewV7()
@@ -421,7 +422,7 @@ func TestServePublic_MetaEndpoint_ListServers_ExcludesSluglessMember(t *testing.
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "ts-slugless-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "ts-slugless-"+uuid.NewString()[:8])
 	serverID, err := uuid.NewV7()
 	require.NoError(t, err)
 	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
@@ -575,17 +576,7 @@ func setToolsetMcpPrivate(t *testing.T, ctx context.Context, ti *testInstance, t
 		ProjectID: projectID,
 	})
 	require.NoError(t, err)
-	_, err = repo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            false,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "private"})
 }
 
 func setToolsetMcpDisabled(t *testing.T, ctx context.Context, ti *testInstance, toolsetID uuid.UUID, projectID uuid.UUID) {
@@ -596,17 +587,7 @@ func setToolsetMcpDisabled(t *testing.T, ctx context.Context, ti *testInstance, 
 		ProjectID: projectID,
 	})
 	require.NoError(t, err)
-	_, err = repo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            toolset.McpIsPublic,
-		McpEnabled:             false,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "disabled"})
 }
 
 // An independent hosted server uses its own visibility, not the backing

@@ -8138,6 +8138,241 @@ func DecodeSetStripeCustomerResponse(decoder func(*http.Response) goahttp.Decode
 	}
 }
 
+// BuildSetAdoptionDashboardURLRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "setAdoptionDashboardUrl"
+// endpoint
+func (c *Client) BuildSetAdoptionDashboardURLRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetAdoptionDashboardURLAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "setAdoptionDashboardUrl", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetAdoptionDashboardURLRequest returns an encoder for requests sent to
+// the admin setAdoptionDashboardUrl server.
+func EncodeSetAdoptionDashboardURLRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.SetAdoptionDashboardURLPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "setAdoptionDashboardUrl", "*admin.SetAdoptionDashboardURLPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewSetAdoptionDashboardURLRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "setAdoptionDashboardUrl", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetAdoptionDashboardURLResponse returns a decoder for responses
+// returned by the admin setAdoptionDashboardUrl endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeSetAdoptionDashboardURLResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetAdoptionDashboardURLResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetAdoptionDashboardURLResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setAdoptionDashboardUrl", err)
+			}
+			err = ValidateSetAdoptionDashboardURLResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setAdoptionDashboardUrl", err)
+			}
+			res := NewSetAdoptionDashboardURLAdminOrganizationOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetAdoptionDashboardURLUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setAdoptionDashboardUrl", err)
+			}
+			err = ValidateSetAdoptionDashboardURLUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setAdoptionDashboardUrl", err)
+			}
+			return nil, NewSetAdoptionDashboardURLUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetAdoptionDashboardURLForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setAdoptionDashboardUrl", err)
+			}
+			err = ValidateSetAdoptionDashboardURLForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setAdoptionDashboardUrl", err)
+			}
+			return nil, NewSetAdoptionDashboardURLForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetAdoptionDashboardURLBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setAdoptionDashboardUrl", err)
+			}
+			err = ValidateSetAdoptionDashboardURLBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setAdoptionDashboardUrl", err)
+			}
+			return nil, NewSetAdoptionDashboardURLBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetAdoptionDashboardURLNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setAdoptionDashboardUrl", err)
+			}
+			err = ValidateSetAdoptionDashboardURLNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setAdoptionDashboardUrl", err)
+			}
+			return nil, NewSetAdoptionDashboardURLNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetAdoptionDashboardURLConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setAdoptionDashboardUrl", err)
+			}
+			err = ValidateSetAdoptionDashboardURLConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setAdoptionDashboardUrl", err)
+			}
+			return nil, NewSetAdoptionDashboardURLConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetAdoptionDashboardURLUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setAdoptionDashboardUrl", err)
+			}
+			err = ValidateSetAdoptionDashboardURLUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setAdoptionDashboardUrl", err)
+			}
+			return nil, NewSetAdoptionDashboardURLUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetAdoptionDashboardURLInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setAdoptionDashboardUrl", err)
+			}
+			err = ValidateSetAdoptionDashboardURLInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setAdoptionDashboardUrl", err)
+			}
+			return nil, NewSetAdoptionDashboardURLInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetAdoptionDashboardURLInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setAdoptionDashboardUrl", err)
+				}
+				err = ValidateSetAdoptionDashboardURLInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setAdoptionDashboardUrl", err)
+				}
+				return nil, NewSetAdoptionDashboardURLInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetAdoptionDashboardURLUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setAdoptionDashboardUrl", err)
+				}
+				err = ValidateSetAdoptionDashboardURLUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setAdoptionDashboardUrl", err)
+				}
+				return nil, NewSetAdoptionDashboardURLUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "setAdoptionDashboardUrl", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetAdoptionDashboardURLGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setAdoptionDashboardUrl", err)
+			}
+			err = ValidateSetAdoptionDashboardURLGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setAdoptionDashboardUrl", err)
+			}
+			return nil, NewSetAdoptionDashboardURLGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "setAdoptionDashboardUrl", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetStripeSubscriptionRequest instantiates a HTTP request object with
 // method and path set to call the "admin" service "getStripeSubscription"
 // endpoint
@@ -24646,6 +24881,7 @@ func unmarshalAdminOrganizationResponseBodyToAdminAdminOrganization(v *AdminOrga
 		TrialEndsAt:                    v.TrialEndsAt,
 		TrialConvertedAt:               v.TrialConvertedAt,
 		TrialDemotedAt:                 v.TrialDemotedAt,
+		AdoptionDashboardURL:           v.AdoptionDashboardURL,
 		MemberCount:                    *v.MemberCount,
 		CreationSource:                 v.CreationSource,
 		CreatedAt:                      *v.CreatedAt,
@@ -25785,6 +26021,9 @@ func unmarshalAdminRegistryPromotionCandidateResponseBodyToAdminAdminRegistryPro
 	if v.SuggestedMetadata != nil {
 		res.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(v.SuggestedMetadata)
 	}
+	if v.AuthDiscovery != nil {
+		res.AuthDiscovery = unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery(v.AuthDiscovery)
+	}
 
 	return res
 }
@@ -25804,6 +26043,23 @@ func unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryP
 		DocumentationURL:  v.DocumentationURL,
 		DocsSlug:          v.DocsSlug,
 		AuthMode:          v.AuthMode,
+	}
+
+	return res
+}
+
+// unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery
+// builds a value of type *admin.AdminRegistryPromotionAuthDiscovery from a
+// value of type *AdminRegistryPromotionAuthDiscoveryResponseBody.
+func unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery(v *AdminRegistryPromotionAuthDiscoveryResponseBody) *admin.AdminRegistryPromotionAuthDiscovery {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminRegistryPromotionAuthDiscovery{
+		SupportsDcr:  *v.SupportsDcr,
+		SupportsCimd: *v.SupportsCimd,
+		AuthSetup:    *v.AuthSetup,
+		Status:       *v.Status,
 	}
 
 	return res
@@ -26187,6 +26443,7 @@ func unmarshalAdminUpstreamOAuthMigrationAuthClientsResponseBodyToAdminAdminUpst
 		SelectionsComplete:       v.SelectionsComplete,
 		PendingSelectionMappings: v.PendingSelectionMappings,
 		PendingGrants:            v.PendingGrants,
+		AttachmentsWaiting:       v.AttachmentsWaiting,
 		SelectionGapCount:        v.SelectionGapCount,
 	}
 	res.UnresolvedAssociations = make([]*admin.AdminUpstreamOAuthMigrationUnresolvedAssociation, len(v.UnresolvedAssociations))

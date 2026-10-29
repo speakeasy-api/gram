@@ -21,6 +21,7 @@ import { ComputedStatus } from "./SetupFields";
 import type {
   PlatformSetup,
   SetupContext,
+  SetupServer,
   SetupStep,
 } from "./setupInstructions";
 import {
@@ -80,7 +81,10 @@ export function useWorkloadSetup({
   settled = false,
   setupOverride,
   targetProjectId,
+  servers = [],
 }: {
+  /** The servers the agent may call, for steps that name one to call. */
+  servers?: SetupServer[];
   /** Reuses issuer registration and admission for non-MCP setup. */
   setupOverride?: PlatformSetup;
   /** An inference exchange cannot use another project’s issuer. */
@@ -301,6 +305,7 @@ export function useWorkloadSetup({
     },
     agentName,
     computed: setupValues.values ?? {},
+    servers,
     // Folded away when it has nothing to say, which is almost always. When it
     // does, the values above it are blank and this is the reason, so it is
     // shown where that can be read rather than behind a disclosure.

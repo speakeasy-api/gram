@@ -86,6 +86,23 @@ func (q *Queries) PostflightCountApprovalsServers(ctx context.Context, projectID
 	return count, err
 }
 
+const postflightCountAttestedDeviceAgentStateReports = `-- name: PostflightCountAttestedDeviceAgentStateReports :one
+SELECT count(*)
+FROM device_agent_state_reports r
+JOIN device_agent_syncs s
+  ON s.organization_id = r.organization_id
+ AND LOWER(s.email) = LOWER(r.email)
+WHERE r.organization_id = $1::text
+  AND r.applied_etag = s.served_etag
+`
+
+func (q *Queries) PostflightCountAttestedDeviceAgentStateReports(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountAttestedDeviceAgentStateReports, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountAuthClientAssociations = `-- name: PostflightCountAuthClientAssociations :one
 SELECT count(*) FROM mcp_server_auth_clients
 WHERE organization_id = $1::text AND deleted IS FALSE
@@ -98,12 +115,40 @@ func (q *Queries) PostflightCountAuthClientAssociations(ctx context.Context, org
 	return count, err
 }
 
+const postflightCountCanonicalWrappers = `-- name: PostflightCountCanonicalWrappers :one
+SELECT count(*)
+FROM mcp_servers s
+JOIN toolsets t ON t.id = s.id AND t.project_id = s.project_id AND t.deleted IS FALSE
+WHERE s.project_id = $1::uuid AND s.toolset_id = s.id AND s.deleted IS FALSE
+`
+
+func (q *Queries) PostflightCountCanonicalWrappers(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountCanonicalWrappers, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountChats = `-- name: PostflightCountChats :one
 SELECT count(*) FROM chats WHERE organization_id = $1::text
 `
 
 func (q *Queries) PostflightCountChats(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountChats, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountDeviceAgentStateReports = `-- name: PostflightCountDeviceAgentStateReports :one
+
+SELECT count(*) FROM device_agent_state_reports WHERE organization_id = $1::text
+`
+
+// State reports: one attested machine and one enforcing an older policy.
+// Without them every active device reads unreported.
+func (q *Queries) PostflightCountDeviceAgentStateReports(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountDeviceAgentStateReports, orgID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -301,6 +346,28 @@ FROM http_tool_definitions WHERE project_id = $1::uuid AND deleted IS FALSE
 
 func (q *Queries) PostflightCountHTTPTools(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountHTTPTools, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountHostedToolsetDrift = `-- name: PostflightCountHostedToolsetDrift :one
+SELECT count(*)
+FROM toolsets t
+JOIN mcp_servers s
+  ON s.id = t.id AND s.toolset_id = t.id AND s.project_id = t.project_id AND s.deleted IS FALSE
+WHERE t.project_id = $1::uuid AND t.deleted IS FALSE
+  AND (s.name IS DISTINCT FROM t.name
+       OR s.tool_variations_group_id IS DISTINCT FROM t.tool_variations_group_id
+       OR NOT EXISTS (
+         SELECT 1 FROM mcp_endpoints e
+         WHERE e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE))
+`
+
+// A hosted toolset's canonical wrapper mirrors the toolset's name and tool
+// variations group, and serves from at least one endpoint.
+func (q *Queries) PostflightCountHostedToolsetDrift(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountHostedToolsetDrift, projectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -666,6 +733,27 @@ func (q *Queries) PostflightCountKillswitchVersions(ctx context.Context, orgID s
 	return count, err
 }
 
+const postflightCountMCPSkillLinks = `-- name: PostflightCountMCPSkillLinks :one
+SELECT count(*)
+FROM mcp_skill_links l
+LEFT JOIN mcp_servers ms
+  ON ms.project_id = l.project_id AND ms.id = l.mcp_server_id AND ms.deleted IS FALSE
+LEFT JOIN meta_mcp_servers mm
+  ON mm.project_id = l.project_id AND mm.id = l.meta_mcp_server_id AND mm.deleted IS FALSE
+WHERE l.project_id = $1::uuid AND l.deleted IS FALSE
+  AND (l.target_kind = 'organization_gateway'
+    OR (l.target_kind = 'mcp_server' AND ms.id IS NOT NULL)
+    OR (l.target_kind = 'meta_mcp_server' AND mm.id IS NOT NULL))
+`
+
+// Skills served over MCP must point at targets that survived the reseed.
+func (q *Queries) PostflightCountMCPSkillLinks(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountMCPSkillLinks, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountMDMDevices = `-- name: PostflightCountMDMDevices :one
 
 SELECT count(*) FROM mdm_devices WHERE organization_id = $1::text
@@ -712,6 +800,26 @@ WHERE organization_id = $1::text
 
 func (q *Queries) PostflightCountNetworkIngresses(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountNetworkIngresses, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountOutdatedDeviceAgentStateReports = `-- name: PostflightCountOutdatedDeviceAgentStateReports :one
+SELECT count(*)
+FROM device_agent_state_reports r
+JOIN device_agent_syncs s
+  ON s.organization_id = r.organization_id
+ AND LOWER(s.email) = LOWER(r.email)
+WHERE r.organization_id = $1::text
+  AND r.applied_etag IS DISTINCT FROM s.served_etag
+  AND r.tools @> '[{"outcome": "error", "error_kind": "permission_denied"}]'::jsonb
+`
+
+// Behind on policy because a tool hit a permission error, the case the
+// device panel exists to explain.
+func (q *Queries) PostflightCountOutdatedDeviceAgentStateReports(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountOutdatedDeviceAgentStateReports, orgID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -904,35 +1012,6 @@ WHERE m.project_id = $1::uuid AND m.deleted IS FALSE
 // would sit in the gateway's table permanently unavailable.
 func (q *Queries) PostflightCountUnservableGatewayMembers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountUnservableGatewayMembers, projectID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const postflightCountUnwrappedToolsets = `-- name: PostflightCountUnwrappedToolsets :one
-SELECT count(*)
-FROM toolsets t
-LEFT JOIN mcp_servers s
-  ON s.id = t.id AND s.toolset_id = t.id AND s.deleted IS FALSE
- AND s.slug = t.mcp_slug AND s.name = t.name
- AND s.user_session_issuer_id IS NOT DISTINCT FROM t.user_session_issuer_id
- AND s.tool_variations_group_id IS NOT DISTINCT FROM t.tool_variations_group_id
- AND s.visibility = CASE WHEN NOT t.mcp_enabled THEN 'disabled'
-                         WHEN t.mcp_is_public THEN 'public'
-                         ELSE 'private' END
-WHERE t.project_id = $1::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL
-  AND (s.id IS NULL
-    OR 1 <> (SELECT count(*) FROM mcp_endpoints e
-             WHERE e.mcp_server_id = t.id AND e.deleted IS FALSE)
-    OR NOT EXISTS (
-      SELECT 1 FROM mcp_endpoints e
-      WHERE e.mcp_server_id = t.id AND e.deleted IS FALSE
-        AND e.slug = t.mcp_slug
-        AND e.custom_domain_id IS NOT DISTINCT FROM t.custom_domain_id))
-`
-
-func (q *Queries) PostflightCountUnwrappedToolsets(ctx context.Context, projectID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, postflightCountUnwrappedToolsets, projectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

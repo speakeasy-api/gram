@@ -44,7 +44,7 @@ Search returns summaries; describe returns full definitions. Exact paths: server
 
 Calls return {ok, data, content, outcome, error?}; check ok. data preserves structuredContent; None when absent. A server refusing the call (unknown tool, invalid arguments) gives ok False, error "tool_call_rejected" and its reason in content: describe the tool and fix the call. Disallowed paths and non-object arguments raise RuntimeError.
 
-Python subset; import asyncio enables await asyncio.gather(...). No external packages, filesystem, environment access, direct network or sleep. Limits: 64 KiB source, 64 MiB heap, 30 s wall, 2 s active Python (tool waits excluded), 64 helper attempts, 8 concurrent helpers, 1 MiB per reply/8 MiB total, 256 KiB result, 16 KiB printed output (truncated).
+Python subset; import asyncio enables await asyncio.gather(...). No external packages, filesystem, environment access, direct network or sleep. Limits: 64 KiB source, 64 MiB heap, 30 s wall, 2 s active Python (tool waits excluded), 64 helper attempts, 8 concurrent helpers, 1 MiB per reply/8 MiB total, 256 KiB result, 16 KiB printed output (truncated). Output printed before a Python error, limit or timeout is still returned.
 
 Optional tools argument restricts every helper to exact paths; omit = all permitted, [] = none.
 
@@ -81,8 +81,15 @@ func (s *Service) listMetaCodeTools(ctx context.Context, logger *slog.Logger, se
 	if len(members) > codePrefixLimit {
 		description.WriteString("Additional prefixes are available through tools.servers().\n")
 	}
-	if len(members) == 0 {
+	switch {
+	case len(members) == 0 && len(gate.hiddenMembers) > 0 && gate.connectURL != "":
+		fmt.Fprintf(&description, "The user hid every server on this gateway. The user can show one again at %s.\n", gate.connectURL)
+	case len(members) == 0:
 		description.WriteString("No tool prefixes are currently permitted.\n")
+	case len(gate.hiddenMembers) == 1:
+		description.WriteString("The user hid 1 more server, which is not available.\n")
+	case len(gate.hiddenMembers) > 1:
+		fmt.Fprintf(&description, "The user hid %d more servers, which are not available.\n", len(gate.hiddenMembers))
 	}
 	body, err := json.Marshal(&result[toolsListResultTools]{ID: req.ID, Result: toolsListResultTools{Tools: []*toolListEntry{{Name: metamcp.ToolCodeExecute, Description: description.String(), InputSchema: codeExecuteSchema, Annotations: nil, Meta: nil}}}, serverIdentity: serverInfoMetaServer, cacheHints: cacheHintsCallerVarying})
 	if err != nil {
