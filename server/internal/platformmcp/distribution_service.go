@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -92,6 +93,11 @@ type Distribution struct {
 	// MCPServer is the name of the MCP server the distribution acted on, echoed
 	// so a caller sees which server it shared rather than inferring it.
 	MCPServer string
+
+	// AwaitingManualSync is whether the plugin's auto sync is off. Its
+	// packages then keep what was last published, publication included, so
+	// the change reaches people only after someone syncs by hand.
+	AwaitingManualSync bool
 }
 
 // DistributionTarget is the MCP server a distribution acts on and the setup
@@ -201,10 +207,19 @@ func (s *DistributionService) Current(ctx context.Context, principal Principal, 
 		return Distribution{}, fmt.Errorf("get current platform mcp plugin attachment: %w", err)
 	}
 	attached := err == nil && live.ID != uuid.Nil
+	awaiting := s.awaitingManualSync(ctx, principal.OrganizationID, target.ProjectID, plugin.ID)
 	if !found {
-		return Distribution{AttachmentLive: attached, PublicationState: publicationStatePending, Plugin: plugin.Name, MCPServer: target.McpServerName}, nil
+		return Distribution{AttachmentLive: attached, PublicationState: publicationStatePending, Plugin: plugin.Name, MCPServer: target.McpServerName, AwaitingManualSync: awaiting}, nil
 	}
-	return Distribution{State: row.State, Version: row.Version, AttachmentLive: attached, PublicationState: row.PublicationState, Plugin: plugin.Name, MCPServer: target.McpServerName}, nil
+	return Distribution{State: row.State, Version: row.Version, AttachmentLive: attached, PublicationState: row.PublicationState, Plugin: plugin.Name, MCPServer: target.McpServerName, AwaitingManualSync: awaiting}, nil
+}
+
+// awaitingManualSync reports whether the plugin's auto sync is off. A failed
+// read reports false, as the plugin's default: the write it describes has
+// already committed.
+func (s *DistributionService) awaitingManualSync(ctx context.Context, organizationID string, projectID, pluginID uuid.UUID) bool {
+	plugin, err := pluginsrepo.New(s.db).GetPlugin(ctx, pluginsrepo.GetPluginParams{ID: pluginID, OrganizationID: organizationID, ProjectID: projectID})
+	return err == nil && !plugindelivery.PluginAutoSyncEnabled(plugin.AutoSyncEnabled)
 }
 
 // Target resolves the MCP server a distribution would act on without writing
@@ -326,7 +341,8 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 		// approval is as real the second time it is asked about.
 		return Distribution{
 			State: existing.State, Version: existing.Version, AttachmentLive: true, PublicationState: existing.PublicationState, Plugin: plugin.Name, MCPServer: target.McpServerName,
-			ShadowMCP: shadowMCPStanding(ctx, s.reads, s.links, principal, ResolvedProject{ID: target.ProjectID, Name: target.ProjectName, Slug: target.ProjectSlug}, remoteURL),
+			ShadowMCP:          shadowMCPStanding(ctx, s.reads, s.links, principal, ResolvedProject{ID: target.ProjectID, Name: target.ProjectName, Slug: target.ProjectSlug}, remoteURL),
+			AwaitingManualSync: s.awaitingManualSync(ctx, principal.OrganizationID, target.ProjectID, plugin.ID),
 		}, nil
 	}
 
@@ -428,7 +444,7 @@ func (s *DistributionService) Remove(ctx context.Context, principal Principal, i
 		if err := tx.Commit(ctx); err != nil {
 			return Distribution{}, fmt.Errorf("commit idempotent platform mcp distribution removal: %w", err)
 		}
-		return Distribution{State: existing.State, Version: existing.Version, AttachmentLive: err == nil, PublicationState: existing.PublicationState, Plugin: plugin.Name, MCPServer: target.McpServerName}, nil
+		return Distribution{State: existing.State, Version: existing.Version, AttachmentLive: err == nil, PublicationState: existing.PublicationState, Plugin: plugin.Name, MCPServer: target.McpServerName, AwaitingManualSync: s.awaitingManualSync(ctx, principal.OrganizationID, target.ProjectID, plugin.ID)}, nil
 	}
 	// A Default plugin may already have contained this MCP when Platform MCP
 	// began tracking the onboarding distribution. Only remove attachments this
@@ -553,13 +569,16 @@ func (s *DistributionService) publishCommittedDistribution(ctx context.Context, 
 		PluginID:         row.DefaultPluginID,
 		Version:          row.Version,
 	})
+	// The publish above is an automatic one, which keeps a plugin whose auto
+	// sync is off as it was last published.
+	awaiting := s.awaitingManualSync(ctx, row.OrganizationID, row.ProjectID, row.DefaultPluginID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Distribution{State: row.State, Version: row.Version, AttachmentLive: row.State == distributionStateAttached, PublicationState: publicationStatePending, Plugin: pluginName, MCPServer: mcpServerName}, nil
+		return Distribution{State: row.State, Version: row.Version, AttachmentLive: row.State == distributionStateAttached, PublicationState: publicationStatePending, Plugin: pluginName, MCPServer: mcpServerName, AwaitingManualSync: awaiting}, nil
 	}
 	if err != nil {
 		return Distribution{}, fmt.Errorf("record platform mcp publication outcome: %w", err)
 	}
-	return Distribution{State: updated.State, Version: updated.Version, AttachmentLive: updated.State == distributionStateAttached, PublicationState: updated.PublicationState, Plugin: pluginName, MCPServer: mcpServerName}, nil
+	return Distribution{State: updated.State, Version: updated.Version, AttachmentLive: updated.State == distributionStateAttached, PublicationState: updated.PublicationState, Plugin: pluginName, MCPServer: mcpServerName, AwaitingManualSync: awaiting}, nil
 }
 
 // distributionTarget resolves the server a distribution acts on: the named MCP

@@ -18,14 +18,17 @@ type DistributeMCPToolInput struct {
 }
 
 type DistributeMCPToolOutput struct {
-	ProjectSlug      string             `json:"project_slug"`
-	MCPID            string             `json:"mcp_id"`
-	MCPServer        string             `json:"mcp_server"`
-	Plugin           string             `json:"plugin"`
-	Attached         bool               `json:"attached"`
-	PublicationState string             `json:"publication_state"`
-	ShadowMCP        *ShadowMCPStanding `json:"shadow_mcp,omitempty"`
-	Message          string             `json:"message"`
+	ProjectSlug      string `json:"project_slug"`
+	MCPID            string `json:"mcp_id"`
+	MCPServer        string `json:"mcp_server"`
+	Plugin           string `json:"plugin"`
+	Attached         bool   `json:"attached"`
+	PublicationState string `json:"publication_state"`
+	// AwaitingManualSync is true when the plugin's auto sync is off, so the
+	// change reaches people only after someone syncs its project by hand.
+	AwaitingManualSync bool               `json:"awaiting_manual_sync"`
+	ShadowMCP          *ShadowMCPStanding `json:"shadow_mcp,omitempty"`
+	Message            string             `json:"message"`
 }
 
 type distributionErrorResult struct {
@@ -38,7 +41,7 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 	addTool(reg, &mcp.Tool{
 		Name:        "distribute_mcp_to_plugin",
 		Title:       "Add an MCP Server to a Plugin",
-		Description: "Give a working MCP server to one plugin — the bundle of MCP servers and skills you share with people — so everyone it is shared with gets it. Constraints: the project must already be selected and the MCP server added to it through setup. Name the server exactly by its ID from find_mcp or get_mcp; an ID matching no such server in the project is refused as mcp_not_found. That server's readiness is checked when this is called, from a current stored check or, if there is none, one new check; a server that is not working is refused as not_ready, and the result names the server either way. Name the plugin exactly by ID, slug, or name: a name matching nothing is refused as not_found and a name matching more than one plugin as ambiguous_target, and neither falls back to the default plugin. This never creates a plugin. For a server added by URL, the administrator's own distribution counts as the Shadow MCP review when the project has a policy that blocks unreviewed servers: the server is recorded in Shadow MCP as approved for this plugin's audience, and shadow_mcp in the result says so with the page where that standing is seen and changed.",
+		Description: "Give a working MCP server to one plugin — the bundle of MCP servers and skills you share with people — so everyone it is shared with gets it. Constraints: the project must already be selected and the MCP server added to it through setup. Name the server exactly by its ID from find_mcp or get_mcp; an ID matching no such server in the project is refused as mcp_not_found. That server's readiness is checked when this is called, from a current stored check or, if there is none, one new check; a server that is not working is refused as not_ready, and the result names the server either way. Name the plugin exactly by ID, slug, or name: a name matching nothing is refused as not_found and a name matching more than one plugin as ambiguous_target, and neither falls back to the default plugin. This never creates a plugin. For a server added by URL, the administrator's own distribution counts as the Shadow MCP review when the project has a policy that blocks unreviewed servers: the server is recorded in Shadow MCP as approved for this plugin's audience, and shadow_mcp in the result says so with the page where that standing is seen and changed. When the plugin's auto sync is off, awaiting_manual_sync is true: the server is in the plugin, but people get it only after the project is synced by hand, and message says how.",
 		Annotations: distributeMCPToPluginAnnotations(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
@@ -113,14 +116,15 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 			}
 		}
 		return nil, DistributeMCPToolOutput{
-			ProjectSlug:      input.ProjectSlug,
-			MCPID:            mcpServerID.String(),
-			MCPServer:        distribution.MCPServer,
-			Plugin:           distribution.Plugin,
-			Attached:         distribution.AttachmentLive,
-			PublicationState: distribution.PublicationState,
-			ShadowMCP:        distribution.ShadowMCP,
-			Message:          distributionOutcomeMessage(distribution.MCPServer, distribution.Plugin, distribution.PublicationState, distribution.AttachmentLive, false) + shadowMCPStandingMessage(distribution.ShadowMCP),
+			ProjectSlug:        input.ProjectSlug,
+			MCPID:              mcpServerID.String(),
+			MCPServer:          distribution.MCPServer,
+			Plugin:             distribution.Plugin,
+			Attached:           distribution.AttachmentLive,
+			PublicationState:   distribution.PublicationState,
+			AwaitingManualSync: distribution.AwaitingManualSync,
+			ShadowMCP:          distribution.ShadowMCP,
+			Message:            distributionOutcomeMessage(distribution, false) + shadowMCPStandingMessage(distribution.ShadowMCP),
 		}, nil
 	})
 
@@ -175,14 +179,15 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 			return nil, DistributeMCPToolOutput{}, err
 		}
 		return nil, DistributeMCPToolOutput{
-			ProjectSlug:      input.ProjectSlug,
-			MCPID:            mcpServerID.String(),
-			MCPServer:        distribution.MCPServer,
-			Plugin:           distribution.Plugin,
-			Attached:         distribution.AttachmentLive,
-			PublicationState: distribution.PublicationState,
-			ShadowMCP:        nil,
-			Message:          distributionOutcomeMessage(distribution.MCPServer, distribution.Plugin, distribution.PublicationState, distribution.AttachmentLive, true),
+			ProjectSlug:        input.ProjectSlug,
+			MCPID:              mcpServerID.String(),
+			MCPServer:          distribution.MCPServer,
+			Plugin:             distribution.Plugin,
+			Attached:           distribution.AttachmentLive,
+			PublicationState:   distribution.PublicationState,
+			AwaitingManualSync: distribution.AwaitingManualSync,
+			ShadowMCP:          nil,
+			Message:            distributionOutcomeMessage(distribution, true),
 		}, nil
 	})
 }
@@ -231,16 +236,21 @@ func distributionToolError(err error, server string) (*mcp.CallToolResult, bool)
 // attachment an administrator made by hand, so the MCP server keeps reaching
 // people even though this flow's own membership is gone. The server instructions
 // tell the model not to narrate publication_state on its own, so this message is
-// the only account the administrator hears.
-func distributionOutcomeMessage(server, plugin, publicationState string, attachmentLive, removed bool) string {
-	subject := mcpServerSubject(server)
+// the only account the administrator hears. A plugin whose auto sync is off
+// keeps what it was last published with through the publish this flow runs,
+// so its change waits for a manual sync whatever that publish's outcome.
+func distributionOutcomeMessage(distribution Distribution, removed bool) string {
+	subject, plugin, publicationState := mcpServerSubject(distribution.MCPServer), distribution.Plugin, distribution.PublicationState
 	if removed {
-		if attachmentLive {
+		if distribution.AttachmentLive {
 			// Remove only withdraws the attachment this flow created; see
 			// DistributionService.Remove, which returns the attachment authority
 			// after publication. Saying people will stop receiving it here would
 			// be false.
 			return subject + " is no longer part of the " + plugin + " plugin through this setup, but an administrator added it to that plugin separately and that stays, so the people it is shared with still get it. Remove that one in the dashboard to stop it reaching them."
+		}
+		if distribution.AwaitingManualSync {
+			return subject + " is no longer part of the " + plugin + " plugin, but that plugin's auto sync is off, so the people it was shared with keep getting it until its project is synced by hand. " + manualSyncRemedy
 		}
 		switch publicationState {
 		case publicationStateCurrent:
@@ -250,6 +260,9 @@ func distributionOutcomeMessage(server, plugin, publicationState string, attachm
 		default:
 			return subject + " is no longer part of the " + plugin + " plugin, but the package that carries that change to people could not be updated, so the change may not have reached them yet. Publish it again from the dashboard."
 		}
+	}
+	if distribution.AwaitingManualSync {
+		return subject + " is now part of the " + plugin + " plugin, but that plugin's auto sync is off, so the people it is shared with get it only after its project is synced by hand. " + manualSyncRemedy
 	}
 	switch publicationState {
 	case publicationStateCurrent:
@@ -263,6 +276,10 @@ func distributionOutcomeMessage(server, plugin, publicationState string, attachm
 		return subject + " is now part of the " + plugin + " plugin, but the package that carries it to people could not be updated, so the change may not have reached them yet. Publish it again from the dashboard."
 	}
 }
+
+// manualSyncRemedy is how a change held by a plugin whose auto sync is off
+// gets out, on the surfaces that can do it.
+const manualSyncRemedy = "Sync it with republish_plugin, which republishes every plugin in the project once the user confirms, or with Sync changes in the dashboard; turning the plugin's auto sync back on with set_plugin_auto_sync publishes it too."
 
 // shadowMCPStandingMessage tells the administrator what their distribution
 // meant for the project's Shadow MCP policy, in the words the policy page uses.

@@ -210,6 +210,39 @@ func TestDistributionServiceTargetsTheNamedPluginAndRefusesAnUnmatchedOne(t *tes
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
+// The publish a distribution runs is an automatic one, which keeps a plugin
+// whose auto sync is off as it was last published. Sharing a server into such
+// a plugin, or taking it back out, reports that the change waits for a manual
+// sync even though that publish succeeded.
+func TestDistributionServiceReportsAPluginWhoseAutoSyncIsOff(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_distribution_paused_plugin")
+	require.NoError(t, err)
+
+	principal, project := seedReadyDistributionTarget(t, ctx, conn)
+	seedPluginWithAutoSync(t, ctx, conn, principal.OrganizationID, project.ID, "Held Tools", "held", pgtype.Bool{Bool: false, Valid: true})
+	seedPluginWithAutoSync(t, ctx, conn, principal.OrganizationID, project.ID, "Live Tools", "live", pgtype.Bool{})
+	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(conn))
+
+	held, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: 0})
+	require.NoError(t, err)
+	require.True(t, held.AttachmentLive)
+	require.Equal(t, publicationStateCurrent, held.PublicationState, "the automatic publish itself succeeded")
+	require.True(t, held.AwaitingManualSync)
+	require.Contains(t, distributionOutcomeMessage(held, false), "get it only after its project is synced by hand")
+
+	removed, err := service.Remove(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: held.Version})
+	require.NoError(t, err)
+	require.True(t, removed.AwaitingManualSync)
+
+	live, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "live", ExpectedVersion: 0})
+	require.NoError(t, err)
+	require.False(t, live.AwaitingManualSync)
+	require.Contains(t, distributionOutcomeMessage(live, false), "the people it is shared with will get it")
+}
+
 func TestDistributionServicePreservesAdminReplacementOnRemoval(t *testing.T) {
 	t.Parallel()
 
