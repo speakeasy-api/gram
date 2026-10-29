@@ -348,11 +348,11 @@ importers:
         specifier: ^1.9.4
         version: 1.9.4
       chart.js:
-        specifier: ^4.5.1
-        version: 4.5.1
+        specifier: ^4.6.1
+        version: 4.6.1
       chartjs-plugin-zoom:
         specifier: ^2.2.0
-        version: 2.2.0(chart.js@4.5.1)
+        version: 2.2.0(chart.js@4.6.1)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -391,7 +391,7 @@ importers:
         version: 19.3.1
       react-chartjs-2:
         specifier: ^5.3.1
-        version: 5.3.1(chart.js@4.5.1)(react@19.3.1)
+        version: 5.3.1(chart.js@4.6.1)(react@19.3.1)
       react-dom:
         specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
@@ -4513,8 +4513,8 @@ packages:
   character-reference-invalid@2.0.1:
     resolution: {integrity: sha512-iBZ4F4wRbyORVsu0jPV7gXkOsGYjGHPmAyv+HiHG8gi5PtC9KI2j1+v8/tlibRvjoWX027ypmG/n0HtO5t7unw==}
 
-  chart.js@4.5.1:
-    resolution: {integrity: sha512-GIjfiT9dbmHRiYi6Nl2yFCq7kkwdkp1W/lp2J99rX0yo9tgJGn3lKQATztIjb5tVtevcBtIdICNWqlq5+E8/Pw==}
+  chart.js@4.6.1:
+    resolution: {integrity: sha512-hJyniucsFmq//EvXYvJ6c6mahPoI3kaxdjVH8awTaJ/fDNWeSqqqArixMJWkWNN6fcYvPU3HneSANFNYtRi61g==}
     engines: {pnpm: '>=8'}
 
   chartjs-plugin-zoom@2.2.0:
@@ -11181,14 +11181,14 @@ snapshots:
 
   character-reference-invalid@2.0.1: {}
 
-  chart.js@4.5.1:
+  chart.js@4.6.1:
     dependencies:
       '@kurkle/color': 0.3.4
 
-  chartjs-plugin-zoom@2.2.0(chart.js@4.5.1):
+  chartjs-plugin-zoom@2.2.0(chart.js@4.6.1):
     dependencies:
       '@types/hammerjs': 2.0.46
-      chart.js: 4.5.1
+      chart.js: 4.6.1
       hammerjs: 2.0.8
 
   check-error@2.1.3: {}
@@ -13279,9 +13279,9 @@ snapshots:
       minimist: 1.2.8
       strip-json-comments: 2.0.1
 
-  react-chartjs-2@5.3.1(chart.js@4.5.1)(react@19.3.1):
+  react-chartjs-2@5.3.1(chart.js@4.6.1)(react@19.3.1):
     dependencies:
-      chart.js: 4.5.1
+      chart.js: 4.6.1
       react: 19.3.1
 
   react-day-picker@10.0.1(@types/react@19.3.0)(react@19.3.1):
