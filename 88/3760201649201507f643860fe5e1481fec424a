@@ -1,0 +1,14 @@
+client/dashboard/src/contexts/rumCollection.test.tsx
+  h_2620cc60cfd1e9 79-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "883760201649201507f643860fe5e1481fec424a",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
