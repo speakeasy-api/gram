@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -42,15 +43,18 @@ func (m *Migrator) requestPublication(ctx context.Context, tx pgx.Tx, organizati
 // cleans up results of risk policies bound to the deleted server, after its
 // transaction commits. This path does neither, so it refuses a toolset that
 // needs either; delete that one from the dashboard instead.
-func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, toolset toolsetsrepo.Toolset, outcome *Outcome) error {
+func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, toolset toolsetsrepo.Toolset, alias pgtype.Text, outcome *Outcome) error {
 	principal := urn.NewPrincipal(urn.PrincipalTypeUser, actor.UserID)
 
 	// Only an MCP-enabled toolset is in a generated package, so only its
 	// deletion can change one. Membership is read before the hosted server
 	// goes, since that detaches server-backed plugin entries.
+	hosting, _, err := hostedmcp.LoadServerState(ctx, tx, toolset)
+	if err != nil {
+		return fmt.Errorf("load hosted MCP server: %w", err)
+	}
 	carried := false
-	if toolset.McpEnabled {
-		var err error
+	if hosting.Enabled {
 		carried, err = pluginsrepo.New(tx).HasPluginMembershipForToolset(ctx, pluginsrepo.HasPluginMembershipForToolsetParams{ProjectID: toolset.ProjectID, ToolsetID: toolset.ID})
 		if err != nil {
 			return fmt.Errorf("check toolset plugin membership: %w", err)
@@ -85,8 +89,8 @@ func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, tools
 	if len(hosted.DeletedRiskPolicies) > 0 {
 		return fail("risk policies are bound to its server; delete it from the dashboard instead")
 	}
-	if ownServer && toolset.McpSlug.Valid && toolset.McpSlug.String != "" {
-		outcome.Actions = append(outcome.Actions, fmt.Sprintf("Delete the server at /mcp/%s with its addresses and plugin entries", toolset.McpSlug.String))
+	if ownServer && alias.Valid && alias.String != "" {
+		outcome.Actions = append(outcome.Actions, fmt.Sprintf("Delete the server at /mcp/%s with its addresses and plugin entries", alias.String))
 	}
 
 	// A server whose id is not the toolset's still points at it; deleting the

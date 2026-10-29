@@ -112,7 +112,7 @@ export function AddCredentialSheet({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const routes = useRoutes();
-  const [picked, setPicked] = useState<Choice>("existing");
+  const [picked, setPicked] = useState<Choice | null>(null);
   const [existingId, setExistingId] = useState("");
   const [name, setName] = useState("");
   const [registrationId, setRegistrationId] = useState("");
@@ -126,11 +126,12 @@ export function AddCredentialSheet({
       (!client.projectId || client.projectId === projectId) &&
       !(tunneled && isHeadersOnly(client.clientType)),
   );
-  // Nothing to reuse means the reuse option only leads to a dead end, so it
-  // is left out and the first new kind is chosen instead.
-  const offersExisting = !reusable.isSuccess || candidates.length > 0;
+  // Default to creation only before an explicit choice. A refresh must not
+  // turn an existing-credential selection into a request to create one.
+  const offersExisting =
+    picked === "existing" || !reusable.isSuccess || candidates.length > 0;
   const choice: Choice =
-    picked === "existing" && !offersExisting ? "service_account" : picked;
+    picked ?? (offersExisting ? "existing" : "service_account");
 
   const owner = REGISTRATION_OWNER[choice];
   const registrations = useAllRemoteSessionClients({}, { enabled: !!owner });
@@ -162,9 +163,11 @@ export function AddCredentialSheet({
 
   const problem =
     choice === "existing"
-      ? existingId
-        ? null
-        : "Choose a credential."
+      ? !existingId
+        ? "Choose a credential."
+        : candidates.some((client) => client.id === existingId)
+          ? null
+          : "This credential is no longer available. Choose another credential."
       : !name.trim()
         ? "Give the credential a name people will recognize."
         : owner && !registration
@@ -259,7 +262,13 @@ export function AddCredentialSheet({
                   again.
                 </FieldError>
               ) : (
-                <Select value={existingId} onValueChange={setExistingId}>
+                <Select
+                  value={existingId}
+                  onValueChange={(id) => {
+                    setPicked("existing");
+                    setExistingId(id);
+                  }}
+                >
                   <SelectTrigger id="existing-credential" className="w-full">
                     <SelectValue placeholder="Choose a credential" />
                   </SelectTrigger>

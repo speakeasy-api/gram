@@ -79,16 +79,16 @@ func TestResolveAuthorization_AgentAttachment(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, agent.String(), actor.String())
 	}
-	// Transfer must not carry the old owner's personal grant into the new
-	// owner's API-key or authenticated-session credentials, even after caching.
+	// Ownership transfer preserves an explicitly delegated grant from an active member.
 	seedUser(t, ctx, ti.conn, "replacement-owner", "replacement@example.com", "Replacement owner")
 	_, err = testrepo.New(ti.conn).AddAttachmentReplacementOwnerMembershipFixture(ctx, organizationID)
 	require.NoError(t, err)
 	_, err = testrepo.New(ti.conn).TransferAttachmentToReplacementOwnerFixture(ctx, testrepo.TransferAttachmentToReplacementOwnerFixtureParams{ID: principalID, OrganizationID: organizationID})
 	require.NoError(t, err)
 	for _, callerCtx := range []context.Context{keyCtx, sessionCtx} {
-		_, err = resolve(callerCtx)
-		require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
+		resolved, err := resolve(callerCtx)
+		require.NoError(t, err)
+		require.Equal(t, source.ID, resolved.RemoteSessionID)
 	}
 	_, err = testrepo.New(ti.conn).SetAttachmentAgentOwnerFixture(ctx, testrepo.SetAttachmentAgentOwnerFixtureParams{OwnerUserID: auth.UserID, ID: principalID, OrganizationID: organizationID})
 	require.NoError(t, err)

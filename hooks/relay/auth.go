@@ -18,6 +18,8 @@ const (
 	credNone credSource = iota
 	credEnv
 	credCache
+	// credOrg is the key baked into the plugin: the shared org key, or an
+	// agent's own key when Config.AgentKey is set.
 	credOrg
 )
 
@@ -134,7 +136,7 @@ func sameDeployment(gotURL, gotOrg, wantURL, wantOrg string) bool {
 }
 
 // resolveAuth returns the effective credential: an explicit env key wins over
-// the cache. Only SPEAKEASY_AI_HOOKS_API_KEY (or its deprecated alias GRAM_HOOKS_API_KEY) is honored — the generic SPEAKEASY_AI_API_KEY and GRAM_API_KEY are
+// the cache and the plugin's baked key (see resolveStoredAuth). Only SPEAKEASY_AI_HOOKS_API_KEY (or its deprecated alias GRAM_HOOKS_API_KEY) is honored — the generic SPEAKEASY_AI_API_KEY and GRAM_API_KEY are
 // a different product surface (MCP access) and must not silently authenticate
 // hook telemetry. The second return is false when the machine holds no
 // credential.
@@ -154,20 +156,39 @@ func resolveAuth(cfg Config) (creds, bool) {
 			Source:    credEnv,
 		}, true
 	}
+	return resolveStoredAuth(cfg)
+}
+
+// resolveStoredAuth returns the credential the machine and plugin hold, with
+// no env key in play. A cached sign-in outranks the shared org key, so a
+// person's events carry their own key. An agent's key outranks the cache: the
+// plugin was installed for the agent, and a person who signed in on the same
+// machine must not have the agent's events recorded under them.
+func resolveStoredAuth(cfg Config) (creds, bool) {
+	baked, hasBaked := bakedAuth(cfg)
+	if hasBaked && cfg.AgentKey {
+		return baked, true
+	}
 	if cached, ok := readCachedAuth(cfg); ok {
 		return cached, true
 	}
-	if apiKey := strings.TrimSpace(cfg.HooksAPIKey); apiKey != "" {
-		return creds{
-			ServerURL: cfg.ServerURL,
-			APIKey:    apiKey,
-			Project:   cfg.ProjectSlug,
-			Email:     "",
-			Org:       cfg.OrgID,
-			Source:    credOrg,
-		}, true
+	return baked, hasBaked
+}
+
+// bakedAuth returns the key baked into the plugin's config, if any.
+func bakedAuth(cfg Config) (creds, bool) {
+	apiKey := strings.TrimSpace(cfg.HooksAPIKey)
+	if apiKey == "" {
+		return creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credNone}, false
 	}
-	return creds{}, false
+	return creds{
+		ServerURL: cfg.ServerURL,
+		APIKey:    apiKey,
+		Project:   cfg.ProjectSlug,
+		Email:     "",
+		Org:       cfg.OrgID,
+		Source:    credOrg,
+	}, true
 }
 
 // writeAuth atomically persists credentials with 0600 permissions and marks the

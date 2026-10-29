@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -500,9 +501,9 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 		case err == nil:
 			targetID = endpoint.ID
 		case errors.Is(err, pgx.ErrNoRows):
-			// A hosted MCP's address belongs to its toolset, which keeps exactly one endpoint.
+			// Hosted addresses follow the hosted address rules, so the root maps only an endpoint the server already has.
 			if server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID {
-				return nil, oops.E(oops.CodeInvalid, nil, "hosted mcp server is not served on this domain; move it to this domain before mapping the root").LogError(ctx, s.logger)
+				return nil, oops.E(oops.CodeInvalid, nil, "hosted MCP server is not served on this domain; add an endpoint on this domain before mapping the root").LogWarn(ctx, s.logger)
 			}
 			if !server.Slug.Valid || server.Slug.String == "" {
 				return nil, oops.E(oops.CodeBadRequest, nil, "mcp server has no slug to name its domain endpoint; attach an endpoint to the domain first").LogError(ctx, s.logger)
@@ -515,18 +516,24 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 			}); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope").LogError(ctx, s.logger)
 			}
-			available, err := mcpendpointsrepo.New(dbtx).CheckUnifiedSlugAvailability(ctx, mcpendpointsrepo.CheckUnifiedSlugAvailabilityParams{
-				Slug:               server.Slug.String,
-				CustomDomainID:     uuid.NullUUID{UUID: domain.ID, Valid: true},
-				OrganizationID:     authCtx.ActiveOrganizationID,
-				ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				ExcludeMcpServerID: uuid.NullUUID{UUID: rootServerID, Valid: true},
-				SkipDomainCheck:    false,
+			available, err := mcpendpointsrepo.New(dbtx).CheckEndpointSlugAvailability(ctx, mcpendpointsrepo.CheckEndpointSlugAvailabilityParams{
+				Slug:             server.Slug.String,
+				CustomDomainID:   uuid.NullUUID{UUID: domain.ID, Valid: true},
+				OrganizationID:   authCtx.ActiveOrganizationID,
+				ExcludeToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				SkipDomainCheck:  false,
 			})
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").LogError(ctx, s.logger)
 			}
-			if !available.Bool {
+			aliasTaken, err := legacyalias.Taken(ctx, dbtx, legacyalias.TakenCheck{
+				Slug: server.Slug.String, CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
+				ExcludeToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ExcludeMcpServerID: uuid.NullUUID{UUID: rootServerID, Valid: true},
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").LogError(ctx, s.logger)
+			}
+			if !available.Bool || aliasTaken {
 				return nil, oops.E(oops.CodeConflict, nil, "an endpoint named %s already exists on this domain", server.Slug.String).LogError(ctx, s.logger)
 			}
 			// Deliberately narrower than the mcpendpoints creation flow: no

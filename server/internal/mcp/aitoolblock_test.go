@@ -2,7 +2,6 @@ package mcp_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
@@ -98,19 +98,20 @@ func TestHandleAuthorize_BlockedAITool_RefusedBeforeATokenExists(t *testing.T) {
 	require.NoError(t, ti.service.HandleAuthorize(w, authorizeRequest(t, toolset.McpSlug.String, claudeCodeCIMDClientID, cimdLoopbackRedirect)))
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
-	var body map[string]string
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	require.Equal(t, "invalid_client", body["error"])
+	body := oauthtest.RequireAuthorizationErrorPage(t, w, http.StatusBadRequest)
+	require.Equal(t, "invalid_client", body.Code)
+	require.Contains(t, w.Body.String(), "Your organization doesn't allow")
+	require.Contains(t, w.Body.String(), toolset.McpSlug.String)
 	// The denial names the tool and says an administrator has to act. It is
 	// the end user's only clue: their client picked this credential at
 	// discovery and will not fall back to registration when authorize refuses
 	// it.
-	require.Contains(t, body["error_description"], "Claude Code")
-	require.Contains(t, body["error_description"], "administrator must approve")
+	require.Contains(t, body.Description, "Claude Code")
+	require.Contains(t, body.Description, "administrator must approve")
 	// Deliberately no request-access link: the only self-service flow grants
 	// an MCP role and cannot clear the tool's block, so offering it sent the
 	// user to a form whose success changed nothing.
-	require.NotContains(t, body["error_description"], "request-access")
+	require.NotContains(t, body.Description, "request-access")
 }
 
 // TestHandleAuthorize_UnblockedAITool_ConnectsNormally pins the other half of
@@ -238,7 +239,7 @@ func TestHandleToken_BlockedAITool_RefusedOnItsNextUse(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 	requireTokenOAuthError(t, w, "unauthorized_client")
-	requireAuthorizeErrorDescription(t, w, "administrator must approve")
+	requireTokenErrorDescription(t, w, "administrator must approve")
 }
 
 // TestHandleToken_UnblockedAITool_ExchangesNormally: a block recorded for one
@@ -298,5 +299,5 @@ func TestHandleToken_BlockedAITool_RefreshInvalidatesOnlyTokens(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 	requireTokenOAuthError(t, w, "invalid_grant")
-	requireAuthorizeErrorDescription(t, w, "administrator must approve")
+	requireTokenErrorDescription(t, w, "administrator must approve")
 }

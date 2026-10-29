@@ -1,3 +1,5 @@
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { IdentitySyncCallout } from "@/components/setup-empty-state";
 import {
   buildEmployees,
@@ -15,20 +17,16 @@ import {
 import { Info } from "lucide-react";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { defineFilters, useFilterState } from "@/components/filters";
-import {
-  useOrganization,
-  useSession,
-  useIsPlatformAdmin,
-} from "@/contexts/Auth";
-import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useSdkClient, useProjectSlugForRequests } from "@/contexts/Sdk";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { AgentOwner } from "@/pages/agents/agent-admin";
+import { AgentOwner, AgentStatus } from "@/pages/agents/agent-admin";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useRBACScopeOverride } from "@/hooks/useRBACScopeOverride";
 import { Badge } from "@/components/ui/Badge";
 import { Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
@@ -47,7 +45,10 @@ import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { Bot, Plus, User } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router";
-import { useCatalogEntries } from "@/pages/agents/credentials/workloadCatalog";
+import {
+  catalogEntryForIssuer,
+  useCatalogEntries,
+} from "@/pages/agents/credentials/workloadCatalog";
 import { useWorkloadIdentities } from "@gram/client/react-query/workloadIdentities.js";
 import {
   identityKindOf,
@@ -556,16 +557,18 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const client = useGramContext();
   const sdk = useSdkClient();
   const session = useSession();
-  const isPlatformAdmin = useIsPlatformAdmin();
+  const scopeOverride = useRBACScopeOverride();
   const { hasScope } = useRBAC();
   const canReadOrganization = hasScope("org:read", organization.id);
   const canAdminOrganization = hasScope("org:admin", organization.id);
+  const inferenceSetupFlag = useFeatureFlag(
+    FEATURE_FLAGS.inferenceWorkloadSetup,
+  );
   // Match the existing agent screen's supported sessions, without changing scope.
   const agentsEnabled =
     organization.slug !== DEMO_ORG_SLUG &&
     !session.organizationOverride &&
-    !session.impersonatorEmail &&
-    getRBACScopeOverrideHeader(import.meta.env.DEV || isPlatformAdmin) === null;
+    !session.impersonatorEmail;
   const [search, setSearch] = useState("");
   // Honours `?sort=<column>:<asc|desc>` so a handoff can open the list on the
   // order it was talking about — the dashboard's Top Users "View all" means
@@ -613,6 +616,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       lifecycleKey,
       ownerKey,
       registered,
+      scopeOverride,
     ],
     queryFn: ({ pageParam, signal }) =>
       fetchRegisteredAgents(
@@ -1025,9 +1029,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       // A catalog platform by its own name; anything else was registered by
       // hand and carries the label its operator gave it. "Custom" is the
       // fallback for one that was left unnamed, not the name of all of them.
-      const known = catalog.entries.find(
-        (entry) => entry.issuer.value === admission.issuer,
-      );
+      const known = catalogEntryForIssuer(catalog.entries, admission.issuer);
       const label =
         known?.displayName ?? (admission.issuerName.trim() || "Custom");
       const names = byAgent.get(admission.agentId);
@@ -1089,24 +1091,11 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       {
         key: "status",
         header: "Status",
-        width: "140px",
+        width: "220px",
         render: (identity) => {
           const agent = agentsById.get(identity.registeredAgentId ?? "");
           if (!agent) return null;
-          return (
-            <Badge
-              size="sm"
-              variant={
-                agent.lifecycle === "active"
-                  ? "success"
-                  : agent.lifecycle === "revoked"
-                    ? "destructive"
-                    : "warning"
-              }
-            >
-              {agent.lifecycle}
-            </Badge>
-          );
+          return <AgentStatus agent={agent} />;
         },
       },
       {
@@ -1278,13 +1267,15 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
                 Set up Claude Tag
               </Link>
             </Button>
-            <Button asChild variant="secondary">
-              <Link
-                to={`${routes.identities.agents.new.href()}?capability=inference`}
-              >
-                Set up inference
-              </Link>
-            </Button>
+            {inferenceSetupFlag.status === "enabled" && (
+              <Button asChild variant="secondary">
+                <Link
+                  to={`${routes.identities.agents.new.href()}?capability=inference`}
+                >
+                  Set up inference
+                </Link>
+              </Button>
+            )}
             <Button asChild variant="primary">
               <Link to={routes.identities.agents.new.href()}>
                 <Plus className="size-4" aria-hidden="true" />
@@ -1519,7 +1510,7 @@ function IdentityGroup({
               at all. It is collapsed to nothing instead of removed: the column
               tracks come from the grid template, so a zero-height row costs no
               layout, where sr-only would take the cells out of the subgrid. */}
-          <div className="border-border min-h-0 flex-1 overflow-y-auto overscroll-y-contain border-b [&_table]:border-t-0 [&_table]:border-b-0 [&_thead]:h-0 [&_thead]:overflow-hidden [&_thead_th]:h-0 [&_thead_th]:overflow-hidden [&_thead_th]:border-0 [&_thead_th]:p-0">
+          <div className="border-border min-h-0 overflow-y-auto overscroll-y-contain border-b [&_table]:border-t-0 [&_table]:border-b-0 [&_thead]:h-0 [&_thead]:overflow-hidden [&_thead_th]:h-0 [&_thead_th]:overflow-hidden [&_thead_th]:border-0 [&_thead_th]:p-0">
             <Table
               columns={columns}
               data={rows.slice(0, visible)}

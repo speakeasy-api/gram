@@ -38,15 +38,19 @@ var (
 	ErrDistributionTargetUnavailable      = errors.New("platform mcp distribution target is unavailable")
 	ErrDistributionBlockedPendingApproval = errors.New("platform mcp distribution blocked by Shadow MCP approval enforcement")
 	ErrDistributionAdmissionUnavailable   = errors.New("platform mcp distribution admission unavailable")
+	ErrDistributionMCPNotFound            = errors.New("platform mcp distribution mcp server not found")
 )
 
-// DistributionInput identifies the project selected by its slug and the plugin
-// inside it that receives the distribution. The active onboarding workflow
-// still supplies the registration and MCP server, so a caller can choose which
-// existing plugin receives an MCP but never which server is distributed.
+// DistributionInput identifies the project selected by its slug, the MCP server
+// distributed, and the plugin inside the project that receives it.
 type DistributionInput struct {
 	// ProjectSlug is the explicit project the distribution acts in.
 	ProjectSlug string
+
+	// MCPServerID names the MCP server distributed, by the ID find_mcp reports.
+	// Nil selects the server the caller's active onboarding workflow last
+	// selected, which is what the dashboard's onboarding flow acts on.
+	MCPServerID uuid.UUID
 
 	// Plugin names an exact existing plugin by id, slug, or name. Empty selects
 	// the project's default plugin, which is what the dashboard's own
@@ -84,6 +88,18 @@ type Distribution struct {
 	// after the write, for a user-supplied URL. Nil for reviewed catalogue
 	// servers and when no reader is wired.
 	ShadowMCP *ShadowMCPStanding
+
+	// MCPServer is the name of the MCP server the distribution acted on, echoed
+	// so a caller sees which server it shared rather than inferring it.
+	MCPServer string
+}
+
+// DistributionTarget is the MCP server a distribution acts on and the setup
+// registration that carries its readiness evidence.
+type DistributionTarget struct {
+	ProjectSlug    string
+	RegistrationID uuid.UUID
+	MCPServerName  string
 }
 
 // ExistingPluginAttacher delegates attachment to the Plugins package. Keeping
@@ -158,12 +174,12 @@ func (s *DistributionService) WithShadowMCPStanding(reads distributionAdmissionR
 // Current returns the selected workflow target's live attachment state and its
 // last persisted version. It does not require readiness, so dashboard resume can
 // safely project the state before offering a mutation.
-func (s *DistributionService) Current(ctx context.Context, principal Principal, projectSlug, targetPlugin string) (Distribution, error) {
+func (s *DistributionService) Current(ctx context.Context, principal Principal, projectSlug string, mcpServerID uuid.UUID, targetPlugin string) (Distribution, error) {
 	if s == nil || s.db == nil || projectSlug == "" {
 		return Distribution{}, ErrDistributionInvalid
 	}
 	q := repo.New(s.db)
-	target, err := s.onboardingTarget(ctx, q, principal, projectSlug)
+	target, err := s.distributionTarget(ctx, q, principal, projectSlug, mcpServerID)
 	if err != nil {
 		return Distribution{}, err
 	}
@@ -186,9 +202,22 @@ func (s *DistributionService) Current(ctx context.Context, principal Principal, 
 	}
 	attached := err == nil && live.ID != uuid.Nil
 	if !found {
-		return Distribution{AttachmentLive: attached, PublicationState: publicationStatePending, Plugin: plugin.Name}, nil
+		return Distribution{AttachmentLive: attached, PublicationState: publicationStatePending, Plugin: plugin.Name, MCPServer: target.McpServerName}, nil
 	}
-	return Distribution{State: row.State, Version: row.Version, AttachmentLive: attached, PublicationState: row.PublicationState, Plugin: plugin.Name}, nil
+	return Distribution{State: row.State, Version: row.Version, AttachmentLive: attached, PublicationState: row.PublicationState, Plugin: plugin.Name, MCPServer: target.McpServerName}, nil
+}
+
+// Target resolves the MCP server a distribution would act on without writing
+// anything, so a caller can check that exact server's readiness first.
+func (s *DistributionService) Target(ctx context.Context, principal Principal, projectSlug string, mcpServerID uuid.UUID) (DistributionTarget, error) {
+	if s == nil || s.db == nil || projectSlug == "" {
+		return DistributionTarget{}, ErrDistributionInvalid
+	}
+	target, err := s.distributionTarget(ctx, repo.New(s.db), principal, projectSlug, mcpServerID)
+	if err != nil {
+		return DistributionTarget{}, err
+	}
+	return DistributionTarget{ProjectSlug: target.ProjectSlug, RegistrationID: target.RegistrationID.UUID, MCPServerName: target.McpServerName}, nil
 }
 
 func (s *DistributionService) Distribute(ctx context.Context, principal Principal, input DistributionInput) (Distribution, error) {
@@ -212,7 +241,7 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	q := repo.New(tx)
-	target, err := s.onboardingTarget(ctx, q, principal, input.ProjectSlug)
+	target, err := s.distributionTarget(ctx, q, principal, input.ProjectSlug, input.MCPServerID)
 	if err != nil {
 		return Distribution{}, err
 	}
@@ -296,7 +325,7 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 		// A replay reports the same standing a fresh write would: the server's
 		// approval is as real the second time it is asked about.
 		return Distribution{
-			State: existing.State, Version: existing.Version, AttachmentLive: true, PublicationState: existing.PublicationState, Plugin: plugin.Name,
+			State: existing.State, Version: existing.Version, AttachmentLive: true, PublicationState: existing.PublicationState, Plugin: plugin.Name, MCPServer: target.McpServerName,
 			ShadowMCP: shadowMCPStanding(ctx, s.reads, s.links, principal, ResolvedProject{ID: target.ProjectID, Name: target.ProjectName, Slug: target.ProjectSlug}, remoteURL),
 		}, nil
 	}
@@ -318,7 +347,7 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 	if err := tx.Commit(ctx); err != nil {
 		return Distribution{}, fmt.Errorf("commit platform mcp distribution: %w", err)
 	}
-	distribution, err := s.publishCommittedDistribution(ctx, principal, row, plugin.Name, "Distribute Platform MCP to "+plugin.Name+" plugin")
+	distribution, err := s.publishCommittedDistribution(ctx, principal, row, plugin.Name, target.McpServerName, "Distribute Platform MCP to "+plugin.Name+" plugin")
 	if err != nil {
 		return Distribution{}, err
 	}
@@ -327,15 +356,16 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 }
 
 // DistributeForOnboarding delegates to the same explicit-project distribution
-// path used by the dashboard. The active workflow supplies the registered MCP;
-// callers cannot target an arbitrary server or create a Default plugin.
-func (s *DistributionService) DistributeForOnboarding(ctx context.Context, principal Principal, projectSlug, targetPlugin string) (Distribution, error) {
-	current, err := s.Current(ctx, principal, projectSlug, targetPlugin)
+// path used by the dashboard. The caller names a server added through setup in
+// that project; it cannot target an arbitrary server or create a Default plugin.
+func (s *DistributionService) DistributeForOnboarding(ctx context.Context, principal Principal, projectSlug string, mcpServerID uuid.UUID, targetPlugin string) (Distribution, error) {
+	current, err := s.Current(ctx, principal, projectSlug, mcpServerID, targetPlugin)
 	if err != nil {
 		return Distribution{}, err
 	}
 	return s.Distribute(ctx, principal, DistributionInput{
 		ProjectSlug:     projectSlug,
+		MCPServerID:     mcpServerID,
 		Plugin:          targetPlugin,
 		ExpectedVersion: current.Version,
 	})
@@ -358,7 +388,7 @@ func (s *DistributionService) Remove(ctx context.Context, principal Principal, i
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	q := repo.New(tx)
-	target, err := s.onboardingTarget(ctx, q, principal, input.ProjectSlug)
+	target, err := s.distributionTarget(ctx, q, principal, input.ProjectSlug, input.MCPServerID)
 	if err != nil {
 		return Distribution{}, err
 	}
@@ -398,7 +428,7 @@ func (s *DistributionService) Remove(ctx context.Context, principal Principal, i
 		if err := tx.Commit(ctx); err != nil {
 			return Distribution{}, fmt.Errorf("commit idempotent platform mcp distribution removal: %w", err)
 		}
-		return Distribution{State: existing.State, Version: existing.Version, AttachmentLive: err == nil, PublicationState: existing.PublicationState, Plugin: plugin.Name}, nil
+		return Distribution{State: existing.State, Version: existing.Version, AttachmentLive: err == nil, PublicationState: existing.PublicationState, Plugin: plugin.Name, MCPServer: target.McpServerName}, nil
 	}
 	// A Default plugin may already have contained this MCP when Platform MCP
 	// began tracking the onboarding distribution. Only remove attachments this
@@ -443,12 +473,12 @@ func (s *DistributionService) Remove(ctx context.Context, principal Principal, i
 	if err := tx.Commit(ctx); err != nil {
 		return Distribution{}, fmt.Errorf("commit platform mcp distribution removal: %w", err)
 	}
-	if _, err := s.publishCommittedDistribution(ctx, principal, row, plugin.Name, "Remove Platform MCP from "+plugin.Name+" plugin"); err != nil {
+	if _, err := s.publishCommittedDistribution(ctx, principal, row, plugin.Name, target.McpServerName, "Remove Platform MCP from "+plugin.Name+" plugin"); err != nil {
 		return Distribution{}, err
 	}
 	// Current reads the attachment authority after publication, including an
 	// administration-owned attachment intentionally preserved above.
-	return s.Current(ctx, principal, input.ProjectSlug, input.Plugin)
+	return s.Current(ctx, principal, input.ProjectSlug, input.MCPServerID, input.Plugin)
 }
 
 // RepairPublication replays the same post-commit desired-state publication
@@ -467,7 +497,7 @@ func (s *DistributionService) RepairPublication(ctx context.Context, principal P
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := repo.New(tx)
-	target, err := s.onboardingTarget(ctx, q, principal, input.ProjectSlug)
+	target, err := s.distributionTarget(ctx, q, principal, input.ProjectSlug, input.MCPServerID)
 	if err != nil {
 		return Distribution{}, err
 	}
@@ -499,7 +529,7 @@ func (s *DistributionService) RepairPublication(ctx context.Context, principal P
 	if err := tx.Commit(ctx); err != nil {
 		return Distribution{}, fmt.Errorf("commit platform mcp publication repair admission: %w", err)
 	}
-	distribution, err := s.publishCommittedDistribution(ctx, principal, row, plugin.Name, "Repair Platform MCP "+plugin.Name+" plugin publication")
+	distribution, err := s.publishCommittedDistribution(ctx, principal, row, plugin.Name, target.McpServerName, "Repair Platform MCP "+plugin.Name+" plugin publication")
 	if err != nil {
 		return Distribution{}, err
 	}
@@ -509,7 +539,7 @@ func (s *DistributionService) RepairPublication(ctx context.Context, principal P
 	return distribution, nil
 }
 
-func (s *DistributionService) publishCommittedDistribution(ctx context.Context, principal Principal, row repo.PlatformMcpDistribution, pluginName, commitMessage string) (Distribution, error) {
+func (s *DistributionService) publishCommittedDistribution(ctx context.Context, principal Principal, row repo.PlatformMcpDistribution, pluginName, mcpServerName, commitMessage string) (Distribution, error) {
 	publicationState := publicationStateRepairRequired
 	if s.publish != nil && s.publish(ctx, row.ProjectID, principal.UserID, commitMessage) == nil {
 		publicationState = publicationStateCurrent
@@ -524,12 +554,40 @@ func (s *DistributionService) publishCommittedDistribution(ctx context.Context, 
 		Version:          row.Version,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Distribution{State: row.State, Version: row.Version, AttachmentLive: row.State == distributionStateAttached, PublicationState: publicationStatePending, Plugin: pluginName}, nil
+		return Distribution{State: row.State, Version: row.Version, AttachmentLive: row.State == distributionStateAttached, PublicationState: publicationStatePending, Plugin: pluginName, MCPServer: mcpServerName}, nil
 	}
 	if err != nil {
 		return Distribution{}, fmt.Errorf("record platform mcp publication outcome: %w", err)
 	}
-	return Distribution{State: updated.State, Version: updated.Version, AttachmentLive: updated.State == distributionStateAttached, PublicationState: updated.PublicationState, Plugin: pluginName}, nil
+	return Distribution{State: updated.State, Version: updated.Version, AttachmentLive: updated.State == distributionStateAttached, PublicationState: updated.PublicationState, Plugin: pluginName, MCPServer: mcpServerName}, nil
+}
+
+// distributionTarget resolves the server a distribution acts on: the named MCP
+// server when one is given, otherwise the onboarding workflow's selection.
+func (s *DistributionService) distributionTarget(ctx context.Context, q *repo.Queries, principal Principal, projectSlug string, mcpServerID uuid.UUID) (repo.GetPlatformMCPOnboardingDistributionTargetRow, error) {
+	if mcpServerID == uuid.Nil {
+		return s.onboardingTarget(ctx, q, principal, projectSlug)
+	}
+	target, err := q.GetPlatformMCPDistributionTargetByServer(ctx, repo.GetPlatformMCPDistributionTargetByServerParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectSlug:    projectSlug,
+		McpServerID:    uuid.NullUUID{UUID: mcpServerID, Valid: true},
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return repo.GetPlatformMCPOnboardingDistributionTargetRow{}, ErrDistributionMCPNotFound
+	}
+	if err != nil {
+		return repo.GetPlatformMCPOnboardingDistributionTargetRow{}, fmt.Errorf("resolve platform mcp distribution target server: %w", err)
+	}
+	return repo.GetPlatformMCPOnboardingDistributionTargetRow{
+		WorkflowID:     uuid.Nil,
+		RegistrationID: uuid.NullUUID{UUID: target.RegistrationID, Valid: true},
+		ProjectID:      target.ProjectID,
+		ProjectName:    target.ProjectName,
+		ProjectSlug:    target.ProjectSlug,
+		McpServerID:    target.McpServerID,
+		McpServerName:  target.McpServerName,
+	}, nil
 }
 
 func (s *DistributionService) onboardingTarget(ctx context.Context, q *repo.Queries, principal Principal, projectSlug string) (repo.GetPlatformMCPOnboardingDistributionTargetRow, error) {

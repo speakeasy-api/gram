@@ -32,13 +32,11 @@ JOIN remote_session_client_user_session_issuers link
  AND link.user_session_issuer_id = us.user_session_issuer_id
 WHERE b.organization_id = @org_id::text AND b.project_id = @project_id::uuid
   AND b.revoked_at IS NULL AND a.suspended_at IS NULL AND a.revoked_at IS NULL
-  AND b.remote_session_id = @remote_session_id::uuid
+  AND b.remote_session_id = ANY(@remote_session_ids::uuid[])
   AND b.remote_session_client_id = rs.remote_session_client_id
-  AND b.grant_generation = rs.grant_generation
   AND b.user_session_issuer_id = us.user_session_issuer_id
-  AND rs.subject_urn = us.subject_urn
-  AND rs.subject_urn = 'user:' || a.owner_user_id
-  AND b.attached_by_subject_id = 'user:' || a.owner_user_id
+  AND rs.subject_urn = b.attached_by_subject_id
+  AND b.attached_by_subject_id = rs.subject_urn
   AND rs.access_token_encrypted = 'DEMO-NOT-VALID-CIPHERTEXT'
   AND rs.refresh_token_encrypted IS NULL AND rs.auto_refresh IS FALSE;
 
@@ -222,14 +220,14 @@ SELECT count(*) FROM mcp_server_remote_session_clients
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 
 -- Check both the total and the expected credential/server/client tuples so
--- eight misassigned choices cannot satisfy postflight.
+-- twenty-six misassigned choices cannot satisfy postflight.
 -- name: PostflightIDUpstreamClientChoices :one
 WITH live AS (
   SELECT * FROM upstream_client_selections
   WHERE project_id = @project_id::uuid AND deleted IS FALSE
 )
 SELECT count(*) FROM live
-WHERE (SELECT count(*) FROM live) = 8
+WHERE (SELECT count(*) FROM live) = 26
   AND credential_kind = 'user_session'
   AND (
     (credential_id = ANY(@linear_session_ids::uuid[])
@@ -242,10 +240,29 @@ WHERE (SELECT count(*) FROM live) = 8
      AND remote_session_client_id IS NULL
      AND client_attachment_scope IS NULL
      AND no_auth IS TRUE)
+    OR
+    (credential_id = ANY(@org_session_ids::uuid[])
+     AND mcp_server_id = ANY(@org_no_auth_server_ids::uuid[])
+     AND remote_session_client_id IS NULL
+     AND client_attachment_scope IS NULL
+     AND no_auth IS TRUE)
+    OR
+    (credential_id = ANY(@org_session_ids::uuid[])
+     AND no_auth IS FALSE
+     AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
+                 JOIN remote_session_clients c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
+                 JOIN user_sessions us ON us.id = live.credential_id
+                 JOIN remote_session_client_user_session_issuers binding
+                   ON binding.remote_session_client_id = c.id
+                  AND binding.user_session_issuer_id = us.user_session_issuer_id
+                 WHERE a.mcp_server_id = live.mcp_server_id
+                   AND a.remote_session_client_id = live.remote_session_client_id
+                   AND a.deleted IS FALSE))
   );
 
--- Live choices that are not the intended ones: Linear through its main
--- client, Slack with no upstream authentication, each on a seeded session.
+-- Count live choices outside the intended set: Linear through its main client,
+-- Slack with no upstream authentication, and the organization gateway's GitHub
+-- and tunneled inventory choices, each on a seeded session.
 -- name: PostflightIDMisassignedUpstreamClientChoices :one
 SELECT count(*)
 FROM upstream_client_selections u
@@ -255,6 +272,13 @@ WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
     AND (
       (u.mcp_server_id = @linear_server_id::uuid AND u.remote_session_client_id = @linear_client_id::uuid)
       OR (u.mcp_server_id = @slack_server_id::uuid AND u.no_auth)
+      OR (u.credential_id = ANY(@org_session_ids::uuid[])
+          AND u.mcp_server_id = ANY(@org_no_auth_server_ids::uuid[]) AND u.no_auth)
+      OR (u.credential_id = ANY(@org_session_ids::uuid[]) AND NOT u.no_auth
+          AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
+                      WHERE a.mcp_server_id = u.mcp_server_id
+                        AND a.remote_session_client_id = u.remote_session_client_id
+                        AND a.deleted IS FALSE))
     )
   );
 
