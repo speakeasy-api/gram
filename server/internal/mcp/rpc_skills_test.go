@@ -525,7 +525,7 @@ func chatSessionToken(t *testing.T, ti *testInstance, f *skillsFixture, userID, 
 		UserID:           userID,
 		SessionID:        sessionID,
 		AccountType:      "",
-		RegisteredClaims: jwt.RegisteredClaims{}, //nolint:exhaustruct // populated by the manager
+		RegisteredClaims: jwt.RegisteredClaims{},
 	}, "http://localhost", 3600)
 	require.NoError(t, err)
 	return token
