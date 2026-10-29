@@ -1401,6 +1401,7 @@ func ParseEndpoint(
 		deviceIntegrationsListManagedDevicesFlags              = flag.NewFlagSet("list-managed-devices", flag.ExitOnError)
 		deviceIntegrationsListManagedDevicesProviderFlag       = deviceIntegrationsListManagedDevicesFlags.String("provider", "", "")
 		deviceIntegrationsListManagedDevicesCoverageBucketFlag = deviceIntegrationsListManagedDevicesFlags.String("coverage-bucket", "", "")
+		deviceIntegrationsListManagedDevicesPolicyStateFlag    = deviceIntegrationsListManagedDevicesFlags.String("policy-state", "", "")
 		deviceIntegrationsListManagedDevicesUserIdsFlag        = deviceIntegrationsListManagedDevicesFlags.String("user-ids", "", "")
 		deviceIntegrationsListManagedDevicesUserEmailsFlag     = deviceIntegrationsListManagedDevicesFlags.String("user-emails", "", "")
 		deviceIntegrationsListManagedDevicesCursorFlag         = deviceIntegrationsListManagedDevicesFlags.String("cursor", "", "")
@@ -10778,7 +10779,7 @@ func ParseEndpoint(
 				data, err = deviceintegrationsc.BuildRetrySchedulePayload(*deviceIntegrationsRetryScheduleBodyFlag, *deviceIntegrationsRetryScheduleApikeyTokenFlag, *deviceIntegrationsRetryScheduleSessionTokenFlag)
 			case "list-managed-devices":
 				endpoint = c.ListManagedDevices()
-				data, err = deviceintegrationsc.BuildListManagedDevicesPayload(*deviceIntegrationsListManagedDevicesProviderFlag, *deviceIntegrationsListManagedDevicesCoverageBucketFlag, *deviceIntegrationsListManagedDevicesUserIdsFlag, *deviceIntegrationsListManagedDevicesUserEmailsFlag, *deviceIntegrationsListManagedDevicesCursorFlag, *deviceIntegrationsListManagedDevicesLimitFlag, *deviceIntegrationsListManagedDevicesApikeyTokenFlag, *deviceIntegrationsListManagedDevicesSessionTokenFlag)
+				data, err = deviceintegrationsc.BuildListManagedDevicesPayload(*deviceIntegrationsListManagedDevicesProviderFlag, *deviceIntegrationsListManagedDevicesCoverageBucketFlag, *deviceIntegrationsListManagedDevicesPolicyStateFlag, *deviceIntegrationsListManagedDevicesUserIdsFlag, *deviceIntegrationsListManagedDevicesUserEmailsFlag, *deviceIntegrationsListManagedDevicesCursorFlag, *deviceIntegrationsListManagedDevicesLimitFlag, *deviceIntegrationsListManagedDevicesApikeyTokenFlag, *deviceIntegrationsListManagedDevicesSessionTokenFlag)
 			case "get-coverage":
 				endpoint = c.GetCoverage()
 				data, err = deviceintegrationsc.BuildGetCoveragePayload(*deviceIntegrationsGetCoverageProviderFlag, *deviceIntegrationsGetCoverageApikeyTokenFlag, *deviceIntegrationsGetCoverageSessionTokenFlag)
@@ -18494,6 +18495,7 @@ func deviceIntegrationsListManagedDevicesUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations list-managed-devices", os.Args[0])
 	fmt.Fprint(os.Stderr, " -provider STRING")
 	fmt.Fprint(os.Stderr, " -coverage-bucket STRING")
+	fmt.Fprint(os.Stderr, " -policy-state STRING")
 	fmt.Fprint(os.Stderr, " -user-ids JSON")
 	fmt.Fprint(os.Stderr, " -user-emails JSON")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
@@ -18509,6 +18511,7 @@ func deviceIntegrationsListManagedDevicesUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
 	fmt.Fprintln(os.Stderr, `    -coverage-bucket STRING: `)
+	fmt.Fprintln(os.Stderr, `    -policy-state STRING: `)
 	fmt.Fprintln(os.Stderr, `    -user-ids JSON: `)
 	fmt.Fprintln(os.Stderr, `    -user-emails JSON: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
@@ -18518,7 +18521,7 @@ func deviceIntegrationsListManagedDevicesUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations list-managed-devices --provider \"abc123\" --coverage-bucket \"agent_stale\" --user-ids '[\n      \"abc123\"\n   ]' --user-emails '[\n      \"abc123\"\n   ]' --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations list-managed-devices --provider \"abc123\" --coverage-bucket \"agent_stale\" --policy-state \"outdated\" --user-ids '[\n      \"abc123\"\n   ]' --user-emails '[\n      \"abc123\"\n   ]' --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func deviceIntegrationsGetCoverageUsage() {

@@ -51,6 +51,10 @@ export type DeviceIntegrationCoverage = {
    */
   attestation: Attestation;
   /**
+   * agent_active devices whose agent build is blocked, so the kill switch has halted enforcement.
+   */
+  enforcementHalted: number;
+  /**
    * Devices absent from the latest completed MDM snapshot.
    */
   missing: number;
@@ -66,6 +70,18 @@ export type DeviceIntegrationCoverage = {
    * Organization the coverage describes.
    */
   organizationId: string;
+  /**
+   * agent_active devices whose latest report applies the policy last served to the reporting user.
+   */
+  policyAttested: number;
+  /**
+   * agent_active devices that report a different policy, or none.
+   */
+  policyOutdated: number;
+  /**
+   * agent_active devices with no state report within the window, typically an agent that predates reporting.
+   */
+  policyUnreported: number;
   /**
    * All synced devices, including missing ones.
    */
@@ -96,10 +112,14 @@ export const DeviceIntegrationCoverage$inboundSchema: z.ZodMiniType<
     agent_other_device: z.int(),
     agent_stale: z.int(),
     attestation: Attestation$inboundSchema,
+    enforcement_halted: z.int(),
     missing: z.int(),
     no_agent: z.int(),
     no_email: z.int(),
     organization_id: z.string(),
+    policy_attested: z.int(),
+    policy_outdated: z.int(),
+    policy_unreported: z.int(),
     total_devices: z.int(),
     unmanaged_agent_users: z.int(),
     unresolved_email: z.int(),
@@ -111,9 +131,13 @@ export const DeviceIntegrationCoverage$inboundSchema: z.ZodMiniType<
       "agent_active_device_attested": "agentActiveDeviceAttested",
       "agent_other_device": "agentOtherDevice",
       "agent_stale": "agentStale",
+      "enforcement_halted": "enforcementHalted",
       "no_agent": "noAgent",
       "no_email": "noEmail",
       "organization_id": "organizationId",
+      "policy_attested": "policyAttested",
+      "policy_outdated": "policyOutdated",
+      "policy_unreported": "policyUnreported",
       "total_devices": "totalDevices",
       "unmanaged_agent_users": "unmanagedAgentUsers",
       "unresolved_email": "unresolvedEmail",

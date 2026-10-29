@@ -53,6 +53,15 @@ func (q *Queries) RolesDeleteDeviceAgentDeviceSyncs(ctx context.Context, organiz
 	return err
 }
 
+const rolesDeleteDeviceAgentStateReports = `-- name: RolesDeleteDeviceAgentStateReports :exec
+DELETE FROM device_agent_state_reports WHERE organization_id = $1
+`
+
+func (q *Queries) RolesDeleteDeviceAgentStateReports(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, rolesDeleteDeviceAgentStateReports, organizationID)
+	return err
+}
+
 const rolesDeleteDeviceAgentSyncs = `-- name: RolesDeleteDeviceAgentSyncs :exec
 DELETE FROM device_agent_syncs WHERE organization_id = $1
 `
@@ -405,20 +414,76 @@ func (q *Queries) RolesInsertDeviceAgentDeviceSync(ctx context.Context, arg Role
 	return err
 }
 
+const rolesInsertDeviceAgentStateReport = `-- name: RolesInsertDeviceAgentStateReport :exec
+INSERT INTO device_agent_state_reports
+  (organization_id, email, serial_number, hostname, schema_version,
+   generated_at, reported_at, applied_etag, applied_at, enforcement_halted,
+   tools, degraded_tool_count, drift_counting_since, speakeasyd_version,
+   speakeasy_version, os, arch, auto_update, update_channel)
+VALUES ($1, $2, $3::text, $4::text, 1,
+        now() - ($5::text)::interval,
+        now() - ($5::text)::interval,
+        $6::text, now() - ($7::text)::interval, FALSE,
+        $8::jsonb, $9::integer,
+        now() - interval '9 days', $10::text,
+        $10::text, 'darwin', 'arm64', 'automatic', 'stable')
+`
+
+type RolesInsertDeviceAgentStateReportParams struct {
+	OrganizationID    string
+	Email             string
+	SerialNumber      string
+	Hostname          string
+	ReportedAgo       string
+	AppliedEtag       string
+	AppliedAgo        string
+	Tools             []byte
+	DegradedToolCount int32
+	SpeakeasydVersion string
+}
+
+func (q *Queries) RolesInsertDeviceAgentStateReport(ctx context.Context, arg RolesInsertDeviceAgentStateReportParams) error {
+	_, err := q.db.Exec(ctx, rolesInsertDeviceAgentStateReport,
+		arg.OrganizationID,
+		arg.Email,
+		arg.SerialNumber,
+		arg.Hostname,
+		arg.ReportedAgo,
+		arg.AppliedEtag,
+		arg.AppliedAgo,
+		arg.Tools,
+		arg.DegradedToolCount,
+		arg.SpeakeasydVersion,
+	)
+	return err
+}
+
 const rolesInsertDeviceAgentSync = `-- name: RolesInsertDeviceAgentSync :exec
-INSERT INTO device_agent_syncs (organization_id, email, first_seen_at, last_seen_at)
+INSERT INTO device_agent_syncs
+  (organization_id, email, first_seen_at, last_seen_at, served_etag,
+   served_etag_changed_at)
 VALUES ($1, $2, now() - interval '9 days',
-        now() - ($3::text)::interval)
+        now() - ($3::text)::interval, $4::text,
+        CASE WHEN $4::text IS NULL THEN NULL
+             ELSE now() - interval '2 days' END)
 `
 
 type RolesInsertDeviceAgentSyncParams struct {
 	OrganizationID string
 	Email          string
 	LastSeenAgo    string
+	ServedEtag     pgtype.Text
 }
 
+// served_etag is the policy etag the user's last poll was served; NULL for an
+// agent that has not polled since the column existed.
 func (q *Queries) RolesInsertDeviceAgentSync(ctx context.Context, arg RolesInsertDeviceAgentSyncParams) error {
-	_, err := q.db.Exec(ctx, rolesInsertDeviceAgentSync, arg.OrganizationID, arg.Email, arg.LastSeenAgo)
+	_, err := q.db.Exec(ctx, rolesInsertDeviceAgentSync,
+		arg.OrganizationID,
+		arg.Email,
+		arg.LastSeenAgo,
+		arg.ServedEtag,
+	)
 	return err
 }
 

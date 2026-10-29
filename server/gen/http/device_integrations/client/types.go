@@ -242,6 +242,17 @@ type GetCoverageResponseBody struct {
 	// Agent users with no matching device in any connected MDM inventory — shadow
 	// devices or fleets outside MDM.
 	UnmanagedAgentUsers *int64 `form:"unmanaged_agent_users,omitempty" json:"unmanaged_agent_users,omitempty" xml:"unmanaged_agent_users,omitempty"`
+	// agent_active devices whose latest report applies the policy last served to
+	// the reporting user.
+	PolicyAttested *int64 `form:"policy_attested,omitempty" json:"policy_attested,omitempty" xml:"policy_attested,omitempty"`
+	// agent_active devices that report a different policy, or none.
+	PolicyOutdated *int64 `form:"policy_outdated,omitempty" json:"policy_outdated,omitempty" xml:"policy_outdated,omitempty"`
+	// agent_active devices with no state report within the window, typically an
+	// agent that predates reporting.
+	PolicyUnreported *int64 `form:"policy_unreported,omitempty" json:"policy_unreported,omitempty" xml:"policy_unreported,omitempty"`
+	// agent_active devices whose agent build is blocked, so the kill switch has
+	// halted enforcement.
+	EnforcementHalted *int64 `form:"enforcement_halted,omitempty" json:"enforcement_halted,omitempty" xml:"enforcement_halted,omitempty"`
 }
 
 // ListProvidersUnauthorizedResponseBody is the type of the
@@ -2211,9 +2222,9 @@ type ManagedDeviceResponseBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// Last device check-in as reported by the MDM.
 	MdmLastCheckInAt *string `form:"mdm_last_check_in_at,omitempty" json:"mdm_last_check_in_at,omitempty" xml:"mdm_last_check_in_at,omitempty"`
-	// The device-agent heartbeat that classified this device: the machine's own
-	// under device-level matching, otherwise its assigned user's. Omitted when no
-	// agent has ever synced.
+	// The latest sign of life that classified this device, a policy poll or a
+	// state report: the machine's own under device-level matching, otherwise its
+	// assigned user's. Omitted when no agent has ever synced.
 	AgentLastSeenAt *string `form:"agent_last_seen_at,omitempty" json:"agent_last_seen_at,omitempty" xml:"agent_last_seen_at,omitempty"`
 	// Coverage classification for the device. What agent_active attests depends on
 	// the org's matching mode and on whether this device matched by serial or by
@@ -2221,8 +2232,92 @@ type ManagedDeviceResponseBody struct {
 	CoverageBucket *string `form:"coverage_bucket,omitempty" json:"coverage_bucket,omitempty" xml:"coverage_bucket,omitempty"`
 	// When the device went absent from the MDM inventory. Omitted while present.
 	MissingSince *string `form:"missing_since,omitempty" json:"missing_since,omitempty" xml:"missing_since,omitempty"`
-	FirstSeenAt  *string `form:"first_seen_at,omitempty" json:"first_seen_at,omitempty" xml:"first_seen_at,omitempty"`
-	LastSeenAt   *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
+	// Whether an agent_active device verifiably applies its policy. attested: its
+	// latest report applies the policy last served to the reporting user.
+	// outdated: it reports a different or no policy. unreported: no report within
+	// the window, from an agent that predates reporting or has stopped sending.
+	// halted: the kill switch stopped enforcement on a blocked agent build.
+	// Omitted for every other bucket.
+	PolicyState *string `form:"policy_state,omitempty" json:"policy_state,omitempty" xml:"policy_state,omitempty"`
+	// The latest state report that classified this device. Omitted when its agent
+	// has never reported.
+	AgentState  *ManagedDeviceAgentStateResponseBody `form:"agent_state,omitempty" json:"agent_state,omitempty" xml:"agent_state,omitempty"`
+	FirstSeenAt *string                              `form:"first_seen_at,omitempty" json:"first_seen_at,omitempty" xml:"first_seen_at,omitempty"`
+	LastSeenAt  *string                              `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
+}
+
+// ManagedDeviceAgentStateResponseBody is used to define fields on response
+// body types.
+type ManagedDeviceAgentStateResponseBody struct {
+	// When the control plane received the report.
+	ReportedAt *string `form:"reported_at,omitempty" json:"reported_at,omitempty" xml:"reported_at,omitempty"`
+	// Etag of the policy the agent last applied.
+	AppliedEtag *string `form:"applied_etag,omitempty" json:"applied_etag,omitempty" xml:"applied_etag,omitempty"`
+	// When the agent first applied that etag.
+	AppliedAt *string `form:"applied_at,omitempty" json:"applied_at,omitempty" xml:"applied_at,omitempty"`
+	// True when the kill switch has halted policy enforcement.
+	EnforcementHalted *bool `form:"enforcement_halted,omitempty" json:"enforcement_halted,omitempty" xml:"enforcement_halted,omitempty"`
+	// True when the agent build is in blocked_versions.
+	CurrentBlocked *bool `form:"current_blocked,omitempty" json:"current_blocked,omitempty" xml:"current_blocked,omitempty"`
+	// Version of the speakeasyd daemon.
+	SpeakeasydVersion *string `form:"speakeasyd_version,omitempty" json:"speakeasyd_version,omitempty" xml:"speakeasyd_version,omitempty"`
+	// Version of the speakeasy CLI.
+	SpeakeasyVersion *string `form:"speakeasy_version,omitempty" json:"speakeasy_version,omitempty" xml:"speakeasy_version,omitempty"`
+	// Version of the menu bar app.
+	SpeakeasyUIVersion *string `form:"speakeasy_ui_version,omitempty" json:"speakeasy_ui_version,omitempty" xml:"speakeasy_ui_version,omitempty"`
+	// Operating system, e.g. darwin.
+	Os *string `form:"os,omitempty" json:"os,omitempty" xml:"os,omitempty"`
+	// CPU architecture, e.g. arm64.
+	Arch *string `form:"arch,omitempty" json:"arch,omitempty" xml:"arch,omitempty"`
+	// Each managed tool's outcome from the agent's last reconcile.
+	Tools []*ManagedDeviceToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// Start of the window tools[].drift_corrections counts over. Omitted when no
+	// tool measures drift.
+	DriftCountingSince *string `form:"drift_counting_since,omitempty" json:"drift_counting_since,omitempty" xml:"drift_counting_since,omitempty"`
+	// Resolved update mode: automatic, notify, or disabled.
+	AutoUpdate *string `form:"auto_update,omitempty" json:"auto_update,omitempty" xml:"auto_update,omitempty"`
+	// Update channel the agent follows, e.g. stable.
+	UpdateChannel *string `form:"update_channel,omitempty" json:"update_channel,omitempty" xml:"update_channel,omitempty"`
+	// Version the organization pinned the fleet to, when set.
+	PinnedTarget *string `form:"pinned_target,omitempty" json:"pinned_target,omitempty" xml:"pinned_target,omitempty"`
+	// The agent's most recent self-rollback after a failed update.
+	LastRollback *ManagedDeviceRollbackResponseBody `form:"last_rollback,omitempty" json:"last_rollback,omitempty" xml:"last_rollback,omitempty"`
+}
+
+// ManagedDeviceToolResponseBody is used to define fields on response body
+// types.
+type ManagedDeviceToolResponseBody struct {
+	// Stable tool id, e.g. claude_code.
+	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
+	// Enforcement layer: user, managed, off, or unknown.
+	Layer *string `form:"layer,omitempty" json:"layer,omitempty" xml:"layer,omitempty"`
+	// Reconcile outcome: armed, pending, skipped (tool not installed), error,
+	// unmanaged, or unknown.
+	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
+	// Why a pending tool is not enforcing yet: privileged_writer_not_ready,
+	// plugin_bundle_not_cloned, or unknown.
+	PendingReason *string `form:"pending_reason,omitempty" json:"pending_reason,omitempty" xml:"pending_reason,omitempty"`
+	// Class of a reconcile error: permission_denied, not_found, invalid_config, or
+	// unknown.
+	ErrorKind *string `form:"error_kind,omitempty" json:"error_kind,omitempty" xml:"error_kind,omitempty"`
+	// True when the tool loads the agent's changes only after it restarts.
+	RestartRequired *bool `form:"restart_required,omitempty" json:"restart_required,omitempty" xml:"restart_required,omitempty"`
+	// True when a problem the user can fix is blocking this tool.
+	ActionRequired *bool `form:"action_required,omitempty" json:"action_required,omitempty" xml:"action_required,omitempty"`
+	// Times the agent restored what it owns in this tool since
+	// drift_counting_since. Omitted when not measured.
+	DriftCorrections *int `form:"drift_corrections,omitempty" json:"drift_corrections,omitempty" xml:"drift_corrections,omitempty"`
+}
+
+// ManagedDeviceRollbackResponseBody is used to define fields on response body
+// types.
+type ManagedDeviceRollbackResponseBody struct {
+	// When the rollback happened.
+	At *string `form:"at,omitempty" json:"at,omitempty" xml:"at,omitempty"`
+	// Version the agent rolled back from.
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// Version the agent rolled back to.
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 }
 
 // NewUpsertConfigRequestBody builds the HTTP request body from the payload of
@@ -3807,6 +3902,10 @@ func NewGetCoverageDeviceIntegrationCoverageOK(body *GetCoverageResponseBody) *d
 		Missing:                   *body.Missing,
 		TotalDevices:              *body.TotalDevices,
 		UnmanagedAgentUsers:       *body.UnmanagedAgentUsers,
+		PolicyAttested:            *body.PolicyAttested,
+		PolicyOutdated:            *body.PolicyOutdated,
+		PolicyUnreported:          *body.PolicyUnreported,
+		EnforcementHalted:         *body.EnforcementHalted,
 	}
 
 	return v
@@ -4190,6 +4289,18 @@ func ValidateGetCoverageResponseBody(body *GetCoverageResponseBody) (err error) 
 	}
 	if body.UnmanagedAgentUsers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("unmanaged_agent_users", "body"))
+	}
+	if body.PolicyAttested == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_attested", "body"))
+	}
+	if body.PolicyOutdated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_outdated", "body"))
+	}
+	if body.PolicyUnreported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_unreported", "body"))
+	}
+	if body.EnforcementHalted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enforcement_halted", "body"))
 	}
 	if body.Attestation != nil {
 		if !(*body.Attestation == "device" || *body.Attestation == "user") {
@@ -6742,11 +6853,93 @@ func ValidateManagedDeviceResponseBody(body *ManagedDeviceResponseBody) (err err
 	if body.MissingSince != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.missing_since", *body.MissingSince, goa.FormatDateTime))
 	}
+	if body.PolicyState != nil {
+		if !(*body.PolicyState == "attested" || *body.PolicyState == "outdated" || *body.PolicyState == "unreported" || *body.PolicyState == "halted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy_state", *body.PolicyState, []any{"attested", "outdated", "unreported", "halted"}))
+		}
+	}
+	if body.AgentState != nil {
+		if err2 := ValidateManagedDeviceAgentStateResponseBody(body.AgentState); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.FirstSeenAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_seen_at", *body.FirstSeenAt, goa.FormatDateTime))
 	}
 	if body.LastSeenAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", *body.LastSeenAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateManagedDeviceAgentStateResponseBody runs the validations defined on
+// ManagedDeviceAgentStateResponseBody
+func ValidateManagedDeviceAgentStateResponseBody(body *ManagedDeviceAgentStateResponseBody) (err error) {
+	if body.ReportedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reported_at", "body"))
+	}
+	if body.EnforcementHalted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enforcement_halted", "body"))
+	}
+	if body.CurrentBlocked == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("current_blocked", "body"))
+	}
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	if body.ReportedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.reported_at", *body.ReportedAt, goa.FormatDateTime))
+	}
+	if body.AppliedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.applied_at", *body.AppliedAt, goa.FormatDateTime))
+	}
+	for _, e := range body.Tools {
+		if e != nil {
+			if err2 := ValidateManagedDeviceToolResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.DriftCountingSince != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.drift_counting_since", *body.DriftCountingSince, goa.FormatDateTime))
+	}
+	if body.LastRollback != nil {
+		if err2 := ValidateManagedDeviceRollbackResponseBody(body.LastRollback); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateManagedDeviceToolResponseBody runs the validations defined on
+// ManagedDeviceToolResponseBody
+func ValidateManagedDeviceToolResponseBody(body *ManagedDeviceToolResponseBody) (err error) {
+	if body.Tool == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool", "body"))
+	}
+	if body.Layer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("layer", "body"))
+	}
+	if body.Outcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
+	}
+	if body.RestartRequired == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("restart_required", "body"))
+	}
+	if body.ActionRequired == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("action_required", "body"))
+	}
+	return
+}
+
+// ValidateManagedDeviceRollbackResponseBody runs the validations defined on
+// ManagedDeviceRollbackResponseBody
+func ValidateManagedDeviceRollbackResponseBody(body *ManagedDeviceRollbackResponseBody) (err error) {
+	if body.At == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("at", "body"))
+	}
+	if body.At != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.at", *body.At, goa.FormatDateTime))
 	}
 	return
 }
