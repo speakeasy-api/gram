@@ -1,9 +1,11 @@
 # Provider setup backend contract
 
 Save through `remoteSessions.commitServerIdentityConfiguration` with
-`target_server_only: true`. It stores the encrypted client secret and associates
-the client with the exact MCP server. A shared user-session issuer returns HTTP
-409 with a safe correction message before registration or writes, and is checked
+`target_server_only: true`. Manual mode encrypts the supplied client secret and
+associates the client with the exact MCP server. Existing-client mode only links
+the selected client; it does not accept or replace its secret. A shared
+user-session issuer returns HTTP 409 with a safe correction message before
+registration or writes, and is checked
 again under the issuer lock. Explicitly assign a dedicated issuer through the
 existing User Identity/server settings APIs before retrying. Omitting the flag
 preserves the existing settings workflow and its shared-binding authorization.
@@ -41,8 +43,14 @@ HTTP validation, permission and internal failures use the existing error envelop
 Neither response returns credentials, tokens or raw provider error bodies. No
 setup progress or completion record is persisted.
 
-Platform MCP assessment: existing catalog/provider readiness tools already use
-this initialization/tool-list probe. No new tool mirrors the dashboard endpoint:
-its direct-human browser-session boundary excludes agent and API-key credentials.
-The existing tools keep their own reviewed identity contracts. No demo seed
+Platform MCP assessment: `get_my_mcp_connection_status` reports the external
+caller's stored authorization state; it does not run this live probe. Existing
+catalog/provider readiness tools use the initialization/tool-list probe under
+their own reviewed identity contracts. Neither is a substitute for verifying one
+dashboard user's direct saved grant. This endpoint intentionally requires a
+validated browser session and refuses agent and API-key credentials, so neither
+external Platform MCP callers nor managed assistants may invoke it. No new tool
+is added and the existing tools retain their contracts. Session/API-key refusal,
+exact-server permissions, and upstream initialize/list-only behavior are covered
+by `serverconnection_test.go`. No demo seed
 change is needed because this adds a live diagnostic, with no new stored data.
