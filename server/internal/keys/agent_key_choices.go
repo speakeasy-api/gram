@@ -2,13 +2,16 @@ package keys
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -23,9 +26,26 @@ func recordAgentKeyAuthClientChoices(ctx context.Context, tx pgx.Tx, organizatio
 	if len(choices) == 0 {
 		return nil
 	}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID != organizationID {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	// Match issuance's live creator authority, not cached session roles or
+	// the agent's policy. Recording a choice grants the agent no access.
+	principals, err := authz.ResolveUserPrincipals(ctx, tx, organizationID, authCtx.UserID)
+	if err != nil {
+		return fmt.Errorf("resolve credential choice creator: %w", err)
+	}
+	grants, err := authz.LoadGrants(ctx, tx, organizationID, principals)
+	if err != nil {
+		return fmt.Errorf("load credential choice creator policy: %w", err)
+	}
 	queries := upstreamclientsrepo.New(tx)
 	seen := make(map[uuid.UUID]bool, len(choices))
 	for _, choice := range choices {
+		if choice == nil {
+			return oops.E(oops.CodeBadRequest, nil, "credential choice must not be null")
+		}
 		serverID, err := uuid.Parse(choice.McpServerID)
 		if err != nil {
 			return oops.E(oops.CodeBadRequest, err, "invalid mcp server id")
@@ -42,6 +62,21 @@ func recordAgentKeyAuthClientChoices(ctx context.Context, tx pgx.Tx, organizatio
 				return oops.E(oops.CodeBadRequest, err, "invalid auth client id")
 			}
 			clientID = uuid.NullUUID{UUID: parsed, Valid: true}
+		}
+
+		server, err := authclientsrepo.New(tx).GetOrganizationMCPServer(ctx, authclientsrepo.GetOrganizationMCPServerParams{OrganizationID: organizationID, ID: serverID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "mcp server not found")
+		}
+		if err != nil {
+			return fmt.Errorf("load credential choice server: %w", err)
+		}
+		allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPConnect, server.ID.String(), server.ProjectID.String()))
+		if err != nil {
+			return fmt.Errorf("authorize credential choice server: %w", err)
+		}
+		if !allowed {
+			return oops.C(oops.CodeForbidden)
 		}
 
 		offered, err := queries.ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: []uuid.UUID{serverID}})

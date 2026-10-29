@@ -757,7 +757,7 @@ func (s *Service) serveRemoteBackend(
 	if err != nil {
 		return err
 	}
-	if upstream, buildOptions, err = s.agentKeyUngatedUpstream(ctx, w, logger, endpoint, mcpServer, organizationID, upstream, buildOptions); err != nil {
+	if upstream, buildOptions, err = s.agentKeyUngatedUpstream(ctx, w, logger, s.BaseURLForRequest(r), endpoint, mcpServer, organizationID, upstream, buildOptions); err != nil {
 		return err
 	}
 
@@ -789,6 +789,7 @@ func (s *Service) agentKeyUngatedUpstream(
 	ctx context.Context,
 	w http.ResponseWriter,
 	logger *slog.Logger,
+	baseURL string,
 	endpoint *mcpendpointsrepo.McpEndpoint,
 	mcpServer *mcpserversrepo.McpServer,
 	organizationID string,
@@ -825,11 +826,19 @@ func (s *Service) agentKeyUngatedUpstream(
 	if err != nil {
 		return upstream, buildOptions, err
 	}
+	protectedResourceURL, err := resolved.ProtectedResourceURL(baseURL)
+	if err != nil {
+		return upstream, buildOptions, oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, logger)
+	}
+	host := ""
+	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
+		host = requestContext.Host
+	}
 	authentication := &issuerGateAuthentication{
 		endpoint:               resolved,
-		protectedResourceURL:   "",
-		mcpURL:                 "",
-		surface:                "",
+		protectedResourceURL:   protectedResourceURL,
+		mcpURL:                 host + "/" + resolved.RouteBase.String() + "/" + resolved.Slug,
+		surface:                mcpmetrics.SurfaceHosting,
 		subject:                urn.NewAgentSubject(agentID),
 		refreshableUserSession: false,
 		directWorkloadHandoff:  false,
@@ -958,7 +967,7 @@ func (s *Service) serveTunneledBackend(
 	if err != nil {
 		return err
 	}
-	if upstream, buildOptions, err = s.agentKeyUngatedUpstream(ctx, w, logger, endpoint, mcpServer, organizationID, upstream, buildOptions); err != nil {
+	if upstream, buildOptions, err = s.agentKeyUngatedUpstream(ctx, w, logger, s.BaseURLForRequest(r), endpoint, mcpServer, organizationID, upstream, buildOptions); err != nil {
 		return err
 	}
 

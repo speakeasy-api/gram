@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestKeysService_AgentKeyRecordsCredentialChoices(t *testing.T) {
@@ -36,11 +37,17 @@ func TestKeysService_AgentKeyRecordsCredentialChoices(t *testing.T) {
 		require.NoError(t, clients.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: organizationID, McpServerID: serverID, AuthClientID: id, Source: "admin"}))
 		return id
 	}
+	creator := urn.NewPrincipal(urn.PrincipalTypeUser, testAuthContext(t, ctx).UserID)
+	upsertGrant(t, ctx, ti, creator, authz.ScopeMCPConnect, serverID.String())
 	shared := offer(authz.AuthClientTypeStaticCredential)
+	serviceAccount := offer(authz.AuthClientTypeServiceAccount)
+	ema := offer(authz.AuthClientTypeEMA)
 	personal := offer(authz.AuthClientTypeRemoteSession)
 	passThrough := offer(authz.AuthClientTypePassThrough)
 
 	refused := map[string]*gen.AgentKeyAuthClientChoice{
+		"a null choice":                    nil,
+		"an external MCP authorization":    {McpServerID: serverID.String(), AuthClientID: new(ema.String())},
 		"a personal connection":            {McpServerID: serverID.String(), AuthClientID: new(personal.String())},
 		"a pass-through credential":        {McpServerID: serverID.String(), AuthClientID: new(passThrough.String())},
 		"no-auth on a server with clients": {McpServerID: serverID.String()},
@@ -57,6 +64,15 @@ func TestKeysService_AgentKeyRecordsCredentialChoices(t *testing.T) {
 		})
 	}
 
+	servicePayload := agentKeyPayload(agentID, projectID)
+	servicePayload.Name = "service account choice"
+	servicePayload.AuthClientChoices = []*gen.AgentKeyAuthClientChoice{{McpServerID: serverID.String(), AuthClientID: new(serviceAccount.String())}}
+	serviceKey, err := ti.service.CreateKey(ctx, servicePayload)
+	require.NoError(t, err)
+	serviceChoice, err := clients.GetSelectionFixture(ctx, authclientbackfill.GetSelectionFixtureParams{CredentialID: uuid.MustParse(serviceKey.ID), McpServerID: serverID})
+	require.NoError(t, err)
+	require.Equal(t, serviceAccount, serviceChoice.AuthClientID.UUID)
+
 	// A second server needing no upstream authentication takes a no-auth choice.
 	noAuthRemote := uuid.New()
 	require.NoError(t, fixtures.CreateRemoteMCPBackendFixture(ctx, testrepo.CreateRemoteMCPBackendFixtureParams{ID: noAuthRemote, ProjectID: projectID, Url: "https://open.example.com/" + noAuthRemote.String()}))
@@ -66,12 +82,25 @@ func TestKeysService_AgentKeyRecordsCredentialChoices(t *testing.T) {
 	}))
 	require.NoError(t, clients.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{ID: noAuthServer, RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true}}))
 
+	// Project read and authority to issue this key do not authorize inspecting
+	// another server's credentials, even when the credential ID is invalid.
+	for _, clientID := range []*string{nil, new(uuid.NewString())} {
+		denied := agentKeyPayload(agentID, projectID)
+		denied.Name = "inaccessible choice"
+		denied.AuthClientChoices = []*gen.AgentKeyAuthClientChoice{{McpServerID: noAuthServer.String(), AuthClientID: clientID}}
+		_, err := ti.service.CreateKey(ctx, denied)
+		requireOopsCode(t, err, oops.CodeForbidden)
+	}
+	projectSelector := authz.NewSelector(authz.ScopeMCPConnect, "*")
+	projectSelector[authz.SelectorKeyProjectID] = projectID.String()
+	upsertGrantSelector(t, ctx, ti, creator, authz.ScopeMCPConnect, projectSelector)
+
 	// One refused choice refuses the whole key, so the valid one before it is
 	// not recorded either and the name stays free.
 	partial := agentKeyPayload(agentID, projectID)
 	partial.Name = "all or nothing"
 	partial.AuthClientChoices = []*gen.AgentKeyAuthClientChoice{{McpServerID: noAuthServer.String()}, refused["a personal connection"]}
-	_, err := ti.service.CreateKey(ctx, partial)
+	_, err = ti.service.CreateKey(ctx, partial)
 	requireOopsCode(t, err, oops.CodeBadRequest)
 	partial.AuthClientChoices = partial.AuthClientChoices[:1]
 	open, err := ti.service.CreateKey(ctx, partial)
