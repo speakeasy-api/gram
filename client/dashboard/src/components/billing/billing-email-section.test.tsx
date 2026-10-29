@@ -120,6 +120,9 @@ describe("BillingEmailSection", () => {
     render(<BillingEmailSection />);
 
     expect(field()).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Save billing email" }),
+    ).toBeTruthy();
     expect(mocks.hasAnyScope).toHaveBeenCalledWith(["org:admin"]);
   });
 

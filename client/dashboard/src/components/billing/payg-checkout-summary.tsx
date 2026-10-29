@@ -16,7 +16,7 @@ const catalogUnits: Readonly<Record<string, string>> = {
 export function PaygCheckoutHeader(): JSX.Element {
   return (
     <div className="flex items-center justify-between gap-4">
-      <Heading variant="h4" className="text-xl font-semibold">
+      <Heading variant="h3" className="text-xl font-semibold">
         Pricing
       </Heading>
       <Badge variant="neutral" className="shrink-0">
@@ -47,7 +47,6 @@ export function PaygCheckoutSummary({
   const currency = new Intl.NumberFormat(undefined, {
     style: "currency",
     currency: checkout.currency,
-    minimumFractionDigits: 2,
     maximumFractionDigits: 20,
   });
 
@@ -96,9 +95,9 @@ export function PaygCheckoutSummary({
               className="flex items-start justify-between py-3 first:pt-0"
             >
               <div className="min-w-0">
-                <h3 className="text-lg font-medium text-foreground">
+                <h4 className="text-lg font-medium text-foreground">
                   {item.name}
-                </h3>
+                </h4>
               </div>
               <p className="shrink-0 text-right">
                 <span className="block font-mono text-xl font-medium text-foreground tabular-nums">

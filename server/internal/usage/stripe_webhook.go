@@ -271,10 +271,10 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 func (s *Service) repairCommittedStripeLifecycleEvent(ctx context.Context, logger *slog.Logger, receipt repo.GetStripeWebhookReceiptRow) error {
 	logger.InfoContext(ctx, "repairing duplicate Stripe lifecycle event from committed state")
 	var err error
-	switch receipt.EventType {
-	case "checkout.session.completed", "checkout.session.async_payment_succeeded":
+	switch {
+	case isStripeCheckoutSuccess(receipt.EventType):
 		err = s.repairReplayedPaygCheckout(ctx, logger, receipt.OrganizationID)
-	case "customer.subscription.deleted":
+	case receipt.EventType == "customer.subscription.deleted":
 		err = RepairPaygOpenRouterChatKey(ctx, logger, s.db, s.openRouter, receipt.OrganizationID, openrouter.KeyDesiredStateDisabled)
 	default:
 		return nil
@@ -428,10 +428,10 @@ func (s *Service) currentCheckoutSession(ctx context.Context, event *stripeclien
 }
 
 func (s *Service) serviceStripeWebhookHandler(ctx context.Context, logger *slog.Logger, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent, checkout *stripeclient.CheckoutSessionState, invoice *stripeclient.InvoiceState) (stripeWebhookResult, error) {
-	switch event.Type {
-	case "checkout.session.completed", "checkout.session.async_payment_succeeded":
+	switch {
+	case isStripeCheckoutSuccess(event.Type):
 		return s.activatePaygCheckout(ctx, tx, organizationID, event, checkout)
-	case "invoice.created":
+	case event.Type == "invoice.created":
 		recorded, err := s.recordStripeInvoice(ctx, tx, organizationID, event, invoice)
 		if err != nil {
 			return stripeWebhookResult{}, err
@@ -441,10 +441,10 @@ func (s *Service) serviceStripeWebhookHandler(ctx context.Context, logger *slog.
 		} else {
 			logger.InfoContext(ctx, "skipped non-billable Stripe invoice creation")
 		}
-	case "invoice.payment_failed", "checkout.session.async_payment_failed":
+	case event.Type == "invoice.payment_failed" || event.Type == "checkout.session.async_payment_failed":
 		logger.InfoContext(ctx, "received Stripe invoice payment failure")
 		return stripeWebhookResult{newlyEnabledFeatures: nil, reconcileKeyTypes: nil, invoicePaymentFailed: true, subscriptionLost: false}, nil
-	case "customer.subscription.deleted":
+	case event.Type == "customer.subscription.deleted":
 		return s.deactivatePaygSubscription(ctx, tx, organizationID, event)
 	}
 	return stripeWebhookResult{newlyEnabledFeatures: nil, reconcileKeyTypes: nil, invoicePaymentFailed: false, subscriptionLost: false}, nil

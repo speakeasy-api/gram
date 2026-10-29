@@ -85,7 +85,7 @@ function MeteredRate({
 
   return (
     <li className="flex items-start justify-between gap-4 py-3 first:pt-0">
-      <h3 className="min-w-0 text-lg font-medium text-foreground">{label}</h3>
+      <h4 className="min-w-0 text-lg font-medium text-foreground">{label}</h4>
       <p className="shrink-0 text-right">
         <span className="block font-mono text-xl font-medium text-foreground tabular-nums">
           {rate}

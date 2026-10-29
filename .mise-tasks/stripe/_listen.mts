@@ -92,6 +92,8 @@ try {
       "off",
       "--log-level",
       "debug",
+      // Keep this list aligned with acceptedStripeWebhookEvents in
+      // server/internal/usage/stripe_webhook.go.
       "--events",
       [
         "checkout.session.completed",

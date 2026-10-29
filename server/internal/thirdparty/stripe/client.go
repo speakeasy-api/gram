@@ -111,7 +111,8 @@ type Client interface {
 	GetCustomer(context.Context, string) (*CustomerDetails, error)
 	UpdateCustomer(context.Context, UpdateCustomerInput) error
 	CreateCheckoutSession(context.Context, CreateCheckoutSessionInput) (*CheckoutSession, error)
-	// PublishableKey is the Stripe.js key paired with this client. Empty when unset.
+	// PublishableKey is the Stripe.js key paired with this client.
+	// Use IsConfigured to check for empty or "unset" configuration.
 	PublishableKey() string
 	GetCheckoutSession(context.Context, string) (*CheckoutSessionState, error)
 	GetSubscription(context.Context, string) (*SubscriptionState, error)

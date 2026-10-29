@@ -7,6 +7,8 @@ import {
 } from "./payg-checkout-summary";
 
 function checkout({
+  currency = "usd",
+  minorUnitsAmountDivisor = 100,
   unitLabel = "tokens",
   name = "Usage",
   minorUnitsAmount = 0.000035,
@@ -19,6 +21,8 @@ function checkout({
   dueNext = "$49.00",
   description = null,
 }: {
+  currency?: string;
+  minorUnitsAmountDivisor?: number;
   unitLabel?: string | null;
   name?: string;
   minorUnitsAmount?: number;
@@ -33,8 +37,8 @@ function checkout({
 } = {}): StripeCheckoutSession {
   // Only session fields consumed by the summary are needed for this fixture.
   return {
-    currency: "usd",
-    minorUnitsAmountDivisor: 100,
+    currency,
+    minorUnitsAmountDivisor,
     recurring: {
       interval,
       intervalCount,
@@ -86,7 +90,7 @@ it("shows the pricing heading without repeating trial copy", () => {
     </>,
   );
   expect(
-    screen.getByRole("heading", { name: "Pricing", level: 4 }),
+    screen.getByRole("heading", { name: "Pricing", level: 3 }),
   ).toBeTruthy();
   expect(
     screen.queryByRole("heading", { name: "Pay as you go pricing" }),
@@ -150,7 +154,7 @@ it("does not advertise a trial when Stripe has none", () => {
     </>,
   );
   expect(
-    screen.getByRole("heading", { name: "Pricing", level: 4 }),
+    screen.getByRole("heading", { name: "Pricing", level: 3 }),
   ).toBeTruthy();
   expect(screen.queryByText("Billed based on usage each month.")).toBeNull();
   expect(
@@ -297,7 +301,9 @@ it.each([null, "   ", "Includes retained session context."])(
   "shows the product name and rate independently of description %s",
   (description) => {
     render(<PaygCheckoutSummary checkout={checkout({ description })} />);
-    expect(screen.getByRole("heading", { name: "Usage" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Usage", level: 4 }),
+    ).toBeTruthy();
     expectRate("$0.35 per million tokens");
   },
 );
@@ -367,3 +373,33 @@ it("shows usage-based billing without substituting a zero total", () => {
   expect(screen.queryByText("$0.00")).toBeNull();
   expect(screen.queryByText(/14 days|After day 14/)).toBeNull();
 });
+
+// Currency minor units determine minimum precision, not the metered rate precision.
+it.each([
+  ["usd", 100, 100, 1],
+  ["jpy", 1, 100, 100],
+  ["kwd", 1000, 1000, 1],
+  ["usd", 100, 0.035, 0.00035],
+  ["jpy", 1, 0.035, 0.035],
+  ["kwd", 1000, 0.035, 0.000035],
+])(
+  "formats %s metered rates with currency defaults and fractional precision",
+  (currency, minorUnitsAmountDivisor, minorUnitsAmount, amount) => {
+    render(
+      <PaygCheckoutSummary
+        checkout={checkout({
+          currency,
+          minorUnitsAmountDivisor,
+          minorUnitsAmount,
+          unitLabel: "request",
+        })}
+      />,
+    );
+    const formatted = new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 20,
+    }).format(amount);
+    expectRate(`${formatted} per request`);
+  },
+);

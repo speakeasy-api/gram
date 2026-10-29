@@ -131,7 +131,7 @@ function BillingEmailForm({ initial }: { initial: BillingEmail }): JSX.Element {
         </Stack>
         <Stack direction="horizontal" align="center" gap={3}>
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? "Saving..." : "Save Billing Email"}
+            {mutation.isPending ? "Saving..." : "Save billing email"}
           </Button>
           {mutation.isSuccess && (
             <Text muted small role="status">

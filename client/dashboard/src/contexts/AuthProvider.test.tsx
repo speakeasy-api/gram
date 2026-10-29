@@ -196,6 +196,7 @@ describe("AuthProvider organization telemetry group", () => {
     (path) => {
       mocks.sessionData.mockReturnValue(gatedSession());
       renderGate(path);
+      expect(screen.getByTestId("location").textContent).toBe(path);
       expect(screen.getByTestId("app")).toBeTruthy();
       expect(screen.queryByTestId("book-demo")).toBeNull();
     },

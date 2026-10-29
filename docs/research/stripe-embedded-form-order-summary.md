@@ -20,7 +20,7 @@ The [JavaScript `createForm` reference](https://docs.stripe.com/js/custom_checko
 >
 > If there are no additional details to display, the summary shows only the total and doesn't expand, regardless of this setting.
 
-Thus `'always'` is a supported native setting worth retaining; it does not force creation of additional detail. The references do not enumerate what counts as “additional details,” or define a metered-trial item visibility rule. The documented `features` controls also include `promotionCodeCollection`; it controls the promo input, not itemization.
+Thus `'always'` is a supported native setting for testing expansion; it does not force creation of additional detail. The references do not enumerate what counts as “additional details,” or define a metered-trial item visibility rule. The documented `features` controls also include `promotionCodeCollection`; it controls the promo input, not itemization.
 
 ### 2. Form layout is a different control
 
@@ -76,14 +76,14 @@ Searching the official [changelog index](https://docs.stripe.com/changelog.md) a
 
 ## Observed behavior versus supported conclusions
 
-The reported current UI shows “Total Usage-based,” promotion entry, zero due today, and the monthly billing start date, but no product rows, despite `amountSummary.expanded: 'always'`. This observation was supplied with the assignment and **was not independently reproduced by this research**.
+The historical UI observation supplied with the assignment described “Total Usage-based,” promotion entry, zero due today, and the monthly billing start date, but no product rows, despite `amountSummary.expanded: 'always'`. This observation **was not independently reproduced by this research**. The current implementation in `client/dashboard/src/components/billing/payg-embedded-checkout.tsx` uses `amountSummary.expanded: "auto"` and a separate application-rendered pricing summary; the supplied `always` observation does not describe the current configuration.
 
 It establishes that expansion alone did not produce the requested breakdown in that session. It does not establish whether the cause is trial status, metered-only items, form design, configuration, or a rollout/bug.
 
 ## Recommended next steps
 
-1. Verify `layout: 'expanded'` alongside the existing amount-summary setting; verify session price/product associations and the actual returned metered price data. No speculative option names.
+1. Verify `layout: 'expanded'` alongside an explicitly selected amount-summary setting (`auto` in the current implementation; `always` in the supplied historical observation); verify session price/product associations and the actual returned metered price data. No speculative option names.
 2. With authorization, compare fresh test sessions: fixed recurring; fixed recurring with trial; metered without trial; metered with trial. Keep form settings constant. This isolates trial-specific versus usage-specific behavior without introducing custom UI.
 3. Inspect Studio's embedded-form capabilities/design and generated implementation. Treat any discovered option as a candidate to validate, not an assumed solution.
-4. Ask Stripe: **“For `ui_mode=form` and `CheckoutForm`, can the native amount summary display each subscription product name and metered unit rate during a free trial? `features.amountSummary.expanded='always'` shows totals only. Is itemization supported, gated, or controlled by a documented session/form/Studio setting? Does trial or metered-only composition affect eligibility?”** Include a sanitized reproduction privately.
-5. Until validated, describe the result as **“no documented native itemization control found; current session does not show the breakdown,”** not “impossible.” Do not silently substitute full embedded-page Checkout or custom Elements: those change the requested integration.
+4. Ask Stripe: **“For `ui_mode=form` and `CheckoutForm`, can the native amount summary display each subscription product name and metered unit rate during a free trial? A supplied historical observation with `features.amountSummary.expanded='always'` showed totals only. Is itemization supported, gated, or controlled by a documented session/form/Studio setting? Does trial or metered-only composition affect eligibility?”** Include a sanitized reproduction privately.
+5. Until validated, describe the result as **“no documented native itemization control found; the supplied historical session did not show the breakdown,”** not “impossible.” Do not silently substitute full embedded-page Checkout or custom Elements: those change the requested integration.
