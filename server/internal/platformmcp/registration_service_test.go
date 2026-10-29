@@ -442,15 +442,15 @@ func TestRegistrationServiceBuildsInspectAuthorizationURLOnlyAfterAttachment(t *
 	registrationID := uuid.New()
 	store := &recordingRegistrationStore{
 		project:   project,
-		dashboard: RegistrationDashboardSetup{OrganizationSlug: "organization", MCPServerRoute: "server route"},
+		dashboard: RegistrationDashboardSetup{OrganizationSlug: "organization", MCPServerRoute: "server route", ServerName: "Example Server"},
 	}
 	service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store)
 	service.WithDashboardURL(&url.URL{Scheme: "https", Host: "localhost:5173"})
 
-	authorizationURL, err := service.DashboardAuthorizationURL(t.Context(), registrationServicePrincipal(), project.Slug, registrationID.String())
+	authorization, err := service.DashboardAuthorization(t.Context(), registrationServicePrincipal(), project.Slug, registrationID.String())
 
 	require.NoError(t, err)
-	require.Equal(t, "https://localhost:5173/organization/projects/project/mcp/server%20route/inspect", authorizationURL)
+	require.Equal(t, DashboardAuthorization{URL: "https://localhost:5173/organization/projects/project/mcp/server%20route/inspect", ServerName: "Example Server"}, authorization)
 }
 
 func TestRegistrationServiceStopsBeforeAttachmentWhenSetupBudgetDenies(t *testing.T) {

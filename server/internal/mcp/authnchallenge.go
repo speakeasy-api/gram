@@ -298,7 +298,12 @@ type UserSessionGrant struct {
 	// the consent page for each MCP server offering several, keyed by server.
 	// The credential this grant mints records it as its choice.
 	UpstreamClientPicks map[uuid.UUID]uuid.UUID `json:"upstream_client_picks,omitempty"`
-	CreatedAt           time.Time               `json:"created_at"`
+	// AuthClientPicks is the typed auth client the subject picked on the
+	// consent page for each MCP server, keyed by server, where typed auth
+	// client resolution is enforced. The credential this grant mints records
+	// it as its choice, with the client's registration in UpstreamClientPicks.
+	AuthClientPicks map[uuid.UUID]uuid.UUID `json:"auth_client_picks,omitempty"`
+	CreatedAt       time.Time               `json:"created_at"`
 }
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)
@@ -1002,6 +1007,11 @@ type issuerGateAuthentication struct {
 	// keeps the upstream client choice.
 	authClient *authClientResolution
 
+	// chainingAuthClient is the typed auth client whose registration the
+	// upstream client choice serves because it may chain an identity; the
+	// request sends its headers in place of the server's.
+	chainingAuthClient *authClientResolution
+
 	// attachedSession is the exact remote session an attached agent's auth
 	// client permit was decided for. It is kept apart from authClient, which
 	// selects how the request is served, so a compatibility handback to the
@@ -1142,6 +1152,7 @@ func (s *Service) authenticateIssuerGate(
 		chosenClient:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		chosenNoAuth:           false,
 		authClient:             nil,
+		chainingAuthClient:     nil,
 		attachedSession:        uuid.Nil,
 	}, toolSelection, nil
 }

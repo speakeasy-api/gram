@@ -381,6 +381,7 @@ type PostgresReader struct {
 	shadowInventory           *ShadowInventoryService
 	shadowDecisions           *ShadowDecisionService
 	shadowAI                  *ShadowAIService
+	deviceCoverage            *DeviceCoverageService
 	reviewRequests            MCPReviewRequestService
 	reviewRequestBudget       OperationBudget
 	reviewLinks               ShadowMCPReviewLinker
@@ -425,6 +426,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		shadowInventory:           nil,
 		shadowDecisions:           nil,
 		shadowAI:                  nil,
+		deviceCoverage:            nil,
 		reviewRequests:            nil,
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
 		reviewLinks:               nil,
@@ -658,6 +660,14 @@ func (r *PostgresReader) WithOrganizationGateway(service *OrganizationGatewaySer
 func (r *PostgresReader) WithShadowAI(service *ShadowAIService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.shadowAI = service
+	}
+	return r
+}
+
+// WithDeviceCoverage serves the MDM coverage reads.
+func (r *PostgresReader) WithDeviceCoverage(service *DeviceCoverageService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.deviceCoverage = service
 	}
 	return r
 }
