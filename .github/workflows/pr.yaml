@@ -435,7 +435,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Download server build artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: server-bin
           path: server/bin
@@ -1373,7 +1373,7 @@ jobs:
         run: mise run build:tunnel-gateway --readonly
 
       - name: Upload server build
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: server-bin
           path: server/bin
@@ -1822,7 +1822,7 @@ jobs:
         # test-timings.json'; 'mise run ci:shard-timings' turns the JUnit
         # reports of recent main runs into ci/cmd/shard/timings.txt.
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: server-test-timings-shard-${{ matrix.shard }}
           path: |
@@ -1931,7 +1931,7 @@ jobs:
       # exact assets this image ships with (a rebuild there could hash
       # differently, e.g. GRAM_GIT_SHA is only set in this job).
       - name: Upload built assets artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dashboard-assets
           path: client/dashboard/dist/assets
@@ -2038,7 +2038,7 @@ jobs:
           - environment: prod
     steps:
       - name: Download built assets artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: dashboard-assets
           path: dist/assets
@@ -2335,7 +2335,7 @@ jobs:
           rm -rf "$KEY_DIR"
 
       - name: Upload melange packages artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: functions-packages
           path: functions/packages
@@ -2393,7 +2393,7 @@ jobs:
         run: aube install --frozen-lockfile
 
       - name: Download melange packages artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: functions-packages
           path: functions/packages
