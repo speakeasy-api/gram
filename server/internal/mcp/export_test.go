@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,7 +11,6 @@ import (
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -130,21 +128,15 @@ func (s *Service) RecordConnectionPopupGrant(ctx context.Context, grant remotese
 	return s.recordConnectionPopupGrant(ctx, grant)
 }
 
-// FreshGatewayMemberResources re-reads endpoint's members in a transaction on
-// db, as workload issuance does after its preflight reached the members in
+// FreshGatewayMemberResources re-reads endpoint's members on db, as workload
+// issuance does in its transaction after its preflight reached the members in
 // reached, and returns the resource each remaining connect check names.
 func FreshGatewayMemberResources(ctx context.Context, db *pgxpool.Pool, endpoint *ResolvedMcpEndpoint, reached ...uuid.UUID) ([]string, error) {
-	tx, err := db.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin gateway member re-read: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-
 	reach := gatewayWorkloadReach{members: make(map[uuid.UUID]struct{}, len(reached))}
 	for _, id := range reached {
 		reach.members[id] = struct{}{}
 	}
-	checks, err := reach.freshMemberChecks(ctx, tx, endpoint)
+	checks, err := reach.freshMemberChecks(ctx, db, endpoint)
 	if err != nil {
 		return nil, err
 	}

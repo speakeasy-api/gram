@@ -20,7 +20,6 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -193,12 +192,12 @@ func (s *Service) resolveGatewayWorkloadReach(ctx context.Context, logger *slog.
 	return ctx, reach, nil
 }
 
-// freshMemberChecks re-reads the gateway's servable members in the issuance
-// transaction and returns the connect check of each member the preflight
-// reached that still is one, so issuance never counts a member removed,
-// disabled, or rewired since the preflight read it.
-func (r gatewayWorkloadReach) freshMemberChecks(ctx context.Context, tx pgx.Tx, endpoint *ResolvedMcpEndpoint) ([]authz.Check, error) {
-	rows, err := metamcprepo.New(tx).ListServableMetaMCPMembers(ctx, metamcprepo.ListServableMetaMCPMembersParams{
+// freshMemberChecks re-reads the gateway's servable members through db, the
+// issuance transaction, and returns the connect check of each member the
+// preflight reached that still is one, so issuance never counts a member
+// removed, disabled, or rewired since the preflight read it.
+func (r gatewayWorkloadReach) freshMemberChecks(ctx context.Context, db metamcprepo.DBTX, endpoint *ResolvedMcpEndpoint) ([]authz.Check, error) {
+	rows, err := metamcprepo.New(db).ListServableMetaMCPMembers(ctx, metamcprepo.ListServableMetaMCPMembersParams{
 		MetaMcpServerID: endpoint.MetaMcpServerID.UUID,
 		ProjectID:       endpoint.ProjectID,
 	})
