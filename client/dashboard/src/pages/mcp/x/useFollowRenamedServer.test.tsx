@@ -21,17 +21,6 @@ vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
 }));
 const base = (slug: string) => `/acme/projects/default/mcp/${slug}`;
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: {
-      details: {
-        href: base,
-        settings: { href: (slug: string) => `${base(slug)}/settings` },
-        overview: { href: (slug: string) => base(slug) },
-      },
-    },
-  }),
-}));
 
 afterEach(() => removeVisitsMatching.mockReset());
 

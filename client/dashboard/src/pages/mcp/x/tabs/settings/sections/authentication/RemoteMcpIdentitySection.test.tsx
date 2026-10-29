@@ -66,32 +66,6 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: {
-      details: {
-        overview: { href: (slug: string) => `/mcp/${slug}` },
-        inspect: { href: (slug: string) => `/mcp/${slug}/inspect` },
-        teamAccess: { href: (slug: string) => `/mcp/${slug}/team-access` },
-        sessions: { href: (slug: string) => `/mcp/${slug}/sessions` },
-        settings: { href: (slug: string) => `/mcp/${slug}/settings` },
-      },
-    },
-    remoteIdentityProviders: {
-      href: () => "/remote-identity-providers",
-      issuerDetail: { href: (id: string) => `/providers/${id}` },
-      clientDetail: {
-        href: (issuerId: string, clientId: string) =>
-          `/providers/${issuerId}/clients/${clientId}`,
-        mcpServers: {
-          href: (issuerId: string, clientId: string) =>
-            `/providers/${issuerId}/clients/${clientId}/mcp-servers`,
-        },
-      },
-    },
-  }),
-}));
-
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     remoteSessions: { commitServerIdentityConfiguration: mocks.commit },
@@ -100,6 +74,7 @@ vi.mock("@/contexts/Sdk", () => ({
       discoverProtectedResourceMetadata: mocks.discoverProtectedResource,
     },
   }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -2177,7 +2152,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(screen.queryByRole("link", { name: "id.example" })).toBeNull();
     expect(
       screen.getByRole("link", { name: /Advanced/ }).getAttribute("href"),
-    ).toBe("/providers/provider-1/clients/client-1");
+    ).toBe(
+      "/org/projects/project/remote-identity-providers/provider-1/clients/client-1",
+    );
     // A raw client ID tells an operator nothing.
     expect(screen.queryByText("dashboard-client")).toBeNull();
   });
@@ -2965,7 +2942,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
       screen
         .getByRole("link", { name: /client's MCP servers/ })
         .getAttribute("href"),
-    ).toBe("/providers/provider-1/clients/client-1/mcp-servers");
+    ).toBe(
+      "/org/projects/project/remote-identity-providers/provider-1/clients/client-1/mcp-servers",
+    );
     expect(
       (
         screen.getByRole("radio", {
@@ -3430,7 +3409,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       screen
         .getByRole("link", { name: "Authorization Servers" })
         .getAttribute("href"),
-    ).toBe("/remote-identity-providers");
+    ).toBe("/org/projects/project/remote-identity-providers");
   });
 
   describe("pinned scopes", () => {

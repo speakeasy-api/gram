@@ -1,8 +1,9 @@
 import { renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import type { AppRoute } from "@/routes";
+import { useRoutes } from "@/routes";
 import { useProjectNavRoutes } from "./useProjectNavRoutes";
 
 const testState = vi.hoisted(() => ({
@@ -15,63 +16,9 @@ const testState = vi.hoisted(() => ({
   },
 }));
 
-function route(title: string, url: string): AppRoute {
-  return {
-    Icon: () => null,
-    Link: ({ children }) => <>{children}</>,
-    active: false,
-    goTo: () => undefined,
-    href: () => `/${url}`,
-    title,
-    url,
-  };
-}
-
-const routes = {
-  mcpSessions: route("MCP Sessions", "mcp-sessions"),
-  remoteIdentityProviders: route(
-    "Authorization Servers",
-    "remote-identity-providers",
-  ),
-  agents: route("Agent Identity", "agent-management"),
-  agentSessions: route("Agent Sessions", "agent-sessions"),
-  assistants: route("Assistants", "assistants"),
-  catalog: route("Catalog", "catalog"),
-  chat: route("Project Assistant", "chat"),
-  skills: route("Skills", "skills"),
-  costs: route("Costs", "costs"),
-  explore: route("Explore", "explore"),
-  dashboards: route("Dashboards", "dashboards"),
-  deployments: route("Deployments", "deployments"),
-  detectionRules: route("Detection Rules", "detection-rules"),
-  identities: {
-    ...route("Identities", "identities"),
-    people: route("People", "identities/people"),
-    agents: route("Agents", "identities/agents"),
-  },
-  environments: route("Environments", "environments"),
-  home: route("Home", ""),
-  insights: route("Insights", "insights"),
-  logs: route("Logs", "logs"),
-  signalsIntelligence: route("Signals intelligence", "signals-intelligence"),
-  mcp: route("MCP", "mcp"),
-  orgMemory: route("Org Memory", "org-memory"),
-  playground: route("Playground", "playground"),
-  plugins: route("Plugins", "plugins"),
-  policyCenter: route("Guardrails", "risk-policies"),
-  riskEvents: route("Risk Events", "risk-events"),
-  watchdog: route("Watchdog", "watchdog"),
-  settings: route("Project settings", "settings"),
-  shadowAI: route("Shadow AI", "shadow-ai"),
-  shadowMCP: route("Shadow MCP", "shadow-mcp"),
-  sources: route("Sources", "sources"),
-};
-
-vi.mock("@/routes", async () => {
-  return {
-    useRoutes: () => routes,
-  };
-});
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
 
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: (flag: string) => testState.featureFlags[flag],
@@ -108,13 +55,23 @@ beforeEach(() => {
   };
 });
 
+// Routes are compared by href: each useRoutes call builds its own objects.
+let routes: ReturnType<typeof useRoutes>;
+beforeAll(() => {
+  routes = renderHook(() => useRoutes(), { wrapper: MemoryRouter }).result
+    .current;
+});
+
+const renderNav = () =>
+  renderHook(() => useProjectNavRoutes(), { wrapper: MemoryRouter });
+
 describe("useProjectNavRoutes", () => {
   it("removes Signals intelligence when entitlement is disabled or a refresh fails", () => {
     testState.productFeatures.data.signalsIntelligenceEnabled = true;
-    const { result, rerender } = renderHook(() => useProjectNavRoutes());
+    const { result, rerender } = renderNav();
     const visible = () =>
       result.current.some(
-        (entry) => entry.route === routes.signalsIntelligence,
+        (entry) => entry.route.href() === routes.signalsIntelligence.href(),
       );
     expect(visible()).toBe(true);
 
@@ -130,35 +87,42 @@ describe("useProjectNavRoutes", () => {
   });
 
   it("includes agents, sessions and remote providers in project navigation", () => {
-    const { result } = renderHook(() => useProjectNavRoutes());
-    expect(result.current.map((entry) => entry.route)).toEqual(
+    const { result } = renderNav();
+    expect(result.current.map((entry) => entry.route.href())).toEqual(
       expect.arrayContaining([
-        routes.identities.agents,
-        routes.mcpSessions,
-        routes.remoteIdentityProviders,
+        routes.identities.agents.href(),
+        routes.mcpSessions.href(),
+        routes.remoteIdentityProviders.href(),
       ]),
     );
   });
 
   it("lists the two rosters and keeps the old agents page out of nav", () => {
-    const { result } = renderHook(() => useProjectNavRoutes());
+    const { result } = renderNav();
 
     expect(
-      result.current.find((entry) => entry.route === routes.agents),
+      result.current.find(
+        (entry) => entry.route.href() === routes.agents.href(),
+      ),
     ).toBeUndefined();
     expect(
-      result.current.find((entry) => entry.route === routes.identities.people)
-        ?.scope,
+      result.current.find(
+        (entry) => entry.route.href() === routes.identities.people.href(),
+      )?.scope,
     ).toEqual(["project:read"]);
     expect(
-      result.current.find((entry) => entry.route === routes.identities.agents),
+      result.current.find(
+        (entry) => entry.route.href() === routes.identities.agents.href(),
+      ),
     ).toBeTruthy();
   });
 
   it("uses the selected project's read grant for MCP Sessions", () => {
-    const { result, rerender } = renderHook(() => useProjectNavRoutes());
+    const { result, rerender } = renderNav();
     const sessions = () =>
-      result.current.find((entry) => entry.route === routes.mcpSessions);
+      result.current.find(
+        (entry) => entry.route.href() === routes.mcpSessions.href(),
+      );
     expect(sessions()?.scope).toEqual(["project:read"]);
     expect(sessions()?.resourceId).toBe("project_a");
     testState.projectId = "project_b";
@@ -167,9 +131,9 @@ describe("useProjectNavRoutes", () => {
   });
 
   it("keeps Agent Sessions discoverable for members who can read their own history", () => {
-    const { result } = renderHook(() => useProjectNavRoutes());
+    const { result } = renderNav();
     const sessions = result.current.find(
-      (entry) => entry.route === routes.agentSessions,
+      (entry) => entry.route.href() === routes.agentSessions.href(),
     );
     // Command K registers these routes as page actions. Requiring chat:read
     // here would hide the search destination from owners without that grant.
@@ -177,24 +141,24 @@ describe("useProjectNavRoutes", () => {
   });
 
   it("lists Identity before MCP Gateway, Security and Policy, and Observability", () => {
-    const { result } = renderHook(() => useProjectNavRoutes());
-    const navRoutes = result.current.map((entry) => entry.route);
+    const { result } = renderNav();
+    const navRoutes = result.current.map((entry) => entry.route.href());
     expect(navRoutes.slice(2, 6)).toEqual([
-      routes.identities.people,
-      routes.identities.agents,
-      routes.mcpSessions,
-      routes.remoteIdentityProviders,
+      routes.identities.people.href(),
+      routes.identities.agents.href(),
+      routes.mcpSessions.href(),
+      routes.remoteIdentityProviders.href(),
     ]);
-    expect(navRoutes.indexOf(routes.playground)).toBeLessThan(
-      navRoutes.indexOf(routes.riskEvents),
+    expect(navRoutes.indexOf(routes.playground.href())).toBeLessThan(
+      navRoutes.indexOf(routes.riskEvents.href()),
     );
-    expect(navRoutes.indexOf(routes.policyCenter)).toBeLessThan(
-      navRoutes.indexOf(routes.costs),
+    expect(navRoutes.indexOf(routes.policyCenter.href())).toBeLessThan(
+      navRoutes.indexOf(routes.costs.href()),
     );
   });
 
   it("leaves Shadow AI and Shadow MCP out of nav; they live in Guardrails", () => {
-    const { result } = renderHook(() => useProjectNavRoutes());
+    const { result } = renderNav();
 
     const titles = result.current.map((entry) => entry.route.title);
     expect(titles).not.toContain("Shadow AI");
@@ -203,7 +167,7 @@ describe("useProjectNavRoutes", () => {
   });
 
   it("leaves Approval Requests out of nav", () => {
-    const { result } = renderHook(() => useProjectNavRoutes());
+    const { result } = renderNav();
 
     const navTitles = result.current.map((entry) => entry.route.title);
 
@@ -211,9 +175,9 @@ describe("useProjectNavRoutes", () => {
   });
 
   it("uses project-scoped skill read for Skills", () => {
-    const { result } = renderHook(() => useProjectNavRoutes());
+    const { result } = renderNav();
     const skills = result.current.find(
-      (entry) => entry.route === routes.skills,
+      (entry) => entry.route.href() === routes.skills.href(),
     );
 
     expect(skills?.scope).toEqual(["skill:read"]);
@@ -222,17 +186,21 @@ describe("useProjectNavRoutes", () => {
 
   it("only includes Org Memory when its session toggle is enabled", () => {
     testState.orgMemoryEnabled = false;
-    const { result, rerender } = renderHook(() => useProjectNavRoutes());
+    const { result, rerender } = renderNav();
 
     expect(
-      result.current.some((entry) => entry.route === routes.orgMemory),
+      result.current.some(
+        (entry) => entry.route.href() === routes.orgMemory.href(),
+      ),
     ).toBe(false);
 
     testState.orgMemoryEnabled = true;
     rerender();
 
     expect(
-      result.current.some((entry) => entry.route === routes.orgMemory),
+      result.current.some(
+        (entry) => entry.route.href() === routes.orgMemory.href(),
+      ),
     ).toBe(true);
   });
 
@@ -243,37 +211,37 @@ describe("useProjectNavRoutes", () => {
         [FEATURE_FLAGS.explore]: unavailableFeatureFlag(status),
       };
 
-      const { result } = renderHook(() => useProjectNavRoutes());
-      const navRoutes = result.current.map((entry) => entry.route);
+      const { result } = renderNav();
+      const navRoutes = result.current.map((entry) => entry.route.href());
 
-      expect(navRoutes).toContain(routes.assistants);
-      expect(navRoutes).toContain(routes.watchdog);
-      expect(navRoutes).not.toContain(routes.explore);
-      expect(navRoutes).toContain(routes.deployments);
-      expect(navRoutes).toContain(routes.riskEvents);
+      expect(navRoutes).toContain(routes.assistants.href());
+      expect(navRoutes).toContain(routes.watchdog.href());
+      expect(navRoutes).not.toContain(routes.explore.href());
+      expect(navRoutes).toContain(routes.deployments.href());
+      expect(navRoutes).toContain(routes.riskEvents.href());
     },
   );
 
   it("keeps Explore and Dashboards out of the nav until their flag is released to the organization", () => {
-    const { result: hidden } = renderHook(() => useProjectNavRoutes());
-    const hiddenRoutes = hidden.current.map((entry) => entry.route);
-    expect(hiddenRoutes).not.toContain(routes.explore);
-    expect(hiddenRoutes).not.toContain(routes.dashboards);
+    const { result: hidden } = renderNav();
+    const hiddenRoutes = hidden.current.map((entry) => entry.route.href());
+    expect(hiddenRoutes).not.toContain(routes.explore.href());
+    expect(hiddenRoutes).not.toContain(routes.dashboards.href());
 
     testState.featureFlags = {
       ...testState.featureFlags,
       [FEATURE_FLAGS.explore]: { status: "enabled" },
     };
-    const { result: shown } = renderHook(() => useProjectNavRoutes());
-    const shownRoutes = shown.current.map((entry) => entry.route);
-    expect(shownRoutes).toContain(routes.explore);
-    expect(shownRoutes).toContain(routes.dashboards);
+    const { result: shown } = renderNav();
+    const shownRoutes = shown.current.map((entry) => entry.route.href());
+    expect(shownRoutes).toContain(routes.explore.href());
+    expect(shownRoutes).toContain(routes.dashboards.href());
   });
 
   it("requires organization admin for Watchdog navigation, matching its page", () => {
-    const { result } = renderHook(() => useProjectNavRoutes());
+    const { result } = renderNav();
     const watchdog = result.current.find(
-      (entry) => entry.route === routes.watchdog,
+      (entry) => entry.route.href() === routes.watchdog.href(),
     );
 
     expect(watchdog?.scope).toEqual(["org:admin"]);
@@ -284,33 +252,34 @@ describe("useProjectNavRoutes", () => {
       [FEATURE_FLAGS.explore]: { status: "enabled" },
     };
 
-    const { result } = renderHook(() => useProjectNavRoutes());
-    const navRoutes = result.current.map((entry) => entry.route);
+    const { result } = renderNav();
+    const navRoutes = result.current.map((entry) => entry.route.href());
 
-    expect(navRoutes).toContain(routes.assistants);
-    expect(navRoutes).toContain(routes.watchdog);
-    expect(navRoutes).toContain(routes.explore);
-    expect(navRoutes).toContain(routes.deployments);
-    expect(navRoutes).toContain(routes.riskEvents);
+    expect(navRoutes).toContain(routes.assistants.href());
+    expect(navRoutes).toContain(routes.watchdog.href());
+    expect(navRoutes).toContain(routes.explore.href());
+    expect(navRoutes).toContain(routes.deployments.href());
+    expect(navRoutes).toContain(routes.riskEvents.href());
   });
 
   it("uses assistant read on the active project for assistant surfaces", () => {
-    const { result } = renderHook(() => useProjectNavRoutes());
+    const { result } = renderNav();
     const assistantRoutes = result.current.filter(
       (entry) =>
-        entry.route === routes.chat || entry.route === routes.assistants,
+        entry.route.href() === routes.chat.href() ||
+        entry.route.href() === routes.assistants.href(),
     );
 
     expect(assistantRoutes).toHaveLength(2);
     expect(assistantRoutes).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          route: routes.chat,
+          route: expect.objectContaining({ title: routes.chat.title }),
           scope: ["assistant:read"],
           projectId: "project_a",
         }),
         expect.objectContaining({
-          route: routes.assistants,
+          route: expect.objectContaining({ title: routes.assistants.title }),
           scope: ["assistant:read"],
           projectId: "project_a",
         }),

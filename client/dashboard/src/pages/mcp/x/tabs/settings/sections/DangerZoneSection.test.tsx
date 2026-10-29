@@ -21,7 +21,6 @@ vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
   useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
 }));
-vi.mock("@/routes", () => ({ useRoutes: () => ({}) }));
 vi.mock("@gram/client/react-query/deleteMcpServer.js", () => ({
   useDeleteMcpServerMutation: () => ({ isPending: false, mutate: vi.fn() }),
 }));

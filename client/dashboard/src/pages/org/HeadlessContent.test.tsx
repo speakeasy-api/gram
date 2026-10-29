@@ -10,8 +10,8 @@ vi.mock("@/components/mode-switch-starfield", () => ({
 vi.mock("@/components/gram-logo/variants/icon", () => ({
   GramIcon: () => null,
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ home: { goTo: vi.fn() } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 // The wizard is a stack of sheets over live onboarding queries; this page's
 // own job is the list that opens it.

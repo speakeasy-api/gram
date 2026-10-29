@@ -1,13 +1,11 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { ServerInfoPopover } from "./ServerInfoPopover";
 import { StepServers } from "./StepServers";
 import type { InventoryServer } from "./useServerInventory";
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    toolset: { href: (slug: string) => `/toolsets/${slug}` },
-    mcp: { details: { overview: { href: (id: string) => `/mcp/${id}` } } },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "other-project" }),
 }));
 afterEach(cleanup);
 const server: InventoryServer = {
@@ -35,6 +33,7 @@ it("opens metadata without selecting the server, and keeps its slug out of the r
       selected={[]}
       onChange={onChange}
     />,
+    { wrapper: MemoryRouter },
   );
   expect(screen.queryByText("hidden-slug")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "About Example" }));
@@ -51,6 +50,7 @@ it("distinguishes zero calls from missing telemetry", () => {
     <ServerInfoPopover
       server={{ ...server, description: "A useful server", recentToolCalls: 0 }}
     />,
+    { wrapper: MemoryRouter },
   );
   fireEvent.click(screen.getByRole("button", { name: "About Example" }));
   expect(screen.getByText("0")).toBeTruthy();
@@ -62,9 +62,10 @@ it("links legacy toolsets by their own slug rather than endpoint suffix or MCP i
     <ServerInfoPopover
       server={{ ...server, kind: "Toolset", toolsetSlug: "actual-toolset" }}
     />,
+    { wrapper: MemoryRouter },
   );
   fireEvent.click(screen.getByRole("button", { name: "About Example" }));
   expect(
     screen.getByRole("link", { name: "Open MCP server" }).getAttribute("href"),
-  ).toBe("/toolsets/actual-toolset");
+  ).toBe("/org/projects/project/toolsets/actual-toolset");
 });

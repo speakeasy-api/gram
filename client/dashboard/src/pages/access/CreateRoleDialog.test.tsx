@@ -42,14 +42,12 @@ vi.mock("@/contexts/Auth", () => ({
     scimEnabled: mocks.scimEnabled,
   }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
-}));
 vi.mock("@gram/client/react-query/agents.js", () => ({
   queryKeyAgents: () => ["agents"],
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ agents: { list: mocks.list } }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: () => ({ data: { members: mocks.members } }),

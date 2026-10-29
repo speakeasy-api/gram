@@ -1,20 +1,21 @@
 import { cleanup, render, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import Login from "./Login";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
-  goHome: vi.fn(),
   useSession: vi.fn(),
   useSearchParams: vi.fn(),
 }));
 vi.mock("@/contexts/Auth", () => ({ useSession: mocks.useSession }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ home: { goTo: mocks.goHome } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   useNavigate: () => mocks.navigate,
   useSearchParams: mocks.useSearchParams,
 }));
@@ -38,7 +39,7 @@ it("preserves partner signup intent for an authenticated zero-org session", asyn
     session: "session",
     activeOrganizationId: "",
   });
-  render(<Login />);
+  render(<Login />, { wrapper: MemoryRouter });
   await waitFor(() => expect(mocks.navigate).toHaveBeenCalled());
   const destination = new URL(
     mocks.navigate.mock.calls[0]![0],
@@ -54,7 +55,7 @@ it("does not route existing organizations into partner registration", async () =
     session: "session",
     activeOrganizationId: "existing-org",
   });
-  render(<Login />);
+  render(<Login />, { wrapper: MemoryRouter });
   await waitFor(() =>
     expect(mocks.navigate).toHaveBeenCalledWith("/welcome", { replace: true }),
   );

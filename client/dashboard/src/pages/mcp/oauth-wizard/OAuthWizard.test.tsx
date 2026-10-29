@@ -111,6 +111,7 @@ vi.mock("@/contexts/Fetcher", () => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 vi.mock("@/contexts/Telemetry", () => ({
@@ -122,14 +123,6 @@ vi.mock("@/contexts/Telemetry", () => ({
 
 vi.mock("@/hooks/useProductTier", () => ({
   useProductTier: () => mocks.productTier,
-}));
-
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    environments: {
-      Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
-    },
-  }),
 }));
 
 vi.mock("@/components/FeatureRequestModal", () => ({

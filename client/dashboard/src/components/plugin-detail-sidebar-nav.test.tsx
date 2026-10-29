@@ -51,27 +51,8 @@ vi.mock("@/hooks/useRBAC", () => ({
           : false,
   }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    skills: {
-      href: () => "/skills",
-      detail: { href: (id: string) => `/skills/${id}` },
-    },
-    plugins: {
-      href: () => "/plugins",
-      detail: {
-        href: (id: string) => `/plugins/${id}`,
-        skills: { href: (id: string) => `/plugins/${id}/skills` },
-      },
-    },
-  }),
-}));
-vi.mock("@/pages/plugins/plugin-detail-sections", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("@/pages/plugins/plugin-detail-sections")
-  >()),
-  pluginSectionHref: (_routes: unknown, id: string, section: string) =>
-    `/plugins/${id}/${section}`,
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@/components/detail/detail-sidebar-nav", () => ({
   DetailSidebarInfoLabel: () => null,
@@ -121,7 +102,7 @@ describe("skill-only plugin sidebar", () => {
     for (const query of queries) expect(query).not.toHaveBeenCalled();
     expect(
       screen.getByRole("link", { name: "Back to skill" }).getAttribute("href"),
-    ).toBe("/skills/skill-a");
+    ).toBe("/org/projects/project/skills/skill-a");
     expect(
       screen.getByRole("link", { name: "Skills" }).getAttribute("href"),
     ).toContain("?skillId=skill-a");
@@ -157,7 +138,7 @@ describe("organization plugin sidebar", () => {
         screen
           .getByRole("link", { name: "Back to all plugins" })
           .getAttribute("href"),
-      ).toBe("/plugins");
+      ).toBe("/org/projects/project/plugins");
       expect(screen.queryByRole("link", { name: "MCP Servers" })).toBeNull();
       for (const title of ["Overview", "Skills"]) {
         expect(screen.getByRole("link", { name: title })).toBeTruthy();

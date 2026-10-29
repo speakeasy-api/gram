@@ -1,4 +1,5 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook as testingRenderHook } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlatformSetupStep } from "../types";
 
@@ -21,9 +22,7 @@ vi.mock("@gram/client/react-query/createAPIKey", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "default",
-}));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ deviceAgent: { href: () => "/acme/device-agent" } }),
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
 }));
 
 import { getAgentPlatforms } from "../setup-data";
@@ -31,6 +30,9 @@ import {
   usePlatformApiKeys,
   usePlatformPlaceholders,
 } from "./platform-setup-values";
+
+const renderHook = <Result,>(hook: () => Result) =>
+  testingRenderHook(hook, { wrapper: MemoryRouter });
 
 function step(code: string): PlatformSetupStep {
   return { title: "step", code, language: "text" };

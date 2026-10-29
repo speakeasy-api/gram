@@ -58,15 +58,13 @@ vi.mock("@/components/icon-dither", () => ({
   }),
 }));
 
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => client }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => client,
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
 vi.mock("react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router")>()),
   useNavigate: () => navigate,
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    plugins: { detail: { href: (id: string) => `/plugins/${id}` } },
-  }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-uuid", slug: "selected-project" }),

@@ -8,6 +8,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { catalogPresetState } from "@/pages/security/server-guardrails/server-guardrail-policy";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AddServerDialog, GuardrailOutcomeNotice } from "./AddServerDialog";
@@ -34,6 +35,7 @@ vi.mock("@/contexts/Auth", () => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "default",
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
   useSdkClient: () => ({
     mcpRegistries: { getServerDetails: mocks.getServerDetails },
   }),
@@ -49,12 +51,6 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router")>()),
   useNavigate: () => mocks.navigate,
-}));
-
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    policyCenter: { new: { href: () => "/p/risk-policies/new" } },
-  }),
 }));
 
 vi.mock("./useRemoteMcpInstallWorkflow", () => ({
@@ -92,7 +88,9 @@ function render(ui: React.ReactElement) {
   const invalidate = vi.spyOn(client, "invalidateQueries");
   return {
     ...testingRender(
-      <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={client}>{ui}</QueryClientProvider>
+      </MemoryRouter>,
     ),
     invalidate,
   };
@@ -312,7 +310,7 @@ describe("AddServerDialog guardrails", () => {
       mocks.navigate.mock.calls[0]![0] as string,
       "https://x",
     );
-    expect(url.pathname).toBe("/p/risk-policies/new");
+    expect(url.pathname).toBe("/acme/projects/default/risk-policies/new");
     expect(url.searchParams.get("kind")).toBe("standard");
     expect(url.searchParams.get("mcp_server_id")).toBe("srv-1");
     expect(url.searchParams.get("action")).toBe("flag");

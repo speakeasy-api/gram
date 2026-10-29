@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MCPApprovalsTab } from "./MCPApprovalsTab";
 
@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => ({
   useMembers: vi.fn(),
   useRiskListPolicies: vi.fn(),
   useRoles: vi.fn(),
-  goToServer: vi.fn(),
   refetchPolicies: vi.fn(),
   insightsConfig: vi.fn(),
 }));
@@ -38,17 +37,8 @@ vi.mock("@/components/insights-dock", () => ({
   },
 }));
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    shadowAI: {
-      mcps: {
-        detail: {
-          href: (serverSlug: string) => `/shadow-ai/mcps/${serverSlug}`,
-          goTo: mocks.goToServer,
-        },
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 // The table's own behavior is covered by its dedicated tests; this file
@@ -96,6 +86,11 @@ vi.mock("@/components/shadow-mcp/ShadowMCPInventoryTable", () => ({
 vi.mock("@/contexts/Auth", () => ({
   useProject: mocks.useProject,
 }));
+
+function LocationDisplay() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname}</output>;
+}
 
 describe("MCPApprovalsTab", () => {
   afterEach(() => {
@@ -240,12 +235,15 @@ describe("MCPApprovalsTab", () => {
     render(
       <MemoryRouter>
         <MCPApprovalsTab />
+        <LocationDisplay />
       </MemoryRouter>,
     );
 
-    screen.getByRole("button", { name: "Open server" }).click();
+    fireEvent.click(screen.getByRole("button", { name: "Open server" }));
 
-    expect(mocks.goToServer).toHaveBeenCalledWith("server-slug");
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/org/projects/project/shadow-ai/mcps/server-slug",
+    );
   });
 
   it("keeps the inventory browsable but pauses deciding when the policy list fails", () => {

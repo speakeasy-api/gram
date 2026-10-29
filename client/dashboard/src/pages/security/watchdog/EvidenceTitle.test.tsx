@@ -24,6 +24,7 @@ vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     risk: { results: { list: listFindings } },
   }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 vi.mock("@gram/client/react-query/loadChat.js", () => ({
@@ -37,10 +38,6 @@ vi.mock("@gram/client/react-query/loadChat.js", () => ({
       queryFn: () => loadChat(request),
       enabled: options.enabled,
     }),
-}));
-
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ agentSessions: { href: () => "/agent-sessions" } }),
 }));
 
 const TITLE = "Please refund order #4023. Customer card";
@@ -133,7 +130,7 @@ describe("EvidenceTitle", () => {
       screen
         .getByRole("link", { name: "Open session in Agent Sessions" })
         .getAttribute("href"),
-    ).toBe("/agent-sessions?chatId=chat-1");
+    ).toBe("/org/projects/project/agent-sessions?chatId=chat-1");
   });
 
   it("expands to the flagged message, not the opening one, with matches masked", async () => {

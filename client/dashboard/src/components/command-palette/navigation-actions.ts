@@ -1,5 +1,6 @@
 import type { CommandAction } from "@/contexts/CommandPalette";
-import type { AppRoute, useOrgRoutes } from "@/routes";
+import type { PagedRoute } from "@/route-pages";
+import type { AppRoute } from "@/routes";
 
 // Convert a single route into a command-palette navigation action.
 export const routeToNavAction = (
@@ -25,7 +26,7 @@ export const routeToNavAction = (
 // pages a user can actually land on: external links, unauthenticated pages, and
 // full-screen pages outside the main layout are excluded.
 const routesToNavActions = (
-  routeMap: Record<string, AppRoute>,
+  routeMap: Record<string, PagedRoute>,
   group: string,
   idPrefix: string,
 ): CommandAction[] =>
@@ -44,10 +45,13 @@ const routesToNavActions = (
     );
 
 export const orgRoutesToNavActions = (
-  orgRoutes: ReturnType<typeof useOrgRoutes>,
+  orgRoutes: Record<string, PagedRoute>,
   showPlatformAdmin: boolean,
   canAccessBilling: boolean,
 ): CommandAction[] => {
+  // Sub-pages sit on the route object under their own keys.
+  const billing = orgRoutes.billing as PagedRoute &
+    Record<"setup" | "paymentMethod", PagedRoute>;
   const paletteOrgRoutes = Object.fromEntries(
     Object.entries(orgRoutes).filter(
       ([key, route]) =>
@@ -65,8 +69,8 @@ export const orgRoutesToNavActions = (
       // billing eligibility checks; registration must not fetch billing state.
       ...(canAccessBilling
         ? {
-            "billing-setup": orgRoutes.billing.setup,
-            "billing-payment-method": orgRoutes.billing.paymentMethod,
+            "billing-setup": billing.setup,
+            "billing-payment-method": billing.paymentMethod,
           }
         : {}),
     },
