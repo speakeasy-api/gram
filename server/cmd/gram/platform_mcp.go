@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/access"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -214,8 +215,14 @@ type platformMCPConfig struct {
 	// live organization-event reads.
 	LogsEnabled     platformmcp.FeatureChecker
 	ShadowInventory *access.Service
-	ShadowReview    *mcpapproval.Service
-	LocalFixture    *platformMCPLocalFixtureConfig
+	// ServerIcons fetches a logo for each MCP server Platform MCP adds, the
+	// same way the dashboard does. Nil leaves new servers without one.
+	ServerIcons mcpservers.DefaultServerIconSetter
+	// AssetStorage reads stored MCP server logos for result cards. Nil makes
+	// every card show the server's first letter.
+	AssetStorage assets.BlobStore
+	ShadowReview *mcpapproval.Service
+	LocalFixture *platformMCPLocalFixtureConfig
 }
 
 func recallRiskFindingReader(reader platformmcp.RiskFindingListReader) platformmcp.RecallRiskFindingReader {
@@ -307,6 +314,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP registration store: %w", err)
 	}
+	store = store.WithServerIcons(config.ServerIcons)
 	registrationGate := platformmcp.NewCatalogRegistrationGate(gate)
 	fixtureAdapter := remotesessionprovider.New(
 		config.GuardianPolicy,
@@ -445,6 +453,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDashboardURL(config.DashboardURL).
 		WithIdentityProviderAttachment(platformmcp.NewCatalogIdentityProviderAttachmentService(config.Logger, config.MeterProvider, config.DB, config.IdentityCommitter, config.GuardianPolicy, config.ServerURL)).
 		WithClientAdmission(platformmcp.NewClientAdmissionService(config.DB, config.AuditLogger)).
+		WithCardLogos(config.Logger, config.DB, config.AssetStorage).
 		WithTelemetry(telemetry)
 	dashboardSetupStarter := platformmcp.NewDashboardSetupService(store, registrationGate, authorizer, adapters, budgets.SetupStart)
 	feedback := platformmcp.NewFeedbackService(config.DB)
@@ -1069,6 +1078,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create Platform MCP registration store: %w", err)
 	}
+	store = store.WithServerIcons(config.ServerIcons)
 	registrationGate := platformmcp.NewCatalogRegistrationGate(gate)
 	adapters := platformmcp.NewProviderAdapters(nil)
 	limitStore := ratelimit.NewRedisStore(config.Redis)
@@ -1193,6 +1203,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDashboardURL(config.DashboardURL).
 		WithIdentityProviderAttachment(platformmcp.NewCatalogIdentityProviderAttachmentService(config.Logger, config.MeterProvider, config.DB, config.IdentityCommitter, config.GuardianPolicy, config.ServerURL)).
 		WithClientAdmission(platformmcp.NewClientAdmissionService(config.DB, config.AuditLogger)).
+		WithCardLogos(config.Logger, config.DB, config.AssetStorage).
 		WithTelemetry(telemetry)
 	dashboardSetupStarter := platformmcp.NewDashboardSetupService(store, registrationGate, authorizer, adapters, budgets.SetupStart)
 	feedback := platformmcp.NewFeedbackService(config.DB)

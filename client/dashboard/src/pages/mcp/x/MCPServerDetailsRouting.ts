@@ -13,12 +13,7 @@ const VALID_TABS = [
   "settings",
 ] as const;
 // Hosted servers manage their toolset on these tabs; every other server inspects its live tools.
-const HOSTED_ONLY_TABS: readonly TabValue[] = [
-  "tools",
-  "resources",
-  "prompts",
-  "skills",
-];
+const HOSTED_ONLY_TABS: readonly TabValue[] = ["tools", "resources", "prompts"];
 
 // Breadcrumb `skipSegments` source. Derived from VALID_TABS rather than
 // hand-maintained alongside it, so adding a tab can't leave a stray crumb.
