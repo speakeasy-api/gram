@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   projectId: "project_one",
   canFederate: true,
   canReadWorkloads: true,
+  canIngestHooks: false,
   renameAgent: vi.fn(),
   createGrant: vi.fn(),
   deleteGrant: vi.fn(),
@@ -135,10 +136,11 @@ vi.mock("@gram/client/react-query/workloadPlatforms.js", () => ({
     };
   },
 }));
-// Reading the workload catalog is its own permission; everything else this
-// flow checks follows canFederate.
+// Reading the workload catalog and sending hook events are their own
+// permissions; everything else this flow checks follows canFederate.
 function hasScope(scope: string): boolean {
   if (scope === "workload:read") return mocks.canReadWorkloads;
+  if (scope === "org:hooks_ingest") return mocks.canIngestHooks;
   return mocks.canFederate;
 }
 vi.mock("@/hooks/useRBAC", () => ({
@@ -307,6 +309,7 @@ beforeEach(() => {
   mocks.projectId = "project_one";
   mocks.canFederate = true;
   mocks.canReadWorkloads = true;
+  mocks.canIngestHooks = false;
   mocks.platformsStatus = "success";
   mocks.platforms.mockReturnValue([]);
   mocks.tokenEndpoints.mockReturnValue([]);
@@ -434,6 +437,52 @@ describe("Provisioning a new agent", () => {
       ),
     );
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives a new agent hook ingestion in its project, and asks its first key for it", async () => {
+    mocks.canIngestHooks = true;
+    const hooksGrant = {
+      effect: "allow",
+      scope: "org:hooks_ingest",
+      selector: { resourceKind: "org", resourceId: "org_example" },
+    };
+    // Discovery that names servers answers with the server grant; discovery
+    // that names none answers with the organization grants.
+    mocks.listDelegableGrants.mockImplementation(
+      async (request: { toolsetIds?: string[] }) =>
+        request.toolsetIds ? [grant] : [hooksGrant],
+    );
+    fireEvent.click(await reachCredentialStep());
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants,
+    ).toContainEqual({
+      effect: "allow",
+      scope: "org:hooks_ingest",
+      selector: {
+        resourceKind: "org",
+        resourceId: "org_example",
+        projectId: "project_one",
+      },
+    });
+    // The key narrows the hooks grant to the agent's project.
+    expect(
+      mocks.createKey.mock.calls[0]?.[0]?.createKeyForm?.requestedGrants,
+    ).toContainEqual({
+      ...hooksGrant,
+      selector: { ...hooksGrant.selector, projectId: "project_one" },
+    });
+  });
+
+  it("does not give hook ingestion when its creator cannot grant it", async () => {
+    fireEvent.click(await reachCredentialStep());
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    const scopes = (
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants ?? []
+    ).map((policy: { scope: string }) => policy.scope);
+    expect(scopes).not.toContain("org:hooks_ingest");
   });
 
   it("keeps the agent when the key fails, and says which part did not happen", async () => {
