@@ -412,8 +412,10 @@ const (
 // turn which systems it can reach and that search_my_tools reaches them. Tool
 // descriptions are shared by every caller and cached by clients, so they
 // cannot carry one person's servers; instructions are built per connection.
-// Any failure, refusal or delay leaves the instructions as they were.
-func gatewayServersInstructionsMiddleware(service *GatewayProxyService, logger *slog.Logger) mcp.Middleware {
+// budget is the instructions size the caller's host keeps (zero: no limit);
+// the paragraph names fewer servers to fit, or is left out. Any failure,
+// refusal or delay leaves the instructions as they were.
+func gatewayServersInstructionsMiddleware(service *GatewayProxyService, logger *slog.Logger, budget func(context.Context) int) mcp.Middleware {
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 			result, err := next(ctx, method, req)
@@ -443,7 +445,13 @@ func gatewayServersInstructionsMiddleware(service *GatewayProxyService, logger *
 				}
 				return result, nil
 			}
-			if paragraph := myServersInstructions(servers.Servers); paragraph != "" {
+			limit := 0
+			if budget != nil {
+				if limit = budget(ctx); limit > 0 {
+					limit -= len(*instructions) + len("\n\n")
+				}
+			}
+			if paragraph := myServersInstructions(servers.Servers, limit); paragraph != "" {
 				*instructions = strings.TrimSpace(*instructions + "\n\n" + paragraph)
 			}
 			return result, nil
@@ -452,9 +460,11 @@ func gatewayServersInstructionsMiddleware(service *GatewayProxyService, logger *
 }
 
 // myServersInstructions is the instructions paragraph naming the caller's
-// servers, or empty when they have none.
-func myServersInstructions(servers []MyServer) string {
-	if len(servers) == 0 {
+// servers, or empty when they have none. A positive limit selects the short
+// form and names as many servers as fit within limit bytes; empty when not
+// even one fits.
+func myServersInstructions(servers []MyServer, limit int) string {
+	if len(servers) == 0 || limit < 0 {
 		return ""
 	}
 	names := make([]string, 0, min(len(servers), maxInstructionServers))
@@ -465,10 +475,24 @@ func myServersInstructions(servers []MyServer) string {
 			names = append(names, server.Slug)
 		}
 	}
-	paragraph := "The user's own MCP servers are usable through this connection: " + strings.Join(names, ", ")
-	if more := len(servers) - len(names); more > 0 {
-		paragraph += fmt.Sprintf(", and %d more", more)
+	if limit == 0 {
+		return "The user's own MCP servers are usable through this connection: " + strings.Join(names, ", ") + moreServers(len(servers)-len(names)) +
+			". When the user asks for data or an action in one of these systems, call search_my_tools with the task in plain words, then execute_tool with the server and tool it returns; when those tools are not listed, reach them through call_platform_tool. " +
+			"Servers added later in this conversation are usable too; call list_my_servers to see the current list."
 	}
-	return paragraph + ". When the user asks for data or an action in one of these systems, call search_my_tools with the task in plain words, then execute_tool with the server and tool it returns; when those tools are not listed, reach them through call_platform_tool. " +
-		"Servers added later in this conversation are usable too; call list_my_servers to see the current list."
+	for shown := len(names); shown > 0; shown-- {
+		paragraph := "The user's MCP servers: " + strings.Join(names[:shown], ", ") + moreServers(len(servers)-shown) +
+			". For tasks in them, call search_my_tools then execute_tool via call_platform_tool."
+		if len(paragraph) <= limit {
+			return paragraph
+		}
+	}
+	return ""
+}
+
+func moreServers(count int) string {
+	if count <= 0 {
+		return ""
+	}
+	return fmt.Sprintf(", and %d more", count)
 }

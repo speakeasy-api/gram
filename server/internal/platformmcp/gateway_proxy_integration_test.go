@@ -260,7 +260,7 @@ func TestGatewayServersInstructionsNameTheCallersServers(t *testing.T) {
 		return &mcp.InitializeResult{Instructions: "Base."}, nil
 	}
 
-	result, err := gatewayServersInstructionsMiddleware(service, nil)(initialize)(contextWithPrincipal(ctx, principal), "initialize", nil)
+	result, err := gatewayServersInstructionsMiddleware(service, nil, nil)(initialize)(contextWithPrincipal(ctx, principal), "initialize", nil)
 
 	require.NoError(t, err)
 	initialized, ok := result.(*mcp.InitializeResult)
@@ -279,7 +279,7 @@ func TestGatewayServersInstructionsFailOpen(t *testing.T) {
 		return &mcp.InitializeResult{Instructions: "Base."}, nil
 	}
 
-	result, err := gatewayServersInstructionsMiddleware(service, nil)(initialize)(contextWithPrincipal(ctx, principal), "initialize", nil)
+	result, err := gatewayServersInstructionsMiddleware(service, nil, nil)(initialize)(contextWithPrincipal(ctx, principal), "initialize", nil)
 
 	require.NoError(t, err)
 	initialized, ok := result.(*mcp.InitializeResult)
@@ -294,9 +294,28 @@ func TestMyServersInstructionsCapsTheList(t *testing.T) {
 		servers = append(servers, MyServer{Slug: fmt.Sprintf("s%d", i), Name: "", Status: ""})
 	}
 
-	paragraph := myServersInstructions(servers)
+	paragraph := myServersInstructions(servers, 0)
 
 	require.Contains(t, paragraph, "and 3 more")
 	require.NotContains(t, paragraph, fmt.Sprintf("s%d", maxInstructionServers))
-	require.Empty(t, myServersInstructions(nil))
+	require.Empty(t, myServersInstructions(nil, 0))
+}
+
+// Hosts that cut instructions at a budget get the short form, naming only as
+// many servers as fit, or nothing.
+func TestMyServersInstructionsFitTheBudget(t *testing.T) {
+	t.Parallel()
+	servers := make([]MyServer, 0, 20)
+	for i := range 20 {
+		servers = append(servers, MyServer{Slug: fmt.Sprintf("server-%d", i), Name: "", Status: ""})
+	}
+	remaining := smallSurfaceInstructionBudget - len(discoveryInstructions(discoveryCode)) - 2
+
+	paragraph := myServersInstructions(servers, remaining)
+
+	require.NotEmpty(t, paragraph)
+	require.LessOrEqual(t, len(paragraph), remaining)
+	require.Contains(t, paragraph, "more")
+	require.Empty(t, myServersInstructions(servers, 10))
+	require.Empty(t, myServersInstructions(servers, -5))
 }

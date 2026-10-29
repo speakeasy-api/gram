@@ -257,6 +257,23 @@ func firstRunToolsFor(ctx context.Context, next mcp.MethodHandler, method string
 	return tools, nil
 }
 
+// smallSurfaceInstructionBudget is the instructions size hosts on the small
+// surface keep; Codex cuts the rest.
+const smallSurfaceInstructionBudget = 1 << 10
+
+// instructionBudget reports the instructions size a caller's host keeps, or
+// zero when it keeps them whole. Middleware outside discovery cannot read the
+// mode from its context, so it asks the same way discovery does.
+func (r *Runtime) instructionBudget(logger *slog.Logger) func(context.Context) int {
+	return func(ctx context.Context) int {
+		principal, ok := PrincipalFromContext(ctx)
+		if !ok || r.discoveryModeFor(ctx, logger, principal) == discoveryFull {
+			return 0
+		}
+		return smallSurfaceInstructionBudget
+	}
+}
+
 // discoveryInstructions replace the full server instructions, which Codex cuts
 // to 1 KB. Tool-specific rules travel with describe_platform_tool instead.
 func discoveryInstructions(mode discoveryMode) string {
