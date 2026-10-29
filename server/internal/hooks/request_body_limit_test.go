@@ -82,6 +82,19 @@ func TestHooksRoutes_RejectOversizedPlainBody(t *testing.T) {
 	require.Equal(t, string(oops.CodeRequestTooLarge), body.Name)
 }
 
+func TestHooksRoutes_RejectOversizedCompressedBodyOnTheWire(t *testing.T) {
+	t.Parallel()
+	server := newHooksHTTPServer(t)
+
+	// The gzip stream itself is tiny; the padding pushes the encoded request
+	// over the wire limit, which must be enforced before decompression.
+	body := append(gzipBytes(t, []byte(`{"hook_event_name":"UserPromptSubmit"}`)), make([]byte, maxHooksRequestBodyBytes)...)
+
+	status, errBody := postHooks(t, server, "/rpc/hooks.claude", body, "gzip")
+	require.Equal(t, http.StatusRequestEntityTooLarge, status)
+	require.Equal(t, string(oops.CodeRequestTooLarge), errBody.Name)
+}
+
 func TestHooksRoutes_AcceptLargeCompressedEventWithinLimit(t *testing.T) {
 	t.Parallel()
 	server := newHooksHTTPServer(t)
