@@ -515,8 +515,20 @@ SELECT count(*) FROM (
 -- name: PostflightCountMDMDevices :one
 SELECT count(*) FROM mdm_devices WHERE organization_id = @org_id::text;
 
--- State reports: one attested machine and one enforcing an older policy.
--- Without them every active device reads unreported.
+-- Machines only their agents list: serials no MDM device holds.
+-- name: PostflightCountAgentOnlyDeviceSyncs :one
+SELECT count(*)
+FROM device_agent_device_syncs d
+WHERE d.organization_id = @org_id::text
+  AND NOT EXISTS (
+    SELECT 1 FROM mdm_devices m
+    WHERE m.organization_id = d.organization_id
+      AND m.serial_number = d.serial_number
+  );
+
+-- State reports: two attested machines (one only its agent lists) and one
+-- enforcing an older policy. Without them every active device reads
+-- unreported.
 
 -- name: PostflightCountDeviceAgentStateReports :one
 SELECT count(*) FROM device_agent_state_reports WHERE organization_id = @org_id::text;

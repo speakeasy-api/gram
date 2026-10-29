@@ -751,6 +751,13 @@ func (s *seeder) seedRolesAccountsAndDevices(ctx context.Context) error {
 		// Installed, then went quiet: the drift case, and the row worth
 		// chasing.
 		{"C02DEMO0004", "mateo", "mateo-mbp", "6 days"},
+		// Two machines Jamf never enrolled, so only their agents list them
+		// (the Devices tab's "Not in an MDM" rows). Amara's build box
+		// enforces policy; Priya's old laptop went quiet after she moved to
+		// a new one. Both owners' enrolled laptops already answer by their
+		// own serials, so these leave the MDM coverage buckets unchanged.
+		{"H4DEMO0101", "amara", "amara-build-mini", "9 minutes"},
+		{"C02DEMO0102", "priya", "priya-old-mbp", "5 days"},
 	}
 	for _, d := range deviceSyncs {
 		if err := s.q.RolesInsertDeviceAgentDeviceSync(ctx, repo.RolesInsertDeviceAgentDeviceSyncParams{
@@ -768,7 +775,8 @@ func (s *seeder) seedRolesAccountsAndDevices(ctx context.Context) error {
 	// enforces the policy it was served. Amara's applied it, Jonas's is still
 	// on the previous one because Claude Code's managed settings are not
 	// writable, and Priya's runs a build that does not report. Three answers,
-	// for the same reason the heartbeats above are split.
+	// for the same reason the heartbeats above are split. Amara's build box
+	// reports too, so the agent-only rows include an enforcing machine.
 	reports := []struct {
 		serial, owner, hostname, reportedAgo, etag, appliedAgo, tools string
 		degraded                                                      int32
@@ -785,6 +793,11 @@ func (s *seeder) seedRolesAccountsAndDevices(ctx context.Context) error {
 			`[{"tool":"claude_code","layer":"managed","outcome":"error","error_kind":"permission_denied","restart_required":false,"action_required":true},` +
 				`{"tool":"cursor","layer":"user","outcome":"armed","restart_required":true,"action_required":false,"drift_corrections":0}]`,
 			1,
+		},
+		{
+			"H4DEMO0101", "amara", "amara-build-mini", "6 minutes", currentEtag, "2 days",
+			`[{"tool":"claude_code","layer":"managed","outcome":"armed","restart_required":false,"action_required":false,"drift_corrections":0}]`,
+			0,
 		},
 	}
 	for _, r := range reports {
