@@ -43,6 +43,7 @@ func (r fixtureRow) Scan(dest ...any) error {
 }
 
 type fixtureDB struct {
+	serverID uuid.UUID
 	config   repo.McpAuthClientGithubApp
 	target   string
 	disabled bool
@@ -61,7 +62,7 @@ func (d *fixtureDB) QueryRow(_ context.Context, sql string, args ...any) pgx.Row
 		return fixtureRow{values: []any{c.AuthClientID, c.OrganizationID, c.InstanceUrl, c.AppID, c.InstallationID, c.PrivateKeyEncrypted, c.UpstreamOrigin, c.CredentialVersion}}
 	}
 	if strings.Contains(sql, "GetGitHubAppServerURL") {
-		if args[0] != c.OrganizationID {
+		if args[0] != c.OrganizationID || args[1] != d.serverID {
 			return fixtureRow{err: pgx.ErrNoRows}
 		}
 		return fixtureRow{values: []any{d.target}}
@@ -82,8 +83,10 @@ func TestCredentialLifecycle(t *testing.T) {
 	secret := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
 	encrypted, err := enc.Encrypt(secret)
 	require.NoError(t, err)
-	db := &fixtureDB{config: repo.McpAuthClientGithubApp{AuthClientID: uuid.New(), OrganizationID: "org_fixture", InstanceUrl: "https://git.example.com", AppID: 123, InstallationID: 456, PrivateKeyEncrypted: encrypted, UpstreamOrigin: "https://mcp.example.com", CredentialVersion: uuid.New()}, target: "https://mcp.example.com/mcp"}
+	db := &fixtureDB{serverID: uuid.New(), config: repo.McpAuthClientGithubApp{AuthClientID: uuid.New(), OrganizationID: "org_fixture", InstanceUrl: "https://git.example.com", AppID: 123, InstallationID: 456, PrivateKeyEncrypted: encrypted, UpstreamOrigin: "https://mcp.example.com", CredentialVersion: uuid.New()}, target: "https://mcp.example.com/mcp"}
 	provider := New(db, enc, guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)))
+	now := time.Now()
+	provider.now = func() time.Time { return now }
 	var calls atomic.Int32
 	provider.http.Transport = transportFunc(func(req *http.Request) (*http.Response, error) {
 		calls.Add(1)
@@ -93,7 +96,7 @@ func TestCredentialLifecycle(t *testing.T) {
 		return &http.Response{StatusCode: 201, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(string(body)))}, nil
 	})
 	get := func() (string, error) {
-		c, err := provider.Credential(t.Context(), db.config.OrganizationID, db.config.AuthClientID, uuid.New())
+		c, err := provider.Credential(t.Context(), db.config.OrganizationID, db.config.AuthClientID, db.serverID)
 		return c.Value(), err
 	}
 	first, err := get()
@@ -112,14 +115,14 @@ func TestCredentialLifecycle(t *testing.T) {
 	require.Error(t, err)
 	require.EqualValues(t, 2, calls.Load())
 	db.disabled = false
-	_, err = provider.Credential(t.Context(), "org_other", db.config.AuthClientID, uuid.New())
+	_, err = provider.Credential(t.Context(), "org_other", db.config.AuthClientID, db.serverID)
 	require.Error(t, err)
 	db.target = "https://attacker.example.com/mcp"
 	_, err = get()
 	require.ErrorContains(t, err, "allowed origin")
 	require.EqualValues(t, 2, calls.Load())
 	db.target = "https://mcp.example.com/mcp"
-	credential, err := provider.Credential(t.Context(), db.config.OrganizationID, db.config.AuthClientID, uuid.New())
+	credential, err := provider.Credential(t.Context(), db.config.OrganizationID, db.config.AuthClientID, db.serverID)
 	require.NoError(t, err)
 	require.NotContains(t, fmt.Sprintf("%v", credential), rotated)
 	raw, err := json.Marshal(credential)
@@ -129,6 +132,24 @@ func TestCredentialLifecycle(t *testing.T) {
 	changed, err := credential.Forget(t.Context())
 	require.NoError(t, err)
 	require.False(t, changed, "fresh rejected tokens must not trigger mint storms")
+	_, err = provider.Credential(t.Context(), db.config.OrganizationID, db.config.AuthClientID, uuid.New())
+	require.Error(t, err, "an unknown destination server must not reuse this credential")
+	now = now.Add(31 * time.Second)
+	changed, err = credential.Forget(t.Context())
+	require.NoError(t, err)
+	require.True(t, changed)
+	replacement, err := get()
+	require.NoError(t, err)
+	require.NotEqual(t, rotated, replacement)
+	require.EqualValues(t, 3, calls.Load())
+	changed, err = credential.Forget(t.Context())
+	require.NoError(t, err)
+	require.True(t, changed, "a concurrent rejection can reuse an already-renewed credential")
+	cached, err := get()
+	require.NoError(t, err)
+	require.Equal(t, replacement, cached)
+	require.EqualValues(t, 3, calls.Load(), "late rejection must not evict the replacement")
+
 }
 
 func TestOriginAndRedirects(t *testing.T) {

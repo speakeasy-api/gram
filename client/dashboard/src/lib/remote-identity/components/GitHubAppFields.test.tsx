@@ -29,6 +29,22 @@ describe("GitHub App configuration", () => {
       expect(gitHubAppReady({ ...complete, [field]: "" })).toBe(false);
     },
   );
+  it.each([
+    "https://user:password@github.com",
+    "https://github.com?query",
+    "https://github.com#fragment",
+    "https://github.com/path",
+    "http://github.com",
+  ])("rejects invalid origin %s", (instanceUrl) => {
+    expect(
+      gitHubAppReady({
+        instanceUrl,
+        appId: "123",
+        installationId: "456",
+        privateKey: "-----BEGIN PRIVATE KEY-----",
+      }),
+    ).toBe(false);
+  });
   it("has accessible enterprise and private key fields", () => {
     const onChange =
       vi.fn<(value: import("../model/githubApp").GitHubAppDraft) => void>();
@@ -39,7 +55,15 @@ describe("GitHub App configuration", () => {
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({ instanceUrl: "https://git.example.com" }),
     );
-    expect(screen.getByLabelText("Private key (PEM)")).toBeDefined();
+    expect(
+      screen.getByLabelText("Private key (PEM)").getAttribute("autocomplete"),
+    ).toBe("new-password");
+    expect(
+      screen.getByLabelText("Private key (PEM)").getAttribute("spellcheck"),
+    ).toBe("false");
+    expect(
+      screen.getByLabelText("Private key (PEM)").getAttribute("data-1p-ignore"),
+    ).toBe("true");
     expect(screen.queryByLabelText("Client secret")).toBeNull();
     expect(screen.getByText(/encrypted and never returned/)).toBeDefined();
   });

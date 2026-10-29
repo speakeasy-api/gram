@@ -385,8 +385,13 @@ export function RemoteMcpIdentitySectionBody({
     (!!selfClient &&
       (selectedMode === "user" ||
         (!!oauthFormat && clientDraft.canSave(oauthFormat))));
+  const leavingGitHub = !!githubDraft.bound && !githubSelected;
   const destructive =
-    leavingUser || leavingAgent || replacingSelf || replacingClient;
+    leavingUser ||
+    leavingAgent ||
+    replacingSelf ||
+    replacingClient ||
+    leavingGitHub;
 
   // The upstream authorization server is derived per user session issuer, so
   // changing this server's clients can re-point every server sharing the
@@ -526,6 +531,7 @@ export function RemoteMcpIdentitySectionBody({
     // The draft is reset at most once per save: a reset deletes a created
     // signing key client, and a second one would delete it again.
     let draftReset = false;
+    let replacedGitHub = false;
     try {
       if (githubSelected) {
         if (!canManageGitHub) return;
@@ -551,6 +557,7 @@ export function RemoteMcpIdentitySectionBody({
           // edit still goes through.
           const binding = clientDraft.canSave(oauthFormat);
           if (binding && !(await clientDraft.save(oauthFormat))) return;
+          replacedGitHub = binding;
           if (replacingCredential) await deleteStaticCredential();
           if (binding) setFormatPick(null);
         } else if (selectedMode === "user" && leavingAgent) {
@@ -558,11 +565,14 @@ export function RemoteMcpIdentitySectionBody({
           // never leaves the server with no identity; the client outranks the
           // header while both exist.
           if (!(await userDraft.save())) return;
+          replacedGitHub = true;
           await removeAgentCredential();
         } else {
           if (leavingAgent) await removeAgentCredential();
           if (selectedMode === "agent") {
             const written = await agentDraft.save();
+            if (leavingGitHub && agentDraft.canSave && !written) return;
+            replacedGitHub = written || !!authorizationHeader;
             if (leavingSelf) {
               // A failed write has already said so; stop there. Otherwise
               // unbind only with a credential to fall back on, new or already
@@ -579,10 +589,11 @@ export function RemoteMcpIdentitySectionBody({
             (actualMode !== "user" || userDraft.canSave)
           ) {
             // A pin or header edit alone must not recommit the connected client.
-            await userDraft.save();
+            replacedGitHub = await userDraft.save();
           }
         }
-        if (githubDraft.bound) await githubDraft.detach();
+        if (leavingGitHub && (replacedGitHub || selectedMode === "none"))
+          await githubDraft.detach();
         // A signing key client made for the Service Account choice and left
         // behind by a save that chose otherwise is never bound, so it goes.
         if (!oauthFormat && clientDraft.created && !draftReset) {
@@ -649,7 +660,7 @@ export function RemoteMcpIdentitySectionBody({
     // the operator to retype one they cannot read.
     identityCanSave =
       agentDraft.canSave ||
-      ((leavingUser || leavingSelf) && !!authorizationHeader);
+      ((leavingUser || leavingSelf || leavingGitHub) && !!authorizationHeader);
   } else {
     // No Identity commits only the removal it implies.
     identityCanSave = destructive;

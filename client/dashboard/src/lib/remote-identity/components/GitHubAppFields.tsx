@@ -49,6 +49,7 @@ export function GitHubAppFields({
           Private key (PEM)
         </label>
         <TextArea
+          noAutofill
           id={`${id}-key`}
           value={value.privateKey}
           onChange={(privateKey) => onChange({ ...value, privateKey })}

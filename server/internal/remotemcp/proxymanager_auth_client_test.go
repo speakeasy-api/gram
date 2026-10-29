@@ -67,4 +67,9 @@ func TestBuildWithRenewableCredential(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "TEST_NEW", retry.AuthorizationOverride)
 	require.Equal(t, 1, calls)
+	built.AuthorizationOverride = "DIFFERENT_PRINCIPAL"
+	retry, err = built.UpstreamResponseRetryer(t.Context(), &http.Response{StatusCode: http.StatusUnauthorized})
+	require.NoError(t, err)
+	require.Nil(t, retry)
+	require.Equal(t, 1, calls, "must not replace a rejected independent bearer with an app token")
 }

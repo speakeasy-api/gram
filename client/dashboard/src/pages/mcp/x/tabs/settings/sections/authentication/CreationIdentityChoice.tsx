@@ -119,7 +119,9 @@ export function CreationIdentityChoice({
           value={githubApp ? "github-app" : "static"}
           onChange={(next) =>
             onGitHubAppChange(
-              next === "github-app" ? newGitHubAppDraft() : undefined,
+              next === "github-app"
+                ? (githubApp ?? newGitHubAppDraft())
+                : undefined,
             )
           }
           options={[
