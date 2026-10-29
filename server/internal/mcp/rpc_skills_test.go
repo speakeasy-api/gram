@@ -89,6 +89,13 @@ func servedSkill(t *testing.T, ctx context.Context, ti *testInstance, f *skillsF
 func servedSkillOn(t *testing.T, ctx context.Context, ti *testInstance, f *skillsFixture, name string, serverID uuid.UUID) (uuid.UUID, string) {
 	t.Helper()
 
+	return servedSkillAt(t, ctx, ti, f, name, mcpskills.MCPServerTarget(serverID))
+}
+
+// servedSkillAt is servedSkill with the skill linked to the given target.
+func servedSkillAt(t *testing.T, ctx context.Context, ti *testInstance, f *skillsFixture, name string, target mcpskills.Target) (uuid.UUID, string) {
+	t.Helper()
+
 	content := skillContent(name, "Serves "+name+".")
 	skillsQueries := skillsrepo.New(ti.conn)
 	skill, err := skillsQueries.CreateSkill(ctx, skillsrepo.CreateSkillParams{
@@ -108,7 +115,7 @@ func servedSkillOn(t *testing.T, ctx context.Context, ti *testInstance, f *skill
 		ProjectID:       f.projectID,
 		SkillID:         skill.ID,
 		PinnedVersionID: nil,
-		Target:          mcpskills.MCPServerTarget(serverID),
+		Target:          target,
 		CreatedByUserID: f.authCtx.UserID,
 	})
 	require.NoError(t, err)
