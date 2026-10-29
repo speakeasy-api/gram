@@ -27,6 +27,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
@@ -399,38 +400,46 @@ func (s *Service) serveConsentProxiedMCP(
 	if serverRow.Visibility == mcpservers.VisibilityPrivate && subject.Kind == urn.SessionSubjectKindAnonymous {
 		return oops.E(oops.CodeBadRequest, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
 	}
-	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+	var buildOptions []remotemcp.BuildOption
+	var upstreamToken remotesessions.UpstreamToken
+	hasGitHubApp, err := authclientsrepo.New(s.db).ServerHasGitHubAppAuthClient(ctx, authclientsrepo.ServerHasGitHubAppAuthClientParams{OrganizationID: endpoint.OrganizationID, McpServerID: serverRow.ID})
 	if err != nil {
-		if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
-			return remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
-		}
-		if errors.Is(err, remotesessions.ErrClientCredentialMisconfigured) {
-			return clientCredentialMisconfiguredError(err).LogWarn(ctx, logger)
-		}
-		if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
-			return oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
-		}
-		if errors.Is(err, remotesessions.ErrNoValidToken) {
-			conflict := oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools")
-			if s.consentTransportDeferred(ctx, logger, endpoint, challengeState) {
-				// Expected before approval: chaining mints the token afterwards.
-				logger.InfoContext(ctx, "consent tool inventory waits for identity chaining", attr.SlogConsentInventoryDeferred(true))
-				return conflict
+		return fmt.Errorf("check consent GitHub App requirement: %w", err)
+	}
+	if !hasGitHubApp {
+		tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		if err != nil {
+			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
+				return remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
 			}
-			return conflict.LogWarn(ctx, logger)
+			if errors.Is(err, remotesessions.ErrClientCredentialMisconfigured) {
+				return clientCredentialMisconfiguredError(err).LogWarn(ctx, logger)
+			}
+			if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
+				return oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
+			}
+			if errors.Is(err, remotesessions.ErrNoValidToken) {
+				conflict := oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools")
+				if s.consentTransportDeferred(ctx, logger, endpoint, challengeState) {
+					// Expected before approval: chaining mints the token afterwards.
+					logger.InfoContext(ctx, "consent tool inventory waits for identity chaining", attr.SlogConsentInventoryDeferred(true))
+					return conflict
+				}
+				return conflict.LogWarn(ctx, logger)
+			}
+			return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
-	}
-	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, serverRow.TunneledMcpServerID.Valid, serverRow.RemoteSessionIssuerID)
-	var routeErr *upstreamRoutingError
-	switch {
-	case errors.As(err, &routeErr):
-		// routeUpstreamToken already logged the structured detail.
-		return oops.E(oops.CodeFailedPrecondition, err, "this MCP server's upstream credentials are not configured unambiguously")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "resolve upstream token for consent transport").LogError(ctx, logger)
-	}
+		upstreamToken, err = routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, serverRow.TunneledMcpServerID.Valid, serverRow.RemoteSessionIssuerID)
+		var routeErr *upstreamRoutingError
+		switch {
+		case errors.As(err, &routeErr):
+			// routeUpstreamToken already logged the structured detail.
+			return oops.E(oops.CodeFailedPrecondition, err, "this MCP server's upstream credentials are not configured unambiguously")
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for consent transport").LogError(ctx, logger)
+		}
 
+	}
 	ctx, err = s.contextForSessionSubject(ctx, endpoint, subject, "consent:"+challengeState.ID, challengeState.ClientID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "stamp consent subject context").LogError(ctx, logger)
@@ -444,6 +453,24 @@ func (s *Service) serveConsentProxiedMCP(
 	ctx, err = s.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceConsent, endpoint.OrganizationID, endpoint.ProjectID, serverRow)
 	if err != nil {
 		return fmt.Errorf("authorize consent transport access: %w", err)
+	}
+
+	if hasGitHubApp {
+		if !serverRow.RemoteMcpServerID.Valid {
+			return oops.E(oops.CodeFailedPrecondition, nil, "GitHub App credentials require a remote MCP destination")
+		}
+		res, err := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, serverRow.ID, endpoint.ProjectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, subject)
+		if err != nil {
+			return fmt.Errorf("resolve consent GitHub App identity: %w", err)
+		}
+		if res.outcome == authClientNoAccess {
+			return s.authClientNoAccessError(ctx, serverRow.ID, res)
+		}
+		if res.outcome != authClientResolved || res.githubCredential == nil {
+			return oops.E(oops.CodeFailedPrecondition, nil, "GitHub App identity is unavailable for consent discovery")
+		}
+		buildOptions = []remotemcp.BuildOption{remotemcp.WithAuthClientHeaders(res.headers), remotemcp.WithRenewableCredential(res.githubCredential.Origin, res.githubRenew)}
+
 	}
 	r = r.WithContext(ctx)
 
@@ -463,7 +490,7 @@ func (s *Service) serveConsentProxiedMCP(
 		if herr != nil {
 			return oops.E(oops.CodeUnexpected, herr, "load remote mcp server headers for consent transport").LogError(ctx, logger)
 		}
-		p = s.remoteProxyManager.Build(logger, &remoteServer, serverRow.ID.String(), headers, serverRow.Visibility, endpoint.OrganizationID, endpoint.ProjectID.String(), upstreamToken.Token, "", nil)
+		p = s.remoteProxyManager.Build(logger, &remoteServer, serverRow.ID.String(), headers, serverRow.Visibility, endpoint.OrganizationID, endpoint.ProjectID.String(), upstreamToken.Token, "", nil, buildOptions...)
 	} else {
 		// One state-derived affinity key pins the whole consent session
 		// (initialize, list pages, DELETE) to a single gateway.

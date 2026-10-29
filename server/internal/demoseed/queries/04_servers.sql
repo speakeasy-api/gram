@@ -804,3 +804,16 @@ VALUES (@id::uuid, @org_id::text, @issuer_id::uuid, @client_id::uuid, 'user:' ||
  @jti::text, @refresh_token_hash::text,
  now() + (@refresh_expires_in::text)::interval,
  now() - interval '1 hour', now() - (@last_used_ago::text)::interval, now() - (@created_ago::text)::interval);
+
+-- The placeholder is deliberately unusable and the client stays disabled.
+-- Its project FK cascades through the auth client on each reseed.
+-- name: ServersInsertGitHubApp :exec
+WITH disabled AS (
+ UPDATE mcp_auth_clients ac SET enabled = FALSE, source = 'admin'
+ WHERE ac.id = @auth_client_id AND ac.organization_id = @org_id
+ RETURNING ac.id, ac.organization_id
+)
+INSERT INTO mcp_auth_client_github_apps
+(auth_client_id, organization_id, instance_url, app_id, installation_id, private_key_encrypted, upstream_origin)
+SELECT id, organization_id, 'https://github.com', 123456, 789012,
+       'DEMO_NOT_A_PRIVATE_KEY', 'https://api.githubcopilot.com' FROM disabled;

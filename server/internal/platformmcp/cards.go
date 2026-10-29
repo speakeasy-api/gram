@@ -117,7 +117,7 @@ type cardAction struct {
 // the first two words.
 func cardInitials(name string) string {
 	var initials []rune
-	for _, word := range strings.Fields(name) {
+	for word := range strings.FieldsSeq(name) {
 		first, _ := utf8.DecodeRuneInString(word)
 		if first == utf8.RuneError || !unicode.IsLetter(first) && !unicode.IsDigit(first) {
 			continue

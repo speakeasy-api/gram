@@ -134,9 +134,14 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		read("risk findings", &findingCount, byOrg(s.q.PostflightCountFindings)),
 		read("members", &memberCount, byOrg(s.q.PostflightCountMembers)),
 		{
+			what:  "GitHub App credentials",
+			count: byOrg(s.q.PostflightCountGitHubApps),
+			fail:  postflightMustEqual(1, "expected 1 GitHub App credential, found %d"),
+		},
+		{
 			what:  "auth client associations",
 			count: byOrg(s.q.PostflightCountAuthClientAssociations),
-			fail:  postflightMustEqual(3, "expected 3 auth client associations, found %d"),
+			fail:  postflightMustEqual(4, "expected 4 auth client associations, found %d"),
 		},
 		{
 			what:  "setup tasks",

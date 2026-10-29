@@ -15,6 +15,27 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// ConfigureGitHubAppAuthClientRequestBody is the type of the "authClients"
+// service "configureGitHubAppAuthClient" endpoint HTTP request body.
+type ConfigureGitHubAppAuthClientRequestBody struct {
+	// Existing GitHub App auth client to rotate. Omit to create.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// MCP server to offer this credential.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Service account display name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// GitHub instance origin, including HTTPS.
+	InstanceURL *string `form:"instance_url,omitempty" json:"instance_url,omitempty" xml:"instance_url,omitempty"`
+	// Positive numeric GitHub App ID.
+	AppID *string `form:"app_id,omitempty" json:"app_id,omitempty" xml:"app_id,omitempty"`
+	// Positive numeric installation ID.
+	InstallationID *string `form:"installation_id,omitempty" json:"installation_id,omitempty" xml:"installation_id,omitempty"`
+	// GitHub App RSA private key in PEM format. Write-only.
+	PrivateKey *string `json:"private_key"`
+	// Explicit HTTPS MCP origin allowed to receive the token.
+	UpstreamOrigin *string `form:"upstream_origin,omitempty" json:"upstream_origin,omitempty" xml:"upstream_origin,omitempty"`
+}
+
 // UpdateAuthClientRequestBody is the type of the "authClients" service
 // "updateAuthClient" endpoint HTTP request body.
 type UpdateAuthClientRequestBody struct {
@@ -56,6 +77,46 @@ type SetAuthClientAudienceRequestBody struct {
 	Entries []*AuthClientAudienceRuleRequestBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
 }
 
+// ConfigureGitHubAppAuthClientResponseBody is the type of the "authClients"
+// service "configureGitHubAppAuthClient" endpoint HTTP response body.
+type ConfigureGitHubAppAuthClientResponseBody struct {
+	// The auth client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project the client belongs to. Omitted for a client shared across the
+	// organization's projects.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// How the client authenticates upstream.
+	ClientType string `form:"client_type" json:"client_type" xml:"client_type"`
+	// backfill when the client was created from existing configuration, admin when
+	// an administrator created it.
+	Source string `form:"source" json:"source" xml:"source"`
+	// The client's name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Whether the client is enabled. Where typed auth client resolution is
+	// enforced, a disabled client is never selected or resolved. Disabling revokes
+	// no upstream credentials, and elsewhere, including in shadow mode, an MCP
+	// server's existing upstream configuration keeps serving.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Customer-owned GitHub App provider. Never includes its private key or tokens.
+	GithubApp *GitHubAppConfigurationResponseBody `form:"github_app,omitempty" json:"github_app,omitempty" xml:"github_app,omitempty"`
+	// The OAuth registration behind remote_session, service_account and ema
+	// clients.
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+	// Whether each caller uses their own connection through the client. A grant on
+	// a personal client never lets one user use another user's connection.
+	Personal bool `form:"personal" json:"personal" xml:"personal"`
+	// The headers the client sends upstream.
+	Headers []*AuthClientHeaderResponseBody `form:"headers" json:"headers" xml:"headers"`
+	// The MCP servers that offer the client. Where typed auth client resolution is
+	// enforced, changing or disabling the client changes upstream behavior on
+	// every one of them.
+	Servers []*AuthClientServerResponseBody `form:"servers" json:"servers" xml:"servers"`
+	// When the client was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the client was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // ListAuthClientsResponseBody is the type of the "authClients" service
 // "listAuthClients" endpoint HTTP response body.
 type ListAuthClientsResponseBody struct {
@@ -83,6 +144,8 @@ type GetAuthClientResponseBody struct {
 	// no upstream credentials, and elsewhere, including in shadow mode, an MCP
 	// server's existing upstream configuration keeps serving.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Customer-owned GitHub App provider. Never includes its private key or tokens.
+	GithubApp *GitHubAppConfigurationResponseBody `form:"github_app,omitempty" json:"github_app,omitempty" xml:"github_app,omitempty"`
 	// The OAuth registration behind remote_session, service_account and ema
 	// clients.
 	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
@@ -121,6 +184,8 @@ type UpdateAuthClientResponseBody struct {
 	// no upstream credentials, and elsewhere, including in shadow mode, an MCP
 	// server's existing upstream configuration keeps serving.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Customer-owned GitHub App provider. Never includes its private key or tokens.
+	GithubApp *GitHubAppConfigurationResponseBody `form:"github_app,omitempty" json:"github_app,omitempty" xml:"github_app,omitempty"`
 	// The OAuth registration behind remote_session, service_account and ema
 	// clients.
 	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
@@ -159,6 +224,8 @@ type DetachAuthClientFromMcpServerResponseBody struct {
 	// no upstream credentials, and elsewhere, including in shadow mode, an MCP
 	// server's existing upstream configuration keeps serving.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Customer-owned GitHub App provider. Never includes its private key or tokens.
+	GithubApp *GitHubAppConfigurationResponseBody `form:"github_app,omitempty" json:"github_app,omitempty" xml:"github_app,omitempty"`
 	// The OAuth registration behind remote_session, service_account and ema
 	// clients.
 	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
@@ -246,6 +313,196 @@ type SetAuthClientAudienceResponseBody struct {
 	// Ids of public servers that offer the client. Anonymous callers on them never
 	// acquire these rules.
 	PublicServers []string `form:"public_servers" json:"public_servers" xml:"public_servers"`
+}
+
+// ConfigureGitHubAppAuthClientUnauthorizedResponseBody is the type of the
+// "authClients" service "configureGitHubAppAuthClient" endpoint HTTP response
+// body for the "unauthorized" error.
+type ConfigureGitHubAppAuthClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureGitHubAppAuthClientForbiddenResponseBody is the type of the
+// "authClients" service "configureGitHubAppAuthClient" endpoint HTTP response
+// body for the "forbidden" error.
+type ConfigureGitHubAppAuthClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureGitHubAppAuthClientBadRequestResponseBody is the type of the
+// "authClients" service "configureGitHubAppAuthClient" endpoint HTTP response
+// body for the "bad_request" error.
+type ConfigureGitHubAppAuthClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureGitHubAppAuthClientNotFoundResponseBody is the type of the
+// "authClients" service "configureGitHubAppAuthClient" endpoint HTTP response
+// body for the "not_found" error.
+type ConfigureGitHubAppAuthClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureGitHubAppAuthClientConflictResponseBody is the type of the
+// "authClients" service "configureGitHubAppAuthClient" endpoint HTTP response
+// body for the "conflict" error.
+type ConfigureGitHubAppAuthClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureGitHubAppAuthClientUnsupportedMediaResponseBody is the type of the
+// "authClients" service "configureGitHubAppAuthClient" endpoint HTTP response
+// body for the "unsupported_media" error.
+type ConfigureGitHubAppAuthClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureGitHubAppAuthClientInvalidResponseBody is the type of the
+// "authClients" service "configureGitHubAppAuthClient" endpoint HTTP response
+// body for the "invalid" error.
+type ConfigureGitHubAppAuthClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureGitHubAppAuthClientInvariantViolationResponseBody is the type of
+// the "authClients" service "configureGitHubAppAuthClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ConfigureGitHubAppAuthClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureGitHubAppAuthClientUnexpectedResponseBody is the type of the
+// "authClients" service "configureGitHubAppAuthClient" endpoint HTTP response
+// body for the "unexpected" error.
+type ConfigureGitHubAppAuthClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureGitHubAppAuthClientGatewayErrorResponseBody is the type of the
+// "authClients" service "configureGitHubAppAuthClient" endpoint HTTP response
+// body for the "gateway_error" error.
+type ConfigureGitHubAppAuthClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // ListAuthClientsUnauthorizedResponseBody is the type of the "authClients"
@@ -1758,41 +2015,17 @@ type SetAuthClientAudienceGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// AuthClientResponseBody is used to define fields on response body types.
-type AuthClientResponseBody struct {
-	// The auth client id.
-	ID string `form:"id" json:"id" xml:"id"`
-	// The project the client belongs to. Omitted for a client shared across the
-	// organization's projects.
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// How the client authenticates upstream.
-	ClientType string `form:"client_type" json:"client_type" xml:"client_type"`
-	// backfill when the client was created from existing configuration, admin when
-	// an administrator created it.
-	Source string `form:"source" json:"source" xml:"source"`
-	// The client's name.
-	Name string `form:"name" json:"name" xml:"name"`
-	// Whether the client is enabled. Where typed auth client resolution is
-	// enforced, a disabled client is never selected or resolved. Disabling revokes
-	// no upstream credentials, and elsewhere, including in shadow mode, an MCP
-	// server's existing upstream configuration keeps serving.
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
-	// The OAuth registration behind remote_session, service_account and ema
-	// clients.
-	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
-	// Whether each caller uses their own connection through the client. A grant on
-	// a personal client never lets one user use another user's connection.
-	Personal bool `form:"personal" json:"personal" xml:"personal"`
-	// The headers the client sends upstream.
-	Headers []*AuthClientHeaderResponseBody `form:"headers" json:"headers" xml:"headers"`
-	// The MCP servers that offer the client. Where typed auth client resolution is
-	// enforced, changing or disabling the client changes upstream behavior on
-	// every one of them.
-	Servers []*AuthClientServerResponseBody `form:"servers" json:"servers" xml:"servers"`
-	// When the client was created.
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// When the client was last updated.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+// GitHubAppConfigurationResponseBody is used to define fields on response body
+// types.
+type GitHubAppConfigurationResponseBody struct {
+	// GitHub instance origin.
+	InstanceURL string `form:"instance_url" json:"instance_url" xml:"instance_url"`
+	// GitHub App ID.
+	AppID string `form:"app_id" json:"app_id" xml:"app_id"`
+	// GitHub installation ID.
+	InstallationID string `form:"installation_id" json:"installation_id" xml:"installation_id"`
+	// Only this MCP origin may receive installation tokens.
+	UpstreamOrigin string `form:"upstream_origin" json:"upstream_origin" xml:"upstream_origin"`
 }
 
 // AuthClientHeaderResponseBody is used to define fields on response body types.
@@ -1825,6 +2058,45 @@ type AuthClientServerResponseBody struct {
 	Public bool `form:"public" json:"public" xml:"public"`
 }
 
+// AuthClientResponseBody is used to define fields on response body types.
+type AuthClientResponseBody struct {
+	// The auth client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project the client belongs to. Omitted for a client shared across the
+	// organization's projects.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// How the client authenticates upstream.
+	ClientType string `form:"client_type" json:"client_type" xml:"client_type"`
+	// backfill when the client was created from existing configuration, admin when
+	// an administrator created it.
+	Source string `form:"source" json:"source" xml:"source"`
+	// The client's name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Whether the client is enabled. Where typed auth client resolution is
+	// enforced, a disabled client is never selected or resolved. Disabling revokes
+	// no upstream credentials, and elsewhere, including in shadow mode, an MCP
+	// server's existing upstream configuration keeps serving.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Customer-owned GitHub App provider. Never includes its private key or tokens.
+	GithubApp *GitHubAppConfigurationResponseBody `form:"github_app,omitempty" json:"github_app,omitempty" xml:"github_app,omitempty"`
+	// The OAuth registration behind remote_session, service_account and ema
+	// clients.
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+	// Whether each caller uses their own connection through the client. A grant on
+	// a personal client never lets one user use another user's connection.
+	Personal bool `form:"personal" json:"personal" xml:"personal"`
+	// The headers the client sends upstream.
+	Headers []*AuthClientHeaderResponseBody `form:"headers" json:"headers" xml:"headers"`
+	// The MCP servers that offer the client. Where typed auth client resolution is
+	// enforced, changing or disabling the client changes upstream behavior on
+	// every one of them.
+	Servers []*AuthClientServerResponseBody `form:"servers" json:"servers" xml:"servers"`
+	// When the client was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the client was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // AuthClientAudienceEntryResponseBody is used to define fields on response
 // body types.
 type AuthClientAudienceEntryResponseBody struct {
@@ -1852,6 +2124,52 @@ type AuthClientAudienceRuleRequestBody struct {
 	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// use or blocked.
 	Level *string `form:"level,omitempty" json:"level,omitempty" xml:"level,omitempty"`
+}
+
+// NewConfigureGitHubAppAuthClientResponseBody builds the HTTP response body
+// from the result of the "configureGitHubAppAuthClient" endpoint of the
+// "authClients" service.
+func NewConfigureGitHubAppAuthClientResponseBody(res *types.AuthClient) *ConfigureGitHubAppAuthClientResponseBody {
+	body := &ConfigureGitHubAppAuthClientResponseBody{
+		ID:                    res.ID,
+		ProjectID:             res.ProjectID,
+		ClientType:            res.ClientType,
+		Source:                string(res.Source),
+		Name:                  res.Name,
+		Enabled:               res.Enabled,
+		RemoteSessionClientID: res.RemoteSessionClientID,
+		Personal:              res.Personal,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.GithubApp != nil {
+		body.GithubApp = marshalTypesGitHubAppConfigurationToGitHubAppConfigurationResponseBody(res.GithubApp)
+	}
+	if res.Headers != nil {
+		body.Headers = make([]*AuthClientHeaderResponseBody, len(res.Headers))
+		for i, val := range res.Headers {
+			if val == nil {
+				body.Headers[i] = nil
+				continue
+			}
+			body.Headers[i] = marshalTypesAuthClientHeaderToAuthClientHeaderResponseBody(val)
+		}
+	} else {
+		body.Headers = []*AuthClientHeaderResponseBody{}
+	}
+	if res.Servers != nil {
+		body.Servers = make([]*AuthClientServerResponseBody, len(res.Servers))
+		for i, val := range res.Servers {
+			if val == nil {
+				body.Servers[i] = nil
+				continue
+			}
+			body.Servers[i] = marshalTypesAuthClientServerToAuthClientServerResponseBody(val)
+		}
+	} else {
+		body.Servers = []*AuthClientServerResponseBody{}
+	}
+	return body
 }
 
 // NewListAuthClientsResponseBody builds the HTTP response body from the result
@@ -1889,6 +2207,9 @@ func NewGetAuthClientResponseBody(res *types.AuthClient) *GetAuthClientResponseB
 		Personal:              res.Personal,
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.GithubApp != nil {
+		body.GithubApp = marshalTypesGitHubAppConfigurationToGitHubAppConfigurationResponseBody(res.GithubApp)
 	}
 	if res.Headers != nil {
 		body.Headers = make([]*AuthClientHeaderResponseBody, len(res.Headers))
@@ -1932,6 +2253,9 @@ func NewUpdateAuthClientResponseBody(res *types.AuthClient) *UpdateAuthClientRes
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
 	}
+	if res.GithubApp != nil {
+		body.GithubApp = marshalTypesGitHubAppConfigurationToGitHubAppConfigurationResponseBody(res.GithubApp)
+	}
 	if res.Headers != nil {
 		body.Headers = make([]*AuthClientHeaderResponseBody, len(res.Headers))
 		for i, val := range res.Headers {
@@ -1974,6 +2298,9 @@ func NewDetachAuthClientFromMcpServerResponseBody(res *types.AuthClient) *Detach
 		Personal:              res.Personal,
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.GithubApp != nil {
+		body.GithubApp = marshalTypesGitHubAppConfigurationToGitHubAppConfigurationResponseBody(res.GithubApp)
 	}
 	if res.Headers != nil {
 		body.Headers = make([]*AuthClientHeaderResponseBody, len(res.Headers))
@@ -2110,6 +2437,156 @@ func NewSetAuthClientAudienceResponseBody(res *types.AuthClientAudience) *SetAut
 		}
 	} else {
 		body.PublicServers = []string{}
+	}
+	return body
+}
+
+// NewConfigureGitHubAppAuthClientUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "configureGitHubAppAuthClient" endpoint
+// of the "authClients" service.
+func NewConfigureGitHubAppAuthClientUnauthorizedResponseBody(res *goa.ServiceError) *ConfigureGitHubAppAuthClientUnauthorizedResponseBody {
+	body := &ConfigureGitHubAppAuthClientUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureGitHubAppAuthClientForbiddenResponseBody builds the HTTP
+// response body from the result of the "configureGitHubAppAuthClient" endpoint
+// of the "authClients" service.
+func NewConfigureGitHubAppAuthClientForbiddenResponseBody(res *goa.ServiceError) *ConfigureGitHubAppAuthClientForbiddenResponseBody {
+	body := &ConfigureGitHubAppAuthClientForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureGitHubAppAuthClientBadRequestResponseBody builds the HTTP
+// response body from the result of the "configureGitHubAppAuthClient" endpoint
+// of the "authClients" service.
+func NewConfigureGitHubAppAuthClientBadRequestResponseBody(res *goa.ServiceError) *ConfigureGitHubAppAuthClientBadRequestResponseBody {
+	body := &ConfigureGitHubAppAuthClientBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureGitHubAppAuthClientNotFoundResponseBody builds the HTTP response
+// body from the result of the "configureGitHubAppAuthClient" endpoint of the
+// "authClients" service.
+func NewConfigureGitHubAppAuthClientNotFoundResponseBody(res *goa.ServiceError) *ConfigureGitHubAppAuthClientNotFoundResponseBody {
+	body := &ConfigureGitHubAppAuthClientNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureGitHubAppAuthClientConflictResponseBody builds the HTTP response
+// body from the result of the "configureGitHubAppAuthClient" endpoint of the
+// "authClients" service.
+func NewConfigureGitHubAppAuthClientConflictResponseBody(res *goa.ServiceError) *ConfigureGitHubAppAuthClientConflictResponseBody {
+	body := &ConfigureGitHubAppAuthClientConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureGitHubAppAuthClientUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "configureGitHubAppAuthClient" endpoint
+// of the "authClients" service.
+func NewConfigureGitHubAppAuthClientUnsupportedMediaResponseBody(res *goa.ServiceError) *ConfigureGitHubAppAuthClientUnsupportedMediaResponseBody {
+	body := &ConfigureGitHubAppAuthClientUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureGitHubAppAuthClientInvalidResponseBody builds the HTTP response
+// body from the result of the "configureGitHubAppAuthClient" endpoint of the
+// "authClients" service.
+func NewConfigureGitHubAppAuthClientInvalidResponseBody(res *goa.ServiceError) *ConfigureGitHubAppAuthClientInvalidResponseBody {
+	body := &ConfigureGitHubAppAuthClientInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureGitHubAppAuthClientInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "configureGitHubAppAuthClient"
+// endpoint of the "authClients" service.
+func NewConfigureGitHubAppAuthClientInvariantViolationResponseBody(res *goa.ServiceError) *ConfigureGitHubAppAuthClientInvariantViolationResponseBody {
+	body := &ConfigureGitHubAppAuthClientInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureGitHubAppAuthClientUnexpectedResponseBody builds the HTTP
+// response body from the result of the "configureGitHubAppAuthClient" endpoint
+// of the "authClients" service.
+func NewConfigureGitHubAppAuthClientUnexpectedResponseBody(res *goa.ServiceError) *ConfigureGitHubAppAuthClientUnexpectedResponseBody {
+	body := &ConfigureGitHubAppAuthClientUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureGitHubAppAuthClientGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "configureGitHubAppAuthClient" endpoint
+// of the "authClients" service.
+func NewConfigureGitHubAppAuthClientGatewayErrorResponseBody(res *goa.ServiceError) *ConfigureGitHubAppAuthClientGatewayErrorResponseBody {
+	body := &ConfigureGitHubAppAuthClientGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }
@@ -3292,6 +3769,30 @@ func NewSetAuthClientAudienceGatewayErrorResponseBody(res *goa.ServiceError) *Se
 	return body
 }
 
+// NewConfigureGitHubAppAuthClientPayload builds a authClients service
+// configureGitHubAppAuthClient endpoint payload.
+func NewConfigureGitHubAppAuthClientPayload(body *ConfigureGitHubAppAuthClientRequestBody, sessionToken *string, apikeyToken *string) *authclients.ConfigureGitHubAppAuthClientPayload {
+	v := &authclients.ConfigureGitHubAppAuthClientPayload{
+		ID:             body.ID,
+		McpServerID:    *body.McpServerID,
+		Name:           *body.Name,
+		AppID:          *body.AppID,
+		InstallationID: *body.InstallationID,
+		PrivateKey:     *body.PrivateKey,
+		UpstreamOrigin: *body.UpstreamOrigin,
+	}
+	if body.InstanceURL != nil {
+		v.InstanceURL = *body.InstanceURL
+	}
+	if body.InstanceURL == nil {
+		v.InstanceURL = "https://github.com"
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
 // NewListAuthClientsPayload builds a authClients service listAuthClients
 // endpoint payload.
 func NewListAuthClientsPayload(mcpServerID *string, clientType *string, cursor *string, limit int, sessionToken *string, apikeyToken *string) *authclients.ListAuthClientsPayload {
@@ -3398,6 +3899,67 @@ func NewSetAuthClientAudiencePayload(body *SetAuthClientAudienceRequestBody, ses
 	v.ApikeyToken = apikeyToken
 
 	return v
+}
+
+// ValidateConfigureGitHubAppAuthClientRequestBody runs the validations defined
+// on ConfigureGitHubAppAuthClientRequestBody
+func ValidateConfigureGitHubAppAuthClientRequestBody(body *ConfigureGitHubAppAuthClientRequestBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.AppID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("app_id", "body"))
+	}
+	if body.InstallationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("installation_id", "body"))
+	}
+	if body.PrivateKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("private_key", "body"))
+	}
+	if body.UpstreamOrigin == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("upstream_origin", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 100, false))
+		}
+	}
+	if body.InstanceURL != nil {
+		if utf8.RuneCountInString(*body.InstanceURL) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.instance_url", *body.InstanceURL, utf8.RuneCountInString(*body.InstanceURL), 2048, false))
+		}
+	}
+	if body.AppID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.app_id", *body.AppID, "^[1-9][0-9]{0,18}$"))
+	}
+	if body.InstallationID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.installation_id", *body.InstallationID, "^[1-9][0-9]{0,18}$"))
+	}
+	if body.PrivateKey != nil {
+		if utf8.RuneCountInString(*body.PrivateKey) > 32768 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.private_key", *body.PrivateKey, utf8.RuneCountInString(*body.PrivateKey), 32768, false))
+		}
+	}
+	if body.UpstreamOrigin != nil {
+		if utf8.RuneCountInString(*body.UpstreamOrigin) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.upstream_origin", *body.UpstreamOrigin, utf8.RuneCountInString(*body.UpstreamOrigin), 2048, false))
+		}
+	}
+	return
 }
 
 // ValidateUpdateAuthClientRequestBody runs the validations defined on

@@ -15690,6 +15690,102 @@ paths:
       x-speakeasy-name-override: transferOut
       x-speakeasy-react-hook:
         disabled: true
+  /rpc/authClients.configureGitHubApp:
+    post:
+      description: Create or rotate a customer-owned GitHub App service account and make it the MCP server's upstream identity. Replaces that server's other auth-client and OAuth-registration associations, without deleting shared clients. Existing connections must reconnect. Verifies the installation before saving. Requires org:admin. Does not grant callers permission to use it.
+      operationId: configureGitHubAppAuthClient
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigureGitHubAppAuthClientRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: configureGitHubAppAuthClient authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: configureGitHubApp
+      x-speakeasy-react-hook:
+        name: ConfigureGitHubAppAuthClient
   /rpc/authClients.detachFromMcpServer:
     post:
       description: Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.
@@ -87885,6 +87981,8 @@ components:
         enabled:
           type: boolean
           description: Whether the client is enabled. Where typed auth client resolution is enforced, a disabled client is never selected or resolved. Disabling revokes no upstream credentials, and elsewhere, including in shadow mode, an MCP server's existing upstream configuration keeps serving.
+        github_app:
+          $ref: '#/components/schemas/GitHubAppConfiguration'
         headers:
           type: array
           items:
@@ -89856,6 +89954,50 @@ components:
         - principal_id
         - user_session_issuer_id
         - attempt_id
+    ConfigureGitHubAppAuthClientRequestBody:
+      type: object
+      properties:
+        app_id:
+          type: string
+          description: Positive numeric GitHub App ID.
+          pattern: ^[1-9][0-9]{0,18}$
+        id:
+          type: string
+          description: Existing GitHub App auth client to rotate. Omit to create.
+          format: uuid
+        installation_id:
+          type: string
+          description: Positive numeric installation ID.
+          pattern: ^[1-9][0-9]{0,18}$
+        instance_url:
+          type: string
+          description: GitHub instance origin, including HTTPS.
+          default: https://github.com
+          maxLength: 2048
+        mcp_server_id:
+          type: string
+          description: MCP server to offer this credential.
+          format: uuid
+        name:
+          type: string
+          description: Service account display name.
+          minLength: 1
+          maxLength: 100
+        private_key:
+          type: string
+          description: GitHub App RSA private key in PEM format. Write-only.
+          maxLength: 32768
+        upstream_origin:
+          type: string
+          description: Explicit HTTPS MCP origin allowed to receive the token.
+          maxLength: 2048
+      required:
+        - mcp_server_id
+        - name
+        - app_id
+        - installation_id
+        - private_key
+        - upstream_origin
     ConfirmOktaResourceConnectionsRequestBody:
       type: object
       properties:
@@ -96653,6 +96795,26 @@ components:
       description: Result of user metrics summary query
       required:
         - metrics
+    GitHubAppConfiguration:
+      type: object
+      properties:
+        app_id:
+          type: string
+          description: GitHub App ID.
+        installation_id:
+          type: string
+          description: GitHub installation ID.
+        instance_url:
+          type: string
+          description: GitHub instance origin.
+        upstream_origin:
+          type: string
+          description: Only this MCP origin may receive installation tokens.
+      required:
+        - instance_url
+        - app_id
+        - installation_id
+        - upstream_origin
     GlobalRemoteSessionIssuer:
       type: object
       properties:

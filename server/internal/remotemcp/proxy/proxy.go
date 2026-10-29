@@ -18,6 +18,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -251,6 +252,9 @@ type Proxy struct {
 
 	// RemoteURL is the upstream endpoint all requests are forwarded to.
 	RemoteURL string
+
+	// CredentialOrigin pins renewable credentials to their approved HTTPS destination.
+	CredentialOrigin string
 
 	// Headers are applied on top of any forwarded client headers when
 	// constructing the upstream request and checked against HeaderPolicy.
@@ -1196,6 +1200,13 @@ func (p *Proxy) forwardRequest(
 	phaseTimer := time.AfterFunc(p.NonStreamingTimeout, forwardCancel)
 
 	upstreamReq, err := http.NewRequestWithContext(forwardCtx, r.Method, p.RemoteURL, body)
+	if err == nil && p.CredentialOrigin != "" {
+		target := upstreamReq.URL
+		if target.Scheme != "https" || target.User != nil || "https://"+strings.TrimSuffix(strings.ToLower(target.Host), ":443") != p.CredentialOrigin {
+			err = fmt.Errorf("upstream destination does not match the service account credential origin")
+		}
+	}
+
 	if err != nil {
 		phaseTimer.Stop()
 		forwardCancel()

@@ -20,6 +20,8 @@ import type { AuthTarget } from "./authTarget";
 import type { CommitServerIdentityConfigurationForm } from "@gram/client/models/components/commitserveridentityconfigurationform.js";
 
 const mocks = vi.hoisted(() => ({
+  githubClients: vi.fn(),
+  detachGitHub: vi.fn(),
   headers: vi.fn(),
   sessions: vi.fn(),
   clients: vi.fn(),
@@ -55,6 +57,14 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
 }));
 
+vi.mock("@gram/client/react-query/authClients.js", () => ({
+  useAuthClientsInfinite: () => ({
+    data: { pages: [{ result: { items: mocks.githubClients() } }] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
   useCustomerManagedKeys: () => ({ entitled: false, isLoading: false }),
 }));
@@ -94,6 +104,7 @@ vi.mock("@/routes", () => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
+    authClients: { detachFromMcpServer: mocks.detachGitHub },
     remoteSessions: { commitServerIdentityConfiguration: mocks.commit },
     remoteSessionIssuers: { fetchMetadata: mocks.fetchMetadata },
     remoteMcp: {
@@ -558,6 +569,8 @@ const target: AuthTarget = {
 };
 
 beforeEach(() => {
+  mocks.githubClients.mockReturnValue([]);
+  mocks.detachGitHub.mockResolvedValue({});
   mocks.associations.mockReturnValue({ data: { associations: [] } });
   mocks.impact.mockReturnValue({
     data: { servers: [], hiddenServerCount: 0 },
@@ -2858,7 +2871,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     expect(screen.getByText("Requires KMS")).toBeDefined();
     const signingKey = within(
-      screen.getByRole("radiogroup", { name: "OAuth credential" }),
+      screen.getByRole("radiogroup", { name: "Renewable credential" }),
     ).getByRole("radio", { name: /^Signing Client/ }) as HTMLButtonElement;
     expect(signingKey.disabled).toBe(true);
     // Still on Bearer: the option advertises KMS signing, it does not switch.
@@ -3210,7 +3223,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
     fireEvent.click(
       within(
-        screen.getByRole("radiogroup", { name: "OAuth credential" }),
+        screen.getByRole("radiogroup", { name: "Renewable credential" }),
       ).getByRole("radio", { name: /^Client Secret/ }),
     );
     addCustomHeader("X-Team", "platform");
@@ -3255,6 +3268,31 @@ describe("RemoteMcpIdentitySectionBody", () => {
     ).toBe(false);
   });
 
+  it("keeps a bound GitHub App when an unfinished OAuth choice only saves headers", async () => {
+    mocks.githubClients.mockReturnValue([
+      {
+        id: "github-client",
+        githubApp: {
+          instanceUrl: "https://github.com",
+          appId: 123,
+          installationId: 456,
+          upstreamOrigin: "https://mcp.example.com",
+        },
+      },
+    ]);
+    renderIdentity();
+    expect(screen.getByRole("radio", { name: /^GitHub App/ })).toBeDefined();
+    fireEvent.click(
+      within(
+        screen.getByRole("radiogroup", { name: "Renewable credential" }),
+      ).getByRole("radio", { name: /^Client Secret/ }),
+    );
+    addCustomHeader("X-Team", "platform");
+    confirmSave();
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled());
+    expect(mocks.detachGitHub).not.toHaveBeenCalled();
+  });
+
   it("keeps a static credential an unfinished OAuth client would not replace", async () => {
     mocks.headers.mockReturnValue({
       data: { headers: [configuredHeader()] },
@@ -3267,7 +3305,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     renderIdentity();
     fireEvent.click(
       within(
-        screen.getByRole("radiogroup", { name: "OAuth credential" }),
+        screen.getByRole("radiogroup", { name: "Renewable credential" }),
       ).getByRole("radio", { name: /^Client Secret/ }),
     );
     addCustomHeader("X-Team", "platform");

@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Text } from "@/components/ui/Text";
@@ -22,29 +21,17 @@ export function AgentIdentityRow({
     <div className="space-y-3">
       <SegmentedControl
         value={draft.format}
-        // Client Credentials is advertised but not built yet, so the segment
-        // shows the roadmap without becoming a selectable dead end.
-        onChange={(next) => {
-          if (next !== "client-credentials") draft.setFormat(next);
-        }}
+        onChange={draft.setFormat}
         disabled={disabled}
         options={[
           { value: "bearer" as const, label: "Bearer" },
           { value: "basic" as const, label: "Basic" },
           { value: "manual" as const, label: "Manual" },
-          {
-            value: "client-credentials" as const,
-            label: (
-              <span className="flex items-center gap-2 opacity-50">
-                Client credentials
-                <Badge variant="neutral" size="sm">
-                  <Badge.Text>Coming soon</Badge.Text>
-                </Badge>
-              </span>
-            ),
-          },
         ]}
       />
+      <Text small muted>
+        OAuth client credentials can be configured in MCP settings after setup.
+      </Text>
       <StaticCredentialFields
         draft={draft}
         disabled={disabled}

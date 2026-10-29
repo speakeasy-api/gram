@@ -1,6 +1,8 @@
 package remotemcp
 
 import (
+	"context"
+	"net/http"
 	"testing"
 
 	"github.com/google/uuid"
@@ -43,4 +45,31 @@ func TestBuildWithAuthClientHeadersDropsServerCredentials(t *testing.T) {
 
 	none := manager.Build(logger, server, uuid.NewString(), headers, mcpservers.VisibilityPrivate, "organization-id", "project-id", "", "", nil, WithAuthClientHeaders(nil))
 	require.Equal(t, []proxy.ConfiguredHeader{{Name: "X-Workspace", StaticValue: "server-ws"}}, none.Headers, "a client with no headers still drops server credentials")
+}
+
+func TestBuildWithRenewableCredential(t *testing.T) {
+	t.Parallel()
+	logger := testenv.NewLogger(t)
+	manager := NewProxyManager(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	server := &remotemcprepo.RemoteMcpServer{ID: uuid.New(), Url: "https://example.com/mcp"}
+	calls := 0
+	built := manager.Build(logger, server, uuid.NewString(), nil, mcpservers.VisibilityPrivate, "organization-id", "project-id", "", "", nil,
+		WithAuthClientHeaders([]proxy.ConfiguredHeader{{Name: "Authorization", StaticValue: "Bearer TEST_OLD"}}),
+		WithRenewableCredential("https://example.com", func(context.Context) (string, bool, error) { calls++; return "TEST_NEW", true, nil }),
+	)
+	require.True(t, built.DisableRedirects)
+	require.Equal(t, "https://example.com", built.CredentialOrigin)
+	retry, err := built.UpstreamResponseRetryer(t.Context(), &http.Response{StatusCode: http.StatusForbidden})
+	require.NoError(t, err)
+	require.Nil(t, retry)
+	require.Zero(t, calls)
+	retry, err = built.UpstreamResponseRetryer(t.Context(), &http.Response{StatusCode: http.StatusUnauthorized})
+	require.NoError(t, err)
+	require.Equal(t, "TEST_NEW", retry.AuthorizationOverride)
+	require.Equal(t, 1, calls)
+	built.AuthorizationOverride = "DIFFERENT_PRINCIPAL"
+	retry, err = built.UpstreamResponseRetryer(t.Context(), &http.Response{StatusCode: http.StatusUnauthorized})
+	require.NoError(t, err)
+	require.Nil(t, retry)
+	require.Equal(t, 1, calls, "must not replace a rejected independent bearer with an app token")
 }

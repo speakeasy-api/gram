@@ -234,6 +234,9 @@ func (s *Service) routeMetaMember(
 		options := []remotemcp.BuildOption{remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String())}
 		if member.authClient != nil && member.authClient.outcome != authClientLegacy {
 			options = append(options, remotemcp.WithAuthClientHeaders(member.authClient.headers))
+			if credential := member.authClient.githubCredential; credential != nil {
+				options = append(options, remotemcp.WithRenewableCredential(credential.Origin, member.authClient.githubRenew))
+			}
 		}
 		var authHeaders []proxy.ConfiguredHeader
 		if member.authClient != nil && member.authClient.outcome != authClientLegacy {

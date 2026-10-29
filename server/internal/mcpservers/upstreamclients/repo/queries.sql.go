@@ -216,6 +216,11 @@ WHERE s.project_id = $2::uuid
   AND s.deleted IS FALSE
   AND s.user_session_issuer_id = ANY($3::uuid[])
   AND NOT EXISTS (
+    SELECT 1 FROM mcp_server_auth_clients a
+    JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.organization_id = a.organization_id
+    WHERE a.mcp_server_id = s.id AND a.organization_id = p.organization_id AND NOT a.deleted
+  )
+  AND NOT EXISTS (
     SELECT 1
     FROM mcp_servers AS other
     JOIN projects AS other_project
@@ -324,7 +329,7 @@ WITH selected AS (
             AND c.remote_session_client_id = $6::uuid
             AND c.client_type IN ('remote_session', 'service_account'))
            OR ($6::uuid IS NULL
-               AND c.client_type IN ('static_credential', 'pass_through')))
+               AND (c.client_type IN ('static_credential', 'pass_through') OR EXISTS (SELECT 1 FROM mcp_auth_client_github_apps g WHERE g.auth_client_id = c.id AND g.organization_id = c.organization_id))))
   ) AS candidates
   WHERE $1::boolean AND m.id = ANY($4::uuid[]) AND m.deleted IS FALSE
 )
@@ -336,6 +341,7 @@ SELECT sel.mcp_server_id,
        (m.tunneled_mcp_server_id IS NOT NULL)::boolean AS tunneled,
        ac.id AS client_id,
        ac.client_type,
+       EXISTS (SELECT 1 FROM mcp_auth_client_github_apps g WHERE g.auth_client_id = ac.id AND g.organization_id = ac.organization_id)::boolean AS github_app,
        ac.enabled AS client_enabled,
        ac.deleted AS client_deleted,
        reg.id AS registration_id,
@@ -512,6 +518,7 @@ type GetAuthClientSelectionRow struct {
 	Tunneled                   bool
 	ClientID                   uuid.NullUUID
 	ClientType                 pgtype.Text
+	GithubApp                  bool
 	ClientEnabled              pgtype.Bool
 	ClientDeleted              pgtype.Bool
 	RegistrationID             uuid.NullUUID
@@ -563,6 +570,7 @@ func (q *Queries) GetAuthClientSelection(ctx context.Context, arg GetAuthClientS
 			&i.Tunneled,
 			&i.ClientID,
 			&i.ClientType,
+			&i.GithubApp,
 			&i.ClientEnabled,
 			&i.ClientDeleted,
 			&i.RegistrationID,

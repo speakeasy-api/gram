@@ -134,7 +134,7 @@ func UsageCommands() []string {
 		"assistants (list-assistants|get-assistant|create-assistant|upgrade-assistant-identity|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|logout-everywhere|register|info|transfer-out|transfer-in)",
-		"auth-clients (list-auth-clients|get-auth-client|update-auth-client|detach-auth-client-from-mcp-server|get-mcp-server-authentication|set-mcp-server-upstream-auth-requirement|get-auth-client-audience|set-auth-client-audience)",
+		"auth-clients (configure-git-hub-app-auth-client|list-auth-clients|get-auth-client|update-auth-client|detach-auth-client-from-mcp-server|get-mcp-server-authentication|set-mcp-server-upstream-auth-requirement|get-auth-client-audience|set-auth-client-audience)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat-overview|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
@@ -979,6 +979,11 @@ func ParseEndpoint(
 		authTransferInReplaceSessionFlag = authTransferInFlags.String("replace-session", "", "")
 
 		authClientsFlags = flag.NewFlagSet("auth-clients", flag.ContinueOnError)
+
+		authClientsConfigureGitHubAppAuthClientFlags            = flag.NewFlagSet("configure-git-hub-app-auth-client", flag.ExitOnError)
+		authClientsConfigureGitHubAppAuthClientBodyFlag         = authClientsConfigureGitHubAppAuthClientFlags.String("body", "REQUIRED", "")
+		authClientsConfigureGitHubAppAuthClientSessionTokenFlag = authClientsConfigureGitHubAppAuthClientFlags.String("session-token", "", "")
+		authClientsConfigureGitHubAppAuthClientApikeyTokenFlag  = authClientsConfigureGitHubAppAuthClientFlags.String("apikey-token", "", "")
 
 		authClientsListAuthClientsFlags            = flag.NewFlagSet("list-auth-clients", flag.ExitOnError)
 		authClientsListAuthClientsMcpServerIDFlag  = authClientsListAuthClientsFlags.String("mcp-server-id", "", "")
@@ -5566,6 +5571,7 @@ func ParseEndpoint(
 	authTransferInFlags.Usage = authTransferInUsage
 
 	authClientsFlags.Usage = authClientsUsage
+	authClientsConfigureGitHubAppAuthClientFlags.Usage = authClientsConfigureGitHubAppAuthClientUsage
 	authClientsListAuthClientsFlags.Usage = authClientsListAuthClientsUsage
 	authClientsGetAuthClientFlags.Usage = authClientsGetAuthClientUsage
 	authClientsUpdateAuthClientFlags.Usage = authClientsUpdateAuthClientUsage
@@ -7242,6 +7248,9 @@ func ParseEndpoint(
 
 		case "auth-clients":
 			switch epn {
+			case "configure-git-hub-app-auth-client":
+				epf = authClientsConfigureGitHubAppAuthClientFlags
+
 			case "list-auth-clients":
 				epf = authClientsListAuthClientsFlags
 
@@ -10507,6 +10516,9 @@ func ParseEndpoint(
 		case "auth-clients":
 			c := authclientsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "configure-git-hub-app-auth-client":
+				endpoint = c.ConfigureGitHubAppAuthClient()
+				data, err = authclientsc.BuildConfigureGitHubAppAuthClientPayload(*authClientsConfigureGitHubAppAuthClientBodyFlag, *authClientsConfigureGitHubAppAuthClientSessionTokenFlag, *authClientsConfigureGitHubAppAuthClientApikeyTokenFlag)
 			case "list-auth-clients":
 				endpoint = c.ListAuthClients()
 				data, err = authclientsc.BuildListAuthClientsPayload(*authClientsListAuthClientsMcpServerIDFlag, *authClientsListAuthClientsClientTypeFlag, *authClientsListAuthClientsCursorFlag, *authClientsListAuthClientsLimitFlag, *authClientsListAuthClientsSessionTokenFlag, *authClientsListAuthClientsApikeyTokenFlag)
@@ -16655,6 +16667,7 @@ func authClientsUsage() {
 	fmt.Fprintln(os.Stderr, `Manage the auth clients Speakeasy uses to authenticate to upstream MCP servers, and which servers offer them. Managing a client never grants permission to use it. Stored header values are never returned. Changes are to typed auth configuration and take effect only where typed auth client resolution is enforced, which is being rolled out in stages. They revoke no upstream credentials and remove no existing upstream OAuth associations; elsewhere, including in shadow mode, existing upstream configuration keeps serving.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] auth-clients COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    configure-git-hub-app-auth-client: Create or rotate a customer-owned GitHub App service account and make it the MCP server's upstream identity. Replaces that server's other auth-client and OAuth-registration associations, without deleting shared clients. Existing connections must reconnect. Verifies the installation before saving. Requires org:admin. Does not grant callers permission to use it.`)
 	fmt.Fprintln(os.Stderr, `    list-auth-clients: List the auth clients in the caller's organization. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-auth-client: Get an auth client in the caller's organization. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    update-auth-client: Rename, enable or disable an auth client. The change applies to the typed auth configuration of every MCP server that offers the client and takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials; elsewhere, including in shadow mode, an MCP server's existing upstream configuration keeps serving. Requires org:admin.`)
@@ -16667,6 +16680,28 @@ func authClientsUsage() {
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s auth-clients COMMAND --help\n", os.Args[0])
 }
+func authClientsConfigureGitHubAppAuthClientUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients configure-git-hub-app-auth-client", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or rotate a customer-owned GitHub App service account and make it the MCP server's upstream identity. Replaces that server's other auth-client and OAuth-registration associations, without deleting shared clients. Existing connections must reconnect. Verifies the installation before saving. Requires org:admin. Does not grant callers permission to use it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients configure-git-hub-app-auth-client --body '{\n      \"app_id\": \"2\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"installation_id\": \"2\",\n      \"instance_url\": \"aaa\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"private_key\": \"aaa\",\n      \"upstream_origin\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
 func authClientsListAuthClientsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients list-auth-clients", os.Args[0])

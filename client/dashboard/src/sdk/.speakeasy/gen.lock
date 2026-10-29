@@ -183,6 +183,7 @@ trackedFiles:
   src/funcs/auditlogsList.ts: {}
   src/funcs/auditlogsListFacets.ts: {}
   src/funcs/authCallback.ts: {}
+  src/funcs/authClientsConfigureGitHubApp.ts: {}
   src/funcs/authClientsDetachFromMcpServer.ts: {}
   src/funcs/authClientsGet.ts: {}
   src/funcs/authClientsGetAudience.ts: {}
@@ -1057,6 +1058,7 @@ trackedFiles:
   src/models/components/commitserveridentityconfigurationform.ts: {}
   src/models/components/commitserveridentityconfigurationresult.ts: {}
   src/models/components/completebindingrefreshrequestbody.ts: {}
+  src/models/components/configuregithubappauthclientrequestbody.ts: {}
   src/models/components/confirmoktaresourceconnectionsrequestbody.ts: {}
   src/models/components/confirmoktaresourceconnectionsresult.ts: {}
   src/models/components/countremotesessionsresult.ts: {}
@@ -1314,6 +1316,7 @@ trackedFiles:
   src/models/components/getunproxiedmcpserveruserusageresult.ts: {}
   src/models/components/getusermetricssummarypayload.ts: {}
   src/models/components/getusermetricssummaryresult.ts: {}
+  src/models/components/githubappconfiguration.ts: {}
   src/models/components/globalremotesessionissuer.ts: {}
   src/models/components/hiddenmcpserver.ts: {}
   src/models/components/hideagentmcpserverrequestbody.ts: {}
@@ -2254,6 +2257,7 @@ trackedFiles:
   src/models/operations/commitserveridentityconfiguration.ts: {}
   src/models/operations/compileexpr.ts: {}
   src/models/operations/completebindingrefresh.ts: {}
+  src/models/operations/configuregithubappauthclient.ts: {}
   src/models/operations/confirmoktaresourceconnections.ts: {}
   src/models/operations/countremotesessions.ts: {}
   src/models/operations/createagent.ts: {}
@@ -3168,6 +3172,7 @@ trackedFiles:
   src/react-query/cloneEnvironment.ts: {}
   src/react-query/cloneToolset.ts: {}
   src/react-query/commitServerIdentityConfiguration.ts: {}
+  src/react-query/configureGitHubAppAuthClient.ts: {}
   src/react-query/confirmOktaResourceConnections.ts: {}
   src/react-query/createAPIKey.ts: {}
   src/react-query/createAgent.ts: {}
@@ -4986,6 +4991,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  configureGitHubAppAuthClient:
+    speakeasy-default-configure-git-hub-app-auth-client:
+      requestBody:
+        application/json: {"app_id": "<id>", "installation_id": "<id>", "instance_url": "https://github.com", "mcp_server_id": "f6968669-2b49-48a4-a8c1-661c8f3411a2", "name": "<value>", "private_key": "<value>", "upstream_origin": "<value>"}
+      responses:
+        "200":
+          application/json: {"client_type": "static_credential", "created_at": "2026-02-21T19:49:53.795Z", "enabled": false, "headers": [{"has_stored_value": false, "is_required": true, "is_secret": false, "name": "<value>"}], "id": "cd3ab91c-e03c-42e4-9ea1-e4e05917bd7d", "name": "<value>", "personal": true, "servers": [{"id": "8489ed5f-c648-4cab-8c32-855848a0372a", "project_id": "8ac295b2-0792-402a-8bd3-0b9153b0d063", "public": true}], "source": "admin", "updated_at": "2025-10-06T14:41:12.106Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   configureSlackApp:
     speakeasy-default-configure-slack-app:
       requestBody:

@@ -354,8 +354,11 @@ open their effective assignments; the dropdown always offers compact member sear
     Remote MCP server. Linear shows the **User** identity pill, the Example
     Workspace Identity provider, and the Session length / Client access controls
     in Sessions. Slack shows **Service Account** with the inert demo
-    Authorization credential managed under Identity. GitHub shows **None** with
-    no provider or static Authorization header. All three use the Display,
+    Authorization credential managed under Identity. GitHub offers a disabled
+    **GitHub App (demo — disabled)** service account, with no OAuth provider or
+    static Authorization header. Under Identity, select **Service Account →
+    GitHub App** and verify the non-secret demo fields and empty private-key
+    input; do not enable or attempt to use the placeholder credential. All three use the Display,
     Identity, Server URL, Sessions, Tool Filtering, Danger Zone order, with
     Custom Headers directly after the Identity controls. In Postgres, only the
     Linear row in `mcp_servers` has `remote_session_issuer_id` set, to the
@@ -704,3 +707,13 @@ In shared Explore Demo, verify the mapping dialog shows its read-only notice and
 ## Tunnel observability
 
 Open MCP Servers → Private inventory → Overview. Verify request, connection and latency charts contain history, the latest missing intervals stay gaps, and the current agent count is zero. The marketplace callout appears above the tunnel status, which reads "No connected tunnel agents" with a View tunnel agent setup action. The sidebar Readiness card does not call the server ready: its Tunnel agent item says no tunnel agent is connected and links to tunnel agent setup. Check 1 hour / 24 hours / 7 days, the Requests by client list, and the data table under About these numbers. The synthetic source must not initiate any network connection.
+
+### GitHub App credential verification
+
+1. In the default project, open **MCP → GitHub → Settings → Identity**.
+2. Confirm **Service Account → GitHub App** shows the instance URL, App ID,
+   and Installation ID from the disabled demo credential. The PEM input is empty.
+3. Confirm **GitHub App (demo — disabled)** remains switched off in the credential
+   list. Do not submit or enable the placeholder; it cannot mint installation tokens.
+4. Open Command K and search for **GitHub App (demo — disabled)**. The result
+   opens this server's identity settings, not an OAuth registration page.

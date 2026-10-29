@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import {
@@ -56,8 +57,10 @@ export function ServiceAccountPanel({
   customerManagedKeys,
   providersHref,
   clientHref,
+  githubAppFields,
   compact = false,
 }: {
+  githubAppFields?: ReactNode;
   format: ServiceAccountFormat;
   onFormatChange: (format: ServiceAccountFormat) => void;
   agentDraft: AgentCredentialFields;
@@ -76,7 +79,8 @@ export function ServiceAccountPanel({
 }): JSX.Element {
   const choose = (next: string) => {
     const picked = next as ServiceAccountFormat;
-    if (!isOAuthFormat(picked)) agentDraft.setFormat(picked);
+    if (!isOAuthFormat(picked) && picked !== "github-app")
+      agentDraft.setFormat(picked);
     onFormatChange(picked);
   };
   // A saved client is the answer, so the choice that led to it steps aside
@@ -125,11 +129,21 @@ export function ServiceAccountPanel({
           />
           <FormatGroup
             compact={compact}
-            label="OAuth"
+            label="Renewable"
             value={format}
             onChange={choose}
             disabled={disabled}
             options={[
+              ...(githubAppFields
+                ? [
+                    {
+                      value: "github-app" as const,
+                      title: "GitHub App",
+                      description:
+                        "A customer-owned app with renewable installation tokens.",
+                    },
+                  ]
+                : []),
               {
                 value: "client-secret",
                 title: "Client Secret",
@@ -158,7 +172,9 @@ export function ServiceAccountPanel({
             : "flex-[999_1_480px]",
         )}
       >
-        {isOAuthFormat(format) ? (
+        {format === "github-app" ? (
+          githubAppFields
+        ) : isOAuthFormat(format) ? (
           <OAuthClientFields
             format={format}
             draft={clientDraft}

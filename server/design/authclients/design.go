@@ -58,6 +58,7 @@ var AuthClient = Type("AuthClient", func() {
 	Attribute("source", AuthClientSource, "backfill when the client was created from existing configuration, admin when an administrator created it.")
 	Attribute("name", String, "The client's name.")
 	Attribute("enabled", Boolean, "Whether the client is enabled. Where typed auth client resolution is enforced, a disabled client is never selected or resolved. Disabling revokes no upstream credentials, and elsewhere, including in shadow mode, an MCP server's existing upstream configuration keeps serving.")
+	Attribute("github_app", GitHubAppConfiguration, "Customer-owned GitHub App provider. Never includes its private key or tokens.")
 	Attribute("remote_session_client_id", String, "The OAuth registration behind remote_session, service_account and ema clients.", func() { Format(FormatUUID) })
 	Attribute("personal", Boolean, "Whether each caller uses their own connection through the client. A grant on a personal client never lets one user use another user's connection.")
 	Attribute("headers", ArrayOf(AuthClientHeader), "The headers the client sends upstream.")
@@ -122,6 +123,15 @@ var AuthClientAudienceRule = Type("AuthClientAudienceRule", func() {
 	Required("principal_urn", "level")
 })
 
+var GitHubAppConfiguration = Type("GitHubAppConfiguration", func() {
+	Meta("struct:pkg:path", "types")
+	Attribute("instance_url", String, "GitHub instance origin.")
+	Attribute("app_id", String, "GitHub App ID.")
+	Attribute("installation_id", String, "GitHub installation ID.")
+	Attribute("upstream_origin", String, "Only this MCP origin may receive installation tokens.")
+	Required("instance_url", "app_id", "installation_id", "upstream_origin")
+})
+
 var _ = Service("authClients", func() {
 	Description("Manage the auth clients Speakeasy uses to authenticate to upstream MCP servers, and which servers offer them. Managing a client never grants permission to use it. Stored header values are never returned. Changes are to typed auth configuration and take effect only where typed auth client resolution is enforced, which is being rolled out in stages. They revoke no upstream credentials and remove no existing upstream OAuth associations; elsewhere, including in shadow mode, existing upstream configuration keeps serving.")
 	Security(security.Session)
@@ -129,6 +139,33 @@ var _ = Service("authClients", func() {
 		Scope("producer")
 	})
 	shared.DeclareErrorResponses()
+
+	Method("configureGitHubAppAuthClient", func() {
+		Description("Create or rotate a customer-owned GitHub App service account and make it the MCP server's upstream identity. Replaces that server's other auth-client and OAuth-registration associations, without deleting shared clients. Existing connections must reconnect. Verifies the installation before saving. Requires org:admin. Does not grant callers permission to use it.")
+		Payload(func() {
+			Attribute("id", String, "Existing GitHub App auth client to rotate. Omit to create.", func() { Format(FormatUUID) })
+			Attribute("mcp_server_id", String, "MCP server to offer this credential.", func() { Format(FormatUUID) })
+			Attribute("name", String, "Service account display name.", func() { MinLength(1); MaxLength(100) })
+			Attribute("instance_url", String, "GitHub instance origin, including HTTPS.", func() { Default("https://github.com"); MaxLength(2048) })
+			Attribute("app_id", String, "Positive numeric GitHub App ID.", func() { Pattern("^[1-9][0-9]{0,18}$") })
+			Attribute("installation_id", String, "Positive numeric installation ID.", func() { Pattern("^[1-9][0-9]{0,18}$") })
+			Attribute("private_key", String, "GitHub App RSA private key in PEM format. Write-only.", func() { MaxLength(32768); Meta("struct:tag:json", "private_key") })
+			Attribute("upstream_origin", String, "Explicit HTTPS MCP origin allowed to receive the token.", func() { MaxLength(2048) })
+			Required("mcp_server_id", "name", "app_id", "installation_id", "private_key", "upstream_origin")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+		Result(AuthClient)
+		HTTP(func() {
+			POST("/rpc/authClients.configureGitHubApp")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "configureGitHubAppAuthClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "configureGitHubApp")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ConfigureGitHubAppAuthClient"}`)
+	})
 
 	Method("listAuthClients", func() {
 		Description("List the auth clients in the caller's organization. Requires org:read.")

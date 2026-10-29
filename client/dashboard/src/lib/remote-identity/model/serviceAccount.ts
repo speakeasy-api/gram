@@ -8,7 +8,8 @@ export type ServiceAccountOAuthFormat = "client-secret" | "signing-key";
 /** Every way a Service Account can authenticate upstream. */
 export type ServiceAccountFormat =
   | Exclude<AgentCredentialFormat, "client-credentials">
-  | ServiceAccountOAuthFormat;
+  | ServiceAccountOAuthFormat
+  | "github-app";
 
 export type SecretMethod = "client_secret_basic" | "client_secret_post";
 export type AssertionAudience = "issuer" | "token_endpoint";

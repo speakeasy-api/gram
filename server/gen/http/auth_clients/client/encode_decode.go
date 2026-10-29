@@ -20,6 +20,246 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
+// BuildConfigureGitHubAppAuthClientRequest instantiates a HTTP request object
+// with method and path set to call the "authClients" service
+// "configureGitHubAppAuthClient" endpoint
+func (c *Client) BuildConfigureGitHubAppAuthClientRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ConfigureGitHubAppAuthClientAuthClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("authClients", "configureGitHubAppAuthClient", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeConfigureGitHubAppAuthClientRequest returns an encoder for requests
+// sent to the authClients configureGitHubAppAuthClient server.
+func EncodeConfigureGitHubAppAuthClientRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*authclients.ConfigureGitHubAppAuthClientPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("authClients", "configureGitHubAppAuthClient", "*authclients.ConfigureGitHubAppAuthClientPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		body := NewConfigureGitHubAppAuthClientRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("authClients", "configureGitHubAppAuthClient", err)
+		}
+		return nil
+	}
+}
+
+// DecodeConfigureGitHubAppAuthClientResponse returns a decoder for responses
+// returned by the authClients configureGitHubAppAuthClient endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeConfigureGitHubAppAuthClientResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeConfigureGitHubAppAuthClientResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ConfigureGitHubAppAuthClientResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			err = ValidateConfigureGitHubAppAuthClientResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			res := NewConfigureGitHubAppAuthClientAuthClientOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ConfigureGitHubAppAuthClientUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			err = ValidateConfigureGitHubAppAuthClientUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			return nil, NewConfigureGitHubAppAuthClientUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ConfigureGitHubAppAuthClientForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			err = ValidateConfigureGitHubAppAuthClientForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			return nil, NewConfigureGitHubAppAuthClientForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ConfigureGitHubAppAuthClientBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			err = ValidateConfigureGitHubAppAuthClientBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			return nil, NewConfigureGitHubAppAuthClientBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ConfigureGitHubAppAuthClientNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			err = ValidateConfigureGitHubAppAuthClientNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			return nil, NewConfigureGitHubAppAuthClientNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ConfigureGitHubAppAuthClientConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			err = ValidateConfigureGitHubAppAuthClientConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			return nil, NewConfigureGitHubAppAuthClientConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ConfigureGitHubAppAuthClientUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			err = ValidateConfigureGitHubAppAuthClientUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			return nil, NewConfigureGitHubAppAuthClientUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ConfigureGitHubAppAuthClientInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			err = ValidateConfigureGitHubAppAuthClientInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			return nil, NewConfigureGitHubAppAuthClientInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ConfigureGitHubAppAuthClientInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("authClients", "configureGitHubAppAuthClient", err)
+				}
+				err = ValidateConfigureGitHubAppAuthClientInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("authClients", "configureGitHubAppAuthClient", err)
+				}
+				return nil, NewConfigureGitHubAppAuthClientInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ConfigureGitHubAppAuthClientUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("authClients", "configureGitHubAppAuthClient", err)
+				}
+				err = ValidateConfigureGitHubAppAuthClientUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("authClients", "configureGitHubAppAuthClient", err)
+				}
+				return nil, NewConfigureGitHubAppAuthClientUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("authClients", "configureGitHubAppAuthClient", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ConfigureGitHubAppAuthClientGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			err = ValidateConfigureGitHubAppAuthClientGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "configureGitHubAppAuthClient", err)
+			}
+			return nil, NewConfigureGitHubAppAuthClientGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("authClients", "configureGitHubAppAuthClient", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListAuthClientsRequest instantiates a HTTP request object with method
 // and path set to call the "authClients" service "listAuthClients" endpoint
 func (c *Client) BuildListAuthClientsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1937,36 +2177,18 @@ func DecodeSetAuthClientAudienceResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
-// unmarshalAuthClientResponseBodyToTypesAuthClient builds a value of type
-// *types.AuthClient from a value of type *AuthClientResponseBody.
-func unmarshalAuthClientResponseBodyToTypesAuthClient(v *AuthClientResponseBody) *types.AuthClient {
-	res := &types.AuthClient{
-		ID:                    *v.ID,
-		ProjectID:             v.ProjectID,
-		ClientType:            *v.ClientType,
-		Source:                types.AuthClientSource(*v.Source),
-		Name:                  *v.Name,
-		Enabled:               *v.Enabled,
-		RemoteSessionClientID: v.RemoteSessionClientID,
-		Personal:              *v.Personal,
-		CreatedAt:             *v.CreatedAt,
-		UpdatedAt:             *v.UpdatedAt,
+// unmarshalGitHubAppConfigurationResponseBodyToTypesGitHubAppConfiguration
+// builds a value of type *types.GitHubAppConfiguration from a value of type
+// *GitHubAppConfigurationResponseBody.
+func unmarshalGitHubAppConfigurationResponseBodyToTypesGitHubAppConfiguration(v *GitHubAppConfigurationResponseBody) *types.GitHubAppConfiguration {
+	if v == nil {
+		return nil
 	}
-	res.Headers = make([]*types.AuthClientHeader, len(v.Headers))
-	for i, val := range v.Headers {
-		if val == nil {
-			res.Headers[i] = nil
-			continue
-		}
-		res.Headers[i] = unmarshalAuthClientHeaderResponseBodyToTypesAuthClientHeader(val)
-	}
-	res.Servers = make([]*types.AuthClientServer, len(v.Servers))
-	for i, val := range v.Servers {
-		if val == nil {
-			res.Servers[i] = nil
-			continue
-		}
-		res.Servers[i] = unmarshalAuthClientServerResponseBodyToTypesAuthClientServer(val)
+	res := &types.GitHubAppConfiguration{
+		InstanceURL:    *v.InstanceURL,
+		AppID:          *v.AppID,
+		InstallationID: *v.InstallationID,
+		UpstreamOrigin: *v.UpstreamOrigin,
 	}
 
 	return res
@@ -1998,6 +2220,44 @@ func unmarshalAuthClientServerResponseBodyToTypesAuthClientServer(v *AuthClientS
 		Name:      v.Name,
 		Slug:      v.Slug,
 		Public:    *v.Public,
+	}
+
+	return res
+}
+
+// unmarshalAuthClientResponseBodyToTypesAuthClient builds a value of type
+// *types.AuthClient from a value of type *AuthClientResponseBody.
+func unmarshalAuthClientResponseBodyToTypesAuthClient(v *AuthClientResponseBody) *types.AuthClient {
+	res := &types.AuthClient{
+		ID:                    *v.ID,
+		ProjectID:             v.ProjectID,
+		ClientType:            *v.ClientType,
+		Source:                types.AuthClientSource(*v.Source),
+		Name:                  *v.Name,
+		Enabled:               *v.Enabled,
+		RemoteSessionClientID: v.RemoteSessionClientID,
+		Personal:              *v.Personal,
+		CreatedAt:             *v.CreatedAt,
+		UpdatedAt:             *v.UpdatedAt,
+	}
+	if v.GithubApp != nil {
+		res.GithubApp = unmarshalGitHubAppConfigurationResponseBodyToTypesGitHubAppConfiguration(v.GithubApp)
+	}
+	res.Headers = make([]*types.AuthClientHeader, len(v.Headers))
+	for i, val := range v.Headers {
+		if val == nil {
+			res.Headers[i] = nil
+			continue
+		}
+		res.Headers[i] = unmarshalAuthClientHeaderResponseBodyToTypesAuthClientHeader(val)
+	}
+	res.Servers = make([]*types.AuthClientServer, len(v.Servers))
+	for i, val := range v.Servers {
+		if val == nil {
+			res.Servers[i] = nil
+			continue
+		}
+		res.Servers[i] = unmarshalAuthClientServerResponseBodyToTypesAuthClientServer(val)
 	}
 
 	return res

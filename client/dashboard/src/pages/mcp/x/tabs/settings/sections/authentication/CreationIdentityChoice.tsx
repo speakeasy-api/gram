@@ -1,3 +1,10 @@
+import { GitHubAppFields } from "@/lib/remote-identity/components/GitHubAppFields";
+import {
+  isGitHubMcpUrl,
+  newGitHubAppDraft,
+  type GitHubAppDraft,
+} from "@/lib/remote-identity/model/githubApp";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
@@ -22,21 +29,29 @@ export function CreationIdentityChoice({
   onChange,
   credential,
   upstreamName,
+  upstreamUrls = [],
   advertisesOAuth,
   authenticationRequired,
   canCreateIdentity,
+  canConfigureGitHub = false,
   rbacLoading,
+  githubApp,
+  onGitHubAppChange,
   serviceAccountPanel,
 }: {
   value: CreationIdentityMode;
   onChange: (mode: CreationIdentityMode) => void;
   credential: AgentCredentialFields;
   upstreamName: string;
+  upstreamUrls?: string[];
   /** The probe saw an OAuth challenge, so User Identity is the default. */
   advertisesOAuth: boolean;
   authenticationRequired: boolean;
   canCreateIdentity: boolean;
+  canConfigureGitHub?: boolean;
   rbacLoading: boolean;
+  githubApp?: GitHubAppDraft;
+  onGitHubAppChange?: (value: GitHubAppDraft | undefined) => void;
   /**
    * The full Service Account choice — static credentials and OAuth clients —
    * from callers that can bind an OAuth client once the server exists.
@@ -44,6 +59,8 @@ export function CreationIdentityChoice({
    */
   serviceAccountPanel?: ReactNode;
 }): JSX.Element {
+  const showGitHubApp =
+    upstreamUrls.length > 0 && upstreamUrls.every(isGitHubMcpUrl);
   const [explainerOpen, setExplainerOpen] = useState(false);
 
   return (
@@ -102,7 +119,36 @@ export function CreationIdentityChoice({
         ))}
       </RadioCardGroup>
 
-      {value === "agent" && serviceAccountPanel ? (
+      {value === "agent" && showGitHubApp && onGitHubAppChange ? (
+        <SegmentedControl
+          value={githubApp ? "github-app" : "static"}
+          onChange={(next) =>
+            onGitHubAppChange(
+              next === "github-app"
+                ? (githubApp ?? newGitHubAppDraft())
+                : undefined,
+            )
+          }
+          options={[
+            { value: "static", label: "Other credentials" },
+            {
+              value: "github-app",
+              label: "GitHub App",
+              disabled: !canConfigureGitHub,
+              tooltip: !canConfigureGitHub
+                ? "Organization administrator access is required"
+                : undefined,
+            },
+          ]}
+        />
+      ) : null}
+      {value === "agent" && showGitHubApp && githubApp && onGitHubAppChange ? (
+        <GitHubAppFields
+          value={githubApp}
+          onChange={onGitHubAppChange}
+          disabled={!canConfigureGitHub}
+        />
+      ) : value === "agent" && serviceAccountPanel ? (
         <div className="pt-2">{serviceAccountPanel}</div>
       ) : value === "agent" ? (
         <AgentIdentityRow

@@ -17,6 +17,75 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// BuildConfigureGitHubAppAuthClientPayload builds the payload for the
+// authClients configureGitHubAppAuthClient endpoint from CLI flags.
+func BuildConfigureGitHubAppAuthClientPayload(authClientsConfigureGitHubAppAuthClientBody string, authClientsConfigureGitHubAppAuthClientSessionToken string, authClientsConfigureGitHubAppAuthClientApikeyToken string) (*authclients.ConfigureGitHubAppAuthClientPayload, error) {
+	var err error
+	var body ConfigureGitHubAppAuthClientRequestBody
+	{
+		err = json.Unmarshal([]byte(authClientsConfigureGitHubAppAuthClientBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"app_id\": \"2\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"installation_id\": \"2\",\n      \"instance_url\": \"aaa\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"private_key\": \"aaa\",\n      \"upstream_origin\": \"aaa\"\n   }'")
+		}
+		if body.ID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if utf8.RuneCountInString(body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+		}
+		if utf8.RuneCountInString(body.Name) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 100, false))
+		}
+		if utf8.RuneCountInString(body.InstanceURL) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.instance_url", body.InstanceURL, utf8.RuneCountInString(body.InstanceURL), 2048, false))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.app_id", body.AppID, "^[1-9][0-9]{0,18}$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.installation_id", body.InstallationID, "^[1-9][0-9]{0,18}$"))
+		if utf8.RuneCountInString(body.PrivateKey) > 32768 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.private_key", body.PrivateKey, utf8.RuneCountInString(body.PrivateKey), 32768, false))
+		}
+		if utf8.RuneCountInString(body.UpstreamOrigin) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.upstream_origin", body.UpstreamOrigin, utf8.RuneCountInString(body.UpstreamOrigin), 2048, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if authClientsConfigureGitHubAppAuthClientSessionToken != "" {
+			sessionToken = &authClientsConfigureGitHubAppAuthClientSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if authClientsConfigureGitHubAppAuthClientApikeyToken != "" {
+			apikeyToken = &authClientsConfigureGitHubAppAuthClientApikeyToken
+		}
+	}
+	v := &authclients.ConfigureGitHubAppAuthClientPayload{
+		ID:             body.ID,
+		McpServerID:    body.McpServerID,
+		Name:           body.Name,
+		InstanceURL:    body.InstanceURL,
+		AppID:          body.AppID,
+		InstallationID: body.InstallationID,
+		PrivateKey:     body.PrivateKey,
+		UpstreamOrigin: body.UpstreamOrigin,
+	}
+	{
+		var zero string
+		if v.InstanceURL == zero {
+			v.InstanceURL = "https://github.com"
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
 // BuildListAuthClientsPayload builds the payload for the authClients
 // listAuthClients endpoint from CLI flags.
 func BuildListAuthClientsPayload(authClientsListAuthClientsMcpServerID string, authClientsListAuthClientsClientType string, authClientsListAuthClientsCursor string, authClientsListAuthClientsLimit string, authClientsListAuthClientsSessionToken string, authClientsListAuthClientsApikeyToken string) (*authclients.ListAuthClientsPayload, error) {

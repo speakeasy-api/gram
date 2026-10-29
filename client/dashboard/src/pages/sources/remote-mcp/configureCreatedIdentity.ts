@@ -1,3 +1,4 @@
+import type { GitHubAppDraft } from "@/lib/remote-identity/model/githubApp";
 import { requireKnownEnumValue } from "@/lib/enum";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { isNotFoundError } from "@/lib/errors";
@@ -27,11 +28,13 @@ type ConfigureCreatedIdentityInput = {
   mcpServer: McpServer;
   identityMode: RemoteMcpCreationIdentity;
   agentAuthorization?: string;
+  githubApp?: GitHubAppDraft;
   /**
    * An OAuth service account client to bind instead of a static credential.
    * Takes precedence over agentAuthorization.
    */
   serviceAccountClient?: ServiceAccountClientSpec;
+
   /** The server's issuer is organization-owned, so a project may not set it up. */
   organizationOwnedUserSessionIssuer?: boolean;
   options?: RequestOptions;
@@ -58,7 +61,9 @@ export async function configureCreatedRemoteMcpIdentity({
   mcpServer,
   identityMode,
   agentAuthorization,
+  githubApp,
   serviceAccountClient,
+
   organizationOwnedUserSessionIssuer = false,
   options,
 }: ConfigureCreatedIdentityInput): Promise<ConfigureCreatedIdentityResult> {
@@ -108,6 +113,40 @@ export async function configureCreatedRemoteMcpIdentity({
   }
 
   if (identityMode === "agent") {
+    if (githubApp) {
+      try {
+        await client.authClients.configureGitHubApp(
+          {
+            configureGitHubAppAuthClientRequestBody: {
+              ...githubApp,
+              mcpServerId: mcpServer.id,
+              name: `${mcpServer.name ?? "GitHub"} service account`,
+              upstreamOrigin: new URL(remoteMcpServer.url).origin,
+            },
+          },
+          undefined,
+          options,
+        );
+      } catch {
+        return setupRequired(
+          mcpServer,
+          identityMode,
+          "GitHub App setup failed. Check the app credentials and installation in Settings > Identity.",
+        );
+      }
+      try {
+        return configured(
+          await setMcpServerVisibility(client, mcpServer, "private", options),
+          identityMode,
+        );
+      } catch {
+        return setupRequired(
+          mcpServer,
+          identityMode,
+          "GitHub App configured, but the server could not be enabled. Review it in Settings.",
+        );
+      }
+    }
     const authorization = agentAuthorization?.trim();
     if (!authorization) {
       return setupRequired(

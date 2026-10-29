@@ -33,6 +33,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authclients/githubapp"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -103,10 +104,13 @@ const (
 // authClientResolution is one credential's typed auth client decision for one
 // server.
 type authClientResolution struct {
-	outcome    authClientOutcome
-	reason     string
-	clientID   uuid.UUID
-	clientType string
+	outcome          authClientOutcome
+	reason           string
+	clientID         uuid.UUID
+	clientType       string
+	githubApp        bool
+	githubCredential *githubapp.Credential
+	githubRenew      func(context.Context) (string, bool, error)
 
 	// serverName names the server in a request-access link.
 	serverName string
@@ -133,7 +137,7 @@ type authClientResolution struct {
 // headersOnly reports a resolved client whose material is its headers alone,
 // with no bearer to acquire.
 func (r *authClientResolution) headersOnly() bool {
-	return r.outcome == authClientResolved && isHeadersOnlyType(r.clientType)
+	return r.outcome == authClientResolved && (isHeadersOnlyType(r.clientType) || r.githubApp)
 }
 
 func isHeadersOnlyType(clientType string) bool {
@@ -220,12 +224,13 @@ func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitR
 // gapResolution is a choice that cannot be used, for reason.
 func gapResolution(reason string) authClientResolution {
 	none := upstreamChoice{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
-	return authClientResolution{outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil, noAuthAllowed: false, attachedSession: uuid.Nil}
+	return authClientResolution{githubApp: false, githubCredential: nil, githubRenew: nil, outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil, noAuthAllowed: false, attachedSession: uuid.Nil}
 }
 
 // decideAuthClient resolves a recorded choice without side effects.
 func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authClientResolution {
 	res := gapResolution("")
+	res.githubApp = row.GithubApp
 	res.serverName = row.ServerName.String
 	res.tunneled = row.Tunneled
 	res.noAuthAllowed = row.RequiresUpstreamAuth.Valid && !row.RequiresUpstreamAuth.Bool
@@ -276,6 +281,14 @@ func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authCli
 	res.clientType = row.ClientType.String
 	switch res.clientType {
 	case authClientTypeRemoteSession, authClientTypeServiceAccount:
+		if res.githubApp {
+			if res.clientType != authClientTypeServiceAccount || row.RegistrationID.Valid || row.Tunneled || row.RequiresDeniedSource || row.CredentialHeadersUncovered || row.HeadersStale {
+				res.reason = authClientReasonSetup
+			} else {
+				res.outcome = authClientResolved
+			}
+			return res
+		}
 		switch {
 		case !row.RegistrationID.Valid || !row.RegistrationLive:
 			res.reason = authClientReasonRegistration
@@ -417,7 +430,14 @@ func (s *Service) prepareAuthClient(ctx context.Context, permit authClientPermit
 		if clientHeaders.err != nil {
 			return res, clientHeaders.err
 		}
-		res = applyAuthClientHeaders(res, clientHeaders.headers)
+		if res.githubApp {
+			res, err = s.prepareGitHubApp(ctx, permit.OrganizationID, permit.ServerID, res, clientHeaders.headers)
+			if err != nil {
+				return res, err
+			}
+		} else {
+			res = applyAuthClientHeaders(res, clientHeaders.headers)
+		}
 	}
 	annotateAuthClient(ctx, s.logger, res)
 	return res, nil
@@ -430,6 +450,12 @@ func (s *Service) checkAuthClientPermission(ctx context.Context, permit authClie
 	// registration or current server headers.
 	if res.outcome == authClientResolved || (res.outcome == authClientLegacy && res.clientID != uuid.Nil) {
 		permitter, err := s.authClientPermitFor(ctx, permit.OrganizationID)
+		if res.githubApp {
+			if s.authz == nil {
+				return res, errors.New("GitHub App credentials require the authorization engine")
+			}
+			permitter, err = mandatoryPermitter{engine: s.authz}, nil
+		}
 		if err != nil {
 			return res, err
 		}

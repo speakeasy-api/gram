@@ -42,6 +42,8 @@ import (
 // [ProxyManager.Build] so the closure over the per-server correlation ids
 // stays request-scoped.
 type proxyBuildOptions struct {
+	credentialOrigin       string
+	renewCredential        func(context.Context) (string, bool, error)
 	recordIdentityCoverage bool
 	metaMCPServerID        string
 	headerPolicy           proxy.HeaderPolicy
@@ -53,7 +55,7 @@ type proxyBuildOptions struct {
 }
 
 func newProxyBuildOptions(buildOptions []BuildOption) proxyBuildOptions {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote, authClientHeaders: nil, authClientSelected: false, anonymousCaller: false}
+	options := proxyBuildOptions{credentialOrigin: "", renewCredential: nil, recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote, authClientHeaders: nil, authClientSelected: false, anonymousCaller: false}
 	for _, option := range buildOptions {
 		if option.apply != nil {
 			option.apply(&options)
@@ -92,6 +94,12 @@ func WithAuthClientHeaders(headers []proxy.ConfiguredHeader) BuildOption {
 		options.authClientHeaders = headers
 		options.authClientSelected = true
 	}}
+}
+
+// WithRenewableCredential binds a shared credential to its destination and
+// lets the proxy replace a rejected token once. It never follows redirects.
+func WithRenewableCredential(origin string, renew func(context.Context) (string, bool, error)) BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) { options.credentialOrigin = origin; options.renewCredential = renew }}
 }
 
 // WithHeaderPolicy selects how configured and copied client headers are
@@ -436,7 +444,7 @@ func (f *ProxyManager) BuildTarget(
 			f.TunnelMetrics.Observe(identity.TunneledMCPServerID, identity.McpServerID, method, client, outcome, elapsed)
 		}
 	}
-	return &proxy.Proxy{
+	p := &proxy.Proxy{
 		RequestObserver:             observer,
 		SessionClients:              nil,
 		GuardianPolicy:              f.guardianPolicy,
@@ -450,13 +458,14 @@ func (f *ProxyManager) BuildTarget(
 		MaxBufferedBodyBytes:        proxy.DefaultMaxBufferedBodyBytes,
 		Identity:                    identity,
 		RemoteURL:                   upstreamURL,
+		CredentialOrigin:            options.credentialOrigin,
 		Headers:                     headers,
 		HeaderPolicy:                options.headerPolicy,
 		AuthorizationOverride:       upstreamAuth,
 		CallerAssertion:             nil,
 		UpstreamResponseRetryer:     nil,
 		UpstreamResponseInterceptor: nil,
-		DisableRedirects:            false,
+		DisableRedirects:            options.credentialOrigin != "",
 		StrictToolSelection:         selection != nil,
 		AnonymousCaller:             options.anonymousCaller && visibility == mcpservers.VisibilityPublic,
 		WWWAuthenticate:             wwwAuthenticate,
@@ -488,6 +497,22 @@ func (f *ProxyManager) BuildTarget(
 		ResourcesListRequestInterceptors:  nil,
 		ResourcesListResponseInterceptors: nil,
 	}
+	if options.renewCredential != nil {
+		p.UpstreamResponseRetryer = func(ctx context.Context, response *http.Response) (*proxy.UpstreamResponseRetry, error) {
+			if response.StatusCode != http.StatusUnauthorized || p.AuthorizationOverride != "" {
+				return nil, nil
+			}
+			token, renewed, err := options.renewCredential(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("renew upstream service account credential: %w", err)
+			}
+			if !renewed {
+				return nil, nil
+			}
+			return &proxy.UpstreamResponseRetry{RemoteURL: "", Headers: nil, AuthorizationOverride: token}, nil
+		}
+	}
+	return p
 }
 
 // Dispositions supplies the proxy's shared metadata resolver to gateway discovery.

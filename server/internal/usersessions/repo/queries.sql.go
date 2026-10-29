@@ -5060,6 +5060,17 @@ mapped AS (
                AND ol.deleted IS FALSE
                AND other.client_type IN ('remote_session', 'service_account', 'ema')
            ))
+       OR (d.remote_session_client_id IS NULL AND d.no_auth
+           AND ac.client_type = 'service_account'
+           AND EXISTS (SELECT 1 FROM mcp_auth_client_github_apps g
+                       WHERE g.auth_client_id = ac.id AND g.organization_id = ac.organization_id)
+           AND NOT EXISTS (
+             SELECT 1 FROM mcp_server_auth_clients ol
+             JOIN mcp_auth_clients other ON other.id = ol.auth_client_id
+               AND other.organization_id = si.organization_id AND NOT other.deleted AND other.enabled
+             WHERE ol.mcp_server_id = d.mcp_server_id AND NOT ol.deleted
+               AND (other.client_type IN ('remote_session', 'ema') OR (other.client_type = 'service_account' AND other.remote_session_client_id IS NOT NULL))
+           ))
     GROUP BY d.mcp_server_id
 )
 INSERT INTO upstream_client_selections (

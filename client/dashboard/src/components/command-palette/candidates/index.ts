@@ -1,3 +1,4 @@
+import { useAuthClientCandidates } from "./useAuthClientCandidates";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -105,6 +106,10 @@ export function useLauncherCandidates({
     projectSlug,
   });
   const marketplace = useMarketplaceCandidate({ enabled, inProject });
+  const authClients = useAuthClientCandidates({
+    enabled:
+      projectEnabled && hasAnyScope(["org:read", "org:admin"], organization.id),
+  });
   const mcpServers = useMcpServerCandidates({
     enabled: projectEnabled && canListMcp,
   });
@@ -151,6 +156,7 @@ export function useLauncherCandidates({
       ...gatewayConnections,
       ...recents,
       ...marketplace,
+      ...authClients,
       ...(inProject && canListMcp ? mcpServers : []),
       ...(inProject && canListGateways ? gateways : []),
       // Directly below the project's own servers: when a name matches both,
@@ -188,6 +194,7 @@ export function useLauncherCandidates({
     gatewayConnections,
     recents,
     marketplace,
+    authClients,
     mcpServers,
     gateways,
     catalog,
