@@ -1643,6 +1643,34 @@ func TestHooksBootstrapFallsBackToPython3WithoutUnzip(t *testing.T) {
 	require.Equal(t, "args:--first\n", string(out))
 }
 
+// TestHooksBootstrapPythonIgnoresImportOverrides keeps the archive extractor
+// independent of Python modules supplied by the calling environment.
+func TestHooksBootstrapPythonIgnoresImportOverrides(t *testing.T) {
+	t.Parallel()
+	path := hooksBootstrapToolPath(t)
+	require.NoError(t, os.Symlink(workingTool(t, "python3", "-c", "import sys, zipfile; print(sys.executable)"), filepath.Join(path, "python3")))
+	imports := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(imports, "zipfile.py"), []byte("raise RuntimeError('unexpected import override')\n"), 0o600))
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\nprintf 'installed\\n'\n"))
+	sum := sha256.Sum256(archive)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	t.Cleanup(server.Close)
+
+	script := renderHooksBootstrapForRelease("test-version", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
+	}, false, "releases.test")
+	out, err := runHooksBootstrapWithEnv(t, script, []string{
+		"SPEAKEASY_AI_HOOKS_HOME=" + t.TempDir(),
+		"PATH=" + path,
+		"PYTHONPATH=" + imports,
+	}, "")
+	require.NoError(t, err, string(out))
+	require.Equal(t, "installed\n", string(out))
+}
+
 // TestHooksBootstrapNamesUnpackToolsWhenNoneInstalled checks that a machine
 // with no way to unpack the archive fails with a message naming the tools that
 // would work, without running anything.

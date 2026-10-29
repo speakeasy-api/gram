@@ -388,7 +388,7 @@ if ! cache_valid; then
   elif command -v python3 >/dev/null 2>&1; then
     # Slim container images, the official OpenClaw image among them, ship
     # neither unzip nor busybox but do carry python3 and its zipfile module.
-    python3 -c $'import sys, zipfile\ndata = zipfile.ZipFile(sys.argv[1]).read(sys.argv[2])\nwith open(sys.argv[3], "wb") as out: out.write(data)' "$archive" "$binary_name" "$extracted" || install_failure 'archive extraction failed'
+    python3 -I -c $'import sys, zipfile\ndata = zipfile.ZipFile(sys.argv[1]).read(sys.argv[2])\nwith open(sys.argv[3], "wb") as out: out.write(data)' "$archive" "$binary_name" "$extracted" || install_failure 'archive extraction failed'
   elif command -v bsdtar >/dev/null 2>&1; then
     bsdtar -xOf "$archive" "$binary_name" > "$extracted" || install_failure 'archive extraction failed'
   elif command -v node >/dev/null 2>&1; then
