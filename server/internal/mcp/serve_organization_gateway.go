@@ -378,7 +378,7 @@ func (s *Service) newOrganizationGatewayTokens(endpoint *ResolvedMcpEndpoint, su
 // members alone, as any other member failure does; the cache has already
 // logged the cause.
 func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-	if g.memberChoices != nil && member.backend == metaMemberBackendProxied {
+	if g.memberChoices != nil && member.backend == metaMemberBackendProxied && g.memberChoices.serves(member) {
 		return g.memberChoices.tokens(ctx, member)
 	}
 	if g.projectTokens == nil {

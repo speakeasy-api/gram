@@ -46,6 +46,14 @@ const mocks = vi.hoisted(() => ({
   attach: vi.fn(),
 }));
 
+vi.mock("@gram/client/react-query/mcpServerAuthClientChoices.js", () => ({
+  useMcpServerAuthClientChoices: () => ({
+    isError: false,
+    isSuccess: true,
+    data: { choices: [] },
+  }),
+}));
+
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: () => ({ data: { members: [] } }),
 }));
@@ -92,6 +100,7 @@ vi.mock("@/contexts/Sdk", () => ({
       checkPolicyGrants: mocks.checkPolicyGrants,
     },
     keys: { create: mocks.createKey, list: mocks.listKeys },
+    authClients: { listMcpServerChoices: async () => ({ choices: [] }) },
     // A person's own connections, read once per project before the agent
     // exists and as the agent's candidates once it does.
     remoteSessions: {

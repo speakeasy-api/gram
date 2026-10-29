@@ -41,6 +41,7 @@ import {
   type AllServersRefusal,
   type ServerSelection,
 } from "./StepServers";
+import { keyCredentialChoices } from "./keyCredentialChoices";
 import { StepVerify, type VerifyState } from "./StepVerify";
 import { CredentialPicker } from "./CredentialPicker";
 import { StepWorkload } from "./StepWorkload";
@@ -1127,6 +1128,15 @@ export function CredentialsWizard({
         );
       }
 
+      const authClientChoices = await keyCredentialChoices(
+        sdk,
+        allServers
+          ? []
+          : selected.map((entry) => ({
+              ...entry.server,
+              authClientId: entry.authClientId,
+            })),
+      );
       // Hook ingestion names the organization rather than a server, so only
       // discovery that names no server returns it. Asked for only when the
       // agent was created with it, and bounded to the agent's project.
@@ -1154,6 +1164,7 @@ export function CredentialsWizard({
           delegatedGrantsVersion: 2,
           requestedGrants: [...requestedGrants, ...hookGrants],
           scopes: [],
+          authClientChoices,
         },
       });
       keyID.current = issued.id;

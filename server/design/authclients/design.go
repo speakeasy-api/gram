@@ -130,6 +130,19 @@ var AuthClientHeaderInput = Type("AuthClientHeaderInput", func() {
 	Required("name")
 })
 
+var AuthClientChoice = Type("AuthClientChoice", func() {
+	Meta("struct:pkg:path", "types")
+	Description("A shared upstream credential a caller can choose for a credential of their own, such as an agent key.")
+
+	Attribute("id", String, "The auth client id.", func() { Format(FormatUUID) })
+	Attribute("name", String, "The client's name.")
+	Attribute("client_type", String, "How the client authenticates upstream. Only shared types are offered.", func() {
+		Enum("service_account", "static_credential", "pass_through")
+	})
+
+	Required("id", "name", "client_type")
+})
+
 var AuthClientAudienceRule = Type("AuthClientAudienceRule", func() {
 	Description("A rule to store for an auth client.")
 
@@ -345,6 +358,35 @@ var _ = Service("authClients", func() {
 		Meta("openapi:operationId", "detachAuthClientFromMcpServer")
 		Meta("openapi:extension:x-speakeasy-name-override", "detachFromMcpServer")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DetachAuthClientFromMcpServer"}`)
+	})
+
+	Method("listMcpServerAuthClientChoices", func() {
+		Description("List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Returns each choice's id, name and client_type, and whether the upstream requires authentication; no headers or credentials.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The MCP server id.", func() { Format(FormatUUID) })
+			Required("mcp_server_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(func() {
+			Attribute("requires_upstream_auth", Boolean, "Whether the upstream needs authentication. Omitted while undecided.")
+			Attribute("choices", ArrayOf(AuthClientChoice), "The enabled shared credentials the server offers.")
+			Required("choices")
+		})
+
+		HTTP(func() {
+			GET("/rpc/authClients.listMcpServerChoices")
+			Param("mcp_server_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listMcpServerAuthClientChoices")
+		Meta("openapi:extension:x-speakeasy-name-override", "listMcpServerChoices")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "McpServerAuthClientChoices"}`)
 	})
 
 	Method("getMcpServerAuthentication", func() {

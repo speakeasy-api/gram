@@ -188,7 +188,7 @@ func (s *Service) authenticateAgentGatewayKey(
 // resolveMemberTokens honors a selected member before falling back to the
 // member issuer for legacy agent keys. An agent gateway has no issuer itself.
 func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-	if gate.agentID == uuid.Nil || (gate.memberChoices != nil && member.backend == metaMemberBackendProxied) {
+	if gate.agentID == uuid.Nil || (gate.memberChoices != nil && member.backend == metaMemberBackendProxied && gate.memberChoices.serves(member)) {
 		tokens, err := gate.memberTokens(ctx, member)
 		if err == nil && gate.agentID != uuid.Nil && member.chosenClientID.Valid {
 			usable := false

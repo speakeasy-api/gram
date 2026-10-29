@@ -377,6 +377,38 @@ func BuildDetachAuthClientFromMcpServerPayload(authClientsDetachAuthClientFromMc
 	return v, nil
 }
 
+// BuildListMcpServerAuthClientChoicesPayload builds the payload for the
+// authClients listMcpServerAuthClientChoices endpoint from CLI flags.
+func BuildListMcpServerAuthClientChoicesPayload(authClientsListMcpServerAuthClientChoicesMcpServerID string, authClientsListMcpServerAuthClientChoicesSessionToken string, authClientsListMcpServerAuthClientChoicesApikeyToken string) (*authclients.ListMcpServerAuthClientChoicesPayload, error) {
+	var err error
+	var mcpServerID string
+	{
+		mcpServerID = authClientsListMcpServerAuthClientChoicesMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if authClientsListMcpServerAuthClientChoicesSessionToken != "" {
+			sessionToken = &authClientsListMcpServerAuthClientChoicesSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if authClientsListMcpServerAuthClientChoicesApikeyToken != "" {
+			apikeyToken = &authClientsListMcpServerAuthClientChoicesApikeyToken
+		}
+	}
+	v := &authclients.ListMcpServerAuthClientChoicesPayload{}
+	v.McpServerID = mcpServerID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
 // BuildGetMcpServerAuthenticationPayload builds the payload for the
 // authClients getMcpServerAuthentication endpoint from CLI flags.
 func BuildGetMcpServerAuthenticationPayload(authClientsGetMcpServerAuthenticationMcpServerID string, authClientsGetMcpServerAuthenticationSessionToken string, authClientsGetMcpServerAuthenticationApikeyToken string) (*authclients.GetMcpServerAuthenticationPayload, error) {
