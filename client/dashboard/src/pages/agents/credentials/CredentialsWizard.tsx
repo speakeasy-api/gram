@@ -787,7 +787,14 @@ export function CredentialsWizard({
       );
       if (covered) continue;
       await createGrant.mutateAsync({
-        request: { createAgentPolicyGrantForm: { agentId, ...grant } },
+        request: {
+          createAgentPolicyGrantForm: {
+            agentId,
+            effect: "allow",
+            scope: grant.scope,
+            selector: grant.selector,
+          },
+        },
       });
     }
     void invalidateAgentPolicy(queryClient, organization.id, user.id, agentId);

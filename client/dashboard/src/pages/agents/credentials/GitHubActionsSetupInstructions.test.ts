@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   ACTION_DEFAULT_CONTROL_PLANE,
   githubActionsAgentGrants,
-  githubActionsSetupInstructions,
   pluginsForEveryAgent,
   repositoryProblem,
   unreachablePluginServers,
   workflowYaml,
-} from "./GitHubActionsSetupInstructions";
+} from "./githubActions";
+import { githubActionsSetupInstructions } from "./GitHubActionsSetupInstructions";
 import { hasPlatformSetup } from "./platformSetups";
 import { subjectRule, type CatalogEntry } from "./workloadCatalog";
 
