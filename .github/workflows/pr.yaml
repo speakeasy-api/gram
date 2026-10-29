@@ -2142,10 +2142,7 @@ jobs:
 
   client-test:
     name: client-test
-    # Dashboard vitest is CPU-bound (~380s on 4 vCPUs, ~70s with ~11 cores
-    # busy). 16 vCPUs scale that step in this job, so admin and registry
-    # tests still run and the summary stays one vitest report.
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: |
       !cancelled() &&
