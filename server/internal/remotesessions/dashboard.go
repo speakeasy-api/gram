@@ -78,6 +78,11 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 	if err != nil {
 		return nil, err
 	}
+	if payload.TargetServerOnly != nil && *payload.TargetServerOnly {
+		if err := requireSingleServerIssuer(ctx, s.db, authCtx.ActiveOrganizationID, target); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.checkServerIdentityRequest(ctx, logger, authCtx, &req, target); err != nil {
 		return nil, err
 	}
@@ -117,6 +122,11 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 	}
 	if err := commit.Lock(ctx, tx); err != nil {
 		return nil, identityOopsError(err, "lock identity configuration").LogError(ctx, logger)
+	}
+	if payload.TargetServerOnly != nil && *payload.TargetServerOnly {
+		if err := requireSingleServerIssuer(ctx, tx.DB(), authCtx.ActiveOrganizationID, target); err != nil {
+			return nil, err
+		}
 	}
 	if err := commit.Bind(ctx, tx, reg); err != nil {
 		return nil, identityOopsError(err, "bind identity client").LogError(ctx, logger)
@@ -604,4 +614,21 @@ func serverIdentityProviderPath(providerID uuid.UUID) string {
 
 func serverIdentityClientPath(providerID, clientID uuid.UUID) string {
 	return serverIdentityProviderPath(providerID) + "/clients/" + clientID.String()
+}
+
+// requireSingleServerIssuer fails before registration and again under the
+// issuer lock. A setup save must never repoint sibling servers, even when the
+// caller has permission to change them all.
+func requireSingleServerIssuer(ctx context.Context, db repo.DBTX, organizationID string, target mcpserversrepo.McpServer) error {
+	if !target.UserSessionIssuerID.Valid {
+		return nil
+	}
+	servers, err := repo.New(db).ListOrganizationMCPServersForUserSessionIssuer(ctx, repo.ListOrganizationMCPServersForUserSessionIssuerParams{OrganizationID: organizationID, UserSessionIssuerID: target.UserSessionIssuerID})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "Could not check shared sign-in configuration.")
+	}
+	if len(servers) != 1 || servers[0].ID != target.ID {
+		return oops.E(oops.CodeConflict, nil, "This server shares its sign-in configuration. Assign a dedicated User Identity issuer in server settings before saving setup credentials.")
+	}
+	return nil
 }

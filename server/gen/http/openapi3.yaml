@@ -66103,6 +66103,101 @@ paths:
             x-speakeasy-name-override: revoke
             x-speakeasy-react-hook:
                 name: RevokeRemoteSession
+    /rpc/remoteSessions.testServerConnection:
+        post:
+            description: Initialize a directly Remote MCP-backed server and discover all tools using the signed-in user's saved authorization. Never executes tools. A provider tab returning is not evidence of authorization. Requires an ordinary dashboard session and mcp:connect on the exact server; API keys are refused.
+            operationId: testServerConnection
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/HideAgentMcpServerRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ServerConnectionTestResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: testServerConnection remoteSessions
+            tags:
+                - remoteSessions
+            x-speakeasy-name-override: testServerConnection
+            x-speakeasy-react-hook:
+                name: TestServerConnection
     /rpc/resources.list:
         get:
             description: List all resources for a project
@@ -102110,6 +102205,9 @@ components:
                     enum:
                         - cimd
                         - dcr
+                target_server_only:
+                    type: boolean
+                    description: Refuse a save if the user session issuer also serves another MCP server. Setup screens must set this to avoid changing shared sign-in bindings. Explicitly assign a dedicated issuer before retrying.
             description: 'A complete plan for configuring identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.'
             required:
                 - mcp_server_id
@@ -124568,6 +124666,32 @@ components:
                 - scope
                 - server_count
                 - associated_at
+        ServerConnectionTestResult:
+            type: object
+            properties:
+                code:
+                    type: string
+                    description: Stable, credential-free reason suitable for choosing a recovery action.
+                message:
+                    type: string
+                    description: Safe message for display in the failed setup step.
+                status:
+                    type: string
+                    description: Live result of this test, never a persisted completion record.
+                    enum:
+                        - ready
+                        - authorization_required
+                        - configuration_required
+                        - failed
+                tool_count:
+                    type: integer
+                    description: Tools discovered, present only after every tools/list page succeeds.
+                    format: int64
+                    minimum: 0
+            required:
+                - status
+                - code
+                - message
         ServerIdentityClientConfiguration:
             type: object
             properties:

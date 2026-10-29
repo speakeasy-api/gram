@@ -195,6 +195,15 @@ func (t tokenResponse) Scopes() []string {
 	return strings.Fields(t.Scope)
 }
 
+// scopesForIssuer preserves RFC 6749 scope parsing except for Slack's official
+// MCP issuer, whose token endpoint reports a comma-separated grant.
+func (t tokenResponse) scopesForIssuer(issuer string) []string {
+	if issuer == "https://mcp.slack.com" || issuer == "https://mcp.slack.com/" {
+		return strings.Fields(strings.ReplaceAll(t.Scope, ",", " "))
+	}
+	return t.Scopes()
+}
+
 // ScopeReported distinguishes omission from Speakeasy's compatibility exception: an explicitly empty token-response scope.
 func (t tokenResponse) ScopeReported() bool {
 	return t.scopePresent

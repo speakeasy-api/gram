@@ -30,6 +30,10 @@ import (
 )
 
 const (
+	// Bound paginated discovery even when an upstream repeats or invents cursors.
+	catalogProbeMaxPages = 100
+	// Leave headroom above catalog server sizes while bounding accumulated results.
+	catalogProbeMaxTools    = 10000
 	catalogProbeTimeout     = 15 * time.Second
 	catalogProbeMaxResponse = 1 << 20
 	catalogReadinessTTL     = time.Minute
@@ -227,6 +231,11 @@ func (p *RemoteMCPReadinessProber) result(principal Principal, registrationID uu
 }
 
 func (p *RemoteMCPReadinessProber) probe(ctx context.Context, remoteURL string, headers []remotemcprepo.RemoteMcpServerHeader, token string) (ReadinessState, string) {
+	state, evidence, _ := p.probeTools(ctx, remoteURL, headers, token)
+	return state, evidence
+}
+
+func (p *RemoteMCPReadinessProber) probeTools(ctx context.Context, remoteURL string, headers []remotemcprepo.RemoteMcpServerHeader, token string) (ReadinessState, string, int) {
 	ctx, cancel := context.WithTimeout(ctx, catalogProbeTimeout)
 	defer cancel()
 	httpClient := p.policy.Client(guardian.WithInternalCatalog())
@@ -252,13 +261,33 @@ func (p *RemoteMCPReadinessProber) probe(ctx context.Context, remoteURL string, 
 	// negative value disables retries so one probe is one attempt.
 	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: remoteURL, HTTPClient: httpClient, MaxRetries: -1, DisableStandaloneSSE: true}, nil)
 	if err != nil {
-		return p.probeFailure(ctx, remoteURL, err, roundTripper, catalogProbeStageInitialize)
+		state, evidence := p.probeFailure(ctx, remoteURL, err, roundTripper, catalogProbeStageInitialize)
+		return state, evidence, 0
 	}
 	defer o11y.NoLogDefer(session.Close)
-	if _, err := session.ListTools(ctx, nil); err != nil {
-		return p.probeFailure(ctx, remoteURL, err, roundTripper, catalogProbeStageToolsList)
+	count := 0
+	cursor := ""
+	seen := make(map[string]bool)
+	for range catalogProbeMaxPages {
+		tools, err := session.ListTools(ctx, &mcp.ListToolsParams{Cursor: cursor, Meta: nil})
+		if err != nil {
+			state, evidence := p.probeFailure(ctx, remoteURL, err, roundTripper, catalogProbeStageToolsList)
+			return state, evidence, 0
+		}
+		count += len(tools.Tools)
+		if count > catalogProbeMaxTools {
+			return ReadinessDegraded, "tools_list_limit_exceeded", 0
+		}
+		if tools.NextCursor == "" {
+			return ReadinessReady, "tools_list_ok", count
+		}
+		if seen[tools.NextCursor] {
+			return ReadinessDegraded, "tools_list_cursor_repeated", 0
+		}
+		cursor = tools.NextCursor
+		seen[cursor] = true
 	}
-	return ReadinessReady, "tools_list_ok"
+	return ReadinessDegraded, "tools_list_limit_exceeded", 0
 }
 
 // probeFailure classifies a failed probe and logs the underlying error. The

@@ -47,6 +47,13 @@ type DetachBindingRequestBody struct {
 	ID                  string `form:"id" json:"id" xml:"id"`
 }
 
+// TestServerConnectionRequestBody is the type of the "remoteSessions" service
+// "testServerConnection" endpoint HTTP request body.
+type TestServerConnectionRequestBody struct {
+	// Exact MCP server to test.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+}
+
 // CommitServerIdentityConfigurationRequestBody is the type of the
 // "remoteSessions" service "commitServerIdentityConfiguration" endpoint HTTP
 // request body.
@@ -55,6 +62,10 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
 	// An existing Remote Identity Provider visible to the target project.
 	ProviderID *string `form:"provider_id,omitempty" json:"provider_id,omitempty" xml:"provider_id,omitempty"`
+	// Refuse a save if the user session issuer also serves another MCP server.
+	// Setup screens must set this to avoid changing shared sign-in bindings.
+	// Explicitly assign a dedicated issuer before retrying.
+	TargetServerOnly *bool `form:"target_server_only,omitempty" json:"target_server_only,omitempty" xml:"target_server_only,omitempty"`
 	// A new project-scoped Remote Identity Provider to create.
 	CreateProvider *CreateRemoteSessionIssuerFormRequestBody `form:"create_provider,omitempty" json:"create_provider,omitempty" xml:"create_provider,omitempty"`
 	// How to provide the OAuth client.
@@ -113,6 +124,19 @@ type AttachBindingResponseBody struct {
 	// grant is available. Absent for unavailable bindings, which remain detachable
 	// by id. Never includes credentials.
 	RemoteSession *RemoteSessionResponseBody `form:"remote_session,omitempty" json:"remote_session,omitempty" xml:"remote_session,omitempty"`
+}
+
+// TestServerConnectionResponseBody is the type of the "remoteSessions" service
+// "testServerConnection" endpoint HTTP response body.
+type TestServerConnectionResponseBody struct {
+	// Live result of this test, never a persisted completion record.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Stable, credential-free reason suitable for choosing a recovery action.
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+	// Safe message for display in the failed setup step.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Tools discovered, present only after every tools/list page succeeds.
+	ToolCount *int `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
 }
 
 // CommitServerIdentityConfigurationResponseBody is the type of the
@@ -1105,6 +1129,196 @@ type DetachBindingUnexpectedResponseBody struct {
 // service "detachBinding" endpoint HTTP response body for the "gateway_error"
 // error.
 type DetachBindingGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestServerConnectionUnauthorizedResponseBody is the type of the
+// "remoteSessions" service "testServerConnection" endpoint HTTP response body
+// for the "unauthorized" error.
+type TestServerConnectionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestServerConnectionForbiddenResponseBody is the type of the
+// "remoteSessions" service "testServerConnection" endpoint HTTP response body
+// for the "forbidden" error.
+type TestServerConnectionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestServerConnectionBadRequestResponseBody is the type of the
+// "remoteSessions" service "testServerConnection" endpoint HTTP response body
+// for the "bad_request" error.
+type TestServerConnectionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestServerConnectionNotFoundResponseBody is the type of the "remoteSessions"
+// service "testServerConnection" endpoint HTTP response body for the
+// "not_found" error.
+type TestServerConnectionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestServerConnectionConflictResponseBody is the type of the "remoteSessions"
+// service "testServerConnection" endpoint HTTP response body for the
+// "conflict" error.
+type TestServerConnectionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestServerConnectionUnsupportedMediaResponseBody is the type of the
+// "remoteSessions" service "testServerConnection" endpoint HTTP response body
+// for the "unsupported_media" error.
+type TestServerConnectionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestServerConnectionInvalidResponseBody is the type of the "remoteSessions"
+// service "testServerConnection" endpoint HTTP response body for the "invalid"
+// error.
+type TestServerConnectionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestServerConnectionInvariantViolationResponseBody is the type of the
+// "remoteSessions" service "testServerConnection" endpoint HTTP response body
+// for the "invariant_violation" error.
+type TestServerConnectionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestServerConnectionUnexpectedResponseBody is the type of the
+// "remoteSessions" service "testServerConnection" endpoint HTTP response body
+// for the "unexpected" error.
+type TestServerConnectionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestServerConnectionGatewayErrorResponseBody is the type of the
+// "remoteSessions" service "testServerConnection" endpoint HTTP response body
+// for the "gateway_error" error.
+type TestServerConnectionGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2960,6 +3174,16 @@ func NewDetachBindingRequestBody(p *remotesessions.DetachBindingPayload) *Detach
 	return body
 }
 
+// NewTestServerConnectionRequestBody builds the HTTP request body from the
+// payload of the "testServerConnection" endpoint of the "remoteSessions"
+// service.
+func NewTestServerConnectionRequestBody(p *remotesessions.TestServerConnectionPayload) *TestServerConnectionRequestBody {
+	body := &TestServerConnectionRequestBody{
+		McpServerID: p.McpServerID,
+	}
+	return body
+}
+
 // NewCommitServerIdentityConfigurationRequestBody builds the HTTP request body
 // from the payload of the "commitServerIdentityConfiguration" endpoint of the
 // "remoteSessions" service.
@@ -2967,6 +3191,7 @@ func NewCommitServerIdentityConfigurationRequestBody(p *remotesessions.CommitSer
 	body := &CommitServerIdentityConfigurationRequestBody{
 		McpServerID:        p.McpServerID,
 		ProviderID:         p.ProviderID,
+		TargetServerOnly:   p.TargetServerOnly,
 		ClientMode:         p.ClientMode,
 		ExistingClientID:   p.ExistingClientID,
 		RegistrationMethod: p.RegistrationMethod,
@@ -3785,6 +4010,170 @@ func NewDetachBindingUnexpected(body *DetachBindingUnexpectedResponseBody) *goa.
 // NewDetachBindingGatewayError builds a remoteSessions service detachBinding
 // endpoint gateway_error error.
 func NewDetachBindingGatewayError(body *DetachBindingGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestServerConnectionServerConnectionTestResultOK builds a
+// "remoteSessions" service "testServerConnection" endpoint result from a HTTP
+// "OK" response.
+func NewTestServerConnectionServerConnectionTestResultOK(body *TestServerConnectionResponseBody) *remotesessions.ServerConnectionTestResult {
+	v := &remotesessions.ServerConnectionTestResult{
+		Status:    *body.Status,
+		Code:      *body.Code,
+		Message:   *body.Message,
+		ToolCount: body.ToolCount,
+	}
+
+	return v
+}
+
+// NewTestServerConnectionUnauthorized builds a remoteSessions service
+// testServerConnection endpoint unauthorized error.
+func NewTestServerConnectionUnauthorized(body *TestServerConnectionUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestServerConnectionForbidden builds a remoteSessions service
+// testServerConnection endpoint forbidden error.
+func NewTestServerConnectionForbidden(body *TestServerConnectionForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestServerConnectionBadRequest builds a remoteSessions service
+// testServerConnection endpoint bad_request error.
+func NewTestServerConnectionBadRequest(body *TestServerConnectionBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestServerConnectionNotFound builds a remoteSessions service
+// testServerConnection endpoint not_found error.
+func NewTestServerConnectionNotFound(body *TestServerConnectionNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestServerConnectionConflict builds a remoteSessions service
+// testServerConnection endpoint conflict error.
+func NewTestServerConnectionConflict(body *TestServerConnectionConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestServerConnectionUnsupportedMedia builds a remoteSessions service
+// testServerConnection endpoint unsupported_media error.
+func NewTestServerConnectionUnsupportedMedia(body *TestServerConnectionUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestServerConnectionInvalid builds a remoteSessions service
+// testServerConnection endpoint invalid error.
+func NewTestServerConnectionInvalid(body *TestServerConnectionInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestServerConnectionInvariantViolation builds a remoteSessions service
+// testServerConnection endpoint invariant_violation error.
+func NewTestServerConnectionInvariantViolation(body *TestServerConnectionInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestServerConnectionUnexpected builds a remoteSessions service
+// testServerConnection endpoint unexpected error.
+func NewTestServerConnectionUnexpected(body *TestServerConnectionUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestServerConnectionGatewayError builds a remoteSessions service
+// testServerConnection endpoint gateway_error error.
+func NewTestServerConnectionGatewayError(body *TestServerConnectionGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5015,6 +5404,31 @@ func ValidateAttachBindingResponseBody(body *AttachBindingResponseBody) (err err
 	if body.RemoteSession != nil {
 		if err2 := ValidateRemoteSessionResponseBody(body.RemoteSession); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateTestServerConnectionResponseBody runs the validations defined on
+// TestServerConnectionResponseBody
+func ValidateTestServerConnectionResponseBody(body *TestServerConnectionResponseBody) (err error) {
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "ready" || *body.Status == "authorization_required" || *body.Status == "configuration_required" || *body.Status == "failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"ready", "authorization_required", "configuration_required", "failed"}))
+		}
+	}
+	if body.ToolCount != nil {
+		if *body.ToolCount < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.tool_count", *body.ToolCount, 0, true))
 		}
 	}
 	return
@@ -6304,6 +6718,246 @@ func ValidateDetachBindingUnexpectedResponseBody(body *DetachBindingUnexpectedRe
 // ValidateDetachBindingGatewayErrorResponseBody runs the validations defined
 // on detachBinding_gateway_error_response_body
 func ValidateDetachBindingGatewayErrorResponseBody(body *DetachBindingGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestServerConnectionUnauthorizedResponseBody runs the validations
+// defined on testServerConnection_unauthorized_response_body
+func ValidateTestServerConnectionUnauthorizedResponseBody(body *TestServerConnectionUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestServerConnectionForbiddenResponseBody runs the validations
+// defined on testServerConnection_forbidden_response_body
+func ValidateTestServerConnectionForbiddenResponseBody(body *TestServerConnectionForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestServerConnectionBadRequestResponseBody runs the validations
+// defined on testServerConnection_bad_request_response_body
+func ValidateTestServerConnectionBadRequestResponseBody(body *TestServerConnectionBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestServerConnectionNotFoundResponseBody runs the validations
+// defined on testServerConnection_not_found_response_body
+func ValidateTestServerConnectionNotFoundResponseBody(body *TestServerConnectionNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestServerConnectionConflictResponseBody runs the validations
+// defined on testServerConnection_conflict_response_body
+func ValidateTestServerConnectionConflictResponseBody(body *TestServerConnectionConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestServerConnectionUnsupportedMediaResponseBody runs the
+// validations defined on testServerConnection_unsupported_media_response_body
+func ValidateTestServerConnectionUnsupportedMediaResponseBody(body *TestServerConnectionUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestServerConnectionInvalidResponseBody runs the validations defined
+// on testServerConnection_invalid_response_body
+func ValidateTestServerConnectionInvalidResponseBody(body *TestServerConnectionInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestServerConnectionInvariantViolationResponseBody runs the
+// validations defined on testServerConnection_invariant_violation_response_body
+func ValidateTestServerConnectionInvariantViolationResponseBody(body *TestServerConnectionInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestServerConnectionUnexpectedResponseBody runs the validations
+// defined on testServerConnection_unexpected_response_body
+func ValidateTestServerConnectionUnexpectedResponseBody(body *TestServerConnectionUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestServerConnectionGatewayErrorResponseBody runs the validations
+// defined on testServerConnection_gateway_error_response_body
+func ValidateTestServerConnectionGatewayErrorResponseBody(body *TestServerConnectionGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

@@ -18,6 +18,27 @@ var _ = Service("remoteSessions", func() {
 	shared.DeclareErrorResponses()
 	principalBindingMethods()
 
+	Method("testServerConnection", func() {
+		Description("Initialize a directly Remote MCP-backed server and discover all tools using the signed-in user's saved authorization. Never executes tools. A provider tab returning is not evidence of authorization. Requires an ordinary dashboard session and mcp:connect on the exact server; API keys are refused.")
+		Security(security.Session, security.ProjectSlug)
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("mcp_server_id", String, "Exact MCP server to test.", func() { Format(FormatUUID) })
+			Required("mcp_server_id")
+		})
+		Result(ServerConnectionTestResult)
+		HTTP(func() {
+			POST("/rpc/remoteSessions.testServerConnection")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "testServerConnection")
+		Meta("openapi:extension:x-speakeasy-name-override", "testServerConnection")
+		Meta("openapi:extension:x-speakeasy-react-hook", "{\"name\": \"TestServerConnection\"}")
+	})
+
 	Method("commitServerIdentityConfiguration", func() {
 		Description("Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.")
 
@@ -221,6 +242,14 @@ var _ = Service("remoteSessions", func() {
 	})
 })
 
+var ServerConnectionTestResult = Type("ServerConnectionTestResult", func() {
+	Attribute("status", String, "Live result of this test, never a persisted completion record.", func() { Enum("ready", "authorization_required", "configuration_required", "failed") })
+	Attribute("code", String, "Stable, credential-free reason suitable for choosing a recovery action.")
+	Attribute("message", String, "Safe message for display in the failed setup step.")
+	Attribute("tool_count", Int, "Tools discovered, present only after every tools/list page succeeds.", func() { Minimum(0) })
+	Required("status", "code", "message")
+})
+
 var CommitServerIdentityConfigurationForm = Type("CommitServerIdentityConfigurationForm", func() {
 	Description("A complete plan for configuring identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.")
 
@@ -230,6 +259,7 @@ var CommitServerIdentityConfigurationForm = Type("CommitServerIdentityConfigurat
 	Attribute("provider_id", String, "An existing Remote Identity Provider visible to the target project.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("target_server_only", Boolean, "Refuse a save if the user session issuer also serves another MCP server. Setup screens must set this to avoid changing shared sign-in bindings. Explicitly assign a dedicated issuer before retrying.")
 	Attribute("create_provider", remotesessionissuers.CreateRemoteSessionIssuerForm, "A new project-scoped Remote Identity Provider to create.")
 	Attribute("client_mode", String, "How to provide the OAuth client.", func() {
 		Enum("auto", "existing", "manual")
