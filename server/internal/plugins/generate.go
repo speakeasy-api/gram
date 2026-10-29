@@ -2205,7 +2205,7 @@ export default {
         const event = slimEvent(hook, rawEvent)
         if (hook === "llm_output") {
           const texts = Array.isArray(event?.assistantTexts) ? event.assistantTexts : []
-          const key = event?.runId ?? event?.sessionId ?? ""
+          const key = event?.runId ?? ctx?.runId ?? event?.sessionId ?? ""
           llmByRun.set(key, { finalMessage: texts.join("\n") || undefined, usage: event?.usage })
           void call(hook, event, sanitizeCtx(hook, ctx))
           const waiting = pendingEnds.get(key)
@@ -2221,7 +2221,7 @@ export default {
         if (hook === "agent_end") {
           // Consume exactly the entry that served the splice: deleting the
           // other candidate key could destroy a concurrent turn's pending entry.
-          const runKey = event?.runId ?? ""
+          const runKey = event?.runId ?? ctx?.runId ?? ""
           let cached = llmByRun.get(runKey)
           if (cached !== undefined) {
             llmByRun.delete(runKey)

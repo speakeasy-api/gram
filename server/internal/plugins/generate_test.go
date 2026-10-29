@@ -2456,9 +2456,7 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 func TestGenerateOpenClawShimSplicesFinalMessageInEitherOrder(t *testing.T) {
 	t.Parallel()
 	nodePath, err := exec.LookPath("node")
-	if err != nil {
-		t.Skip("node is not installed")
-	}
+	require.NoError(t, err, "node is required to run the generated shim")
 	files, err := GenerateObservabilityPluginPackage(GenerateConfig{
 		OrgName:     "Acme",
 		ServerURL:   "https://app.getgram.ai",
@@ -2484,6 +2482,8 @@ const ctx = (runId) => ({ runId, sessionId: "session-" + runId, agentId: "main" 
 handlers.agent_end({ runId: "late-output", success: true, messages: [] }, ctx("late-output"))
 handlers.llm_output({ runId: "late-output", assistantTexts: ["hello world"], usage: { input: 1, output: 2 } }, ctx("late-output"))
 handlers.agent_end({ runId: "no-output", success: true, messages: [] }, ctx("no-output"))
+handlers.agent_end({ success: true, messages: [] }, ctx("ctx-only"))
+handlers.llm_output({ assistantTexts: ["from ctx"], usage: { input: 1, output: 2 } }, ctx("ctx-only"))
 setTimeout(() => process.exit(0), 3000)
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "driver.mjs"), []byte(driver), 0o600))
@@ -2513,6 +2513,9 @@ setTimeout(() => process.exit(0), 3000)
 	require.Equal(t, "hello world", ends["late-output"][0]["finalMessage"])
 	require.Len(t, ends["no-output"], 1, "agent_end without an llm_output is still sent")
 	require.NotContains(t, ends["no-output"][0], "finalMessage")
+	// A run ID that only ctx carries still pairs the two hooks.
+	require.Len(t, ends[""], 1, "agent_end with a ctx-only run ID is sent once")
+	require.Equal(t, "from ctx", ends[""][0]["finalMessage"])
 }
 
 // OpenClaw's Codex app-server harness fires llm_input but no before_agent_run,
