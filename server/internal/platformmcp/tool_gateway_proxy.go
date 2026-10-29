@@ -477,12 +477,12 @@ func myServersInstructions(servers []MyServer, limit int) string {
 	}
 	if limit == 0 {
 		return "The user's own MCP servers are usable through this connection: " + strings.Join(names, ", ") + moreServers(len(servers)-len(names)) +
-			". When the user asks for data or an action in one of these systems, call search_my_tools with the task in plain words, then execute_tool with the server and tool it returns; when those tools are not listed, reach them through call_platform_tool. " +
+			". When the user asks for data or an action in one of these systems, call search_my_tools with the task in plain words, then execute_tool with the server and tool it returns. " +
 			"Servers added later in this conversation are usable too; call list_my_servers to see the current list."
 	}
 	for shown := len(names); shown > 0; shown-- {
 		paragraph := "The user's MCP servers: " + strings.Join(names[:shown], ", ") + moreServers(len(servers)-shown) +
-			". For tasks in them, call search_my_tools then execute_tool via call_platform_tool."
+			". For tasks in them, use call_platform_tool to run search_my_tools, then execute_tool."
 		if len(paragraph) <= limit {
 			return paragraph
 		}
