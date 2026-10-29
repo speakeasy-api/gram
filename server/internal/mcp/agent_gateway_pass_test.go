@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -19,12 +20,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -59,7 +63,13 @@ type workloadGatewayFixture struct {
 func newWorkloadGatewayFixture(t *testing.T) workloadGatewayFixture {
 	t.Helper()
 
-	f := newWorkloadGrantFixture(t)
+	return newWorkloadGatewayFixtureFrom(t, newWorkloadGrantFixture(t))
+}
+
+// newWorkloadGatewayFixtureFrom builds the gateway on f's issuer and project.
+func newWorkloadGatewayFixtureFrom(t *testing.T, f workloadGrantFixture) workloadGatewayFixture {
+	t.Helper()
+
 	ctx := f.fixtureContext(t)
 	slug := "agent-gateway-" + uuid.NewString()[:8]
 	meta := createMetaMcpEndpoint(t, ctx, f.ti.conn, f.fx.target.ProjectID, f.fx.orgID, slug, f.fx.target.UserSessionIssuerID)
@@ -181,6 +191,18 @@ func (g workloadGatewayFixture) callTool(t *testing.T, token, tool string, argum
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	return decodeRPCResponse(t, w)
+}
+
+// endpoint is the gateway as the MCP side resolves it.
+func (g workloadGatewayFixture) endpoint() *mcp.ResolvedMcpEndpoint {
+	return &mcp.ResolvedMcpEndpoint{
+		OrganizationID:      g.fx.orgID,
+		ProjectID:           g.fx.target.ProjectID,
+		RouteBase:           mcproute.MCP,
+		Slug:                g.slug,
+		MetaMcpServerID:     uuid.NullUUID{UUID: g.metaID, Valid: true},
+		UserSessionIssuerID: g.fx.target.UserSessionIssuerID,
+	}
 }
 
 // attachMember makes serverID a member of the gateway.
@@ -344,14 +366,70 @@ func TestWorkloadGateway_ResourceGrantSessionIsBoundToTheGateway(t *testing.T) {
 }
 
 // A workload whose agent reaches no member of the gateway is refused at the
-// token endpoint rather than handed a session that serves nothing.
+// token endpoint rather than handed a session that serves nothing. The answer
+// is the invalid_grant an untrusted identity gets, and the log names the
+// reason.
 func TestWorkloadGateway_ResourceGrantRefusedWhenNoMemberIsReachable(t *testing.T) {
 	t.Parallel()
 
-	g := newWorkloadGatewayFixture(t)
+	var logs syncBuffer
+	g := newWorkloadGatewayFixtureFrom(t, newWorkloadGrantFixtureWithLogger(t, slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelInfo, AddSource: false, ReplaceAttr: nil}))))
 	rows, err := accessrepo.New(g.ti.conn).DeletePrincipalGrant(t.Context(), accessrepo.DeletePrincipalGrantParams{ID: g.grantID, OrganizationID: g.fx.orgID})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), rows)
+
+	requireWorkloadGrantRefused(t, g.exchangeAtGateway(t))
+	require.Contains(t, logs.String(), "workload assertion grant refused")
+	require.Contains(t, logs.String(), "gateway_member_unreachable")
+	require.NotContains(t, logs.String(), "agent_admission_denied")
+}
+
+// Issuance decides on the membership its own transaction reads: a member the
+// preflight reached but that has since left the gateway is not counted, nor is
+// one the preflight did not reach, and a hosted member's check names its
+// toolset.
+func TestWorkloadGateway_IssuanceRereadsMembership(t *testing.T) {
+	t.Parallel()
+
+	g := newWorkloadGatewayFixture(t)
+	ctx := g.fixtureContext(t)
+	hosted := seedHostedMetaMember(t, ctx, g.ti, g.metaID, "hosted member", 2, mcpservers.VisibilityPublic, "alpha_tool")
+	deniedID := mcpServerBySlug(t, ctx, g.ti, g.fx.target.ProjectID, g.denied)
+
+	resources, err := mcp.FreshGatewayMemberResources(ctx, g.ti.conn, g.endpoint(), g.grantedServerID, deniedID, hosted.serverID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{g.grantedServerID.String(), deniedID.String(), hosted.toolsetID.String()}, resources)
+
+	resources, err = mcp.FreshGatewayMemberResources(ctx, g.ti.conn, g.endpoint(), g.grantedServerID)
+	require.NoError(t, err)
+	require.Equal(t, []string{g.grantedServerID.String()}, resources, "a member the preflight did not reach is not counted")
+
+	_, err = metamcprepo.New(g.ti.conn).DeleteMetaMCPMembersByMCPServerID(ctx, metamcprepo.DeleteMetaMCPMembersByMCPServerIDParams{McpServerID: deniedID, ProjectID: g.fx.target.ProjectID})
+	require.NoError(t, err)
+	resources, err = mcp.FreshGatewayMemberResources(ctx, g.ti.conn, g.endpoint(), g.grantedServerID, deniedID, hosted.serverID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{g.grantedServerID.String(), hosted.toolsetID.String()}, resources, "a member removed since the preflight is not counted")
+}
+
+// A hosted member the agent may connect to, but whose toolset no longer
+// serves, reads as nonexistent on drill-down, so it does not make a session
+// issuable on its own.
+func TestWorkloadGateway_UnservableHostedMemberDoesNotMakeASessionIssuable(t *testing.T) {
+	t.Parallel()
+
+	g := newWorkloadGatewayFixture(t).anotherGateway(t)
+	ctx := g.fixtureContext(t)
+	hosted := seedHostedMetaMember(t, ctx, g.ti, g.metaID, "hosted member", 0, mcpservers.VisibilityPublic, "alpha_tool")
+	g.grantAgent(t, hosted.toolsetID)
+
+	w := g.exchangeAtGateway(t)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Equal(t, []string{hosted.slug}, g.listServers(t, decodeSharedTokenResponse(t, w).AccessToken))
+
+	toolset, err := toolsets_repo.New(g.ti.conn).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: hosted.toolsetID, ProjectID: g.fx.target.ProjectID})
+	require.NoError(t, err)
+	_, err = toolsets_repo.New(g.ti.conn).DeleteToolset(ctx, toolsets_repo.DeleteToolsetParams{Slug: toolset.Slug, ProjectID: g.fx.target.ProjectID})
+	require.NoError(t, err)
 
 	requireWorkloadGrantRefused(t, g.exchangeAtGateway(t))
 }

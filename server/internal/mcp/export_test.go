@@ -2,14 +2,17 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -125,4 +128,29 @@ func (f testAuthClientPermission) Permitted(context.Context, authClientPermitReq
 // RecordConnectionPopupGrant exercises the callback's parent-state correlation.
 func (s *Service) RecordConnectionPopupGrant(ctx context.Context, grant remotesessions.RemoteGrant) error {
 	return s.recordConnectionPopupGrant(ctx, grant)
+}
+
+// FreshGatewayMemberResources re-reads endpoint's members in a transaction on
+// db, as workload issuance does after its preflight reached the members in
+// reached, and returns the resource each remaining connect check names.
+func FreshGatewayMemberResources(ctx context.Context, db *pgxpool.Pool, endpoint *ResolvedMcpEndpoint, reached ...uuid.UUID) ([]string, error) {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin gateway member re-read: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	reach := gatewayWorkloadReach{members: make(map[uuid.UUID]struct{}, len(reached))}
+	for _, id := range reached {
+		reach.members[id] = struct{}{}
+	}
+	checks, err := reach.freshMemberChecks(ctx, tx, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	resources := make([]string, 0, len(checks))
+	for _, check := range checks {
+		resources = append(resources, check.ResourceID)
+	}
+	return resources, nil
 }

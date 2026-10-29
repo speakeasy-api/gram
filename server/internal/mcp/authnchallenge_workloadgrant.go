@@ -685,11 +685,8 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	if err == nil && grant.session.Audience == InferenceResource {
 		err = s.authz.Require(authorizationCtx, authz.InferenceExecuteCheck(grant.session.ProjectID.String()))
 	}
-	switch {
-	case errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):
-		return nil, refuseWorkloadGrant("agent_admission_denied", err)
-	case err != nil:
-		return nil, workloadGrantStageUnavailable("agent_admission_unavailable", err)
+	if err != nil {
+		return nil, workloadGrantAdmissionRefusal(err)
 	}
 
 	// A database that cannot start or commit the transaction is an outage,
@@ -706,14 +703,18 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	}
 	// All database work after the lock uses dbtx, never another pool connection.
 	authorizationCtx, err = s.admitWorkloadGrantInTx(authorizationCtx, dbtx, organizationID, subject, grant.credential)
+	var gatewayChecks []authz.Check
+	if err == nil && gatewayReach != nil {
+		gatewayChecks, err = gatewayReach.freshMemberChecks(ctx, dbtx, grant.endpoint)
+		if err != nil {
+			return nil, workloadGrantStageUnavailable("gateway_members_unavailable", err)
+		}
+	}
 	if err == nil {
-		err = s.recheckWorkloadGrantAuthorization(authorizationCtx, grant, gatewayReach)
+		err = s.recheckWorkloadGrantAuthorization(authorizationCtx, grant, gatewayChecks)
 	}
 	if err != nil {
-		if errors.Is(err, errCredentialRejected) || isCredentialDenial(err) {
-			return nil, refuseWorkloadGrant("agent_admission_denied", err)
-		}
-		return nil, workloadGrantStageUnavailable("agent_admission_unavailable", err)
+		return nil, workloadGrantAdmissionRefusal(err)
 	}
 
 	minted, err := s.issueSession(authorizationCtx, grant.client, usersessions_repo.New(dbtx), grant.session, logger)
@@ -731,6 +732,21 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	}
 
 	return minted, nil
+}
+
+// workloadGrantAdmissionRefusal classifies a verified workload grant that
+// admission did not let through: a stored gateway the workload reaches no
+// member of, an agent or owner that refused it, or a decision that could not
+// be reached and so is worth retrying.
+func workloadGrantAdmissionRefusal(err error) error {
+	switch {
+	case errors.Is(err, errGatewayMemberUnreachable):
+		return refuseWorkloadGrant("gateway_member_unreachable", err)
+	case errors.Is(err, errCredentialRejected), isCredentialDenial(err):
+		return refuseWorkloadGrant("agent_admission_denied", err)
+	default:
+		return workloadGrantStageUnavailable("agent_admission_unavailable", err)
+	}
 }
 
 // writeWorkloadGrantRefusal logs a refused grant with its reason and the
@@ -779,21 +795,19 @@ func retryAfterSeconds(d time.Duration) string {
 // writing challenge logs through the pool while the issuance transaction holds a
 // connection and issuer lock. The preflight checks record the normal challenge.
 //
-// A stored gateway rechecks the members its preflight admitted, gatewayReach,
-// rather than resolving its membership again on another pool connection.
-func (s *Service) recheckWorkloadGrantAuthorization(ctx context.Context, grant workloadGrantIssuance, gatewayReach *gatewayWorkloadReach) error {
+// A stored gateway rechecks gatewayChecks, the connect check of each member
+// its preflight admitted that the issuance transaction still reads as one,
+// rather than admitting its membership again on another pool connection.
+func (s *Service) recheckWorkloadGrantAuthorization(ctx context.Context, grant workloadGrantIssuance, gatewayChecks []authz.Check) error {
 	var checks []authz.Check
 	switch {
 	case grant.endpoint != nil && agentGatewayAddressable(grant.endpoint):
-		if gatewayReach == nil {
-			return errCredentialRejected
-		}
-		reached, err := gatewayReach.recheck(ctx, s.authz)
+		reached, err := gatewayMemberReached(ctx, s.authz, gatewayChecks)
 		if err != nil {
 			return err
 		}
 		if !reached {
-			return errCredentialRejected
+			return fmt.Errorf("%w: %w", errCredentialRejected, errGatewayMemberUnreachable)
 		}
 	case grant.endpoint != nil:
 		target, ok := agentAuthorizationTarget(grant.endpoint)

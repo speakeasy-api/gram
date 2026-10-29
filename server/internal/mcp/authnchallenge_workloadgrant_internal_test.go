@@ -159,10 +159,11 @@ func TestRecheckWorkloadGrantInferenceUsesFreshPoliciesWithoutChallengeLogging(t
 	}
 }
 
-// A grant for a stored gateway rechecks the members its preflight admitted
+// A grant for a stored gateway rechecks the members issuance still counts
 // against the freshly loaded ceiling, agent, and owner policies: losing any
-// one of them on every member refuses the session, and one member still
-// reached keeps it. A public member is rechecked like a private one.
+// one of them on every member refuses the session, as having no member left
+// does, and one member still reached keeps it. A public member is rechecked
+// like a private one.
 func TestRecheckWorkloadGrantGatewayUsesFreshPoliciesPerMember(t *testing.T) {
 	t.Parallel()
 	project := uuid.New()
@@ -180,13 +181,13 @@ func TestRecheckWorkloadGrantGatewayUsesFreshPoliciesPerMember(t *testing.T) {
 		MetaMcpServerID:     uuid.NullUUID{UUID: uuid.New(), Valid: true},
 	}
 	grant := workloadGrantIssuance{endpoint: endpoint, session: sessionIssuance{ProjectID: project}}
-	reach := &gatewayWorkloadReach{checks: []authz.Check{
+	members := []authz.Check{
 		metaMemberConnectCheck(other, uuid.NullUUID{}, project),
 		metaMemberConnectCheck(uuid.New(), uuid.NullUUID{UUID: reachable, Valid: true}, project),
-	}}
+	}
 	// The preflight admitted only a public member, which the agent's grant on
 	// it let through.
-	publicReach := &gatewayWorkloadReach{checks: []authz.Check{metaMemberConnectCheck(reachable, uuid.NullUUID{}, project)}}
+	publicMember := []authz.Check{metaMemberConnectCheck(reachable, uuid.NullUUID{}, project)}
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{UserID: "owner", ActiveOrganizationID: "test-org"}, urn.NewPrincipal(urn.PrincipalTypeUser, "owner"))
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	ceiling := []authz.Grant{authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{
@@ -203,16 +204,16 @@ func TestRecheckWorkloadGrantGatewayUsesFreshPoliciesPerMember(t *testing.T) {
 	cases := []struct {
 		name    string
 		revoked string
-		reach   *gatewayWorkloadReach
+		members []authz.Check
 		allowed bool
 	}{
-		{name: "one member still reached", revoked: "none", reach: reach, allowed: true},
-		{name: "ceiling revoked", revoked: "ceiling", reach: reach, allowed: false},
-		{name: "agent revoked", revoked: "agent", reach: reach, allowed: false},
-		{name: "owner revoked", revoked: "owner", reach: reach, allowed: false},
-		{name: "public member still reached", revoked: "none", reach: publicReach, allowed: true},
-		{name: "public member agent revoked", revoked: "agent", reach: publicReach, allowed: false},
-		{name: "no preflight", revoked: "none", reach: nil, allowed: false},
+		{name: "one member still reached", revoked: "none", members: members, allowed: true},
+		{name: "ceiling revoked", revoked: "ceiling", members: members, allowed: false},
+		{name: "agent revoked", revoked: "agent", members: members, allowed: false},
+		{name: "owner revoked", revoked: "owner", members: members, allowed: false},
+		{name: "public member still reached", revoked: "none", members: publicMember, allowed: true},
+		{name: "public member agent revoked", revoked: "agent", members: publicMember, allowed: false},
+		{name: "no member left", revoked: "none", members: nil, allowed: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -231,12 +232,40 @@ func TestRecheckWorkloadGrantGatewayUsesFreshPoliciesPerMember(t *testing.T) {
 			})
 			fresh, err := admitter.AdmitWorkloadSessionInTx(ctx, nil)
 			require.NoError(t, err)
-			err = service.recheckWorkloadGrantAuthorization(fresh, grant, tc.reach)
+			err = service.recheckWorkloadGrantAuthorization(fresh, grant, tc.members)
 			if tc.allowed {
 				require.NoError(t, err)
 			} else {
 				require.ErrorIs(t, err, errCredentialRejected)
+				require.ErrorIs(t, err, errGatewayMemberUnreachable)
 			}
+		})
+	}
+}
+
+// A gateway grant refused for reaching no member is logged under its own
+// reason, apart from an agent that refused the workload; both are refusals,
+// answered with invalid_grant.
+func TestWorkloadGrantAdmissionRefusalNamesAnUnreachableGateway(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		err     error
+		reason  string
+		outcome workloadGrantOutcome
+	}{
+		"gateway member unreachable": {err: fmt.Errorf("%w: %w", errCredentialRejected, errGatewayMemberUnreachable), reason: "gateway_member_unreachable", outcome: workloadGrantRefused},
+		"agent refused":              {err: fmt.Errorf("%w: agent suspended", errCredentialRejected), reason: "agent_admission_denied", outcome: workloadGrantRefused},
+		"undecided":                  {err: errors.New("policy store unavailable"), reason: "agent_admission_unavailable", outcome: workloadGrantUnavailable},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			refusal, ok := errors.AsType[*workloadGrantError](workloadGrantAdmissionRefusal(tc.err))
+			require.True(t, ok)
+			require.Equal(t, tc.reason, refusal.reason)
+			require.Equal(t, tc.outcome, refusal.outcome)
 		})
 	}
 }

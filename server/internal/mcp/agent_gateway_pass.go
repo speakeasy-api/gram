@@ -20,10 +20,12 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -142,36 +144,81 @@ func metaMemberConnectCheck(serverID uuid.UUID, toolsetID uuid.NullUUID, project
 	return authz.MCPCheck(authz.ScopeMCPConnect, resourceID.String(), projectID.String())
 }
 
-// gatewayWorkloadReach is what a workload grant's preflight found the
-// workload reaches at a stored gateway.
+// errGatewayMemberUnreachable marks a workload grant for a stored gateway
+// refused because the workload reaches none of the gateway's members. The
+// token endpoint answers it with the same invalid_grant as an untrusted
+// identity, so the answer reveals no gateway, member, or grant, but the
+// refusal is logged under its own reason.
+var errGatewayMemberUnreachable = errors.New("workload reaches no member of this gateway")
+
+// gatewayWorkloadReach is the members of a stored gateway a workload grant's
+// preflight found the workload reaches.
 type gatewayWorkloadReach struct {
-	// checks is the connect check of each member the preflight admitted,
-	// public or private: a workload is held to mcp:connect on both.
-	checks []authz.Check
+	// members is the mcp_servers id of each member the preflight admitted and
+	// could serve: public or private, since a workload is held to mcp:connect
+	// on both, and for a hosted member only while its toolset serves.
+	members map[uuid.UUID]struct{}
 }
 
 // resolveGatewayWorkloadReach admits a stored gateway's live members for an
 // admitted workload, as its requests will, and refuses a workload that
 // reaches none of them: a session for an empty gateway serves nothing.
+//
+// A hosted member counts only when its toolset loads as it would on
+// drill-down, so a member that lists but reads as nonexistent there does not
+// make the session issuable. The workload acts in the gateway's own
+// organization.
 func (s *Service) resolveGatewayWorkloadReach(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (context.Context, gatewayWorkloadReach, error) {
-	reach := gatewayWorkloadReach{checks: nil}
+	reach := gatewayWorkloadReach{members: map[uuid.UUID]struct{}{}}
 	ctx, members, err := s.resolveEndpointMemberSnapshot(withMandatoryAdmission(ctx), logger, mandatorySurfaceTokenIssuance, endpoint)
 	if err != nil {
 		return ctx, reach, fmt.Errorf("resolve gateway members for workload: %w", err)
 	}
+	access := memberToolsetAccess{authenticated: true, connectPublic: true}
 	for _, member := range members {
-		reach.checks = append(reach.checks, metaMemberConnectCheck(member.serverID, member.toolsetID, member.projectID))
+		if member.backend == metaMemberBackendHosted {
+			_, _, _, err := s.loadMemberToolset(ctx, logger, access, member)
+			if memberReadsAsNonexistent(err) {
+				continue
+			}
+			if err != nil {
+				return ctx, reach, fmt.Errorf("load hosted gateway member for workload: %w", err)
+			}
+		}
+		reach.members[member.serverID] = struct{}{}
 	}
-	if len(reach.checks) == 0 {
-		return ctx, reach, fmt.Errorf("%w: workload reaches no member of this gateway", errCredentialRejected)
+	if len(reach.members) == 0 {
+		return ctx, reach, fmt.Errorf("%w: %w", errCredentialRejected, errGatewayMemberUnreachable)
 	}
 	return ctx, reach, nil
 }
 
-// recheck reports whether freshly loaded authority still reaches a member the
-// preflight admitted.
-func (r gatewayWorkloadReach) recheck(ctx context.Context, engine *authz.Engine) (bool, error) {
-	for _, check := range r.checks {
+// freshMemberChecks re-reads the gateway's servable members in the issuance
+// transaction and returns the connect check of each member the preflight
+// reached that still is one, so issuance never counts a member removed,
+// disabled, or rewired since the preflight read it.
+func (r gatewayWorkloadReach) freshMemberChecks(ctx context.Context, tx pgx.Tx, endpoint *ResolvedMcpEndpoint) ([]authz.Check, error) {
+	rows, err := metamcprepo.New(tx).ListServableMetaMCPMembers(ctx, metamcprepo.ListServableMetaMCPMembersParams{
+		MetaMcpServerID: endpoint.MetaMcpServerID.UUID,
+		ProjectID:       endpoint.ProjectID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("re-read gateway members for issuance: %w", err)
+	}
+	checks := make([]authz.Check, 0, len(rows))
+	for _, row := range rows {
+		if _, reached := r.members[row.McpServerID]; !reached || row.McpServerUnproxiedMcpServerID.Valid {
+			continue
+		}
+		checks = append(checks, metaMemberConnectCheck(row.McpServerID, row.McpServerToolsetID, endpoint.ProjectID))
+	}
+	return checks, nil
+}
+
+// gatewayMemberReached reports whether freshly loaded authority allows any of
+// checks, the connect check of each member issuance still counts.
+func gatewayMemberReached(ctx context.Context, engine *authz.Engine, checks []authz.Check) (bool, error) {
+	for _, check := range checks {
 		allowed, err := engine.Evaluate(ctx, check)
 		if err != nil {
 			return false, fmt.Errorf("recheck gateway member authority: %w", err)

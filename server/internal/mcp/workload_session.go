@@ -246,6 +246,12 @@ func (s *Service) admitWorkloadSession(ctx context.Context, organizationID strin
 //
 // A stored gateway has no single server to check. Either session enters it,
 // and each request admits every live member against the same three policies.
+// A gateway session whose agent has lost every member is therefore served an
+// empty member list rather than withdrawn with invalid_token, as a
+// single-server session is when its one server refuses it. A gateway's
+// members and grants change independently of the session, so a member granted
+// or added later serves the same session until it expires; an empty gateway
+// says nothing final about the token.
 func (s *Service) requireWorkloadSessionAuthorization(ctx context.Context, endpoint *ResolvedMcpEndpoint, reach workloadSessionReach) (context.Context, error) {
 	if agentGatewayAddressable(endpoint) {
 		return ctx, nil
