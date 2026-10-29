@@ -425,9 +425,10 @@ func (s *PluginsService) setPluginAutoSync(ctx context.Context, principal Princi
 	}
 	// The target is resolved and checked after the replay lookup, so a retry
 	// of a change that committed replays it rather than being refused over
-	// changes made since, and before the receipt transaction, so a refusal is
-	// never charged. The write checks again in its own transaction, which is
-	// what keeps a change to the plugin from committing unseen in between.
+	// changes made since, and before the receipt transaction, so the usual
+	// refusal is never charged. The write checks again in its own transaction,
+	// which is what keeps a change to the plugin from committing unseen in
+	// between; a refusal there is charged.
 	var ref PluginRef
 	unsynced := func(err error) error {
 		return pluginMetadataCoreError(fmt.Errorf("check plugin has no unsynced changes: %w", err))

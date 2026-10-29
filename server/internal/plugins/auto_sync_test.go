@@ -576,10 +576,12 @@ func TestAutoSync_TurnOffWaitsForAChangeStillCommitting(t *testing.T) {
 	waitRoleSetupBlocked(t, ctx, f.ti, int32(change.Conn().PgConn().PID()))
 	require.NoError(t, change.Commit(ctx))
 
+	// Generous next to the check's milliseconds, so only a stuck lock fails it.
+	const turnOffDeadline = 10 * time.Second
 	select {
 	case err := <-turnOff:
 		require.ErrorIs(t, err, plugins.ErrPluginHasUnsyncedChanges, "the check must see the change that committed while it waited")
-	case <-time.After(10 * time.Second):
+	case <-time.After(turnOffDeadline):
 		t.Fatal("turning auto sync off never finished")
 	}
 	got, err := f.ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: f.paused.ID})

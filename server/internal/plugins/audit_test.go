@@ -46,8 +46,7 @@ func TestPluginsService_CreatePlugin_AuditRecordsAutoSyncOff(t *testing.T) {
 
 	ctx, ti := newTestPluginsService(t)
 
-	off := false
-	created, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Audit Create Paused", AutoSyncEnabled: &off})
+	created, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Audit Create Paused", AutoSyncEnabled: new(false)})
 	require.NoError(t, err)
 
 	rec, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionPluginCreate, created.ID)

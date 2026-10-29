@@ -202,7 +202,7 @@ func TestCreatePluginRefusesASlugWhosePackagesShareADirectory(t *testing.T) {
 	var refusal *PluginMetadataMutationError
 	require.ErrorAs(t, err, &refusal)
 	require.Equal(t, "invalid_request", refusal.Code)
-	require.Equal(t, "invalid slug: support-codex would publish into support-codex/, which plugin support already uses; choose a different slug.", refusal.Message)
+	require.Equal(t, "invalid slug: support-codex would publish into support-codex/, which is already used by plugin support; choose a different slug.", refusal.Message)
 	require.Equal(t, 1, fixture.pluginCount(t, ctx, fixture.project.ID))
 }
 

@@ -157,6 +157,13 @@ func (s *Service) planPausedPlugins(
 	}
 
 	for _, slug := range slices.Sorted(maps.Keys(pending)) {
+		if slices.ContainsFunc(pluginSubtreePrefixes(slug), func(prefix string) bool { return owners[prefix] != slug }) {
+			s.logger.WarnContext(ctx, "a plugin with auto sync off shares a package directory with another plugin; publishing its current state instead",
+				attr.SlogProjectID(projectID.String()),
+			)
+			plan.Active = append(plan.Active, pending[slug])
+			continue
+		}
 		files := make(map[string][]byte)
 		for filePath, content := range existing {
 			if owner, ok := owners.ownerOf(filePath); ok && owner == slug {
@@ -182,13 +189,13 @@ func (s *Service) planPausedPlugins(
 // that owns it.
 type pluginPrefixOwners map[string]string
 
-// ownersOfPlugins assigns each plugin directory to its plugin. New slugs can't
-// share a directory (see pluginSlugPackageCollision), but plugins created
-// before that check or outside the metadata core (role distribution names
-// plugins after roles) may: plugin foo's Codex package and plugin foo-codex's
-// Claude package are then both foo-codex/. Such a directory belongs to
-// neither, since both write into it, so neither can be held and both publish
-// their live state.
+// ownersOfPlugins assigns each plugin directory to its plugin. The metadata
+// core refuses a slug whose directories another plugin uses, but plugins
+// created before that check or outside it (role distribution names plugins
+// after roles) may share one: plugin foo's Codex package and plugin
+// foo-codex's Claude package are then both foo-codex/. Such a directory
+// belongs to neither, since both write into it, so neither can be held and
+// both publish their live state.
 func ownersOfPlugins(plugins []PluginInfo) pluginPrefixOwners {
 	owners := make(pluginPrefixOwners)
 	shared := make(map[string]bool)
@@ -349,8 +356,9 @@ func publishMCPFingerprints(active []PluginInfo, held []heldPlugin, cfg Generate
 // compare against, so turning auto sync off is always allowed there. The live
 // fingerprint is computed with the same configuration publishProject uses.
 // It reads the plugin's live state in tx. lockContent first takes the package
-// content lock exclusively, as the check that decides must (see
-// requireAutoSyncCanTurnOff); it waits only once there is something to compare.
+// content lock exclusively, which the check that decides must do so no change
+// commits unseen before its write; it waits only once there is something to
+// compare.
 func (s *Service) requirePluginSyncedForPause(ctx context.Context, tx pgx.Tx, plugin repo.Plugin, lockContent bool) error {
 	conn, err := s.repo.WithTx(tx).GetGitHubConnection(ctx, plugin.ProjectID)
 	if errors.Is(err, pgx.ErrNoRows) {

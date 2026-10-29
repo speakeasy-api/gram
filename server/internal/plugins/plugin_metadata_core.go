@@ -47,8 +47,7 @@ var (
 	ErrPluginSlugConflict = errors.New("a plugin with this slug already exists")
 
 	// ErrPluginSlugUnavailable is a slug whose packages would share a
-	// directory with another package in the marketplace (see
-	// pluginSlugPackageCollision).
+	// directory with another package in the marketplace.
 	ErrPluginSlugUnavailable = errors.New("invalid slug: its packages would share a directory with another package in the marketplace")
 
 	// ErrPluginMetadataTargetNotFound is a plugin id that matches no plugin in
@@ -207,7 +206,7 @@ type pluginSlugUnavailableError struct {
 }
 
 func (e *pluginSlugUnavailableError) Error() string {
-	return fmt.Sprintf("invalid slug: %s would publish into %s, which %s already uses; choose a different slug", e.slug, e.dir, e.holder)
+	return fmt.Sprintf("invalid slug: %s would publish into %s, which is already used by %s; choose a different slug", e.slug, e.dir, e.holder)
 }
 
 func (e *pluginSlugUnavailableError) Unwrap() error { return ErrPluginSlugUnavailable }
@@ -315,15 +314,15 @@ func (c *PluginMetadataCore) CreateInTransaction(ctx context.Context, tx pgx.Tx,
 	}
 
 	if err := c.audit.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{
-		OrganizationID:   mutation.OrganizationID,
-		ProjectID:        mutation.ProjectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, mutation.Actor.UserID),
-		ActorDisplayName: mutation.Actor.DisplayName,
-		ActorSlug:        nil,
-		PluginID:         plugin.ID,
-		PluginName:       plugin.Name,
-		PluginSlug:       plugin.Slug,
-		SnapshotAfter:    pluginAuditSnapshot(plugin),
+		OrganizationID:      mutation.OrganizationID,
+		ProjectID:           mutation.ProjectID,
+		Actor:               urn.NewPrincipal(urn.PrincipalTypeUser, mutation.Actor.UserID),
+		ActorDisplayName:    mutation.Actor.DisplayName,
+		ActorSlug:           nil,
+		PluginID:            plugin.ID,
+		PluginName:          plugin.Name,
+		PluginSlug:          plugin.Slug,
+		PluginSnapshotAfter: pluginAuditSnapshot(plugin),
 	}); err != nil {
 		return PluginMetadataResult{}, fmt.Errorf("audit log plugin create: %w", err)
 	}

@@ -31,21 +31,21 @@ func TestPluginsService_RefusesSlugsWhosePackagesShareADirectory(t *testing.T) {
 	_, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Foo", Slug: new("foo")})
 	require.NoError(t, err)
 	_, err = ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Foo Codex", Slug: new("foo-codex")})
-	requireSlugUnavailable(t, err, "invalid slug: foo-codex would publish into foo-codex/, which plugin foo already uses; choose a different slug")
+	requireSlugUnavailable(t, err, "invalid slug: foo-codex would publish into foo-codex/, which is already used by plugin foo; choose a different slug")
 
 	_, err = ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Bar Codex", Slug: new("bar-codex")})
 	require.NoError(t, err)
 	_, err = ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Bar", Slug: new("bar")})
-	requireSlugUnavailable(t, err, "invalid slug: bar would publish into bar-codex/, which plugin bar-codex already uses; choose a different slug")
+	requireSlugUnavailable(t, err, "invalid slug: bar would publish into bar-codex/, which is already used by plugin bar-codex; choose a different slug")
 
 	// A slug derived from the name is checked the same way.
 	_, err = ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Foo Codex"})
-	requireSlugUnavailable(t, err, "invalid slug: foo-codex would publish into foo-codex/, which plugin foo already uses; choose a different slug")
+	requireSlugUnavailable(t, err, "invalid slug: foo-codex would publish into foo-codex/, which is already used by plugin foo; choose a different slug")
 
 	other, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Other", Slug: new("other")})
 	require.NoError(t, err)
 	_, err = ti.service.UpdatePlugin(ctx, &gen.UpdatePluginPayload{ID: other.ID, Name: other.Name, Slug: "foo-codex"})
-	requireSlugUnavailable(t, err, "invalid slug: foo-codex would publish into foo-codex/, which plugin foo already uses; choose a different slug")
+	requireSlugUnavailable(t, err, "invalid slug: foo-codex would publish into foo-codex/, which is already used by plugin foo; choose a different slug")
 
 	// Renaming a plugin without moving its slug needs no check.
 	_, err = ti.service.UpdatePlugin(ctx, &gen.UpdatePluginPayload{ID: other.ID, Name: "Other Renamed", Slug: other.Slug})
@@ -71,13 +71,16 @@ func TestPluginsService_RefusesSlugsOfTheMarketplacesOwnPackages(t *testing.T) {
 	observability, _ := orgObservabilitySlugs(t, ctx, ti)
 
 	for slug, message := range map[string]string{
-		"cursor-plugins":            "invalid slug: cursor-plugins would publish into cursor-plugins/, which the marketplace's Cursor packages already uses; choose a different slug",
-		"speakeasy":                 "invalid slug: speakeasy would publish into speakeasy/, which the Speakeasy Platform MCP plugin already uses; choose a different slug",
-		observability:               "invalid slug: " + observability + " would publish into " + observability + "/, which the observability plugin already uses; choose a different slug",
-		observability + "-opencode": "invalid slug: " + observability + "-opencode would publish into " + observability + "-opencode/, which the observability plugin already uses; choose a different slug",
+		"cursor-plugins":            "invalid slug: cursor-plugins would publish into cursor-plugins/, which is already used by the marketplace's Cursor packages; choose a different slug",
+		"speakeasy":                 "invalid slug: speakeasy would publish into speakeasy/, which is already used by the Speakeasy Platform MCP plugin; choose a different slug",
+		observability:               "invalid slug: " + observability + " would publish into " + observability + "/, which is already used by the observability plugin; choose a different slug",
+		observability + "-opencode": "invalid slug: " + observability + "-opencode would publish into " + observability + "-opencode/, which is already used by the observability plugin; choose a different slug",
 	} {
-		_, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: slug, Slug: new(slug)})
-		requireSlugUnavailable(t, err, message)
+		t.Run(slug, func(t *testing.T) {
+			t.Parallel()
+			_, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: slug, Slug: new(slug)})
+			requireSlugUnavailable(t, err, message)
+		})
 	}
 }
 

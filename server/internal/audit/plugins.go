@@ -49,15 +49,15 @@ type LogPluginCreateEvent struct {
 	PluginName string
 	PluginSlug string
 
-	// SnapshotAfter is the created plugin, recording settings chosen at
+	// PluginSnapshotAfter is the created plugin, recording settings chosen at
 	// creation such as auto sync being off. Nil records no snapshot.
-	SnapshotAfter *PluginSnapshot
+	PluginSnapshotAfter *PluginSnapshot
 }
 
 func (l *Logger) LogPluginCreate(ctx context.Context, dbtx repo.DBTX, event LogPluginCreateEvent) error {
 	action := ActionPluginCreate
 
-	afterSnapshot, err := marshalAuditPayload(event.SnapshotAfter)
+	afterSnapshot, err := marshalAuditPayload(event.PluginSnapshotAfter)
 	if err != nil {
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
 	}

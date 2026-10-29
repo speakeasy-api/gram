@@ -1379,9 +1379,9 @@ func reservedPackageDirs(orgNames []string) map[string]string {
 	return reserved
 }
 
-// pluginSlugPackageCollision refuses a slug whose package directories (see
-// pluginSubtreePrefixes) would be ones another of the project's plugins, or
-// the marketplace itself, already publishes into: plugin foo's Codex package
+// pluginSlugPackageCollision refuses a slug whose package directories would be
+// ones another of the project's plugins, or the marketplace itself, already
+// publishes into: plugin foo's Codex package
 // and plugin foo-codex's Claude package would both be foo-codex/. others are
 // the project's other live slugs; a slug equal to one of them is left to the
 // unique slug check. orgNames are as for reservedPackageDirs.

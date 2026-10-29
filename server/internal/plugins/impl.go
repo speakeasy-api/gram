@@ -437,15 +437,15 @@ func (s *Service) ensureDefaultPlugin(ctx context.Context, ac *contextvalues.Aut
 	}
 
 	if err := s.audit.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{
-		OrganizationID:   ac.ActiveOrganizationID,
-		ProjectID:        *ac.ProjectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName: ac.Email,
-		ActorSlug:        nil,
-		PluginID:         ensured.Plugin.ID,
-		PluginName:       ensured.Plugin.Name,
-		PluginSlug:       ensured.Plugin.Slug,
-		SnapshotAfter:    nil,
+		OrganizationID:      ac.ActiveOrganizationID,
+		ProjectID:           *ac.ProjectID,
+		Actor:               urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:    ac.Email,
+		ActorSlug:           nil,
+		PluginID:            ensured.Plugin.ID,
+		PluginName:          ensured.Plugin.Name,
+		PluginSlug:          ensured.Plugin.Slug,
+		PluginSnapshotAfter: nil,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "audit log default plugin create").LogError(ctx, s.logger)
 	}
@@ -693,8 +693,9 @@ func (s *Service) requireAutoSyncCanTurnOff(ctx context.Context, tx pgx.Tx, orga
 // RequireAutoSyncCanTurnOffInTransaction is the check UpdatePlugin makes before
 // turning a plugin's auto sync off, for a caller that changes nothing else
 // about the plugin, such as the Platform MCP. Run it in the transaction that
-// writes the setting, before the write (see requireAutoSyncCanTurnOff). A
-// refusal because the plugin has changes that haven't been synced matches
+// writes the setting, before the write: the locks it takes there are what keep
+// a change to the plugin from committing unseen in between. A refusal because
+// the plugin has changes that haven't been synced matches
 // ErrPluginHasUnsyncedChanges. The caller must already have authorized plugin
 // write for the project.
 func (s *Service) RequireAutoSyncCanTurnOffInTransaction(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID uuid.UUID) error {
@@ -702,8 +703,9 @@ func (s *Service) RequireAutoSyncCanTurnOffInTransaction(ctx context.Context, tx
 }
 
 // RequireAutoSyncCanTurnOff is RequireAutoSyncCanTurnOffInTransaction without
-// its locks, for refusing early before any write begins. Passing it doesn't
-// make the write safe: the write must still run the locked check.
+// the plugin row and package content locks, for refusing early before any
+// write begins. Passing it doesn't make the write safe: the write must still
+// run the locked check.
 func (s *Service) RequireAutoSyncCanTurnOff(ctx context.Context, organizationID string, projectID, pluginID uuid.UUID) error {
 	current, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
 		ID:             pluginID,
@@ -2737,8 +2739,8 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	if observabilityEnabled {
 		sharedCfg.HooksAPIKey = fingerprintHooksKeySentinel
 	}
-	// Point the observability entries at a carried subtree's directories (see
-	// fingerprintCfg above) so they stay resolvable.
+	// Point the observability entries at a carried subtree's directories, as
+	// the fingerprint did, so they stay resolvable.
 	if carriedHooks {
 		sharedCfg.HooksOrgName = carryHooksOrgName
 	}

@@ -30,7 +30,7 @@ func TestPluginSlugPackageCollision(t *testing.T) {
 			t.Parallel()
 			err := pluginSlugPackageCollision(test.slug, test.others, []string{"Acme", "Old Acme"})
 			require.ErrorIs(t, err, ErrPluginSlugUnavailable)
-			require.Equal(t, "invalid slug: "+test.slug+" would publish into "+test.dir+", which "+test.holder+" already uses; choose a different slug", err.Error())
+			require.Equal(t, "invalid slug: "+test.slug+" would publish into "+test.dir+", which is already used by "+test.holder+"; choose a different slug", err.Error())
 		})
 	}
 
@@ -60,20 +60,23 @@ func TestOwnersOfPluginsSharedDirectoryBelongsToNeither(t *testing.T) {
 
 	foo := PluginInfo{Name: "Foo", Slug: "foo", Description: "", Servers: nil, Skills: nil, AgentPluginsV1Issues: nil}
 	fooCodex := PluginInfo{Name: "Foo Codex", Slug: "foo-codex", Description: "", Servers: nil, Skills: nil, AgentPluginsV1Issues: nil}
-	for _, order := range [][]PluginInfo{{foo, fooCodex}, {fooCodex, foo}} {
-		owners := ownersOfPlugins(order)
+	for name, order := range map[string][]PluginInfo{"foo first": {foo, fooCodex}, "foo-codex first": {fooCodex, foo}} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			owners := ownersOfPlugins(order)
 
-		_, ok := owners.ownerOf("foo-codex/.mcp.json")
-		require.False(t, ok, "both plugins write into the shared directory")
+			_, ok := owners.ownerOf("foo-codex/.mcp.json")
+			require.False(t, ok, "both plugins write into the shared directory")
 
-		owner, ok := owners.ownerOf("foo/.mcp.json")
-		require.True(t, ok)
-		require.Equal(t, "foo", owner)
-		owner, ok = owners.ownerOf("cursor-plugins/foo-cursor/mcp.json")
-		require.True(t, ok)
-		require.Equal(t, "foo", owner)
-		owner, ok = owners.ownerOf("foo-codex-codex/.mcp.json")
-		require.True(t, ok)
-		require.Equal(t, "foo-codex", owner)
+			owner, ok := owners.ownerOf("foo/.mcp.json")
+			require.True(t, ok)
+			require.Equal(t, "foo", owner)
+			owner, ok = owners.ownerOf("cursor-plugins/foo-cursor/mcp.json")
+			require.True(t, ok)
+			require.Equal(t, "foo", owner)
+			owner, ok = owners.ownerOf("foo-codex-codex/.mcp.json")
+			require.True(t, ok)
+			require.Equal(t, "foo-codex", owner)
+		})
 	}
 }

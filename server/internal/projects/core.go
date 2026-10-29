@@ -213,15 +213,15 @@ func (c *Core) CreateInTransaction(ctx context.Context, dbtx pgx.Tx, mutation Cr
 
 	if ensured.Created {
 		if err := c.audit.LogPluginCreate(ctx, dbtx, audit.LogPluginCreateEvent{
-			OrganizationID:   mutation.OrganizationID,
-			ProjectID:        prj.ID,
-			Actor:            mutation.Actor.principal(),
-			ActorDisplayName: mutation.Actor.DisplayName,
-			ActorSlug:        nil,
-			PluginID:         ensured.Plugin.ID,
-			PluginName:       ensured.Plugin.Name,
-			PluginSlug:       ensured.Plugin.Slug,
-			SnapshotAfter:    nil,
+			OrganizationID:      mutation.OrganizationID,
+			ProjectID:           prj.ID,
+			Actor:               mutation.Actor.principal(),
+			ActorDisplayName:    mutation.Actor.DisplayName,
+			ActorSlug:           nil,
+			PluginID:            ensured.Plugin.ID,
+			PluginName:          ensured.Plugin.Name,
+			PluginSlug:          ensured.Plugin.Slug,
+			PluginSnapshotAfter: nil,
 		}); err != nil {
 			return repo.Project{}, fmt.Errorf("log default plugin creation: %w", err)
 		}
