@@ -515,6 +515,33 @@ SELECT count(*) FROM (
 -- name: PostflightCountMDMDevices :one
 SELECT count(*) FROM mdm_devices WHERE organization_id = @org_id::text;
 
+-- State reports: one attested machine and one enforcing an older policy.
+-- Without them every active device reads unreported.
+
+-- name: PostflightCountDeviceAgentStateReports :one
+SELECT count(*) FROM device_agent_state_reports WHERE organization_id = @org_id::text;
+
+-- name: PostflightCountAttestedDeviceAgentStateReports :one
+SELECT count(*)
+FROM device_agent_state_reports r
+JOIN device_agent_syncs s
+  ON s.organization_id = r.organization_id
+ AND LOWER(s.email) = LOWER(r.email)
+WHERE r.organization_id = @org_id::text
+  AND r.applied_etag = s.served_etag;
+
+-- name: PostflightCountOutdatedDeviceAgentStateReports :one
+-- Behind on policy because a tool hit a permission error, the case the
+-- device panel exists to explain.
+SELECT count(*)
+FROM device_agent_state_reports r
+JOIN device_agent_syncs s
+  ON s.organization_id = r.organization_id
+ AND LOWER(s.email) = LOWER(r.email)
+WHERE r.organization_id = @org_id::text
+  AND r.applied_etag IS DISTINCT FROM s.served_etag
+  AND r.tools @> '[{"outcome": "error", "error_kind": "permission_denied"}]'::jsonb;
+
 -- name: PostflightCountDeviceIntegrationConfigs :one
 SELECT count(*) FROM device_integration_configs
 WHERE organization_id = @org_id::text AND deleted IS FALSE;

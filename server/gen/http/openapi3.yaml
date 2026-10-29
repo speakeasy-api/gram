@@ -30923,6 +30923,18 @@ paths:
                         - missing
                     type: string
                 - allowEmptyValue: true
+                  description: Only agent_active devices in this policy state.
+                  in: query
+                  name: policy_state
+                  schema:
+                    description: Only agent_active devices in this policy state.
+                    enum:
+                        - attested
+                        - outdated
+                        - unreported
+                        - halted
+                    type: string
+                - allowEmptyValue: true
                   description: Only devices assigned to these Speakeasy users. Combined with user_emails as an OR, because a device only carries a resolved user id when the MDM's reported email matched a member.
                   in: query
                   name: user_ids
@@ -99123,11 +99135,11 @@ components:
                     minLength: 1
                 value:
                     type: string
-                    description: The value to send. Omit it on a secret header that already stores one to keep the stored value.
+                    description: The value to send. Omit it on a header that already stores one, with is_secret unchanged, to keep the stored value.
                 value_from_request_header:
                     type: string
                     description: The caller's request header to copy the value from, for pass-through headers.
-            description: A header an auth client sends upstream. Exactly one of value and value_from_request_header is set, except that a secret header already storing a value may omit both to keep it.
+            description: A header an auth client sends upstream. Exactly one of value and value_from_request_header is set, except that a header already storing a value may omit both to keep it, as long as is_secret is unchanged.
             required:
                 - name
         AuthClientServer:
@@ -104415,6 +104427,10 @@ components:
                     enum:
                         - device
                         - user
+                enforcement_halted:
+                    type: integer
+                    description: agent_active devices whose agent build is blocked, so the kill switch has halted enforcement.
+                    format: int64
                 missing:
                     type: integer
                     description: Devices absent from the latest completed MDM snapshot.
@@ -104430,6 +104446,18 @@ components:
                 organization_id:
                     type: string
                     description: Organization the coverage describes.
+                policy_attested:
+                    type: integer
+                    description: agent_active devices whose latest report applies the policy last served to the reporting user.
+                    format: int64
+                policy_outdated:
+                    type: integer
+                    description: agent_active devices that report a different policy, or none.
+                    format: int64
+                policy_unreported:
+                    type: integer
+                    description: agent_active devices with no state report within the window, typically an agent that predates reporting.
+                    format: int64
                 total_devices:
                     type: integer
                     description: All synced devices, including missing ones.
@@ -104457,6 +104485,10 @@ components:
                 - missing
                 - total_devices
                 - unmanaged_agent_users
+                - policy_attested
+                - policy_outdated
+                - policy_unreported
+                - enforcement_halted
         DeviceIntegrationProvider:
             type: object
             properties:
@@ -113579,8 +113611,10 @@ components:
             properties:
                 agent_last_seen_at:
                     type: string
-                    description: 'The device-agent heartbeat that classified this device: the machine''s own under device-level matching, otherwise its assigned user''s. Omitted when no agent has ever synced.'
+                    description: 'The latest sign of life that classified this device, a policy poll or a state report: the machine''s own under device-level matching, otherwise its assigned user''s. Omitted when no agent has ever synced.'
                     format: date-time
+                agent_state:
+                    $ref: '#/components/schemas/ManagedDeviceAgentState'
                 coverage_bucket:
                     type: string
                     description: Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.
@@ -113621,6 +113655,14 @@ components:
                 os_version:
                     type: string
                     description: Operating system version.
+                policy_state:
+                    type: string
+                    description: 'Whether an agent_active device verifiably applies its policy. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different or no policy. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the kill switch stopped enforcement on a blocked agent build. Omitted for every other bucket.'
+                    enum:
+                        - attested
+                        - outdated
+                        - unreported
+                        - halted
                 provider:
                     type: string
                     description: Provider the device was synced from.
@@ -113641,6 +113683,118 @@ components:
                 - coverage_bucket
                 - first_seen_at
                 - last_seen_at
+        ManagedDeviceAgentState:
+            type: object
+            properties:
+                applied_at:
+                    type: string
+                    description: When the agent first applied that etag.
+                    format: date-time
+                applied_etag:
+                    type: string
+                    description: Etag of the policy the agent last applied.
+                arch:
+                    type: string
+                    description: CPU architecture, e.g. arm64.
+                auto_update:
+                    type: string
+                    description: 'Resolved update mode: automatic, notify, or disabled.'
+                current_blocked:
+                    type: boolean
+                    description: True when the agent build is in blocked_versions.
+                drift_counting_since:
+                    type: string
+                    description: Start of the window tools[].drift_corrections counts over. Omitted when no tool measures drift.
+                    format: date-time
+                enforcement_halted:
+                    type: boolean
+                    description: True when the kill switch has halted policy enforcement.
+                last_rollback:
+                    $ref: '#/components/schemas/ManagedDeviceRollback'
+                os:
+                    type: string
+                    description: Operating system, e.g. darwin.
+                pinned_target:
+                    type: string
+                    description: Version the organization pinned the fleet to, when set.
+                reported_at:
+                    type: string
+                    description: When the control plane received the report.
+                    format: date-time
+                speakeasy_ui_version:
+                    type: string
+                    description: Version of the menu bar app.
+                speakeasy_version:
+                    type: string
+                    description: Version of the speakeasy CLI.
+                speakeasyd_version:
+                    type: string
+                    description: Version of the speakeasyd daemon.
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ManagedDeviceTool'
+                    description: Each managed tool's outcome from the agent's last reconcile.
+                update_channel:
+                    type: string
+                    description: Update channel the agent follows, e.g. stable.
+            description: What a device's agent last reported it enforces. Carries no error text or user-facing message.
+            required:
+                - reported_at
+                - enforcement_halted
+                - current_blocked
+                - tools
+        ManagedDeviceRollback:
+            type: object
+            properties:
+                at:
+                    type: string
+                    description: When the rollback happened.
+                    format: date-time
+                from:
+                    type: string
+                    description: Version the agent rolled back from.
+                to:
+                    type: string
+                    description: Version the agent rolled back to.
+            description: 'A self-rollback: the updated build failed to start, so the agent restored the previous one.'
+            required:
+                - at
+        ManagedDeviceTool:
+            type: object
+            properties:
+                action_required:
+                    type: boolean
+                    description: True when a problem the user can fix is blocking this tool.
+                drift_corrections:
+                    type: integer
+                    description: Times the agent restored what it owns in this tool since drift_counting_since. Omitted when not measured.
+                    format: int64
+                error_kind:
+                    type: string
+                    description: 'Class of a reconcile error: permission_denied, not_found, invalid_config, or unknown.'
+                layer:
+                    type: string
+                    description: 'Enforcement layer: user, managed, off, or unknown.'
+                outcome:
+                    type: string
+                    description: 'Reconcile outcome: armed, pending, skipped (tool not installed), error, unmanaged, or unknown.'
+                pending_reason:
+                    type: string
+                    description: 'Why a pending tool is not enforcing yet: privileged_writer_not_ready, plugin_bundle_not_cloned, or unknown.'
+                restart_required:
+                    type: boolean
+                    description: True when the tool loads the agent's changes only after it restarts.
+                tool:
+                    type: string
+                    description: Stable tool id, e.g. claude_code.
+            description: One managed tool's enforcement state on a device.
+            required:
+                - tool
+                - layer
+                - outcome
+                - restart_required
+                - action_required
         MarkEnterpriseTrialConvertedRequestBody:
             type: object
             properties:

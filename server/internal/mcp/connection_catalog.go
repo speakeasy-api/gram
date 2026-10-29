@@ -5,14 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -38,6 +41,39 @@ var errConnectionCatalogTooLarge = errors.New("approved tool definitions exceed 
 
 // catalogMemberNotApproved explains a member outside the approved catalog.
 const catalogMemberNotApproved = "This server was not approved. Give consent again to add it."
+
+// consentRejectionReason is the log reason for an approval that cannot serve a
+// request. Clients see only a sign-in challenge or consent_required, so these
+// values are how operators tell the causes apart.
+type consentRejectionReason string
+
+const (
+	// consentRejectionNoCatalogReference is a gateway session without an approval reference.
+	consentRejectionNoCatalogReference consentRejectionReason = "catalog_reference_missing"
+
+	// consentRejectionCatalogNotFound is an approval missing from the store. The
+	// store drops a record at its expiry, so this covers both expiry and eviction.
+	consentRejectionCatalogNotFound consentRejectionReason = "catalog_not_found"
+
+	// consentRejectionCatalogUnreadable is a stored approval that is oversized or does not decode.
+	consentRejectionCatalogUnreadable consentRejectionReason = "catalog_unreadable"
+
+	// consentRejectionCatalogBindingMismatch is an approval bound to another
+	// version, organization, issuer, gateway, subject, or OAuth client.
+	consentRejectionCatalogBindingMismatch consentRejectionReason = "catalog_binding_mismatch"
+
+	// consentRejectionCatalogExpired is an approval past its recorded expiry.
+	consentRejectionCatalogExpired consentRejectionReason = "catalog_expired"
+
+	// consentRejectionMemberNotApproved is a member the approval does not name for its current server and project.
+	consentRejectionMemberNotApproved consentRejectionReason = "member_not_approved"
+
+	// consentRejectionAuthenticationChanged is a proxied member whose upstream client or registration changed.
+	consentRejectionAuthenticationChanged consentRejectionReason = "authentication_changed"
+
+	// consentRejectionConfigurationChanged is a member whose stored configuration hash changed.
+	consentRejectionConfigurationChanged consentRejectionReason = "configuration_changed"
+)
 
 // connectionCatalogMember identifies the route and client verified at consent.
 type connectionCatalogMember struct {
@@ -196,28 +232,64 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, endpoint *Resolv
 // snapshot. A cache outage is an operational error; eviction needs consent.
 func (s *Service) loadConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, reference *toolfilter.CatalogReference, now time.Time) (*connectionCatalog, error) {
 	if reference == nil || reference.ID == uuid.Nil {
-		return nil, errConnectionCatalogExpired
+		return nil, s.rejectConnectionCatalog(ctx, endpoint, reference, consentRejectionNoCatalogReference, nil, time.Time{})
 	}
 	var raw []byte
 	err := s.connectionCatalogCache.Get(ctx, connectionCatalogKey(endpoint.OrganizationID, reference.ID), &raw)
 	if errors.Is(err, redisCache.ErrCacheMiss) {
-		return nil, errConnectionCatalogExpired
+		return nil, s.rejectConnectionCatalog(ctx, endpoint, reference, consentRejectionCatalogNotFound, nil, time.Time{})
 	}
 	if err != nil {
 		return nil, fmt.Errorf("load connection catalog: %w", err)
 	}
 	var catalog connectionCatalog
 	if len(raw) > connectionCatalogMaxBytes || json.Unmarshal(raw, &catalog) != nil {
-		return nil, errConnectionCatalogExpired
-	}
-	if catalog.Version != connectionCatalogVersion || catalog.ID != reference.ID || catalog.OrganizationID != endpoint.OrganizationID || catalog.IssuerID != endpoint.UserSessionIssuerID || catalog.Resource != endpointToolSelectionResource(endpoint) || catalog.Subject != subject || !now.Before(catalog.ExpiresAt) {
-		return nil, errConnectionCatalogExpired
+		return nil, s.rejectConnectionCatalog(ctx, endpoint, reference, consentRejectionCatalogUnreadable, nil, time.Time{})
 	}
 	clientID, _ := contextvalues.GetOAuthClientID(ctx)
-	if catalog.ClientID != clientID {
-		return nil, errConnectionCatalogExpired
+	bindings := map[string]bool{
+		"version_matches":      catalog.Version == connectionCatalogVersion,
+		"id_matches":           catalog.ID == reference.ID,
+		"organization_matches": catalog.OrganizationID == endpoint.OrganizationID,
+		"issuer_matches":       catalog.IssuerID == endpoint.UserSessionIssuerID,
+		"resource_matches":     catalog.Resource == endpointToolSelectionResource(endpoint),
+		"subject_matches":      catalog.Subject == subject,
+		"client_matches":       catalog.ClientID == clientID,
+	}
+	for _, matches := range bindings {
+		if !matches {
+			return nil, s.rejectConnectionCatalog(ctx, endpoint, reference, consentRejectionCatalogBindingMismatch, bindings, catalog.ExpiresAt)
+		}
+	}
+	if !now.Before(catalog.ExpiresAt) {
+		return nil, s.rejectConnectionCatalog(ctx, endpoint, reference, consentRejectionCatalogExpired, nil, catalog.ExpiresAt)
 	}
 	return &catalog, nil
+}
+
+// rejectConnectionCatalog logs why a stored approval cannot serve this request
+// before callers turn it into a bare sign-in challenge. It returns the shared
+// sentinel unchanged: its text reaches clients in WWW-Authenticate.
+func (s *Service) rejectConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, reference *toolfilter.CatalogReference, reason consentRejectionReason, bindings map[string]bool, expiresAt time.Time) error {
+	attrs := []slog.Attr{
+		attr.SlogReason(string(reason)),
+		attr.SlogOrganizationID(endpoint.OrganizationID),
+		attr.SlogProjectID(endpoint.ProjectID.String()),
+	}
+	if endpoint.MetaMcpServerID.Valid {
+		attrs = append(attrs, attr.SlogMetaMcpServerID(endpoint.MetaMcpServerID.UUID.String()))
+	}
+	if reference != nil {
+		attrs = append(attrs, attr.SlogMcpConsentCatalogID(reference.ID.String()), attr.SlogMcpConsentCatalogMode(string(reference.Mode)))
+	}
+	if bindings != nil {
+		attrs = append(attrs, attr.SlogMcpConsentComparisons(bindings))
+	}
+	if !expiresAt.IsZero() {
+		attrs = append(attrs, attr.SlogMcpConsentExpiresAt(expiresAt))
+	}
+	s.logger.LogAttrs(ctx, slog.LevelInfo, "gateway connection catalog rejected", attrs...)
+	return errConnectionCatalogExpired
 }
 
 // describeCachedMember applies current tool permissions to stored definitions.
@@ -310,7 +382,8 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 	}
 	approved, found := gate.catalog.Members[member.slug]
 	if !found || approved.ServerID != member.serverID || approved.ProjectID != member.projectID {
-		return catalogConsentError{&metaMemberError{message: catalogMemberNotApproved}}
+		return s.rejectCatalogMember(ctx, gate, member, consentRejectionMemberNotApproved, catalogMemberNotApproved,
+			map[string]bool{"member_recorded": found, "server_id_matches": found && approved.ServerID == member.serverID, "project_id_matches": found && approved.ProjectID == member.projectID})
 	}
 
 	if member.backend == metaMemberBackendProxied && (gate.execute || gate.catalogRef.Mode == toolfilter.CatalogModeLive) {
@@ -322,13 +395,54 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 			return member.upstreamUnavailable
 		}
 		if approved.Auth == nil || approved.Auth.RegistrationID != member.chosenClientID || approved.Auth.ClientID != clientID {
-			return catalogConsentError{&metaMemberError{message: "This server's authentication changed. Give consent again to approve it."}}
+			return s.rejectCatalogMember(ctx, gate, member, consentRejectionAuthenticationChanged, "This server's authentication changed. Give consent again to approve it.",
+				map[string]bool{"auth_recorded": approved.Auth != nil, "registration_id_matches": approved.Auth != nil && approved.Auth.RegistrationID == member.chosenClientID, "auth_client_id_matches": approved.Auth != nil && approved.Auth.ClientID == clientID})
 		}
 	}
 	if member.configurationHash == "" || member.configurationHash != approved.BackendHash {
-		return catalogConsentError{&metaMemberError{message: "This server's configuration changed. Give consent again to approve it."}}
+		return s.rejectCatalogMember(ctx, gate, member, consentRejectionConfigurationChanged, "This server's configuration changed. Give consent again to approve it.",
+			map[string]bool{"configuration_hash_present": member.configurationHash != "", "approved_hash_recorded": approved.BackendHash != ""})
 	}
 	return nil
+}
+
+// Log before discovery collapses the refusal into consent_required. Keep the
+// record to correlation IDs and comparison results: never log the catalog,
+// credentials, configuration hashes, headers, or tool definitions.
+func (s *Service) rejectCatalogMember(ctx context.Context, gate *metaGateContext, member metaMember, reason consentRejectionReason, message string, comparisons map[string]bool) error {
+	err := catalogConsentError{&metaMemberError{message: message}}
+	if gate.consentDiagnostics != nil {
+		key := consentDiagnosticKey{catalogID: gate.catalog.ID, memberID: member.serverID, reason: reason}
+		if _, seen := gate.consentDiagnostics.seen.LoadOrStore(key, struct{}{}); seen {
+			return err
+		}
+	}
+	catalogMode := ""
+	if gate.catalogRef != nil {
+		catalogMode = string(gate.catalogRef.Mode)
+	}
+	s.logger.LogAttrs(ctx, slog.LevelInfo, "gateway consent validation failed",
+		attr.SlogMetaMcpServerID(gate.metaServerID.String()),
+		attr.SlogMcpServerID(member.serverID.String()),
+		attr.SlogProjectID(gate.projectID.String()),
+		attr.SlogMcpConsentMemberProjectID(member.projectID.String()),
+		attr.SlogReason(string(reason)),
+		attr.SlogMcpConsentCatalogID(gate.catalog.ID.String()),
+		attr.SlogMcpConsentCatalogMode(catalogMode),
+		attr.SlogMcpConsentDiscoveryMode(string(gate.discoveryMode)),
+		attr.SlogMcpConsentExecute(gate.execute),
+		attr.SlogMcpConsentComparisons(comparisons))
+	return err
+}
+
+// A Code Mode execution can validate the same member concurrently through
+// several helpers. Keep its diagnostic set shared across refreshed gate copies.
+type consentDiagnostics struct{ seen sync.Map }
+
+type consentDiagnosticKey struct {
+	catalogID uuid.UUID
+	memberID  uuid.UUID
+	reason    consentRejectionReason
 }
 
 // catalogConsentError is a member whose approval no longer matches it. Only a

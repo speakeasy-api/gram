@@ -130,6 +130,8 @@ const brokenAuthMessage = "Speakeasy hooks are configured for this workspace but
 
 const reauthNeededMessage = "Speakeasy hooks need to reconnect. Run the Speakeasy hooks login command to reconnect."
 
+const tokenRejectedMessage = "Speakeasy refused this device's hooks: the device may have been revoked, have no hooks project configured, or not be allowed to send hooks to that project. Contact your Speakeasy administrator."
+
 const envKeyRejectedMessage = "Speakeasy hooks rejected the API key configured in SPEAKEASY_AI_HOOKS_API_KEY (or the deprecated GRAM_HOOKS_API_KEY). Update or unset it, then run the Speakeasy hooks login command to reconnect."
 
 // deliver relays one event to the server, returning the result and the
@@ -162,6 +164,25 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	}
 
 	c, ok := resolveAuth(r.cfg)
+	// A box refused since its last accepted token must not trust a cached
+	// bearer: ask for a fresh one, and stay closed unless the server accepts
+	// it. Otherwise a later outage would let a revoked box fail open.
+	rejectedBox := ok && c.Source == credToken && tokenRejected()
+	if rejectedBox {
+		argv, _ := tokenCommandArgv()
+		c, ok = resolveTokenAuth(r.cfg, argv, true)
+	}
+	if !ok && tokenCommandConfigured() {
+		if tokenRejected() {
+			// This box was definitively refused and has not been issued a token
+			// since: fail closed, and drop the event rather than spool it.
+			r.debugf("event=%s token-rejected", agenthooks.EventOf(typed).NativeName)
+			return tokenRejectedResult(), stateBroken
+		}
+		// No token is a missing verdict, not a missing credential: treat it like an
+		// outage (spool observe-only events, gate by the fail-open posture).
+		return r.tokenUnavailable(typed), stateReady
+	}
 	if !ok {
 		if reauthNeeded() {
 			r.debugf("event=%s no-creds state=reauth-needed authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
@@ -213,6 +234,24 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 			res.decision.Message = envKeyRejectedMessage
 		}
 	}
+	if res.authRejected && c.Source == credToken {
+		// A rejected token gets one fresh token and one retry. There is no
+		// key to fall back to: a token box authenticates as itself or not at
+		// all, so a second rejection stays a definitive, fail-closed 4xx.
+		res, finalCreds = recoverTokenRejection(r.cfg, c, res, func(fresh creds) ingestResult {
+			return r.send(ctx, fresh, payload, idemKey)
+		})
+		r.debugf("event=%s auth-retry=token status=%d cause=%s denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.cause, res.decision.denied())
+	}
+	if c.Source == credToken && res.accepted() {
+		clearTokenRejected()
+	}
+	if rejectedBox && !res.accepted() {
+		// Still refused, or no verdict: a refused box neither fails open nor
+		// keeps the event for replay until a token is accepted again.
+		r.debugf("event=%s token-rejected status=%d", agenthooks.EventOf(typed).NativeName, res.statusCode)
+		return tokenRejectedResult(), stateBroken
+	}
 	if res.authRejected && c.Source == credCache && !disableLocalAuth() {
 		// A rejected personal cache is forgotten. When the published plugin has
 		// a shared org key, replay the same event through it so a stale personal
@@ -242,7 +281,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	// kept for replay, a healthy exchange flushes any backlog, and a
 	// definitive 4xx does neither — the server answered, and would reject a
 	// replay identically.
-	r.finishExchange(idemKey, payload, res)
+	r.finishExchange(idemKey, payload, res, tokenProjectOf(finalCreds))
 	if res.accepted() || res.unsent() {
 		commitPromptAttachmentHighWater(promptAttachmentAdvance)
 	}
@@ -250,6 +289,35 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		r.debugf("skill upload: %v", err)
 	}
 	return res, state
+}
+
+// tokenUnavailable records an event the token command could not authenticate.
+// The payload is spooled exactly as an unreachable send would be, and the
+// drain replays it once the device agent produces a token again.
+func (r *Relay) tokenUnavailable(typed any) ingestResult {
+	payload := buildEnvelope(typed, hostname())
+	res := ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeCredential, causeDetail: "token command produced no usable token"}
+	r.debugf("event=%s token-unavailable", agenthooks.EventOf(typed).NativeName)
+	// Bind the entry to the project the box last authenticated for, so a
+	// replay after the box's configured hooks project changes cannot land in
+	// another project. An entry with no valid project is never replayed: the
+	// drain drops it.
+	st, _ := readTokenBox()
+	r.finishExchange(newIdempotencyToken(), payload, res, st.Project)
+	return res
+}
+
+func tokenRejectedResult() ingestResult {
+	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: tokenRejectedMessage}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}
+}
+
+// tokenProjectOf is the configured hooks project a token credential is bound to, or
+// "" for key credentials.
+func tokenProjectOf(c creds) string {
+	if c.Source == credToken {
+		return c.Project
+	}
+	return ""
 }
 
 // send posts one envelope through the ingest client and mirrors any
