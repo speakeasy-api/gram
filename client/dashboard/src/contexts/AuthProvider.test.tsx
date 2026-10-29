@@ -187,6 +187,20 @@ describe("AuthProvider organization telemetry group", () => {
     expect(registeredOrgGroups()).toEqual([["organization", ORG.slug, {}]]);
   });
 
+  it.each([
+    "/test-org/billing/setup",
+    "/test-org/billing/payment-method",
+    "/test-org/billing?session_id=cs_test_example",
+  ])(
+    "allows only active-organization billing recovery through the lockout: %s",
+    (path) => {
+      mocks.sessionData.mockReturnValue(gatedSession());
+      renderGate(path);
+      expect(screen.getByTestId("app")).toBeTruthy();
+      expect(screen.queryByTestId("book-demo")).toBeNull();
+    },
+  );
+
   it("registers the organization when the switcher takes precedence", () => {
     mocks.sessionData.mockReturnValue(
       gatedSession({ organizations: [ORG, OTHER_ORG] }),

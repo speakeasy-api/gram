@@ -1,30 +1,14 @@
 import { formatExactUsd } from "@/components/billing/payg-billing-estimate";
-import { Page } from "@/components/page-layout";
+import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { useSession } from "@/contexts/Auth";
-import { useTrialNow } from "@/hooks/useTrialNow";
-import { getTrialLifecycleFromDates } from "@/lib/trial-status";
 import type { TierLimits } from "@gram/client/models/components/tierlimits.js";
 import { useGetUsageTiers } from "@gram/client/react-query/getUsageTiers.js";
+import { Heading } from "../ui/Heading";
 
-/**
- * The server-owned PAYG rates, shown while the product trial that converts to
- * pay as you go is running: metered token management, risk scanning, and MCP
- * gateway egress, plus provider-cost pass-through lines. The product feature
- * list stays off this section — it describes the plan's contents, not prices.
- */
+/** Server-owned rates for the guarded billing setup and payment subpages. */
 export function PaygPriceList(): JSX.Element | null {
-  const { trial } = useSession();
-  const now = useTrialNow(trial);
-
-  if (getTrialLifecycleFromDates(trial, now) !== "active") return null;
-
-  return <PaygPriceListBody />;
-}
-
-function PaygPriceListBody(): JSX.Element | null {
   const { data, isLoading, isError } = useGetUsageTiers({
     throwOnError: false,
   });
@@ -32,20 +16,21 @@ function PaygPriceListBody(): JSX.Element | null {
   if (isError) return null;
 
   return (
-    <Page.Section>
-      <Page.Section.Title area="">Pay as you go pricing</Page.Section.Title>
-      <Page.Section.Description>
-        The rates this organization is billed once the trial converts to pay as
-        you go.
-      </Page.Section.Description>
-      <Page.Section.Body>
+    <section className="min-w-0 space-y-6">
+      <div className="flex items-center justify-between gap-4 border-b border-border pb-2">
+        <Heading variant="h3">Pricing</Heading>
+        <Badge variant="neutral" className="shrink-0">
+          Pay as you go
+        </Badge>
+      </div>
+      <div>
         {isLoading || !data ? (
           <Skeleton className="h-16 w-full max-w-md" />
         ) : (
           <PaygRates payg={data.payg} />
         )}
-      </Page.Section.Body>
-    </Page.Section>
+      </div>
+    </section>
   );
 }
 
@@ -54,21 +39,23 @@ function PaygRates({ payg }: { payg: TierLimits }): JSX.Element {
 
   return (
     <Stack gap={4}>
-      <MeteredRate
-        label="Agent session storage"
-        price={payg.tumPricePerMillionUsd}
-        unit="per million tokens"
-      />
-      <MeteredRate
-        label="Risk scanning"
-        price={payg.riskScanPricePerMillionUsd}
-        unit="per million tokens scanned"
-      />
-      <MeteredRate
-        label="MCP gateway"
-        price={payg.mcpEgressPricePerGibUsd}
-        unit="per GiB of egress"
-      />
+      <ul className="divide-y divide-border/50 border-b border-border pb-2">
+        <MeteredRate
+          label="Agent session storage"
+          price={payg.tumPricePerMillionUsd}
+          unit="per million tokens"
+        />
+        <MeteredRate
+          label="Risk scanning"
+          price={payg.riskScanPricePerMillionUsd}
+          unit="per million tokens scanned"
+        />
+        <MeteredRate
+          label="MCP gateway"
+          price={payg.mcpEgressPricePerGibUsd}
+          unit="per GiB of egress"
+        />
+      </ul>
       {passThroughLines.length > 0 && (
         <ul className="space-y-1">
           {passThroughLines.map((item) => (
@@ -97,11 +84,16 @@ function MeteredRate({
   if (rate === null) return null;
 
   return (
-    <Stack gap={1}>
-      <Text className="font-medium">{label}</Text>
-      <Text muted>
-        {rate} {unit}
-      </Text>
-    </Stack>
+    <li className="flex items-start justify-between gap-4 py-3 first:pt-0">
+      <h3 className="min-w-0 text-lg font-medium text-foreground">{label}</h3>
+      <p className="shrink-0 text-right">
+        <span className="block font-mono text-xl font-medium text-foreground tabular-nums">
+          {rate}
+        </span>{" "}
+        <span className="block font-mono text-xs leading-5 text-muted">
+          {unit}
+        </span>
+      </p>
+    </li>
   );
 }

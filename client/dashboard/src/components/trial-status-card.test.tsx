@@ -11,6 +11,7 @@ import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 
 const mocks = vi.hoisted(() => ({
   useSession: vi.fn(),
+  useBillingState: vi.fn(),
   flagResult: vi.fn(),
   hasScope: vi.fn(),
 }));
@@ -21,6 +22,14 @@ vi.mock("@/contexts/Auth", async (importOriginal) => {
     ...actual,
     useSession: mocks.useSession,
   };
+});
+
+vi.mock("@/components/billing/use-billing-state", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("@/components/billing/use-billing-state")
+    >();
+  return { ...actual, useBillingState: mocks.useBillingState };
 });
 
 // The embedded self-serve CTA brings its own gates; stub what it reads so the
@@ -59,10 +68,14 @@ describe("TrialStatusCard", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-05T00:00:00.000Z"));
-    mocks.useSession.mockReturnValue({ trial: activeTrial });
+    mocks.useSession.mockReturnValue({
+      trial: activeTrial,
+      organization: { slug: "test-org" },
+    });
     // Off by default so the existing states are asserted without the CTA.
     mocks.flagResult.mockReturnValue({ status: "disabled" });
     mocks.hasScope.mockReturnValue(true);
+    mocks.useBillingState.mockReturnValue({ status: "needs-setup" });
   });
 
   afterEach(() => {
@@ -243,7 +256,7 @@ describe("TrialStatusCard", () => {
     ).toBe(true);
   });
 
-  it("offers self-serve checkout beside the sales trigger during the trial", () => {
+  it("offers self-serve checkout when the trial has no subscription", () => {
     mocks.flagResult.mockReturnValue({ status: "enabled" });
 
     render(<TrialStatusCard />);
@@ -254,6 +267,23 @@ describe("TrialStatusCard", () => {
     // Sales stays available; checkout is an addition, not a replacement.
     expect(screen.getByRole("button", { name: "Talk to sales" })).toBeTruthy();
   });
+
+  it.each(["manage", "loading", "error", "unavailable"])(
+    "hides checkout without replacing it when billing is %s",
+    (status) => {
+      mocks.flagResult.mockReturnValue({ status: "enabled" });
+      mocks.useBillingState.mockReturnValue({ status });
+
+      render(<TrialStatusCard />);
+
+      expect(screen.queryByText(/add payment method/i)).toBeNull();
+      expect(screen.queryByText(/manage billing/i)).toBeNull();
+      expect(screen.getByText("14 days left")).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "Talk to sales" }),
+      ).toBeTruthy();
+    },
+  );
 
   it("keeps only the sales trigger for a member", () => {
     mocks.flagResult.mockReturnValue({ status: "enabled" });
@@ -290,3 +320,7 @@ describe("TrialStatusCard", () => {
     expect(salesTrigger.getAttribute("type")).toBe("button");
   });
 });
+
+vi.mock("@/components/ui/hooks/useConfig", () => ({
+  useConfig: () => ({ theme: "light" }),
+}));

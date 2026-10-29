@@ -57,7 +57,7 @@ func TestPartnerPromotionCodeSurvivesCheckoutLifecycleRecovery(t *testing.T) {
 	require.Error(t, err)
 	checkoutURL, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
 	require.NoError(t, err)
-	require.Equal(t, "https://checkout.stripe.test/2", checkoutURL)
+	require.Equal(t, "cs_test_secret_2", checkoutURL.ClientSecret)
 	require.Equal(t, []string{"cs_1"}, ti.stripe.expiredCheckoutIDs)
 	_, _, checkouts := ti.stripe.snapshot()
 	require.Len(t, checkouts, 3)
@@ -116,20 +116,20 @@ func attributePartnerSignup(t *testing.T, db orgrepo.DBTX, orgID string) {
 
 func TestPartnerFailedInvoiceDoesNotActivateAndCheckoutRetryKeepsPromotion(t *testing.T) {
 	t.Parallel()
-	testPartnerPaymentFailureCheckoutRetry(t, "invoice.payment_failed", "incomplete", http.StatusOK)
+	testPartnerPaymentFailureCheckoutRetry(t, "invoice.payment_failed", "incomplete", "unpaid", http.StatusOK)
 }
 
 func TestPartnerUnpaidCompletionDoesNotActivateAndCheckoutRetryKeepsPromotion(t *testing.T) {
 	t.Parallel()
-	testPartnerPaymentFailureCheckoutRetry(t, "checkout.session.completed", "unpaid", http.StatusOK)
+	testPartnerPaymentFailureCheckoutRetry(t, "checkout.session.completed", "unpaid", "unpaid", http.StatusOK)
 }
 
 func TestPartnerIncompleteSubscriptionDoesNotActivateAndCheckoutRetryKeepsPromotion(t *testing.T) {
 	t.Parallel()
-	testPartnerPaymentFailureCheckoutRetry(t, "checkout.session.completed", "incomplete", http.StatusServiceUnavailable)
+	testPartnerPaymentFailureCheckoutRetry(t, "checkout.session.completed", "incomplete", "paid", http.StatusServiceUnavailable)
 }
 
-func testPartnerPaymentFailureCheckoutRetry(t *testing.T, eventType, status string, wantStatus int) {
+func testPartnerPaymentFailureCheckoutRetry(t *testing.T, eventType, status, paymentStatus string, wantStatus int) {
 	t.Helper()
 	ti := newStripeCheckoutTestInstance(t)
 	attributePartnerSignup(t, ti.db, ti.orgID)
@@ -139,7 +139,7 @@ func testPartnerPaymentFailureCheckoutRetry(t *testing.T, eventType, status stri
 		verify: func([]byte, string) (*stripeclient.WebhookEvent, error) {
 			return &stripeclient.WebhookEvent{ID: "evt_payment_failure", Type: eventType, Created: time.Now().UTC(), ObjectID: "cs_1", CustomerID: "cus_1", SubscriptionID: "sub_unpaid"}, nil
 		},
-		checkout: &stripeclient.CheckoutSessionState{ID: "cs_1", Status: "complete", CustomerID: "cus_1", SubscriptionID: "sub_unpaid", SubscriptionCustomerID: "cus_1", SubscriptionStatus: status, BillingCycleAnchor: time.Date(2026, time.August, 23, 9, 0, 0, 0, time.UTC)},
+		checkout: &stripeclient.CheckoutSessionState{ID: "cs_1", Status: "complete", PaymentStatus: paymentStatus, CustomerID: "cus_1", SubscriptionID: "sub_unpaid", SubscriptionCustomerID: "cus_1", SubscriptionStatus: status, BillingCycleAnchor: time.Date(2026, time.August, 23, 9, 0, 0, 0, time.UTC)},
 	}
 	ti.service.stripeHandler = ti.service.serviceStripeWebhookHandler
 	require.Equal(t, wantStatus, serveStripeWebhook(ti.service, "payment failure").Code)
@@ -218,7 +218,7 @@ func TestPartnerCancellationCannotRedeemPromotionAgain(t *testing.T) {
 	event := &stripeclient.WebhookEvent{ID: "evt_partner_paid", Type: "checkout.session.completed", Created: time.Now().UTC(), ObjectID: "cs_1", CustomerID: "cus_1", SubscriptionID: "sub_partner"}
 	ti.service.stripeClient = &fakeStripeWebhookClient{
 		verify:   func([]byte, string) (*stripeclient.WebhookEvent, error) { return event, nil },
-		checkout: &stripeclient.CheckoutSessionState{ID: "cs_1", Status: "complete", CustomerID: "cus_1", SubscriptionID: "sub_partner", SubscriptionCustomerID: "cus_1", SubscriptionStatus: "active", BillingCycleAnchor: time.Date(2026, time.August, 23, 9, 0, 0, 0, time.UTC)},
+		checkout: &stripeclient.CheckoutSessionState{ID: "cs_1", Status: "complete", PaymentStatus: "paid", CustomerID: "cus_1", SubscriptionID: "sub_partner", SubscriptionCustomerID: "cus_1", SubscriptionStatus: "active", BillingCycleAnchor: time.Date(2026, time.August, 23, 9, 0, 0, 0, time.UTC)},
 	}
 	ti.service.stripeHandler = ti.service.serviceStripeWebhookHandler
 	logger := ti.service.auditLogger
@@ -282,7 +282,7 @@ func TestPartnerCancellationCannotRedeemPromotionAgain(t *testing.T) {
 	event = &stripeclient.WebhookEvent{ID: "evt_partner_second", Type: "checkout.session.completed", Created: time.Now().UTC(), ObjectID: "cs_second", CustomerID: "cus_1", SubscriptionID: "sub_second"}
 	ti.service.stripeClient = &fakeStripeWebhookClient{
 		verify:   func([]byte, string) (*stripeclient.WebhookEvent, error) { return event, nil },
-		checkout: &stripeclient.CheckoutSessionState{ID: "cs_second", Status: "complete", CustomerID: "cus_1", SubscriptionID: "sub_second", SubscriptionCustomerID: "cus_1", SubscriptionStatus: "active", BillingCycleAnchor: time.Now().UTC()},
+		checkout: &stripeclient.CheckoutSessionState{ID: "cs_second", Status: "complete", PaymentStatus: "paid", CustomerID: "cus_1", SubscriptionID: "sub_second", SubscriptionCustomerID: "cus_1", SubscriptionStatus: "active", BillingCycleAnchor: time.Now().UTC()},
 	}
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(ti.service, "second subscription").Code)
 	redemptions, err = repo.New(ti.db).ListOrganizationPromotionRedemptions(t.Context(), pgtype.Text{String: ti.orgID, Valid: true})
