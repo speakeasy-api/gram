@@ -32,7 +32,7 @@ export const CoverageBucket = {
 export type CoverageBucket = OpenEnum<typeof CoverageBucket>;
 
 /**
- * Whether an agent_active device verifiably applies its policy. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different or no policy. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the kill switch stopped enforcement on a blocked agent build. Omitted for every other bucket.
+ * Whether the agent that answers for an agent_active device verifiably applies its policy; agent_state.attestation says whether that agent runs on this machine. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different policy, or none. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the reporting agent's kill switch stopped enforcement on a blocked build. Omitted for every other bucket.
  */
 export const PolicyState = {
   Attested: "attested",
@@ -41,7 +41,7 @@ export const PolicyState = {
   Halted: "halted",
 } as const;
 /**
- * Whether an agent_active device verifiably applies its policy. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different or no policy. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the kill switch stopped enforcement on a blocked agent build. Omitted for every other bucket.
+ * Whether the agent that answers for an agent_active device verifiably applies its policy; agent_state.attestation says whether that agent runs on this machine. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different policy, or none. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the reporting agent's kill switch stopped enforcement on a blocked build. Omitted for every other bucket.
  */
 export type PolicyState = OpenEnum<typeof PolicyState>;
 
@@ -92,7 +92,7 @@ export type ManagedDevice = {
    */
   osVersion?: string | undefined;
   /**
-   * Whether an agent_active device verifiably applies its policy. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different or no policy. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the kill switch stopped enforcement on a blocked agent build. Omitted for every other bucket.
+   * Whether the agent that answers for an agent_active device verifiably applies its policy; agent_state.attestation says whether that agent runs on this machine. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different policy, or none. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the reporting agent's kill switch stopped enforcement on a blocked build. Omitted for every other bucket.
    */
   policyState?: PolicyState | undefined;
   /**

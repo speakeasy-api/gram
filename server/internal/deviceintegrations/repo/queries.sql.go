@@ -765,6 +765,7 @@ SELECT
     -- report.
   , coalesce(pol.policy_state, '')::text AS policy_state
   , (rpt.id IS NOT NULL)::boolean AS has_report
+  , coalesce(rpt.by_serial, false)::boolean AS report_by_serial
   , rpt.reported_at AS report_reported_at
   , rpt.applied_etag AS report_applied_etag
   , rpt.applied_at AS report_applied_at
@@ -939,6 +940,7 @@ type ListManagedDevicesRow struct {
 	CoverageBucket            string
 	PolicyState               string
 	HasReport                 bool
+	ReportBySerial            bool
 	ReportReportedAt          pgtype.Timestamptz
 	ReportAppliedEtag         pgtype.Text
 	ReportAppliedAt           pgtype.Timestamptz
@@ -1010,6 +1012,7 @@ func (q *Queries) ListManagedDevices(ctx context.Context, arg ListManagedDevices
 			&i.CoverageBucket,
 			&i.PolicyState,
 			&i.HasReport,
+			&i.ReportBySerial,
 			&i.ReportReportedAt,
 			&i.ReportAppliedEtag,
 			&i.ReportAppliedAt,

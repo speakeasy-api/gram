@@ -78,4 +78,8 @@ describe("toolLabel", () => {
     expect(toolLabel("claude_code")).toBe("Claude Code");
     expect(toolLabel("new_tool")).toBe("New tool");
   });
+
+  it("ignores inherited keys", () => {
+    expect(toolLabel("constructor")).toBe("Constructor");
+  });
 });
