@@ -70,6 +70,7 @@ func TestServerConnectionUsesSignedInUserAndDoesNotExecuteTools(t *testing.T) {
 	signedInUser := *authCtx
 	signedInUser.UserID = env.subject.ID
 	signedIn := contextvalues.WithValidatedGramSession(ctx, &signedInUser, false)
+	associate(t, ctx, env.db, env.organizationID, env.projectID, env.mcpServerID.UUID, env.clientID)
 	payload := &gen.TestServerConnectionPayload{McpServerID: env.mcpServerID.UUID.String()}
 	result, err := env.service.TestServerConnection(signedIn, payload)
 	require.NoError(t, err)
@@ -112,6 +113,64 @@ func TestServerConnectionDoesNotExposeForeignProjectServer(t *testing.T) {
 	result, err := ti.service.TestServerConnection(ctx, &gen.TestServerConnectionPayload{McpServerID: foreign.String()})
 	require.Nil(t, result)
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestServerConnectionSelectsOnlyAssociatedClient(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name                string
+		associateUserClient bool
+		sharedIssuer        bool
+		wantStatus          string
+	}{
+		{"unassociated", false, false, "configuration_required"},
+		{"another client associated", false, true, "authorization_required"},
+		{"shared issuer with target client", true, true, "ready"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var requests atomic.Int32
+			server := mcp.NewServer(&mcp.Implementation{Name: "associated-upstream", Version: "1"}, nil)
+			handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests.Add(1)
+				if r.Header.Get("Authorization") != "Bearer associated-user-token" {
+					t.Error("used another client's authorization")
+					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					return
+				}
+				handler.ServeHTTP(w, r)
+			}))
+			t.Cleanup(upstream.Close)
+			ctx, env := newSyntheticExpiryEnv(t, "associated", func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"access_token":"associated-user-token","token_type":"Bearer","expires_in":3600,"scope":"channels:history"}`))
+			}, withRemoteServer(upstream.URL))
+			target, err := mcpserversrepo.New(env.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: env.mcpServerID.UUID, ProjectID: env.projectID})
+			require.NoError(t, err)
+			if tc.associateUserClient {
+				associate(t, ctx, env.db, env.organizationID, env.projectID, target.ID, env.clientID)
+			}
+			if tc.sharedIssuer {
+				other, _ := seedActiveClient(t, ctx, env.db, env.projectID, target.UserSessionIssuerID.UUID, env.organizationID, "other-associated")
+				if !tc.associateUserClient {
+					associate(t, ctx, env.db, env.organizationID, env.projectID, target.ID, other)
+				}
+			}
+			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+			require.NoError(t, err)
+			env.service.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(testenv.NewLogger(t), env.db, env.enc, policy, env.mgr))
+			authCtx, _ := contextvalues.GetAuthContext(ctx)
+			signedInUser := *authCtx
+			signedInUser.UserID = env.subject.ID
+			result, err := env.service.TestServerConnection(contextvalues.WithValidatedGramSession(ctx, &signedInUser, false), &gen.TestServerConnectionPayload{McpServerID: target.ID.String()})
+			require.NoError(t, err)
+			require.Equal(t, tc.wantStatus, result.Status)
+			if tc.wantStatus != "ready" {
+				require.Zero(t, requests.Load())
+			}
+		})
+	}
 }
 
 func TestSetupSaveRefusesSharedIdentityEvenWithWriteAccess(t *testing.T) {
@@ -171,6 +230,7 @@ func TestServerConnectionRefusesStaticAuthorizationHeader(t *testing.T) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	signedInUser := *authCtx
 	signedInUser.UserID = env.subject.ID
+	associate(t, ctx, env.db, env.organizationID, env.projectID, env.mcpServerID.UUID, env.clientID)
 	result, err := env.service.TestServerConnection(contextvalues.WithValidatedGramSession(ctx, &signedInUser, false), &gen.TestServerConnectionPayload{McpServerID: env.mcpServerID.UUID.String()})
 	require.NoError(t, err)
 	require.Equal(t, "configuration_required", result.Status)

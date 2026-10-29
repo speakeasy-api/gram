@@ -13,6 +13,10 @@ func TestTokenResponseScopesForIssuer(t *testing.T) {
 	}{
 		{"Slack", "https://mcp.slack.com", "channels:read,chat:write", []string{"channels:read", "chat:write"}},
 		{"Slack whitespace", "https://mcp.slack.com", " channels:read, chat:write,, ", []string{"channels:read", "chat:write"}},
+		{"Slack canonical spelling", " HTTPS://MCP.SLACK.COM:443/ ", "read,write", []string{"read", "write"}},
+		{"Slack other path", "https://mcp.slack.com/other", "read,write", []string{"read,write"}},
+		{"Slack other port", "https://mcp.slack.com:8443", "read,write", []string{"read,write"}},
+		{"Slack query", "https://mcp.slack.com?other", "read,write", []string{"read,write"}},
 		{"generic comma", "https://example.com", "read,write other", []string{"read,write", "other"}},
 		{"Slack lookalike", "https://mcp.slack.com.example.com", "read,write", []string{"read,write"}},
 	} {

@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -21,7 +23,7 @@ var _ remotesessions.ServerConnectionTester = (*RemoteMCPReadinessProber)(nil)
 // TestUserConnection reuses the catalog's bounded initialization and tool-list
 // probe. Setup requires a direct human grant, so anonymous, service-account and
 // identity-chaining readiness cannot stand in for a completed user sign-in.
-func (p *RemoteMCPReadinessProber) TestUserConnection(ctx context.Context, organizationID, userID string, projectID, remoteServerID, userSessionIssuerID uuid.UUID) (*gen.ServerConnectionTestResult, error) {
+func (p *RemoteMCPReadinessProber) TestUserConnection(ctx context.Context, organizationID, userID string, projectID, mcpServerID, remoteServerID, userSessionIssuerID uuid.UUID) (*gen.ServerConnectionTestResult, error) {
 	if _, err := projectsrepo.New(p.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: projectID, OrganizationID: organizationID}); err != nil {
 		return nil, fmt.Errorf("validate connection project: %w", err)
 	}
@@ -36,6 +38,17 @@ func (p *RemoteMCPReadinessProber) TestUserConnection(ctx context.Context, organ
 	if err != nil {
 		return nil, fmt.Errorf("list connection clients: %w", err)
 	}
+	associated, err := upstreamclientsrepo.New(p.db).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: mcpServerID, ProjectID: projectID})
+	if err != nil {
+		return nil, fmt.Errorf("list connection server clients: %w", err)
+	}
+	// A shared sign-in issuer can bind clients for several upstreams. Only
+	// the target server's explicit associations authorize this diagnostic.
+	clients = slices.DeleteFunc(clients, func(client remotesessions.Client) bool {
+		return !slices.ContainsFunc(associated, func(row upstreamclientsrepo.ListMCPServerRemoteSessionClientsRow) bool {
+			return row.RemoteSessionClientID == client.ID && row.RemoteSessionIssuerID == client.RemoteSessionIssuerID
+		})
+	})
 	if len(clients) != 1 || clients[0].CredentialOwner == remotesessions.CredentialOwnerSelf {
 		return setupConnectionResult("configuration_required", "user_identity_client_required"), nil
 	}

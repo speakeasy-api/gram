@@ -198,7 +198,7 @@ func (t tokenResponse) Scopes() []string {
 // scopesForIssuer preserves RFC 6749 scope parsing except for Slack's official
 // MCP issuer, whose token endpoint reports a comma-separated grant.
 func (t tokenResponse) scopesForIssuer(issuer string) []string {
-	if issuer == "https://mcp.slack.com" || issuer == "https://mcp.slack.com/" {
+	if issuerURLsCanonicallyEqual(issuer, "https://mcp.slack.com") {
 		return strings.Fields(strings.ReplaceAll(t.Scope, ",", " "))
 	}
 	return t.Scopes()

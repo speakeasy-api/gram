@@ -22,6 +22,7 @@ var _ = Service("remoteSessions", func() {
 		Description("Initialize a directly Remote MCP-backed server and discover all tools using the signed-in user's saved authorization. Never executes tools. A provider tab returning is not evidence of authorization. Requires an ordinary dashboard session and mcp:connect on the exact server; API keys are refused.")
 		Security(security.Session, security.ProjectSlug)
 		Payload(func() {
+			Meta("openapi:typename", "TestServerConnectionRequestBody")
 			security.SessionPayload()
 			security.ProjectPayload()
 			Attribute("mcp_server_id", String, "Exact MCP server to test.", func() { Format(FormatUUID) })

@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  HideAgentMcpServerRequestBody,
-  HideAgentMcpServerRequestBody$Outbound,
-  HideAgentMcpServerRequestBody$outboundSchema,
-} from "../components/hideagentmcpserverrequestbody.js";
+  TestServerConnectionRequestBody,
+  TestServerConnectionRequestBody$Outbound,
+  TestServerConnectionRequestBody$outboundSchema,
+} from "../components/testserverconnectionrequestbody.js";
 
 export type TestServerConnectionSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -24,7 +24,7 @@ export type TestServerConnectionRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  hideAgentMcpServerRequestBody: HideAgentMcpServerRequestBody;
+  testServerConnectionRequestBody: TestServerConnectionRequestBody;
 };
 
 /** @internal */
@@ -64,7 +64,7 @@ export function testServerConnectionSecurityToJSON(
 export type TestServerConnectionRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  HideAgentMcpServerRequestBody: HideAgentMcpServerRequestBody$Outbound;
+  TestServerConnectionRequestBody: TestServerConnectionRequestBody$Outbound;
 };
 
 /** @internal */
@@ -75,13 +75,14 @@ export const TestServerConnectionRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    hideAgentMcpServerRequestBody: HideAgentMcpServerRequestBody$outboundSchema,
+    testServerConnectionRequestBody:
+      TestServerConnectionRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
-      hideAgentMcpServerRequestBody: "HideAgentMcpServerRequestBody",
+      testServerConnectionRequestBody: "TestServerConnectionRequestBody",
     });
   }),
 );

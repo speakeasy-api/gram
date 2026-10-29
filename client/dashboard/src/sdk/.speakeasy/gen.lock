@@ -2027,6 +2027,7 @@ trackedFiles:
   src/models/components/testdetectionrulematch.ts: {}
   src/models/components/testdetectionrulerequestbody.ts: {}
   src/models/components/testdetectionruleresult.ts: {}
+  src/models/components/testserverconnectionrequestbody.ts: {}
   src/models/components/tierlimits.ts: {}
   src/models/components/timeseriesbucket.ts: {}
   src/models/components/tokenresult.ts: {}

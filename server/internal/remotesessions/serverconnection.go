@@ -16,7 +16,7 @@ import (
 // ServerConnectionTester checks a stored upstream with one dashboard user's
 // credential. Implementations must never execute tools or return credentials.
 type ServerConnectionTester interface {
-	TestUserConnection(ctx context.Context, organizationID, userID string, projectID, remoteServerID, userSessionIssuerID uuid.UUID) (*gen.ServerConnectionTestResult, error)
+	TestUserConnection(ctx context.Context, organizationID, userID string, projectID, mcpServerID, remoteServerID, userSessionIssuerID uuid.UUID) (*gen.ServerConnectionTestResult, error)
 }
 
 // SetServerConnectionTester shares the runtime's authenticated readiness probe.
@@ -49,7 +49,7 @@ func (s *Service) TestServerConnection(ctx context.Context, payload *gen.TestSer
 	if s.connectionTester == nil {
 		return nil, oops.E(oops.CodeUnexpected, nil, "Connection testing is unavailable. Try again later.")
 	}
-	result, err := s.connectionTester.TestUserConnection(ctx, authCtx.ActiveOrganizationID, authCtx.UserID, *authCtx.ProjectID, target.RemoteMcpServerID.UUID, target.UserSessionIssuerID.UUID)
+	result, err := s.connectionTester.TestUserConnection(ctx, authCtx.ActiveOrganizationID, authCtx.UserID, *authCtx.ProjectID, target.ID, target.RemoteMcpServerID.UUID, target.UserSessionIssuerID.UUID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "Could not test the connection. Try again.").LogError(ctx, s.logger)
 	}

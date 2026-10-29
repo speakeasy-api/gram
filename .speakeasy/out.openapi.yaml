@@ -57957,7 +57957,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/HideAgentMcpServerRequestBody'
+              $ref: '#/components/schemas/TestServerConnectionRequestBody'
         required: true
       responses:
         "200":
@@ -116481,6 +116481,15 @@ components:
       required:
         - matches
         - supported
+    TestServerConnectionRequestBody:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: Exact MCP server to test.
+          format: uuid
+      required:
+        - mcp_server_id
     TierLimits:
       type: object
       properties:
