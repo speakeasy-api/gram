@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -59,17 +59,61 @@ function importChain(importers: Map<string, string>, file: string): string {
   return chain.join(" -> ");
 }
 
-// The modules `route-pages.tsx` imports directly: every component mounted as a
-// page, including the few that live outside `src/pages`.
+const ROUTE_PAGES = path.join(SRC, "route-pages.tsx");
+
+// The modules whose components `route-pages.tsx` mounts as a page, including
+// the few that live outside `src/pages`. Only imports used as a `component` or
+// `indexComponent` count, so a helper imported there is not mistaken for a page.
 function pageComponents(): Set<string> {
-  const routePages = path.join(SRC, "route-pages.tsx");
-  const source = readFileSync(routePages, "utf8");
+  const source = readFileSync(ROUTE_PAGES, "utf8");
+  const mounted = new Set(
+    [...source.matchAll(/\b(?:component|indexComponent): (\w+)/g)].map(
+      (match) => match[1]!,
+    ),
+  );
   const pages = new Set<string>();
-  for (const match of source.matchAll(IMPORT_PATTERN)) {
-    const resolved = resolveLocal(match[1] ?? match[2]!, routePages);
+  const addIfMounted = (names: string[], specifier: string) => {
+    if (!names.some((name) => mounted.has(name))) return;
+    const resolved = resolveLocal(specifier, ROUTE_PAGES);
     if (resolved) pages.add(resolved);
+  };
+  for (const match of source.matchAll(
+    /import\s+(?!type\s)([^'"]*?)\s+from\s+["']([^"']+)["']/g,
+  )) {
+    addIfMounted(match[1]!.match(/\w+/g) ?? [], match[2]!);
+  }
+  for (const match of source.matchAll(
+    /const (\w+) = React\.lazy\(\s*\(\) => import\(["']([^"']+)["']\)/g,
+  )) {
+    addIfMounted([match[1]!], match[2]!);
   }
   return pages;
+}
+
+// Every non-test module under src that imports `route-pages.tsx`.
+function routePagesImporters(): string[] {
+  const importers: string[] = [];
+  const visit = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== "sdk") visit(file);
+      } else if (
+        /\.tsx?$/.test(entry.name) &&
+        !/\.test\.tsx?$/.test(entry.name)
+      ) {
+        const source = readFileSync(file, "utf8");
+        for (const match of source.matchAll(IMPORT_PATTERN)) {
+          if (resolveLocal(match[1] ?? match[2]!, file) === ROUTE_PAGES) {
+            importers.push(path.relative(SRC, file));
+            break;
+          }
+        }
+      }
+    }
+  };
+  visit(SRC);
+  return importers.sort();
 }
 
 describe("@/routes import graph", () => {
@@ -81,5 +125,9 @@ describe("@/routes import graph", () => {
       .map((file) => importChain(importers, file));
 
     expect(pageChains).toEqual([]);
+  });
+
+  it("keeps the route-to-page map inside the app shell", () => {
+    expect(routePagesImporters()).toEqual(["App.tsx", "route-elements.tsx"]);
   });
 });
