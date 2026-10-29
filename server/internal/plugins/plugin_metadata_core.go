@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
+	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -44,6 +45,11 @@ var (
 	// ErrPluginSlugConflict is a slug another plugin in the project already
 	// holds.
 	ErrPluginSlugConflict = errors.New("a plugin with this slug already exists")
+
+	// ErrPluginSlugUnavailable is a slug whose published packages would land
+	// in a directory another plugin in the project, or the marketplace itself,
+	// already publishes into. The error carrying it names the directory.
+	ErrPluginSlugUnavailable = errors.New("invalid slug: its packages would share a directory with another package in the marketplace")
 
 	// ErrPluginMetadataTargetNotFound is a plugin id that matches no plugin in
 	// the project.
@@ -193,6 +199,58 @@ func ResolveCreatePluginSlug(name string, requested *string) (string, error) {
 	return slug, nil
 }
 
+// pluginSlugUnavailableError is ErrPluginSlugUnavailable for one slug, naming
+// the directory it would share and what already publishes there.
+type pluginSlugUnavailableError struct {
+	slug   string
+	dir    string
+	holder string
+}
+
+func (e *pluginSlugUnavailableError) Error() string {
+	return fmt.Sprintf("invalid slug: %s would publish into %s, which %s already uses; choose a different slug", e.slug, e.dir, e.holder)
+}
+
+func (e *pluginSlugUnavailableError) Unwrap() error { return ErrPluginSlugUnavailable }
+
+// requirePluginSlugPackagesFree refuses slug for pluginID (uuid.Nil for a new
+// plugin) when its package directories would collide with another plugin's
+// in the project or with one the marketplace reserves. The caller holds the
+// project lock, so no concurrent create or rename can claim them in between.
+func requirePluginSlugPackagesFree(ctx context.Context, queries *repo.Queries, organizationID string, projectID, pluginID uuid.UUID, slug string) error {
+	rows, err := queries.ListPluginSlugsForProject(ctx, projectID)
+	if err != nil {
+		return fmt.Errorf("list plugin slugs: %w", err)
+	}
+	others := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if row.ID != pluginID {
+			others = append(others, row.Slug)
+		}
+	}
+
+	// The observability plugin's directories derive from the org's name, or
+	// from the name its published subtree still carries after a rename.
+	var orgNames []string
+	name, err := queries.GetOrganizationName(ctx, organizationID)
+	switch {
+	case err == nil:
+		orgNames = append(orgNames, name)
+	case !errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("get organization name: %w", err)
+	}
+	conn, err := queries.GetGitHubConnection(ctx, projectID)
+	switch {
+	case err == nil:
+		if published := naming.PublishedHooksOrgName(conn.PublishedHooksConfig); published != "" {
+			orgNames = append(orgNames, published)
+		}
+	case !errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("get github connection: %w", err)
+	}
+	return pluginSlugPackageCollision(slug, others, orgNames)
+}
+
 func validateSuppliedPluginSlug(requested string) error {
 	slug := conv.ToSlug(requested)
 	if slug == "" || slug != requested {
@@ -219,6 +277,9 @@ func (c *PluginMetadataCore) CreateInTransaction(ctx context.Context, tx pgx.Tx,
 	}
 
 	queries := repo.New(tx)
+	if err := requirePluginSlugPackagesFree(ctx, queries, mutation.OrganizationID, mutation.ProjectID, uuid.Nil, slug); err != nil {
+		return PluginMetadataResult{}, err
+	}
 	plugin, err := queries.CreatePlugin(ctx, repo.CreatePluginParams{
 		OrganizationID:  mutation.OrganizationID,
 		ProjectID:       mutation.ProjectID,
@@ -323,6 +384,11 @@ func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx,
 	}
 	if slug != before.Slug && !autoSyncAfter {
 		return PluginMetadataResult{}, ErrPluginSlugLockedWhileAutoSyncOff
+	}
+	if slug != before.Slug {
+		if err := requirePluginSlugPackagesFree(ctx, queries, mutation.OrganizationID, mutation.ProjectID, mutation.PluginID, slug); err != nil {
+			return PluginMetadataResult{}, err
+		}
 	}
 	name := before.Name
 	if mutation.Name != nil {

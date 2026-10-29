@@ -182,10 +182,20 @@ func (s *Service) planPausedPlugins(
 // that owns it.
 type pluginPrefixOwners map[string]string
 
+// ownersOfPlugins assigns each plugin directory to its plugin. New slugs can't
+// share a directory (see pluginSlugPackageCollision), but a project may predate
+// that check: plugin foo's Codex package and plugin foo-codex's Claude package
+// are then both foo-codex/. Such a directory belongs to the plugin it is named
+// after, whatever the order of plugins: generating both writes that plugin
+// last, so its files are the ones the repo keeps. The other plugin's copy then
+// misses files it needs there, so holding it falls back to its live state.
 func ownersOfPlugins(plugins []PluginInfo) pluginPrefixOwners {
 	owners := make(pluginPrefixOwners)
 	for _, p := range plugins {
 		for _, prefix := range pluginSubtreePrefixes(p.Slug) {
+			if _, claimed := owners[prefix]; claimed && prefix != p.Slug+"/" {
+				continue
+			}
 			owners[prefix] = p.Slug
 		}
 	}

@@ -685,7 +685,7 @@ func validPluginMetadataReceiptResult(result PluginMetadataReceiptResult) bool {
 // for the same input.
 func pluginMetadataCoreError(err error) error {
 	switch {
-	case errors.Is(err, plugindelivery.ErrPluginSlugInvalid), errors.Is(err, plugindelivery.ErrPluginSlugTooLong), errors.Is(err, plugindelivery.ErrPluginNameWithoutSlug), errors.Is(err, plugindelivery.ErrPluginNameEmpty):
+	case errors.Is(err, plugindelivery.ErrPluginSlugInvalid), errors.Is(err, plugindelivery.ErrPluginSlugTooLong), errors.Is(err, plugindelivery.ErrPluginSlugUnavailable), errors.Is(err, plugindelivery.ErrPluginNameWithoutSlug), errors.Is(err, plugindelivery.ErrPluginNameEmpty):
 		return pluginMetadataMutationInvalid("invalid_request", err.Error()+".")
 	case errors.Is(err, plugindelivery.ErrPluginSlugConflict):
 		return &PluginMetadataMutationError{Code: pluginMetadataCodeSlugTaken, Message: "A plugin with this slug already exists in this project. List the project's plugins again, then either use that plugin or choose a different slug.", Slug: "", Cause: fmt.Errorf("%w: %w", ErrPluginMetadataMutationConflict, err)}

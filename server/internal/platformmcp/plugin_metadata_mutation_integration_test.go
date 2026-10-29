@@ -186,6 +186,26 @@ func TestCreatePluginRefusesASlugAnotherPluginHolds(t *testing.T) {
 	require.Contains(t, refusal.Message, plugindelivery.ErrPluginSlugInvalid.Error())
 }
 
+// A slug whose packages would land in a directory another plugin publishes
+// into is refused with the dashboard's own wording, naming that directory.
+func TestCreatePluginRefusesASlugWhosePackagesShareADirectory(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_create_plugin_shared_directory")
+	_, err := fixture.service.CreatePlugin(ctx, fixture.principal, CreatePluginInput{
+		ProjectID: fixture.project.ID.String(), Name: "Support", Slug: "support", IdempotencyKey: "first", Confirmed: true,
+	})
+	require.NoError(t, err)
+
+	_, err = fixture.service.CreatePlugin(ctx, fixture.principal, CreatePluginInput{
+		ProjectID: fixture.project.ID.String(), Name: "Support Codex", Slug: "support-codex", IdempotencyKey: "second", Confirmed: true,
+	})
+	var refusal *PluginMetadataMutationError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "invalid_request", refusal.Code)
+	require.Equal(t, "invalid slug: support-codex would publish into support-codex/, which plugin support already uses; choose a different slug.", refusal.Message)
+	require.Equal(t, 1, fixture.pluginCount(t, ctx, fixture.project.ID))
+}
+
 func TestCreatePluginRefusesAnUnconfirmedRequest(t *testing.T) {
 	t.Parallel()
 	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_create_plugin_unconfirmed")

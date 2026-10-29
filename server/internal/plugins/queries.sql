@@ -87,6 +87,15 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: ListPluginSlugsForProject :many
+-- Every live plugin's slug in a project, for refusing a slug whose published
+-- package directories another plugin already uses.
+SELECT id, slug
+FROM plugins
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY slug;
+
 -- name: GetPluginForUpdate :one
 -- GetPlugin that also locks the row for the rest of the transaction.
 SELECT *

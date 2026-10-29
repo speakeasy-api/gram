@@ -1352,6 +1352,53 @@ func pluginSubtreePrefixes(slug string) []string {
 	}
 }
 
+// reservedPackageDirs maps each repo directory a marketplace publishes outside
+// its feature plugins to what publishes there: the per-platform package roots,
+// the Platform MCP plugin, and the observability plugin under each org name
+// its directories may derive from.
+func reservedPackageDirs(orgNames []string) map[string]string {
+	reserved := map[string]string{
+		cursorPluginRoot + "/":              "the marketplace's Cursor packages",
+		opencodePluginRoot + "/":            "the marketplace's OpenCode packages",
+		agentPluginRoot + "/":               "the marketplace's Agent Plugins packages",
+		platformMCPPluginRoot + "/":         "the Speakeasy Platform MCP plugin",
+		platformMCPCursorPluginRoot + "/":   "the Speakeasy Platform MCP plugin",
+		platformMCPCodexPluginRoot + "/":    "the Speakeasy Platform MCP plugin",
+		platformMCPOpenCodePluginRoot + "/": "the Speakeasy Platform MCP plugin",
+		platformMCPAgentPluginRoot + "/":    "the Speakeasy Platform MCP plugin",
+	}
+	for _, orgName := range orgNames {
+		for _, dir := range slices.Concat(hooksSubtreePrefixes(orgName), hooksOptionalSubtreePrefixes(orgName)) {
+			reserved[dir] = "the observability plugin"
+		}
+	}
+	return reserved
+}
+
+// pluginSlugPackageCollision refuses a slug whose package directories (see
+// pluginSubtreePrefixes) would be ones another of the project's plugins, or
+// the marketplace itself, already publishes into: plugin foo's Codex package
+// and plugin foo-codex's Claude package would both be foo-codex/. others are
+// the project's other live slugs; a slug equal to one of them is left to the
+// unique slug check. orgNames are as for reservedPackageDirs.
+func pluginSlugPackageCollision(slug string, others []string, orgNames []string) error {
+	taken := reservedPackageDirs(orgNames)
+	for _, other := range others {
+		if other == slug {
+			continue
+		}
+		for _, dir := range pluginSubtreePrefixes(other) {
+			taken[dir] = "plugin " + other
+		}
+	}
+	for _, dir := range pluginSubtreePrefixes(slug) {
+		if holder, ok := taken[dir]; ok {
+			return &pluginSlugUnavailableError{slug: slug, dir: dir, holder: holder}
+		}
+	}
+	return nil
+}
+
 // generateClaudeObservabilityPlugin emits the per-org observability plugin
 // containing Speakeasy hooks for Claude Code. The generated runtime configuration
 // carries the org's hooks-scoped API key so no per-machine setup is required.
