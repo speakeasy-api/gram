@@ -127,8 +127,7 @@ export function GatewayInheritedSkillsSection({
       <Page.Section.Title>Inherited from servers</Page.Section.Title>
       <Page.Section.Description>
         Skills added to servers in {surfaceName}. Agents load them here while
-        they can reach that server. Manage them on the server&apos;s Skills
-        tab.
+        they can reach that server. Manage them on the server&apos;s Skills tab.
       </Page.Section.Description>
       <Page.Section.Body>{body}</Page.Section.Body>
     </Page.Section>
@@ -159,11 +158,7 @@ const inheritedSkillColumns: Column<InheritedSkill>[] = [
   },
 ];
 
-function InheritedSkillCell({
-  skill,
-}: {
-  skill: InheritedSkill;
-}): JSX.Element {
+function InheritedSkillCell({ skill }: { skill: InheritedSkill }): JSX.Element {
   const routes = useRoutes();
   return (
     <div className="min-w-0">
