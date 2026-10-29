@@ -185,16 +185,28 @@
         height: 14px;
         fill: currentColor;
       }
-      @media (max-width: 380px) {
+      /* A narrow card puts the panel above the text so the text keeps the
+   card's full width. */
+      @media (max-width: 480px) {
+        .body {
+          flex-direction: column;
+        }
         .panel {
-          min-width: 88px;
+          width: auto;
+          max-width: none;
+          padding: 16px 0;
+          border-right: 0;
+          border-bottom: 1px solid var(--hair);
         }
         .tile {
           width: 56px;
           height: 56px;
         }
         .text {
-          padding: 18px 16px 16px;
+          padding: 18px 18px 18px;
+        }
+        h1 {
+          font-size: 23px;
         }
       }
     </style>
