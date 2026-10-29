@@ -289,6 +289,69 @@ func TestAutoSync_ManualSyncPublishesHeldChanges(t *testing.T) {
 	require.True(t, again.Skipped)
 }
 
+// A publish requested as a manual sync from outside the dashboard, such as the
+// Platform MCP's republish, sends a paused plugin's pending changes the way
+// Sync changes does, and stays fingerprint-gated.
+func TestAutoSync_RequestedManualSyncPublishesHeldChanges(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newAutoSyncFixture(t, "requested")
+	_, err := f.setAutoSync(ctx, f.paused, false)
+	require.NoError(t, err)
+	f.addServer(t, ctx, f.paused, "requested-paused-two", "Paused Two", 1)
+	require.True(t, f.automaticPublish(t, ctx).Skipped, "only the paused plugin changed, so nothing publishes automatically")
+
+	sync := func() *plugins.PublishProjectResult {
+		t.Helper()
+		result, err := f.ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+			ProjectID: f.projectID, CreatedByUserID: f.userID, CommitMessage: "Update plugin packages",
+			SkipIfUnchanged: true, IncludePausedPlugins: true,
+		})
+		require.NoError(t, err)
+		return result
+	}
+	require.False(t, sync().Skipped, "the paused plugin's pending change makes the sync publish")
+	require.Contains(t, string(f.mock.lastPushedFiles[f.paused.Slug+"/.mcp.json"]), "Paused Two")
+
+	status, err := f.ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, status.UpToDate)
+	require.True(t, *status.UpToDate)
+	require.True(t, sync().Skipped, "with nothing pending, a requested sync stays fingerprint-gated")
+}
+
+// RequireAutoSyncCanTurnOff is UpdatePlugin's check for callers that change
+// only auto sync, and its refusal is recognisable outside the management API.
+func TestAutoSync_RequireAutoSyncCanTurnOffMatchesUpdatePlugin(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newAutoSyncFixture(t, "guard")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	pluginID := uuid.MustParse(f.paused.ID)
+	check := func() error {
+		return f.ti.service.RequireAutoSyncCanTurnOff(ctx, authCtx.ActiveOrganizationID, f.projectID, pluginID)
+	}
+	require.NoError(t, check(), "nothing is unsynced right after a publish")
+
+	f.addServer(t, ctx, f.paused, "guard-paused-two", "Paused Two", 1)
+	err := check()
+	require.ErrorIs(t, err, plugins.ErrPluginHasUnsyncedChanges)
+	requireFailedPrecondition(t, err, "This plugin has changes that haven't been synced yet.")
+	_, err = f.setAutoSync(ctx, f.paused, false)
+	require.ErrorIs(t, err, plugins.ErrPluginHasUnsyncedChanges, "the dashboard refuses for the same reason")
+
+	_, err = f.ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	require.NoError(t, check())
+	_, err = f.setAutoSync(ctx, f.paused, false)
+	require.NoError(t, err)
+
+	// Already off, it needs no check, whatever is pending.
+	f.addServer(t, ctx, f.paused, "guard-paused-three", "Paused Three", 2)
+	require.NoError(t, check())
+}
+
 // When nothing in the MCP component changed but the hooks regenerate, the MCP
 // carry must still keep the held plugin's published files, which are copied by
 // directory rather than by the paths its live state would generate.

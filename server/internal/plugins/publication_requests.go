@@ -34,6 +34,17 @@ func (r PublicationRequests) Project(ctx context.Context, tx pgx.Tx, organizatio
 // ProjectWithOutcome reports what was actually written in the caller's transaction.
 // A successful enqueue remains provisional until that transaction commits.
 func (r PublicationRequests) ProjectWithOutcome(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, actorID string) (ProjectPublicationRequestOutcome, error) {
+	return r.projectWithOutcome(ctx, tx, organizationID, projectID, actorID, false)
+}
+
+// SyncProjectWithOutcome is ProjectWithOutcome for a manual sync: the publish it
+// requests also sends the pending changes of plugins whose auto sync is off, as
+// the dashboard's Sync changes does.
+func (r PublicationRequests) SyncProjectWithOutcome(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, actorID string) (ProjectPublicationRequestOutcome, error) {
+	return r.projectWithOutcome(ctx, tx, organizationID, projectID, actorID, true)
+}
+
+func (r PublicationRequests) projectWithOutcome(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, actorID string, includePausedPlugins bool) (ProjectPublicationRequestOutcome, error) {
 	if !r.Enabled {
 		return ProjectPublicationEmissionDisabled, nil
 	}
@@ -55,9 +66,10 @@ func (r PublicationRequests) ProjectWithOutcome(ctx context.Context, tx pgx.Tx, 
 		PublicID:   uuid.Nil,
 		Attributes: nil,
 		Proto: publicationv1.PublicationRequested_builder{
-			OrganizationId:  new(organizationID),
-			ProjectId:       new(projectID.String()),
-			CreatedByUserId: new(actorID),
+			OrganizationId:       new(organizationID),
+			ProjectId:            new(projectID.String()),
+			CreatedByUserId:      new(actorID),
+			IncludePausedPlugins: new(includePausedPlugins),
 		}.Build(),
 	})
 	if err != nil {

@@ -119,8 +119,12 @@ type UpdatePluginMutation struct {
 	// PluginID is the plugin to update.
 	PluginID uuid.UUID
 
-	// Name is the new administrator-facing plugin name.
+	// Name is the new administrator-facing plugin name, unless KeepName is
+	// set.
 	Name string
+
+	// KeepName leaves the current name in place and ignores Name.
+	KeepName bool
 
 	// Slug is the new slug. Nil keeps the current slug, which is what a rename
 	// wants: the slug names the published package, so changing it moves the
@@ -278,7 +282,7 @@ func (c *PluginMetadataCore) CreateInTransaction(ctx context.Context, tx pgx.Tx,
 // the publication request it writes regenerates packages from the new
 // metadata.
 func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx, mutation UpdatePluginMutation) (PluginMetadataResult, error) {
-	if mutation.Name == "" {
+	if mutation.Name == "" && !mutation.KeepName {
 		return PluginMetadataResult{}, ErrPluginNameEmpty
 	}
 	if mutation.Slug != nil {
@@ -316,6 +320,10 @@ func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx,
 	if slug != before.Slug && !autoSyncAfter {
 		return PluginMetadataResult{}, ErrPluginSlugLockedWhileAutoSyncOff
 	}
+	name := mutation.Name
+	if mutation.KeepName {
+		name = before.Name
+	}
 	description := conv.PtrToPGText(mutation.Description)
 	if mutation.KeepDescription {
 		description = before.Description
@@ -324,7 +332,7 @@ func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx,
 		ID:              mutation.PluginID,
 		OrganizationID:  mutation.OrganizationID,
 		ProjectID:       mutation.ProjectID,
-		Name:            mutation.Name,
+		Name:            name,
 		Slug:            slug,
 		Description:     description,
 		AutoSyncEnabled: conv.PtrToPGBool(mutation.AutoSyncEnabled),

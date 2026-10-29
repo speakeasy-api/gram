@@ -20,8 +20,9 @@ import (
 )
 
 const (
-	operationCreatePlugin = "create_plugin"
-	operationRenamePlugin = "rename_plugin"
+	operationCreatePlugin      = "create_plugin"
+	operationRenamePlugin      = "rename_plugin"
+	operationSetPluginAutoSync = "set_plugin_auto_sync"
 
 	pluginMetadataFeature = "plugin_metadata"
 
@@ -51,6 +52,10 @@ const (
 	// pluginMetadataCodeIdempotencyKeyReused refuses a request whose
 	// idempotency key was already used for different input.
 	pluginMetadataCodeIdempotencyKeyReused = "idempotency_key_reused"
+
+	// pluginMetadataCodeUnsyncedChanges refuses turning auto sync off while the
+	// plugin has changes that haven't been synced, as the dashboard does.
+	pluginMetadataCodeUnsyncedChanges = "unsynced_changes"
 )
 
 var (
@@ -76,12 +81,13 @@ func (e *PluginMetadataMutationError) Error() string { return e.Message }
 func (e *PluginMetadataMutationError) Unwrap() error { return e.Cause }
 
 type CreatePluginInput struct {
-	ProjectID      string `json:"project_id" jsonschema:"explicit project ID the plugin is created in"`
-	Name           string `json:"name" jsonschema:"administrator-facing plugin name; at most 256 bytes"`
-	Slug           string `json:"slug,omitempty" jsonschema:"optional slug of at most 60 lowercase letters, digits, and hyphens; derived from name when omitted. It becomes the plugin's permanent install name and does not change when the plugin is renamed"`
-	Description    string `json:"description,omitempty" jsonschema:"optional plugin description; at most 1024 bytes"`
-	IdempotencyKey string `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact creation"`
-	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms the project, name, and slug of the plugin to create"`
+	ProjectID       string `json:"project_id" jsonschema:"explicit project ID the plugin is created in"`
+	Name            string `json:"name" jsonschema:"administrator-facing plugin name; at most 256 bytes"`
+	Slug            string `json:"slug,omitempty" jsonschema:"optional slug of at most 60 lowercase letters, digits, and hyphens; derived from name when omitted. It becomes the plugin's permanent install name and does not change when the plugin is renamed"`
+	Description     string `json:"description,omitempty" jsonschema:"optional plugin description; at most 1024 bytes"`
+	AutoSyncEnabled *bool  `json:"auto_sync_enabled,omitempty" jsonschema:"whether the plugin's changes publish to the marketplace on their own; defaults to true. When false, the plugin stays out of the marketplace until someone syncs it by hand"`
+	IdempotencyKey  string `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact creation"`
+	Confirmed       bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms the project, name, and slug of the plugin to create"`
 }
 
 type RenamePluginInput struct {
@@ -92,8 +98,16 @@ type RenamePluginInput struct {
 	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms the exact plugin and its new name"`
 }
 
-// PluginMetadataMutationPlugin is the committed plugin a create or rename
-// produced, read inside the same transaction that wrote it.
+type SetPluginAutoSyncInput struct {
+	ProjectID       string `json:"project_id" jsonschema:"explicit project ID that owns the plugin"`
+	Plugin          string `json:"plugin" jsonschema:"exact plugin ID, slug, or name returned by list_plugins"`
+	AutoSyncEnabled bool   `json:"auto_sync_enabled" jsonschema:"true to publish the plugin's changes to the marketplace on their own; false to hold them until someone syncs by hand"`
+	IdempotencyKey  string `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact change"`
+	Confirmed       bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms the exact plugin and whether its auto sync turns on or off"`
+}
+
+// PluginMetadataMutationPlugin is the committed plugin a create, rename, or
+// auto sync change produced, read inside the same transaction that wrote it.
 type PluginMetadataMutationPlugin struct {
 	ID          string                  `json:"id"`
 	Name        string                  `json:"name"`
@@ -104,6 +118,10 @@ type PluginMetadataMutationPlugin struct {
 	SkillCount  int64                   `json:"skill_count"`
 	Assignments PluginAssignmentSummary `json:"assignments"`
 	Publication string                  `json:"publication"`
+
+	// AutoSyncEnabled is absent from results stored before the setting was
+	// reported.
+	AutoSyncEnabled *bool `json:"auto_sync_enabled,omitempty"`
 }
 
 type PluginMetadataReceiptResult struct {
@@ -123,7 +141,8 @@ type PluginMetadataReceiptResult struct {
 	// the change.
 	PublicationRequest string `json:"publication_request"`
 
-	// ResultCategory is "created" or "renamed".
+	// ResultCategory is "created", "renamed", "auto_sync_turned_on", or
+	// "auto_sync_turned_off".
 	ResultCategory string `json:"result_category"`
 }
 
@@ -144,10 +163,16 @@ type normalizedPluginMetadataMutation struct {
 	Name        string `json:"name"`
 	Slug        string `json:"slug,omitempty"`
 	Description string `json:"description,omitempty"`
+
+	// AutoSyncEnabled is recorded for an auto sync change, and for a create
+	// only when it turns auto sync off, so a create that leaves it out hashes
+	// as it did before the setting existed.
+	AutoSyncEnabled *bool `json:"auto_sync_enabled,omitempty"`
 }
 
-// WithMetadataMutations enables creating and renaming plugins. The writes go
-// through the same core the plugins management API uses, so both surfaces
+// WithMetadataMutations enables creating and renaming plugins, and turning
+// their auto sync on or off once WithAutoSyncGuard is composed too. The writes
+// go through the same core the plugins management API uses, so both surfaces
 // refuse the same inputs the same way. There is deliberately no creation cap:
 // the dashboard has none, and the operation budget already bounds a runaway
 // create loop. The post-commit publish signal goes through the same publisher
@@ -165,6 +190,26 @@ func (s *PluginsService) metadataMutationValid() bool {
 	return s.valid() && s.authorization != nil && s.metadataLogger != nil && s.metadataCore != nil && s.metadataBudget.valid()
 }
 
+// pluginAutoSyncGuard refuses turning a plugin's auto sync off while it has
+// changes that haven't been synced. Implemented by the plugins management
+// service, so the rule is the dashboard's own.
+type pluginAutoSyncGuard interface {
+	RequireAutoSyncCanTurnOff(ctx context.Context, organizationID string, projectID, pluginID uuid.UUID) error
+}
+
+// WithAutoSyncGuard enables set_plugin_auto_sync alongside the other metadata
+// writes.
+func (s *PluginsService) WithAutoSyncGuard(guard pluginAutoSyncGuard) *PluginsService {
+	if s != nil {
+		s.autoSyncGuard = guard
+	}
+	return s
+}
+
+func (s *PluginsService) autoSyncMutationValid() bool {
+	return s.metadataMutationValid() && s.autoSyncGuard != nil
+}
+
 // CreatePlugin creates one empty plugin. Every error it returns is a
 // classified refusal; anything unexpected is logged with its cause and
 // reported as temporarily unavailable.
@@ -179,6 +224,14 @@ func (s *PluginsService) CreatePlugin(ctx context.Context, principal Principal, 
 func (s *PluginsService) RenamePlugin(ctx context.Context, principal Principal, input RenamePluginInput) (PluginMetadataMutationOutput, error) {
 	output, err := s.renamePlugin(ctx, principal, input)
 	return output, s.pluginMetadataRefusal(ctx, operationRenamePlugin, err)
+}
+
+// SetPluginAutoSync turns one plugin's auto sync on or off. Every error it
+// returns is a classified refusal; anything unexpected is logged with its cause
+// and reported as temporarily unavailable.
+func (s *PluginsService) SetPluginAutoSync(ctx context.Context, principal Principal, input SetPluginAutoSyncInput) (PluginMetadataMutationOutput, error) {
+	output, err := s.setPluginAutoSync(ctx, principal, input)
+	return output, s.pluginMetadataRefusal(ctx, operationSetPluginAutoSync, err)
 }
 
 // pluginMetadataRefusal is the boundary between these writes and the MCP
@@ -244,19 +297,21 @@ func (s *PluginsService) createPlugin(ctx context.Context, principal Principal, 
 	if err != nil {
 		return PluginMetadataMutationOutput{}, err
 	}
+	var autoSyncOff *bool
+	if input.AutoSyncEnabled != nil && !*input.AutoSyncEnabled {
+		autoSyncOff = new(false)
+	}
 	normalized := normalizedPluginMetadataMutation{
 		Operation: operationCreatePlugin, ProjectID: project.ID.String(), Plugin: "",
-		Name: input.Name, Slug: input.Slug, Description: input.Description,
+		Name: input.Name, Slug: input.Slug, Description: input.Description, AutoSyncEnabled: autoSyncOff,
 	}
 	mutation := plugindelivery.CreatePluginMutation{
-		OrganizationID: principal.OrganizationID,
-		ProjectID:      project.ID,
-		Name:           input.Name,
-		Slug:           optionalString(input.Slug),
-		Description:    optionalString(input.Description),
-		// Platform MCP does not expose auto sync yet, so new plugins keep the
-		// default: their changes publish automatically.
-		AutoSyncEnabled: nil,
+		OrganizationID:  principal.OrganizationID,
+		ProjectID:       project.ID,
+		Name:            input.Name,
+		Slug:            optionalString(input.Slug),
+		Description:     optionalString(input.Description),
+		AutoSyncEnabled: input.AutoSyncEnabled,
 		Actor:           plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
 	}
 	return s.executePluginMetadataMutation(ctx, principal, project, operationCreatePlugin, key, normalized, func(ctx context.Context, tx pgx.Tx) (PluginMetadataReceiptResult, error) {
@@ -292,7 +347,7 @@ func (s *PluginsService) renamePlugin(ctx context.Context, principal Principal, 
 	}
 	normalized := normalizedPluginMetadataMutation{
 		Operation: operationRenamePlugin, ProjectID: project.ID.String(), Plugin: target,
-		Name: input.Name, Slug: "", Description: "",
+		Name: input.Name, Slug: "", Description: "", AutoSyncEnabled: nil,
 	}
 	return s.executePluginMetadataMutation(ctx, principal, project, operationRenamePlugin, key, normalized, func(ctx context.Context, tx pgx.Tx) (PluginMetadataReceiptResult, error) {
 		// Resolved inside the receipt transaction, after the replay check, so a
@@ -307,6 +362,7 @@ func (s *PluginsService) renamePlugin(ctx context.Context, principal Principal, 
 			ProjectID:       project.ID,
 			PluginID:        ref.ID,
 			Name:            input.Name,
+			KeepName:        false,
 			Slug:            nil,
 			Description:     nil,
 			KeepDescription: true,
@@ -327,15 +383,85 @@ func (s *PluginsService) renamePlugin(ctx context.Context, principal Principal, 
 	})
 }
 
+// setPluginAutoSync applies the dashboard's auto sync switch: turning auto
+// sync off is refused while the plugin has changes that haven't been synced,
+// and turning it on lets the publish this requests send what was held.
+func (s *PluginsService) setPluginAutoSync(ctx context.Context, principal Principal, input SetPluginAutoSyncInput) (PluginMetadataMutationOutput, error) {
+	if !s.autoSyncMutationValid() {
+		return PluginMetadataMutationOutput{}, pluginMetadataMutationUnavailable(nil)
+	}
+	if !input.Confirmed {
+		return PluginMetadataMutationOutput{}, pluginMetadataMutationInvalid("confirmation_required", "Ask the user to confirm the exact plugin and whether its auto sync turns on or off, then retry with confirmed: true.")
+	}
+	key := strings.TrimSpace(input.IdempotencyKey)
+	if err := validatePluginMetadataCaller(principal, key); err != nil {
+		return PluginMetadataMutationOutput{}, err
+	}
+	target := strings.TrimSpace(input.Plugin)
+	if target == "" {
+		return PluginMetadataMutationOutput{}, pluginMetadataMutationInvalid("invalid_request", "Name the plugin exactly as list_plugins returned it.")
+	}
+	if pluginID, err := uuid.Parse(target); err == nil && pluginID == uuid.Nil {
+		return PluginMetadataMutationOutput{}, pluginMetadataMutationInvalid("invalid_request", "The plugin ID must not be all zeroes.")
+	}
+	project, err := s.authorizePluginMetadataProject(ctx, principal, input.ProjectID)
+	if err != nil {
+		return PluginMetadataMutationOutput{}, err
+	}
+	normalized := normalizedPluginMetadataMutation{
+		Operation: operationSetPluginAutoSync, ProjectID: project.ID.String(), Plugin: target,
+		Name: "", Slug: "", Description: "", AutoSyncEnabled: &input.AutoSyncEnabled,
+	}
+	category := "auto_sync_turned_off"
+	if input.AutoSyncEnabled {
+		category = "auto_sync_turned_on"
+	}
+	return s.executePluginMetadataMutation(ctx, principal, project, operationSetPluginAutoSync, key, normalized, func(ctx context.Context, tx pgx.Tx) (PluginMetadataReceiptResult, error) {
+		// Resolved and checked inside the receipt transaction, after the
+		// replay check, so a retry of a change that committed replays it
+		// rather than being refused over changes made since.
+		ref, err := s.resolve(ctx, platformrepo.New(tx), principal, project.ID, target)
+		if err != nil {
+			return PluginMetadataReceiptResult{}, err
+		}
+		if !input.AutoSyncEnabled {
+			if err := s.autoSyncGuard.RequireAutoSyncCanTurnOff(ctx, principal.OrganizationID, project.ID, ref.ID); err != nil {
+				if errors.Is(err, plugindelivery.ErrPluginHasUnsyncedChanges) {
+					return PluginMetadataReceiptResult{}, &PluginMetadataMutationError{
+						Code:    pluginMetadataCodeUnsyncedChanges,
+						Message: "Auto sync is still on: this plugin has changes that haven't been synced yet, and turning it off now would hold them back with nothing saying so. Sync them first with republish_plugin, which republishes every plugin in the project once the user confirms. When get_plugin reports publication_evidence.fresh=true, turn auto sync off.",
+						Slug:    "",
+						Cause:   err,
+					}
+				}
+				return PluginMetadataReceiptResult{}, fmt.Errorf("check plugin has no unsynced changes: %w", err)
+			}
+		}
+		updated, err := s.metadataCore.UpdateInTransaction(ctx, tx, plugindelivery.UpdatePluginMutation{
+			OrganizationID:  principal.OrganizationID,
+			ProjectID:       project.ID,
+			PluginID:        ref.ID,
+			Name:            "",
+			KeepName:        true,
+			Slug:            nil,
+			Description:     nil,
+			KeepDescription: true,
+			AutoSyncEnabled: &input.AutoSyncEnabled,
+			Actor:           plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
+		})
+		if err != nil {
+			return PluginMetadataReceiptResult{}, pluginMetadataCoreError(err)
+		}
+		return s.pluginMetadataReceiptResult(ctx, tx, principal, project, updated, category)
+	})
+}
+
 // validatePluginMetadataRequest refuses out-of-bounds input before anything is
 // read, charged, or written, so an over-long name is reported as an input
 // limit rather than discovered as an oversized receipt after the write.
 func validatePluginMetadataRequest(principal Principal, key, name, description string) error {
-	if principal.OrganizationID == "" || principal.UserID == "" {
-		return pluginMetadataMutationInvalid("invalid_request", "The plugin request is missing its caller identity.")
-	}
-	if key == "" || len(key) > 128 {
-		return pluginMetadataMutationInvalid("invalid_request", "Provide a stable idempotency key of at most 128 characters so retrying this exact change is safe.")
+	if err := validatePluginMetadataCaller(principal, key); err != nil {
+		return err
 	}
 	if strings.TrimSpace(name) == "" {
 		return pluginMetadataMutationInvalid("invalid_request", "Provide a plugin name.")
@@ -345,6 +471,16 @@ func validatePluginMetadataRequest(principal Principal, key, name, description s
 	}
 	if len(description) > maxPluginMetadataDescriptionBytes {
 		return pluginMetadataMutationInvalid("invalid_request", fmt.Sprintf("A plugin description can be at most %d bytes. Ask the user for a shorter description.", maxPluginMetadataDescriptionBytes))
+	}
+	return nil
+}
+
+func validatePluginMetadataCaller(principal Principal, key string) error {
+	if principal.OrganizationID == "" || principal.UserID == "" {
+		return pluginMetadataMutationInvalid("invalid_request", "The plugin request is missing its caller identity.")
+	}
+	if key == "" || len(key) > 128 {
+		return pluginMetadataMutationInvalid("invalid_request", "Provide a stable idempotency key of at most 128 characters so retrying this exact change is safe.")
 	}
 	return nil
 }
@@ -372,14 +508,14 @@ func (s *PluginsService) authorizePluginMetadataProject(ctx context.Context, pri
 	return project, nil
 }
 
-// chargePluginMetadataMutation spends the create-and-rename allowance. It runs
+// chargePluginMetadataMutation spends the plugin metadata allowance. It runs
 // after validation, authorization, and the replay lookup, and outside any
 // transaction, so a refused or replayed call never pays and a slow limiter
 // never holds a database connection.
 func (s *PluginsService) chargePluginMetadataMutation(ctx context.Context, principal Principal) error {
 	if err := s.metadataBudget.AllowConnectionOrOrganization(ctx, principal); err != nil {
 		if errors.Is(err, ErrOperationRateLimited) {
-			return &PluginMetadataMutationError{Code: "rate_limited", Message: "Plugins were created or renamed too often just now. Try again shortly.", Slug: "", Cause: err}
+			return &PluginMetadataMutationError{Code: "rate_limited", Message: "Plugins were created or changed too often just now. Try again shortly.", Slug: "", Cause: err}
 		}
 		return pluginMetadataMutationUnavailable(err)
 	}
@@ -463,7 +599,7 @@ func (s *PluginsService) pluginMetadataReceiptResult(ctx context.Context, tx pgx
 		Plugin: PluginMetadataMutationPlugin{
 			ID: inventory.ID, Name: inventory.Name, Slug: inventory.Slug, Description: inventory.Description,
 			IsDefault: inventory.IsDefault, ServerCount: inventory.ServerCount, SkillCount: inventory.SkillCount,
-			Assignments: *inventory.Assignments, Publication: inventory.Publication,
+			Assignments: *inventory.Assignments, Publication: inventory.Publication, AutoSyncEnabled: inventory.AutoSyncEnabled,
 		},
 		PreviousName:        "",
 		DeliveredToEveryone: written.DeliveredToEveryone,
@@ -495,7 +631,9 @@ func validPluginMetadataReceiptResult(result PluginMetadataReceiptResult) bool {
 	if uuid.Validate(result.ProjectID) != nil || uuid.Validate(result.Plugin.ID) != nil || result.Plugin.Slug == "" {
 		return false
 	}
-	if result.ResultCategory != "created" && result.ResultCategory != "renamed" {
+	switch result.ResultCategory {
+	case "created", "renamed", "auto_sync_turned_on", "auto_sync_turned_off":
+	default:
 		return false
 	}
 	switch result.Plugin.Publication {
@@ -528,7 +666,7 @@ func pluginMetadataMutationInvalid(code, message string) error {
 
 func pluginMetadataMutationUnavailable(cause error) error {
 	if cause == nil {
-		return &PluginMetadataMutationError{Code: unavailableCode, Message: "Creating and renaming plugins is not available on this server.", Slug: "", Cause: ErrPluginMetadataMutationUnavailable}
+		return &PluginMetadataMutationError{Code: unavailableCode, Message: "Creating and changing plugins is not available on this server.", Slug: "", Cause: ErrPluginMetadataMutationUnavailable}
 	}
-	return &PluginMetadataMutationError{Code: unavailableCode, Message: "Creating and renaming plugins is temporarily unavailable.", Slug: "", Cause: fmt.Errorf("%w: %w", ErrPluginMetadataMutationUnavailable, cause)}
+	return &PluginMetadataMutationError{Code: unavailableCode, Message: "Creating and changing plugins is temporarily unavailable.", Slug: "", Cause: fmt.Errorf("%w: %w", ErrPluginMetadataMutationUnavailable, cause)}
 }

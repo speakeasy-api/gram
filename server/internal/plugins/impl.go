@@ -607,6 +607,7 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		ProjectID:       *ac.ProjectID,
 		PluginID:        pluginID,
 		Name:            payload.Name,
+		KeepName:        false,
 		Slug:            &payload.Slug,
 		Description:     payload.Description,
 		KeepDescription: false,
@@ -652,26 +653,50 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 // it was last published, so anything unsynced would be stranded. Turning it off
 // when it already is off needs no check.
 func (s *Service) requireAutoSyncCanTurnOff(ctx context.Context, ac *contextvalues.AuthContext, pluginID uuid.UUID, payload *gen.UpdatePluginPayload) error {
-	current, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
-		ID:             pluginID,
-		OrganizationID: ac.ActiveOrganizationID,
-		ProjectID:      *ac.ProjectID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return oops.C(oops.CodeNotFound)
-	}
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "get plugin").LogError(ctx, s.logger)
-	}
-	if !PluginAutoSyncEnabled(current.AutoSyncEnabled) {
-		return nil
+	current, err := s.pluginWithAutoSyncOn(ctx, ac.ActiveOrganizationID, *ac.ProjectID, pluginID)
+	if err != nil || current == nil {
+		return err
 	}
 	if payload.Name != current.Name ||
 		payload.Slug != current.Slug ||
 		conv.PtrValOr(payload.Description, "") != conv.FromPGTextOrEmpty[string](current.Description) {
 		return oops.E(oops.CodeFailedPrecondition, nil, "%s", autoSyncOffWithOtherChangesMessage)
 	}
-	return s.requirePluginSyncedForPause(ctx, current)
+	return s.requirePluginSyncedForPause(ctx, *current)
+}
+
+// RequireAutoSyncCanTurnOff is the check UpdatePlugin makes before turning a
+// plugin's auto sync off, for a caller that changes nothing else about the
+// plugin, such as the Platform MCP. A refusal because the plugin has changes
+// that haven't been synced matches ErrPluginHasUnsyncedChanges. The caller must
+// already have authorized plugin write for the project.
+func (s *Service) RequireAutoSyncCanTurnOff(ctx context.Context, organizationID string, projectID, pluginID uuid.UUID) error {
+	current, err := s.pluginWithAutoSyncOn(ctx, organizationID, projectID, pluginID)
+	if err != nil || current == nil {
+		return err
+	}
+	return s.requirePluginSyncedForPause(ctx, *current)
+}
+
+// pluginWithAutoSyncOn loads the plugin an update would turn auto sync off
+// for. It returns nil when auto sync is already off: turning it off again
+// needs no check.
+func (s *Service) pluginWithAutoSyncOn(ctx context.Context, organizationID string, projectID, pluginID uuid.UUID) (*repo.Plugin, error) {
+	current, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
+		ID:             pluginID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get plugin").LogError(ctx, s.logger)
+	}
+	if !PluginAutoSyncEnabled(current.AutoSyncEnabled) {
+		return nil, nil
+	}
+	return &current, nil
 }
 
 func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPayload) error {
@@ -2089,6 +2114,10 @@ type PublishProjectInput struct {
 	// rollout hasn't cleared. The only lever to advance hooks is the
 	// FlagHooksRollout payload pin in PostHog (plus the hardcoded canary).
 	SkipIfUnchanged bool
+	// IncludePausedPlugins makes this a manual sync, like the dashboard's
+	// PublishPlugins: it also publishes the pending changes of plugins whose
+	// auto sync is off. Set only for a sync someone asked for.
+	IncludePausedPlugins bool
 }
 
 type PublishProjectResult struct {
@@ -2179,7 +2208,7 @@ func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput)
 		GitHubUsernames:      nil,
 		CommitMessage:        conv.Default(input.CommitMessage, "Update plugin packages"),
 		SkipIfUnchanged:      input.SkipIfUnchanged,
-		IncludePausedPlugins: false,
+		IncludePausedPlugins: input.IncludePausedPlugins,
 		RotateHooksKey:       false,
 		HooksKeyCandidate:    nil,
 	})
@@ -2208,9 +2237,10 @@ type publishProjectInput struct {
 	CommitMessage    string
 	SkipIfUnchanged  bool
 	// IncludePausedPlugins publishes the pending changes of plugins whose auto
-	// sync is off. Only the dashboard's manual sync (PublishPlugins) sets it.
-	// Every other publish is automatic and keeps each such plugin as it was
-	// last published, or leaves it out if it was never published.
+	// sync is off. Only a manual sync sets it: the dashboard's PublishPlugins,
+	// or a PublishProject someone asked for. Every other publish is automatic
+	// and keeps each such plugin as it was last published, or leaves it out if
+	// it was never published.
 	IncludePausedPlugins bool
 	// RotateHooksKey makes this a hooks-only publish: the hooks subtree
 	// regenerates so HooksKeyCandidate is baked into the published observability

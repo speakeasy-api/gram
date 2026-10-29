@@ -113,7 +113,7 @@ type platformMCPConfig struct {
 	// DirectoryReview backs the directory review tools with the dashboard's
 	// access service, so they share its authorization, checks and audit.
 	DirectoryReview        platformmcp.DirectoryReviewBackend
-	PluginPublishSignaler  plugins.PluginPublishSignaler
+	PluginPublishSignaler  plugins.PluginSyncSignaler
 	NetworkAccessAdmission networkaccess.EligibilityChecker
 	PublicationRequests    plugins.PublicationRequests
 	TemporalEnv            *tenv.Environment
@@ -493,7 +493,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		pluginInventory.WithPublishStatus(&background.TemporalPluginPublisher{TemporalEnv: config.TemporalEnv})
 	}
 	if config.PluginManagement != nil {
-		pluginInventory.WithServerRemoval(config.PluginManagement)
+		pluginInventory.WithServerRemoval(config.PluginManagement).WithAutoSyncGuard(config.PluginManagement)
 	}
 	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
 	if config.DirectoryReview != nil {
@@ -755,7 +755,7 @@ func newPlatformMCPLifecycleVisibilityService(config platformMCPConfig, readines
 		if config.PluginPublisher == nil {
 			return fmt.Errorf("plugin publishing is not configured")
 		}
-		_, err := config.PluginPublisher.PublishProject(ctx, plugins.PublishProjectInput{ProjectID: projectID, CreatedByUserID: userID, CommitMessage: commitMessage, SkipIfUnchanged: true})
+		_, err := config.PluginPublisher.PublishProject(ctx, plugins.PublishProjectInput{ProjectID: projectID, CreatedByUserID: userID, CommitMessage: commitMessage, SkipIfUnchanged: true, IncludePausedPlugins: false})
 		return err
 	}, platformMCPReconcileCustomDomains(config), readiness, config.JWTSigningKey)
 	if err != nil {
@@ -782,7 +782,7 @@ func newPlatformMCPDistributionService(config platformMCPConfig, pluginTargets p
 			if config.PluginPublisher == nil {
 				return fmt.Errorf("plugin publishing is not configured")
 			}
-			_, err := config.PluginPublisher.PublishProject(ctx, plugins.PublishProjectInput{ProjectID: projectID, CreatedByUserID: userID, CommitMessage: commitMessage, SkipIfUnchanged: true})
+			_, err := config.PluginPublisher.PublishProject(ctx, plugins.PublishProjectInput{ProjectID: projectID, CreatedByUserID: userID, CommitMessage: commitMessage, SkipIfUnchanged: true, IncludePausedPlugins: false})
 			return err
 		},
 		pluginTargets,
@@ -1243,7 +1243,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		pluginInventory.WithPublishStatus(&background.TemporalPluginPublisher{TemporalEnv: config.TemporalEnv})
 	}
 	if config.PluginManagement != nil {
-		pluginInventory.WithServerRemoval(config.PluginManagement)
+		pluginInventory.WithServerRemoval(config.PluginManagement).WithAutoSyncGuard(config.PluginManagement)
 	}
 	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
 	if config.DirectoryReview != nil {

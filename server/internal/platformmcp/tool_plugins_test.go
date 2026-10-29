@@ -13,8 +13,9 @@ import (
 var pluginReadToolNames = []string{"list_plugins", "get_plugin", "list_plugin_assignments"}
 
 // pluginMutationToolNames change who receives a plugin, what it carries, what
-// it is called, or whether it is republished, and stay external-only.
-var pluginMutationToolNames = []string{operationSetPluginAssignments, operationCreatePlugin, operationRenamePlugin, operationRepublishPlugin, "distribute_mcp_to_plugin", "remove_mcp_from_plugin", "remove_plugin_server"}
+// it is called, whether it syncs on its own, or whether it is republished, and
+// stay external-only.
+var pluginMutationToolNames = []string{operationSetPluginAssignments, operationCreatePlugin, operationRenamePlugin, operationSetPluginAutoSync, operationRepublishPlugin, "distribute_mcp_to_plugin", "remove_mcp_from_plugin", "remove_plugin_server"}
 
 // requirePluginToolAudiences asserts the audience split every plugin tool
 // registration must keep, whether the plugins service is composed or absent.

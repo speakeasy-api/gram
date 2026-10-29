@@ -20,6 +20,15 @@ type PluginPublishSignaler interface {
 	SignalPluginPublish(ctx context.Context, projectID uuid.UUID, createdByUserID string) error
 }
 
+// PluginSyncSignaler is a PluginPublishSignaler that can also request a manual
+// sync: a publish that also sends the pending changes of plugins whose auto
+// sync is off, as the dashboard's Sync changes does. Every other publish keeps
+// those plugins as they were last published.
+type PluginSyncSignaler interface {
+	PluginPublishSignaler
+	SignalPluginSync(ctx context.Context, projectID uuid.UUID, createdByUserID string) error
+}
+
 // SignalPluginPublishAfterRequest schedules the legacy publish signal after the
 // transaction that requested publication has committed. A durable outbox request
 // already covers the publication, so it must not be signalled again. When the
@@ -31,6 +40,18 @@ func SignalPluginPublishAfterRequest(ctx context.Context, signaler PluginPublish
 	}
 	if err := signaler.SignalPluginPublish(context.WithoutCancel(ctx), projectID, createdByUserID); err != nil {
 		return fmt.Errorf("signal plugin publication: %w", err)
+	}
+	return nil
+}
+
+// SignalPluginSyncAfterRequest is SignalPluginPublishAfterRequest for a manual
+// sync requested with PublicationRequests.SyncProjectWithOutcome.
+func SignalPluginSyncAfterRequest(ctx context.Context, signaler PluginSyncSignaler, outcome ProjectPublicationRequestOutcome, projectID uuid.UUID, createdByUserID string) error {
+	if signaler == nil || outcome == ProjectPublicationEnqueued {
+		return nil
+	}
+	if err := signaler.SignalPluginSync(context.WithoutCancel(ctx), projectID, createdByUserID); err != nil {
+		return fmt.Errorf("signal plugin sync: %w", err)
 	}
 	return nil
 }

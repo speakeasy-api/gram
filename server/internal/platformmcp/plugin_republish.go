@@ -7,13 +7,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
 const operationRepublishPlugin = "republish_plugin"
@@ -38,7 +41,7 @@ const pluginRepublishNote = "Publishing runs in the background, so a requested p
 const pluginRepublishSignalSkippedNote = "This repeats a republish that was already requested. The publish was not signalled again because the retry allowance is spent or could not be checked; the original request still stands. Call get_plugin again later: publication_evidence.fresh=true confirms the package caught up. Installed clients are not inspected."
 
 // pluginAlreadyCurrentNote is returned when nothing was requested.
-const pluginAlreadyCurrentNote = "The plugin's published package already matches its current inputs, so no publish was requested. Installed clients are not inspected."
+const pluginAlreadyCurrentNote = "The plugin's published package already matches its current inputs, and no plugin whose auto sync is off has changes waiting, so no publish was requested. Installed clients are not inspected."
 
 var (
 	ErrPluginRepublishInvalid       = errors.New("invalid platform mcp plugin republish")
@@ -68,7 +71,7 @@ func (e *PluginRepublishError) Unwrap() error { return e.Cause }
 type RepublishPluginInput struct {
 	ProjectID      string `json:"project_id" jsonschema:"explicit project ID that owns the plugin"`
 	Plugin         string `json:"plugin" jsonschema:"exact plugin ID, slug, or name returned by list_plugins"`
-	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms republishing every plugin in this project"`
+	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms republishing every plugin in this project, including changes waiting on plugins whose auto sync is off"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated idempotency key, at most 128 characters; reuse only to retry this exact request"`
 }
 
@@ -123,7 +126,7 @@ type normalizedRepublishPlugin struct {
 // WithRepublish enables republish_plugin. Publication requests are the durable
 // outbox path; the signaler is the debounced fallback used when emission is
 // disabled. Either one is enough to request a publish.
-func (s *PluginsService) WithRepublish(publication plugindelivery.PublicationRequests, publisher plugindelivery.PluginPublishSignaler, budget OperationBudget) *PluginsService {
+func (s *PluginsService) WithRepublish(publication plugindelivery.PublicationRequests, publisher plugindelivery.PluginSyncSignaler, budget OperationBudget) *PluginsService {
 	if s != nil {
 		s.publication = publication
 		s.publisher = publisher
@@ -136,11 +139,13 @@ func (s *PluginsService) republishValid() bool {
 	return s.valid() && s.publicationEvidence != nil && s.republishBudget.valid() && (s.publication.Enabled || s.publisher != nil)
 }
 
-// RepublishPlugin requests a publish of the project's plugin packages when the
-// named plugin's package is stale. The request goes through the same
-// fingerprint-gated, per-project publish the rollout sweep uses, so it
-// regenerates every plugin in the project and a package whose inputs did not
-// change is left as it is.
+// RepublishPlugin requests a manual sync of the project's plugin packages when
+// the named plugin's package is stale, or when a plugin whose auto sync is off
+// has changes waiting. The request goes through the same fingerprint-gated,
+// per-project publish the rollout sweep uses, so it regenerates every plugin in
+// the project and a package whose inputs did not change is left as it is. Like
+// the dashboard's Sync changes, it also publishes the pending changes of
+// plugins whose auto sync is off.
 func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principal, input RepublishPluginInput) (RepublishPluginOutput, error) {
 	if !s.republishValid() {
 		return RepublishPluginOutput{}, pluginRepublishUnavailable(nil)
@@ -148,7 +153,7 @@ func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principa
 	if !input.Confirmed {
 		return RepublishPluginOutput{}, &PluginRepublishError{
 			Code:         "confirmation_required",
-			Message:      "Tell the user that this republishes every plugin in the project, not only the one named, ask them to explicitly confirm it, then call this tool again with confirmed: true.",
+			Message:      "Tell the user that this republishes every plugin in the project, not only the one named, including any changes waiting on plugins whose auto sync is off, ask them to explicitly confirm it, then call this tool again with confirmed: true.",
 			DashboardURL: "",
 			Cause:        ErrPluginRepublishInvalid,
 		}
@@ -203,16 +208,20 @@ func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principa
 			// Read inside the receipt transaction so a retry of a request that
 			// already committed replays its stored outcome instead of
 			// re-deciding from evidence that the publish itself has since moved.
-			evidence := s.readPublicationEvidence(ctx, principal, project.ID, target.Slug)
+			paused, err := pluginsrepo.New(tx).ListAutoSyncPausedPluginSlugs(ctx, project.ID)
+			if err != nil {
+				return pluginRepublishReceipt{}, fmt.Errorf("list plugins with auto sync off: %w", err)
+			}
+			evidence := s.readPublicationEvidence(ctx, principal, project.ID, target.Slug, !slices.Contains(paused, target.Slug))
 			if evidence.NotConfigured {
 				return pluginRepublishReceipt{}, s.pluginRepublishNotConfigured(ctx, principal, project)
 			}
-			if evidence.Fresh != nil && *evidence.Fresh {
+			if evidence.Fresh != nil && *evidence.Fresh && s.pausedPluginsFresh(ctx, principal, project.ID, paused) {
 				return pluginRepublishReceipt{Plugin: plugin, Outcome: PluginRepublishAlreadyCurrent, Publication: ""}, nil
 			}
 			// Unknown or unavailable evidence still requests a publish: the
 			// publish is fingerprint-gated, so an unnecessary request is a no-op.
-			outcome, err := s.publication.ProjectWithOutcome(ctx, tx, principal.OrganizationID, project.ID, principal.UserID)
+			outcome, err := s.publication.SyncProjectWithOutcome(ctx, tx, principal.OrganizationID, project.ID, principal.UserID)
 			if err != nil {
 				return pluginRepublishReceipt{}, fmt.Errorf("request plugin republish: %w", err)
 			}
@@ -246,18 +255,42 @@ func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principa
 		if err := chargeRerun(ctx, receipt, charge); err != nil {
 			skippedRerun(ctx, s.metadataLogger, err)
 			note = pluginRepublishSignalSkippedNote
-		} else if err := plugindelivery.SignalPluginPublishAfterRequest(ctx, s.publisher, plugindelivery.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {
+		} else if err := plugindelivery.SignalPluginSyncAfterRequest(ctx, s.publisher, plugindelivery.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {
 			return RepublishPluginOutput{}, pluginRepublishUnavailable(err)
 		}
 	}
+	// An unreadable setting reads as on, so the evidence never claims changes
+	// are waiting for a sync it could not confirm is needed.
+	paused, _ := pluginsrepo.New(s.db).ListAutoSyncPausedPluginSlugs(ctx, project.ID)
 	return RepublishPluginOutput{
 		ProjectID:           project.ID.String(),
 		Plugin:              stored.Plugin,
 		Outcome:             stored.Outcome,
-		PublicationEvidence: s.readPublicationEvidence(ctx, principal, project.ID, stored.Plugin.Slug),
+		PublicationEvidence: s.readPublicationEvidence(ctx, principal, project.ID, stored.Plugin.Slug, !slices.Contains(paused, stored.Plugin.Slug)),
 		Note:                note,
 		Receipt:             riskMutationToolReceipt(receipt),
 	}, nil
+}
+
+// pausedPluginsFresh reports whether every plugin in paused, the project's
+// plugins whose auto sync is off, already matches what was last published.
+// Only a manual sync publishes their pending changes, so republishing must not
+// be skipped while one of them has some, even when the named plugin is
+// current. Evidence that cannot be read counts as not fresh.
+func (s *PluginsService) pausedPluginsFresh(ctx context.Context, principal Principal, projectID uuid.UUID, paused []string) bool {
+	if len(paused) == 0 {
+		return true
+	}
+	evidence, err := s.publicationEvidence.ResolvePublicationEvidence(ctx, principal.OrganizationID, projectID, paused)
+	if err != nil || len(evidence) != len(paused) {
+		return false
+	}
+	for _, plugin := range evidence {
+		if plugin.Fresh == nil || !*plugin.Fresh {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *PluginsService) pluginRepublishNotConfigured(ctx context.Context, principal Principal, project ResolvedProject) error {

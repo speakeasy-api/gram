@@ -26,6 +26,11 @@ import (
 // from then on would strand those changes with nothing on screen saying so.
 const pluginHasUnsyncedChangesMessage = "This plugin has changes that haven't been synced yet. Sync changes first, then turn off auto sync."
 
+// ErrPluginHasUnsyncedChanges is the cause of the refusal carrying
+// pluginHasUnsyncedChangesMessage, so a caller outside the management API can
+// tell it apart from a failed check.
+var ErrPluginHasUnsyncedChanges = errors.New("plugin has unsynced changes")
+
 // autoSyncOffWithOtherChangesMessage refuses turning auto sync off in the same
 // update that edits the plugin: the edit itself would be an unsynced change.
 const autoSyncOffWithOtherChangesMessage = "Turn off auto sync on its own, without other changes to the plugin."
@@ -346,7 +351,7 @@ func (s *Service) requirePluginSyncedForPause(ctx context.Context, plugin repo.P
 		// paused, it would drop out of the marketplace. Otherwise it was never
 		// published and has nothing to strand.
 		if conn.UpdatedAt.Valid && plugin.CreatedAt.Valid && plugin.CreatedAt.Time.Before(conn.UpdatedAt.Time) {
-			return oops.E(oops.CodeFailedPrecondition, nil, "%s", pluginHasUnsyncedChangesMessage)
+			return oops.E(oops.CodeFailedPrecondition, ErrPluginHasUnsyncedChanges, "%s", pluginHasUnsyncedChangesMessage)
 		}
 		return nil
 	}
@@ -373,7 +378,7 @@ func (s *Service) requirePluginSyncedForPause(ctx context.Context, plugin repo.P
 		return oops.E(oops.CodeUnexpected, err, "compute plugin fingerprint").LogError(ctx, s.logger)
 	}
 	if current != stored {
-		return oops.E(oops.CodeFailedPrecondition, nil, "%s", pluginHasUnsyncedChangesMessage)
+		return oops.E(oops.CodeFailedPrecondition, ErrPluginHasUnsyncedChanges, "%s", pluginHasUnsyncedChangesMessage)
 	}
 	return nil
 }

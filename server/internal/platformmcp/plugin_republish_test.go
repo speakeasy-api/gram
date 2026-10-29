@@ -26,6 +26,9 @@ import (
 type pluginPublishSignal struct {
 	projectID uuid.UUID
 	userID    string
+	// sync marks a manual sync, which also publishes the pending changes of
+	// plugins whose auto sync is off.
+	sync bool
 }
 
 type recordingPluginPublishSignaler struct {
@@ -37,6 +40,13 @@ func (r *recordingPluginPublishSignaler) SignalPluginPublish(_ context.Context, 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.signals = append(r.signals, pluginPublishSignal{projectID: projectID, userID: createdByUserID})
+	return nil
+}
+
+func (r *recordingPluginPublishSignaler) SignalPluginSync(_ context.Context, projectID uuid.UUID, createdByUserID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.signals = append(r.signals, pluginPublishSignal{projectID: projectID, userID: createdByUserID, sync: true})
 	return nil
 }
 
@@ -159,7 +169,7 @@ func TestRepublishPluginSignalsTheProjectWhenEmissionIsDisabled(t *testing.T) {
 	require.Equal(t, pluginRepublishNote, got.Note)
 	require.NotNil(t, got.PublicationEvidence)
 	require.Equal(t, new(false), got.PublicationEvidence.Fresh, "the post-call read reports the package as it stands, not as requested")
-	require.Equal(t, []pluginPublishSignal{{projectID: project.ID, userID: principal.UserID}}, signaler.recorded())
+	require.Equal(t, []pluginPublishSignal{{projectID: project.ID, userID: principal.UserID, sync: true}}, signaler.recorded(), "a republish is a manual sync")
 
 	replayed, err := service.RepublishPlugin(ctx, principal, input)
 	require.NoError(t, err)
@@ -215,6 +225,7 @@ func TestRepublishPluginEnqueuesADurableRequestForAConnectedMarketplace(t *testi
 		require.Equal(t, principal.OrganizationID, published.GetOrganizationId())
 		require.Equal(t, project.ID.String(), published.GetProjectId())
 		require.Equal(t, principal.UserID, published.GetCreatedByUserId())
+		require.True(t, published.GetIncludePausedPlugins(), "a republish is a manual sync")
 	}
 	require.Equal(t, 1, requested)
 }

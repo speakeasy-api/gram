@@ -157,7 +157,14 @@ type Plugin struct {
 	Assignments *PluginAssignmentSummary `json:"assignments,omitempty"`
 
 	// Publication indicates that a package exists, not whether its addresses are current.
-	Publication           string                 `json:"publication"`
+	Publication string `json:"publication"`
+
+	// AutoSyncEnabled reports whether the plugin's changes publish to the
+	// marketplace on their own. When false they wait until someone syncs by
+	// hand, and a plugin never published stays out of the marketplace until
+	// then. Member reads omit it.
+	AutoSyncEnabled *bool `json:"auto_sync_enabled,omitempty"`
+
 	DistributionAdmission *DistributionAdmission `json:"distribution_admission,omitempty"`
 }
 
@@ -339,6 +346,12 @@ type PluginPublicationEvidence struct {
 	Fresh         *bool                      `json:"fresh"`
 	Packages      []PluginPublicationPackage `json:"packages"`
 
+	// AwaitingManualSync is true when the plugin's auto sync is off and its
+	// package is not fresh: its changes publish only when someone syncs by
+	// hand, never on their own. The dashboard shows the same plugin as both
+	// "Auto sync off" and "Needs syncing".
+	AwaitingManualSync bool `json:"awaiting_manual_sync"`
+
 	// LastPublish describes the project marketplace's latest publish attempt
 	// and last successful push, which explain why a package is not fresh.
 	LastPublish *PluginLastPublish `json:"last_publish,omitempty"`
@@ -397,9 +410,10 @@ type publicationEvidenceReader interface {
 	ResolvePublicationEvidence(context.Context, string, uuid.UUID, []string) ([]plugindelivery.PublicationEvidence, error)
 }
 
-// readPublicationEvidence projects one plugin's publication evidence. Callers
-// must have checked that a reader is composed.
-func (s *PluginsService) readPublicationEvidence(ctx context.Context, principal Principal, projectID uuid.UUID, pluginSlug string) *PluginPublicationEvidence {
+// readPublicationEvidence projects one plugin's publication evidence, given
+// whether the plugin's auto sync is on. Callers must have checked that a reader
+// is composed.
+func (s *PluginsService) readPublicationEvidence(ctx context.Context, principal Principal, projectID uuid.UUID, pluginSlug string, autoSyncEnabled bool) *PluginPublicationEvidence {
 	evidence, err := s.publicationEvidence.ResolvePublicationEvidence(ctx, principal.OrganizationID, projectID, []string{pluginSlug})
 	if err != nil || len(evidence) != 1 || evidence[0].PluginSlug != pluginSlug {
 		// Package resolution can fail when a private address is incomplete.
@@ -411,9 +425,10 @@ func (s *PluginsService) readPublicationEvidence(ctx context.Context, principal 
 		packages = append(packages, PluginPublicationPackage{ServerName: pkg.ServerName, MCPURL: pkg.MCPURL})
 	}
 	return &PluginPublicationEvidence{
-		NotConfigured: evidence[0].NotConfigured,
-		Fresh:         evidence[0].Fresh,
-		Packages:      packages,
+		NotConfigured:      evidence[0].NotConfigured,
+		Fresh:              evidence[0].Fresh,
+		Packages:           packages,
+		AwaitingManualSync: !autoSyncEnabled && evidence[0].Fresh != nil && !*evidence[0].Fresh,
 	}
 }
 
@@ -450,15 +465,16 @@ type PluginsService struct {
 	distributionAdmissionRead distributionAdmissionReader
 
 	// publication and publisher request a plugin publish. republish_plugin
-	// uses both; create_plugin and rename_plugin signal through publisher
-	// after their own publication request commits.
+	// uses both to request a manual sync; create_plugin and rename_plugin
+	// signal through publisher after their own publication request commits.
 	publication     plugindelivery.PublicationRequests
-	publisher       plugindelivery.PluginPublishSignaler
+	publisher       plugindelivery.PluginSyncSignaler
 	republishBudget OperationBudget
 
 	metadataLogger *slog.Logger
 	metadataCore   *plugindelivery.PluginMetadataCore
 	metadataBudget OperationBudget
+	autoSyncGuard  pluginAutoSyncGuard
 
 	// orgHosts resolves the platform host stored as an organization's default
 	// host. Nil links follow the request's platform origin. orgHostsLogger
@@ -503,6 +519,7 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		metadataLogger:        nil,
 		metadataCore:          nil,
 		metadataBudget:        OperationBudget{},
+		autoSyncGuard:         nil,
 	}
 }
 
@@ -1022,7 +1039,7 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 	// the gate lives here too so no other caller of this read can expose them.
 	if s.publicationEvidence != nil {
 		if admin, adminErr := s.IsOrganizationAdmin(ctx, principal); adminErr == nil && admin {
-			output.PublicationEvidence = s.readPublicationEvidence(ctx, principal, project.ID, target.Slug)
+			output.PublicationEvidence = s.readPublicationEvidence(ctx, principal, project.ID, target.Slug, plugindelivery.PluginAutoSyncEnabled(row.AutoSyncEnabled))
 			// Read even when evidence is unavailable or not configured: a failed
 			// first publish leaves no marketplace yet, and its failure is the
 			// explanation an administrator needs.
@@ -1276,6 +1293,7 @@ func pluginFromInventoryRow(row platformrepo.ListPlatformMCPPluginInventoryRow) 
 			Users:      row.UserAssignmentCount,
 		},
 		Publication:           publication,
+		AutoSyncEnabled:       new(plugindelivery.PluginAutoSyncEnabled(row.AutoSyncEnabled)),
 		DistributionAdmission: nil,
 	}
 }
