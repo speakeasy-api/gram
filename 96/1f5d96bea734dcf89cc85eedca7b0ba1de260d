@@ -1,0 +1,33 @@
+server/cmd/gram/flags_network_ingress_test.go
+  h_9630b74bdac540 54-55,73-84,138-172,183-185
+server/internal/k8s/network_ingress_orphans.go
+  h_9630b74bdac540 78-81,83,194-198,240-244,246-247,249,253-258
+  h_9630b74bdac540 199,245,248,250-252
+server/internal/k8s/network_ingress_orphans_test.go
+  h_9630b74bdac540 162-184,195,251,266,268,274
+  h_9630b74bdac540 248-250,259-265
+server/internal/k8s/tailscale_network_ingress_provisioner_test.go
+  h_9630b74bdac540 6,12,15,23,128,130-131,140,203-421,585-587,898-936,938-944
+  h_9630b74bdac540 422-423,937,945-946
+server/internal/k8s/tailscale_network_ingress_provisioner.go
+  h_9630b74bdac540 21,24,30,58-88,113-137,173-175,179-188,191-199,201-208,267,301,303,319-325,327-331,342-366,632-649,874,907,925-1052,1281-1286,1343-1344,1348
+  h_9630b74bdac540 189-190,200,209-210,245,268-269,326,367-368,1053-1054
+.changeset/private-network-high-availability.md
+  h_9630b74bdac540 1-5
+server/internal/networkingress/runtime_config.go
+  h_9630b74bdac540 109-111
+server/cmd/gram/flags_network_ingress.go
+  h_9630b74bdac540 133-164,197-206,222-227,265-267,270-282
+  h_9630b74bdac540 207,268-269,283-284
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "961f5d96bea734dcf89cc85eedca7b0ba1de260d",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
