@@ -65,10 +65,14 @@ func (p *emaPlan) reachesDirectly(serverID uuid.UUID) bool {
 // plan for the header phase and the warnings after it.
 func runEMA(ctx context.Context, tx pgx.Tx, opts Options, report *Report, want *expected, plan *emaPlan) error {
 	q := New(tx)
-	bindings, err := q.ListEMABackfillBindings(ctx, opts.OrganizationID)
+	bindings, err := q.ListEMABackfillBindings(ctx, ListEMABackfillBindingsParams{OrganizationID: opts.OrganizationID})
 	if err != nil {
 		return fmt.Errorf("list identity chaining bindings: %w", err)
 	}
+	return decideEMABindings(ctx, tx, q, opts, report, want, plan, bindings)
+}
+
+func decideEMABindings(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, report *Report, want *expected, plan *emaPlan, bindings []ListEMABackfillBindingsRow) error {
 	groups := map[emaUpstream][]ListEMABackfillBindingsRow{}
 	var order []emaUpstream
 	for _, binding := range bindings {

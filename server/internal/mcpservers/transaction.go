@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
@@ -80,6 +81,10 @@ func CreateProjectMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLo
 func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input MCPServerTransactionInput) (repo.McpServer, error) {
 	if tx == nil || auditLogger == nil || input.ProjectID == uuid.Nil || input.Name == "" || input.Visibility == "" {
 		return repo.McpServer{}, fmt.Errorf("invalid MCP server transaction input")
+	}
+
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, input.OrganizationID, []uuid.UUID{input.ProjectID}); err != nil {
+		return repo.McpServer{}, err
 	}
 
 	// Before the server row exists, so the source's liveness and ownership are
@@ -152,6 +157,9 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 
 	// A source's credential headers are usually set up before any server
 	// fronts them, so offer their auth clients from this server as it appears.
+	if err := authclientbackfill.SyncEMAServers(ctx, tx, input.OrganizationID, []uuid.UUID{server.ID}); err != nil {
+		return repo.McpServer{}, err
+	}
 	if err := syncCredentialSources(ctx, tx, input.OrganizationID, sources); err != nil {
 		return repo.McpServer{}, err
 	}

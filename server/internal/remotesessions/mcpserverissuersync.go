@@ -20,10 +20,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 )
 
 const issuerResyncTimeout = 10 * time.Second
@@ -38,8 +40,29 @@ func ResyncMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserversrep
 	if organizationID == "" || projectID == uuid.Nil {
 		return fmt.Errorf("resync mcp server remote session issuers: no tenant scope")
 	}
+	tx, existing := dbtx.(pgx.Tx)
+	if !existing {
+		beginner, ok := dbtx.(interface {
+			Begin(context.Context) (pgx.Tx, error)
+		})
+		if !ok {
+			return fmt.Errorf("resync mcp server remote session issuers: %T cannot begin a transaction", dbtx)
+		}
+		var err error
+		tx, err = beginner.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	}
+	// The denormalized server update also takes row locks. Acquire the same
+	// complete scope before it and retain it through capture and typed copies.
+	// A caller supplying a transaction must preflight before its earlier writes.
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, organizationID, []uuid.UUID{projectID}); err != nil {
+		return fmt.Errorf("lock issuer resynchronization scope: %w", err)
+	}
 	if len(userIssuerIDs) > 0 {
-		if _, err := mcpserversrepo.New(dbtx).ResyncMCPServerRemoteSessionIssuers(ctx, mcpserversrepo.ResyncMCPServerRemoteSessionIssuersParams{
+		if _, err := mcpserversrepo.New(tx).ResyncMCPServerRemoteSessionIssuers(ctx, mcpserversrepo.ResyncMCPServerRemoteSessionIssuersParams{
 			UserSessionIssuerIds: userIssuerIDs,
 			OrganizationID:       organizationID,
 			ProjectID:            projectID,
@@ -47,8 +70,11 @@ func ResyncMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserversrep
 			return fmt.Errorf("resync mcp server remote session issuers: %w", err)
 		}
 	}
-	if err := upstreamclients.Reconcile(ctx, dbtx, organizationID, projectID, userIssuerIDs); err != nil {
+	if err := upstreamclients.Reconcile(ctx, tx, organizationID, projectID, userIssuerIDs); err != nil {
 		return fmt.Errorf("resync mcp server remote session issuers: %w", err)
+	}
+	if !existing {
+		return tx.Commit(ctx)
 	}
 	return nil
 }

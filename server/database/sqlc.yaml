@@ -708,7 +708,7 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
-    queries: ../internal/mcpservers/upstreamclients/authclientbackfill/queries.sql
+    queries: ../internal/mcpservers/upstreamclients/authclientbackfill
     engine: postgresql
     gen:
       go:

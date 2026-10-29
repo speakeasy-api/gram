@@ -247,6 +247,8 @@ ON CONFLICT (id) DO UPDATE
 SET deleted_at = NULL, updated_at = clock_timestamp()
 WHERE mcp_auth_clients.deleted
   AND mcp_auth_clients.source = 'backfill'
+  AND mcp_auth_clients.organization_id = EXCLUDED.organization_id
+  AND mcp_auth_clients.project_id IS NOT DISTINCT FROM EXCLUDED.project_id
   AND mcp_auth_clients.client_type = EXCLUDED.client_type
 `
 
@@ -422,6 +424,31 @@ func (q *Queries) GetAuthClientState(ctx context.Context, arg GetAuthClientState
 	row := q.db.QueryRow(ctx, getAuthClientState, arg.ID, arg.OrganizationID)
 	var i GetAuthClientStateRow
 	err := row.Scan(&i.ID, &i.ClientType, &i.Deleted)
+	return i, err
+}
+
+const getEMABindingLockScope = `-- name: GetEMABindingLockScope :one
+SELECT b.project_id, b.remote_session_issuer_id, b.remote_session_client_id
+FROM remote_session_ema_bindings b
+JOIN projects p ON p.id = b.project_id AND p.organization_id = b.organization_id
+WHERE b.id = $1::uuid AND b.organization_id = $2::text
+`
+
+type GetEMABindingLockScopeParams struct {
+	BindingID      uuid.UUID
+	OrganizationID string
+}
+
+type GetEMABindingLockScopeRow struct {
+	ProjectID             uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	RemoteSessionClientID uuid.NullUUID
+}
+
+func (q *Queries) GetEMABindingLockScope(ctx context.Context, arg GetEMABindingLockScopeParams) (GetEMABindingLockScopeRow, error) {
+	row := q.db.QueryRow(ctx, getEMABindingLockScope, arg.BindingID, arg.OrganizationID)
+	var i GetEMABindingLockScopeRow
+	err := row.Scan(&i.ProjectID, &i.RemoteSessionIssuerID, &i.RemoteSessionClientID)
 	return i, err
 }
 
@@ -1115,14 +1142,17 @@ LEFT JOIN LATERAL (
 WHERE a.deleted IS FALSE
   AND a.id > $1::uuid
   AND a.organization_id = $2::text
+  AND ($3::uuid[] IS NULL
+       OR a.mcp_server_id = ANY($3::uuid[]))
 ORDER BY a.id
-LIMIT $3::int
+LIMIT $4::int
 `
 
 type ListAuthClientBackfillCandidatesParams struct {
-	Cursor         uuid.UUID
-	OrganizationID string
-	PageSize       int32
+	Cursor           uuid.UUID
+	OrganizationID   string
+	OnlyMcpServerIds []uuid.UUID
+	PageSize         int32
 }
 
 type ListAuthClientBackfillCandidatesRow struct {
@@ -1154,8 +1184,17 @@ type ListAuthClientBackfillCandidatesRow struct {
 // the server already offers that auth client; link_detached that an
 // administrator detached the client's backfilled auth client from the server,
 // so the backfill must not link it again.
+//
+// only_mcp_server_ids narrows the rows to those servers' associations, for an
+// association write that records its own servers' clients; NULL reads every
+// server in the organization.
 func (q *Queries) ListAuthClientBackfillCandidates(ctx context.Context, arg ListAuthClientBackfillCandidatesParams) ([]ListAuthClientBackfillCandidatesRow, error) {
-	rows, err := q.db.Query(ctx, listAuthClientBackfillCandidates, arg.Cursor, arg.OrganizationID, arg.PageSize)
+	rows, err := q.db.Query(ctx, listAuthClientBackfillCandidates,
+		arg.Cursor,
+		arg.OrganizationID,
+		arg.OnlyMcpServerIds,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1267,7 +1306,7 @@ func (q *Queries) ListAuthClientHeadersFixture(ctx context.Context, authClientID
 }
 
 const listAuthClientSummariesFixture = `-- name: ListAuthClientSummariesFixture :many
-SELECT id, client_type, project_id, name, deleted
+SELECT id, client_type, project_id, name, deleted, enabled
 FROM mcp_auth_clients
 WHERE organization_id = $1
 ORDER BY id
@@ -1279,6 +1318,7 @@ type ListAuthClientSummariesFixtureRow struct {
 	ProjectID  uuid.NullUUID
 	Name       string
 	Deleted    bool
+	Enabled    bool
 }
 
 func (q *Queries) ListAuthClientSummariesFixture(ctx context.Context, organizationID string) ([]ListAuthClientSummariesFixtureRow, error) {
@@ -1296,6 +1336,7 @@ func (q *Queries) ListAuthClientSummariesFixture(ctx context.Context, organizati
 			&i.ProjectID,
 			&i.Name,
 			&i.Deleted,
+			&i.Enabled,
 		); err != nil {
 			return nil, err
 		}
@@ -1735,8 +1776,31 @@ LEFT JOIN remote_session_issuers AS rsi
 WHERE b.organization_id = $1::text
   AND b.state = 'ready'
   AND b.remote_session_client_id IS NOT NULL
+  AND ($2::uuid IS NULL OR EXISTS (
+    SELECT 1 FROM remote_session_ema_bindings AS selected
+    WHERE selected.id = $2::uuid
+      AND selected.organization_id = b.organization_id
+      AND selected.remote_session_issuer_id = b.remote_session_issuer_id
+      AND selected.remote_session_client_id = b.remote_session_client_id
+      AND rtrim(selected.resource, '/') = rtrim(b.resource, '/')
+  ))
+  AND ($3::uuid IS NULL OR EXISTS (
+    SELECT 1 FROM remote_session_ema_bindings AS selected
+    WHERE selected.project_id = $3::uuid
+      AND selected.organization_id = b.organization_id
+      AND selected.state = 'ready'
+      AND selected.remote_session_issuer_id = b.remote_session_issuer_id
+      AND selected.remote_session_client_id = b.remote_session_client_id
+      AND rtrim(selected.resource, '/') = rtrim(b.resource, '/')
+  ))
 ORDER BY b.id
 `
+
+type ListEMABackfillBindingsParams struct {
+	OrganizationID string
+	OnlyBindingID  uuid.NullUUID
+	OnlyProjectID  uuid.NullUUID
+}
 
 type ListEMABackfillBindingsRow struct {
 	BindingID             uuid.UUID
@@ -1755,8 +1819,8 @@ type ListEMABackfillBindingsRow struct {
 // projects, as the runtime selects them, with the exact and trimmed resource.
 // in_reach reports that the binding's registration and its issuer are live
 // and belong to the binding's project, its organization or the platform.
-func (q *Queries) ListEMABackfillBindings(ctx context.Context, organizationID string) ([]ListEMABackfillBindingsRow, error) {
-	rows, err := q.db.Query(ctx, listEMABackfillBindings, organizationID)
+func (q *Queries) ListEMABackfillBindings(ctx context.Context, arg ListEMABackfillBindingsParams) ([]ListEMABackfillBindingsRow, error) {
+	rows, err := q.db.Query(ctx, listEMABackfillBindings, arg.OrganizationID, arg.OnlyBindingID, arg.OnlyProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -1978,7 +2042,7 @@ WHERE ac.organization_id = $2::text
   AND ac.source = 'backfill'
   AND ac.deleted IS FALSE
 GROUP BY ac.id
-ORDER BY ac.id
+ORDER BY ac.remote_session_client_id, ac.id
 `
 
 type ListEMAClientsOfServersParams struct {
@@ -2007,6 +2071,72 @@ func (q *Queries) ListEMAClientsOfServers(ctx context.Context, arg ListEMAClient
 	for rows.Next() {
 		var i ListEMAClientsOfServersRow
 		if err := rows.Scan(&i.AuthClientID, &i.McpServerIds); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMAPreparationLockScope = `-- name: ListEMAPreparationLockScope :many
+WITH registrations AS (
+  SELECT c.id FROM remote_session_clients c
+  WHERE c.remote_session_issuer_id = $1::uuid
+    AND (c.project_id IN (SELECT p.id FROM projects p WHERE p.organization_id = $2::text)
+         OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $2::text)))
+), scope_projects AS (
+  SELECT $3::uuid AS id
+  UNION
+  SELECT b.project_id FROM remote_session_ema_bindings b
+  WHERE b.organization_id = $2::text AND b.remote_session_issuer_id = $1::uuid
+  UNION
+  SELECT s.project_id FROM mcp_servers s
+  JOIN mcp_server_auth_clients l ON l.mcp_server_id = s.id
+  JOIN mcp_auth_clients ac ON ac.id = l.auth_client_id
+  WHERE ac.organization_id = $2::text AND ac.client_type = 'ema'
+    AND ac.remote_session_client_id IN (SELECT id FROM registrations)
+), owned_projects AS (
+  SELECT p.id FROM projects p JOIN scope_projects sp ON sp.id = p.id
+  WHERE p.organization_id = $2::text
+)
+SELECT 'project'::text AS kind, p.id FROM owned_projects p
+UNION ALL
+SELECT 'remote'::text AS kind, r.id FROM remote_mcp_servers r WHERE r.project_id IN (SELECT id FROM owned_projects)
+UNION ALL
+SELECT 'tunneled'::text AS kind, t.id FROM tunneled_mcp_servers t WHERE t.project_id IN (SELECT id FROM owned_projects)
+UNION ALL
+SELECT 'server'::text AS kind, s.id FROM mcp_servers s WHERE s.project_id IN (SELECT id FROM owned_projects)
+ORDER BY kind, id
+`
+
+type ListEMAPreparationLockScopeParams struct {
+	IssuerID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type ListEMAPreparationLockScopeRow struct {
+	Kind string
+	ID   uuid.UUID
+}
+
+// Discover before taking registration locks, including old ownership and all
+// projects sharing this issuer's registrations. Include deleted sources and
+// servers: their old typed links and copies may still need retirement. The
+// conservative project envelope also covers a binding not yet inserted.
+func (q *Queries) ListEMAPreparationLockScope(ctx context.Context, arg ListEMAPreparationLockScopeParams) ([]ListEMAPreparationLockScopeRow, error) {
+	rows, err := q.db.Query(ctx, listEMAPreparationLockScope, arg.IssuerID, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMAPreparationLockScopeRow
+	for rows.Next() {
+		var i ListEMAPreparationLockScopeRow
+		if err := rows.Scan(&i.Kind, &i.ID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -3816,6 +3946,125 @@ type LockAttachmentUpstreamIssuerParams struct {
 func (q *Queries) LockAttachmentUpstreamIssuer(ctx context.Context, arg LockAttachmentUpstreamIssuerParams) error {
 	_, err := q.db.Exec(ctx, lockAttachmentUpstreamIssuer, arg.BindingID, arg.OrganizationID)
 	return err
+}
+
+const lockEMACopyClient = `-- name: LockEMACopyClient :exec
+SELECT ac.id FROM mcp_auth_clients ac
+WHERE ac.id = $1::uuid AND ac.organization_id = $2::text
+FOR UPDATE OF ac
+`
+
+type LockEMACopyClientParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+// Administrator mutations lock the typed client before its links.
+func (q *Queries) LockEMACopyClient(ctx context.Context, arg LockEMACopyClientParams) error {
+	_, err := q.db.Exec(ctx, lockEMACopyClient, arg.AuthClientID, arg.OrganizationID)
+	return err
+}
+
+const lockEMAGatewayReachReader = `-- name: LockEMAGatewayReachReader :exec
+SELECT pg_advisory_xact_lock_shared(hashtextextended('authclient-ema-gateway-reach:' || $1::text, 0))
+`
+
+// Hold before discovering projects or taking project/source locks. Shared
+// acquisition permits unrelated preparation and normal writers to proceed.
+func (q *Queries) LockEMAGatewayReachReader(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockEMAGatewayReachReader, organizationID)
+	return err
+}
+
+const lockEMAGatewayReachWriter = `-- name: LockEMAGatewayReachWriter :exec
+SELECT pg_advisory_xact_lock(hashtextextended('authclient-ema-gateway-reach:' || $1::text, 0))
+`
+
+// A setting change must exclude first preparations before discovering their
+// project set, including when no gateway bindings have committed yet.
+func (q *Queries) LockEMAGatewayReachWriter(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockEMAGatewayReachWriter, organizationID)
+	return err
+}
+
+const lockEMAPreparationServer = `-- name: LockEMAPreparationServer :exec
+SELECT s.id FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id
+WHERE s.id = $1::uuid AND p.organization_id = $2::text
+FOR UPDATE OF s
+`
+
+type LockEMAPreparationServerParams struct {
+	ServerID       uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockEMAPreparationServer(ctx context.Context, arg LockEMAPreparationServerParams) error {
+	_, err := q.db.Exec(ctx, lockEMAPreparationServer, arg.ServerID, arg.OrganizationID)
+	return err
+}
+
+const lockEMAProjectScope = `-- name: LockEMAProjectScope :exec
+SELECT pg_advisory_xact_lock(hashtextextended('authclient-ema-scope:' || $1::text || ':' || p.id::text, 0))
+FROM projects p WHERE p.id = $2::uuid AND p.organization_id = $1::text
+`
+
+type LockEMAProjectScopeParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Serializes scope discovery with creation/retargeting, including an empty
+// project. All normal preparation and source/server preflights take these
+// gates in project UUID order before acquiring any source rows.
+func (q *Queries) LockEMAProjectScope(ctx context.Context, arg LockEMAProjectScopeParams) error {
+	_, err := q.db.Exec(ctx, lockEMAProjectScope, arg.OrganizationID, arg.ProjectID)
+	return err
+}
+
+const lockEMARegistrationForSync = `-- name: LockEMARegistrationForSync :one
+SELECT c.id
+FROM remote_session_clients AS c
+WHERE (EXISTS (
+  SELECT 1 FROM remote_session_ema_bindings AS b
+  JOIN projects AS p ON p.id = b.project_id
+    AND p.organization_id = b.organization_id AND p.deleted IS FALSE
+  WHERE b.id = $1::uuid
+    AND b.organization_id = $2::text
+    AND b.remote_session_client_id = c.id
+    AND (c.project_id = b.project_id
+         OR (c.project_id IS NULL AND c.organization_id = b.organization_id)
+         OR (c.project_id IS NULL AND c.organization_id IS NULL))
+) OR EXISTS (
+  SELECT 1 FROM mcp_auth_clients AS ac
+  WHERE ac.id = $3::uuid
+    AND ac.organization_id = $2::text
+    AND ac.client_type = 'ema'
+    AND ac.remote_session_client_id = c.id
+    AND (c.project_id IS NULL OR EXISTS (
+      SELECT 1 FROM projects AS p WHERE p.id = c.project_id
+        AND p.organization_id = ac.organization_id AND p.deleted IS FALSE
+    ))
+    AND (c.project_id IS NOT NULL OR c.organization_id IS NULL
+         OR c.organization_id = ac.organization_id)
+))
+FOR NO KEY UPDATE OF c
+`
+
+type LockEMARegistrationForSyncParams struct {
+	BindingID      uuid.NullUUID
+	OrganizationID string
+	AuthClientID   uuid.NullUUID
+}
+
+// Serialize EMA binding and credential-copy decisions on their registration.
+// The caller must read bindings and links again after taking this lock. Lock
+// strength allows concurrent binding inserts' foreign-key checks to finish.
+func (q *Queries) LockEMARegistrationForSync(ctx context.Context, arg LockEMARegistrationForSyncParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockEMARegistrationForSync, arg.BindingID, arg.OrganizationID, arg.AuthClientID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const lockOrganizationBackfill = `-- name: LockOrganizationBackfill :exec

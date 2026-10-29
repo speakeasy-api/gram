@@ -12,6 +12,10 @@
 -- the server already offers that auth client; link_detached that an
 -- administrator detached the client's backfilled auth client from the server,
 -- so the backfill must not link it again.
+--
+-- only_mcp_server_ids narrows the rows to those servers' associations, for an
+-- association write that records its own servers' clients; NULL reads every
+-- server in the organization.
 SELECT a.id AS association_id,
        a.project_id,
        a.organization_id,
@@ -78,6 +82,8 @@ LEFT JOIN LATERAL (
 WHERE a.deleted IS FALSE
   AND a.id > @cursor::uuid
   AND a.organization_id = @organization_id::text
+  AND (sqlc.narg('only_mcp_server_ids')::uuid[] IS NULL
+       OR a.mcp_server_id = ANY(sqlc.narg('only_mcp_server_ids')::uuid[]))
 ORDER BY a.id
 LIMIT @page_size::int;
 
@@ -542,6 +548,8 @@ ON CONFLICT (id) DO UPDATE
 SET deleted_at = NULL, updated_at = clock_timestamp()
 WHERE mcp_auth_clients.deleted
   AND mcp_auth_clients.source = 'backfill'
+  AND mcp_auth_clients.organization_id = EXCLUDED.organization_id
+  AND mcp_auth_clients.project_id IS NOT DISTINCT FROM EXCLUDED.project_id
   AND mcp_auth_clients.client_type = EXCLUDED.client_type;
 
 -- name: PlanClientHeaders :many
@@ -1003,6 +1011,37 @@ WHERE ac.organization_id = @organization_id::text
   AND ac.deleted IS FALSE
 ORDER BY ac.id;
 
+-- name: LockEMARegistrationForSync :one
+-- Serialize EMA binding and credential-copy decisions on their registration.
+-- The caller must read bindings and links again after taking this lock. Lock
+-- strength allows concurrent binding inserts' foreign-key checks to finish.
+SELECT c.id
+FROM remote_session_clients AS c
+WHERE (EXISTS (
+  SELECT 1 FROM remote_session_ema_bindings AS b
+  JOIN projects AS p ON p.id = b.project_id
+    AND p.organization_id = b.organization_id AND p.deleted IS FALSE
+  WHERE b.id = sqlc.narg('binding_id')::uuid
+    AND b.organization_id = @organization_id::text
+    AND b.remote_session_client_id = c.id
+    AND (c.project_id = b.project_id
+         OR (c.project_id IS NULL AND c.organization_id = b.organization_id)
+         OR (c.project_id IS NULL AND c.organization_id IS NULL))
+) OR EXISTS (
+  SELECT 1 FROM mcp_auth_clients AS ac
+  WHERE ac.id = sqlc.narg('auth_client_id')::uuid
+    AND ac.organization_id = @organization_id::text
+    AND ac.client_type = 'ema'
+    AND ac.remote_session_client_id = c.id
+    AND (c.project_id IS NULL OR EXISTS (
+      SELECT 1 FROM projects AS p WHERE p.id = c.project_id
+        AND p.organization_id = ac.organization_id AND p.deleted IS FALSE
+    ))
+    AND (c.project_id IS NOT NULL OR c.organization_id IS NULL
+         OR c.organization_id = ac.organization_id)
+))
+FOR NO KEY UPDATE OF c;
+
 -- name: ListEMABackfillBindings :many
 -- The organization's ready, client-bound identity chaining bindings in live
 -- projects, as the runtime selects them, with the exact and trimmed resource.
@@ -1040,6 +1079,23 @@ LEFT JOIN remote_session_issuers AS rsi
 WHERE b.organization_id = @organization_id::text
   AND b.state = 'ready'
   AND b.remote_session_client_id IS NOT NULL
+  AND (sqlc.narg('only_binding_id')::uuid IS NULL OR EXISTS (
+    SELECT 1 FROM remote_session_ema_bindings AS selected
+    WHERE selected.id = sqlc.narg('only_binding_id')::uuid
+      AND selected.organization_id = b.organization_id
+      AND selected.remote_session_issuer_id = b.remote_session_issuer_id
+      AND selected.remote_session_client_id = b.remote_session_client_id
+      AND rtrim(selected.resource, '/') = rtrim(b.resource, '/')
+  ))
+  AND (sqlc.narg('only_project_id')::uuid IS NULL OR EXISTS (
+    SELECT 1 FROM remote_session_ema_bindings AS selected
+    WHERE selected.project_id = sqlc.narg('only_project_id')::uuid
+      AND selected.organization_id = b.organization_id
+      AND selected.state = 'ready'
+      AND selected.remote_session_issuer_id = b.remote_session_issuer_id
+      AND selected.remote_session_client_id = b.remote_session_client_id
+      AND rtrim(selected.resource, '/') = rtrim(b.resource, '/')
+  ))
 ORDER BY b.id;
 
 -- name: ListEMABindingServers :many
@@ -1553,7 +1609,7 @@ WHERE ac.organization_id = @organization_id::text
   AND ac.source = 'backfill'
   AND ac.deleted IS FALSE
 GROUP BY ac.id
-ORDER BY ac.id;
+ORDER BY ac.remote_session_client_id, ac.id;
 
 -- name: LockTunneledCredentialSource :one
 -- LockRemoteCredentialSource for a tunneled source.
@@ -2369,7 +2425,7 @@ UPDATE remote_mcp_servers SET deleted_at = clock_timestamp() WHERE id = @id;
 UPDATE remote_mcp_server_headers SET deleted_at = NULL, updated_at = clock_timestamp() WHERE id = @id;
 
 -- name: ListAuthClientSummariesFixture :many
-SELECT id, client_type, project_id, name, deleted
+SELECT id, client_type, project_id, name, deleted, enabled
 FROM mcp_auth_clients
 WHERE organization_id = @organization_id
 ORDER BY id;
@@ -2800,3 +2856,72 @@ VALUES (@organization_id, @feature_name, sqlc.narg('deleted_at'));
 
 -- name: CountServerSelectionsFixture :one
 SELECT count(*) FROM upstream_client_selections WHERE mcp_server_id = @mcp_server_id;
+
+-- name: ListEMAPreparationLockScope :many
+-- Discover before taking registration locks, including old ownership and all
+-- projects sharing this issuer's registrations. Include deleted sources and
+-- servers: their old typed links and copies may still need retirement. The
+-- conservative project envelope also covers a binding not yet inserted.
+WITH registrations AS (
+  SELECT c.id FROM remote_session_clients c
+  WHERE c.remote_session_issuer_id = @issuer_id::uuid
+    AND (c.project_id IN (SELECT p.id FROM projects p WHERE p.organization_id = @organization_id::text)
+         OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+), scope_projects AS (
+  SELECT @project_id::uuid AS id
+  UNION
+  SELECT b.project_id FROM remote_session_ema_bindings b
+  WHERE b.organization_id = @organization_id::text AND b.remote_session_issuer_id = @issuer_id::uuid
+  UNION
+  SELECT s.project_id FROM mcp_servers s
+  JOIN mcp_server_auth_clients l ON l.mcp_server_id = s.id
+  JOIN mcp_auth_clients ac ON ac.id = l.auth_client_id
+  WHERE ac.organization_id = @organization_id::text AND ac.client_type = 'ema'
+    AND ac.remote_session_client_id IN (SELECT id FROM registrations)
+), owned_projects AS (
+  SELECT p.id FROM projects p JOIN scope_projects sp ON sp.id = p.id
+  WHERE p.organization_id = @organization_id::text
+)
+SELECT 'project'::text AS kind, p.id FROM owned_projects p
+UNION ALL
+SELECT 'remote'::text AS kind, r.id FROM remote_mcp_servers r WHERE r.project_id IN (SELECT id FROM owned_projects)
+UNION ALL
+SELECT 'tunneled'::text AS kind, t.id FROM tunneled_mcp_servers t WHERE t.project_id IN (SELECT id FROM owned_projects)
+UNION ALL
+SELECT 'server'::text AS kind, s.id FROM mcp_servers s WHERE s.project_id IN (SELECT id FROM owned_projects)
+ORDER BY kind, id;
+
+-- name: LockEMAPreparationServer :exec
+SELECT s.id FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id
+WHERE s.id = @server_id::uuid AND p.organization_id = @organization_id::text
+FOR UPDATE OF s;
+
+-- name: GetEMABindingLockScope :one
+SELECT b.project_id, b.remote_session_issuer_id, b.remote_session_client_id
+FROM remote_session_ema_bindings b
+JOIN projects p ON p.id = b.project_id AND p.organization_id = b.organization_id
+WHERE b.id = @binding_id::uuid AND b.organization_id = @organization_id::text;
+
+-- name: LockEMACopyClient :exec
+-- Administrator mutations lock the typed client before its links.
+SELECT ac.id FROM mcp_auth_clients ac
+WHERE ac.id = @auth_client_id::uuid AND ac.organization_id = @organization_id::text
+FOR UPDATE OF ac;
+
+-- name: LockEMAProjectScope :exec
+-- Serializes scope discovery with creation/retargeting, including an empty
+-- project. All normal preparation and source/server preflights take these
+-- gates in project UUID order before acquiring any source rows.
+SELECT pg_advisory_xact_lock(hashtextextended('authclient-ema-scope:' || @organization_id::text || ':' || p.id::text, 0))
+FROM projects p WHERE p.id = @project_id::uuid AND p.organization_id = @organization_id::text;
+
+-- name: LockEMAGatewayReachReader :exec
+-- Hold before discovering projects or taking project/source locks. Shared
+-- acquisition permits unrelated preparation and normal writers to proceed.
+SELECT pg_advisory_xact_lock_shared(hashtextextended('authclient-ema-gateway-reach:' || @organization_id::text, 0));
+
+-- name: LockEMAGatewayReachWriter :exec
+-- A setting change must exclude first preparations before discovering their
+-- project set, including when no gateway bindings have committed yet.
+SELECT pg_advisory_xact_lock(hashtextextended('authclient-ema-gateway-reach:' || @organization_id::text, 0));
