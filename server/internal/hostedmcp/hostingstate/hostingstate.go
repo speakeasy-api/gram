@@ -1,6 +1,5 @@
-// Package hostingstate derives a toolset's MCP hosting state from the server row holding its id. The canonical
-// wrapper owns that state; the toolset's own hosting columns stand only without one, apart from the legacy alias
-// address, which FollowAlias moves onto the endpoint holding it.
+// Package hostingstate derives a toolset's MCP hosting state from its canonical wrapper, the server row holding its
+// id; a toolset without one is not hosted.
 package hostingstate
 
 import (
@@ -9,9 +8,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -49,27 +46,6 @@ func NotHosted() Hosting {
 	return Hosting{Enabled: false, Public: false, UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
 }
 
-// LegacyAlias is the legacy /mcp/<slug> address a toolset created before hosted servers owned their endpoints still
-// answers on (AIM-670). Hosting readers use it instead of reading the toolset's address columns directly.
-func LegacyAlias(toolset toolsetsrepo.Toolset) Address {
-	return Address{Slug: toolset.McpSlug, CustomDomainID: toolset.CustomDomainID}
-}
-
-// Columns are a toolset's own hosting columns. Hosting stands only without a canonical wrapper; Address also stands
-// when the wrapper has no servable endpoint.
-type Columns struct {
-	Hosting
-	Address
-}
-
-// ToolsetColumns reads toolset's own hosting columns.
-func ToolsetColumns(toolset toolsetsrepo.Toolset) Columns {
-	return Columns{
-		Hosting: Hosting{Enabled: toolset.McpEnabled, Public: toolset.McpIsPublic, UserSessionIssuerID: toolset.UserSessionIssuerID},
-		Address: LegacyAlias(toolset),
-	}
-}
-
 // FromServer is the hosting state of a canonical wrapper with the given visibility and issuer. A disabled server
 // reads as the visibility it re-enables to, which depends on the toolset's external OAuth server.
 func FromServer(externalOAuthServerID uuid.NullUUID, serverVisibility string, issuer uuid.NullUUID) Hosting {
@@ -98,23 +74,15 @@ func reEnableVisibility(externalOAuthServerID uuid.NullUUID) string {
 	return visibility.Private
 }
 
-// Kept is the hosting state of a toolset whose id a non-canonical server kept after leaving it: nothing serves it.
-func Kept(issuer uuid.NullUUID) Hosting {
-	return Hosting{Enabled: false, Public: false, UserSessionIssuerID: issuer}
-}
-
-// Derive is a toolset's hosting state and preferred address given the server row holding its id. A nil row leaves
-// the toolset columns standing; a canonical wrapper without a servable endpoint keeps the toolset's address.
-func Derive(columns Columns, externalOAuthServerID uuid.NullUUID, row *Row) (Hosting, Address) {
-	switch {
-	case row == nil:
-		return columns.Hosting, columns.Address
-	case !row.Canonical:
-		return Kept(columns.UserSessionIssuerID), columns.Address
+// Derive is a toolset's hosting state and its servable endpoint address given the server row holding its id. Only a
+// canonical wrapper hosts the toolset.
+func Derive(externalOAuthServerID uuid.NullUUID, row *Row) (Hosting, Address) {
+	if row == nil || !row.Canonical {
+		return NotHosted(), Address{Slug: pgtype.Text{String: "", Valid: false}, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
 	}
 	hosting := FromServer(externalOAuthServerID, row.Visibility, row.UserSessionIssuerID)
 	if !row.HasEndpoint {
-		return hosting, columns.Address
+		return hosting, Address{Slug: pgtype.Text{String: "", Valid: false}, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
 	}
 	return hosting, Address{Slug: pgtype.Text{String: row.EndpointSlug, Valid: true}, CustomDomainID: row.EndpointCustomDomainID}
 }
@@ -169,87 +137,6 @@ func CheckPrivateIngress(ctx context.Context, db networkingressrepo.DBTX, organi
 			(ingress.EndpointNamespaceKind == namespaceCustomDomain && (!endpoint.CustomDomainID.Valid || endpoint.CustomDomainID != ingress.CustomDomainID)) {
 			return oops.E(oops.CodeInvalid, nil, "hosted MCP address does not match the private ingress namespace")
 		}
-	}
-	return nil
-}
-
-// AliasAddress is the address a legacy toolset's MCP alias follows among its hosted server's live endpoints: its
-// current address while an endpoint still holds it, else the platform endpoint, else the oldest one. With no live
-// endpoint the alias stays. This is the address rule pods that mirror the toolset columns apply, so both agree.
-func AliasAddress(toolset toolsetsrepo.Toolset, endpoints []mcpendpointsrepo.McpEndpoint) (pgtype.Text, uuid.NullUUID) {
-	alias := LegacyAlias(toolset)
-	var preferred *mcpendpointsrepo.McpEndpoint
-	for i := range endpoints {
-		candidate := &endpoints[i]
-		switch {
-		case alias.Slug.Valid && candidate.Slug == alias.Slug.String && candidate.CustomDomainID == alias.CustomDomainID:
-			return alias.Slug, alias.CustomDomainID
-		case preferred == nil:
-			preferred = candidate
-		case !candidate.CustomDomainID.Valid && preferred.CustomDomainID.Valid:
-			preferred = candidate
-		case candidate.CustomDomainID.Valid == preferred.CustomDomainID.Valid && candidate.CreatedAt.Time.Before(preferred.CreatedAt.Time):
-			preferred = candidate
-		}
-	}
-	if preferred == nil {
-		return alias.Slug, alias.CustomDomainID
-	}
-	return pgtype.Text{String: preferred.Slug, Valid: true}, preferred.CustomDomainID
-}
-
-// FollowAlias moves a legacy toolset's MCP alias to the endpoint AliasAddress picks, after a write to its hosted
-// server's endpoints. Toolsets without an alias are left alone. The caller holds the toolset row lock.
-func FollowAlias(ctx context.Context, tx toolsetsrepo.DBTX, organizationID string, projectID, toolsetID uuid.UUID) error {
-	toolset, err := toolsetsrepo.New(tx).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: toolsetID, ProjectID: projectID})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "load hosted toolset")
-	}
-	alias := LegacyAlias(toolset)
-	if !alias.Slug.Valid || alias.Slug.String == "" {
-		return nil
-	}
-	rows, err := mcpendpointsrepo.New(tx).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
-		OrganizationID: organizationID, ProjectID: projectID, McpServerID: toolsetID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list hosted MCP endpoints")
-	}
-	live := make([]mcpendpointsrepo.McpEndpoint, 0, len(rows))
-	for _, row := range rows {
-		live = append(live, row.McpEndpoint)
-	}
-	slug, domainID := AliasAddress(toolset, live)
-	if slug == alias.Slug && domainID == alias.CustomDomainID {
-		return nil
-	}
-	if domainID.Valid && slug.Valid {
-		// The platform host also serves custom-domain aliases, so the move must not contend with another one there.
-		// The caller already holds another slug's lock, so waiting here could deadlock.
-		locked, err := mcpendpointsrepo.New(tx).TryLockPlatformSlugScope(ctx, slug.String)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "lock hosted MCP alias address")
-		}
-		if !locked {
-			return oops.E(oops.CodeConflict, nil, "hosted MCP address changed concurrently; retry the request")
-		}
-		served, err := toolsetsrepo.New(tx).OtherCustomDomainAliasServedOnPlatform(ctx, toolsetsrepo.OtherCustomDomainAliasServedOnPlatformParams{Slug: slug, ToolsetID: toolsetID})
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "check hosted MCP alias address")
-		}
-		if served {
-			return oops.E(oops.CodeConflict, nil, "this address is already taken by another toolset")
-		}
-	}
-	if err := toolsetsrepo.New(tx).MoveToolsetMCPAlias(ctx, toolsetsrepo.MoveToolsetMCPAliasParams{McpSlug: slug, CustomDomainID: domainID, ID: toolsetID, ProjectID: projectID}); err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return oops.E(oops.CodeConflict, err, "this address is already taken by another toolset")
-		}
-		return oops.E(oops.CodeUnexpected, err, "move hosted MCP alias")
 	}
 	return nil
 }

@@ -206,6 +206,12 @@ vi.mock("@/hooks/usePluginWriteAccess", () => ({
   usePluginWriteAccess: () => mocks.pluginWriteAccess,
 }));
 vi.mock("@/contexts/Telemetry", () => ({
+  useTelemetryContext: () => ({
+    featureFlags: { status: "ready" },
+    telemetry: {
+      isFeatureEnabled: (flag: string) => mocks.flags.includes(flag),
+    },
+  }),
   useTelemetry: () => ({
     isFeatureEnabled: (flag: string) => mocks.flags.includes(flag),
   }),

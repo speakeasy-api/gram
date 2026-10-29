@@ -49,9 +49,9 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 			selected = env.ID
 		}
 	}
-	hosted, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{OrganizationID: identity.OrganizationID, ProjectID: r.ProjectID, Name: "Tools", Slug: "tools", DefaultEnvironmentSlug: pgtype.Text{String: "default-env", Valid: true}, McpSlug: pgtype.Text{String: "tools-endpoint", Valid: true}, McpEnabled: true})
+	hosted, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{OrganizationID: identity.OrganizationID, ProjectID: r.ProjectID, Name: "Tools", Slug: "tools", DefaultEnvironmentSlug: pgtype.Text{String: "default-env", Valid: true}})
 	require.NoError(t, err)
-	syncCanonicalWrapper(t, db, hosted)
+	createCanonicalWrapper(t, db, hosted, "tools-endpoint", "private")
 	q := assistantrepo.New(db)
 	require.NoError(t, q.SetAttachedMCPServerIssuerForTest(t.Context(), assistantrepo.SetAttachedMCPServerIssuerForTestParams{ID: hosted.ID, ProjectID: r.ProjectID, UserSessionIssuerID: uuid.NullUUID{UUID: config.MCPUserSessionIssuerID, Valid: true}}))
 	_, err = q.AddAssistantMcpServers(t.Context(), []assistantrepo.AddAssistantMcpServersParams{{AssistantID: r.AssistantID, ProjectID: r.ProjectID, McpServerID: hosted.ID, EnvironmentID: uuid.NullUUID{UUID: selected, Valid: true}}})
@@ -112,9 +112,9 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 	_, err = q.AddAssistantMcpServers(t.Context(), []assistantrepo.AddAssistantMcpServersParams{{AssistantID: r.AssistantID, ProjectID: r.ProjectID, McpServerID: hosted.ID}})
 	require.NoError(t, err)
 	assertEnvironment(bootstrap(), "default-env")
-	plain, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{OrganizationID: identity.OrganizationID, ProjectID: r.ProjectID, Name: "Plain tools", Slug: "plain-tools", McpSlug: pgtype.Text{String: "plain-tools-endpoint", Valid: true}, McpEnabled: true})
+	plain, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{OrganizationID: identity.OrganizationID, ProjectID: r.ProjectID, Name: "Plain tools", Slug: "plain-tools"})
 	require.NoError(t, err)
-	syncCanonicalWrapper(t, db, plain)
+	createCanonicalWrapper(t, db, plain, "plain-tools-endpoint", "private")
 	require.NoError(t, q.SetAttachedMCPServerIssuerForTest(t.Context(), assistantrepo.SetAttachedMCPServerIssuerForTestParams{ID: plain.ID, ProjectID: r.ProjectID, UserSessionIssuerID: uuid.NullUUID{UUID: config.MCPUserSessionIssuerID, Valid: true}}))
 	require.NoError(t, q.ClearAssistantMcpServersForServers(t.Context(), assistantrepo.ClearAssistantMcpServersForServersParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, McpServerIds: []uuid.UUID{hosted.ID}}))
 	_, err = q.AddAssistantMcpServers(t.Context(), []assistantrepo.AddAssistantMcpServersParams{{AssistantID: r.AssistantID, ProjectID: r.ProjectID, McpServerID: plain.ID}})

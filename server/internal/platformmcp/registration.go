@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -44,6 +45,15 @@ const (
 	registrationStatusRegistered   = "registered"
 	receiptLifetime                = 24 * time.Hour
 	maxMCPEndpointSlugLength       = 128
+
+	// readableSlugSuffixLength is the length of the random suffix a readable
+	// slug gets when the bare one is taken. Five characters from a 35-character
+	// set make a repeat collision unlikely while keeping the address short.
+	readableSlugSuffixLength = 5
+
+	// readableSlugAttempts is how many readable slugs a registration tries,
+	// the bare one included, before it falls back to a random slug.
+	readableSlugAttempts = 3
 )
 
 var (
@@ -758,6 +768,16 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("generate platform mcp server id: %w", err)
 	}
 	serverSlug := "platform-mcp-" + suffix
+	endpointSlug := platformMCPEndpointSlug(organization.Slug, suffix)
+	if registration.SourceKind == directRemoteSourceKind {
+		readable, found, err := claimReadableRegistrationSlug(ctx, tx, project.ID, registration.OrganizationID, organization.Slug, displayName)
+		if err != nil {
+			return platformrepo.PlatformMcpCatalogRegistration{}, err
+		}
+		if found {
+			serverSlug, endpointSlug = readable, organization.Slug+"-"+readable
+		}
+	}
 	server, err := mcpserversrepo.New(tx).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  serverID,
 		ProjectID:           project.ID,
@@ -770,12 +790,13 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp server: %w", err)
 	}
-	// The slug embeds the 64-bit random registration suffix, so it cannot land
-	// on an existing toolsets.mcp_slug; no LockSlugScope/availability probe.
+	// A readable slug was locked and checked by claimReadableRegistrationSlug.
+	// The fallback embeds the 64-bit random registration suffix, so it cannot
+	// land on an existing toolsets.mcp_slug and needs no lock or probe.
 	endpoint, err := mcpendpointsrepo.New(tx).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:   project.ID,
 		McpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
-		Slug:        platformMCPEndpointSlug(organization.Slug, suffix),
+		Slug:        endpointSlug,
 	})
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp endpoint: %w", err)
@@ -809,6 +830,88 @@ func platformMCPEndpointSlug(organizationSlug, suffix string) string {
 	suffixRunes := []rune("-platform-mcp-endpoint-" + suffix)
 	organizationRunes := []rune(organizationSlug)
 	return string(organizationRunes[:min(len(organizationRunes), maxMCPEndpointSlugLength-len(suffixRunes))]) + string(suffixRunes)
+}
+
+// claimReadableRegistrationSlug picks a slug derived from a remote MCP's
+// display name, such as "linear", for its MCP server, and claims
+// "<organization>-<slug>" as its endpoint address. It tries the bare slug
+// first and then a few with a short random suffix. A candidate is used only
+// when its address lock is held, the address is free in the unified MCP slug
+// namespace, the project has no server with that slug, and the dashboard can
+// route to it. found is false when no candidate qualifies, and the caller
+// keeps its random slugs.
+//
+// The lock is taken without waiting: the caller holds the project row lock,
+// and an endpoint write elsewhere can hold an address lock while it waits on
+// that row. A busy address counts as taken.
+func claimReadableRegistrationSlug(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, organizationID, organizationSlug, displayName string) (string, bool, error) {
+	prefix := organizationSlug + "-"
+	// The database allows 128 characters, but the dashboard's endpoint editor
+	// holds a platform address to 40, so a longer one could not be edited
+	// there without being shortened first.
+	bare := gatewayAddressSlug(displayName, len(prefix))
+	// A suffixed candidate cuts the name shorter so it still fits the address limit.
+	base := gatewayAddressSlug(displayName, len(prefix)+len("-")+readableSlugSuffixLength)
+	for attempt := range readableSlugAttempts {
+		candidate := bare
+		if attempt > 0 {
+			if base == "" {
+				break
+			}
+			suffix, err := conv.GenerateRandomSlug(readableSlugSuffixLength)
+			if err != nil {
+				return "", false, fmt.Errorf("generate platform mcp slug suffix: %w", err)
+			}
+			candidate = base + "-" + suffix
+		} else if bare == "" || mcpservers.DashboardRouteParam(bare, uuid.Nil) != bare {
+			// The dashboard cannot route to an empty or reserved slug such as "catalog".
+			continue
+		}
+		free, err := readableRegistrationSlugFree(ctx, tx, projectID, organizationID, candidate, prefix+candidate)
+		if err != nil {
+			return "", false, err
+		}
+		if free {
+			return candidate, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+func readableRegistrationSlugFree(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, organizationID, serverSlug, endpointSlug string) (bool, error) {
+	// The project's server slugs need no address lock: the caller holds the
+	// project row lock, which serialises Platform MCP registrations in the
+	// project. A dashboard write of the same slug at the same moment makes the
+	// server create fail, and a retry with the same key picks another slug.
+	_, err := mcpserversrepo.New(tx).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(serverSlug), ProjectID: projectID})
+	switch {
+	case err == nil:
+		return false, nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return false, fmt.Errorf("check platform mcp server slug: %w", err)
+	}
+	locked, err := mcpendpointsrepo.New(tx).TryLockPlatformSlugScope(ctx, endpointSlug)
+	if err != nil {
+		return false, fmt.Errorf("lock platform mcp endpoint address: %w", err)
+	}
+	if !locked {
+		return false, nil
+	}
+	available, err := mcpendpoints.CheckSlugAvailable(ctx, tx, mcpendpoints.SlugAvailabilityCheck{
+		Slug:                     endpointSlug,
+		CustomDomainID:           uuid.NullUUID{},
+		OrganizationID:           organizationID,
+		ExcludeToolsetID:         uuid.NullUUID{},
+		ExcludeMcpServerID:       uuid.NullUUID{},
+		SkipDomainOwnershipCheck: false,
+	})
+	if err != nil {
+		return false, fmt.Errorf("check platform mcp endpoint address: %w", err)
+	}
+	if !available {
+		return false, nil
+	}
+	return true, nil
 }
 
 func newRegistrationComponentSuffix() (string, error) {

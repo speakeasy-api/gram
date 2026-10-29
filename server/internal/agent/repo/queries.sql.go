@@ -793,6 +793,32 @@ func (q *Queries) ListOwnedChatSessionMeta(ctx context.Context, arg ListOwnedCha
 	return items, nil
 }
 
+const recordDeviceAgentServedEtag = `-- name: RecordDeviceAgentServedEtag :exec
+UPDATE device_agent_syncs
+SET served_etag            = $1
+  , served_etag_changed_at = clock_timestamp()
+  , updated_at             = clock_timestamp()
+WHERE organization_id = $2
+  AND email = $3
+  AND served_etag IS DISTINCT FROM $1
+`
+
+type RecordDeviceAgentServedEtagParams struct {
+	ServedEtag     pgtype.Text
+	OrganizationID string
+	Email          string
+}
+
+// Records the getPlugins etag just served to @email, which device
+// attestation compares an agent's reported applied etag against. Separate
+// from UpsertDeviceAgentSync because the etag is only known once the plugin
+// set resolves, and that heartbeat must land even when resolving fails.
+// Writes only on change, so the steady-state poll costs no write.
+func (q *Queries) RecordDeviceAgentServedEtag(ctx context.Context, arg RecordDeviceAgentServedEtagParams) error {
+	_, err := q.db.Exec(ctx, recordDeviceAgentServedEtag, arg.ServedEtag, arg.OrganizationID, arg.Email)
+	return err
+}
+
 const setAIScanTargetStatus = `-- name: SetAIScanTargetStatus :one
 INSERT INTO ai_scan_targets (organization_id, id, status, rationale)
 VALUES ($1, $2, $3, $4)
@@ -1073,6 +1099,171 @@ func (q *Queries) UpsertDeviceAgentEnvironmentSync(ctx context.Context, arg Upse
 		arg.Hostname,
 	)
 	return err
+}
+
+const upsertDeviceAgentStateReport = `-- name: UpsertDeviceAgentStateReport :one
+INSERT INTO device_agent_state_reports (
+    organization_id
+  , email
+  , serial_number
+  , hostname
+  , schema_version
+  , generated_at
+  , applied_etag
+  , applied_at
+  , enforcement_halted
+  , remote_config_etag
+  , remote_config_failed
+  , withheld_plugins
+  , tools
+  , degraded_tool_count
+  , drift_counting_since
+  , speakeasyd_version
+  , speakeasy_version
+  , speakeasy_ui_version
+  , os
+  , arch
+  , auto_update
+  , update_channel
+  , pinned_target
+  , current_blocked
+  , last_rollback_at
+  , last_rollback_from
+  , last_rollback_to
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+  , $11
+  , $12
+  , $13
+  , $14
+  , $15
+  , $16
+  , $17
+  , $18
+  , $19
+  , $20
+  , $21
+  , $22
+  , $23
+  , $24
+  , $25
+  , $26
+  , $27
+)
+ON CONFLICT (organization_id, LOWER(serial_number), LOWER(email)) DO UPDATE
+SET email                = EXCLUDED.email
+  , serial_number        = EXCLUDED.serial_number
+    -- A report without a hostname must not blank a known one.
+  , hostname             = COALESCE(EXCLUDED.hostname, device_agent_state_reports.hostname)
+  , schema_version       = EXCLUDED.schema_version
+  , generated_at         = EXCLUDED.generated_at
+  , reported_at          = clock_timestamp()
+  , applied_etag         = EXCLUDED.applied_etag
+  , applied_at           = EXCLUDED.applied_at
+  , enforcement_halted   = EXCLUDED.enforcement_halted
+  , remote_config_etag   = EXCLUDED.remote_config_etag
+  , remote_config_failed = EXCLUDED.remote_config_failed
+  , withheld_plugins     = EXCLUDED.withheld_plugins
+  , tools                = EXCLUDED.tools
+  , degraded_tool_count  = EXCLUDED.degraded_tool_count
+  , drift_counting_since = EXCLUDED.drift_counting_since
+  , speakeasyd_version   = EXCLUDED.speakeasyd_version
+  , speakeasy_version    = EXCLUDED.speakeasy_version
+  , speakeasy_ui_version = EXCLUDED.speakeasy_ui_version
+  , os                   = EXCLUDED.os
+  , arch                 = EXCLUDED.arch
+  , auto_update          = EXCLUDED.auto_update
+  , update_channel       = EXCLUDED.update_channel
+  , pinned_target        = EXCLUDED.pinned_target
+  , current_blocked      = EXCLUDED.current_blocked
+  , last_rollback_at     = EXCLUDED.last_rollback_at
+  , last_rollback_from   = EXCLUDED.last_rollback_from
+  , last_rollback_to     = EXCLUDED.last_rollback_to
+  , updated_at           = clock_timestamp()
+RETURNING applied_etag, reported_at
+`
+
+type UpsertDeviceAgentStateReportParams struct {
+	OrganizationID     string
+	Email              string
+	SerialNumber       pgtype.Text
+	Hostname           pgtype.Text
+	SchemaVersion      int32
+	GeneratedAt        pgtype.Timestamptz
+	AppliedEtag        pgtype.Text
+	AppliedAt          pgtype.Timestamptz
+	EnforcementHalted  bool
+	RemoteConfigEtag   pgtype.Text
+	RemoteConfigFailed bool
+	WithheldPlugins    []byte
+	Tools              []byte
+	DegradedToolCount  int32
+	DriftCountingSince pgtype.Timestamptz
+	SpeakeasydVersion  pgtype.Text
+	SpeakeasyVersion   pgtype.Text
+	SpeakeasyUiVersion pgtype.Text
+	Os                 pgtype.Text
+	Arch               pgtype.Text
+	AutoUpdate         pgtype.Text
+	UpdateChannel      pgtype.Text
+	PinnedTarget       pgtype.Text
+	CurrentBlocked     bool
+	LastRollbackAt     pgtype.Timestamptz
+	LastRollbackFrom   pgtype.Text
+	LastRollbackTo     pgtype.Text
+}
+
+type UpsertDeviceAgentStateReportRow struct {
+	AppliedEtag pgtype.Text
+	ReportedAt  pgtype.Timestamptz
+}
+
+// Replaces the latest state report for one enrolled user on one machine
+// (serial NULL when the machine cannot read one). Infers
+// device_agent_state_reports_org_lower_serial_lower_email_key.
+func (q *Queries) UpsertDeviceAgentStateReport(ctx context.Context, arg UpsertDeviceAgentStateReportParams) (UpsertDeviceAgentStateReportRow, error) {
+	row := q.db.QueryRow(ctx, upsertDeviceAgentStateReport,
+		arg.OrganizationID,
+		arg.Email,
+		arg.SerialNumber,
+		arg.Hostname,
+		arg.SchemaVersion,
+		arg.GeneratedAt,
+		arg.AppliedEtag,
+		arg.AppliedAt,
+		arg.EnforcementHalted,
+		arg.RemoteConfigEtag,
+		arg.RemoteConfigFailed,
+		arg.WithheldPlugins,
+		arg.Tools,
+		arg.DegradedToolCount,
+		arg.DriftCountingSince,
+		arg.SpeakeasydVersion,
+		arg.SpeakeasyVersion,
+		arg.SpeakeasyUiVersion,
+		arg.Os,
+		arg.Arch,
+		arg.AutoUpdate,
+		arg.UpdateChannel,
+		arg.PinnedTarget,
+		arg.CurrentBlocked,
+		arg.LastRollbackAt,
+		arg.LastRollbackFrom,
+		arg.LastRollbackTo,
+	)
+	var i UpsertDeviceAgentStateReportRow
+	err := row.Scan(&i.AppliedEtag, &i.ReportedAt)
+	return i, err
 }
 
 const upsertDeviceAgentSync = `-- name: UpsertDeviceAgentSync :exec

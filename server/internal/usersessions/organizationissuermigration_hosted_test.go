@@ -23,34 +23,35 @@ import (
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
+// seedMigrationToolset creates a toolset hosted by a private canonical server with a platform endpoint at mcpSlug, on issuerID.
 func seedMigrationToolset(t *testing.T, ctx context.Context, ti *testInstance, slug string, mcpSlug string, issuerID uuid.UUID) toolsetsrepo.Toolset {
+	t.Helper()
+	toolset := seedMigrationBackingToolset(t, ctx, ti, slug)
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	_, err := hostedmcp.CreateCanonical(ctx, tx, audit.NewLogger(), hostedmcp.SystemActor("test"), hostedmcp.CreateCanonicalInput{
+		Toolset: toolset, Slug: mcpSlug, Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+	issuer := conv.ToNullUUID(issuerID)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "", UserSessionIssuerID: &issuer, Slug: "", CustomDomainID: uuid.NullUUID{}})
+	return toolset
+}
+
+func seedMigrationBackingToolset(t *testing.T, ctx context.Context, ti *testInstance, slug string) toolsetsrepo.Toolset {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	toolsets := toolsetsrepo.New(ti.conn)
-	toolset, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
 		Name: slug, Slug: slug, Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug: conv.ToPGText(mcpSlug), McpEnabled: true,
-	})
-	require.NoError(t, err)
-	toolset, err = toolsets.UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: conv.ToNullUUID(issuerID), Slug: toolset.Slug, ProjectID: *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
 	return toolset
 }
 
-func syncMigrationWrapper(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsetsrepo.Toolset) {
-	t.Helper()
-	tx := testenv.BeginTx(t, ctx, ti.conn)
-	_, err := hostedmcp.BackfillSync(ctx, tx, audit.NewLogger(), hostedmcp.SystemActor("test"), toolset)
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit(ctx))
-}
-
-// Hosted wrappers move with the bulk server update; their toolset issuer column is a frozen alias and stays put.
-func TestOrganizationUserSessionIssuerMigrateMovesHostedWrappersNotToolsetColumns(t *testing.T) {
+// Hosted servers move with the bulk server update; readers take the issuer from the canonical server.
+func TestOrganizationUserSessionIssuerMigrateMovesHostedWrappers(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -65,12 +66,10 @@ func TestOrganizationUserSessionIssuerMigrateMovesHostedWrappersNotToolsetColumn
 	targetID := uuid.MustParse(target.ID)
 
 	hosted := seedMigrationToolset(t, ctx, ti, "hosted-migrate", "hosted-migrate-mcp", sourceID)
-	syncMigrationWrapper(t, ctx, ti, hosted)
 	endpoints := mcpendpointsrepo.New(ti.conn)
 	endpointsBefore, err := endpoints.ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: projectID, McpServerID: hosted.ID})
 	require.NoError(t, err)
 	require.Len(t, endpointsBefore, 1)
-	legacy := seedMigrationToolset(t, ctx, ti, "legacy-migrate", "legacy-migrate-mcp", sourceID)
 
 	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID})
 	require.NoError(t, err)
@@ -81,17 +80,12 @@ func TestOrganizationUserSessionIssuerMigrateMovesHostedWrappersNotToolsetColumn
 	require.Equal(t, conv.ToNullUUID(targetID), wrapper.UserSessionIssuerID)
 	hostedAfter, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: hosted.ID, ProjectID: projectID})
 	require.NoError(t, err)
-	require.Equal(t, conv.ToNullUUID(sourceID), hostedAfter.UserSessionIssuerID, "the frozen toolset alias is not written")
 	effective, _, err := hostedmcp.LoadServerState(ctx, ti.conn, hostedAfter)
 	require.NoError(t, err)
 	require.Equal(t, conv.ToNullUUID(targetID), effective.UserSessionIssuerID, "readers take the issuer from the wrapper")
 	endpointsAfter, err := endpoints.ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: projectID, McpServerID: hosted.ID})
 	require.NoError(t, err)
 	require.Equal(t, endpointsBefore, endpointsAfter)
-
-	legacyAfter, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: legacy.ID, ProjectID: projectID})
-	require.NoError(t, err)
-	require.Equal(t, conv.ToNullUUID(targetID), legacyAfter.UserSessionIssuerID, "a toolset without a wrapper still serves from its column")
 }
 
 // migrateWithRemoteBinding migrates two hosted wrappers and a free server sharing a project and returns their remote issuers.
@@ -125,10 +119,8 @@ func migrateWithRemoteBinding(t *testing.T) (uuid.UUID, []uuid.NullUUID) {
 	}))
 
 	first := seedMigrationToolset(t, ctx, ti, "resync-first", "resync-first-mcp", sourceID)
-	syncMigrationWrapper(t, ctx, ti, first)
 	second := seedMigrationToolset(t, ctx, ti, "resync-second", "resync-second-mcp", sourceID)
-	syncMigrationWrapper(t, ctx, ti, second)
-	backing := seedMigrationToolset(t, ctx, ti, "resync-backing", "resync-backing-mcp", sourceID)
+	backing := seedMigrationBackingToolset(t, ctx, ti, "resync-backing")
 	freeID := uuid.New()
 	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: freeID, ProjectID: projectID, Name: conv.ToPGText("Resync free server"), Slug: conv.ToPGText("resync-free-server"),
@@ -175,12 +167,10 @@ func TestOrganizationUserSessionIssuerMigrateSkipsDeletedHostedServerAudit(t *te
 	targetID := uuid.MustParse(target.ID)
 
 	deleted := seedMigrationToolset(t, ctx, ti, "deleted-migrate", "deleted-migrate-mcp", sourceID)
-	syncMigrationWrapper(t, ctx, ti, deleted)
 	_, err = mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: deleted.ID, ProjectID: projectID})
 	require.NoError(t, err)
 	live := seedMigrationToolset(t, ctx, ti, "live-migrate", "live-migrate-mcp", sourceID)
-	syncMigrationWrapper(t, ctx, ti, live)
-	backing := seedMigrationToolset(t, ctx, ti, "free-migrate-backing", "free-migrate-backing-mcp", sourceID)
+	backing := seedMigrationBackingToolset(t, ctx, ti, "free-migrate-backing")
 	freeID := uuid.New()
 	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: freeID, ProjectID: projectID, Name: conv.ToPGText("Free migrate server"), Slug: conv.ToPGText("free-migrate-server"),

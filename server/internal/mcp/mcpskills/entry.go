@@ -48,13 +48,19 @@ type Entry struct {
 	// SkillID is the skill the entry serves.
 	SkillID uuid.UUID
 
+	// ProjectID is the project that owns the skill. A gateway serves skills
+	// from every project in its organization, so it can differ from the
+	// endpoint's.
+	ProjectID uuid.UUID
+
+	// ProjectSlug is the owning project's slug, the URI segment that keeps
+	// same-named skills from different projects apart.
+	ProjectSlug string
+
 	// VersionID is the resolved skill version whose content is served.
 	VersionID uuid.UUID
 
-	// PluginID is the plugin whose distribution won the resolution.
-	PluginID uuid.UUID
-
-	// Name is the skill's normalized name, the authority segment of the URI
+	// Name is the skill's normalized name, the final path segment of the URI
 	// and the frontmatter name.
 	Name string
 
@@ -62,21 +68,19 @@ type Entry struct {
 	// returns and the digest covers.
 	Content string
 
-	// RawSHA256 is the lowercase hex SHA-256 of Content as recorded on the
-	// version.
+	// RawSHA256 is the lowercase hex SHA-256 of Content: as recorded on the
+	// version for a stored skill, or computed from the embedded bytes for an
+	// entry of the EmbeddedCatalog.
 	RawSHA256 string
 
 	// Frontmatter is the parsed YAML frontmatter of Content.
 	Frontmatter map[string]any
-
-	// Pinned reports whether the winning distribution pins this version
-	// rather than tracking the skill's latest valid version.
-	Pinned bool
 }
 
-// URI returns the entry's resource URI, skill://<name>/SKILL.md.
+// URI returns the entry's resource URI,
+// skill://<project-slug>/<name>/SKILL.md.
 func (e Entry) URI() string {
-	return SkillURI(e.Name)
+	return SkillURI(e.ProjectSlug, e.Name)
 }
 
 // CheckFrontmatterName reports an error when the entry's frontmatter name is
@@ -96,7 +100,13 @@ func (e Entry) CheckFrontmatterName() error {
 
 // Digest returns the SEP-2640 digest of the served content, "sha256:<hex>".
 func (e Entry) Digest() string {
-	return digestPrefix + strings.ToLower(e.RawSHA256)
+	return Digest(e.RawSHA256)
+}
+
+// Digest renders a raw SHA-256 hex string in the SEP-2640 "sha256:<hex>" form
+// agents see when they load a skill.
+func Digest(rawSHA256 string) string {
+	return digestPrefix + strings.ToLower(rawSHA256)
 }
 
 // Size returns the byte length of the served content.

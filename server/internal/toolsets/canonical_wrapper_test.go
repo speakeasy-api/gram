@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	cdrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -53,18 +54,14 @@ func loadCanonical(t *testing.T, ctx context.Context, ti *testInstance, toolset 
 	return canonicalState{server: server, endpoints: endpoints}
 }
 
-// requireHostingColumnsUnset asserts no toolset write has touched the frozen hosting columns.
+// requireHostingColumnsUnset asserts no toolset write has given the toolset a legacy alias.
 func requireHostingColumnsUnset(t *testing.T, ctx context.Context, ti *testInstance, toolsetID string) {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	row, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: uuid.MustParse(toolsetID), ProjectID: *authCtx.ProjectID})
+	alias, err := legacyalias.Get(ctx, ti.conn, *authCtx.ProjectID, uuid.MustParse(toolsetID))
 	require.NoError(t, err)
-	require.False(t, row.McpSlug.Valid)
-	require.False(t, row.McpEnabled)
-	require.False(t, row.McpIsPublic)
-	require.False(t, row.CustomDomainID.Valid)
-	require.False(t, row.UserSessionIssuerID.Valid)
+	require.Equal(t, legacyalias.None(), alias)
 }
 
 // requireCanonicalMatches checks the toolset view reports its canonical wrapper's state and single
@@ -575,13 +572,16 @@ func TestToolsetViewsFallBackToFrozenAlias(t *testing.T) {
 	require.True(t, ok)
 	legacy, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, Name: "Frozen Alias", Slug: "frozen-alias",
-		McpSlug: conv.ToPGText(authCtx.OrganizationSlug + "-frozen-alias"), McpEnabled: true,
 	})
 	require.NoError(t, err)
-	tx := testenv.BeginTx(t, ctx, ti.conn)
-	_, err = hostedmcp.BackfillSync(ctx, tx, audit.NewLogger(), hostedmcp.SystemActor("test"), legacy)
+	alias := authCtx.OrganizationSlug + "-frozen-alias"
+	testenv.SetLegacyAlias(t, ctx, ti.conn, *authCtx.ProjectID, legacy.ID, alias, uuid.NullUUID{})
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: legacy.ID, ProjectID: *authCtx.ProjectID, Name: conv.ToPGText(legacy.Name),
+		ToolsetID: conv.ToNullUUID(legacy.ID), Visibility: mcpservers.VisibilityPrivate,
+	})
 	require.NoError(t, err)
-	require.NoError(t, tx.Commit(ctx))
+	testenv.SetHostedMCP(t, ctx, ti.conn, *authCtx.ProjectID, legacy.ID, testenv.HostedMCP{Slug: alias})
 	endpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: *authCtx.ProjectID, McpServerID: legacy.ID})
 	require.NoError(t, err)
 	require.Len(t, endpoints, 1)
@@ -589,7 +589,11 @@ func TestToolsetViewsFallBackToFrozenAlias(t *testing.T) {
 	require.NoError(t, err)
 
 	view := getToolset(t, ctx, ti, types.Slug(legacy.Slug))
-	require.Equal(t, legacy.McpSlug.String, string(*view.McpSlug), "a server with no endpoint reports its frozen alias")
+	require.NotNil(t, view.McpSlug, "a server with no servable endpoint reports the alias that still serves it")
+	require.Equal(t, alias, string(*view.McpSlug))
+	require.Nil(t, view.CustomDomainID)
 	require.True(t, *view.McpEnabled)
-	require.Equal(t, legacy.McpSlug.String, string(*listedEntry(t, ctx, ti, legacy.ID.String()).McpSlug))
+	listed := listedEntry(t, ctx, ti, legacy.ID.String()).McpSlug
+	require.NotNil(t, listed)
+	require.Equal(t, alias, string(*listed))
 }
