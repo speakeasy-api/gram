@@ -779,6 +779,42 @@ checksum = "sha256:4ccf353e484997dd4975361b6433f3b2661f5db614f2b382cddcac7eaa74a
 url = "https://github.com/jdx/hk/releases/download/v1.56.1/hk-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/jdx/hk/releases/assets/525632118"
 
+[[tools."http:dagger"]]
+version = "1.0.0-beta.21"
+backend = "http:dagger"
+
+[tools."http:dagger"."platforms.linux-arm64"]
+checksum = "sha256:ba9d55638636918a3404313511bceba5cc0af22f487c1c1b6a5ba60ce70a61bb"
+url = "https://dl.dagger.io/dagger/releases/1.0.0-beta.21/dagger_v1.0.0-beta.21_linux_arm64.tar.gz"
+
+[tools."http:dagger"."platforms.linux-arm64-musl"]
+checksum = "sha256:ba9d55638636918a3404313511bceba5cc0af22f487c1c1b6a5ba60ce70a61bb"
+url = "https://dl.dagger.io/dagger/releases/1.0.0-beta.21/dagger_v1.0.0-beta.21_linux_arm64.tar.gz"
+
+[tools."http:dagger"."platforms.linux-x64"]
+checksum = "sha256:c5ac777a5c99089869660943381136e22177b59a46412e310c2fef594760a041"
+url = "https://dl.dagger.io/dagger/releases/1.0.0-beta.21/dagger_v1.0.0-beta.21_linux_amd64.tar.gz"
+
+[tools."http:dagger"."platforms.linux-x64-musl"]
+checksum = "sha256:c5ac777a5c99089869660943381136e22177b59a46412e310c2fef594760a041"
+url = "https://dl.dagger.io/dagger/releases/1.0.0-beta.21/dagger_v1.0.0-beta.21_linux_amd64.tar.gz"
+
+[tools."http:dagger"."platforms.macos-arm64"]
+checksum = "sha256:781f4862c022a19b9a4c498b59e1d9cfda1ee3cdc8ce210e4545bd8842a7416d"
+url = "https://dl.dagger.io/dagger/releases/1.0.0-beta.21/dagger_v1.0.0-beta.21_darwin_arm64.tar.gz"
+
+[tools."http:dagger"."platforms.macos-x64"]
+checksum = "sha256:fdbe191c965d240ee9cc90719fa9dca1586805cbb89b0a0087314a84a0937354"
+url = "https://dl.dagger.io/dagger/releases/1.0.0-beta.21/dagger_v1.0.0-beta.21_darwin_amd64.tar.gz"
+
+[tools."http:dagger"."platforms.windows-arm64"]
+checksum = "sha256:996f5f21dbadb8d1e596326e9b2faa1059cb7ca190842ed9b014b543f7975863"
+url = "https://dl.dagger.io/dagger/releases/1.0.0-beta.21/dagger_v1.0.0-beta.21_windows_arm64.zip"
+
+[tools."http:dagger"."platforms.windows-x64"]
+checksum = "sha256:2e8f7ae2b86ae71cd135f8ed6a42e0bf0fd931e1c893dc6e48373b2c5e1a3ad7"
+url = "https://dl.dagger.io/dagger/releases/1.0.0-beta.21/dagger_v1.0.0-beta.21_windows_amd64.zip"
+
 [[tools.jq]]
 version = "1.8.2"
 backend = "aqua:jqlang/jq"

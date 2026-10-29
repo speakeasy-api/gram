@@ -63,6 +63,15 @@ rust = { version = "1.96.1", profile = "minimal", components = ["clippy", "rustf
 pitchfork = "2.32.4"
 "npm:@playwright/cli" = "0.1.17"
 
+# Beta artifacts are published on dl.dagger.io, ahead of GitHub Releases.
+# Check https://docs.dagger.io/getting-started/install and dagger/dagger Git tags.
+[tools."http:dagger"]
+version = "1.0.0-beta.21"
+url = 'https://dl.dagger.io/dagger/releases/{{ version }}/dagger_v{{ version }}_{{ os(macos="darwin") }}_{{ arch(x64="amd64") }}.tar.gz'
+checksum_url = "https://dl.dagger.io/dagger/releases/{{ version }}/checksums.txt"
+platforms.windows-x64 = { url = "https://dl.dagger.io/dagger/releases/{{ version }}/dagger_v{{ version }}_windows_amd64.zip" }
+platforms.windows-arm64 = { url = "https://dl.dagger.io/dagger/releases/{{ version }}/dagger_v{{ version }}_windows_arm64.zip" }
+
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
 [env]

@@ -1,0 +1,14 @@
+# Go pipeline entry points and generated bindings. Usage: .dagger/README.md.
+
+[modules.go-sdk]
+source = "dagger.io/sdk/go"
+
+[sdks.go]
+module = "go-sdk"
+
+[sdks.go.scopes.".dagger/go"]
+is-module = true
+name = "go-pipeline"
+
+[modules.go-pipeline]
+source = ".dagger/go"
