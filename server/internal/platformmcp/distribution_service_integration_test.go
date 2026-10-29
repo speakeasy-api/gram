@@ -315,7 +315,7 @@ func TestDistributionServicePreservesAttachmentWhenPublicationFails(t *testing.T
 	require.True(t, distributed.AttachmentLive)
 	require.Equal(t, publicationStateRepairRequired, distributed.PublicationState)
 
-	current, err := service.Current(ctx, principal, project.Slug, "")
+	current, err := service.Current(ctx, principal, project.Slug, uuid.Nil, "")
 	require.NoError(t, err)
 	require.True(t, current.AttachmentLive, "publication must never roll back a committed attachment")
 	require.Equal(t, publicationStateRepairRequired, current.PublicationState)
@@ -452,7 +452,7 @@ func descriptorByName(t *testing.T, reg *Registrar, name string) Descriptor {
 func TestDistributionToolErrorClassifiesAnInvalidTarget(t *testing.T) {
 	t.Parallel()
 
-	result, ok := distributionToolError(ErrDistributionInvalid)
+	result, ok := distributionToolError(ErrDistributionInvalid, "")
 	require.True(t, ok, "an invalid distribution target must not escape as a bare error string")
 	require.NotNil(t, result)
 	require.True(t, result.IsError)
@@ -463,4 +463,111 @@ func TestDistributionToolErrorClassifiesAnInvalidTarget(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(text.Text), &decoded))
 	require.Equal(t, "no_distribution_target", decoded.Code)
 	require.NotEmpty(t, decoded.Message)
+}
+
+// seedRegisteredMCP adds one MCP server to the project through setup and
+// returns its registration, without touching the onboarding workflow.
+func seedRegisteredMCP(t *testing.T, ctx context.Context, conn *pgxpool.Pool, principal Principal, project ResolvedProject, reference string) platformrepo.PlatformMcpCatalogRegistration {
+	t.Helper()
+
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	request := registrationRequest(project, reference, reference+"-key")
+	receipt, err := store.BeginReceipt(ctx, principal, project, request, time.Now().UTC())
+	require.NoError(t, err)
+	receipt, err = store.ConvergeRegistration(ctx, principal, project, request, receipt)
+	require.NoError(t, err)
+	_, err = store.CompleteRegistrationWithRemoteURL(ctx, principal, project, request, receipt, "https://"+reference+".invalid/mcp")
+	require.NoError(t, err)
+	registration, err := platformrepo.New(conn).GetActivePlatformMCPCatalogRegistration(ctx, platformrepo.GetActivePlatformMCPCatalogRegistrationParams{
+		OrganizationID:   principal.OrganizationID,
+		ProjectID:        project.ID,
+		SourceKind:       request.SourceKind,
+		CatalogProvider:  request.CatalogProvider,
+		CatalogReference: request.CatalogReference,
+	})
+	require.NoError(t, err)
+	require.True(t, registration.McpServerID.Valid)
+	return registration
+}
+
+// A chat that adds two servers leaves the workflow pointing at the last one.
+// Naming the first must share the first, and a refusal must say which server
+// it is about, rather than acting on whatever the session last selected.
+func TestDistributeToolSharesTheNamedServerNotTheSessionSelection(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_distribution_named_server")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	ready := seedRegisteredMCP(t, ctx, conn, principal, project, "ready-fixture")
+	unchecked := seedRegisteredMCP(t, ctx, conn, principal, project, "unchecked-fixture")
+
+	onboarding := NewOnboardingService(conn)
+	_, err = onboarding.Start(ctx, principal.OrganizationID, principal.UserID)
+	require.NoError(t, err)
+	_, err = onboarding.BindRegistration(ctx, principal.OrganizationID, principal.UserID, project.ID, unchecked.ID)
+	require.NoError(t, err)
+	defaultPlugin, err := pluginsrepo.New(conn).CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID})
+	require.NoError(t, err)
+	_, err = store.RecordReadiness(ctx, principal, ReadinessBinding{ProjectID: project.ID, RegistrationID: ready.ID, ProviderAuthorizationFingerprint: "fixture-readiness"}, ReadinessReady, "fixture", time.Now().UTC(), time.Now().UTC().Add(time.Hour))
+	require.NoError(t, err)
+
+	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(conn))
+	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	registerDistributionTools(reg, onboarding, service, nil)
+	distribute := descriptorByName(t, reg, "distribute_mcp_to_plugin")
+	callCtx := ContextWithPrincipal(ctx, principal)
+	call := func(mcpID string) json.RawMessage {
+		return json.RawMessage(`{"project_slug":"` + project.Slug + `","mcp_id":"` + mcpID + `","plugin":"` + defaultPlugin.ID.String() + `"}`)
+	}
+	// Invoke surfaces a tool refusal as an error carrying the refusal JSON.
+	refusal := func(err error) distributionErrorResult {
+		t.Helper()
+		require.Error(t, err)
+		var decoded distributionErrorResult
+		require.NoError(t, json.Unmarshal([]byte(err.Error()), &decoded))
+		return decoded
+	}
+
+	output, err := distribute.Invoke(callCtx, call(ready.McpServerID.UUID.String()))
+	require.NoError(t, err)
+	shared, ok := output.(DistributeMCPToolOutput)
+	require.True(t, ok, "expected a distribution, got %T", output)
+	require.True(t, shared.Attached)
+	require.Equal(t, ready.McpServerID.UUID.String(), shared.MCPID)
+	require.NotEmpty(t, shared.MCPServer)
+	require.Contains(t, shared.Message, shared.MCPServer)
+
+	_, err = pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{
+		PluginID: defaultPlugin.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, McpServerID: ready.McpServerID,
+	})
+	require.NoError(t, err, "the named server must be the one shared")
+	_, err = pluginsrepo.New(conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{
+		PluginID: defaultPlugin.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, McpServerID: unchecked.McpServerID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "the session's selection must not be shared")
+
+	_, err = distribute.Invoke(callCtx, call(unchecked.McpServerID.UUID.String()))
+	notReady := refusal(err)
+	require.Equal(t, "not_ready", notReady.Code)
+	require.NotEmpty(t, notReady.MCPServer)
+	require.Contains(t, notReady.Message, notReady.MCPServer)
+
+	for _, mcpID := range []string{uuid.NewString(), "", "not-a-uuid"} {
+		_, err = distribute.Invoke(callCtx, call(mcpID))
+		require.Equal(t, "mcp_not_found", refusal(err).Code, "mcp_id %q", mcpID)
+	}
+
+	remove := descriptorByName(t, reg, "remove_mcp_from_plugin")
+	output, err = remove.Invoke(callCtx, call(ready.McpServerID.UUID.String()))
+	require.NoError(t, err)
+	removed, ok := output.(DistributeMCPToolOutput)
+	require.True(t, ok, "expected a removal, got %T", output)
+	require.False(t, removed.Attached)
+	require.Equal(t, shared.MCPServer, removed.MCPServer)
 }

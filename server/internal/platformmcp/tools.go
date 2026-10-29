@@ -230,7 +230,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		"Use get_mcp_readiness with the returned registration ID to inspect persisted readiness. If readiness says an upstream authorization server is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action.",
 		"Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization.",
 		"Setup also decides which MCP clients may sign in to the new server: read get_mcp_client_admission, explain in plain words which apps that lets in, and only change it with set_mcp_client_admission after the user explicitly confirms.",
-		"Registration never distributes an MCP: use list_plugins to show the project's plugins, ask the user which one should carry it, then call distribute_mcp_to_plugin naming that plugin exactly. There is no implicit default. When no existing plugin fits, offer to create one: agree its name with the user, choose one idempotency key for this create and pass it on the unconfirmed preview and on the confirmed call: the preview returns the exact permanent install name it would use, show that to the user, and call it again confirmed once they agree, then distribute to the new plugin. A plugin created in the organization's default project is delivered to every member; elsewhere it reaches no one until people are assigned to it. rename_plugin changes only a plugin's display name, never its install name.",
+		"Registration never distributes an MCP: use list_plugins to show the project's plugins, ask the user which one should carry it, then call distribute_mcp_to_plugin naming that plugin exactly and the server by its mcp_id from find_mcp. There is no implicit default for either: when the chat has added more than one server, name the one the user asked to share. When no existing plugin fits, offer to create one: agree its name with the user, choose one idempotency key for this create and pass it on the unconfirmed preview and on the confirmed call: the preview returns the exact permanent install name it would use, show that to the user, and call it again confirmed once they agree, then distribute to the new plugin. A plugin created in the organization's default project is delivered to every member; elsewhere it reaches no one until people are assigned to it. rename_plugin changes only a plugin's display name, never its install name.",
 		"To remove existing plugin content, use remove_plugin_server with exact project, plugin and membership IDs after explicit confirmation. This changes distribution only, never server access. remove_mcp_from_plugin remains limited to undoing this connection's onboarding distribution. Re-read the plugin and distinguish a publication update from installed-client refresh.",
 		"When a member wants one connection for every MCP server they can reach across the organization, call get_my_organization_gateway and give them its url (the Organization Gateway) to add to their MCP client; the Organization Gateway page under MCP Servers has per-client install steps. It lists no servers itself. Once connected, the tool discovery mode they choose at sign-in decides how the gateway exposes the servers their own access reaches: Progressive offers list_servers, then describe_server, describe_tools and execute_tool; Direct lists each tool as server--tool; Code Mode offers one execute tool that runs Python. For a connection limited to one project, call get_my_project_gateway with its exact project_slug instead. If either gateway is unavailable, relay its next_action as written.",
 		"For an administrator investigating gateway authorizations, use list_gateway_sessions with an explicit organization scope or exact gateway ID. It shares dashboard filtering and pagination but omits identity details. Preserve the filters while following cursors; a server association is configuration, not proof of usage. Revocation and identity review remain in the dashboard Connections view.",
@@ -454,7 +454,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	if onboarding == nil || distributions == nil {
 		registerUnavailableTools(reg)
 	} else {
-		registerDistributionTools(reg, onboarding, distributions)
+		registerDistributionTools(reg, onboarding, distributions, registrations)
 	}
 	if !diagnostics.valid() {
 		registerUnavailableDiagnosticsTools(reg)
@@ -662,7 +662,7 @@ func registerUnavailableReadinessTools(reg *Registrar) {
 
 func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 	if errors.Is(err, ErrDistributionBlockedPendingApproval) || errors.Is(err, ErrDistributionAdmissionUnavailable) {
-		return distributionToolError(err)
+		return distributionToolError(err, "")
 	}
 	var result operationBudgetResult
 	switch {
