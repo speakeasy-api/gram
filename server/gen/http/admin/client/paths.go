@@ -177,6 +177,11 @@ func SetStripeCustomerAdminPath() string {
 	return "/admin/organization.setStripeCustomer"
 }
 
+// SetAdoptionDashboardURLAdminPath returns the URL path to the admin service setAdoptionDashboardUrl HTTP endpoint.
+func SetAdoptionDashboardURLAdminPath() string {
+	return "/admin/organization.setAdoptionDashboardUrl"
+}
+
 // GetStripeSubscriptionAdminPath returns the URL path to the admin service getStripeSubscription HTTP endpoint.
 func GetStripeSubscriptionAdminPath() string {
 	return "/admin/organization.stripeSubscription"
@@ -325,6 +330,31 @@ func PreviewExternalMcpMigrationAdminPath() string {
 // MigrateExternalMcpServersAdminPath returns the URL path to the admin service migrateExternalMcpServers HTTP endpoint.
 func MigrateExternalMcpServersAdminPath() string {
 	return "/admin/externalMcpMigration.migrate"
+}
+
+// ListRegistryPromotionCandidatesAdminPath returns the URL path to the admin service listRegistryPromotionCandidates HTTP endpoint.
+func ListRegistryPromotionCandidatesAdminPath() string {
+	return "/admin/registry.promotionCandidates"
+}
+
+// GetRegistryPromotionCandidateAdminPath returns the URL path to the admin service getRegistryPromotionCandidate HTTP endpoint.
+func GetRegistryPromotionCandidateAdminPath() string {
+	return "/admin/registry.promotionCandidate"
+}
+
+// PromoteRegistryCandidateAdminPath returns the URL path to the admin service promoteRegistryCandidate HTTP endpoint.
+func PromoteRegistryCandidateAdminPath() string {
+	return "/admin/registry.promoteCandidate"
+}
+
+// CurateRegistryPromotionCandidateAdminPath returns the URL path to the admin service curateRegistryPromotionCandidate HTTP endpoint.
+func CurateRegistryPromotionCandidateAdminPath() string {
+	return "/admin/registry.curatePromotionCandidate"
+}
+
+// RetryRegistryPromotionDocsAdminPath returns the URL path to the admin service retryRegistryPromotionDocs HTTP endpoint.
+func RetryRegistryPromotionDocsAdminPath() string {
+	return "/admin/registry.retryPromotionDocs"
 }
 
 // GetRegistryOktaCandidatesAdminPath returns the URL path to the admin service getRegistryOktaCandidates HTTP endpoint.

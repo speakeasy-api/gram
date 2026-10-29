@@ -24,7 +24,7 @@ func (s *Service) handleMetaConnectionStatusCall(
 	members []metaMember,
 	req *rawRequest,
 ) (json.RawMessage, error) {
-	servers := make([]metamcp.ConnectionStatusServer, 0, len(members)+len(gate.unapprovedMembers))
+	servers := make([]metamcp.ConnectionStatusServer, 0, len(members)+len(gate.unapprovedMembers)+len(gate.hiddenMembers))
 	for _, member := range members {
 		status, detail := s.memberSignInStatus(ctx, logger, gate, member)
 		servers = append(servers, metamcp.ConnectionStatusServer{
@@ -37,7 +37,7 @@ func (s *Service) handleMetaConnectionStatusCall(
 	// A cached connection reports members its consent did not approve,
 	// whether unavailable at consent or added since, so the person knows
 	// renewed consent would add them.
-	if gate.catalog != nil && gate.catalogMode == toolfilter.CatalogModeCached {
+	if gate.catalog != nil && gate.catalogRef != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		for _, member := range gate.unapprovedMembers {
 			servers = append(servers, metamcp.ConnectionStatusServer{
 				Slug:   member.slug,
@@ -46,6 +46,15 @@ func (s *Service) handleMetaConnectionStatusCall(
 				Detail: catalogMemberNotApproved,
 			})
 		}
+	}
+
+	for _, member := range gate.hiddenMembers {
+		servers = append(servers, metamcp.ConnectionStatusServer{
+			Slug:   member.slug,
+			Name:   member.name,
+			Status: metamcp.SignInHidden,
+			Detail: "",
+		})
 	}
 
 	payload := metamcp.ConnectionStatusResult{ConnectURL: gate.connectURL, Servers: servers}
@@ -86,7 +95,7 @@ func (s *Service) handleMetaConnectionStatusCall(
 // a grant routed by its upstream resource without a derived issuer, so
 // routing runs before that shortcut.
 func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, string) {
-	if gate.catalog != nil && gate.catalogMode == toolfilter.CatalogModeCached {
+	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		if err := s.validateCatalogMember(ctx, gate, member); err != nil {
 			return metamcp.SignInNeedsConsent, memberErrorMessage(err)
 		}
@@ -101,7 +110,7 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		if !member.remoteSessionIssuerID.Valid {
 			return metamcp.SignInNotRequired, ""
 		}
-		gateTokens, err := gate.memberTokens(ctx, member)
+		gateTokens, err := s.resolveMemberTokens(ctx, gate, member)
 		if err != nil {
 			return metamcp.SignInError, memberErrorMessage(err)
 		}
@@ -164,13 +173,13 @@ func handleMetaResourcesRead(ctx context.Context, logger *slog.Logger, req *rawR
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse resources/read request").LogError(ctx, logger)
 	}
-	if params.URI != metamcp.ConnectionStatusResourceURI {
+	if !metamcp.IsConnectionStatusResourceURI(params.URI) {
 		return nil, oops.E(oops.CodeNotFound, nil, "unknown resource %q", params.URI).LogWarn(ctx, logger)
 	}
 	bs, err := json.Marshal(&result[resourceReadResult]{
 		ID: req.ID,
 		Result: resourceReadResult{Contents: []resourceContent{{
-			URI:      metamcp.ConnectionStatusResourceURI,
+			URI:      params.URI,
 			Name:     nil,
 			MimeType: conv.PtrEmpty(metamcp.MCPAppMimeType),
 			Text:     metamcp.ConnectionStatusHTML,

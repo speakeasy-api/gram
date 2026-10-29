@@ -44,11 +44,14 @@ export const AUDIT_ACTIONS = [
   "api_key:revoke",
   "api_key:update_policy",
   "asset:create",
+  "auth-client:attach-mcp-server",
+  "auth-client:create",
   "auth-client:detach-mcp-server",
   "auth-client:disable",
   "auth-client:enable",
   "auth-client:update",
   "auth-client:update-audience",
+  "auth-client:update-headers",
   "assistant:identity_provision",
   "assistant:tool_call",
   "aws_iam_credential:create",
@@ -62,6 +65,10 @@ export const AUDIT_ACTIONS = [
   "billing_metadata:create_stripe_portal",
   "billing_metadata:resume_stripe_subscription",
   "billing_metadata:update",
+  "catalog-promotion:archive",
+  "catalog-promotion:reject",
+  "catalog-promotion:restore",
+  "catalog-promotion:retry-docs",
   "chat_analysis_settings:upsert",
   "chat_session:access",
   "chat_session:handoff_export",
@@ -134,6 +141,7 @@ export const AUDIT_ACTIONS = [
   "mcp-endpoint:update",
   "mcp-server:create",
   "mcp-server:delete",
+  "mcp-server:promote-catalogue",
   "mcp-server:update",
   "mcp-server:update-scope-pin",
   "mcp-server:update-tool-metadata",
@@ -280,14 +288,17 @@ export const AUDIT_ACTIONS = [
   "skill:archive",
   "skill:create",
   "skill:distribute",
+  "skill:link",
   "skill:restore_version",
   "skill:share_link_create",
   "skill:share_link_revoke",
   "skill:suggestion_approve",
   "skill:suggestion_dismiss",
   "skill:undistribute",
+  "skill:unlink",
   "skill:update",
   "skill:update_distribution",
+  "skill:update_link",
   "skill_efficacy_settings:upsert",
   "spend_rule:archive",
   "spend_rule:create",
@@ -441,8 +452,14 @@ export function staticActionPhrase(action: AuditAction): string {
     case "asset:create":
       return "uploaded asset";
 
+    case "auth-client:create":
+      return "created auth client";
     case "auth-client:update":
       return "renamed auth client";
+    case "auth-client:update-headers":
+      return "changed the headers of auth client";
+    case "auth-client:attach-mcp-server":
+      return "added an MCP server to auth client";
     case "auth-client:enable":
       return "enabled auth client";
     case "auth-client:disable":
@@ -537,6 +554,14 @@ export function staticActionPhrase(action: AuditAction): string {
       return "resumed Stripe subscription for";
     case "billing_metadata:update":
       return "updated billing metadata";
+    case "catalog-promotion:archive":
+      return "archived catalog promotion candidate";
+    case "catalog-promotion:reject":
+      return "rejected catalog promotion candidate";
+    case "catalog-promotion:restore":
+      return "restored catalog promotion candidate";
+    case "catalog-promotion:retry-docs":
+      return "retried setup documentation for";
     case "chat_analysis_settings:upsert":
       return "updated chat analysis settings";
     case "chat_session:access":
@@ -654,6 +679,8 @@ export function staticActionPhrase(action: AuditAction): string {
     case "meta-mcp:remove_member":
       return "removed meta MCP member";
 
+    case "mcp-server:promote-catalogue":
+      return "published to the MCP catalog";
     case "mcp-server:create":
       return "created MCP server";
     case "mcp-server:update":
@@ -964,6 +991,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "stopped distributing skill";
     case "skill:update_distribution":
       return "updated distribution for skill";
+    case "skill:link":
+      return "linked skill";
+    case "skill:update_link":
+      return "updated a link for skill";
+    case "skill:unlink":
+      return "unlinked skill";
     case "skill:share_link_create":
       return "created a share link for";
     case "skill:share_link_revoke":

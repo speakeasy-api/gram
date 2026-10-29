@@ -7285,6 +7285,97 @@ paths:
       x-speakeasy-name-override: getConfiguration
       x-speakeasy-react-hook:
         name: DeviceAgentConfiguration
+  /rpc/agent.getMyConnections:
+    get:
+      description: Report the enrolled user's sign-in state for each MCP server in the plugins delivered to them, with the page that signs in to each. Sign-in belongs to the server, so one sign-in covers every plugin that contains it. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getPlugins resolves the polling user.
+      operationId: getAgentMyConnections
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+          example: dev@acme.corp
+          in: header
+          name: Gram-User-Email
+          schema:
+            description: Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+            example: dev@acme.corp
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMyConnectionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: getMyConnections agent
+      tags:
+        - agent
+      x-speakeasy-name-override: getMyConnections
+      x-speakeasy-react-hook:
+        name: AgentMyConnections
   /rpc/agent.getPlugins:
     get:
       description: Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.
@@ -7506,6 +7597,99 @@ paths:
       x-speakeasy-name-override: getSessionMeta
       x-speakeasy-react-hook:
         name: AgentSessionMeta
+  /rpc/agent.hideMcpServer:
+    post:
+      description: Hide an MCP server for the enrolled user, the same preference the gateway consent page's Hide sets. Gateways leave a hidden server out of the user's tools, and getMyConnections reports it as hidden. Only servers getMyConnections reports to the user can be hidden; anything else is not found. Hiding a hidden server changes nothing. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getMyConnections resolves the user.
+      operationId: hideAgentMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+          example: dev@acme.corp
+          in: header
+          name: Gram-User-Email
+          schema:
+            description: Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+            example: dev@acme.corp
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HideAgentMcpServerRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: hideMcpServer agent
+      tags:
+        - agent
+      x-speakeasy-name-override: hideMcpServer
+      x-speakeasy-react-hook:
+        name: HideAgentMcpServer
   /rpc/agent.listAiScanTargets:
     get:
       description: 'List the Shadow AI scan targets this organization''s device agents probe for: the Speakeasy built-ins plus the organization''s own additions, with the catalog version agents echo on scan receipts. Everything listed is probed for; a built-in leaves the list by leaving Speakeasy''s catalog, an organization target by being deleted. Requires a session with the org:admin scope.'
@@ -7873,6 +8057,215 @@ paths:
       x-speakeasy-name-override: reportSessionMoved
       x-speakeasy-react-hook:
         name: ReportAgentSessionMoved
+  /rpc/agent.reportState:
+    post:
+      description: 'Record the device agent''s applied state: the policy etag it enforces, each tool''s enforcement outcome, its versions and update posture. A snapshot: the latest report per enrolled user per machine replaces the previous one. Accepts the per-user key and the org install key (with a vouched email), mirroring reportAIScan; agent keys and device-agent tokens are refused. A report from a non-endpoint environment is accepted and not stored, because device coverage matches managed endpoints only. Contract: device-agent ADR-0029.'
+      operationId: reportAgentState
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Email of the enrolled user, sent in the Gram-User-Email header. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
+          in: header
+          name: Gram-User-Email
+          schema:
+            description: Email of the enrolled user, sent in the Gram-User-Email header. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
+            type: string
+        - allowEmptyValue: true
+          description: Hardware serial number of the reporting machine, when the agent can read it.
+          in: header
+          name: Gram-Device-Serial
+          schema:
+            description: Hardware serial number of the reporting machine, when the agent can read it.
+            type: string
+        - allowEmptyValue: true
+          description: Hostname of the reporting machine, when the agent can read it.
+          in: header
+          name: Gram-Device-Hostname
+          schema:
+            description: Hostname of the reporting machine, when the agent can read it.
+            type: string
+        - allowEmptyValue: true
+          description: 'What kind of machine the agent runs on, as in getPlugins: endpoint (the default when omitted), ephemeral, or server.'
+          in: header
+          name: Gram-Device-Environment
+          schema:
+            description: 'What kind of machine the agent runs on, as in getPlugins: endpoint (the default when omitted), ephemeral, or server.'
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportStateRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportStateResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: reportState agent
+      tags:
+        - agent
+      x-speakeasy-name-override: reportState
+      x-speakeasy-react-hook:
+        name: ReportAgentState
+  /rpc/agent.unhideMcpServer:
+    post:
+      description: Show a hidden MCP server again for the enrolled user. Unhiding a server that is not hidden changes nothing. Authenticates like hideMcpServer.
+      operationId: unhideAgentMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+          example: dev@acme.corp
+          in: header
+          name: Gram-User-Email
+          schema:
+            description: Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+            example: dev@acme.corp
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnhideAgentMcpServerRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: unhideMcpServer agent
+      tags:
+        - agent
+      x-speakeasy-name-override: unhideMcpServer
+      x-speakeasy-react-hook:
+        name: UnhideAgentMcpServer
   /rpc/agent.updateConfiguration:
     post:
       description: Create or replace the organization-wide, non-secret device-agent configuration. Requires a session with the org:admin scope. Known settings are replaced wholesale — omitting one removes it — while stored keys this server does not recognize are preserved for forward compatibility; identity and credential keys are rejected.
@@ -8137,6 +8530,94 @@ paths:
       x-speakeasy-name-override: blockOnConnection
       x-speakeasy-react-hook:
         name: BlockAgentOnConnection
+  /rpc/agents.checkPolicyGrants:
+    post:
+      description: 'Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would create for owner_user_id (the caller by default). Uses the authorization and containment rule of agents.create and agents.createPolicyGrant, which still check every write.'
+      operationId: checkAgentPolicyGrants
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckAgentPolicyGrantsForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckAgentPolicyGrantsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: checkPolicyGrants agents
+      tags:
+        - agents
+      x-speakeasy-name-override: checkPolicyGrants
+      x-speakeasy-react-hook:
+        name: CheckAgentPolicyGrants
   /rpc/agents.create:
     post:
       operationId: createAgent
@@ -14248,9 +14729,15 @@ paths:
           description: The auth code for authentication from the speakeasy system
           in: query
           name: code
-          required: true
           schema:
             description: The auth code for authentication from the speakeasy system
+            type: string
+        - allowEmptyValue: true
+          description: The identity provider error, when sign-in was not completed.
+          in: query
+          name: error
+          schema:
+            description: The identity provider error, when sign-in was not completed.
             type: string
         - allowEmptyValue: true
           description: The opaque state string optionally provided during initialization.
@@ -15203,6 +15690,198 @@ paths:
       x-speakeasy-name-override: transferOut
       x-speakeasy-react-hook:
         disabled: true
+  /rpc/authClients.attachToMcpServer:
+    post:
+      description: 'Offer an existing auth client on another MCP server instead of creating a copy. The client stays one client: changing or rotating it changes upstream behavior on every server that offers it. Offering a client grants nobody permission to use it or access to the server. Takes effect only where typed auth client resolution is enforced. Requires org:admin.'
+      operationId: attachAuthClientToMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttachAuthClientToMcpServerRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: attachAuthClientToMcpServer authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: attachToMcpServer
+      x-speakeasy-react-hook:
+        name: AttachAuthClientToMcpServer
+  /rpc/authClients.create:
+    post:
+      description: 'Create an auth client and, optionally, offer it on MCP servers. A remote_session or service_account client authenticates through an existing OAuth registration whose credential owner matches its type; a static_credential or pass_through client authenticates with its own headers. Creating a client gives nobody permission to use it: set its audience to decide who may. Takes effect only where typed auth client resolution is enforced. Requires org:admin.'
+      operationId: createAuthClient
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAuthClientRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: createAuthClient authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: CreateAuthClient
   /rpc/authClients.detachFromMcpServer:
     post:
       description: Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.
@@ -15829,6 +16508,102 @@ paths:
       x-speakeasy-name-override: setAudience
       x-speakeasy-react-hook:
         name: SetAuthClientAudience
+  /rpc/authClients.setHeaders:
+    post:
+      description: Replace the headers an auth client sends upstream. Rotating a shared client's credential changes upstream behavior on every server that offers it. Token-generating clients produce their own Authorization header, which cannot be configured. Clients created from a server's existing settings follow those settings and are edited there. Takes effect only where typed auth client resolution is enforced. Requires org:admin.
+      operationId: setAuthClientHeaders
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAuthClientHeadersRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: setAuthClientHeaders authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: setHeaders
+      x-speakeasy-react-hook:
+        name: SetAuthClientHeaders
   /rpc/authClients.setMcpServerUpstreamAuthRequirement:
     post:
       description: Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.
@@ -16879,6 +17654,14 @@ paths:
           name: assistant_id
           schema:
             description: Filter to chats produced by this assistant
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Filter to chats produced by this agent (the agent principal recorded on the session at capture)
+          in: query
+          name: agent_id
+          schema:
+            description: Filter to chats produced by this agent (the agent principal recorded on the session at capture)
             format: uuid
             type: string
         - allowEmptyValue: true
@@ -18185,7 +18968,7 @@ paths:
       x-speakeasy-name-override: revoke
   /rpc/cliAuth.authorize:
     post:
-      description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires a member-available session (org:read); NOT org-admin. Refused (403) while impersonating an organization or user, or without membership in the active org.
+      description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.
       operationId: cliAuthAuthorize
       parameters:
         - allowEmptyValue: true
@@ -21709,6 +22492,18 @@ paths:
               - no_email
               - unresolved_email
               - missing
+            type: string
+        - allowEmptyValue: true
+          description: Only agent_active devices in this policy state.
+          in: query
+          name: policy_state
+          schema:
+            description: Only agent_active devices in this policy state.
+            enum:
+              - attested
+              - outdated
+              - unreported
+              - halted
             type: string
         - allowEmptyValue: true
           description: Only devices assigned to these Speakeasy users. Combined with user_emails as an OR, because a device only carries a resolved user id when the MDM's reported email matched a member.
@@ -26483,6 +27278,543 @@ paths:
       x-speakeasy-name-override: verifyGcpKms
       x-speakeasy-react-hook:
         name: VerifyGcpKmsKey
+  /rpc/gatewaySessions.list:
+    get:
+      operationId: listGatewaySessions
+      parameters:
+        - allowEmptyValue: true
+          description: Project gateway id. Omit for the Organization Gateway; organization access is then required and the selected project is ignored.
+          in: query
+          name: gateway_id
+          schema:
+            description: Project gateway id. Omit for the Organization Gateway; organization access is then required and the selected project is ignored.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Case-insensitive literal search by subject URN, name, or email.
+          in: query
+          name: search
+          schema:
+            description: Case-insensitive literal search by subject URN, name, or email.
+            maxLength: 200
+            type: string
+        - allowEmptyValue: true
+          description: Filter by an upstream account associated with this member server.
+          in: query
+          name: server_id
+          schema:
+            description: Filter by an upstream account associated with this member server.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Filter by upstream provider issuer.
+          in: query
+          name: provider_id
+          schema:
+            description: Filter by upstream provider issuer.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Inbound authorization status.
+          in: query
+          name: status
+          schema:
+            default: active
+            description: Inbound authorization status.
+            enum:
+              - active
+              - expired
+              - revoked
+              - all
+            type: string
+        - allowEmptyValue: true
+          description: Inclusive creation time lower bound.
+          in: query
+          name: created_after
+          schema:
+            description: Inclusive creation time lower bound.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Exclusive creation time upper bound.
+          in: query
+          name: created_before
+          schema:
+            description: Exclusive creation time upper bound.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Ordering; expiry uses the inbound authorization deadline, not access-token expiry. Unknown last-use times sort last.
+          in: query
+          name: sort
+          schema:
+            default: newest
+            description: Ordering; expiry uses the inbound authorization deadline, not access-token expiry. Unknown last-use times sort last.
+            enum:
+              - newest
+              - oldest
+              - last_used
+              - expiry
+            type: string
+        - allowEmptyValue: true
+          description: Opaque cursor bound to the current filters and ordering.
+          in: query
+          name: cursor
+          schema:
+            description: Opaque cursor bound to the current filters and ordering.
+            type: string
+        - allowEmptyValue: true
+          description: Page size.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Page size.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewaySessionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: listGatewaySessions gatewaySessions
+      tags:
+        - gatewaySessions
+      x-speakeasy-name-override: list
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: GatewaySessions
+  /rpc/gatewaySessions.listFacets:
+    get:
+      description: Complete configured member server and provider choices, independent of pagination and active filters.
+      operationId: listGatewaySessionFacets
+      parameters:
+        - allowEmptyValue: true
+          description: Project gateway id. Omit for the Organization Gateway; organization access is then required and the selected project is ignored.
+          in: query
+          name: gateway_id
+          schema:
+            description: Project gateway id. Omit for the Organization Gateway; organization access is then required and the selected project is ignored.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewaySessionFacets'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: listGatewaySessionFacets gatewaySessions
+      tags:
+        - gatewaySessions
+      x-speakeasy-name-override: listFacets
+      x-speakeasy-react-hook:
+        name: GatewaySessionFacets
+  /rpc/hiddenMcpServers.hide:
+    post:
+      description: Hide an MCP server for the signed-in user. Hiding a hidden server changes nothing.
+      operationId: hideMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HideMcpServerRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: hide hiddenMcpServers
+      tags:
+        - hiddenMcpServers
+      x-speakeasy-name-override: hide
+      x-speakeasy-react-hook:
+        name: HideMcpServer
+  /rpc/hiddenMcpServers.list:
+    get:
+      description: List the MCP servers the signed-in user hid in the active organization.
+      operationId: listHiddenMcpServers
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListHiddenMcpServersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: list hiddenMcpServers
+      tags:
+        - hiddenMcpServers
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: HiddenMcpServers
+  /rpc/hiddenMcpServers.unhide:
+    post:
+      description: Show a hidden MCP server again for the signed-in user. Unhiding a server that is not hidden changes nothing.
+      operationId: unhideMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnhideMcpServerRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: unhide hiddenMcpServers
+      tags:
+        - hiddenMcpServers
+      x-speakeasy-name-override: unhide
+      x-speakeasy-react-hook:
+        name: UnhideMcpServer
   /rpc/hooks.claude:
     post:
       tags:
@@ -33144,6 +34476,14 @@ paths:
           name: custom_domain_id
           schema:
             description: Optional custom domain ID. Omit to check platform-domain slug availability.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Optional MCP server the slug is for. Addresses that server may claim, such as its own legacy alias, read as available.
+          in: query
+          name: mcp_server_id
+          schema:
+            description: Optional MCP server the slug is for. Addresses that server may claim, such as its own legacy alias, read as available.
             format: uuid
             type: string
         - allowEmptyValue: true
@@ -41462,11 +42802,58 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
-          description: Pagination cursor.
+          description: Case-insensitive literal identity search.
+          in: query
+          name: search
+          schema:
+            description: Case-insensitive literal identity search.
+            maxLength: 200
+            type: string
+        - allowEmptyValue: true
+          description: Filter by effective upstream authorization status. Access expiry alone does not expire a refreshable account.
+          in: query
+          name: status
+          schema:
+            description: Filter by effective upstream authorization status. Access expiry alone does not expire a refreshable account.
+            enum:
+              - active
+              - expired
+              - all
+            type: string
+        - allowEmptyValue: true
+          description: Inclusive creation lower bound.
+          in: query
+          name: created_after
+          schema:
+            description: Inclusive creation lower bound.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Exclusive creation upper bound.
+          in: query
+          name: created_before
+          schema:
+            description: Exclusive creation upper bound.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Ordering. Authorization expiry is the earliest hard authorization deadline and usable refresh/access deadline. Omit to retain ID ordering and UUID cursors.
+          in: query
+          name: sort
+          schema:
+            description: Ordering. Authorization expiry is the earliest hard authorization deadline and usable refresh/access deadline. Omit to retain ID ordering and UUID cursors.
+            enum:
+              - newest
+              - oldest
+              - last_used
+              - expiry
+            type: string
+        - allowEmptyValue: true
+          description: Pagination cursor. Preserve the filters and ordering when following it.
           in: query
           name: cursor
           schema:
-            description: Pagination cursor.
+            description: Pagination cursor. Preserve the filters and ordering when following it.
             type: string
         - allowEmptyValue: true
           description: Page size (default 50, max 100).
@@ -54665,7 +56052,7 @@ paths:
         name: UpdateRemoteSessionIssuer
   /rpc/remoteSessions.attachBinding:
     post:
-      description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+      description: Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.
       operationId: attachBinding
       parameters:
         - allowEmptyValue: true
@@ -54757,6 +56144,100 @@ paths:
       tags:
         - remoteSessions
       x-speakeasy-name-override: attachBinding
+  /rpc/remoteSessions.beginBindingRefresh:
+    post:
+      description: Refresh an agent attachment through one exact browser OAuth attempt. Requires an ordinary human with agent write permission and ownership of the attached connection. The one-time attempt is bound to the caller, agent, issuer and original attachment; completion never selects a different sign-in.
+      operationId: beginBindingRefresh
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BeginBindingRefreshRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BindingRefreshAttempt'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: beginBindingRefresh remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: beginBindingRefresh
   /rpc/remoteSessions.commitServerIdentityConfiguration:
     post:
       description: Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.
@@ -54862,6 +56343,100 @@ paths:
       x-speakeasy-name-override: commitServerIdentityConfiguration
       x-speakeasy-react-hook:
         name: CommitServerIdentityConfiguration
+  /rpc/remoteSessions.completeBindingRefresh:
+    post:
+      description: Refresh an agent attachment through one exact browser OAuth attempt. Requires an ordinary human with agent write permission and ownership of the attached connection. The one-time attempt is bound to the caller, agent, issuer and original attachment; completion never selects a different sign-in.
+      operationId: completeBindingRefresh
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteBindingRefreshRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BindingRefreshResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: completeBindingRefresh remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: completeBindingRefresh
   /rpc/remoteSessions.count:
     get:
       description: 'Count the distinct people (user subjects) holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer, client and remote issuer are reachable from the caller''s project count; API-key and anonymous subjects do not. A client shared by several MCP servers counts people across all of them.'
@@ -54972,7 +56547,7 @@ paths:
         name: RemoteSessionsCount
   /rpc/remoteSessions.detachBinding:
     post:
-      description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+      description: Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.
       operationId: detachBinding
       parameters:
         - allowEmptyValue: true
@@ -55307,7 +56882,7 @@ paths:
         name: ServerIdentityImpact
   /rpc/remoteSessions.list:
     get:
-      description: List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
+      description: List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, authorization_expires_at, scopes).
       operationId: listRemoteSessions
       parameters:
         - allowEmptyValue: true
@@ -55460,7 +57035,7 @@ paths:
         name: RemoteSessions
   /rpc/remoteSessions.listBindings:
     get:
-      description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+      description: Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.
       operationId: listBindings
       parameters:
         - allowEmptyValue: true
@@ -64573,6 +66148,115 @@ paths:
       x-speakeasy-name-override: getShared
       x-speakeasy-react-hook:
         name: SharedSkill
+  /rpc/skills.link:
+    post:
+      description: Link a skill to exactly one MCP surface that serves it over MCP. Repeating the request for the same skill and target updates the version pin or is a no-op. Requires the skills-over-mcp rollout for the organization.
+      operationId: linkSkill
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              id: 550e8400-e29b-41d4-a716-446655440000
+              mcp_server_id: 550e8400-e29b-41d4-a716-446655440001
+              target_kind: mcp_server
+            schema:
+              $ref: '#/components/schemas/LinkSkillRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillLink'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: link skills
+      tags:
+        - skills
+      x-speakeasy-name-override: link
+      x-speakeasy-react-hook:
+        name: LinkSkill
   /rpc/skills.list:
     get:
       description: List active skills in the project. The implementation requires the skills product feature and skill read scope.
@@ -65035,6 +66719,166 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: SkillFeedback
+  /rpc/skills.listLinks:
+    get:
+      description: List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills-over-mcp rollout for the organization.
+      operationId: listSkillLinks
+      parameters:
+        - allowEmptyValue: true
+          description: Only return links of this skill.
+          in: query
+          name: skill_id
+          schema:
+            description: Only return links of this skill.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Only return links to this MCP server.
+          in: query
+          name: mcp_server_id
+          schema:
+            description: Only return links to this MCP server.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Only return links to this gateway.
+          in: query
+          name: meta_mcp_server_id
+          schema:
+            description: Only return links to this gateway.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Only return links to this kind of MCP surface.
+          in: query
+          name: target_kind
+          schema:
+            description: Only return links to this kind of MCP surface.
+            enum:
+              - mcp_server
+              - meta_mcp_server
+              - organization_gateway
+            type: string
+        - allowEmptyValue: true
+          description: Cursor for the next page of skill links.
+          in: query
+          name: cursor
+          schema:
+            description: Cursor for the next page of skill links.
+            type: string
+        - allowEmptyValue: true
+          description: The number of skill links to return per page.
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: The number of skill links to return per page.
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSkillLinksResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listLinks skills
+      tags:
+        - skills
+      x-speakeasy-name-override: listLinks
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: SkillLinks
   /rpc/skills.listSuggestionFeedback:
     get:
       description: List the agent feedback cited as the reason for one proposed change, newest first.
@@ -66061,6 +67905,109 @@ paths:
       x-speakeasy-name-override: undistribute
       x-speakeasy-react-hook:
         name: UndistributeSkill
+  /rpc/skills.unlink:
+    post:
+      description: Remove a skill link so its MCP surface stops serving the skill through it. Removing a link that is already gone is a no-op. Requires the skills-over-mcp rollout for the organization.
+      operationId: unlinkSkill
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              link_id: 550e8400-e29b-41d4-a716-446655440000
+            schema:
+              $ref: '#/components/schemas/UnlinkSkillRequestBody'
+        required: true
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: unlink skills
+      tags:
+        - skills
+      x-speakeasy-name-override: unlink
+      x-speakeasy-react-hook:
+        name: UnlinkSkill
   /rpc/skills.unshare:
     post:
       description: Revoke a skill's active public share link. Repeated requests are a no-op.
@@ -72928,119 +74875,6 @@ paths:
       x-speakeasy-name-override: addExternalOAuthServer
       x-speakeasy-react-hook:
         name: AddExternalOAuthServer
-  /rpc/toolsets.checkMCPSlugAvailability:
-    get:
-      deprecated: true
-      description: |-
-        Check if a MCP slug is taken in any scope (true means taken).
-
-        Deprecated: use mcpEndpoints.checkSlugAvailability instead, which is scoped to one domain and returns true when available.
-      operationId: checkMCPSlugAvailability
-      parameters:
-        - allowEmptyValue: true
-          description: The slug to check
-          in: query
-          name: slug
-          required: true
-          schema:
-            description: A short url-friendly label that uniquely identifies a resource.
-            maxLength: 40
-            pattern: ^[a-z0-9_-]{1,128}$
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                type: boolean
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - {}
-      summary: checkMCPSlugAvailability toolsets
-      tags:
-        - toolsets
-      x-speakeasy-name-override: checkMCPSlugAvailability
-      x-speakeasy-react-hook:
-        name: CheckMCPSlugAvailability
   /rpc/toolsets.clone:
     post:
       description: Clone an existing toolset with a new name
@@ -74099,7 +75933,7 @@ paths:
       description: |-
         Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
 
-        Deprecated: use mcpServers.update instead.
+        Deprecated: use mcpServers.update with user_session_issuer_id, or clear_user_session_issuer to unlink. This endpoint will be removed on 2026-11-25.
       operationId: setToolsetUserSessionIssuer
       parameters:
         - allowEmptyValue: true
@@ -82568,7 +84402,7 @@ paths:
         name: RegisterWorkloadIssuer
   /rpc/workloadIdentities.updateIssuer:
     post:
-      description: Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+      description: Edit a trusted issuer's name, description, tags, JWKS URI, or assertion reuse setting. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
       operationId: updateWorkloadIssuer
       parameters:
         - allowEmptyValue: true
@@ -84432,6 +86266,9 @@ components:
           type: string
           description: Link to the server's page in the Speakeasy dashboard. Present only when the enrolled user holds mcp:read on the server; the agent tells the user that links need that scope when it is absent.
           format: uri
+        id:
+          type: string
+          description: Stable identifier of the server, the same in every plugin that contains it. Matches the id getMyConnections reports the server's sign-in state under. Absent from servers predating the field.
         name:
           type: string
           description: Display name of the server within its plugin.
@@ -84464,6 +86301,21 @@ components:
         - selector
         - created_at
         - updated_at
+    AgentPolicyGrantCheck:
+      type: object
+      properties:
+        allowed:
+          type: boolean
+          description: Whether the grant fits within the caller's and the owner's permissions.
+        limited_by:
+          type: string
+          description: Whose permissions the grant exceeds; absent when allowed.
+          enum:
+            - caller
+            - owner
+      description: Whether one policy grant could be written, by the same rule agents.create and agents.createPolicyGrant enforce.
+      required:
+        - allowed
     AgentPolicyGrantForm:
       type: object
       properties:
@@ -84557,6 +86409,37 @@ components:
       required:
         - urn
         - display_name
+    AgentServerConnection:
+      type: object
+      properties:
+        connect_url:
+          type: string
+          description: Page that signs the user in to this server in the browser. Present when state is not_connected or reauthorization_required.
+          format: uri
+        hidden:
+          type: boolean
+          description: True when the user hid this server, from the gateway consent page or the device agent. Absent when not hidden.
+        id:
+          type: string
+          description: The server's id, as getPlugins reports it on each plugin server.
+        request_access_url:
+          type: string
+          description: Page where the user can ask an administrator for access to this server. Present only when state is no_access and the organization accepts access requests.
+          format: uri
+        state:
+          type: string
+          description: '`connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server''s sign-in setup first. `no_access`: the user lacks permission to connect to the server. `unknown`: the state can''t be determined, for example for a gateway.'
+          enum:
+            - connected
+            - not_connected
+            - reauthorization_required
+            - not_required
+            - setup_required
+            - no_access
+            - unknown
+      required:
+        - id
+        - state
     AgentSession:
       type: object
       properties:
@@ -84615,6 +86498,159 @@ components:
         - session_id
         - chat_id
         - updated_at
+    AgentStatePolicy:
+      type: object
+      properties:
+        applied_at:
+          type: string
+          description: When the agent first applied this etag. Later reconciles of the same etag keep this time.
+          format: date-time
+        applied_etag:
+          type: string
+          description: Etag of the getPlugins snapshot the last reconcile applied. Omitted before the agent has applied one.
+          maxLength: 128
+        remote_config_etag:
+          type: string
+          description: Etag of the remote configuration the agent applied.
+          maxLength: 128
+        remote_config_failed:
+          type: boolean
+          description: True when the agent could not apply the remote configuration it last received and kept its previous settings.
+        withheld_plugins:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentStateWithheldPlugin'
+          description: Optional plugins the agent left out of the applied set because of a user choice. Required plugins are never withheld.
+          maxItems: 500
+      description: The policy the agent's last reconcile applied.
+      required:
+        - withheld_plugins
+    AgentStateRollback:
+      type: object
+      properties:
+        at:
+          type: string
+          description: When the rollback happened.
+          format: date-time
+        from:
+          type: string
+          description: Version that failed to stabilize.
+          maxLength: 64
+        to:
+          type: string
+          description: Version the daemon reverted to.
+          maxLength: 64
+      description: 'A self-rollback: the daemon reverted an update that did not stabilize.'
+      required:
+        - at
+    AgentStateTool:
+      type: object
+      properties:
+        action_required:
+          type: boolean
+          description: True when a problem the user can fix is blocking this tool.
+        drift_corrections:
+          type: integer
+          description: Times since drift_counting_since the agent rewrote what it owns in this tool although the applied policy had not changed. Omitted when this tool's syncer does not measure drift.
+          format: int64
+          minimum: 0
+          maximum: 2.147483647e+09
+        error_kind:
+          type: string
+          description: 'Class of a reconcile error: permission_denied, not_found, invalid_config, or unknown.'
+          maxLength: 32
+        layer:
+          type: string
+          description: 'Resolved enforcement layer: user, managed, or off.'
+          maxLength: 16
+        outcome:
+          type: string
+          description: 'Reconcile outcome: armed, pending, skipped (tool not installed), error, or unmanaged.'
+          maxLength: 16
+        pending_reason:
+          type: string
+          description: 'Why a pending tool is not yet enforcing: privileged_writer_not_ready or plugin_bundle_not_cloned.'
+          maxLength: 64
+        restart_required:
+          type: boolean
+          description: True when the agent wrote configuration the tool loads only after it restarts.
+        tool:
+          type: string
+          description: Stable tool id, e.g. claude_code.
+          minLength: 1
+          maxLength: 64
+      description: 'One managed tool''s outcome from the agent''s last reconcile. Carries no error text or user-facing message: those can name paths and entries the agent does not own.'
+      required:
+        - tool
+        - layer
+        - outcome
+    AgentStateUpdate:
+      type: object
+      properties:
+        auto_update:
+          type: string
+          description: 'Auto-update mode: disabled, notify, or automatic.'
+          maxLength: 16
+        channel:
+          type: string
+          description: Release channel the agent resolved to.
+          maxLength: 32
+        current_blocked:
+          type: boolean
+          description: True when the running build is in blocked_versions.
+        last_rollback:
+          $ref: '#/components/schemas/AgentStateRollback'
+        pinned_target:
+          type: string
+          description: Version the organization pinned the fleet to, when set.
+          maxLength: 64
+      description: The device agent's update posture.
+    AgentStateVersions:
+      type: object
+      properties:
+        arch:
+          type: string
+          description: CPU architecture (Go GOARCH), e.g. arm64.
+          maxLength: 32
+        os:
+          type: string
+          description: Operating system (Go GOOS), e.g. darwin.
+          maxLength: 32
+        speakeasy:
+          type: string
+          description: Version of the speakeasy CLI, when the agent could read it.
+          maxLength: 64
+        speakeasy_ui:
+          type: string
+          description: Version of the menu bar app, when the agent could read it.
+          maxLength: 64
+        speakeasyd:
+          type: string
+          description: Version of the speakeasyd daemon.
+          maxLength: 64
+      description: Versions of the device agent's binaries and the platform they run on.
+      required:
+        - speakeasyd
+    AgentStateWithheldPlugin:
+      type: object
+      properties:
+        marketplace:
+          type: string
+          description: Marketplace the plugin belongs to.
+          maxLength: 128
+        reason:
+          type: string
+          description: 'Why it was withheld: user_disabled for a default-on plugin the user turned off, not_opted_in for an opt-in plugin the user has not turned on.'
+          maxLength: 32
+        slug:
+          type: string
+          description: The plugin's slug.
+          minLength: 1
+          maxLength: 128
+      description: One optional plugin the agent left out of the applied set.
+      required:
+        - slug
+        - reason
     AgentUsage:
       type: object
       properties:
@@ -85988,6 +88024,20 @@ components:
           description: The toolset slug exposed to the assistant.
       required:
         - toolset_slug
+    AttachAuthClientToMcpServerRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The auth client id.
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: The MCP server id.
+          format: uuid
+      required:
+        - id
+        - mcp_server_id
     AttachBindingRequestBody:
       type: object
       properties:
@@ -86299,6 +88349,33 @@ components:
         - is_required
         - is_secret
         - has_stored_value
+    AuthClientHeaderInput:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What the header is for.
+        is_required:
+          type: boolean
+          description: Whether a caller must supply the header when it is copied from the request.
+          default: false
+        is_secret:
+          type: boolean
+          description: Whether the value is secret. Secret values are stored encrypted and never returned.
+          default: false
+        name:
+          type: string
+          description: The header name.
+          minLength: 1
+        value:
+          type: string
+          description: The value to send. Omit it on a header that already stores one, with is_secret unchanged, to keep the stored value.
+        value_from_request_header:
+          type: string
+          description: The caller's request header to copy the value from, for pass-through headers.
+      description: A header an auth client sends upstream. Exactly one of value and value_from_request_header is set, except that a header already storing a value may omit both to keep it, as long as is_secret is unchanged.
+      required:
+        - name
     AuthClientServer:
       type: object
       properties:
@@ -86572,6 +88649,22 @@ components:
         - name
         - created_at
         - updated_at
+    BeginBindingRefreshRequestBody:
+      type: object
+      properties:
+        binding_id:
+          type: string
+          format: uuid
+        principal_id:
+          type: string
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          format: uuid
+      required:
+        - principal_id
+        - user_session_issuer_id
+        - binding_id
     BeginResponseBody:
       type: object
       properties:
@@ -86595,6 +88688,24 @@ components:
           description: The configured billing notification email. Omitted when organization administrators receive billing notifications.
           format: email
           nullable: true
+    BindingRefreshAttempt:
+      type: object
+      properties:
+        attempt_id:
+          type: string
+          format: uuid
+      required:
+        - attempt_id
+    BindingRefreshResult:
+      type: object
+      properties:
+        binding:
+          $ref: '#/components/schemas/PrincipalRemoteSessionBinding'
+        completed:
+          type: boolean
+          description: Whether this popup committed an exact grant and replaced the attachment. False means no matching callback completed; the attempt is consumed without changing the attachment.
+      required:
+        - completed
     BlockAgentOnConnectionForm:
       type: object
       properties:
@@ -87649,6 +89760,35 @@ components:
         - tool_calls
         - tool_results
         - risk_only
+    CheckAgentPolicyGrantsForm:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The agent the grants would be written to. Omit for an agent the caller would create.
+          format: uuid
+        owner_user_id:
+          type: string
+          description: Owner of the agent the caller would create, as agents.create takes it; defaults to the caller. Not allowed with agent_id, whose owner is its own.
+        policy_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPolicyGrantForm'
+          description: The grants to check, answered in the same order.
+          minItems: 1
+          maxItems: 100
+      required:
+        - policy_grants
+    CheckAgentPolicyGrantsResult:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPolicyGrantCheck'
+          description: One answer per requested grant, in request order.
+      required:
+        - results
     CimdClientPreset:
       type: object
       properties:
@@ -88041,6 +90181,22 @@ components:
       description: The outcome of committing a Remote MCP server user-identity plan. registered and linked are successful local commits. A registration failure is returned in failure. manual_setup_required is a preparation signal, not a registration outcome, and means auto mode found neither usable CIMD nor DCR support; no local state changed.
       required:
         - manual_setup_required
+    CompleteBindingRefreshRequestBody:
+      type: object
+      properties:
+        attempt_id:
+          type: string
+          format: uuid
+        principal_id:
+          type: string
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          format: uuid
+      required:
+        - principal_id
+        - user_session_issuer_id
+        - attempt_id
     ConfirmOktaResourceConnectionsRequestBody:
       type: object
       properties:
@@ -88157,6 +90313,43 @@ components:
         - model
         - instructions
         - toolsets
+    CreateAuthClientRequestBody:
+      type: object
+      properties:
+        client_type:
+          type: string
+          description: How the client authenticates upstream.
+          enum:
+            - remote_session
+            - service_account
+            - static_credential
+            - pass_through
+        headers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthClientHeaderInput'
+          description: The headers the client sends upstream. Required for static_credential and pass_through clients. Token-generating clients produce their own Authorization header, which cannot be configured.
+        mcp_server_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: MCP servers that should offer the client.
+        name:
+          type: string
+          description: The client's name.
+          minLength: 1
+        project_id:
+          type: string
+          description: Confine the client to one project. Omit to share it across the organization's projects.
+          format: uuid
+        remote_session_client_id:
+          type: string
+          description: The OAuth registration behind a remote_session or service_account client.
+          format: uuid
+      required:
+        - client_type
+        - name
     CreateAwsIamCredentialForm:
       type: object
       properties:
@@ -90978,11 +93171,11 @@ components:
           format: int64
         agent_active:
           type: integer
-          description: Devices with an agent heartbeat within the window. What that attests depends on the matching mode and, per device, on whether the match was by serial or by email — compare against agent_active_device_attested.
+          description: Devices with an agent heartbeat or state report within the window. What that attests depends on the matching mode and, per device, on whether the match was by serial or by email — compare against agent_active_device_attested.
           format: int64
         agent_active_device_attested:
           type: integer
-          description: How many of agent_active are backed by that machine's OWN heartbeat (serial match). Under user-level matching this is 0; under device-level matching a value below agent_active means some devices fell back to the assigned-user email, which is the weaker claim.
+          description: How many of agent_active are backed by that machine's OWN heartbeat or state report (serial match). Under user-level matching this is 0; under device-level matching a value below agent_active means some devices fell back to the assigned-user email, which is the weaker claim.
           format: int64
         agent_other_device:
           type: integer
@@ -90998,6 +93191,10 @@ components:
           enum:
             - device
             - user
+        enforcement_halted:
+          type: integer
+          description: agent_active devices whose latest state report says the kill switch halted enforcement, because the reporting agent's build was blocked when it reported.
+          format: int64
         missing:
           type: integer
           description: Devices absent from the latest completed MDM snapshot.
@@ -91013,6 +93210,18 @@ components:
         organization_id:
           type: string
           description: Organization the coverage describes.
+        policy_attested:
+          type: integer
+          description: agent_active devices whose latest report applies the policy last served to the reporting user.
+          format: int64
+        policy_outdated:
+          type: integer
+          description: agent_active devices that report a different policy, or none.
+          format: int64
+        policy_unreported:
+          type: integer
+          description: agent_active devices with no state report within the window, typically an agent that predates reporting.
+          format: int64
         total_devices:
           type: integer
           description: All synced devices, including missing ones.
@@ -91040,6 +93249,10 @@ components:
         - missing
         - total_devices
         - unmanaged_agent_users
+        - policy_attested
+        - policy_outdated
+        - policy_unreported
+        - enforcement_halted
     DeviceIntegrationProvider:
       type: object
       properties:
@@ -92823,6 +95036,15 @@ components:
     ExternalMCPServerEntry:
       type: object
       properties:
+        auth_setup:
+          type: string
+          description: Advertised authentication setup; unknown means evidence is insufficient, not that manual setup is required.
+          enum:
+            - none
+            - dcr
+            - cimd
+            - manual
+            - unknown
         description:
           type: string
           description: Description of what the server does
@@ -92859,9 +95081,12 @@ components:
           description: Available remote endpoints for the server
         repository:
           $ref: '#/components/schemas/ExternalMCPRepository'
+        supports_cimd:
+          type: boolean
+          description: Whether issuer metadata advertises compatible Client ID Metadata Document support.
         supports_dcr:
           type: boolean
-          description: Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). When false, connecting requires manual setup (static OAuth client credentials or API keys).
+          description: Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). False alone does not establish that manual setup is required.
         title:
           type: string
           description: Display name for the server
@@ -93278,6 +95503,41 @@ components:
         - tool_urn
         - created_at
         - updated_at
+    GatewaySessionFacet:
+      type: object
+      properties:
+        label:
+          type: string
+        value:
+          type: string
+      required:
+        - value
+        - label
+    GatewaySessionFacets:
+      type: object
+      properties:
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatewaySessionFacet'
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatewaySessionFacet'
+      required:
+        - servers
+        - providers
+    GatewaySessionsResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSession'
+        next_cursor:
+          type: string
+      required:
+        - items
     GcpIamCredential:
       type: object
       properties:
@@ -94026,6 +96286,16 @@ components:
       description: Result of metrics summary query
       required:
         - metrics
+    GetMyConnectionsResult:
+      type: object
+      properties:
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentServerConnection'
+          description: One entry per distinct MCP server in the plugins delivered to the user, in plugin order. Servers the user can neither read nor connect to are omitted; a server the user can read but not connect to is reported as no_access.
+      required:
+        - servers
     GetObservabilityOverviewPayload:
       type: object
       properties:
@@ -94308,11 +96578,51 @@ components:
     GetToolUsageFilterOptionsPayload:
       type: object
       properties:
+        account_type:
+          type: string
+          description: Optional account type filter ('team' or 'personal').
+        agent_ids:
+          type: array
+          items:
+            type: string
+          description: Agent identities to narrow by. Not applied to the agent user options.
+        client_keys:
+          type: array
+          items:
+            type: string
+          description: MCP client keys to narrow by. Not applied to the client options.
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogFilter'
+          description: Arbitrary attribute filter conditions from the af URL param
         from:
           type: string
           description: Start time in ISO 8601 format
           example: "2025-12-19T10:00:00Z"
           format: date-time
+        hook_sources:
+          type: array
+          items:
+            type: string
+          description: Hook plugin sources to narrow by.
+        hosted_toolset_slugs:
+          type: array
+          items:
+            type: string
+          description: 'Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to narrow by. Not applied to the server options.'
+        mcp_server_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: MCP server ids to narrow by. Not applied to the server options.
+          maxItems: 100
+        meta_mcp_server_ids:
+          type: array
+          items:
+            type: string
+          description: Gateway (meta MCP server) ids to narrow by. Not applied to the server options.
         option_types:
           type: array
           items:
@@ -94325,11 +96635,48 @@ components:
               - users
               - clients
           description: Filter option types to include. Empty means all option types.
+        query:
+          type: string
+          description: Free-text attribute search string from the q URL param.
+        shadow_server_names:
+          type: array
+          items:
+            type: string
+          description: Shadow MCP server names to narrow by. Not applied to the server options.
+        statuses:
+          type: array
+          items:
+            type: string
+            description: Tool usage trace outcome
+            enum:
+              - error
+              - success
+              - blocked
+              - pending
+          description: Trace outcomes to narrow by. Empty means all.
+        target_types:
+          type: array
+          items:
+            type: string
+            description: Tool usage target type
+            enum:
+              - hosted_mcp_server
+              - tunneled_mcp_server
+              - meta_mcp_server
+              - shadow_mcp_server
+              - local_tool
+              - skill
+          description: Target types to include. Empty means all target types.
         to:
           type: string
           description: End time in ISO 8601 format
           example: "2025-12-19T11:00:00Z"
           format: date-time
+        user_filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsageUserFilter'
+          description: Typed user identities to narrow by. Not applied to the email user options.
       description: Payload for target-aware MCP and tool usage filter options
       required:
         - from
@@ -94835,9 +97182,158 @@ components:
         - tool_urn
         - created_at
         - updated_at
+    HiddenMcpServer:
+      type: object
+      properties:
+        hidden_at:
+          type: string
+          description: When the user hid the server.
+          format: date-time
+        mcp_server_id:
+          type: string
+          description: The hidden MCP server.
+          format: uuid
+        name:
+          type: string
+          description: The server's display name, when it has one.
+        project_id:
+          type: string
+          description: The server's project.
+          format: uuid
+        project_slug:
+          type: string
+          description: The server's project slug.
+        slug:
+          type: string
+          description: The server's slug, when it has one.
+      description: An MCP server the signed-in user hid.
+      required:
+        - mcp_server_id
+        - project_id
+        - project_slug
+        - hidden_at
+    HideAgentMcpServerRequestBody:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The MCP server, as getMyConnections reports it.
+          format: uuid
+      required:
+        - mcp_server_id
+    HideMcpServerRequestBody:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The MCP server.
+          format: uuid
+      required:
+        - mcp_server_id
+    HookDeliveryFailureData:
+      type: object
+      properties:
+        arch:
+          type: string
+          description: CPU architecture of the device.
+          maxLength: 32
+        attempted_at:
+          type: string
+          description: RFC3339 time the failed send started, on the device clock.
+          format: date-time
+        attempts:
+          type: integer
+          description: Number of send attempts the client made.
+          format: int64
+        binary_version:
+          type: string
+          description: speakeasy-hooks binary version that made the attempt.
+          maxLength: 64
+        cause:
+          type: string
+          description: Failure class the hook sender observed. http means the control plane answered with a retryable status.
+          enum:
+            - dns
+            - tls
+            - timeout
+            - canceled
+            - connection
+            - unreadable-response
+            - unknown
+            - http
+        delivery_phase:
+          type: string
+          description: Whether a failed send was a live hook or a spool-drain replay.
+          enum:
+            - live
+            - drain
+        elapsed_ms:
+          type: integer
+          description: Wall time the client spent on the send across its attempts, in milliseconds.
+          format: int64
+        failed_event_type:
+          type: string
+          description: Canonical type of the event whose delivery failed. Bounded to the hook activity event vocabulary because it is a metric dimension; a report never describes another report.
+          enum:
+            - session.started
+            - session.updated
+            - session.ended
+            - mcp.inventory
+            - prompt.submitted
+            - tool.requested
+            - tool.completed
+            - tool.failed
+            - assistant.responded
+            - assistant.thought
+            - usage.reported
+            - skill.activated
+            - notification.reported
+        failed_idempotency_key:
+          type: string
+          description: Idempotency key of the event that failed, so the report joins to the row its eventual replay produces.
+          maxLength: 256
+        gating:
+          type: boolean
+          description: Whether the send gated an agent action (a verdict was awaited) rather than observing one.
+        harness:
+          type: string
+          description: Coding agent harness the hook ran under.
+          maxLength: 64
+        harness_variant:
+          type: string
+          description: Harness variant, when the harness distinguishes one.
+          maxLength: 64
+        harness_version:
+          type: string
+          description: Harness version, when known.
+          maxLength: 64
+        os:
+          type: string
+          description: Operating system of the device.
+          maxLength: 32
+        session_id:
+          type: string
+          description: Session id of the event that failed.
+          maxLength: 256
+        spool_depth:
+          type: integer
+          description: Events waiting in the device's offline spool when the report was written.
+          format: int64
+        status_code:
+          type: integer
+          description: HTTP status of the final attempt, 0 when no response arrived.
+          format: int64
+      description: Device-side delivery failure report, sent with event type client.delivery_failed and a required Idempotency-Key so each failure counts once. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.
+      required:
+        - failed_event_type
+        - delivery_phase
+        - cause
+        - attempted_at
     HookIngestData:
       type: object
       properties:
+        delivery_failure:
+          $ref: '#/components/schemas/HookDeliveryFailureData'
         mcp:
           $ref: '#/components/schemas/HookMCPData'
         mcp_attribution:
@@ -94895,6 +97391,7 @@ components:
             - usage.reported
             - skill.activated
             - notification.reported
+            - client.delivery_failed
       description: Canonical Speakeasy feature event.
       required:
         - type
@@ -96824,6 +99321,39 @@ components:
       description: Probability distributions over the supplied candidates and verbs.
       required:
         - disabled
+    LinkSkillRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The skill ID.
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: The MCP server that serves the skill. Required when target_kind is mcp_server.
+          format: uuid
+        meta_mcp_server_id:
+          type: string
+          description: The gateway that serves the skill. Required when target_kind is meta_mcp_server.
+          format: uuid
+        pinned_version_id:
+          type: string
+          description: An optional valid version to pin instead of serving the latest valid version.
+          format: uuid
+        target_kind:
+          type: string
+          description: The kind of MCP surface that serves the skill.
+          enum:
+            - mcp_server
+            - meta_mcp_server
+            - organization_gateway
+      example:
+        id: 550e8400-e29b-41d4-a716-446655440000
+        mcp_server_id: 550e8400-e29b-41d4-a716-446655440001
+        target_kind: mcp_server
+      required:
+        - id
+        - target_kind
     ListAIDetectionUsersResult:
       type: object
       properties:
@@ -97528,6 +100058,16 @@ components:
       description: Result type for the platform-administrator global issuer listing.
       required:
         - items
+    ListHiddenMcpServersResult:
+      type: object
+      properties:
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/HiddenMcpServer'
+          description: Hidden servers, oldest first.
+      required:
+        - servers
     ListHooksTracesPayload:
       type: object
       properties:
@@ -98541,6 +101081,20 @@ components:
         - metrics
         - timeline
         - feedback
+    ListSkillLinksResult:
+      type: object
+      properties:
+        links:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillLink'
+          description: The live skill links in this page.
+        next_cursor:
+          type: string
+          description: Cursor for the next page; absent when exhausted.
+      description: A page of live skill links for the current project.
+      required:
+        - links
     ListSkillSuggestionFeedbackResult:
       type: object
       properties:
@@ -99379,6 +101933,9 @@ components:
     ManagedAgent:
       type: object
       properties:
+        connection_needs_refresh:
+          type: boolean
+          description: An assigned connection has expired or is no longer available; an authorized editor must reconnect their own account and assign it again
         created_at:
           type: string
           format: date-time
@@ -99426,8 +101983,10 @@ components:
       properties:
         agent_last_seen_at:
           type: string
-          description: 'The device-agent heartbeat that classified this device: the machine''s own under device-level matching, otherwise its assigned user''s. Omitted when no agent has ever synced.'
+          description: 'The latest sign of life that classified this device, a policy poll or a state report: the machine''s own under device-level matching, otherwise its assigned user''s. Omitted when no agent has ever synced.'
           format: date-time
+        agent_state:
+          $ref: '#/components/schemas/ManagedDeviceAgentState'
         coverage_bucket:
           type: string
           description: Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.
@@ -99468,6 +102027,14 @@ components:
         os_version:
           type: string
           description: Operating system version.
+        policy_state:
+          type: string
+          description: 'Whether the agent that answers for an agent_active device verifiably applies its policy; agent_state.attestation says whether that agent runs on this machine. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different policy, or none. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the reporting agent''s kill switch stopped enforcement on a blocked build. Omitted for every other bucket.'
+          enum:
+            - attested
+            - outdated
+            - unreported
+            - halted
         provider:
           type: string
           description: Provider the device was synced from.
@@ -99488,6 +102055,125 @@ components:
         - coverage_bucket
         - first_seen_at
         - last_seen_at
+    ManagedDeviceAgentState:
+      type: object
+      properties:
+        applied_at:
+          type: string
+          description: When the agent first applied that etag.
+          format: date-time
+        applied_etag:
+          type: string
+          description: Etag of the policy the agent last applied.
+        arch:
+          type: string
+          description: CPU architecture, e.g. arm64.
+        attestation:
+          type: string
+          description: device when this machine's own agent sent the report, matched by serial. user when the assigned user's agent sent it, which may run on another machine.
+          enum:
+            - device
+            - user
+        auto_update:
+          type: string
+          description: 'Resolved update mode: automatic, notify, or disabled.'
+        current_blocked:
+          type: boolean
+          description: True when the agent build is in blocked_versions.
+        drift_counting_since:
+          type: string
+          description: Start of the window tools[].drift_corrections counts over. Omitted when no tool measures drift.
+          format: date-time
+        enforcement_halted:
+          type: boolean
+          description: True when the kill switch has halted policy enforcement.
+        last_rollback:
+          $ref: '#/components/schemas/ManagedDeviceRollback'
+        os:
+          type: string
+          description: Operating system, e.g. darwin.
+        pinned_target:
+          type: string
+          description: Version the organization pinned the fleet to, when set.
+        reported_at:
+          type: string
+          description: When the control plane received the report.
+          format: date-time
+        speakeasy_ui_version:
+          type: string
+          description: Version of the menu bar app.
+        speakeasy_version:
+          type: string
+          description: Version of the speakeasy CLI.
+        speakeasyd_version:
+          type: string
+          description: Version of the speakeasyd daemon.
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagedDeviceTool'
+          description: Each managed tool's outcome from the agent's last reconcile.
+        update_channel:
+          type: string
+          description: Update channel the agent follows, e.g. stable.
+      description: What a device's agent last reported it enforces. Carries no error text or user-facing message.
+      required:
+        - reported_at
+        - attestation
+        - enforcement_halted
+        - current_blocked
+        - tools
+    ManagedDeviceRollback:
+      type: object
+      properties:
+        at:
+          type: string
+          description: When the rollback happened.
+          format: date-time
+        from:
+          type: string
+          description: Version the agent rolled back from.
+        to:
+          type: string
+          description: Version the agent rolled back to.
+      description: 'A self-rollback: the updated build failed to start, so the agent restored the previous one.'
+      required:
+        - at
+    ManagedDeviceTool:
+      type: object
+      properties:
+        action_required:
+          type: boolean
+          description: True when a problem the user can fix is blocking this tool.
+        drift_corrections:
+          type: integer
+          description: Times the agent restored what it owns in this tool since drift_counting_since. Omitted when not measured.
+          format: int64
+        error_kind:
+          type: string
+          description: 'Class of a reconcile error: permission_denied, not_found, invalid_config, or unknown.'
+        layer:
+          type: string
+          description: 'Enforcement layer: user, managed, off, or unknown.'
+        outcome:
+          type: string
+          description: 'Reconcile outcome: armed, pending, skipped (tool not installed), error, unmanaged, or unknown.'
+        pending_reason:
+          type: string
+          description: 'Why a pending tool is not enforcing yet: privileged_writer_not_ready, plugin_bundle_not_cloned, or unknown.'
+        restart_required:
+          type: boolean
+          description: True when the tool loads the agent's changes only after it restarts.
+        tool:
+          type: string
+          description: Stable tool id, e.g. claude_code.
+      description: One managed tool's enforcement state on a device.
+      required:
+        - tool
+        - layer
+        - outcome
+        - restart_required
+        - action_required
     MarkRiskResultsFalsePositiveRequestBody:
       type: object
       properties:
@@ -99793,6 +102479,9 @@ components:
           type: string
           description: The ID of the MCP server
           format: uuid
+        legacy_platform_slug:
+          type: string
+          description: 'The slug of an older Speakeasy-hosted address of this hosted server: its legacy custom-domain address, which the Speakeasy domain also answers under the same access rules. Absent when a platform endpoint or another alias holds that slug.'
         name:
           type: string
           description: A human-readable display name for the server
@@ -100066,6 +102755,9 @@ components:
     MetaMcpServer:
       type: object
       properties:
+        code_mode_enabled:
+          type: boolean
+          description: Whether this gateway can select Code Mode. True only when the code runtime is available, the organization has Code Mode, and the gateway requires sign-in through a user session issuer.
         created_at:
           type: string
           description: When the meta MCP server was created
@@ -100076,6 +102768,7 @@ components:
           enum:
             - progressive
             - direct
+            - code_mode
         id:
           type: string
           description: The ID of the meta MCP server
@@ -100398,6 +103091,7 @@ components:
           enum:
             - progressive
             - direct
+            - code_mode
         mcp_server_id:
           type: string
           description: Bind the JWT to this MCP server's user_session_issuer audience (any issuer-gated backend, hosted servers included). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
@@ -102825,6 +105519,10 @@ components:
           type: string
           description: The distribution ID.
           format: uuid
+        last_loaded_over_mcp_at:
+          type: string
+          description: When an agent last loaded the skill over MCP from a Speakeasy-hosted server, absent when it never has. Loads are counted per skill, not per distribution.
+          format: date-time
         pinned_version_id:
           type: string
           description: The pinned version, absent when tracking the latest valid version.
@@ -103082,6 +105780,9 @@ components:
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
+        code_mode_enabled:
+          type: boolean
+          description: Whether the organization has the staff-managed gateway Code Mode entitlement
         custom_model_keys_enabled:
           type: boolean
           description: Whether the organization can supply its own model provider API keys (BYOK)
@@ -103160,6 +105861,7 @@ components:
         - network_ingress_enabled
         - signals_intelligence_enabled
         - organization_gateway_disabled
+        - code_mode_enabled
         - device_agent
     Project:
       type: object
@@ -104247,6 +106949,9 @@ components:
     RegisterWorkloadIssuerForm:
       type: object
       properties:
+        allow_assertion_reuse:
+          type: boolean
+          description: Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Defaults to false. Tokens without replay identifiers retain existing exact-token compatibility.
         allow_wildcard_admission:
           type: boolean
           description: Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Checked when a wildcard rule is admitted and again on every lookup, so clearing it makes wildcard rules already written inert immediately.
@@ -104493,6 +107198,10 @@ components:
           type: string
           description: Upstream access-token expiry. Independent of refresh_expires_at.
           format: date-time
+        authorization_expires_at:
+          type: string
+          description: Upstream authorization deadline. When present, the connection cannot be used or refreshed after this time even if its tokens have later expiries.
+          format: date-time
         created_at:
           type: string
           format: date-time
@@ -104506,6 +107215,10 @@ components:
         identity_source:
           type: string
           description: The upstream identity interface that supplied the stored account identity, such as an ID token or userinfo response. Absent when upstream identity is unknown.
+        last_used_at:
+          type: string
+          description: Last recorded upstream request, accurate to within five minutes. Null means unknown.
+          format: date-time
         refresh_expires_at:
           type: string
           description: Upstream refresh-token expiry. Null when the session has no refresh token.
@@ -104584,6 +107297,9 @@ components:
           enum:
             - subject
             - self
+        display_name:
+          type: string
+          description: Administrator-chosen name for the client. Null when unset, in which case the client is shown by its client_id.
         federated_callback_url:
           type: string
           description: The redirect URI to register in the customer identity provider's app when this client is a user session issuer's trusted sign-in client. Present only on organization-owned clients outside any project and not managed by an identity provider connection, the only clients a user session issuer can trust.
@@ -105150,6 +107866,62 @@ components:
       required:
         - session_id
         - target_harness
+    ReportStateRequestBody:
+      type: object
+      properties:
+        agent:
+          $ref: '#/components/schemas/AgentStateVersions'
+        drift_counting_since:
+          type: string
+          description: Start of the window tools[].drift_corrections counts over (the daemon's start).
+          format: date-time
+        enforcement_halted:
+          type: boolean
+          description: True when the kill switch has halted policy enforcement because the running build is in blocked_versions. The tool outcomes are then those of the last reconcile before the halt.
+        generated_at:
+          type: string
+          description: When the agent assembled the report, by its own clock.
+          format: date-time
+        policy:
+          $ref: '#/components/schemas/AgentStatePolicy'
+        schema_version:
+          type: integer
+          description: Report envelope version. Fields are added within a version; a change of meaning bumps it. Newer versions are accepted and stored as far as this server understands them.
+          format: int64
+          minimum: 1
+          maximum: 2.147483647e+09
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentStateTool'
+          description: Each managed tool's outcome from the last reconcile.
+          maxItems: 32
+        update:
+          $ref: '#/components/schemas/AgentStateUpdate'
+      required:
+        - schema_version
+        - generated_at
+        - agent
+        - enforcement_halted
+        - policy
+        - tools
+    ReportStateResult:
+      type: object
+      properties:
+        applied_etag:
+          type: string
+          description: The applied etag the server now holds for this device.
+        received_at:
+          type: string
+          description: When the server received the report.
+          format: date-time
+        stored:
+          type: boolean
+          description: False when the report was accepted but not stored because it came from a non-endpoint environment.
+      description: Acknowledgement of a state report.
+      required:
+        - stored
+        - received_at
     RequestAccessForm:
       type: object
       properties:
@@ -108882,6 +111654,21 @@ components:
         - id
         - expected_version
         - entries
+    SetAuthClientHeadersRequestBody:
+      type: object
+      properties:
+        headers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthClientHeaderInput'
+          description: Every header the client should send.
+        id:
+          type: string
+          description: The auth client id.
+          format: uuid
+      required:
+        - id
+        - headers
     SetAuthenticationHostRequestBody:
       type: object
       properties:
@@ -109148,6 +111935,7 @@ components:
             - network_ingress
             - signals_intelligence
             - organization_gateway_disabled
+            - code_mode
           maxLength: 60
         organization_id:
           type: string
@@ -109963,6 +112751,10 @@ components:
           type: string
           description: The skill ID.
           format: uuid
+        last_loaded_over_mcp_at:
+          type: string
+          description: When an agent last loaded the skill over MCP from a Speakeasy-hosted server, absent when it never has. Returned by list and get only.
+          format: date-time
         last_seen_at:
           type: string
           description: When this skill was most recently activated.
@@ -110088,6 +112880,10 @@ components:
           type: string
           description: The distribution ID.
           format: uuid
+        last_loaded_over_mcp_at:
+          type: string
+          description: When an agent last loaded the skill over MCP from a Speakeasy-hosted server, absent when it never has. Loads are counted per skill, not per distribution.
+          format: date-time
         pinned_version_id:
           type: string
           description: The pinned version, absent when tracking the latest valid version.
@@ -110752,6 +113548,57 @@ components:
         - session_cost_usd
         - scored_sessions
         - estimated_minutes_saved
+    SkillLink:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the link was created.
+          format: date-time
+        id:
+          type: string
+          description: The link ID.
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: The MCP server that serves the skill, for an mcp_server link.
+          format: uuid
+        meta_mcp_server_id:
+          type: string
+          description: The gateway that serves the skill, for a meta_mcp_server link.
+          format: uuid
+        pinned_version_id:
+          type: string
+          description: The pinned version, absent when serving the latest valid version.
+          format: uuid
+        skill_display_name:
+          type: string
+          description: The display name of the linked skill.
+        skill_id:
+          type: string
+          description: The linked skill ID.
+          format: uuid
+        skill_name:
+          type: string
+          description: The canonical name of the linked skill.
+        target_kind:
+          type: string
+          description: The kind of MCP surface that serves the skill.
+          enum:
+            - mcp_server
+            - meta_mcp_server
+            - organization_gateway
+        target_name:
+          type: string
+          description: The name of the MCP server or gateway, absent for the organization gateway.
+      description: A live link from a project skill to the MCP surface that serves it over MCP.
+      required:
+        - id
+        - skill_id
+        - skill_name
+        - skill_display_name
+        - target_kind
+        - created_at
     SkillPromptInjectionFinding:
       type: object
       properties:
@@ -113687,7 +116534,7 @@ components:
           format: date-time
         user_session_issuer_id:
           type: string
-          description: The id of the user_session_issuer wired to this toolset. Set via toolsets.setUserSessionIssuer; null when no USI is linked.
+          description: The id of the user_session_issuer wired to this toolset's hosted MCP server. Set via mcpServers.update; null when no USI is linked.
         user_session_issuer_slug:
           type: string
           description: A short url-friendly label that uniquely identifies a resource.
@@ -114707,6 +117554,24 @@ components:
         plugin_id: 550e8400-e29b-41d4-a716-446655440001
       required:
         - id
+    UnhideAgentMcpServerRequestBody:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The MCP server, as getMyConnections reports it.
+          format: uuid
+      required:
+        - mcp_server_id
+    UnhideMcpServerRequestBody:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The MCP server.
+          format: uuid
+      required:
+        - mcp_server_id
     UnknownSkillActivation:
       type: object
       properties:
@@ -114769,6 +117634,17 @@ components:
         - user_session_issuer_id
         - remote_session_issuer_id
         - resource
+    UnlinkSkillRequestBody:
+      type: object
+      properties:
+        link_id:
+          type: string
+          description: The skill link ID.
+          format: uuid
+      example:
+        link_id: 550e8400-e29b-41d4-a716-446655440000
+      required:
+        - link_id
     UnmarkRiskResultsFalsePositiveRequestBody:
       type: object
       properties:
@@ -115402,6 +118278,9 @@ components:
     UpdateMcpServerForm:
       type: object
       properties:
+        clear_user_session_issuer:
+          type: boolean
+          description: Detach the current user session issuer, so the server no longer requires user sessions. Must not be true when user_session_issuer_id is set.
         environment_id:
           type: string
           description: The ID of the environment to associate with the server
@@ -115451,7 +118330,7 @@ components:
             - disabled
             - private
             - public
-      description: 'Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value; the slug is recomputed server-side from the resulting name.'
+      description: 'Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value, and set clear_user_session_issuer to detach the issuer; the slug is recomputed server-side from the resulting name.'
       required:
         - id
         - visibility
@@ -115493,6 +118372,7 @@ components:
           enum:
             - progressive
             - direct
+            - code_mode
         id:
           type: string
           description: The ID of the meta MCP server to update
@@ -115751,9 +118631,17 @@ components:
           description: Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.
           pattern: ^[!-~]+$
           maxLength: 512
+        client_id:
+          type: string
+          description: Correct the client_id registered with the issuer. Refused for Client ID Metadata Document (CIMD) clients and clients managed by an identity provider connection. A changed value revokes every remote session obtained through the client, so each user must reconnect. Omit to leave unchanged.
+          minLength: 1
         client_secret:
           type: string
           description: Rotate the client secret. Speakeasy re-encrypts before persisting.
+        display_name:
+          type: string
+          description: Replace the client's display name. Pass an empty string to clear it so the client shows its client_id. Omit to leave unchanged.
+          maxLength: 200
         id:
           type: string
           description: The remote_session_client id.
@@ -116369,7 +119257,7 @@ components:
       type: object
       properties:
         custom_domain_id:
-          description: 'Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The ID of the custom domain to use for the toolset'
+          description: 'Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The ID of the custom domain to use for the toolset'
           type: string
           x-speakeasy-deprecation-message: Use mcpEndpoints.create or mcpEndpoints.update instead
           deprecated: true
@@ -116382,17 +119270,17 @@ components:
           type: string
           description: The new description of the toolset
         mcp_enabled:
-          description: 'Deprecated: use mcpServers.update. Whether the toolset is enabled for MCP'
+          description: 'Deprecated: rejected; use mcpServers.update. Whether the toolset is enabled for MCP'
           type: boolean
           x-speakeasy-deprecation-message: Use mcpServers.update instead
           deprecated: true
         mcp_is_public:
-          description: 'Deprecated: use mcpServers.update. Whether the toolset is public in MCP'
+          description: 'Deprecated: rejected; use mcpServers.update. Whether the toolset is public in MCP'
           type: boolean
           x-speakeasy-deprecation-message: Use mcpServers.update instead
           deprecated: true
         mcp_slug:
-          description: 'Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The slug of the MCP to use for the toolset'
+          description: 'Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The slug of the MCP to use for the toolset'
           maxLength: 40
           pattern: ^[a-z0-9_-]{1,128}$
           type: string
@@ -116402,7 +119290,7 @@ components:
           type: string
           description: The new name of the toolset
         network_access_mode:
-          description: 'Deprecated: use mcpServers.update. Where the hosted MCP is accessible: public_only, dual, or private_only'
+          description: 'Deprecated: rejected; use mcpServers.update. Where the hosted MCP is accessible: public_only, dual, or private_only'
           enum:
             - public_only
             - dual
@@ -116566,6 +119454,9 @@ components:
     UpdateWorkloadIssuerForm:
       type: object
       properties:
+        allow_assertion_reuse:
+          type: boolean
+          description: Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Omit to preserve the current setting; false disables this opt-in. Tokens without replay identifiers retain existing exact-token compatibility.
         description:
           type: string
           description: What the platform is and what runs on it, in the operator's words. Trimmed on write; blank clears it. At most 500 characters after trimming.
@@ -117020,7 +119911,7 @@ components:
           format: date-time
         expires_at:
           type: string
-          description: Terminal session expiry; ceiling on refresh_expires_at.
+          description: Current access-token expiry. Sessions with a refresh grant may refresh before refresh_expires_at; workload and other sessions without a refresh grant cannot.
           format: date-time
         id:
           type: string
@@ -117038,7 +119929,7 @@ components:
           format: date-time
         refresh_expires_at:
           type: string
-          description: Next refresh deadline.
+          description: Inbound authorization deadline. Refresh is possible until this time only when the session has a refresh grant.
           format: date-time
         revoked_at:
           type: string
@@ -118271,6 +121162,9 @@ components:
     WorkloadIssuer:
       type: object
       properties:
+        allow_assertion_reuse:
+          type: boolean
+          description: Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Defaults to false. Tokens without replay identifiers retain existing exact-token compatibility.
         allow_wildcard_admission:
           type: boolean
           description: Whether subjects under this issuer may be admitted by a wildcard rule.
@@ -118317,6 +121211,7 @@ components:
         - jwks_uri
         - description
         - allow_wildcard_admission
+        - allow_assertion_reuse
         - tags
         - created_at
         - updated_at
@@ -118646,6 +121541,8 @@ tags:
     description: External MCP registry operations
   - name: functions
     description: Endpoints for working with functions.
+  - name: hiddenMcpServers
+    description: MCP servers the signed-in user hid. Gateways leave hidden servers out of the user's tools and list them last on the consent page. Each user manages only their own list.
   - name: hooksServerNames
     description: Manages display name overrides for hooks servers.
   - name: hooks
@@ -118772,6 +121669,8 @@ tags:
     description: Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.
   - name: userSessions
     description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
+  - name: gatewaySessions
+    description: Sessions authorized for a project gateway or the Organization Gateway. Issuer-scoped sessions may authorize several endpoints; resource-bound sessions are restricted to the selected endpoint. Server filters describe configured upstream associations, not historical usage.
   - name: widgets
     description: 'Widgets: Explore''s saved questions, each kept with the chart that draws it.'
   - name: workloadIdentities

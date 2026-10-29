@@ -152,6 +152,10 @@ type Client struct {
 	// setStripeCustomer endpoint.
 	SetStripeCustomerDoer goahttp.Doer
 
+	// SetAdoptionDashboardURL Doer is the HTTP client used to make requests to the
+	// setAdoptionDashboardUrl endpoint.
+	SetAdoptionDashboardURLDoer goahttp.Doer
+
 	// GetStripeSubscription Doer is the HTTP client used to make requests to the
 	// getStripeSubscription endpoint.
 	GetStripeSubscriptionDoer goahttp.Doer
@@ -271,6 +275,26 @@ type Client struct {
 	// MigrateExternalMcpServers Doer is the HTTP client used to make requests to
 	// the migrateExternalMcpServers endpoint.
 	MigrateExternalMcpServersDoer goahttp.Doer
+
+	// ListRegistryPromotionCandidates Doer is the HTTP client used to make
+	// requests to the listRegistryPromotionCandidates endpoint.
+	ListRegistryPromotionCandidatesDoer goahttp.Doer
+
+	// GetRegistryPromotionCandidate Doer is the HTTP client used to make requests
+	// to the getRegistryPromotionCandidate endpoint.
+	GetRegistryPromotionCandidateDoer goahttp.Doer
+
+	// PromoteRegistryCandidate Doer is the HTTP client used to make requests to
+	// the promoteRegistryCandidate endpoint.
+	PromoteRegistryCandidateDoer goahttp.Doer
+
+	// CurateRegistryPromotionCandidate Doer is the HTTP client used to make
+	// requests to the curateRegistryPromotionCandidate endpoint.
+	CurateRegistryPromotionCandidateDoer goahttp.Doer
+
+	// RetryRegistryPromotionDocs Doer is the HTTP client used to make requests to
+	// the retryRegistryPromotionDocs endpoint.
+	RetryRegistryPromotionDocsDoer goahttp.Doer
 
 	// GetRegistryOktaCandidates Doer is the HTTP client used to make requests to
 	// the getRegistryOktaCandidates endpoint.
@@ -458,6 +482,7 @@ func NewClient(
 		GetPaygBillingSummaryDoer:                   doer,
 		GetStripeCustomerDoer:                       doer,
 		SetStripeCustomerDoer:                       doer,
+		SetAdoptionDashboardURLDoer:                 doer,
 		GetStripeSubscriptionDoer:                   doer,
 		CancelStripeSubscriptionDoer:                doer,
 		ResumeStripeSubscriptionDoer:                doer,
@@ -488,6 +513,11 @@ func NewClient(
 		ListExternalMcpMigrationCandidatesDoer:      doer,
 		PreviewExternalMcpMigrationDoer:             doer,
 		MigrateExternalMcpServersDoer:               doer,
+		ListRegistryPromotionCandidatesDoer:         doer,
+		GetRegistryPromotionCandidateDoer:           doer,
+		PromoteRegistryCandidateDoer:                doer,
+		CurateRegistryPromotionCandidateDoer:        doer,
+		RetryRegistryPromotionDocsDoer:              doer,
 		GetRegistryOktaCandidatesDoer:               doer,
 		ListRegistryOktaUnmappedDoer:                doer,
 		ListRegistryEntriesDoer:                     doer,
@@ -1345,6 +1375,30 @@ func (c *Client) SetStripeCustomer() goa.Endpoint {
 	}
 }
 
+// SetAdoptionDashboardURL returns an endpoint that makes HTTP requests to the
+// admin service setAdoptionDashboardUrl server.
+func (c *Client) SetAdoptionDashboardURL() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetAdoptionDashboardURLRequest(c.encoder)
+		decodeResponse = DecodeSetAdoptionDashboardURLResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetAdoptionDashboardURLRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetAdoptionDashboardURLDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setAdoptionDashboardUrl", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // GetStripeSubscription returns an endpoint that makes HTTP requests to the
 // admin service getStripeSubscription server.
 func (c *Client) GetStripeSubscription() goa.Endpoint {
@@ -2065,6 +2119,126 @@ func (c *Client) MigrateExternalMcpServers() goa.Endpoint {
 		resp, err := c.MigrateExternalMcpServersDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "migrateExternalMcpServers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRegistryPromotionCandidates returns an endpoint that makes HTTP requests
+// to the admin service listRegistryPromotionCandidates server.
+func (c *Client) ListRegistryPromotionCandidates() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRegistryPromotionCandidatesRequest(c.encoder)
+		decodeResponse = DecodeListRegistryPromotionCandidatesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRegistryPromotionCandidatesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRegistryPromotionCandidatesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listRegistryPromotionCandidates", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetRegistryPromotionCandidate returns an endpoint that makes HTTP requests
+// to the admin service getRegistryPromotionCandidate server.
+func (c *Client) GetRegistryPromotionCandidate() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRegistryPromotionCandidateRequest(c.encoder)
+		decodeResponse = DecodeGetRegistryPromotionCandidateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRegistryPromotionCandidateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRegistryPromotionCandidateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getRegistryPromotionCandidate", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// PromoteRegistryCandidate returns an endpoint that makes HTTP requests to the
+// admin service promoteRegistryCandidate server.
+func (c *Client) PromoteRegistryCandidate() goa.Endpoint {
+	var (
+		encodeRequest  = EncodePromoteRegistryCandidateRequest(c.encoder)
+		decodeResponse = DecodePromoteRegistryCandidateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildPromoteRegistryCandidateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.PromoteRegistryCandidateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "promoteRegistryCandidate", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CurateRegistryPromotionCandidate returns an endpoint that makes HTTP
+// requests to the admin service curateRegistryPromotionCandidate server.
+func (c *Client) CurateRegistryPromotionCandidate() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCurateRegistryPromotionCandidateRequest(c.encoder)
+		decodeResponse = DecodeCurateRegistryPromotionCandidateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCurateRegistryPromotionCandidateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CurateRegistryPromotionCandidateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "curateRegistryPromotionCandidate", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RetryRegistryPromotionDocs returns an endpoint that makes HTTP requests to
+// the admin service retryRegistryPromotionDocs server.
+func (c *Client) RetryRegistryPromotionDocs() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRetryRegistryPromotionDocsRequest(c.encoder)
+		decodeResponse = DecodeRetryRegistryPromotionDocsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRetryRegistryPromotionDocsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RetryRegistryPromotionDocsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "retryRegistryPromotionDocs", err)
 		}
 		return decodeResponse(resp)
 	}

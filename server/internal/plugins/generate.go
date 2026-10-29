@@ -85,6 +85,11 @@ type GenerateConfig struct {
 	APIKey string
 	// HooksAPIKey controls whether the observability plugin is emitted.
 	HooksAPIKey string
+	// HooksKeyIsAgent marks HooksAPIKey as an agent identity's own key rather
+	// than the shared org key. The hooks binary then prefers it to a cached
+	// personal sign-in on the same machine, so the agent's events are never
+	// recorded under the person who signed in.
+	HooksKeyIsAgent bool
 	// ProjectSlug is the publishing project's slug. The Cursor hooks endpoint
 	// requires it via the Speakeasy-AI-Project header, and it scopes the default
 	// marketplace name for non-default projects.
@@ -147,6 +152,7 @@ func PublishedHooksFiles() (map[string][]byte, error) {
 		ServerURL:        "https://app.getgram.ai",
 		APIKey:           fingerprintAPIKeySentinel,
 		HooksAPIKey:      fingerprintHooksKeySentinel,
+		HooksKeyIsAgent:  false,
 		ProjectSlug:      "hooks-check",
 		IsDefaultProject: true,
 		Version:          "",
@@ -197,6 +203,7 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 		ServerURL:        "https://app.getgram.ai",
 		APIKey:           "",
 		HooksAPIKey:      "",
+		HooksKeyIsAgent:  false,
 		ProjectSlug:      "",
 		IsDefaultProject: true,
 		Version:          "",
@@ -302,6 +309,7 @@ type HooksConfig struct {
 	ProjectSlug     string                       `json:"project_slug"`
 	ServerURL       string                       `json:"server_url"`
 	OrgID           string                       `json:"org_id"`
+	HooksKeyIsAgent bool                         `json:"hooks_key_is_agent,omitempty"`
 	BrowserLogin    bool                         `json:"browser_login"`
 	InstallFailOpen bool                         `json:"install_fail_open"`
 	BinaryVersion   string                       `json:"binary_version"`
@@ -320,6 +328,7 @@ func hooksConfigSnapshot(cfg GenerateConfig) HooksConfig {
 		ProjectSlug:     cfg.ProjectSlug,
 		ServerURL:       cfg.ServerURL,
 		OrgID:           cfg.OrgID,
+		HooksKeyIsAgent: cfg.HooksKeyIsAgent,
 		BrowserLogin:    cfg.BrowserLogin,
 		InstallFailOpen: cfg.InstallFailOpen,
 		BinaryVersion:   hooksBinaryVersion,
@@ -385,7 +394,7 @@ const platformMCPGeneratorVersion = "4"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "51"
+const hooksGeneratorVersion = "56"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -423,9 +432,9 @@ const (
 )
 
 // platformMCPSkillsFS is the single source for reviewed skills distributed with
-// every Platform MCP package. Add skills as
-// platform_mcp_skills/<canonical-name>/SKILL.md; loadPlatformMCPSkills validates
-// directory/frontmatter names before any package is generated.
+// every Platform MCP package and served over MCP by the platform toolset. Add
+// skills as platform_mcp_skills/<canonical-name>/SKILL.md; PlatformMCPSkills
+// validates directory/frontmatter names before any package is generated.
 //
 //go:embed platform_mcp_skills/*/SKILL.md
 var platformMCPSkillsFS embed.FS
@@ -2030,7 +2039,11 @@ func generateOpenClawObservabilityPluginInDir(files map[string][]byte, subdir st
 			"additionalProperties": false,
 			"properties":           map[string]any{},
 		},
-		"activation": map[string]any{"onStartup": true},
+		// From 2026.9.3 the Gateway may skip a hook-only plugin at startup
+		// unless its manifest declares the hook capability
+		// (openclaw/openclaw#155079). Releases back to 2026.4.24 already
+		// parse onCapabilities, so declaring it next to onStartup is safe.
+		"activation": map[string]any{"onStartup": true, "onCapabilities": []string{"hook"}},
 	}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal openclaw plugin manifest: %w", err)
@@ -2077,12 +2090,21 @@ const COMMAND =
   process.platform === "win32"
     ? ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(ROOT, "hooks", "bootstrap.ps1"), ...SERVE_ARGS]
     : ["bash", join(ROOT, "hooks", "bootstrap.sh"), ...SERVE_ARGS]
-const HOOKS = ["before_tool_call", "after_tool_call", "before_agent_run", "session_start", "session_end", "agent_end", "llm_output", "gateway_start", "gateway_stop"]
+// llm_input is observe-only. OpenClaw's Codex app-server harness fires no
+// before_agent_run, so the daemon reports those runs' user prompt from
+// llm_input. No gate fires there, so prompt policies cannot block those runs.
+const HOOKS = ["before_tool_call", "after_tool_call", "before_agent_run", "session_start", "session_end", "agent_end", "llm_input", "llm_output", "gateway_start", "gateway_stop"]
 // 10s gate wall: the daemon's deadline is 90% of this and the relay's
 // network budget is 5s, so a fail-closed verdict always lands first and
 // no hook stalls the agent longer than ~10s.
 const GATE_TIMEOUT_MS = { before_tool_call: 10000, before_agent_run: 10000 }
 const DEFAULT_TIMEOUT_MS = 30000
+// How long an agent_end that arrived before its run's llm_output waits for it
+// before it is sent without the final message.
+const AGENT_END_WAIT_MS = 2000
+// How long a run whose agent_end was sent without its final message ignores a
+// late llm_output, so that output is not cached where nothing will consume it.
+const ENDED_RUN_TTL_MS = 60000
 // The relay resolves the org's fail-open posture in-process; shim-level
 // fail-closed covers the binary being unavailable (mirrors cursor failClosed).
 const FAIL_CLOSED = true
@@ -2100,6 +2122,10 @@ export default {
     // agent_end carries no final message or usage; cache the turn's
     // llm_output and splice it into the agent_end frame.
     const llmByRun = new Map()
+    // The built-in runtime can fire agent_end just before the run's last
+    // llm_output, so an agent_end with nothing to splice waits briefly for it.
+    const pendingEnds = new Map()
+    const endedRuns = new Set()
 
     createInterface({ input: child.stdout }).on("line", (line) => {
       if (!line.trim()) return
@@ -2142,13 +2168,16 @@ export default {
 
     // The daemon never reads these history-sized fields (finalMessage/usage
     // ride the llm_output splice), and an oversized frame is dropped at the
-    // serve loop's size cap — strip them before they reach the pipe. The
-    // canonical shim also strips llm_input.historyMessages; this shim never
-    // subscribes llm_input, so that branch is omitted here.
+    // serve loop's size cap, so strip them before they reach the pipe. From
+    // llm_input the daemon reads only the prompt and the run identity.
     const slimEvent = (hook, event) => {
       if (event == null || typeof event !== "object") return event
       if (hook === "agent_end" || hook === "before_agent_run") {
         const { messages, ...rest } = event
+        return rest
+      }
+      if (hook === "llm_input") {
+        const { historyMessages, systemPrompt, tools, ...rest } = event
         return rest
       }
       return event
@@ -2180,15 +2209,24 @@ export default {
         const event = slimEvent(hook, rawEvent)
         if (hook === "llm_output") {
           const texts = Array.isArray(event?.assistantTexts) ? event.assistantTexts : []
-          const key = event?.runId ?? event?.sessionId ?? ""
-          llmByRun.set(key, { finalMessage: texts.join("\n") || undefined, usage: event?.usage })
+          const key = event?.runId ?? ctx?.runId ?? event?.sessionId ?? ""
           void call(hook, event, sanitizeCtx(hook, ctx))
+          if (endedRuns.delete(key)) return
+          llmByRun.set(key, { finalMessage: texts.join("\n") || undefined, usage: event?.usage })
+          const waiting = pendingEnds.get(key)
+          if (waiting !== undefined) {
+            clearTimeout(waiting.timer)
+            pendingEnds.delete(key)
+            const cached = llmByRun.get(key)
+            llmByRun.delete(key)
+            void call("agent_end", { ...waiting.event, finalMessage: cached.finalMessage, usage: cached.usage }, waiting.ctx)
+          }
           return
         }
         if (hook === "agent_end") {
           // Consume exactly the entry that served the splice: deleting the
           // other candidate key could destroy a concurrent turn's pending entry.
-          const runKey = event?.runId ?? ""
+          const runKey = event?.runId ?? ctx?.runId ?? ""
           let cached = llmByRun.get(runKey)
           if (cached !== undefined) {
             llmByRun.delete(runKey)
@@ -2196,6 +2234,17 @@ export default {
             const sessionKey = ctx?.sessionId ?? ""
             cached = llmByRun.get(sessionKey)
             if (cached !== undefined) llmByRun.delete(sessionKey)
+          }
+          if (cached === undefined && runKey !== "") {
+            const waitingCtx = sanitizeCtx(hook, ctx)
+            const timer = setTimeout(() => {
+              pendingEnds.delete(runKey)
+              endedRuns.add(runKey)
+              setTimeout(() => endedRuns.delete(runKey), ENDED_RUN_TTL_MS).unref?.()
+              void call(hook, event, waitingCtx)
+            }, AGENT_END_WAIT_MS)
+            pendingEnds.set(runKey, { event, ctx: waitingCtx, timer })
+            return
           }
           const spliced = cached ? { ...event, finalMessage: cached.finalMessage, usage: cached.usage } : event
           void call(hook, spliced, sanitizeCtx(hook, ctx))
@@ -2291,6 +2340,23 @@ func GenerateObservabilityPluginPackage(cfg GenerateConfig, platform string) (ma
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
 	return files, nil
+}
+
+// ObservabilityPluginZip renders one platform's observability plugin as the
+// ZIP archive its installer accepts directly (for OpenClaw,
+// `openclaw plugins install <zip>`). The archive carries cfg.HooksAPIKey in
+// its speakeasy.json, so it is as sensitive as the key.
+func ObservabilityPluginZip(cfg GenerateConfig, platform string) ([]byte, error) {
+	files, err := GenerateObservabilityPluginPackage(cfg, platform)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	if err := writePluginZip(&buf, files); err != nil {
+		return nil, fmt.Errorf("zip %s observability plugin: %w", platform, err)
+	}
+	return buf.Bytes(), nil
 }
 
 // codexHookApproval is a single [hooks.state] entry that pre-approves a Codex
@@ -2976,7 +3042,12 @@ func platformMCPManifestVersion(cfg GenerateConfig) string {
 	return "0." + platformMCPGeneratorVersion + "." + conv.Default(cfg.Version, "0")
 }
 
-func loadPlatformMCPSkills() (map[string][]byte, error) {
+// PlatformMCPSkills returns the reviewed skills embedded in the server, keyed
+// by skill name, each the exact SKILL.md bytes the Platform MCP packages ship
+// and the platform toolset serves. Every skill is validated against the
+// Agent Skills specification with its directory name as the required name, so
+// a caller can rely on frontmatter.name matching the key.
+func PlatformMCPSkills() (map[string][]byte, error) {
 	entries, err := platformMCPSkillsFS.ReadDir("platform_mcp_skills")
 	if err != nil {
 		return nil, fmt.Errorf("read embedded Platform MCP skills: %w", err)
@@ -3002,7 +3073,7 @@ func loadPlatformMCPSkills() (map[string][]byte, error) {
 }
 
 func emitPlatformMCPSkills(files map[string][]byte) error {
-	skills, err := loadPlatformMCPSkills()
+	skills, err := PlatformMCPSkills()
 	if err != nil {
 		return err
 	}
@@ -3120,7 +3191,7 @@ func generatePlatformMCPOpenCodePackage(cfg GenerateConfig, platformURL string) 
 	if err := generateOpenCodePluginInDir(files, "", plugin, cfg); err != nil {
 		return nil, fmt.Errorf("generate Platform MCP OpenCode package: %w", err)
 	}
-	skills, err := loadPlatformMCPSkills()
+	skills, err := PlatformMCPSkills()
 	if err != nil {
 		return nil, err
 	}

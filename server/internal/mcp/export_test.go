@@ -2,6 +2,9 @@ package mcp
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"slices"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -60,6 +63,11 @@ func (s *Service) VerifyRemoteGrantOn(ctx context.Context, endpoint *ResolvedMcp
 	s.probeRemoteGrant(ctx, s.logger, endpoint, challengeState, grant)
 }
 
+// LoadResolvedMcpEndpointByRef resumes a cached challenge's endpoint.
+func (s *Service) LoadResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
+	return s.loadResolvedMcpEndpointByRef(ctx, ref)
+}
+
 // RemoteChallengeManager is the manager the service registered its grant hook on.
 func (s *Service) RemoteChallengeManager() *remotesessions.ChallengeManager {
 	return s.remoteChallengeMgr
@@ -104,4 +112,60 @@ func (s *Service) SetPosthog(p *posthog.Posthog) {
 // count or delay admissions.
 func (s *Service) SetPrepareMandatory(prepare func(context.Context) (authz.MandatoryAuthorization, error)) {
 	s.prepareMandatory = prepare
+}
+
+type fixedPermitter bool
+
+func (p fixedPermitter) Permitted(context.Context, authClientPermitRequest) (bool, error) {
+	return bool(p), nil
+}
+
+// SetAuthClientPermitted answers every auth client permission check with allowed.
+func (s *Service) SetAuthClientPermitted(allowed bool) {
+	s.authClientPermitter = fixedPermitter(allowed)
+}
+
+type callerRecordingPermitter struct {
+	mu    sync.Mutex
+	users []string
+}
+
+func (p *callerRecordingPermitter) Permitted(ctx context.Context, _ authClientPermitRequest) (bool, error) {
+	user := ""
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		user = authCtx.UserID
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.users = append(p.users, user)
+	return true, nil
+}
+
+// RecordAuthClientPermitCallers allows every auth client and returns the
+// users each permission check was judged for, empty for a check made with no
+// signed-in caller.
+func (s *Service) RecordAuthClientPermitCallers() func() []string {
+	permitter := &callerRecordingPermitter{mu: sync.Mutex{}, users: nil}
+	s.authClientPermitter = permitter
+	return func() []string {
+		permitter.mu.Lock()
+		defer permitter.mu.Unlock()
+		return slices.Clone(permitter.users)
+	}
+}
+
+// SetAuthClientPermission installs a mutable permit decision in the test binary.
+func (s *Service) SetAuthClientPermission(allowed func() bool) {
+	s.authClientPermitter = testAuthClientPermission(allowed)
+}
+
+type testAuthClientPermission func() bool
+
+func (f testAuthClientPermission) Permitted(context.Context, authClientPermitRequest) (bool, error) {
+	return f(), nil
+}
+
+// RecordConnectionPopupGrant exercises the callback's parent-state correlation.
+func (s *Service) RecordConnectionPopupGrant(ctx context.Context, grant remotesessions.RemoteGrant) error {
+	return s.recordConnectionPopupGrant(ctx, grant)
 }

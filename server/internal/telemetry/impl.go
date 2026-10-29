@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,7 +16,13 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/trace"
+	goahttp "goa.design/goa/v3/http"
+	"goa.design/goa/v3/security"
+	"golang.org/x/sync/errgroup"
+
 	telem_srv "github.com/speakeasy-api/gram/server/gen/http/telemetry/server"
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -29,6 +36,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/identity"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcpRepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -42,10 +51,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
-	"go.opentelemetry.io/otel/trace"
-	goahttp "goa.design/goa/v3/http"
-	"goa.design/goa/v3/security"
-	"golang.org/x/sync/errgroup"
 )
 
 type Service struct {
@@ -3983,50 +3988,34 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 
 // GetToolUsageFilterOptions returns selectable filter options for target-aware MCP and tool usage metrics.
 func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_gen.GetToolUsageFilterOptionsPayload) (res *telem_gen.GetToolUsageFilterOptionsResult, err error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
-	}
-
-	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
-	}
-
-	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	params, err := s.resolveToolUsageParams(ctx, toolUsageFilters{
+		From:               payload.From,
+		To:                 payload.To,
+		TargetTypes:        payload.TargetTypes,
+		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
+		ShadowServerNames:  payload.ShadowServerNames,
+		MetaMcpServerIDs:   payload.MetaMcpServerIds,
+		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
+		HookSources:        payload.HookSources,
+		ClientKeys:         payload.ClientKeys,
+		AccountType:        payload.AccountType,
+		Statuses:           toolUsageStatusStrings(payload.Statuses),
+		Query:              payload.Query,
+		Filters:            payload.Filters,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	hostedMCPMatchers, mcpServerMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
-	}
-	metaMCPMatchers, err := LoadMetaMCPMatchers(ctx, s.db, *authCtx.ProjectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateway endpoints")
-	}
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	gatewayNames, err := LoadMetaMCPNames(ctx, s.db, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateways")
 	}
 
-	options, err := s.chRepo.GetToolUsageFilterOptions(ctx, repo.GetToolUsageFilterOptionsParams{
-		GramProjectID:     authCtx.ProjectID.String(),
-		TimeStart:         timeStart,
-		TimeEnd:           timeEnd,
-		HostedMCPMatchers: hostedMCPMatchers,
-		MCPServerMatchers: mcpServerMatchers,
-		MetaMCPMatchers:   metaMCPMatchers,
-	})
+	options, err := s.chRepo.GetToolUsageFilterOptions(ctx, params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage filter options")
 	}
@@ -4034,7 +4023,7 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 		options.Users = s.authorizerUserOptions(ctx, authCtx.ActiveOrganizationID, options.Users, options.Authorizers)
 	}
 
-	return toToolUsageFilterOptionsResult(options, hostedMCPMatchers, gatewayNames, payload.OptionTypes), nil
+	return toToolUsageFilterOptionsResult(options, params.HostedMCPMatchers, gatewayNames, payload.OptionTypes), nil
 }
 
 // mcpServerActivityLookbackDays bounds the "ever active" window. Telemetry logs
@@ -4167,6 +4156,22 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	if err != nil {
 		return nil, nil, fmt.Errorf("list project toolsets: %w", err)
 	}
+	toolsetIDs := make([]uuid.UUID, len(toolsets))
+	for i, toolset := range toolsets {
+		toolsetIDs[i] = toolset.ID
+	}
+	organizationID := ""
+	if len(toolsets) > 0 {
+		organizationID = toolsets[0].OrganizationID
+	}
+	hosting, err := hostingstate.Load(ctx, db, organizationID, toolsetIDs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load hosted MCP state: %w", err)
+	}
+	aliases, err := legacyalias.List(ctx, db, projectID, toolsetIDs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list toolset aliases: %w", err)
+	}
 
 	// Include soft-deleted servers: tool_source on telemetry rows is the
 	// backend remote/tunneled server id, which outlives the mcp_servers row.
@@ -4185,9 +4190,20 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	}
 	hostedMatchers := make([]repo.HostedMCPMatcher, 0, len(toolsets))
 	for _, toolset := range toolsets {
-		// The slug is the legacy alias; whether it serves is the server's state, so the slug matches either way.
-		if !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
-			// No alias, but its past calls still need their server id.
+		// Traffic can arrive through the frozen alias or any of the canonical server's endpoints.
+		var slugs []string
+		if alias := aliases[toolset.ID].Slug; alias.Valid && alias.String != "" {
+			slugs = append(slugs, alias.String)
+		}
+		if row := hostingstate.For(hosting, toolset.ID); row != nil && row.Canonical {
+			for _, slug := range row.EndpointSlugs {
+				if !slices.Contains(slugs, slug) {
+					slugs = append(slugs, slug)
+				}
+			}
+		}
+		if len(slugs) == 0 {
+			// No address, but its past calls still need their server id.
 			if serverID := toolsetServerIDs[toolset.ID]; serverID != "" {
 				hostedMatchers = append(hostedMatchers, repo.HostedMCPMatcher{
 					ToolsetSlug: toolset.Slug,
@@ -4198,12 +4214,14 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 			}
 			continue
 		}
-		hostedMatchers = append(hostedMatchers, repo.HostedMCPMatcher{
-			ToolsetSlug: toolset.Slug,
-			ToolsetName: toolset.Name,
-			McpSlug:     toolset.McpSlug.String,
-			MCPServerID: toolsetServerIDs[toolset.ID],
-		})
+		for _, slug := range slugs {
+			hostedMatchers = append(hostedMatchers, repo.HostedMCPMatcher{
+				ToolsetSlug: toolset.Slug,
+				ToolsetName: toolset.Name,
+				McpSlug:     slug,
+				MCPServerID: toolsetServerIDs[toolset.ID],
+			})
+		}
 	}
 
 	serverMatchers := make([]repo.MCPServerMatcher, 0, len(servers))
@@ -4282,9 +4300,23 @@ func LoadMetaMCPMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid.U
 	if err != nil {
 		return nil, fmt.Errorf("list project gateway endpoints: %w", err)
 	}
+	// A deleted endpoint stops matching once a legacy toolset alias holds its address.
+	var deleted []legacyalias.Alias
+	for _, endpoint := range endpoints {
+		if endpoint.Deleted {
+			deleted = append(deleted, legacyalias.Alias{Slug: pgtype.Text{String: endpoint.Slug, Valid: true}, CustomDomainID: endpoint.CustomDomainID})
+		}
+	}
+	taken, err := legacyalias.TakenAddresses(ctx, db, deleted)
+	if err != nil {
+		return nil, fmt.Errorf("check gateway endpoint addresses: %w", err)
+	}
 	anchoredMatchers := make([]repo.MetaMCPMatcher, 0, len(endpoints))
 	platformMatchers := make([]repo.MetaMCPMatcher, 0, len(endpoints))
 	for _, endpoint := range endpoints {
+		if endpoint.Deleted && taken[legacyalias.Alias{Slug: pgtype.Text{String: endpoint.Slug, Valid: true}, CustomDomainID: endpoint.CustomDomainID}] {
+			continue
+		}
 		matcher := repo.MetaMCPMatcher{
 			URLSuffix:    "/mcp/" + endpoint.Slug,
 			TargetID:     endpoint.MetaMcpServerID.String(),

@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,6 +14,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 
 	"github.com/go-chi/chi/v5"
 	redisCache "github.com/go-redis/cache/v9"
@@ -79,23 +80,17 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 	require.NotEmpty(t, response["refresh_token"])
 
 	otherSlug := "refresh-replay-other-" + uuid.NewString()[:8]
-	otherToolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	otherToolsetRow, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         toolset.OrganizationID,
 		ProjectID:              toolset.ProjectID,
 		Name:                   "Refresh replay alternate endpoint",
 		Slug:                   otherSlug,
 		Description:            conv.ToPGText("Alternate OAuth endpoint surface"),
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                conv.ToPGText(otherSlug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-	otherToolset, err = toolsets_repo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
-		Slug:                otherToolset.Slug,
-		ProjectID:           otherToolset.ProjectID,
-	})
-	require.NoError(t, err)
+	otherToolset := hostLegacyToolset(t, ctx, ti, otherToolsetRow, otherSlug, "private", noIssuer())
+	otherToolset = setToolsetIssuer(t, ctx, ti.conn, otherToolset.ProjectID, otherToolset, issuer.ID)
 
 	otherEndpoint := performRefresh(otherSlug, client.ClientID, refreshToken)
 	require.NoError(t, otherEndpoint.err)
@@ -936,7 +931,7 @@ func seedRefreshReplaySession(
 	t *testing.T,
 	ctx context.Context,
 	ti *testInstance,
-) (toolsets_repo.Toolset, usersessions_repo.UserSessionIssuer, usersessions_repo.UserSessionClient, string) {
+) (hostedToolset, usersessions_repo.UserSessionIssuer, usersessions_repo.UserSessionClient, string) {
 	t.Helper()
 	toolset, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
 	return toolset, issuer, client, refreshToken
@@ -947,7 +942,7 @@ func seedRefreshReplaySessionDetails(
 	ctx context.Context,
 	ti *testInstance,
 	refreshExpiresAt time.Time,
-) (toolsets_repo.Toolset, usersessions_repo.UserSessionIssuer, usersessions_repo.UserSessionClient, string, string) {
+) (hostedToolset, usersessions_repo.UserSessionIssuer, usersessions_repo.UserSessionClient, string, string) {
 	t.Helper()
 
 	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)

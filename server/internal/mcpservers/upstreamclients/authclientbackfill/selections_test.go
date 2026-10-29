@@ -116,6 +116,7 @@ func (f *fixture) adminHeaderClient(server uuid.UUID) uuid.UUID {
 		OrganizationID: f.orgID,
 		McpServerID:    server,
 		AuthClientID:   id,
+		Source:         "admin",
 	}))
 	return id
 }
@@ -306,6 +307,27 @@ func TestRun_OAuthChoiceTheIssuerIsNotBoundToIsAGap(t *testing.T) {
 	require.Zero(t, report.SelectionsMapped)
 	require.Len(t, selectionGaps(report, SelectionUnusable), 1, "the upstream client choice already rejects it")
 	require.False(t, f.selection(credential, server).AuthClientID.Valid)
+}
+
+// A choice for a deleted server is never served again: it stays recorded but
+// is not counted as live coverage, while a live server's unusable choice still
+// is.
+func TestRun_ChoiceForADeletedServerIsNotLiveCoverage(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	live, deleted, registration := f.server(), f.server(), f.client("subject")
+	f.associate(live, registration)
+	credential := f.interactiveCredential()
+	f.unboundOAuthSelection(credential, live, registration)
+	f.unboundOAuthSelection(credential, deleted, registration)
+	require.NoError(t, f.q.SoftDeleteMCPServerFixture(t.Context(), deleted))
+
+	report := f.run(true)
+	gaps := selectionGaps(report, SelectionUnusable)
+	require.Len(t, gaps, 1)
+	require.Equal(t, live, gaps[0].MCPServerID)
+	require.Equal(t, 1, report.Selections[ClassInteractive].Selections)
+	require.False(t, f.selection(credential, deleted).AuthClientID.Valid, "the deleted server's choice is kept as recorded")
 }
 
 // A choice already naming its registration's auth client no longer depends on

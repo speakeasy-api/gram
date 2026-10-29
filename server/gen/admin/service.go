@@ -115,6 +115,9 @@ type Service interface {
 	// Sets an organization's Stripe customer ID when it has no existing Stripe
 	// customer or subscription.
 	SetStripeCustomer(context.Context, *SetStripeCustomerPayload) (res *AdminOrganization, err error)
+	// Sets or clears the link to an organization's adoption dashboard shown on the
+	// admin overview. An empty or absent URL clears it.
+	SetAdoptionDashboardURL(context.Context, *SetAdoptionDashboardURLPayload) (res *AdminOrganization, err error)
 	// Returns the live Stripe subscription and payment state for an organization.
 	GetStripeSubscription(context.Context, *GetStripeSubscriptionPayload) (res *AdminStripeSubscription, err error)
 	// Schedules an organization's PAYG subscription to cancel at period end.
@@ -246,6 +249,22 @@ type Service interface {
 	// Never creates a sign-in provider or a client and never registers one with
 	// the upstream.
 	MigrateExternalMcpServers(context.Context, *MigrateExternalMcpServersPayload) (res *AdminExternalMcpMigrationResult, err error)
+	// List observed remote MCP candidates and durable promotion delivery status.
+	// Active excludes endpoints already in the catalogue; candidate includes all
+	// unpublished active entries. No source URLs or credentials are returned.
+	ListRegistryPromotionCandidates(context.Context, *ListRegistryPromotionCandidatesPayload) (res *AdminRegistryPromotionCandidates, err error)
+	// Refresh health evidence for one exact remote MCP deployment before staff
+	// review.
+	GetRegistryPromotionCandidate(context.Context, *GetRegistryPromotionCandidatePayload) (res *AdminRegistryPromotionCandidate, err error)
+	// Publish an explicitly reviewed public catalogue entry and queue setup
+	// documentation. Customer credentials are never copied.
+	PromoteRegistryCandidate(context.Context, *PromoteRegistryCandidatePayload) (res *AdminRegistryPromotionCandidate, err error)
+	// Reject, archive, or restore one exact unpublished catalogue candidate.
+	// Hidden candidates cannot be promoted until restored and refreshed.
+	CurateRegistryPromotionCandidate(context.Context, *CurateRegistryPromotionCandidatePayload) (res *AdminRegistryPromotionCandidate, err error)
+	// Retry a failed setup-guide request for one exact reviewed promotion without
+	// republishing the catalogue entry.
+	RetryRegistryPromotionDocs(context.Context, *RetryRegistryPromotionDocsPayload) (res *AdminRegistryPromotionCandidate, err error)
 	// Staff-only registry administration: Okta application names observed across
 	// synced tenants that plausibly belong to the entry, for confirmation in the
 	// editor.
@@ -375,7 +394,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [97]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement"}
+var MethodNames = [103]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -1221,6 +1240,9 @@ type AdminOrganization struct {
 	TrialConvertedAt *string
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string
 	// Number of active members in the organization.
 	MemberCount int
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1410,6 +1432,71 @@ type AdminRegistryPage struct {
 	NextCursor *string
 }
 
+// Publicly advertised authentication capabilities, not a verified OAuth
+// connection.
+type AdminRegistryPromotionAuthDiscovery struct {
+	SupportsDcr  bool
+	SupportsCimd bool
+	AuthSetup    string
+	Status       string
+}
+
+// AdminRegistryPromotionCandidate is the result type of the admin service
+// getRegistryPromotionCandidate method.
+type AdminRegistryPromotionCandidate struct {
+	ID                string
+	OrganizationID    string
+	ProjectID         string
+	McpServerID       string
+	RemoteMcpServerID string
+	SourceName        *string
+	CreatedAt         string
+	CurationRevision  string
+	SuggestedMetadata *AdminRegistryPromotionSuggestions
+	AuthDiscovery     *AdminRegistryPromotionAuthDiscovery
+	SourceRevision    string
+	Eligible          bool
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility bool
+	Reason                 string
+	Status                 string
+	ObservedSuccesses      int64
+	ObservedFailures       int64
+	ObservedDays           int
+	CheckedAt              *string
+	RegistryEntryID        *string
+	DocsStatus             *string
+	DocsURL                *string
+	DocsRevision           string
+	DocsRetryAllowed       bool
+	DocsAttempts           int
+	DocsLastAttemptAt      *string
+	DocsNextAttemptAt      *string
+	DocsQueuedAt           *string
+	PromotedAt             *string
+	PublicTitle            *string
+	DeliveryError          *string
+}
+
+// AdminRegistryPromotionCandidates is the result type of the admin service
+// listRegistryPromotionCandidates method.
+type AdminRegistryPromotionCandidates struct {
+	Candidates []*AdminRegistryPromotionCandidate
+	NextCursor *string
+}
+
+// Untrusted observed metadata suggestions. Staff must edit and explicitly
+// confirm every value before publication.
+type AdminRegistryPromotionSuggestions struct {
+	PublicName        *string
+	PublicTitle       *string
+	PublicDescription *string
+	PublicURL         *string
+	DocumentationURL  *string
+	DocsSlug          *string
+	AuthMode          *string
+}
+
 type AdminRegistrySummary struct {
 	ID        string
 	Name      string
@@ -1566,6 +1653,9 @@ type AdminUpstreamOAuthMigrationAuthClients struct {
 	// agents and API keys are missing, which a run adds. Enforcement needs them,
 	// so existing callers keep their access.
 	PendingGrants *int64
+	// Agent attachments whose grants a run does not write while the organization's
+	// upstream selector writes are not allowed. While any wait, complete is false.
+	AttachmentsWaiting *int64
 	// Credential choice coverage for each credential class.
 	SelectionClasses []*AdminUpstreamOAuthMigrationSelectionClass
 	// The first live credential choices left without a usable auth client.
@@ -2043,8 +2133,15 @@ type CreateOnboardingUseCasePayload struct {
 type CreateOrganizationPayload struct {
 	AdminSessionToken *string
 	// Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes
-	// the name and verified email domain.
+	// the verified email domain.
 	URL string
+	// Organization display name. When omitted, a name is derived from the
+	// registrable company domain.
+	Name *string
+	// Preferred organization URL slug. When omitted, a unique slug is derived from
+	// the organization name. Explicit slugs use lowercase letters, numbers, and
+	// hyphens.
+	Slug *string
 	// The operator confirms that domain ownership was established outside this
 	// form.
 	OwnershipConfirmed bool
@@ -2066,6 +2163,17 @@ type CreateSignupOfferPayload struct {
 	Name                  string
 	StripePromotionCodeID string
 	SignupFlow            string
+}
+
+// CurateRegistryPromotionCandidatePayload is the payload type of the admin
+// service curateRegistryPromotionCandidate method.
+type CurateRegistryPromotionCandidatePayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	PromotionID       string
+	CurationRevision  string
+	Action            string
+	RetryKey          string
 }
 
 // DeleteGlobalIssuerPayload is the payload type of the admin service
@@ -2323,6 +2431,15 @@ type GetRegistryEntryPayload struct {
 type GetRegistryOktaCandidatesPayload struct {
 	AdminSessionToken *string
 	ID                string
+}
+
+// GetRegistryPromotionCandidatePayload is the payload type of the admin
+// service getRegistryPromotionCandidate method.
+type GetRegistryPromotionCandidatePayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	ProjectID         string
+	McpServerID       string
 }
 
 // GetSessionPayload is the payload type of the admin service getSession method.
@@ -2668,6 +2785,15 @@ type ListRegistryOktaUnmappedPayload struct {
 	AdminSessionToken *string
 }
 
+// ListRegistryPromotionCandidatesPayload is the payload type of the admin
+// service listRegistryPromotionCandidates method.
+type ListRegistryPromotionCandidatesPayload struct {
+	AdminSessionToken *string
+	Cursor            *string
+	Status            string
+	Limit             int
+}
+
 // ListSignupOffersPayload is the payload type of the admin service
 // listSignupOffers method.
 type ListSignupOffersPayload struct {
@@ -2854,10 +2980,37 @@ type ProductFeatures struct {
 	// Whether an organization admin turned the organization gateway off, so its
 	// routes answer 404
 	OrganizationGatewayDisabled bool
+	// Whether the organization has the staff-managed gateway Code Mode entitlement
+	CodeModeEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool
+}
+
+// PromoteRegistryCandidatePayload is the payload type of the admin service
+// promoteRegistryCandidate method.
+type PromoteRegistryCandidatePayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	ProjectID         string
+	McpServerID       string
+	SourceRevision    string
+	CurationRevision  string
+	PublicName        string
+	// Public title, at most 100 Unicode code points.
+	PublicTitle string
+	// Public description, at most 100 Unicode code points.
+	PublicDescription       string
+	PublicURL               string
+	DocumentationURL        string
+	DocsSlug                string
+	AuthMode                string
+	RetryKey                string
+	PublicMetadataConfirmed bool
+	// Explicitly accept insufficient, failed, or unavailable health evidence.
+	// Source safety checks still apply.
+	OverrideEligibility bool
 }
 
 // RearmTrialPayload is the payload type of the admin service rearmTrial method.
@@ -2898,6 +3051,16 @@ type ResumeStripeSubscriptionPayload struct {
 	OrganizationID    string
 }
 
+// RetryRegistryPromotionDocsPayload is the payload type of the admin service
+// retryRegistryPromotionDocs method.
+type RetryRegistryPromotionDocsPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	PromotionID       string
+	DocsRevision      string
+	RetryKey          string
+}
+
 // RunUpstreamOAuthMigrationPayload is the payload type of the admin service
 // runUpstreamOAuthMigration method.
 type RunUpstreamOAuthMigrationPayload struct {
@@ -2930,6 +3093,15 @@ type ServeImageResult struct {
 	LastModified              string
 	AccessControlAllowOrigin  *string
 	CrossOriginResourcePolicy string
+}
+
+// SetAdoptionDashboardURLPayload is the payload type of the admin service
+// setAdoptionDashboardUrl method.
+type SetAdoptionDashboardURLPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	// An https URL, or empty to clear the link.
+	AdoptionDashboardURL *string
 }
 
 // SetInferenceKeyMonthlyLimitPayload is the payload type of the admin service
@@ -3426,6 +3598,9 @@ func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
 	if vres.OrganizationGatewayDisabled != nil {
 		res.OrganizationGatewayDisabled = *vres.OrganizationGatewayDisabled
 	}
+	if vres.CodeModeEnabled != nil {
+		res.CodeModeEnabled = *vres.CodeModeEnabled
+	}
 	if vres.DeviceAgent != nil {
 		res.DeviceAgent = *vres.DeviceAgent
 	}
@@ -3456,6 +3631,7 @@ func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesVie
 		NetworkIngressEnabled:                   &res.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              &res.SignalsIntelligenceEnabled,
 		OrganizationGatewayDisabled:             &res.OrganizationGatewayDisabled,
+		CodeModeEnabled:                         &res.CodeModeEnabled,
 		DeviceAgent:                             &res.DeviceAgent,
 	}
 	return vres

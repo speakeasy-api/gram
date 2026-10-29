@@ -439,21 +439,42 @@ open their effective assignments; the dropdown always offers compact member sear
     [Visual evidence on PR #6602](https://github.com/speakeasy-api/gram/pull/6602#issuecomment-5742380327).
 
 23. **Exact remote-session attachments (local only)**
-    - With the feature enabled, inspect Linear session 6 for the fictional
-      account and the two active release agents owned by the same human.
-      Both attachments must show the same upstream session, with no token
-      material exposed. Shared demo impersonation is not an authorized caller.
-    - Attachment mutations require the actual owner as an ordinary human
-      caller. The local developer is not automatically that fictional owner;
-      use a separate local-only account/session fixture for mutation checks.
-    - Detach one agent: the other binding and upstream account must survive.
-      Reattach the same exact session twice: only one active binding per
-      agent/issuer/client slot. A replacement session must not silently take
-      over a binding to the original session.
-    - Rerun `mise run seed` twice. Expect four agents, one inert upstream
-      session, two bindings and two exact project/server-scoped grants, with no
-      usable upstream credentials. This
-      fixture proves display and identity relationships, not live execution.
+    - With the feature enabled, inspect the two active release agents owned
+      by the first demo member. **Release assistant** has that member's
+      unexpired connection; **Release notes assistant** has the second demo
+      member's expired delegated connection. The latter must show one **Needs
+      refresh** status in both the agent list and detail view, replacing Active
+      rather than adding a second badge. No token material is
+      exposed. Shared demo impersonation is not an authorized caller.
+    - An ordinary human with agent write permission may remove either
+      assignment and attach only their own session. In the wizard, **MCP
+      selection** chooses servers without connection controls; **MCP
+      authentication** then lists only those selected. Shared credentials,
+      the assigned person, expired connections, and missing connections must
+      be distinguishable in the collapsed rows. Expand a row to manage its
+      connection. Remove a selected server here without returning to selection.
+    - **Reauthenticate** and **Remove** belong on the connection subrow;
+      expired connections use a warning treatment. Reauthenticate is available
+      only to the person whose connection expired. With a separate live
+      local-only OAuth fixture, verify it opens a small popup and refreshes the
+      row automatically when the popup closes. The icon-only status refresh is
+      a fallback, not a required second step. A successful explicit
+      reauthentication must restore gateway calls; the inert seed cannot prove
+      that exchange.
+    - On creation, missing or expired individual selections must be connected
+      or removed before continuing. **All servers** keeps valid assignments
+      and names missing connections without blocking progression. On edit,
+      Save remains unavailable until the stored server grants have loaded;
+      clearing all selections may then intentionally remove those grants.
+    - Detach one agent: the other binding and both personal accounts must
+      survive. Reattach the same exact session twice: only one active binding
+      per agent/issuer/client slot. Reauthorization changes the generation and
+      must not silently authorize an old attachment.
+    - Rerun `mise run seed` twice. Expect six managed agents, two inert
+      attachment sessions, two bindings and two exact project/server-scoped
+      grants, with no usable upstream credentials. The separate six Linear
+      validation sessions remain intact. These fixtures prove display and
+      identity relationships, not live execution.
 
 24. **Identity-chaining registration evidence**
     - Run `mise run seed` twice in an isolated local stack. In its `default`
@@ -588,6 +609,47 @@ open their effective assignments; the dropdown always offers compact member sear
     - Select one server's heading, then a single tool from another server, and approve. The connection's tools list, Progressive `describe_tools`, and `execute_tool` only reach the chosen tools; calls to the others are refused.
     - Reconnect: the consent screen opens with the previous choice selected.
     - Repeat on the organization gateway (`/mcp/gateway/acme-demo` on the demo org, or `/mcp/gateway/speakeasy` after `mise run seed`; the local seed leaves the organization gateway off, so first open MCP → Organization Gateway and enable it): its picker groups tools from every project you can reach, and the chosen tools are the only ones listed, described or callable.
+
+33. **Python Code Gateway** (local seed with the local code runner; the shared demo org stores it as Progressive)
+    - Open Inspect: confirm exactly one execute tool, Python helper documentation,
+      and the two permitted member prefixes. Execute `await tools.search("health")`.
+    - Describe a returned path, then call a local read-only fixture tool and inspect
+      its return value and completed nested-call outcome. Print a value and confirm
+      the submitted source remains visible after editing the next snippet.
+    - Select Progressive/Direct overrides and reconnect; return to the gateway
+      default and confirm execute returns. Reconnect through the consent screen
+      with Specific tools and a Code Mode override: search and calls only reach the
+      chosen tools.
+    - In Settings select Code Mode, save, and verify a new default connection. A missing
+      runtime must prevent new Code selections with a visible error or
+      unavailable option; stored Code defaults and connections are served in
+      Progressive mode until the runtime returns.
+    - Run the seed twice and the demoseed safety test: the third gateway, its two
+      members and endpoint must survive, with no rows changed in other tenants.
+    - Connect to the organization gateway (`/mcp/gateway/acme-demo` on the demo
+      org, or `/mcp/gateway/speakeasy` after `mise run seed`), choose
+      Code Mode on the consent page ("Gateway default (Progressive)" stays the
+      default), and confirm one execute tool whose search and calls reach
+      servers from every project you can reach.
+    - Command K: search "Python Code Gateway". It is listed under Gateways and
+      opens the gateway's overview.
+
+34. **Skills served over MCP** (needs the `skills-over-mcp` flag on for the
+    organization)
+    - Open **MCP → Acme Support Tools → Skills**. It lists Support Refunds and
+      Triage Incident, each with a Latest badge and a "Last loaded over MCP"
+      value. As a writer, **Add skill** opens a picker without those two and
+      each row has a remove button.
+    - Open **MCP → Acme Agent Gateway → Skills**. It lists Triage Incident and
+      Runbook.
+    - Open **Skills → Runbook → Usage**. "Served over MCP" lists Acme Agent
+      Gateway (opens the gateway's Skills tab) and Organization gateway, and
+      there is no **Add to organization gateway** button. Support Refunds
+      lists only Acme Support Tools and offers the button to project writers.
+    - In the read-only demo org no add or remove control shows. With the flag
+      off, neither Skills tab is in the sidebar, a direct `/skills` tab URL
+      returns to the server or gateway overview, and the skill page has no
+      "Served over MCP" section.
 
 ## On failure
 

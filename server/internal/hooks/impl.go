@@ -131,6 +131,9 @@ func (s *Service) now() time.Time {
 
 type authorizer interface {
 	Authorize(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error)
+
+	// AuthorizeWithHandlerProjectAccess resolves the project like Authorize
+	// but leaves the project permission check to the caller.
 	AuthorizeWithHandlerProjectAccess(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error)
 }
 
@@ -356,50 +359,37 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	if schema.Name == constants.ProjectSlugSecuritySchema && deviceagenttoken.IsWorkloadActor(ctx) {
 		return s.authorizeWorkloadProject(ctx, key, schema)
 	}
-
 	if schema.Name == constants.ProjectSlugSecuritySchema {
 		// Every method an agent key reaches pairs the key with this scheme, so
 		// the project-scoped hooks check runs here, once the project resolves.
-		authorized, err := s.authorizeHooksProject(ctx, key, schema)
-		if err != nil {
-			return authorized, fmt.Errorf("authorize hooks project: %w", err)
+		// An agent skips project:read only on an ingestion method.
+		if isAgentActor(ctx) && !isAgentIngestMethod(ctx) {
+			return ctx, oops.C(oops.CodeForbidden)
 		}
-		return authorized, nil
+		return s.authorizeHooksProject(ctx, key, schema)
 	}
 
 	ctx, err := s.auth.Authorize(ctx, key, schema)
 	if err != nil {
 		return ctx, fmt.Errorf("authorize hooks api key: %w", err)
 	}
-	if schema.Name == constants.KeySecurityScheme && isAgentActor(ctx) {
-		// Agent-principal keys may only reach the ingestion methods.
-		switch method, _ := ctx.Value(goa.MethodKey).(string); method {
-		case "cursor", "codex", "logs", "metrics":
-		default:
-			return ctx, oops.C(oops.CodeForbidden)
-		}
+	// Agent-principal keys may only reach the ingestion methods.
+	if schema.Name == constants.KeySecurityScheme && isAgentActor(ctx) && !isAgentIngestMethod(ctx) {
+		return ctx, oops.C(oops.CodeForbidden)
 	}
 	return ctx, nil
 }
 
-// authorizeHooksProject resolves Gram-Project for a request whose key has
-// already authenticated. An agent key is held to org:hooks_ingest on the
-// resolved project in place of the project:read gate, which a hooks-only agent
-// does not hold; every other caller keeps the project:read gate.
-func (s *Service) authorizeHooksProject(ctx context.Context, projectSlug string, schema *security.APIKeyScheme) (context.Context, error) {
-	authorize := s.auth.Authorize
-	if isAgentKeyActor(ctx) {
-		authorize = s.auth.AuthorizeWithHandlerProjectAccess
+// isAgentIngestMethod reports whether the Goa method on ctx ingests events,
+// the only hooks methods an agent actor may call through Goa security. The
+// claude and ingest methods authenticate inside their handlers instead.
+func isAgentIngestMethod(ctx context.Context) bool {
+	switch method, _ := ctx.Value(goa.MethodKey).(string); method {
+	case "cursor", "codex", "logs", "metrics":
+		return true
+	default:
+		return false
 	}
-	authorized, err := authorize(ctx, projectSlug, schema)
-	if err != nil {
-		return authorized, fmt.Errorf("authorize project: %w", err)
-	}
-	// For an agent key this is the only check binding it to the project.
-	if err := s.requireAgentHooksIngest(authorized); err != nil {
-		return authorized, err
-	}
-	return authorized, nil
 }
 
 // JWTAuth admits a device-agent token on the ingestion methods; the project step
@@ -418,9 +408,7 @@ func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTSche
 		refusal := oops.E(oops.CodeUnauthorized, nil, "this deployment does not accept device-agent tokens")
 		return deviceagenttoken.WithAuthFailure(ctx, refusal), refusal
 	}
-	switch method, _ := ctx.Value(goa.MethodKey).(string); method {
-	case "cursor", "codex", "logs", "metrics":
-	default:
+	if !isAgentIngestMethod(ctx) {
 		return ctx, oops.C(oops.CodeForbidden)
 	}
 
@@ -444,14 +432,11 @@ func (s *Service) authorizeWorkloadProject(ctx context.Context, key string, sche
 		return deviceagenttoken.WithAuthFailure(ctx, err), err
 	}
 
-	authorized, err := s.auth.Authorize(ctx, key, schema)
-	if err != nil {
-		err = fmt.Errorf("authorize workload hooks project: %w", err)
-		return deviceagenttoken.WithAuthFailure(ctx, err), err
-	}
 	// The workload stays the actor; attribution, spend and session scoping read
 	// the agent it acts for through deviceagenttoken.EffectiveAgent.
-	if err := s.requireAgentHooksIngest(authorized); err != nil {
+	authorized, err := s.authorizeHooksProject(ctx, key, schema)
+	if err != nil {
+		err = fmt.Errorf("authorize workload hooks project: %w", err)
 		return deviceagenttoken.WithAuthFailure(ctx, err), err
 	}
 	return authorized, nil

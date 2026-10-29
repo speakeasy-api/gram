@@ -20,8 +20,8 @@ func (a schemeAuthorizer) Authorize(_ context.Context, _ string, schema *securit
 	return a[schema.Name], nil
 }
 
-func (a schemeAuthorizer) AuthorizeWithHandlerProjectAccess(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return a.Authorize(ctx, key, schema)
+func (a schemeAuthorizer) AuthorizeWithHandlerProjectAccess(_ context.Context, _ string, schema *security.APIKeyScheme) (context.Context, error) {
+	return a[schema.Name], nil
 }
 
 // unboundAgentKey returns an admitted agent credential as the key scheme

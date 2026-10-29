@@ -40,6 +40,8 @@ func (a *ahpTestAuthorizer) Authorize(ctx context.Context, key string, scheme *s
 	}
 }
 
+// AuthorizeWithHandlerProjectAccess resolves the project the way Authorize
+// does: these tests authenticate humans, whose project check stays upstream.
 func (a *ahpTestAuthorizer) AuthorizeWithHandlerProjectAccess(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
 	return a.Authorize(ctx, key, scheme)
 }

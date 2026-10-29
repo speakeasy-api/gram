@@ -12,6 +12,21 @@ func GetPluginsAgentPath() string {
 	return "/rpc/agent.getPlugins"
 }
 
+// GetMyConnectionsAgentPath returns the URL path to the agent service getMyConnections HTTP endpoint.
+func GetMyConnectionsAgentPath() string {
+	return "/rpc/agent.getMyConnections"
+}
+
+// HideMcpServerAgentPath returns the URL path to the agent service hideMcpServer HTTP endpoint.
+func HideMcpServerAgentPath() string {
+	return "/rpc/agent.hideMcpServer"
+}
+
+// UnhideMcpServerAgentPath returns the URL path to the agent service unhideMcpServer HTTP endpoint.
+func UnhideMcpServerAgentPath() string {
+	return "/rpc/agent.unhideMcpServer"
+}
+
 // ListSyncedUsersAgentPath returns the URL path to the agent service listSyncedUsers HTTP endpoint.
 func ListSyncedUsersAgentPath() string {
 	return "/rpc/agent.listSyncedUsers"
@@ -55,6 +70,11 @@ func ReportSessionMovedAgentPath() string {
 // ReportAIScanAgentPath returns the URL path to the agent service reportAIScan HTTP endpoint.
 func ReportAIScanAgentPath() string {
 	return "/rpc/agent.reportAIScan"
+}
+
+// ReportStateAgentPath returns the URL path to the agent service reportState HTTP endpoint.
+func ReportStateAgentPath() string {
+	return "/rpc/agent.reportState"
 }
 
 // CreateSessionHandoffAgentPath returns the URL path to the agent service createSessionHandoff HTTP endpoint.

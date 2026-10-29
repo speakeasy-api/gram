@@ -78,8 +78,7 @@ When plugins are published, all platform configs land in a single repo. The root
 │
 └── agent-plugins/<plugin-slug>/       # Portable Agent Plugins 1.0 package
     ├── .cursor-plugin/plugin.json     # Native Cursor overlay
-    ├── .codex-plugin/plugin.json      # Native Codex overlay
-    ├── .mcp.json                      # Native Codex MCP config
+    ├── .mcp.json                      # Native Cursor MCP config
     ├── plugin.json
     ├── mcp.json
     └── skills/
@@ -90,7 +89,12 @@ Cursor plugins are grouped under the `cursor-plugins/` subdirectory, declared vi
 then resolved relative to that root (bare names, no `./` prefix).
 
 Compatible plugins are also published under `agent-plugins/` without changing the
-native Cursor or Codex marketplace entries.
+native Cursor or Codex marketplace entries. Codex must install the native
+`<plugin-slug>-codex/` package (or `speakeasy-codex/` for Platform MCP), not
+the portable package: its AP1.0 manifest selects Codex's restricted Agent Plugins
+tool budget. The portable package retains its Cursor overlay and MCP config,
+but does not include a Codex overlay. Native Codex ZIP downloads likewise have
+no root AP1.0 manifest; the explicit `agent-plugin` ZIP remains AP1.0.
 
 ## Marketplace manifests
 
@@ -425,13 +429,16 @@ OpenClaw has no marketplace track: the observability package is the only OpenCla
   "id": "speakeasy-observability",
   "name": "Speakeasy Observability",
   "description": "Speakeasy observability hooks for OpenClaw.",
-  "activation": { "onStartup": true }
+  "activation": { "onStartup": true, "onCapabilities": ["hook"] }
 }
 ```
 
+`onStartup: true` loads the plugin when the Gateway starts.
+`onCapabilities: ["hook"]` declares its hook capability for OpenClaw 2026.9.3 and later.
+
 `index.js` is plain JavaScript, not TypeScript: OpenClaw package installs reject a build step. It subscribes the typed plugin hooks and proxies each frame to `agenthooks serve --provider=openclaw`, returning the reply verbatim as the hook handler's return value so `before_tool_call` denials reach OpenClaw intact.
 
-**Conversation-scope hooks require opt-in.** `before_agent_run`, `llm_output` and `agent_end` only fire when the customer sets `plugins.entries.speakeasy-observability.hooks.allowConversationAccess: true`. Without it the package still reports tool calls and session lifecycle, so a half-configured install looks partly working.
+**Conversation-scope hooks require opt-in.** `before_agent_run`, `llm_input`, `llm_output` and `agent_end` only fire when the customer sets `plugins.entries.speakeasy-observability.hooks.allowConversationAccess: true`. Without it the package still reports tool calls and session lifecycle, so a half-configured install looks partly working.
 
 **The shim owns its own deadlines.** OpenClaw applies no default hook timeout, so the module enforces them: 10s for the blocking gates (`before_tool_call`, `before_agent_run`) and 30s for observe-only hooks. `--timeout=60s` bounds the serve process, not a handler.
 

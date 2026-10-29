@@ -40,6 +40,7 @@ func (s *seeder) seedDeploymentInference(ctx context.Context) error {
 		Description: "Summary workers exchanging platform identity for project-scoped inference access.",
 		Tags:        []string{"inference", "workers"}, Issuer: "https://inference.example.com",
 		JwksUri: "https://inference.example.com/.well-known/jwks.json", AllowWildcardAdmission: false,
+		AllowAssertionReuse: false,
 	}); err != nil {
 		return fmt.Errorf("insert demo inference workload issuer: %w", err)
 	}

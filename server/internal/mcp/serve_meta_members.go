@@ -13,8 +13,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -235,8 +238,12 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 		}
 		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, issuer, scopeProjectID)
 	}
+	if err == nil && gate.userID != "" && !isAssistantRequest(ctx) {
+		members, gate.hiddenMembers = s.splitHiddenMembers(ctx, logger, gate.organizationID, gate.userID, members)
+	}
 	if err == nil && gate.catalog != nil {
 		members, gate.unapprovedMembers = gate.catalog.approvedMembers(members)
+		gate.hiddenMembers, _ = gate.catalog.approvedMembers(gate.hiddenMembers)
 	}
 	if err == nil && gate.catalog != nil {
 		ids := make([]uuid.UUID, 0, len(members))
@@ -254,7 +261,7 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 	if err == nil && gate.memberChoices != nil {
 		if gate.catalog == nil {
 			gate.memberChoices.apply(ctx, logger, members, false)
-		} else if gate.catalogMode != toolfilter.CatalogModeCached || gate.execute {
+		} else if gate.catalogRef.Mode != toolfilter.CatalogModeCached || gate.execute {
 			gate.memberChoices.apply(ctx, logger, members, true)
 		}
 	}
@@ -456,7 +463,7 @@ func (s *Service) admitMetaMembers(
 		connect := authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), candidate.projectID.String())
 		switch candidate.visibility {
 		case mcpservers.VisibilityPublic:
-			shadow.record(ctx, surface, true, connect)
+			shadow.recordServer(ctx, surface, true, authz.MandatoryServerPublic, connect)
 		case mcpservers.VisibilityPrivate:
 			if err := s.authz.Require(ctx, connect); err != nil {
 				// Forbidden and Unauthorized (anonymous callers on an ungated
@@ -464,12 +471,12 @@ func (s *Service) admitMetaMembers(
 				// member. Anything else is an evaluation failure.
 				var oopsErr *oops.ShareableError
 				if errors.As(err, &oopsErr) && (oopsErr.Code == oops.CodeForbidden || oopsErr.Code == oops.CodeUnauthorized) {
-					shadow.record(ctx, surface, false, connect)
+					shadow.recordServer(ctx, surface, false, authz.MandatoryServerPrivate, connect)
 					continue
 				}
 				return ctx, nil, oops.E(oops.CodeUnexpected, err, "check member authz").LogError(ctx, logger)
 			}
-			shadow.record(ctx, surface, true, connect)
+			shadow.recordServer(ctx, surface, true, authz.MandatoryServerPrivate, connect)
 		default:
 			continue
 		}
@@ -513,4 +520,37 @@ func findMetaMember(members []metaMember, serverSlug string) (metaMember, bool) 
 	}
 	var none metaMember
 	return none, false
+}
+
+// isAssistantRequest reports an assistant run, which acts for its owner but
+// must not inherit the owner's hidden servers.
+func isAssistantRequest(ctx context.Context) bool {
+	_, ok := contextvalues.GetAssistantPrincipal(ctx)
+	return ok
+}
+
+// splitHiddenMembers separates the servers the user hid from those served.
+// Hiding is a preference, so a failed lookup serves every member rather than
+// failing the request.
+func (s *Service) splitHiddenMembers(ctx context.Context, logger *slog.Logger, organizationID, userID string, members []metaMember) ([]metaMember, []metaMember) {
+	hidden, err := hiddenmcpservers.HiddenServerIDs(ctx, s.db, organizationID, userID)
+	if err != nil {
+		if ctx.Err() == nil {
+			logger.WarnContext(ctx, "load hidden gateway members", attr.SlogError(err))
+		}
+		return members, nil
+	}
+	if len(hidden) == 0 {
+		return members, nil
+	}
+	served := make([]metaMember, 0, len(members))
+	var removed []metaMember
+	for _, member := range members {
+		if hidden[member.serverID] {
+			removed = append(removed, member)
+		} else {
+			served = append(served, member)
+		}
+	}
+	return served, removed
 }

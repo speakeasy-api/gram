@@ -81,6 +81,7 @@ func platformMCPMarketplaceFiles(serverURL, marketplaceRepoURL, version string, 
 		ServerURL:        serverURL,
 		APIKey:           "",
 		HooksAPIKey:      "",
+		HooksKeyIsAgent:  false,
 		ProjectSlug:      "",
 		IsDefaultProject: true,
 		Version:          version,
@@ -239,6 +240,6 @@ func platformMCPMarketplaceReadme(marketplaceRepoURL string, mode platformMCPMar
 	} else {
 		b.WriteString("Agent Plugins formats. Clone this repository and point your ")
 	}
-	b.WriteString("agent at the directory for your format.\n")
+	b.WriteString("agent at the directory for your format. Codex must use `speakeasy-codex/`, not the portable Agent Plugins package.\n")
 	return []byte(b.String())
 }

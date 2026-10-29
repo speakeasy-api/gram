@@ -2368,6 +2368,7 @@ func (q *Queries) GetPlatformMCPConnectionForUpdate(ctx context.Context, arg Get
 const getPlatformMCPConnectionSettings = `-- name: GetPlatformMCPConnectionSettings :one
 SELECT
     CASE WHEN $1::text = 'gateway' THEN COALESCE(gateway.discovery_mode, 'progressive') ELSE '' END::text AS discovery_mode,
+    ($1::text = 'gateway' AND gateway.user_session_issuer_id IS NOT NULL)::boolean AS gateway_requires_sign_in,
     CASE WHEN $1::text = 'gateway' THEN gateway.name ELSE COALESCE(server.name, server.slug, '') END::text AS name,
     CASE WHEN $1::text = 'gateway' THEN gateway.visibility ELSE server.visibility END::text AS visibility,
     COALESCE(
@@ -2456,13 +2457,14 @@ type GetPlatformMCPConnectionSettingsParams struct {
 }
 
 type GetPlatformMCPConnectionSettingsRow struct {
-	DiscoveryMode     string
-	Name              string
-	Visibility        string
-	NetworkMode       string
-	Endpoints         []byte
-	Ingress           []byte
-	PluginMemberships []byte
+	DiscoveryMode         string
+	GatewayRequiresSignIn bool
+	Name                  string
+	Visibility            string
+	NetworkMode           string
+	Endpoints             []byte
+	Ingress               []byte
+	PluginMemberships     []byte
 }
 
 // One exact organization/project-scoped target and its connection dependencies.
@@ -2477,6 +2479,7 @@ func (q *Queries) GetPlatformMCPConnectionSettings(ctx context.Context, arg GetP
 	var i GetPlatformMCPConnectionSettingsRow
 	err := row.Scan(
 		&i.DiscoveryMode,
+		&i.GatewayRequiresSignIn,
 		&i.Name,
 		&i.Visibility,
 		&i.NetworkMode,
@@ -2537,6 +2540,65 @@ func (q *Queries) GetPlatformMCPDistribution(ctx context.Context, arg GetPlatfor
 		&i.ActingSurface,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPlatformMCPDistributionTargetByServer = `-- name: GetPlatformMCPDistributionTargetByServer :one
+SELECT
+    registration.id AS registration_id,
+    project.id AS project_id,
+    project.name AS project_name,
+    project.slug AS project_slug,
+    registration.mcp_server_id,
+    COALESCE(mcp_server.name, mcp_server.slug, '')::text AS mcp_server_name
+FROM platform_mcp_catalog_registrations AS registration
+JOIN projects AS project
+  ON project.id = registration.project_id
+ AND project.organization_id = registration.organization_id
+ AND project.deleted IS FALSE
+JOIN mcp_servers AS mcp_server
+  ON mcp_server.id = registration.mcp_server_id
+ AND mcp_server.project_id = registration.project_id
+ AND mcp_server.deleted IS FALSE
+WHERE registration.organization_id = $1
+  AND project.slug = $2
+  AND registration.mcp_server_id = $3
+  AND registration.status = 'registered'
+  AND registration.deleted IS FALSE
+ORDER BY registration.created_at DESC, registration.id DESC
+LIMIT 1
+`
+
+type GetPlatformMCPDistributionTargetByServerParams struct {
+	OrganizationID string
+	ProjectSlug    string
+	McpServerID    uuid.NullUUID
+}
+
+type GetPlatformMCPDistributionTargetByServerRow struct {
+	RegistrationID uuid.UUID
+	ProjectID      uuid.UUID
+	ProjectName    string
+	ProjectSlug    string
+	McpServerID    uuid.NullUUID
+	McpServerName  string
+}
+
+// Resolves the MCP server a distribution names, by its ID as find_mcp reports
+// it, rather than the one the onboarding workflow last selected. Only a server
+// added through Platform MCP setup has a registration, and so readiness evidence
+// that distribution can require.
+func (q *Queries) GetPlatformMCPDistributionTargetByServer(ctx context.Context, arg GetPlatformMCPDistributionTargetByServerParams) (GetPlatformMCPDistributionTargetByServerRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPDistributionTargetByServer, arg.OrganizationID, arg.ProjectSlug, arg.McpServerID)
+	var i GetPlatformMCPDistributionTargetByServerRow
+	err := row.Scan(
+		&i.RegistrationID,
+		&i.ProjectID,
+		&i.ProjectName,
+		&i.ProjectSlug,
+		&i.McpServerID,
+		&i.McpServerName,
 	)
 	return i, err
 }
@@ -2870,7 +2932,8 @@ SELECT
     project.id AS project_id,
     project.name AS project_name,
     project.slug AS project_slug,
-    registration.mcp_server_id
+    registration.mcp_server_id,
+    COALESCE(mcp_server.name, mcp_server.slug, '')::text AS mcp_server_name
 FROM platform_mcp_onboarding_workflows AS workflow
 JOIN projects AS project
   ON project.id = workflow.selected_project_id
@@ -2881,6 +2944,9 @@ JOIN platform_mcp_catalog_registrations AS registration
  AND registration.organization_id = workflow.organization_id
  AND registration.project_id = project.id
  AND registration.deleted IS FALSE
+LEFT JOIN mcp_servers AS mcp_server
+  ON mcp_server.id = registration.mcp_server_id
+ AND mcp_server.project_id = registration.project_id
 WHERE workflow.organization_id = $1
   AND workflow.initiating_subject_urn = $2
   AND workflow.status = 'active'
@@ -2901,6 +2967,7 @@ type GetPlatformMCPOnboardingDistributionTargetRow struct {
 	ProjectName    string
 	ProjectSlug    string
 	McpServerID    uuid.NullUUID
+	McpServerName  string
 }
 
 func (q *Queries) GetPlatformMCPOnboardingDistributionTarget(ctx context.Context, arg GetPlatformMCPOnboardingDistributionTargetParams) (GetPlatformMCPOnboardingDistributionTargetRow, error) {
@@ -2913,6 +2980,7 @@ func (q *Queries) GetPlatformMCPOnboardingDistributionTarget(ctx context.Context
 		&i.ProjectName,
 		&i.ProjectSlug,
 		&i.McpServerID,
+		&i.McpServerName,
 	)
 	return i, err
 }
@@ -3297,6 +3365,40 @@ func (q *Queries) GetPlatformMCPReadiness(ctx context.Context, arg GetPlatformMC
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const getPlatformMCPRegistrationLogo = `-- name: GetPlatformMCPRegistrationLogo :one
+SELECT a.url, a.content_type, a.content_length
+FROM platform_mcp_catalog_registrations r
+JOIN mcp_metadata m ON m.mcp_server_id = r.mcp_server_id AND m.project_id = r.project_id
+JOIN assets a ON a.id = m.logo_id AND a.project_id = r.project_id
+WHERE r.id = $1
+  AND r.organization_id = $2
+  AND r.project_id = $3
+  AND r.deleted IS FALSE
+  AND a.kind = 'image'
+  AND a.deleted IS FALSE
+`
+
+type GetPlatformMCPRegistrationLogoParams struct {
+	RegistrationID uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformMCPRegistrationLogoRow struct {
+	Url           string
+	ContentType   string
+	ContentLength int64
+}
+
+// The stored logo of a registration's MCP server, for its result card. Every
+// join is pinned to the registration's organization and project.
+func (q *Queries) GetPlatformMCPRegistrationLogo(ctx context.Context, arg GetPlatformMCPRegistrationLogoParams) (GetPlatformMCPRegistrationLogoRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPRegistrationLogo, arg.RegistrationID, arg.OrganizationID, arg.ProjectID)
+	var i GetPlatformMCPRegistrationLogoRow
+	err := row.Scan(&i.Url, &i.ContentType, &i.ContentLength)
 	return i, err
 }
 
@@ -5308,6 +5410,15 @@ WHERE m.deleted IS FALSE
       OR m.id::text ILIKE '%' || $10::text || '%'
       OR COALESCE(m.name, '') ILIKE '%' || $10::text || '%'
       OR COALESCE(m.slug, '') ILIKE '%' || $10::text || '%'
+      OR EXISTS (
+          SELECT 1
+          FROM platform_mcp_catalog_registrations AS source
+          WHERE source.organization_id = $1
+            AND source.project_id = m.project_id
+            AND source.mcp_server_id = m.id
+            AND source.deleted IS FALSE
+            AND source.catalog_reference ILIKE '%' || $10::text || '%'
+      )
   )
   AND (
       $11::text IS NULL
@@ -5322,7 +5433,15 @@ WHERE m.deleted IS FALSE
 ORDER BY
     CASE
         WHEN $10::text <> ''
-         AND (m.id::text = $10::text OR LOWER(COALESCE(m.name, '')) = LOWER($10::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($10::text))
+         AND (m.id::text = $10::text OR LOWER(COALESCE(m.name, '')) = LOWER($10::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($10::text) OR EXISTS (
+             SELECT 1
+             FROM platform_mcp_catalog_registrations AS source
+             WHERE source.organization_id = $1
+               AND source.project_id = m.project_id
+               AND source.mcp_server_id = m.id
+               AND source.deleted IS FALSE
+               AND LOWER(source.catalog_reference) = LOWER($10::text)
+         ))
         THEN 0
         ELSE 1
     END,
@@ -5453,11 +5572,28 @@ WHERE m.deleted IS FALSE
       OR m.id::text ILIKE '%' || $4::text || '%'
       OR COALESCE(m.name, '') ILIKE '%' || $4::text || '%'
       OR COALESCE(m.slug, '') ILIKE '%' || $4::text || '%'
+      OR EXISTS (
+          SELECT 1
+          FROM platform_mcp_catalog_registrations AS source
+          WHERE source.organization_id = $1
+            AND source.project_id = m.project_id
+            AND source.mcp_server_id = m.id
+            AND source.deleted IS FALSE
+            AND source.catalog_reference ILIKE '%' || $4::text || '%'
+      )
   )
 ORDER BY
     CASE
         WHEN $4::text <> ''
-         AND (m.id::text = $4::text OR LOWER(COALESCE(m.name, '')) = LOWER($4::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($4::text))
+         AND (m.id::text = $4::text OR LOWER(COALESCE(m.name, '')) = LOWER($4::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($4::text) OR EXISTS (
+             SELECT 1
+             FROM platform_mcp_catalog_registrations AS source
+             WHERE source.organization_id = $1
+               AND source.project_id = m.project_id
+               AND source.mcp_server_id = m.id
+               AND source.deleted IS FALSE
+               AND LOWER(source.catalog_reference) = LOWER($4::text)
+         ))
         THEN 0
         ELSE 1
     END,
@@ -6005,8 +6141,10 @@ SELECT
     CASE WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server' ELSE 'gateway' END::text AS target_kind,
     COALESCE(ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
-    COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
-    COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
+    COALESCE(ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
+    -- legacyalias: drop with AIM-670.
+    t.id AS alias_toolset_id,
+    COALESCE(s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
     membership_version.value AS membership_version
 FROM plugin_servers ps
 CROSS JOIN membership_version
@@ -6072,6 +6210,7 @@ type ListPlatformMCPPluginMembershipsRow struct {
 	TargetID          uuid.NullUUID
 	TargetResolved    bool
 	McpSlug           string
+	AliasToolsetID    uuid.NullUUID
 	Enabled           bool
 	MembershipVersion string
 }
@@ -6107,6 +6246,7 @@ func (q *Queries) ListPlatformMCPPluginMemberships(ctx context.Context, arg List
 			&i.TargetID,
 			&i.TargetResolved,
 			&i.McpSlug,
+			&i.AliasToolsetID,
 			&i.Enabled,
 			&i.MembershipVersion,
 		); err != nil {
@@ -6127,8 +6267,10 @@ SELECT
     ps.policy,
     ps.sort_order,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
-    COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
-    COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
+    COALESCE(ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
+    -- legacyalias: drop with AIM-670.
+    t.id AS alias_toolset_id,
+    COALESCE(s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
 JOIN plugins p
   ON p.id = ps.plugin_id
@@ -6175,18 +6317,20 @@ type ListPlatformMCPPluginServersParams struct {
 }
 
 type ListPlatformMCPPluginServersRow struct {
-	ID            uuid.UUID
-	DisplayName   string
-	Policy        string
-	SortOrder     int32
-	GatewayBacked bool
-	McpSlug       string
-	Enabled       bool
+	ID             uuid.UUID
+	DisplayName    string
+	Policy         string
+	SortOrder      int32
+	GatewayBacked  bool
+	McpSlug        string
+	AliasToolsetID uuid.NullUUID
+	Enabled        bool
 }
 
 // Member-facing compatibility projection. It deliberately omits membership and
 // backend IDs, which are administrative identity and must not cross this path.
-// A canonical wrapper with no endpoint falls back to its toolset's MCP slug.
+// A canonical wrapper with no endpoint falls back to its toolset's legacy alias,
+// which the caller reads through legacyalias for alias_toolset_id.
 func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlatformMCPPluginServersParams) ([]ListPlatformMCPPluginServersRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPPluginServers,
 		arg.PluginID,
@@ -6208,6 +6352,7 @@ func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlat
 			&i.SortOrder,
 			&i.GatewayBacked,
 			&i.McpSlug,
+			&i.AliasToolsetID,
 			&i.Enabled,
 		); err != nil {
 			return nil, err
@@ -6382,6 +6527,105 @@ func (q *Queries) ListPlatformMCPProjectPlugins(ctx context.Context, arg ListPla
 			&i.Name,
 			&i.Slug,
 			&i.IsDefault,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPProjectSkillLinkServers = `-- name: ListPlatformMCPProjectSkillLinkServers :many
+SELECT
+    candidates.kind,
+    candidates.id,
+    candidates.name,
+    candidates.slug
+FROM (
+    SELECT
+        'mcp_server'::text AS kind,
+        mcp_servers.id,
+        COALESCE(mcp_servers.name, toolsets.name, mcp_servers.slug, mcp_servers.id::text)::text AS name,
+        COALESCE(mcp_servers.slug, '')::text AS slug
+    FROM mcp_servers
+    JOIN projects
+      ON projects.id = mcp_servers.project_id
+    LEFT JOIN toolsets
+      ON toolsets.id = mcp_servers.toolset_id
+      AND toolsets.project_id = mcp_servers.project_id
+      AND toolsets.deleted IS FALSE
+    WHERE $1::text = 'mcp_server'
+      AND mcp_servers.project_id = $2
+      AND projects.organization_id = $3
+      AND projects.deleted IS FALSE
+      AND mcp_servers.deleted IS FALSE
+    UNION ALL
+    SELECT
+        'meta_mcp_server'::text AS kind,
+        meta_mcp_servers.id,
+        meta_mcp_servers.name,
+        ''::text AS slug
+    FROM meta_mcp_servers
+    JOIN projects
+      ON projects.id = meta_mcp_servers.project_id
+    WHERE $1::text = 'meta_mcp_server'
+      AND meta_mcp_servers.project_id = $2
+      AND meta_mcp_servers.organization_id = $3
+      AND projects.organization_id = $3
+      AND projects.deleted IS FALSE
+      AND meta_mcp_servers.deleted IS FALSE
+) AS candidates
+WHERE candidates.id::text = $4::text
+   OR (candidates.slug <> '' AND lower(candidates.slug) = lower($4::text))
+   OR lower(candidates.name) = lower($4::text)
+ORDER BY candidates.name ASC, candidates.id ASC
+LIMIT $5
+`
+
+type ListPlatformMCPProjectSkillLinkServersParams struct {
+	Kind           string
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Wanted         string
+	ResultLimit    int32
+}
+
+type ListPlatformMCPProjectSkillLinkServersRow struct {
+	Kind string
+	ID   uuid.UUID
+	Name string
+	Slug string
+}
+
+// The live MCP servers or gateways of one kind in one project that an exact
+// identifier names: the id, the slug, or the name, ignoring case. A server is
+// named by its own name, falling back to its toolset's name and then its slug.
+// Matching here, rather than over a capped list of every server, means a
+// target the project has is never refused as not found because it sorted past
+// the cap.
+func (q *Queries) ListPlatformMCPProjectSkillLinkServers(ctx context.Context, arg ListPlatformMCPProjectSkillLinkServersParams) ([]ListPlatformMCPProjectSkillLinkServersRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPProjectSkillLinkServers,
+		arg.Kind,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Wanted,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPProjectSkillLinkServersRow
+	for rows.Next() {
+		var i ListPlatformMCPProjectSkillLinkServersRow
+		if err := rows.Scan(
+			&i.Kind,
+			&i.ID,
+			&i.Name,
+			&i.Slug,
 		); err != nil {
 			return nil, err
 		}
@@ -6953,85 +7197,6 @@ func (q *Queries) ListPlatformMCPSubjectConnections(ctx context.Context, arg Lis
 			&i.AuthorizedAt,
 			&i.ReauthorizedAt,
 			&i.Ready,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRiskFindingSpansForRecall = `-- name: ListRiskFindingSpansForRecall :many
-SELECT rr.chat_message_id, rr.source, rr.rule_id, rr.match, rr.spans, rr.start_pos, rr.end_pos
-FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-JOIN chats c ON c.id = cm.chat_id
-LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-WHERE cm.chat_id = $1
-  AND rr.project_id = $2
-  AND c.organization_id = $3
-  AND c.user_id = $4::text
-  AND c.deleted IS FALSE
-  AND (ua.id IS NULL OR ua.account_type <> 'personal')
-  AND cm.generation = (
-    SELECT COALESCE(MAX(generation), 0)
-    FROM chat_messages
-    WHERE chat_id = $1
-      AND project_id = $2
-  )
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-ORDER BY cm.created_at ASC, cm.seq ASC, rr.id ASC
-`
-
-type ListRiskFindingSpansForRecallParams struct {
-	ChatID         uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	UserID         string
-}
-
-type ListRiskFindingSpansForRecallRow struct {
-	ChatMessageID uuid.NullUUID
-	Source        string
-	RuleID        pgtype.Text
-	Match         pgtype.Text
-	Spans         []byte
-	StartPos      pgtype.Int4
-	EndPos        pgtype.Int4
-}
-
-// Findings that drive inline masking of the recall digest. Message-anchored
-// rows only (the digest does not render content parts): found, not excluded,
-// not swept as false positive, policy still enabled and not deleted.
-// Latest generation only, matching the transcript read: findings on
-// superseded generations mask nothing the digest renders, so loading them
-// would only let long, repeatedly compacted sessions inflate the scan.
-func (q *Queries) ListRiskFindingSpansForRecall(ctx context.Context, arg ListRiskFindingSpansForRecallParams) ([]ListRiskFindingSpansForRecallRow, error) {
-	rows, err := q.db.Query(ctx, listRiskFindingSpansForRecall,
-		arg.ChatID,
-		arg.ProjectID,
-		arg.OrganizationID,
-		arg.UserID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListRiskFindingSpansForRecallRow
-	for rows.Next() {
-		var i ListRiskFindingSpansForRecallRow
-		if err := rows.Scan(
-			&i.ChatMessageID,
-			&i.Source,
-			&i.RuleID,
-			&i.Match,
-			&i.Spans,
-			&i.StartPos,
-			&i.EndPos,
 		); err != nil {
 			return nil, err
 		}
@@ -8291,6 +8456,30 @@ func (q *Queries) ResolvePlatformMCPProjectBySlug(ctx context.Context, arg Resol
 	var i ResolvePlatformMCPProjectBySlugRow
 	err := row.Scan(&i.ID, &i.Name, &i.Slug)
 	return i, err
+}
+
+const retirePlatformMCPCatalogRegistration = `-- name: RetirePlatformMCPCatalogRegistration :exec
+UPDATE platform_mcp_catalog_registrations
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+`
+
+type RetirePlatformMCPCatalogRegistrationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Retires a registration whose MCP server was deleted outside Platform MCP, so
+// adding the same catalogue server again creates a fresh registration instead
+// of reusing one that points at a deleted server.
+func (q *Queries) RetirePlatformMCPCatalogRegistration(ctx context.Context, arg RetirePlatformMCPCatalogRegistrationParams) error {
+	_, err := q.db.Exec(ctx, retirePlatformMCPCatalogRegistration, arg.ID, arg.OrganizationID, arg.ProjectID)
+	return err
 }
 
 const revokePlatformMCPConnection = `-- name: RevokePlatformMCPConnection :one

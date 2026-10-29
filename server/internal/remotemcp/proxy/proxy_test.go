@@ -1067,30 +1067,47 @@ func TestProxy_Get_StreamTerminatesOnIdleTimeout(t *testing.T) {
 	require.Contains(t, rr.Body.String(), `"step":0`, "first event must have reached the client before idle terminated the stream")
 }
 
-func TestProxy_Post_StreamIdleTimeoutReturnsGatewayError(t *testing.T) {
+func TestProxy_Post_StreamIdleTimeoutAnswersWithErrorEvent(t *testing.T) {
 	t.Parallel()
 
 	// Upstream answers the POST with an SSE stream, sends one progress
 	// event, then stalls without ever delivering the terminal response
 	// event. Unlike the standalone GET stream, the client is still owed a
-	// reply here, so the idle bound firing is an upstream fault.
+	// reply here. The response headers are already sent, so the reply must
+	// be an SSE event: a returned error would reach the client as a bare
+	// line that SSE parsers drop.
 	const idleTimeout = 100 * time.Millisecond
 
 	upstream := newStallingSSEUpstream(t)
 
+	failures := &mockToolsCallFailureInterceptor{}
 	p := newProxyForTest(t, upstream.URL)
 	p.NonStreamingTimeout = 5 * time.Second
 	p.StreamingTimeout = idleTimeout
+	p.ToolsCallFailureInterceptors = []proxy.ToolsCallFailureInterceptor{failures}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(initializeRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(toolsCallRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 
 	rr := httptest.NewRecorder()
-	err := p.Post(rr, req)
+	require.NoError(t, p.Post(rr, req))
 
+	events := sseDataEvents(t, rr.Body.String())
+	require.NotEmpty(t, events)
+	var reply struct {
+		ID    int `json:"id"`
+		Error struct {
+			Code int `json:"code"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(events[len(events)-1]), &reply))
+	require.Equal(t, 1, reply.ID)
+	require.Equal(t, -32603, reply.Error.Code)
+
+	require.Len(t, failures.failures, 1)
 	var serr *oops.ShareableError
-	require.ErrorAs(t, err, &serr, "idle timeout mid-POST-response must surface as a shareable error")
+	require.ErrorAs(t, failures.failures[0].Err, &serr, "the failure log still records the upstream fault")
 	require.Equal(t, oops.CodeGatewayError, serr.Code, "idle timeout mid-POST-response is an upstream fault")
 }
 
@@ -2629,7 +2646,8 @@ func TestProxy_Post_ToolsListResponseInterceptor_RejectionWritesJSONRPCError(t *
 // members the SDK's ListToolsResult does not model — the MCP 2026-07-28
 // required resultType/ttlMs/cacheScope trio and an invented future member —
 // plus an _meta value whose integer exceeds float64 precision. Mutation
-// tests assert all of them relay intact through SetTools.
+// tests assert they relay intact through SetTools, except ttlMs and
+// cacheScope, which the proxy overwrites with its caller-varying label.
 const toolsListResponseThreeTools = `{
   "jsonrpc": "2.0",
   "id": 2,
@@ -2882,8 +2900,8 @@ func TestProxy_Post_ToolsListResponse_SetTools_RewritesRelayedBody_JSONPath(t *t
 	// SetTools splices only the tools member into the original payload
 	// instead of round-tripping through ListToolsResult.
 	require.Contains(t, rr.Body.String(), `"resultType":"tools/list"`, "unmodeled required member must survive SetTools")
-	require.Contains(t, rr.Body.String(), `"ttlMs":60000`, "unmodeled required member must survive SetTools")
-	require.Contains(t, rr.Body.String(), `"cacheScope":"server"`, "unmodeled required member must survive SetTools")
+	require.Contains(t, rr.Body.String(), `"ttlMs":0`, "the proxy must overwrite the upstream ttl after SetTools")
+	require.Contains(t, rr.Body.String(), `"cacheScope":"private"`, "the proxy must overwrite the upstream scope after SetTools")
 	require.Contains(t, rr.Body.String(), `"futureUnknownField":{"nested":["ok"]}`, "unknown future member must survive SetTools")
 	require.Contains(t, rr.Body.String(), `"_meta":{"upstream/trace":9007199254740993}`,
 		"_meta must relay with its original bytes — no float64 precision loss")

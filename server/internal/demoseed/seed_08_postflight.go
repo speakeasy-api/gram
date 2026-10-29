@@ -14,6 +14,13 @@ import (
 // postflight asserts the demo data landed and nothing leaked outside the demo
 // org. Any failure rolls the whole Postgres seed back.
 func (s *seeder) postflight(ctx context.Context) error {
+	count, err := s.q.PostflightCountRegistryPromotionCandidates(ctx, repo.PostflightCountRegistryPromotionCandidatesParams{OrgID: s.orgID(), ProjectID: s.projectID()})
+	if err != nil {
+		return fmt.Errorf("count synthetic catalogue promotion candidates: %w", err)
+	}
+	if count != 3 {
+		return fmt.Errorf("expected three ineligible catalogue promotion candidates, got %d", count)
+	}
 	if err := s.postflightCore(ctx); err != nil {
 		return err
 	}
@@ -129,7 +136,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "auth client associations",
 			count: byOrg(s.q.PostflightCountAuthClientAssociations),
-			fail:  postflightMustEqual(3, "expected 3 auth client associations, found %d"),
+			fail:  postflightMustEqual(4, "expected 4 auth client associations, found %d"),
 		},
 		{
 			what:  "setup tasks",
@@ -394,12 +401,17 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "gateway members",
 			count: byProject(s.q.PostflightCountGatewayMembers),
-			fail:  postflightMustEqual(4, "expected 4 gateway members, found %d"),
+			fail:  postflightMustEqual(6, "expected 6 gateway members, found %d"),
 		},
 		{
 			what:  "removed gateway members",
 			count: byProject(s.q.PostflightCountRemovedGatewayMembers),
 			fail:  postflightMustEqual(1, "expected 1 removed gateway member, found %d"),
+		},
+		{
+			what:  "mcp skill links",
+			count: byProject(s.q.PostflightCountMCPSkillLinks),
+			fail:  postflightMustEqual(5, "expected 5 MCP skill links, found %d"),
 		},
 		{
 			what:  "approvals server",
@@ -408,13 +420,18 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		},
 		{
 			what:  "hosted toolset wrappers",
-			count: byProject(s.q.PostflightCountUnwrappedToolsets),
-			fail:  postflightMustBeZero("%d hosted toolsets lack a matching canonical wrapper and endpoint"),
+			count: byProject(s.q.PostflightCountHostedToolsetDrift),
+			fail:  postflightMustBeZero("%d toolsets have a canonical wrapper out of step with them"),
+		},
+		{
+			what:  "canonical wrappers",
+			count: byProject(s.q.PostflightCountCanonicalWrappers),
+			fail:  postflightMustEqual(4, "expected 4 canonical hosted MCP servers (support, ops, partner, discovery), found %d"),
 		},
 		{
 			what:  "gateway endpoints",
 			count: byProject(s.q.PostflightCountGatewayEndpoints),
-			fail:  postflightMustEqual(1, "expected 1 gateway endpoint, found %d"),
+			fail:  postflightMustEqual(2, "expected 2 gateway endpoints, found %d"),
 		},
 		// A member whose server lost its backend can never be dispatched to,
 		// so it would sit in the gateway's table permanently unavailable.
@@ -460,6 +477,23 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			what:  "mdm devices",
 			count: byOrg(s.q.PostflightCountMDMDevices),
 			fail:  postflightMustEqual(7, "expected 7 mdm devices, found %d"),
+		},
+		// The policy states coverage refines agent_active into: one attested
+		// machine and one behind, beside a third with no report.
+		{
+			what:  "device agent state reports",
+			count: byOrg(s.q.PostflightCountDeviceAgentStateReports),
+			fail:  postflightMustEqual(2, "expected 2 device agent state reports, found %d"),
+		},
+		{
+			what:  "attested device agent state reports",
+			count: byOrg(s.q.PostflightCountAttestedDeviceAgentStateReports),
+			fail:  postflightMustEqual(1, "expected 1 state report applying its served etag, found %d"),
+		},
+		{
+			what:  "outdated device agent state reports",
+			count: byOrg(s.q.PostflightCountOutdatedDeviceAgentStateReports),
+			fail:  postflightMustEqual(1, "expected 1 state report behind on policy with a permission error, found %d"),
 		},
 		{
 			what:  "device integration configs",

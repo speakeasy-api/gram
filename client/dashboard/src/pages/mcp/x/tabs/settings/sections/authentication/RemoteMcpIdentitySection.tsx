@@ -598,7 +598,7 @@ export function RemoteMcpIdentitySectionBody({
   // that card says so rather than a banner underneath the choice.
   const noneWarning =
     noneProbeStatus === "authentication-required"
-      ? "This server answers with an authentication challenge. With no identity configured, requests to it will keep failing — choose User Identity or a Service Account."
+      ? "This server answers with an authentication challenge. With no identity configured, requests to it will keep failing — choose User Identity or a shared credential."
       : null;
   const cards = identityModeCards(upstreamName);
 
@@ -714,8 +714,8 @@ export function RemoteMcpIdentitySectionBody({
             {passThroughAuthorization ? (
               <Alert variant="warning" dismissible={false}>
                 A legacy pass-through Authorization header is still configured.
-                Remove it in Custom Headers before selecting Service Account or
-                relying on Manual.
+                Remove it in Custom Headers before selecting a shared credential
+                or relying on Manual.
               </Alert>
             ) : null}
 

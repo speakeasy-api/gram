@@ -713,8 +713,6 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 		Scopes:         []string{},
 		RequiredScopes: []string{"hooks"},
 	}
-	// The hooks grant may be bounded to one project, so it is checked only
-	// once the project slug has resolved.
 	ctx, err = s.authorizeHooksProject(ctx, projectSlug, projectScheme)
 	if err != nil {
 		if isAgentActor(ctx) {

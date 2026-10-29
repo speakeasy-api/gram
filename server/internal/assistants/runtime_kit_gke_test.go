@@ -9,11 +9,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	k8stesting "k8s.io/client-go/testing"
 )
 
@@ -25,11 +29,14 @@ func kitGKEInput() KitGKEProvisionInput {
 	}
 	return KitGKEProvisionInput{
 		TLSCertificate: cert, TLSPrivateKey: key,
+		Model: "test-model", InferenceEndpoint: "https://example.invalid/inference",
+		Workload:               &KitWorkloadBinding{IssuerID: uuid.New(), Subject: "test", ServiceAccount: "kit-workload-test", Audience: "https://example.invalid/oauth"},
+		WorkloadServiceAccount: "kit-workload-test", WorkloadAudience: "https://example.invalid/oauth",
 		CheckpointMarker: []byte("11111111-1111-4111-8111-111111111111"),
 		Identity:         KitGKEIdentity{Namespace: "kit-test", AssistantID: "assistant-test", Lineage: "lineage-one", CompatibilityGeneration: "generation-one"},
 		Name:             "kit-test-runtime", Image: "example.invalid/kit@sha256:" + strings.Repeat("a", 64), IngressCIDR: "10.1.0.0/16", GuestPort: 8080,
 		Command: []string{"/usr/local/bin/kit"}, Args: func() []string { _, args := KitGatewayCommand(8080); return args }(),
-		AgentsMD: []byte("caller instructions"), InferenceJSON: []byte(`{"api_key":"gram_local_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","project":"test-project","email":null,"organization_id":null}`), MCPJSON: []byte(`{"mcpServers":{}}`), GatewayToken: []byte("test-token"),
+		AgentsMD: []byte("caller instructions"), MCPJSON: []byte(`{"mcpServers":{}}`), GatewayToken: []byte("test-token"),
 		WorkSizeLimit: "1Gi", TmpSizeLimit: "128Mi",
 		Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("128Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("1Gi")}},
 	}
@@ -52,7 +59,7 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	var secret corev1.Secret
 	require.NoError(t, runtime.DefaultUnstructuredConverter.FromUnstructured(objects.Secret.Object, &secret))
 	require.True(t, *secret.Immutable)
-	require.Equal(t, map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitFileConfig + "model = \"openai/gpt-4.1-mini\"\n"), "speakeasy.json": in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken, "checkpoint-marker": in.CheckpointMarker, "tls.crt": in.TLSCertificate, "tls.key": in.TLSPrivateKey, "nginx.conf": []byte(kitGKETLSProxyConfig(in.GuestPort))}, secret.Data)
+	require.Equal(t, map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitBootstrapConfig(KitLocalBootstrap{Model: in.Model, Workload: in.Workload, AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: in.InferenceEndpoint})), "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken, "checkpoint-marker": in.CheckpointMarker, "tls.crt": in.TLSCertificate, "tls.key": in.TLSPrivateKey, "nginx.conf": []byte(kitGKETLSProxyConfig(in.GuestPort))}, secret.Data)
 	require.Equal(t, in.Identity.labels(), secret.Labels)
 	pod := kitPodTemplate(t, objects)
 	foundBootstrap := false
@@ -60,7 +67,7 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 		if volume.Name == "bootstrap" {
 			foundBootstrap = true
 			require.NotNil(t, volume.Secret)
-			require.Contains(t, volume.Secret.Items, corev1.KeyToPath{Key: "speakeasy.json", Path: "credentials/" + KitInferenceCredentialFilename})
+			require.NotContains(t, secret.Data, "speakeasy.json")
 		}
 	}
 	require.True(t, foundBootstrap, "bootstrap volume must exist")
@@ -68,6 +75,7 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	require.NotContains(t, pod.Annotations, "podsnapshot.gke.io/ps-name")
 	require.Equal(t, "false", pod.Annotations["cluster-autoscaler.kubernetes.io/safe-to-evict"])
 	require.False(t, *pod.Spec.AutomountServiceAccountToken)
+	require.Equal(t, in.WorkloadServiceAccount, pod.Spec.ServiceAccountName)
 	require.Equal(t, "gvisor", *pod.Spec.RuntimeClassName)
 	require.Equal(t, int64(1000), *pod.Spec.SecurityContext.RunAsUser)
 	require.Equal(t, int64(1000), *pod.Spec.SecurityContext.RunAsGroup)
@@ -83,9 +91,9 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	require.Equal(t, []string{"/bin/sh", "-ec"}, main.Command)
 	require.Equal(t, append(append([]string{}, in.Command...), "gateway", "--listen", "127.0.0.1:17766", "--credential-file", "/home/kit/.kit/credentials/gateway-token", "--project", KitWorkspacePath), main.Args[2:])
 	require.Equal(t, kitBootstrapScript+"exec \"$@\"\n", main.Args[0])
-	require.Equal(t, []corev1.EnvVar{{Name: "HOME", Value: "/home/kit"}, {Name: "SPEAKEASY_ORIGIN", Value: "https://ai.speakeasy.com"}}, main.Env)
+	require.Equal(t, []corev1.EnvVar{{Name: "HOME", Value: "/home/kit"}}, main.Env)
 	require.Equal(t, "/home/kit", main.WorkingDir)
-	require.Equal(t, []corev1.VolumeMount{{Name: "bootstrap", MountPath: "/bootstrap", ReadOnly: true}, {Name: "tmp", MountPath: "/tmp"}}, main.VolumeMounts)
+	require.Equal(t, []corev1.VolumeMount{{Name: "bootstrap", MountPath: "/bootstrap", ReadOnly: true}, {Name: "tmp", MountPath: "/tmp"}, {Name: "workload", MountPath: "/var/run/secrets/speakeasy/workload", ReadOnly: true}}, main.VolumeMounts)
 	proxy := pod.Spec.Containers[1]
 	require.Equal(t, "acp-tls", proxy.Name)
 	require.Equal(t, kitGKETLSProxyImage, proxy.Image)
@@ -107,7 +115,11 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	}
 	require.Equal(t, corev1.StorageMediumMemory, pod.Spec.Volumes[0].EmptyDir.Medium)
 	require.Equal(t, secret.Name, pod.Spec.Volumes[1].Secret.SecretName)
-	require.Len(t, pod.Spec.Volumes, 4)
+	require.Len(t, pod.Spec.Volumes, 5)
+	require.Equal(t, "workload", pod.Spec.Volumes[4].Name)
+	require.Equal(t, &corev1.ProjectedVolumeSource{DefaultMode: new(int32(0440)), Sources: []corev1.VolumeProjection{{ServiceAccountToken: &corev1.ServiceAccountTokenProjection{Audience: in.WorkloadAudience, ExpirationSeconds: new(int64(600)), Path: "assertion"}}}}, pod.Spec.Volumes[4].Projected)
+	require.NotContains(t, secret.Data, "assertion")
+	require.NotContains(t, main.Args[0], "/var/run/secrets/speakeasy/workload")
 	require.Equal(t, "tls-tmp", pod.Spec.Volumes[2].Name)
 	require.Equal(t, corev1.StorageMediumMemory, pod.Spec.Volumes[2].EmptyDir.Medium)
 	require.Equal(t, "tls", pod.Spec.Volumes[3].Name)
@@ -115,7 +127,7 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	require.ElementsMatch(t, []corev1.KeyToPath{{Key: "tls.crt", Path: "tls.crt"}, {Key: "tls.key", Path: "tls.key"}, {Key: "nginx.conf", Path: "nginx.conf"}}, pod.Spec.Volumes[3].Secret.Items)
 	require.Equal(t, resource.MustParse(in.WorkSizeLimit), main.Resources.Limits[corev1.ResourceEphemeralStorage])
 	require.Equal(t, int32(0440), *pod.Spec.Volumes[1].Secret.DefaultMode)
-	require.Len(t, pod.Spec.Volumes[1].Secret.Items, 6)
+	require.Len(t, pod.Spec.Volumes[1].Secret.Items, 5)
 	policy, found, err := unstructured.NestedMap(objects.Template.Object, "spec", "networkPolicy")
 	require.NoError(t, err)
 	require.True(t, found)
@@ -135,7 +147,7 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 }
 func TestKitGKEEnsureCreateOrderingAndFailure(t *testing.T) {
 	t.Parallel()
-	for _, failResource := range []string{"", "secrets", "sandboxtemplates", "sandboxclaims"} {
+	for _, failResource := range []string{"", "serviceaccounts", "secrets", "sandboxtemplates", "sandboxclaims"} {
 		t.Run(failResource, func(t *testing.T) {
 			t.Parallel()
 			backend, client, record, _ := kitGKEBackendFixture(t)
@@ -143,7 +155,7 @@ func TestKitGKEEnsureCreateOrderingAndFailure(t *testing.T) {
 				client.PrependReactor("create", failResource, func(k8stesting.Action) (bool, runtime.Object, error) { return true, nil, errors.New("blocked") })
 			}
 			_, err := backend.Ensure(t.Context(), record)
-			expected := []string{"secrets", "sandboxtemplates", "sandboxclaims"}
+			expected := []string{"serviceaccounts", "secrets", "sandboxtemplates", "sandboxclaims"}
 			if failResource != "" {
 				require.Error(t, err)
 				for idx, name := range expected {
@@ -172,23 +184,27 @@ func TestKitGKEEnsureCreateOrderingAndFailure(t *testing.T) {
 func TestKitGKEProvisionValidation(t *testing.T) {
 	t.Parallel()
 	cases := map[string]func(*KitGKEProvisionInput){
-		"missing TLS key":              func(in *KitGKEProvisionInput) { in.TLSPrivateKey = nil },
-		"missing TLS certificate":      func(in *KitGKEProvisionInput) { in.TLSCertificate = nil },
-		"wrong TLS identity":           func(in *KitGKEProvisionInput) { in.Name = "another-runtime" },
-		"reserved plaintext port":      func(in *KitGKEProvisionInput) { in.GuestPort = kitGKEPlaintextPort },
-		"legacy":                       func(in *KitGKEProvisionInput) { in.Name = "gram-asst" },
-		"missing command":              func(in *KitGKEProvisionInput) { in.Command = nil },
-		"unspecified args":             func(in *KitGKEProvisionInput) { in.Args = nil },
-		"invalid JSON":                 func(in *KitGKEProvisionInput) { in.MCPJSON = []byte("not JSON") },
-		"invalid label":                func(in *KitGKEProvisionInput) { in.Identity.Lineage = "bad/value" },
-		"missing marker":               func(in *KitGKEProvisionInput) { in.CheckpointMarker = nil },
-		"invalid marker":               func(in *KitGKEProvisionInput) { in.CheckpointMarker = []byte("invalid") },
-		"unexpected restore marker":    func(in *KitGKEProvisionInput) { in.ExpectedCheckpointMarker = in.CheckpointMarker },
-		"missing token":                func(in *KitGKEProvisionInput) { in.GatewayToken = nil },
-		"invalid CIDR":                 func(in *KitGKEProvisionInput) { in.IngressCIDR = "bad" },
-		"missing volume limit":         func(in *KitGKEProvisionInput) { in.WorkSizeLimit = "" },
-		"reset without prior identity": func(in *KitGKEProvisionInput) { in.ColdReset = true },
-		"reset same lineage":           func(in *KitGKEProvisionInput) { in.ColdReset = true; old := in.Identity; in.PreviousIdentity = &old },
+		"missing workload service account": func(in *KitGKEProvisionInput) { in.WorkloadServiceAccount = "" },
+		"invalid workload service account": func(in *KitGKEProvisionInput) { in.WorkloadServiceAccount = "bad/name" },
+		"missing workload audience":        func(in *KitGKEProvisionInput) { in.WorkloadAudience = "" },
+		"blank workload audience":          func(in *KitGKEProvisionInput) { in.WorkloadAudience = "  " },
+		"missing TLS key":                  func(in *KitGKEProvisionInput) { in.TLSPrivateKey = nil },
+		"missing TLS certificate":          func(in *KitGKEProvisionInput) { in.TLSCertificate = nil },
+		"wrong TLS identity":               func(in *KitGKEProvisionInput) { in.Name = "another-runtime" },
+		"reserved plaintext port":          func(in *KitGKEProvisionInput) { in.GuestPort = kitGKEPlaintextPort },
+		"legacy":                           func(in *KitGKEProvisionInput) { in.Name = "gram-asst" },
+		"missing command":                  func(in *KitGKEProvisionInput) { in.Command = nil },
+		"unspecified args":                 func(in *KitGKEProvisionInput) { in.Args = nil },
+		"invalid JSON":                     func(in *KitGKEProvisionInput) { in.MCPJSON = []byte("not JSON") },
+		"invalid label":                    func(in *KitGKEProvisionInput) { in.Identity.Lineage = "bad/value" },
+		"missing marker":                   func(in *KitGKEProvisionInput) { in.CheckpointMarker = nil },
+		"invalid marker":                   func(in *KitGKEProvisionInput) { in.CheckpointMarker = []byte("invalid") },
+		"unexpected restore marker":        func(in *KitGKEProvisionInput) { in.ExpectedCheckpointMarker = in.CheckpointMarker },
+		"missing token":                    func(in *KitGKEProvisionInput) { in.GatewayToken = nil },
+		"invalid CIDR":                     func(in *KitGKEProvisionInput) { in.IngressCIDR = "bad" },
+		"missing volume limit":             func(in *KitGKEProvisionInput) { in.WorkSizeLimit = "" },
+		"reset without prior identity":     func(in *KitGKEProvisionInput) { in.ColdReset = true },
+		"reset same lineage":               func(in *KitGKEProvisionInput) { in.ColdReset = true; old := in.Identity; in.PreviousIdentity = &old },
 	}
 	for name, change := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -305,21 +321,58 @@ func TestKitGKESnapshotContracts(t *testing.T) {
 func TestKitGKEEnsureDoesNotOverwriteExistingSecret(t *testing.T) {
 	t.Parallel()
 	backend, client, record, _ := kitGKEBackendFixture(t)
+	var existingSecret, ownedSA *unstructured.Unstructured
+	client.PrependReactor("create", "serviceaccounts", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		creation, ok := action.(k8stesting.CreateAction)
+		require.True(t, ok)
+		ownedSA, ok = creation.GetObject().(*unstructured.Unstructured)
+		require.True(t, ok)
+		return false, nil, nil
+	})
 	client.PrependReactor("create", "secrets", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		creation, ok := action.(k8stesting.CreateAction)
 		require.True(t, ok)
 		obj, ok := creation.GetObject().(*unstructured.Unstructured)
 		require.True(t, ok)
-		require.NoError(t, client.Tracker().Create(kitSecretGVR, obj.DeepCopy(), obj.GetNamespace()))
+		existingSecret = obj.DeepCopy()
+		existingSecret.SetUID(types.UID("unowned-secret"))
+		require.NoError(t, client.Tracker().Create(kitSecretGVR, existingSecret, obj.GetNamespace()))
 		return false, nil, nil
 	})
 	_, err := backend.Ensure(t.Context(), record)
 	require.Error(t, err)
+	require.NotNil(t, existingSecret)
+	require.NotNil(t, ownedSA)
+	require.NotEmpty(t, ownedSA.GetUID())
+	deletes := 0
 	for _, action := range client.Actions() {
 		require.NotEqual(t, "update", action.GetVerb())
 		require.NotEqual(t, "patch", action.GetVerb())
-		require.NotEqual(t, "delete", action.GetVerb())
+		if action.GetVerb() == "create" && action.GetResource() == kitServiceAccountGVR {
+			creation, ok := action.(k8stesting.CreateAction)
+			require.True(t, ok)
+			serviceAccount, ok := creation.GetObject().(*unstructured.Unstructured)
+			require.True(t, ok)
+			require.Equal(t, ownedSA.GetName(), serviceAccount.GetName())
+		}
+		if action.GetVerb() == "delete" {
+			deletes++
+			require.Equal(t, kitServiceAccountGVR, action.GetResource())
+			require.NotNil(t, ownedSA)
+			deletion, ok := action.(k8stesting.DeleteAction)
+			require.True(t, ok)
+			require.Equal(t, ownedSA.GetName(), deletion.GetName())
+			require.NotNil(t, deletion.GetDeleteOptions().Preconditions)
+			require.NotNil(t, deletion.GetDeleteOptions().Preconditions.UID)
+			require.Equal(t, ownedSA.GetUID(), *deletion.GetDeleteOptions().Preconditions.UID)
+		}
 	}
+	require.Equal(t, 1, deletes)
+	preserved, err := client.Resource(kitSecretGVR).Namespace(existingSecret.GetNamespace()).Get(t.Context(), existingSecret.GetName(), metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, existingSecret.Object, preserved.Object)
+	_, err = client.Resource(kitServiceAccountGVR).Namespace(ownedSA.GetNamespace()).Get(t.Context(), ownedSA.GetName(), metav1.GetOptions{})
+	require.True(t, apierrors.IsNotFound(err))
 }
 
 func TestKitGKERejectsUnboundedOrMutableProvisioning(t *testing.T) {
@@ -461,4 +514,15 @@ func TestKitGKEBootstrapRestoreMarkerGate(t *testing.T) {
 			require.Equal(t, "durable session", string(session))
 		})
 	}
+}
+
+func TestKitGKETemplateAndClaimHaveDistinctPolicyNames(t *testing.T) {
+	t.Parallel()
+	objects, err := RenderKitGKEProvision(kitGKEInput())
+	require.NoError(t, err)
+	require.Equal(t, objects.Claim.GetName()+"-template", objects.Template.GetName())
+	ref, found, err := unstructured.NestedString(objects.Claim.Object, "spec", "sandboxTemplateRef", "name")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, objects.Template.GetName(), ref)
 }
