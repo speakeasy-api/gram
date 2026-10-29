@@ -2,7 +2,14 @@
 // set, not one MCP server, so a credential carries no single-server target
 // into it. The gate admits the credential, and every request then admits each
 // live member against the credential's ceiling, the agent's live policy, and
-// its owner's live policy, the way it admits each member for a person.
+// its owner's live policy. Unlike a person, such a caller needs mcp:connect on
+// a public member too, as the issuer gate requires of it at a public single
+// server.
+//
+// A member that signs in upstream is called with the credential the caller
+// would use at that member's own server: an agent key's attachment, a
+// principal credential's authorizer's connection, or a workload's agent
+// owner's own connection. A member the agent is not granted is never called.
 
 package mcp
 
@@ -16,7 +23,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // agentGatewayAddressable reports whether an agent or workload credential may
@@ -81,6 +89,20 @@ func (s *Service) requireAgentCredentialAuthorization(ctx context.Context, endpo
 	return s.requireAgentSessionAuthorization(ctx, endpoint)
 }
 
+// delegatedCaller reports whether the request acts as an agent or a workload:
+// an agent key, a principal credential, or an agent or workload session. Its
+// authority is a delegated ceiling intersected with the agent's and its
+// owner's live policies, and a server's public visibility opens nothing past
+// that: the issuer gate requires such a caller's mcp:connect at a public
+// single server, and a stored gateway requires it on each public member.
+func delegatedCaller(ctx context.Context) bool {
+	if _, ok := contextvalues.PrincipalCredentialAuthorization(ctx); ok {
+		return true
+	}
+	actor, ok := contextvalues.AuthenticatedActor(ctx)
+	return ok && (actor.Type == urn.PrincipalTypeAgent || actor.Type == urn.PrincipalTypeWorkload)
+}
+
 // metaMemberConnectCheck is the mcp:connect check a gateway member is admitted
 // by. Grants on toolset-backed servers key on the toolset id, and grants on
 // proxy backends on the mcp_servers id; checking the wrong one silently hides
@@ -96,32 +118,24 @@ func metaMemberConnectCheck(serverID uuid.UUID, toolsetID uuid.NullUUID, project
 // gatewayWorkloadReach is what a workload grant's preflight found the
 // workload reaches at a stored gateway.
 type gatewayWorkloadReach struct {
-	// public reports a public member, which a gateway serves to every caller
-	// its gate admits.
-	public bool
-
-	// private is the connect check of each private member the preflight
-	// admitted.
-	private []authz.Check
+	// checks is the connect check of each member the preflight admitted,
+	// public or private: a workload is held to mcp:connect on both.
+	checks []authz.Check
 }
 
 // resolveGatewayWorkloadReach admits a stored gateway's live members for an
 // admitted workload, as its requests will, and refuses a workload that
 // reaches none of them: a session for an empty gateway serves nothing.
 func (s *Service) resolveGatewayWorkloadReach(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (context.Context, gatewayWorkloadReach, error) {
-	reach := gatewayWorkloadReach{public: false, private: nil}
+	reach := gatewayWorkloadReach{checks: nil}
 	ctx, members, err := s.resolveEndpointMemberSnapshot(withMandatoryAdmission(ctx), logger, mandatorySurfaceTokenIssuance, endpoint)
 	if err != nil {
 		return ctx, reach, fmt.Errorf("resolve gateway members for workload: %w", err)
 	}
 	for _, member := range members {
-		if member.visibility == mcpservers.VisibilityPublic {
-			reach.public = true
-			continue
-		}
-		reach.private = append(reach.private, metaMemberConnectCheck(member.serverID, member.toolsetID, member.projectID))
+		reach.checks = append(reach.checks, metaMemberConnectCheck(member.serverID, member.toolsetID, member.projectID))
 	}
-	if !reach.public && len(reach.private) == 0 {
+	if len(reach.checks) == 0 {
 		return ctx, reach, fmt.Errorf("%w: workload reaches no member of this gateway", errCredentialRejected)
 	}
 	return ctx, reach, nil
@@ -130,10 +144,7 @@ func (s *Service) resolveGatewayWorkloadReach(ctx context.Context, logger *slog.
 // recheck reports whether freshly loaded authority still reaches a member the
 // preflight admitted.
 func (r gatewayWorkloadReach) recheck(ctx context.Context, engine *authz.Engine) (bool, error) {
-	if r.public {
-		return true, nil
-	}
-	for _, check := range r.private {
+	for _, check := range r.checks {
 		allowed, err := engine.Evaluate(ctx, check)
 		if err != nil {
 			return false, fmt.Errorf("recheck gateway member authority: %w", err)

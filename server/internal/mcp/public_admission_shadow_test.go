@@ -110,16 +110,36 @@ func TestShadowPrivateAndUnknownProxyAdmission(t *testing.T) {
 	}
 }
 
+// With connectPublic, a public toolset is reached only on the caller's
+// mcp:connect, as a private one is.
+func TestMemberToolsetConnectPublicChecksPublicToolsets(t *testing.T) {
+	t.Parallel()
+	h := newShadowHarness(t, false)
+	toolset := &toolsetsrepo.Toolset{ID: uuid.New(), ProjectID: uuid.New()}
+	granted := sessionContext(t, shadowOrg, authz.NewGrant(authz.ScopeMCPConnect, toolset.ID.String()))
+	ungranted := sessionContext(t, shadowOrg)
+
+	allowed, err := h.service.memberToolsetConnectAllowed(ungranted, nil, mandatorySurfaceGatewayMember, true, toolset, true, true)
+	require.NoError(t, err)
+	require.False(t, allowed, "a public toolset is not open to a caller held to mcp:connect")
+	allowed, err = h.service.memberToolsetConnectAllowed(granted, nil, mandatorySurfaceGatewayMember, false, toolset, true, true)
+	require.NoError(t, err)
+	require.False(t, allowed, "a caller outside the organization never reaches it")
+	allowed, err = h.service.memberToolsetConnectAllowed(granted, nil, mandatorySurfaceGatewayMember, true, toolset, true, true)
+	require.NoError(t, err)
+	require.True(t, allowed)
+}
+
 func TestShadowMemberToolsetKeepsPrivateBoundary(t *testing.T) {
 	t.Parallel()
 	h := newShadowHarness(t, true)
 	ctx := t.Context()
 	shadow := h.service.newMandatoryShadow(ctx, shadowOrg)
 	toolset := &toolsetsrepo.Toolset{ID: uuid.New(), ProjectID: uuid.New()}
-	allowed, err := h.service.memberToolsetConnectAllowed(ctx, shadow, mandatorySurfaceConsent, false, toolset, true)
+	allowed, err := h.service.memberToolsetConnectAllowed(ctx, shadow, mandatorySurfaceConsent, false, toolset, true, false)
 	require.NoError(t, err)
 	require.True(t, allowed)
-	allowed, err = h.service.memberToolsetConnectAllowed(ctx, shadow, mandatorySurfaceConsent, false, toolset, false)
+	allowed, err = h.service.memberToolsetConnectAllowed(ctx, shadow, mandatorySurfaceConsent, false, toolset, false, false)
 	require.NoError(t, err)
 	require.False(t, allowed, "public member admission never bypasses a private underlying toolset")
 	require.Equal(t, map[attribute.Set]int64{

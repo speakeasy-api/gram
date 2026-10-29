@@ -161,8 +161,8 @@ func TestRecheckWorkloadGrantInferenceUsesFreshPoliciesWithoutChallengeLogging(t
 
 // A grant for a stored gateway rechecks the members its preflight admitted
 // against the freshly loaded ceiling, agent, and owner policies: losing any
-// one of them on every private member refuses the session, while one member
-// still reached, or a public member, keeps it.
+// one of them on every member refuses the session, and one member still
+// reached keeps it. A public member is rechecked like a private one.
 func TestRecheckWorkloadGrantGatewayUsesFreshPoliciesPerMember(t *testing.T) {
 	t.Parallel()
 	project := uuid.New()
@@ -180,10 +180,13 @@ func TestRecheckWorkloadGrantGatewayUsesFreshPoliciesPerMember(t *testing.T) {
 		MetaMcpServerID:     uuid.NullUUID{UUID: uuid.New(), Valid: true},
 	}
 	grant := workloadGrantIssuance{endpoint: endpoint, session: sessionIssuance{ProjectID: project}}
-	privateReach := &gatewayWorkloadReach{public: false, private: []authz.Check{
+	reach := &gatewayWorkloadReach{checks: []authz.Check{
 		metaMemberConnectCheck(other, uuid.NullUUID{}, project),
 		metaMemberConnectCheck(uuid.New(), uuid.NullUUID{UUID: reachable, Valid: true}, project),
 	}}
+	// The preflight admitted only a public member, which the agent's grant on
+	// it let through.
+	publicReach := &gatewayWorkloadReach{checks: []authz.Check{metaMemberConnectCheck(reachable, uuid.NullUUID{}, project)}}
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{UserID: "owner", ActiveOrganizationID: "test-org"}, urn.NewPrincipal(urn.PrincipalTypeUser, "owner"))
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	ceiling := []authz.Grant{authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{
@@ -203,11 +206,12 @@ func TestRecheckWorkloadGrantGatewayUsesFreshPoliciesPerMember(t *testing.T) {
 		reach   *gatewayWorkloadReach
 		allowed bool
 	}{
-		{name: "one member still reached", revoked: "none", reach: privateReach, allowed: true},
-		{name: "ceiling revoked", revoked: "ceiling", reach: privateReach, allowed: false},
-		{name: "agent revoked", revoked: "agent", reach: privateReach, allowed: false},
-		{name: "owner revoked", revoked: "owner", reach: privateReach, allowed: false},
-		{name: "public member", revoked: "agent", reach: &gatewayWorkloadReach{public: true, private: nil}, allowed: true},
+		{name: "one member still reached", revoked: "none", reach: reach, allowed: true},
+		{name: "ceiling revoked", revoked: "ceiling", reach: reach, allowed: false},
+		{name: "agent revoked", revoked: "agent", reach: reach, allowed: false},
+		{name: "owner revoked", revoked: "owner", reach: reach, allowed: false},
+		{name: "public member still reached", revoked: "none", reach: publicReach, allowed: true},
+		{name: "public member agent revoked", revoked: "agent", reach: publicReach, allowed: false},
 		{name: "no preflight", revoked: "none", reach: nil, allowed: false},
 	}
 	for _, tc := range cases {

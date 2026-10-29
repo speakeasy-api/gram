@@ -580,7 +580,7 @@ func (s *Service) loadMemberToolset(
 	if member.serverID == toolset.ID && !hosting.Enabled {
 		return nil, hostingstate.NotHosted(), uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	}
-	allowed, err := s.memberToolsetConnectAllowed(ctx, s.newMandatoryShadow(ctx, toolset.OrganizationID), mandatorySurfaceGatewayMember, gate.authenticated, &toolset, hosting.Public)
+	allowed, err := s.memberToolsetConnectAllowed(ctx, s.newMandatoryShadow(ctx, toolset.OrganizationID), mandatorySurfaceGatewayMember, gate.authenticated, &toolset, hosting.Public, gate.publicMembersNeedConnect(ctx))
 	if err != nil {
 		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "check toolset-level authz").LogError(ctx, logger)
 	}
@@ -592,20 +592,22 @@ func (s *Service) loadMemberToolset(
 }
 
 // memberToolsetConnectAllowed applies a non-public toolset's own mcp:connect
-// gate, matching ServeToolsetResolved's connection check. Grants context was
-// prepared when the member snapshot was resolved.
-func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public bool) (bool, error) {
+// gate, matching ServeToolsetResolved's connection check. connectPublic
+// applies it to a public toolset as well, for a delegated caller at a stored
+// gateway. Grants context was prepared when the member snapshot was resolved.
+func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public, connectPublic bool) (bool, error) {
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())
-	if public {
-		shadow.recordServer(ctx, shadowSurface, true, authz.MandatoryServerPublic, connect)
+	visibility := mandatoryVisibility(public)
+	if public && !connectPublic {
+		shadow.recordServer(ctx, shadowSurface, true, visibility, connect)
 		return true, nil
 	}
 	if !authenticated {
-		shadow.recordServer(ctx, shadowSurface, false, authz.MandatoryServerPrivate, connect)
+		shadow.recordServer(ctx, shadowSurface, false, visibility, connect)
 		return false, nil
 	}
 	err := s.authz.Require(ctx, connect)
-	shadow.shadowRequireServer(ctx, shadowSurface, err, authz.MandatoryServerPrivate, connect)
+	shadow.shadowRequireServer(ctx, shadowSurface, err, visibility, connect)
 	if err != nil {
 		if oopsErr, ok := errors.AsType[*oops.ShareableError](err); ok && oopsErr.Code == oops.CodeForbidden {
 			return false, nil
