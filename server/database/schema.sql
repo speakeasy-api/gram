@@ -1207,6 +1207,10 @@ CREATE TABLE IF NOT EXISTS plugins (
   description TEXT,
   is_default boolean DEFAULT false,
   auto_created boolean NOT NULL DEFAULT false,
+  -- When FALSE, changes to this plugin wait for an admin to sync the
+  -- marketplace by hand. NULL or TRUE means changes publish automatically
+  -- (the historical default).
+  auto_sync_enabled boolean,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1225,6 +1229,7 @@ COMMENT ON COLUMN plugins.name IS '@access: confidential';
 COMMENT ON COLUMN plugins.slug IS '@access: confidential';
 COMMENT ON COLUMN plugins.description IS '@access: opaque-restricted';
 COMMENT ON COLUMN plugins.auto_created IS '@access: confidential';
+COMMENT ON COLUMN plugins.auto_sync_enabled IS '@access: confidential';
 COMMENT ON COLUMN plugins.created_at IS '@access: confidential';
 COMMENT ON COLUMN plugins.updated_at IS '@access: confidential';
 COMMENT ON COLUMN plugins.deleted_at IS '@access: confidential';
@@ -1603,6 +1608,15 @@ CREATE TABLE IF NOT EXISTS device_agent_syncs (
   organization_id TEXT NOT NULL,
   email TEXT NOT NULL,
 
+  -- The getPlugins etag last served to this user. Device attestation
+  -- compares an agent's reported applied etag against it: the etag is
+  -- derived from the user's plugin set, so it is per user, not per
+  -- organization. NULL until a poll after this column existed.
+  served_etag TEXT,
+  -- When served_etag last changed, so a device lagging a policy change can
+  -- say for how long.
+  served_etag_changed_at timestamptz,
+
   first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1616,6 +1630,8 @@ CREATE TABLE IF NOT EXISTS device_agent_syncs (
 COMMENT ON COLUMN device_agent_syncs.id IS '@access: confidential';
 COMMENT ON COLUMN device_agent_syncs.organization_id IS '@access: confidential';
 COMMENT ON COLUMN device_agent_syncs.email IS '@access: confidential-pii';
+COMMENT ON COLUMN device_agent_syncs.served_etag IS '@access: confidential';
+COMMENT ON COLUMN device_agent_syncs.served_etag_changed_at IS '@access: confidential';
 COMMENT ON COLUMN device_agent_syncs.first_seen_at IS '@access: confidential';
 COMMENT ON COLUMN device_agent_syncs.last_seen_at IS '@access: confidential';
 COMMENT ON COLUMN device_agent_syncs.created_at IS '@access: confidential';
@@ -1757,6 +1773,120 @@ COMMENT ON COLUMN device_agent_device_syncs.updated_at IS '@access: confidential
 -- ON CONFLICT (organization_id, LOWER(serial_number)).
 CREATE UNIQUE INDEX IF NOT EXISTS device_agent_device_syncs_org_lower_serial_key
 ON device_agent_device_syncs (organization_id, LOWER(serial_number));
+
+-- The latest state each endpoint's device agent reported through
+-- agent.reportState: the policy etag it applied, each tool's enforcement
+-- outcome, its versions and update posture. A snapshot, not a log: each
+-- report replaces the previous one. Contract: device-agent ADR-0029.
+--
+-- One row per enrolled user per machine. The email is part of the key
+-- alongside the serial because the agent runs per OS user, so two people
+-- sharing a machine report different policy from one serial. A machine
+-- that cannot read a serial reports with serial_number NULL and is keyed by
+-- email alone.
+--
+-- Endpoints only, for the reason device_agent_device_syncs is: this backs
+-- device coverage, and a cloud box must not attest a person's laptop.
+CREATE TABLE IF NOT EXISTS device_agent_state_reports (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  serial_number TEXT,
+  hostname TEXT,
+
+  -- Report envelope version the agent sent.
+  schema_version integer NOT NULL,
+  -- Agent clock; reported_at is the control plane's.
+  generated_at timestamptz NOT NULL,
+  reported_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  -- Etag of the policy snapshot the agent's last reconcile applied. NULL
+  -- before the agent has applied any.
+  applied_etag TEXT,
+  applied_at timestamptz,
+  -- True while the kill switch has halted policy enforcement.
+  enforcement_halted boolean NOT NULL,
+  remote_config_etag TEXT,
+  remote_config_failed boolean NOT NULL DEFAULT false,
+  -- Optional plugins the agent left out of the applied set by user choice:
+  -- [{marketplace, slug, reason}].
+  withheld_plugins jsonb NOT NULL DEFAULT '[]'::jsonb,
+
+  -- Per-tool enforcement outcomes: [{tool, layer, outcome, pending_reason,
+  -- error_kind, restart_required, action_required, drift_corrections}].
+  tools jsonb NOT NULL DEFAULT '[]'::jsonb,
+  -- Installed tools whose outcome is error or pending, derived from tools at
+  -- write time so coverage can filter without unpacking the array.
+  degraded_tool_count integer NOT NULL DEFAULT 0,
+  -- Start of the window tools[].drift_corrections counts over.
+  drift_counting_since timestamptz,
+
+  speakeasyd_version TEXT,
+  speakeasy_version TEXT,
+  speakeasy_ui_version TEXT,
+  os TEXT,
+  arch TEXT,
+
+  auto_update TEXT,
+  update_channel TEXT,
+  pinned_target TEXT,
+  -- True when the running build is in blocked_versions.
+  current_blocked boolean NOT NULL DEFAULT false,
+  last_rollback_at timestamptz,
+  last_rollback_from TEXT,
+  last_rollback_to TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT device_agent_state_reports_pkey PRIMARY KEY (id),
+  CONSTRAINT device_agent_state_reports_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN device_agent_state_reports.id IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.organization_id IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.email IS '@access: confidential-pii';
+COMMENT ON COLUMN device_agent_state_reports.serial_number IS '@access: confidential-pii';
+COMMENT ON COLUMN device_agent_state_reports.hostname IS '@access: confidential-pii';
+COMMENT ON COLUMN device_agent_state_reports.schema_version IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.generated_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.reported_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.applied_etag IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.applied_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.enforcement_halted IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.remote_config_etag IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.remote_config_failed IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.withheld_plugins IS 'Marketplace and plugin slugs chosen by the organization.
+@access: opaque-confidential';
+COMMENT ON COLUMN device_agent_state_reports.tools IS 'Speakeasy-defined tool ids and enforcement enums.
+@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.degraded_tool_count IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.drift_counting_since IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.speakeasyd_version IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.speakeasy_version IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.speakeasy_ui_version IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.os IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.arch IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.auto_update IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.update_channel IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.pinned_target IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.current_blocked IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.last_rollback_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.last_rollback_from IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.last_rollback_to IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.created_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.updated_at IS '@access: confidential';
+
+-- The dedup key. LOWER() on both columns for the reason
+-- device_agent_device_syncs_org_lower_serial_key gives; NULLS NOT DISTINCT so
+-- serial-less machines dedup on email alone instead of piling up rows.
+CREATE UNIQUE INDEX IF NOT EXISTS device_agent_state_reports_org_lower_serial_lower_email_key
+ON device_agent_state_reports (organization_id, LOWER(serial_number), LOWER(email)) NULLS NOT DISTINCT;
+
+-- Serves the coverage join's email fallback for serial-less machines.
+CREATE INDEX IF NOT EXISTS device_agent_state_reports_organization_id_lower_email_idx
+ON device_agent_state_reports (organization_id, LOWER(email));
 
 -- Stores the organization-wide, non-secret configuration delivered to enrolled
 -- device agents. The schema version is separate from the JSON document so the
@@ -10415,6 +10545,77 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS meta_mcp_server_members_meta_mcp_server_id_mcp_server_id_key
 ON meta_mcp_server_members (meta_mcp_server_id, mcp_server_id)
 WHERE deleted IS FALSE;
+
+-- Links a skill to the MCP surface that serves it over the Skills extension.
+-- target_kind names the surface: 'mcp_server' and 'meta_mcp_server' point at
+-- stored rows through their id column, while row-less surfaces such as the
+-- organization gateway are named by their kind alone and leave both id columns
+-- NULL. Which columns each kind sets is validated in application code.
+CREATE TABLE IF NOT EXISTS mcp_skill_links (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  -- NULL serves the skill's latest valid version.
+  pinned_version_id uuid,
+
+  target_kind TEXT NOT NULL CHECK (target_kind <> ''),
+  mcp_server_id uuid,
+  meta_mcp_server_id uuid,
+
+  created_by_user_id TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT mcp_skill_links_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_skill_links_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT mcp_skill_links_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE,
+  -- No delete action, as on skill_distributions: versions are only removed
+  -- together with their skill, which cascades this row in the same statement.
+  CONSTRAINT mcp_skill_links_skill_id_pinned_version_id_fkey FOREIGN KEY (skill_id, pinned_version_id) REFERENCES skill_versions (skill_id, id),
+  CONSTRAINT mcp_skill_links_project_id_mcp_server_id_fkey FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT mcp_skill_links_project_id_meta_mcp_server_id_fkey FOREIGN KEY (project_id, meta_mcp_server_id) REFERENCES meta_mcp_servers (project_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN mcp_skill_links.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.skill_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.pinned_version_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.target_kind IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.meta_mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.created_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.updated_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.deleted IS '@access: confidential';
+
+-- One live link per skill and target. NULLS NOT DISTINCT makes row-less
+-- targets, whose id columns are both NULL, unique per kind.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_skill_links_project_id_skill_id_target_key
+ON mcp_skill_links (project_id, skill_id, target_kind, mcp_server_id, meta_mcp_server_id) NULLS NOT DISTINCT
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_skill_links_mcp_server_id_idx
+ON mcp_skill_links (mcp_server_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_skill_links_meta_mcp_server_id_idx
+ON mcp_skill_links (meta_mcp_server_id)
+WHERE deleted IS FALSE;
+
+-- Serves row-less targets that span projects, such as the organization
+-- gateway, which reads every project's links of its kind.
+CREATE INDEX IF NOT EXISTS mcp_skill_links_organization_id_target_kind_idx
+ON mcp_skill_links (organization_id, target_kind)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_skill_links_skill_id_pinned_version_id_idx
+ON mcp_skill_links (skill_id, pinned_version_id);
 
 CREATE TABLE IF NOT EXISTS mcp_metadata (
   id UUID NOT NULL DEFAULT generate_uuidv7(),

@@ -138,6 +138,25 @@ describe("Agent permission editor", () => {
     }
     expect(mocks.remove).not.toHaveBeenCalled();
   });
+  it("grants device agent sync to the whole organization", async () => {
+    setup();
+    openPlatform();
+    fireEvent.click(screen.getByRole("button", { name: "Add permissions" }));
+    fireEvent.click(screen.getByText("org:device_agent_sync"));
+    expect(await screen.findByText("Whole organization")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
+    expect(mocks.create).toHaveBeenCalledOnce();
+    expect(mocks.create).toHaveBeenCalledWith({
+      createAgentPolicyGrantForm: {
+        agentId: agent.id,
+        scope: "org:device_agent_sync",
+        effect: "allow",
+        selector: { resourceKind: "org", resourceId: "*" },
+      },
+    });
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
   it("deletes only the chosen project's grant, preserving the other project, MCP and unsupported grants", async () => {
     const grants: AgentPolicyGrant[] = [
       inferenceGrant("project_one"),
@@ -193,6 +212,26 @@ describe("Agent permission editor", () => {
     expect(mocks.create).not.toHaveBeenCalled();
     expect(mocks.remove).not.toHaveBeenCalled();
     expect(mocks.close).not.toHaveBeenCalled();
+  });
+  it("saves against a ceiling holding a credential restriction without showing or removing it", async () => {
+    const restriction: AgentPolicyGrant = {
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      id: "credential_restriction",
+      scope: "mcp:blocked_auth",
+      effect: "allow",
+      selector: { resourceKind: "mcp_auth_client", resourceId: "client_one" },
+    };
+    setup([inferenceGrant("project_one"), restriction]);
+    expect(screen.queryByText(/mcp:blocked_auth/)).toBeNull();
+    openPlatform();
+    fireEvent.click(screen.getByRole("button", { name: /Choose resources/ }));
+    fireEvent.click(screen.getByText("Project two"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
+    expect(mocks.create).toHaveBeenCalledOnce();
+    expect(mocks.remove).not.toHaveBeenCalled();
   });
   it("does not normalize redundant grants on a no-op save", async () => {
     setup([

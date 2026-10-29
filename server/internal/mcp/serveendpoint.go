@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
@@ -331,6 +332,7 @@ func hostedServingFromWrapper(endpointID uuid.UUID, mcpServer *mcpserversrepo.Mc
 		mcpServerID:           &serverID,
 		mcpEndpointID:         &endpointID,
 		toolsetHosting:        nil,
+		toolsetAlias:          legacyalias.None(),
 	}
 }
 
@@ -774,14 +776,21 @@ func (s *Service) serveRemoteBackend(
 	return serveProxyBackend(w, r.WithContext(ctx), p)
 }
 
-// authClientBuildOptions sends the resolved typed auth client's headers in
-// place of the server's credential headers; none when the upstream client
-// choice governs the request.
+// authClientBuildOptions sends the typed auth client's headers in place of
+// the server's credential headers; none when the upstream client choice
+// governs the request without one.
 func authClientBuildOptions(authentication *issuerGateAuthentication) []remotemcp.BuildOption {
-	if authentication == nil || authentication.authClient == nil {
+	switch {
+	case authentication == nil:
+		return nil
+	case authentication.authClient != nil:
+		return []remotemcp.BuildOption{remotemcp.WithAuthClientHeaders(authentication.authClient.headers)}
+	case authentication.chainingAuthClient != nil && !authentication.chosenNoAuth:
+		// A no-auth choice sends no client's headers.
+		return []remotemcp.BuildOption{remotemcp.WithAuthClientHeaders(authentication.chainingAuthClient.headers)}
+	default:
 		return nil
 	}
-	return []remotemcp.BuildOption{remotemcp.WithAuthClientHeaders(authentication.authClient.headers)}
 }
 
 // remoteBackendProxyBuilder loads a remote-backed server once and yields fresh one-request proxies for it.

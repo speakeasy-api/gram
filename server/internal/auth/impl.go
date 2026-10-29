@@ -537,7 +537,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 				logger.ErrorContext(ctx, "failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(org.ID), attr.SlogUserID(userID))
 			}
 
-			s.captureSignupTelemetry(ctx, userInfo.Email, intent.OrgName, org)
+			s.captureSignupTelemetry(ctx, userInfo.Email, intent.OrgName, org, createdViaSignup, nil)
 
 			return &gen.CallbackResult{
 				Location:      s.signupDestination(ctx, payload, org, partnerSignup),
@@ -1720,14 +1720,25 @@ func (s *Service) redirectSignupError(ctx context.Context, payload *gen.Callback
 //
 // Telemetry failures are logged, never returned: the org exists and the user is
 // authenticated, so a dropped analytics event must not fail the request.
-func (s *Service) captureSignupTelemetry(ctx context.Context, email, orgName string, org orgRepo.OrganizationMetadatum) {
-	if err := s.posthog.CaptureEvent(ctx, "onboarding_event", email, map[string]any{
+//
+// createdVia is one of the createdVia constants. extra carries flow-specific
+// properties, such as the MCP client behind a Platform MCP signup, onto both
+// the onboarding event and the growth activity.
+func (s *Service) captureSignupTelemetry(ctx context.Context, email, orgName string, org orgRepo.OrganizationMetadatum, createdVia string, extra map[string]string) {
+	properties := map[string]any{
 		"action":            "new_org_created",
-		"created_via":       "signup",
+		createdViaProperty:  createdVia,
 		"company_name":      orgName,
 		"organization_id":   org.ID,
 		"organization_slug": org.Slug,
-	}); err != nil {
+	}
+	activityExtra := map[string]string{createdViaProperty: createdVia}
+	for key, value := range extra {
+		properties[key] = value
+		activityExtra[key] = value
+	}
+
+	if err := s.posthog.CaptureEvent(ctx, "onboarding_event", email, properties); err != nil {
 		s.logger.ErrorContext(ctx, "failed to capture signup onboarding_event", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
 	}
 
@@ -1735,7 +1746,7 @@ func (s *Service) captureSignupTelemetry(ctx context.Context, email, orgName str
 	// the moment of the event. This is what PostHog cohorts, flags, and surveys
 	// target.
 	if err := s.posthog.IdentifyUser(ctx, email, map[string]any{
-		"created_via": "signup",
+		createdViaProperty: createdVia,
 	}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to set signup created_via person property", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
 	}
@@ -1752,7 +1763,7 @@ func (s *Service) captureSignupTelemetry(ctx context.Context, email, orgName str
 		ActingSurface:  "",
 		AuditAction:    "",
 		DashboardURL:   "",
-		Extra:          map[string]string{createdViaProperty: createdViaSignup},
+		Extra:          activityExtra,
 	})
 }
 
@@ -1761,8 +1772,9 @@ func (s *Service) captureSignupTelemetry(ctx context.Context, email, orgName str
 // Slack reader can tell a self-serve signup from a platform-admin invite
 // without opening PostHog.
 const (
-	createdViaProperty = "created_via"
-	createdViaSignup   = "signup"
+	createdViaProperty    = "created_via"
+	createdViaSignup      = "signup"
+	createdViaPlatformMCP = "platform_mcp"
 )
 
 func (s *Service) dispositionFromState(payload *gen.CallbackPayload) string {

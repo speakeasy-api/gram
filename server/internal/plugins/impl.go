@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"path"
 	"regexp"
 	"slices"
 	"sort"
@@ -45,7 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
@@ -843,7 +844,10 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		if wErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, wErr, "verify toolset mcp server").LogError(ctx, s.logger)
 		}
-		alias := hostingstate.LegacyAlias(toolset)
+		alias, aErr := legacyalias.Get(ctx, s.db, *ac.ProjectID, toolset.ID)
+		if aErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, aErr, "verify toolset mcp server").LogError(ctx, s.logger)
+		}
 		hosted := hosting.Enabled && alias.Slug.Valid && alias.Slug.String != ""
 		if wrapper != nil && hosting.Enabled && !hosted {
 			// Without the legacy slug alias the server needs an endpoint of its own.
@@ -1447,14 +1451,9 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug, *ac.ProjectID, s.projectServerURL(ctx, *ac.ProjectID), publishedHooksConfig)
 	cfg.HooksAPIKey = candidate.fullKey
 
-	files, err := GenerateObservabilityPluginPackage(cfg, payload.Platform)
+	archive, err := ObservabilityPluginZip(cfg, payload.Platform)
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate observability plugin package").LogError(ctx, s.logger)
-	}
-
-	var buf bytes.Buffer
-	if err := writePluginZip(&buf, files); err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "build plugin zip").LogError(ctx, s.logger)
 	}
 
 	filename := "observability"
@@ -1475,7 +1474,7 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 	return &gen.DownloadObservabilityPluginResult{
 		ContentType:        "application/zip",
 		ContentDisposition: fmt.Sprintf(`attachment; filename="%s.zip"`, filename),
-	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+	}, io.NopCloser(bytes.NewReader(archive)), nil
 }
 
 func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.DownloadCodexInstallScriptPayload) (*gen.DownloadCodexInstallScriptResult, io.ReadCloser, error) {
@@ -1541,7 +1540,9 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 // writePluginZip serializes the file map as a deterministic ZIP, marking shell
 // scripts executable so the bootstrapper runs after extraction. The GitHub
 // publish path applies the same rule via Tree mode 100755 in
-// thirdparty/github/repo.go; keep them in sync.
+// thirdparty/github/repo.go; keep them in sync. Git has no owner-only mode, so
+// only the ZIP marks the key-bearing files (speakeasy.json, the root
+// install.sh) owner-only.
 func writePluginZip(w io.Writer, files map[string][]byte) error {
 	zw := zip.NewWriter(w)
 	paths := make([]string, 0, len(files))
@@ -1575,8 +1576,16 @@ func writePluginZip(w io.Writer, files map[string][]byte) error {
 			ExternalAttrs:      0,
 		}
 		var mode os.FileMode = 0o644
-		if strings.HasSuffix(p, ".sh") {
+		switch {
+		case p == "install.sh":
+			// The root install script embeds the hooks API key, so it stays
+			// owner-only while still runnable.
+			mode = 0o700
+		case strings.HasSuffix(p, ".sh"):
 			mode = 0o755
+		case path.Base(p) == "speakeasy.json":
+			// Carries the hooks API key, so extraction must leave it owner-only.
+			mode = 0o600
 		}
 		header.SetMode(mode)
 		f, err := zw.CreateHeader(header)
@@ -1671,6 +1680,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				ServerURL:        "",
 				APIKey:           "",
 				HooksAPIKey:      "",
+				HooksKeyIsAgent:  false,
 				ProjectSlug:      "",
 				IsDefaultProject: false,
 				Version:          "",
@@ -3280,7 +3290,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 	if err != nil {
 		return nil, "", oops.E(oops.CodeUnexpected, err, "list active plugins").LogError(ctx, s.logger)
 	}
-	mcpRows, err := lockedRepo.ListPluginsWithMcpServersForProject(ctx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
+	mcpRows, err := listPluginMCPServers(ctx, tx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
 		return nil, "", oops.E(oops.CodeUnexpected, err, "list plugins with mcp servers").LogError(ctx, s.logger)
 	}
@@ -3474,13 +3484,14 @@ func (s *Service) resolveAgentPluginCompatibility(ctx context.Context, projectID
 // projectServerURL, so server_url matches the plugins' MCP addresses.
 func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlug string, projectID uuid.UUID, serverURL string, publishedHooksConfig []byte) GenerateConfig {
 	cfg := GenerateConfig{
-		OrgName:     orgSlug,
-		OrgEmail:    "",
-		OrgID:       orgID,
-		ServerURL:   serverURL,
-		APIKey:      "",
-		HooksAPIKey: "",
-		ProjectSlug: projectSlug,
+		OrgName:         orgSlug,
+		OrgEmail:        "",
+		OrgID:           orgID,
+		ServerURL:       serverURL,
+		APIKey:          "",
+		HooksAPIKey:     "",
+		HooksKeyIsAgent: false,
+		ProjectSlug:     projectSlug,
 		// Milliseconds rather than seconds so publishes close together (e.g. a
 		// settings flip right after a publish) still mint distinct manifest
 		// versions; the 13-digit patch also sorts numerically above the

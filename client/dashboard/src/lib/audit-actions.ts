@@ -44,11 +44,14 @@ export const AUDIT_ACTIONS = [
   "api_key:revoke",
   "api_key:update_policy",
   "asset:create",
+  "auth-client:attach-mcp-server",
+  "auth-client:create",
   "auth-client:detach-mcp-server",
   "auth-client:disable",
   "auth-client:enable",
   "auth-client:update",
   "auth-client:update-audience",
+  "auth-client:update-headers",
   "assistant:identity_provision",
   "assistant:tool_call",
   "aws_iam_credential:create",
@@ -285,14 +288,17 @@ export const AUDIT_ACTIONS = [
   "skill:archive",
   "skill:create",
   "skill:distribute",
+  "skill:link",
   "skill:restore_version",
   "skill:share_link_create",
   "skill:share_link_revoke",
   "skill:suggestion_approve",
   "skill:suggestion_dismiss",
   "skill:undistribute",
+  "skill:unlink",
   "skill:update",
   "skill:update_distribution",
+  "skill:update_link",
   "skill_efficacy_settings:upsert",
   "spend_rule:archive",
   "spend_rule:create",
@@ -446,8 +452,14 @@ export function staticActionPhrase(action: AuditAction): string {
     case "asset:create":
       return "uploaded asset";
 
+    case "auth-client:create":
+      return "created auth client";
     case "auth-client:update":
       return "renamed auth client";
+    case "auth-client:update-headers":
+      return "changed the headers of auth client";
+    case "auth-client:attach-mcp-server":
+      return "added an MCP server to auth client";
     case "auth-client:enable":
       return "enabled auth client";
     case "auth-client:disable":
@@ -979,6 +991,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "stopped distributing skill";
     case "skill:update_distribution":
       return "updated distribution for skill";
+    case "skill:link":
+      return "linked skill";
+    case "skill:update_link":
+      return "updated a link for skill";
+    case "skill:unlink":
+      return "unlinked skill";
     case "skill:share_link_create":
       return "created a share link for";
     case "skill:share_link_revoke":

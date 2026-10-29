@@ -541,7 +541,7 @@ func TestUploadSkillContent_HTTPRouteRequiresAuthentication(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
-func TestIngest_RejectsReservedAssistantAdapter(t *testing.T) {
+func TestIngest_RejectsReservedServerAdapter(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = captureFeatureStub{skills: true, metadataOnly: false, fail: ""}
@@ -549,7 +549,7 @@ func TestIngest_RejectsReservedAssistantAdapter(t *testing.T) {
 	require.True(t, ok)
 
 	content := captureManifest("spoofed", "body")
-	for _, adapter := range []string{"assistant", "Assistants", " ASSISTANT ", "assist ant"} {
+	for _, adapter := range []string{"assistant", "Assistants", " ASSISTANT ", "assist ant", "mcp", " MCP "} {
 		_, err := ti.service.Ingest(ctx, skillPayload(adapter, eventTypeSkillActivated, "spoof-session", "spoofed", rawHash(content)))
 		require.Error(t, err, adapter)
 		var oopsErr *oops.ShareableError
@@ -567,4 +567,25 @@ func TestIngest_RejectsReservedAssistantAdapter(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, "claude", rows[0].Provider)
+}
+
+func TestIngest_RejectsReservedMCPIdempotencyKey(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = captureFeatureStub{skills: true, metadataOnly: false, fail: ""}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	content := captureManifest("preclaimed", "body")
+	payload := skillPayload("claude", eventTypeSkillActivated, "mcp-session", "preclaimed", rawHash(content))
+	payload.IdempotencyKey = new(" mcp:mcp-session:" + rawHash(content))
+	_, err := ti.service.Ingest(ctx, payload)
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+
+	rows, err := ti.service.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.Empty(t, rows)
 }

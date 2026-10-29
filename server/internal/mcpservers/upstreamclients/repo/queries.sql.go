@@ -303,7 +303,7 @@ WITH selected AS (
     AND organization_id = $5::text
     AND deleted IS FALSE
   UNION ALL
-  SELECT $6::uuid IS NULL,
+  SELECT $6::uuid IS NULL AND $7::uuid IS NULL,
          candidates.auth_client_id,
          $6::uuid, m.id, m.project_id, p.organization_id,
          candidates.ambiguous
@@ -320,11 +320,17 @@ WITH selected AS (
      AND c.deleted IS FALSE
     WHERE link.mcp_server_id = m.id AND link.organization_id = p.organization_id
       AND link.deleted IS FALSE
-      AND (($6::uuid IS NOT NULL
-            AND c.remote_session_client_id = $6::uuid
-            AND c.client_type IN ('remote_session', 'service_account'))
-           OR ($6::uuid IS NULL
-               AND c.client_type IN ('static_credential', 'pass_through')))
+      AND (
+        -- A named client is the only candidate, whatever its type.
+        ($7::uuid IS NOT NULL
+         AND c.id = $7::uuid)
+        OR ($7::uuid IS NULL
+            AND (($6::uuid IS NOT NULL
+                  AND c.remote_session_client_id = $6::uuid
+                  AND c.client_type IN ('remote_session', 'service_account'))
+                 OR ($6::uuid IS NULL
+                     AND c.client_type IN ('static_credential', 'pass_through'))))
+      )
   ) AS candidates
   WHERE $1::boolean AND m.id = ANY($4::uuid[]) AND m.deleted IS FALSE
 )
@@ -346,13 +352,16 @@ SELECT sel.mcp_server_id,
          AND rsi.id IS NOT NULL
          AND rsi.deleted IS FALSE
        )::boolean AS registration_live,
-       EXISTS (
-         SELECT 1
-         FROM mcp_server_remote_session_clients AS a
-         WHERE a.mcp_server_id = sel.mcp_server_id
-           AND a.remote_session_client_id = ac.remote_session_client_id
-           AND a.organization_id = sel.organization_id
-           AND a.deleted IS FALSE
+       (
+         NOT copy.mirrored
+         OR EXISTS (
+           SELECT 1
+           FROM mcp_server_remote_session_clients AS a
+           WHERE a.mcp_server_id = sel.mcp_server_id
+             AND a.remote_session_client_id = ac.remote_session_client_id
+             AND a.organization_id = sel.organization_id
+             AND a.deleted IS FALSE
+         )
        )::boolean AS registration_attached,
        EXISTS (
          SELECT 1
@@ -416,7 +425,7 @@ SELECT sel.mcp_server_id,
              AND a.deleted IS FALSE
          )
        )::boolean AS server_has_oauth_clients,
-       EXISTS (
+       (copy.mirrored AND EXISTS (
          SELECT 1
          FROM mcp_auth_client_headers AS c
          WHERE c.auth_client_id = ac.id
@@ -433,8 +442,8 @@ SELECT sel.mcp_server_id,
                AND h.is_required = c.is_required
                AND h.is_secret = c.is_secret
            )
-       )::boolean AS headers_stale,
-       EXISTS (
+       ))::boolean AS headers_stale,
+       (copy.mirrored AND EXISTS (
          SELECT 1
          FROM remote_mcp_server_headers AS h
          WHERE h.remote_mcp_server_id = m.remote_mcp_server_id
@@ -450,7 +459,7 @@ SELECT sel.mcp_server_id,
                AND c.deleted IS FALSE
                AND lower(c.name) = lower(h.name)
            )
-       )::boolean AS credential_headers_uncovered,
+       ))::boolean AS credential_headers_uncovered,
        EXISTS (
          SELECT 1
          FROM mcp_auth_client_headers AS c
@@ -488,6 +497,19 @@ LEFT JOIN mcp_auth_clients AS ac
   ON ac.id = sel.auth_client_id
  AND ac.organization_id = sel.organization_id
  AND (ac.project_id IS NULL OR ac.project_id = sel.project_id)
+CROSS JOIN LATERAL (
+  -- No client reads as mirrored, so a no-auth choice keeps being checked
+  -- against the server's credential headers.
+  SELECT (ac.id IS NULL OR (ac.source = 'backfill' AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_server_auth_clients AS link
+    WHERE link.mcp_server_id = sel.mcp_server_id
+      AND link.auth_client_id = ac.id
+      AND link.organization_id = sel.organization_id
+      AND link.deleted IS FALSE
+      AND link.source <> 'backfill'
+  )))::boolean AS mirrored
+) AS copy
 LEFT JOIN remote_session_clients AS reg
   ON reg.id = COALESCE(ac.remote_session_client_id, CASE WHEN $1::boolean THEN sel.remote_session_client_id END)
 LEFT JOIN remote_session_issuers AS rsi
@@ -501,6 +523,7 @@ type GetAuthClientSelectionParams struct {
 	McpServerIds           []uuid.UUID
 	OrganizationID         string
 	ProposedRegistrationID uuid.NullUUID
+	ProposedAuthClientID   uuid.NullUUID
 }
 
 type GetAuthClientSelectionRow struct {
@@ -534,10 +557,13 @@ type GetAuthClientSelectionRow struct {
 // client is still usable for the server, and what the server says about
 // needing upstream authentication. A client outside the server's tenant reads
 // as absent, never as another tenant's client.
-// Admin edits still write only the legacy tables, so the typed rows are
-// checked against them: an OAuth client's registration must still be attached
-// to the server, header copies must still match the server's headers, and the
-// server's credential headers must be carried by the chosen client.
+// A client the backfill copied from a server's settings, offered through a
+// backfilled association, is checked against the settings it mirrors, which
+// server edits still write: its OAuth registration must still be attached to
+// the server, its header copies must still match the server's headers, and the
+// server's credential headers must be carried by it. A client or association
+// an administrator created is authoritative and mirrors nothing, so those
+// checks do not apply to it.
 func (q *Queries) GetAuthClientSelection(ctx context.Context, arg GetAuthClientSelectionParams) ([]GetAuthClientSelectionRow, error) {
 	rows, err := q.db.Query(ctx, getAuthClientSelection,
 		arg.Proposed,
@@ -546,6 +572,7 @@ func (q *Queries) GetAuthClientSelection(ctx context.Context, arg GetAuthClientS
 		arg.McpServerIds,
 		arg.OrganizationID,
 		arg.ProposedRegistrationID,
+		arg.ProposedAuthClientID,
 	)
 	if err != nil {
 		return nil, err
@@ -784,6 +811,61 @@ func (q *Queries) ListMCPServerRemoteSessionClients(ctx context.Context, arg Lis
 	return items, nil
 }
 
+const listRememberedAuthClients = `-- name: ListRememberedAuthClients :many
+SELECT latest.mcp_server_id,
+       latest.auth_client_id::uuid AS auth_client_id
+FROM (
+  SELECT DISTINCT ON (sel.mcp_server_id)
+         sel.mcp_server_id,
+         sel.auth_client_id
+  FROM upstream_client_selections AS sel
+  JOIN user_sessions AS us
+    ON COALESCE(us.credential_id, us.id) = sel.credential_id
+   AND us.subject_urn = $1::text
+  WHERE sel.credential_kind = 'user_session'
+    AND sel.organization_id = $2::text
+    AND sel.mcp_server_id = ANY($3::uuid[])
+    AND sel.deleted IS FALSE
+  ORDER BY sel.mcp_server_id, sel.created_at DESC
+) AS latest
+WHERE latest.auth_client_id IS NOT NULL
+`
+
+type ListRememberedAuthClientsParams struct {
+	SubjectUrn     string
+	OrganizationID string
+	McpServerIds   []uuid.UUID
+}
+
+type ListRememberedAuthClientsRow struct {
+	McpServerID  uuid.UUID
+	AuthClientID uuid.UUID
+}
+
+// The auth client a subject most recently approved for each MCP server
+// through any of their user sessions. It only prefills a new consent and is
+// checked again before use. A latest approval with no client remembers
+// nothing.
+func (q *Queries) ListRememberedAuthClients(ctx context.Context, arg ListRememberedAuthClientsParams) ([]ListRememberedAuthClientsRow, error) {
+	rows, err := q.db.Query(ctx, listRememberedAuthClients, arg.SubjectUrn, arg.OrganizationID, arg.McpServerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRememberedAuthClientsRow
+	for rows.Next() {
+		var i ListRememberedAuthClientsRow
+		if err := rows.Scan(&i.McpServerID, &i.AuthClientID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listServerAssociatedClients = `-- name: ListServerAssociatedClients :many
 SELECT a.mcp_server_id, a.remote_session_client_id
 FROM mcp_server_remote_session_clients AS a
@@ -817,6 +899,78 @@ func (q *Queries) ListServerAssociatedClients(ctx context.Context, arg ListServe
 	for rows.Next() {
 		var i ListServerAssociatedClientsRow
 		if err := rows.Scan(&i.McpServerID, &i.RemoteSessionClientID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listServerConsentAuthClients = `-- name: ListServerConsentAuthClients :many
+SELECT m.id AS mcp_server_id,
+       m.requires_upstream_auth,
+       c.id AS auth_client_id,
+       c.name AS auth_client_name,
+       c.client_type,
+       c.remote_session_client_id
+FROM mcp_servers AS m
+JOIN projects AS p
+  ON p.id = m.project_id
+ AND p.organization_id = $1::text
+ AND p.deleted IS FALSE
+LEFT JOIN mcp_server_auth_clients AS link
+  ON link.mcp_server_id = m.id
+ AND link.organization_id = p.organization_id
+ AND link.deleted IS FALSE
+LEFT JOIN mcp_auth_clients AS c
+  ON c.id = link.auth_client_id
+ AND c.organization_id = link.organization_id
+ AND (c.project_id IS NULL OR c.project_id = m.project_id)
+ AND c.deleted IS FALSE
+ AND c.enabled
+WHERE m.id = ANY($2::uuid[])
+  AND m.deleted IS FALSE
+ORDER BY m.id, c.name, c.id
+`
+
+type ListServerConsentAuthClientsParams struct {
+	OrganizationID string
+	McpServerIds   []uuid.UUID
+}
+
+type ListServerConsentAuthClientsRow struct {
+	McpServerID           uuid.UUID
+	RequiresUpstreamAuth  pgtype.Bool
+	AuthClientID          uuid.NullUUID
+	AuthClientName        pgtype.Text
+	ClientType            pgtype.Text
+	RemoteSessionClientID uuid.NullUUID
+}
+
+// The enabled auth clients each MCP server offers, for the consent screen to
+// choose among, with whether the server needs upstream authentication. A
+// server with no enabled client still has a row, with no client, so the
+// screen can tell no-auth from incomplete setup.
+func (q *Queries) ListServerConsentAuthClients(ctx context.Context, arg ListServerConsentAuthClientsParams) ([]ListServerConsentAuthClientsRow, error) {
+	rows, err := q.db.Query(ctx, listServerConsentAuthClients, arg.OrganizationID, arg.McpServerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServerConsentAuthClientsRow
+	for rows.Next() {
+		var i ListServerConsentAuthClientsRow
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.RequiresUpstreamAuth,
+			&i.AuthClientID,
+			&i.AuthClientName,
+			&i.ClientType,
+			&i.RemoteSessionClientID,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
