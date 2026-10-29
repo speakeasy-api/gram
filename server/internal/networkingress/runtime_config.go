@@ -106,6 +106,9 @@ func (c RuntimeConfig) Validate() error {
 			return fmt.Errorf("invalid private ingress cluster CIDR")
 		}
 	}
+	if err := c.Tailscale.ValidateTopology(); err != nil {
+		return fmt.Errorf("validate private ingress topology: %w", err)
+	}
 	return nil
 }
 
