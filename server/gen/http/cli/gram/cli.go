@@ -124,7 +124,7 @@ func UsageCommands() []string {
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
-		"agent (get-plugins|get-my-connections|hide-mcp-server|unhide-mcp-server|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
+		"agent (get-plugins|get-my-connections|hide-mcp-server|unhide-mcp-server|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|report-state|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|check-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"analytics (signal-definition|signal-findings|query|describe|dimension-values)",
@@ -134,7 +134,7 @@ func UsageCommands() []string {
 		"assistants (list-assistants|get-assistant|create-assistant|upgrade-assistant-identity|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|logout-everywhere|register|info|transfer-out|transfer-in)",
-		"auth-clients (list-auth-clients|get-auth-client|update-auth-client|detach-auth-client-from-mcp-server|get-mcp-server-authentication|set-mcp-server-upstream-auth-requirement|get-auth-client-audience|set-auth-client-audience)",
+		"auth-clients (list-auth-clients|get-auth-client|update-auth-client|create-auth-client|attach-auth-client-to-mcp-server|set-auth-client-headers|detach-auth-client-from-mcp-server|list-mcp-server-auth-client-choices|get-mcp-server-authentication|set-mcp-server-upstream-auth-requirement|get-auth-client-audience|set-auth-client-audience)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat-overview|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
@@ -207,7 +207,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|get-mcp-server-tool-calls|get-hook-clients|list-external-mcp-migration-candidates|preview-external-mcp-migration|migrate-external-mcp-servers|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|get-mcp-server-tool-calls|get-hook-clients|list-external-mcp-migration-candidates|preview-external-mcp-migration|migrate-external-mcp-servers|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -563,6 +563,14 @@ func ParseEndpoint(
 		agentReportAIScanEmailFlag        = agentReportAIScanFlags.String("email", "", "")
 		agentReportAIScanSerialNumberFlag = agentReportAIScanFlags.String("serial-number", "", "")
 		agentReportAIScanHostnameFlag     = agentReportAIScanFlags.String("hostname", "", "")
+
+		agentReportStateFlags            = flag.NewFlagSet("report-state", flag.ExitOnError)
+		agentReportStateBodyFlag         = agentReportStateFlags.String("body", "REQUIRED", "")
+		agentReportStateApikeyTokenFlag  = agentReportStateFlags.String("apikey-token", "", "")
+		agentReportStateEmailFlag        = agentReportStateFlags.String("email", "", "")
+		agentReportStateSerialNumberFlag = agentReportStateFlags.String("serial-number", "", "")
+		agentReportStateHostnameFlag     = agentReportStateFlags.String("hostname", "", "")
+		agentReportStateEnvironmentFlag  = agentReportStateFlags.String("environment", "", "")
 
 		agentCreateSessionHandoffFlags            = flag.NewFlagSet("create-session-handoff", flag.ExitOnError)
 		agentCreateSessionHandoffBodyFlag         = agentCreateSessionHandoffFlags.String("body", "REQUIRED", "")
@@ -992,10 +1000,30 @@ func ParseEndpoint(
 		authClientsUpdateAuthClientSessionTokenFlag = authClientsUpdateAuthClientFlags.String("session-token", "", "")
 		authClientsUpdateAuthClientApikeyTokenFlag  = authClientsUpdateAuthClientFlags.String("apikey-token", "", "")
 
+		authClientsCreateAuthClientFlags            = flag.NewFlagSet("create-auth-client", flag.ExitOnError)
+		authClientsCreateAuthClientBodyFlag         = authClientsCreateAuthClientFlags.String("body", "REQUIRED", "")
+		authClientsCreateAuthClientSessionTokenFlag = authClientsCreateAuthClientFlags.String("session-token", "", "")
+		authClientsCreateAuthClientApikeyTokenFlag  = authClientsCreateAuthClientFlags.String("apikey-token", "", "")
+
+		authClientsAttachAuthClientToMcpServerFlags            = flag.NewFlagSet("attach-auth-client-to-mcp-server", flag.ExitOnError)
+		authClientsAttachAuthClientToMcpServerBodyFlag         = authClientsAttachAuthClientToMcpServerFlags.String("body", "REQUIRED", "")
+		authClientsAttachAuthClientToMcpServerSessionTokenFlag = authClientsAttachAuthClientToMcpServerFlags.String("session-token", "", "")
+		authClientsAttachAuthClientToMcpServerApikeyTokenFlag  = authClientsAttachAuthClientToMcpServerFlags.String("apikey-token", "", "")
+
+		authClientsSetAuthClientHeadersFlags            = flag.NewFlagSet("set-auth-client-headers", flag.ExitOnError)
+		authClientsSetAuthClientHeadersBodyFlag         = authClientsSetAuthClientHeadersFlags.String("body", "REQUIRED", "")
+		authClientsSetAuthClientHeadersSessionTokenFlag = authClientsSetAuthClientHeadersFlags.String("session-token", "", "")
+		authClientsSetAuthClientHeadersApikeyTokenFlag  = authClientsSetAuthClientHeadersFlags.String("apikey-token", "", "")
+
 		authClientsDetachAuthClientFromMcpServerFlags            = flag.NewFlagSet("detach-auth-client-from-mcp-server", flag.ExitOnError)
 		authClientsDetachAuthClientFromMcpServerBodyFlag         = authClientsDetachAuthClientFromMcpServerFlags.String("body", "REQUIRED", "")
 		authClientsDetachAuthClientFromMcpServerSessionTokenFlag = authClientsDetachAuthClientFromMcpServerFlags.String("session-token", "", "")
 		authClientsDetachAuthClientFromMcpServerApikeyTokenFlag  = authClientsDetachAuthClientFromMcpServerFlags.String("apikey-token", "", "")
+
+		authClientsListMcpServerAuthClientChoicesFlags            = flag.NewFlagSet("list-mcp-server-auth-client-choices", flag.ExitOnError)
+		authClientsListMcpServerAuthClientChoicesMcpServerIDFlag  = authClientsListMcpServerAuthClientChoicesFlags.String("mcp-server-id", "REQUIRED", "")
+		authClientsListMcpServerAuthClientChoicesSessionTokenFlag = authClientsListMcpServerAuthClientChoicesFlags.String("session-token", "", "")
+		authClientsListMcpServerAuthClientChoicesApikeyTokenFlag  = authClientsListMcpServerAuthClientChoicesFlags.String("apikey-token", "", "")
 
 		authClientsGetMcpServerAuthenticationFlags            = flag.NewFlagSet("get-mcp-server-authentication", flag.ExitOnError)
 		authClientsGetMcpServerAuthenticationMcpServerIDFlag  = authClientsGetMcpServerAuthenticationFlags.String("mcp-server-id", "REQUIRED", "")
@@ -1380,6 +1408,7 @@ func ParseEndpoint(
 		deviceIntegrationsListManagedDevicesFlags              = flag.NewFlagSet("list-managed-devices", flag.ExitOnError)
 		deviceIntegrationsListManagedDevicesProviderFlag       = deviceIntegrationsListManagedDevicesFlags.String("provider", "", "")
 		deviceIntegrationsListManagedDevicesCoverageBucketFlag = deviceIntegrationsListManagedDevicesFlags.String("coverage-bucket", "", "")
+		deviceIntegrationsListManagedDevicesPolicyStateFlag    = deviceIntegrationsListManagedDevicesFlags.String("policy-state", "", "")
 		deviceIntegrationsListManagedDevicesUserIdsFlag        = deviceIntegrationsListManagedDevicesFlags.String("user-ids", "", "")
 		deviceIntegrationsListManagedDevicesUserEmailsFlag     = deviceIntegrationsListManagedDevicesFlags.String("user-emails", "", "")
 		deviceIntegrationsListManagedDevicesCursorFlag         = deviceIntegrationsListManagedDevicesFlags.String("cursor", "", "")
@@ -5011,6 +5040,9 @@ func ParseEndpoint(
 		adminDisableUpstreamAuthEnforcementBodyFlag              = adminDisableUpstreamAuthEnforcementFlags.String("body", "REQUIRED", "")
 		adminDisableUpstreamAuthEnforcementAdminSessionTokenFlag = adminDisableUpstreamAuthEnforcementFlags.String("admin-session-token", "", "")
 
+		adminBackfillMcpAuthGrantsFlags                 = flag.NewFlagSet("backfill-mcp-auth-grants", flag.ExitOnError)
+		adminBackfillMcpAuthGrantsAdminSessionTokenFlag = adminBackfillMcpAuthGrantsFlags.String("admin-session-token", "", "")
+
 		userSessionClientsFlags = flag.NewFlagSet("user-session-clients", flag.ContinueOnError)
 
 		userSessionClientsListUserSessionClientsFlags                   = flag.NewFlagSet("list-user-session-clients", flag.ExitOnError)
@@ -5464,6 +5496,7 @@ func ParseEndpoint(
 	agentGetSessionMetaFlags.Usage = agentGetSessionMetaUsage
 	agentReportSessionMovedFlags.Usage = agentReportSessionMovedUsage
 	agentReportAIScanFlags.Usage = agentReportAIScanUsage
+	agentReportStateFlags.Usage = agentReportStateUsage
 	agentCreateSessionHandoffFlags.Usage = agentCreateSessionHandoffUsage
 
 	agentsFlags.Usage = agentsUsage
@@ -5562,7 +5595,11 @@ func ParseEndpoint(
 	authClientsListAuthClientsFlags.Usage = authClientsListAuthClientsUsage
 	authClientsGetAuthClientFlags.Usage = authClientsGetAuthClientUsage
 	authClientsUpdateAuthClientFlags.Usage = authClientsUpdateAuthClientUsage
+	authClientsCreateAuthClientFlags.Usage = authClientsCreateAuthClientUsage
+	authClientsAttachAuthClientToMcpServerFlags.Usage = authClientsAttachAuthClientToMcpServerUsage
+	authClientsSetAuthClientHeadersFlags.Usage = authClientsSetAuthClientHeadersUsage
 	authClientsDetachAuthClientFromMcpServerFlags.Usage = authClientsDetachAuthClientFromMcpServerUsage
+	authClientsListMcpServerAuthClientChoicesFlags.Usage = authClientsListMcpServerAuthClientChoicesUsage
 	authClientsGetMcpServerAuthenticationFlags.Usage = authClientsGetMcpServerAuthenticationUsage
 	authClientsSetMcpServerUpstreamAuthRequirementFlags.Usage = authClientsSetMcpServerUpstreamAuthRequirementUsage
 	authClientsGetAuthClientAudienceFlags.Usage = authClientsGetAuthClientAudienceUsage
@@ -6447,6 +6484,7 @@ func ParseEndpoint(
 	adminRunUpstreamOAuthMigrationFlags.Usage = adminRunUpstreamOAuthMigrationUsage
 	adminEnableUpstreamAuthEnforcementFlags.Usage = adminEnableUpstreamAuthEnforcementUsage
 	adminDisableUpstreamAuthEnforcementFlags.Usage = adminDisableUpstreamAuthEnforcementUsage
+	adminBackfillMcpAuthGrantsFlags.Usage = adminBackfillMcpAuthGrantsUsage
 
 	userSessionClientsFlags.Usage = userSessionClientsUsage
 	userSessionClientsListUserSessionClientsFlags.Usage = userSessionClientsListUserSessionClientsUsage
@@ -6967,6 +7005,9 @@ func ParseEndpoint(
 			case "report-ai-scan":
 				epf = agentReportAIScanFlags
 
+			case "report-state":
+				epf = agentReportStateFlags
+
 			case "create-session-handoff":
 				epf = agentCreateSessionHandoffFlags
 
@@ -7241,8 +7282,20 @@ func ParseEndpoint(
 			case "update-auth-client":
 				epf = authClientsUpdateAuthClientFlags
 
+			case "create-auth-client":
+				epf = authClientsCreateAuthClientFlags
+
+			case "attach-auth-client-to-mcp-server":
+				epf = authClientsAttachAuthClientToMcpServerFlags
+
+			case "set-auth-client-headers":
+				epf = authClientsSetAuthClientHeadersFlags
+
 			case "detach-auth-client-from-mcp-server":
 				epf = authClientsDetachAuthClientFromMcpServerFlags
+
+			case "list-mcp-server-auth-client-choices":
+				epf = authClientsListMcpServerAuthClientChoicesFlags
 
 			case "get-mcp-server-authentication":
 				epf = authClientsGetMcpServerAuthenticationFlags
@@ -9750,6 +9803,9 @@ func ParseEndpoint(
 			case "disable-upstream-auth-enforcement":
 				epf = adminDisableUpstreamAuthEnforcementFlags
 
+			case "backfill-mcp-auth-grants":
+				epf = adminBackfillMcpAuthGrantsFlags
+
 			}
 
 		case "user-session-clients":
@@ -10214,6 +10270,9 @@ func ParseEndpoint(
 			case "report-ai-scan":
 				endpoint = c.ReportAIScan()
 				data, err = agentc.BuildReportAIScanPayload(*agentReportAIScanBodyFlag, *agentReportAIScanApikeyTokenFlag, *agentReportAIScanEmailFlag, *agentReportAIScanSerialNumberFlag, *agentReportAIScanHostnameFlag)
+			case "report-state":
+				endpoint = c.ReportState()
+				data, err = agentc.BuildReportStatePayload(*agentReportStateBodyFlag, *agentReportStateApikeyTokenFlag, *agentReportStateEmailFlag, *agentReportStateSerialNumberFlag, *agentReportStateHostnameFlag, *agentReportStateEnvironmentFlag)
 			case "create-session-handoff":
 				endpoint = c.CreateSessionHandoff()
 				data, err = agentc.BuildCreateSessionHandoffPayload(*agentCreateSessionHandoffBodyFlag, *agentCreateSessionHandoffApikeyTokenFlag, *agentCreateSessionHandoffSerialNumberFlag, *agentCreateSessionHandoffHostnameFlag)
@@ -10503,9 +10562,21 @@ func ParseEndpoint(
 			case "update-auth-client":
 				endpoint = c.UpdateAuthClient()
 				data, err = authclientsc.BuildUpdateAuthClientPayload(*authClientsUpdateAuthClientBodyFlag, *authClientsUpdateAuthClientSessionTokenFlag, *authClientsUpdateAuthClientApikeyTokenFlag)
+			case "create-auth-client":
+				endpoint = c.CreateAuthClient()
+				data, err = authclientsc.BuildCreateAuthClientPayload(*authClientsCreateAuthClientBodyFlag, *authClientsCreateAuthClientSessionTokenFlag, *authClientsCreateAuthClientApikeyTokenFlag)
+			case "attach-auth-client-to-mcp-server":
+				endpoint = c.AttachAuthClientToMcpServer()
+				data, err = authclientsc.BuildAttachAuthClientToMcpServerPayload(*authClientsAttachAuthClientToMcpServerBodyFlag, *authClientsAttachAuthClientToMcpServerSessionTokenFlag, *authClientsAttachAuthClientToMcpServerApikeyTokenFlag)
+			case "set-auth-client-headers":
+				endpoint = c.SetAuthClientHeaders()
+				data, err = authclientsc.BuildSetAuthClientHeadersPayload(*authClientsSetAuthClientHeadersBodyFlag, *authClientsSetAuthClientHeadersSessionTokenFlag, *authClientsSetAuthClientHeadersApikeyTokenFlag)
 			case "detach-auth-client-from-mcp-server":
 				endpoint = c.DetachAuthClientFromMcpServer()
 				data, err = authclientsc.BuildDetachAuthClientFromMcpServerPayload(*authClientsDetachAuthClientFromMcpServerBodyFlag, *authClientsDetachAuthClientFromMcpServerSessionTokenFlag, *authClientsDetachAuthClientFromMcpServerApikeyTokenFlag)
+			case "list-mcp-server-auth-client-choices":
+				endpoint = c.ListMcpServerAuthClientChoices()
+				data, err = authclientsc.BuildListMcpServerAuthClientChoicesPayload(*authClientsListMcpServerAuthClientChoicesMcpServerIDFlag, *authClientsListMcpServerAuthClientChoicesSessionTokenFlag, *authClientsListMcpServerAuthClientChoicesApikeyTokenFlag)
 			case "get-mcp-server-authentication":
 				endpoint = c.GetMcpServerAuthentication()
 				data, err = authclientsc.BuildGetMcpServerAuthenticationPayload(*authClientsGetMcpServerAuthenticationMcpServerIDFlag, *authClientsGetMcpServerAuthenticationSessionTokenFlag, *authClientsGetMcpServerAuthenticationApikeyTokenFlag)
@@ -10729,7 +10800,7 @@ func ParseEndpoint(
 				data, err = deviceintegrationsc.BuildRetrySchedulePayload(*deviceIntegrationsRetryScheduleBodyFlag, *deviceIntegrationsRetryScheduleApikeyTokenFlag, *deviceIntegrationsRetryScheduleSessionTokenFlag)
 			case "list-managed-devices":
 				endpoint = c.ListManagedDevices()
-				data, err = deviceintegrationsc.BuildListManagedDevicesPayload(*deviceIntegrationsListManagedDevicesProviderFlag, *deviceIntegrationsListManagedDevicesCoverageBucketFlag, *deviceIntegrationsListManagedDevicesUserIdsFlag, *deviceIntegrationsListManagedDevicesUserEmailsFlag, *deviceIntegrationsListManagedDevicesCursorFlag, *deviceIntegrationsListManagedDevicesLimitFlag, *deviceIntegrationsListManagedDevicesApikeyTokenFlag, *deviceIntegrationsListManagedDevicesSessionTokenFlag)
+				data, err = deviceintegrationsc.BuildListManagedDevicesPayload(*deviceIntegrationsListManagedDevicesProviderFlag, *deviceIntegrationsListManagedDevicesCoverageBucketFlag, *deviceIntegrationsListManagedDevicesPolicyStateFlag, *deviceIntegrationsListManagedDevicesUserIdsFlag, *deviceIntegrationsListManagedDevicesUserEmailsFlag, *deviceIntegrationsListManagedDevicesCursorFlag, *deviceIntegrationsListManagedDevicesLimitFlag, *deviceIntegrationsListManagedDevicesApikeyTokenFlag, *deviceIntegrationsListManagedDevicesSessionTokenFlag)
 			case "get-coverage":
 				endpoint = c.GetCoverage()
 				data, err = deviceintegrationsc.BuildGetCoveragePayload(*deviceIntegrationsGetCoverageProviderFlag, *deviceIntegrationsGetCoverageApikeyTokenFlag, *deviceIntegrationsGetCoverageSessionTokenFlag)
@@ -13026,6 +13097,9 @@ func ParseEndpoint(
 			case "disable-upstream-auth-enforcement":
 				endpoint = c.DisableUpstreamAuthEnforcement()
 				data, err = adminc.BuildDisableUpstreamAuthEnforcementPayload(*adminDisableUpstreamAuthEnforcementBodyFlag, *adminDisableUpstreamAuthEnforcementAdminSessionTokenFlag)
+			case "backfill-mcp-auth-grants":
+				endpoint = c.BackfillMcpAuthGrants()
+				data, err = adminc.BuildBackfillMcpAuthGrantsPayload(*adminBackfillMcpAuthGrantsAdminSessionTokenFlag)
 			}
 		case "user-session-clients":
 			c := usersessionclientsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -14487,6 +14561,7 @@ func agentUsage() {
 	fmt.Fprintln(os.Stderr, `    get-session-meta: Resolve display metadata (Speakeasy chat id, generated title, last activity) for captured agent sessions the calling user owns. Used by the device agent's session picker to overlay server-generated titles on locally discovered transcripts; unknown or non-owned session ids are silently omitted, so the picker degrades gracefully. Requires a per-user key: the fleet-shared org install key is refused because session metadata is per-user data.`)
 	fmt.Fprintln(os.Stderr, `    report-session-moved: Record that a captured agent session was moved to another harness on a device (session portability). Carries no session content — only the session identity, the target harness, and device attribution — and lands as a chat_session:move audit event so organizations retain governance visibility over local-first moves. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report moves. Fire-and-forget from the agent's perspective: the daemon must never fail a move because this call failed.`)
 	fmt.Fprintln(os.Stderr, `    report-ai-scan: Report the result of a device-agent AI scan: which AI tools from the served scan target catalog (or the list embedded in the agent as a fallback) were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent's perspective: the daemon must never block on this call.`)
+	fmt.Fprintln(os.Stderr, `    report-state: Record the device agent's applied state: the policy etag it enforces, each tool's enforcement outcome, its versions and update posture. A snapshot: the latest report per enrolled user per machine replaces the previous one. Accepts the per-user key and the org install key (with a vouched email), mirroring reportAIScan; agent keys and device-agent tokens are refused. A report from a non-endpoint environment is accepted and not stored, because device coverage matches managed endpoints only. Contract: device-agent ADR-0029.`)
 	fmt.Fprintln(os.Stderr, `    create-session-handoff: Mint a short-lived capability URL for a rendered session-handoff document (session portability). The device agent uploads the handoff it rendered from the local transcript; the returned URL serves the markdown exactly once (burn-after-read) until expiry, so a cloud agent or another machine can continue the session. Content transits the server only for this purpose and stops being served at first read or expiry, whichever comes first. Requires a per-user key: the fleet-shared org install key is refused because minting a fetch-by-token URL for uploaded content is a per-user, content-bearing surface (the same DNO-383 blast-radius rule as getSessionMeta).`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -14768,6 +14843,34 @@ func agentReportAIScanUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent report-ai-scan --body '{\n      \"matches\": [\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         }\n      ],\n      \"scan_completed_at\": \"1970-01-01T00:00:01Z\",\n      \"scan_started_at\": \"1970-01-01T00:00:01Z\",\n      \"target_list_version\": 1\n   }' --apikey-token \"abc123\" --email \"abc123\" --serial-number \"abc123\" --hostname \"abc123\"")
+}
+
+func agentReportStateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agent report-state", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -email STRING")
+	fmt.Fprint(os.Stderr, " -serial-number STRING")
+	fmt.Fprint(os.Stderr, " -hostname STRING")
+	fmt.Fprint(os.Stderr, " -environment STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record the device agent's applied state: the policy etag it enforces, each tool's enforcement outcome, its versions and update posture. A snapshot: the latest report per enrolled user per machine replaces the previous one. Accepts the per-user key and the org install key (with a vouched email), mirroring reportAIScan; agent keys and device-agent tokens are refused. A report from a non-endpoint environment is accepted and not stored, because device coverage matches managed endpoints only. Contract: device-agent ADR-0029.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -email STRING: `)
+	fmt.Fprintln(os.Stderr, `    -serial-number STRING: `)
+	fmt.Fprintln(os.Stderr, `    -hostname STRING: `)
+	fmt.Fprintln(os.Stderr, `    -environment STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent report-state --body '{\n      \"agent\": {\n         \"arch\": \"aaa\",\n         \"os\": \"aaa\",\n         \"speakeasy\": \"aaa\",\n         \"speakeasy_ui\": \"aaa\",\n         \"speakeasyd\": \"aaa\"\n      },\n      \"drift_counting_since\": \"1970-01-01T00:00:01Z\",\n      \"enforcement_halted\": false,\n      \"generated_at\": \"1970-01-01T00:00:01Z\",\n      \"policy\": {\n         \"applied_at\": \"1970-01-01T00:00:01Z\",\n         \"applied_etag\": \"aaa\",\n         \"remote_config_etag\": \"aaa\",\n         \"remote_config_failed\": false,\n         \"withheld_plugins\": [\n            {\n               \"marketplace\": \"aaa\",\n               \"reason\": \"aaa\",\n               \"slug\": \"aa\"\n            },\n            {\n               \"marketplace\": \"aaa\",\n               \"reason\": \"aaa\",\n               \"slug\": \"aa\"\n            },\n            {\n               \"marketplace\": \"aaa\",\n               \"reason\": \"aaa\",\n               \"slug\": \"aa\"\n            }\n         ]\n      },\n      \"schema_version\": 2,\n      \"tools\": [\n         {\n            \"action_required\": false,\n            \"drift_corrections\": 1,\n            \"error_kind\": \"aaa\",\n            \"layer\": \"aaa\",\n            \"outcome\": \"aaa\",\n            \"pending_reason\": \"aaa\",\n            \"restart_required\": false,\n            \"tool\": \"aa\"\n         },\n         {\n            \"action_required\": false,\n            \"drift_corrections\": 1,\n            \"error_kind\": \"aaa\",\n            \"layer\": \"aaa\",\n            \"outcome\": \"aaa\",\n            \"pending_reason\": \"aaa\",\n            \"restart_required\": false,\n            \"tool\": \"aa\"\n         },\n         {\n            \"action_required\": false,\n            \"drift_corrections\": 1,\n            \"error_kind\": \"aaa\",\n            \"layer\": \"aaa\",\n            \"outcome\": \"aaa\",\n            \"pending_reason\": \"aaa\",\n            \"restart_required\": false,\n            \"tool\": \"aa\"\n         }\n      ],\n      \"update\": {\n         \"auto_update\": \"aaa\",\n         \"channel\": \"aaa\",\n         \"current_blocked\": false,\n         \"last_rollback\": {\n            \"at\": \"1970-01-01T00:00:01Z\",\n            \"from\": \"aaa\",\n            \"to\": \"aaa\"\n         },\n         \"pinned_target\": \"aaa\"\n      }\n   }' --apikey-token \"abc123\" --email \"abc123\" --serial-number \"abc123\" --hostname \"abc123\" --environment \"abc123\"")
 }
 
 func agentCreateSessionHandoffUsage() {
@@ -16620,7 +16723,11 @@ func authClientsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-auth-clients: List the auth clients in the caller's organization. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-auth-client: Get an auth client in the caller's organization. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    update-auth-client: Rename, enable or disable an auth client. The change applies to the typed auth configuration of every MCP server that offers the client and takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials; elsewhere, including in shadow mode, an MCP server's existing upstream configuration keeps serving. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    create-auth-client: Create an auth client and, optionally, offer it on MCP servers. A remote_session or service_account client authenticates through an existing OAuth registration whose credential owner matches its type; a static_credential or pass_through client authenticates with its own headers. Creating a client gives nobody permission to use it: set its audience to decide who may. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    attach-auth-client-to-mcp-server: Offer an existing auth client on another MCP server instead of creating a copy. The client stays one client: changing or rotating it changes upstream behavior on every server that offers it. Offering a client grants nobody permission to use it or access to the server. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    set-auth-client-headers: Replace the headers an auth client sends upstream. Rotating a shared client's credential changes upstream behavior on every server that offers it. Token-generating clients produce their own Authorization header, which cannot be configured. Clients created from a server's existing settings follow those settings and are edited there. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    detach-auth-client-from-mcp-server: Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    list-mcp-server-auth-client-choices: List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Returns each choice's id, name and client_type, and whether the upstream requires authentication; no headers or credentials.`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-authentication: Get how an MCP server authenticates to its upstream: whether authentication is required and which auth clients it offers. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    set-mcp-server-upstream-auth-requirement: Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-auth-client-audience: List who may use an auth client: the rules naming it and the broader rules that reach it. Requires org:read.`)
@@ -16701,6 +16808,72 @@ func authClientsUpdateAuthClientUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients update-auth-client --body '{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
+func authClientsCreateAuthClientUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients create-auth-client", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create an auth client and, optionally, offer it on MCP servers. A remote_session or service_account client authenticates through an existing OAuth registration whose credential owner matches its type; a static_credential or pass_through client authenticates with its own headers. Creating a client gives nobody permission to use it: set its audience to decide who may. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients create-auth-client --body '{\n      \"client_type\": \"service_account\",\n      \"headers\": [\n         {\n            \"description\": \"abc123\",\n            \"is_required\": false,\n            \"is_secret\": false,\n            \"name\": \"aa\",\n            \"value\": \"abc123\",\n            \"value_from_request_header\": \"abc123\"\n         }\n      ],\n      \"mcp_server_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"name\": \"aa\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_client_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func authClientsAttachAuthClientToMcpServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients attach-auth-client-to-mcp-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Offer an existing auth client on another MCP server instead of creating a copy. The client stays one client: changing or rotating it changes upstream behavior on every server that offers it. Offering a client grants nobody permission to use it or access to the server. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients attach-auth-client-to-mcp-server --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func authClientsSetAuthClientHeadersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients set-auth-client-headers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace the headers an auth client sends upstream. Rotating a shared client's credential changes upstream behavior on every server that offers it. Token-generating clients produce their own Authorization header, which cannot be configured. Clients created from a server's existing settings follow those settings and are edited there. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients set-auth-client-headers --body '{\n      \"headers\": [\n         {\n            \"description\": \"abc123\",\n            \"is_required\": false,\n            \"is_secret\": false,\n            \"name\": \"aa\",\n            \"value\": \"abc123\",\n            \"value_from_request_header\": \"abc123\"\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
 func authClientsDetachAuthClientFromMcpServerUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients detach-auth-client-from-mcp-server", os.Args[0])
@@ -16721,6 +16894,28 @@ func authClientsDetachAuthClientFromMcpServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients detach-auth-client-from-mcp-server --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func authClientsListMcpServerAuthClientChoicesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients list-mcp-server-auth-client-choices", os.Args[0])
+	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Returns each choice's id, name and client_type, and whether the upstream requires authentication; no headers or credentials.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients list-mcp-server-auth-client-choices --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func authClientsGetMcpServerAuthenticationUsage() {
@@ -18351,6 +18546,7 @@ func deviceIntegrationsListManagedDevicesUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations list-managed-devices", os.Args[0])
 	fmt.Fprint(os.Stderr, " -provider STRING")
 	fmt.Fprint(os.Stderr, " -coverage-bucket STRING")
+	fmt.Fprint(os.Stderr, " -policy-state STRING")
 	fmt.Fprint(os.Stderr, " -user-ids JSON")
 	fmt.Fprint(os.Stderr, " -user-emails JSON")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
@@ -18366,6 +18562,7 @@ func deviceIntegrationsListManagedDevicesUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
 	fmt.Fprintln(os.Stderr, `    -coverage-bucket STRING: `)
+	fmt.Fprintln(os.Stderr, `    -policy-state STRING: `)
 	fmt.Fprintln(os.Stderr, `    -user-ids JSON: `)
 	fmt.Fprintln(os.Stderr, `    -user-emails JSON: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
@@ -18375,7 +18572,7 @@ func deviceIntegrationsListManagedDevicesUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations list-managed-devices --provider \"abc123\" --coverage-bucket \"agent_stale\" --user-ids '[\n      \"abc123\"\n   ]' --user-emails '[\n      \"abc123\"\n   ]' --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations list-managed-devices --provider \"abc123\" --coverage-bucket \"agent_stale\" --policy-state \"outdated\" --user-ids '[\n      \"abc123\"\n   ]' --user-emails '[\n      \"abc123\"\n   ]' --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func deviceIntegrationsGetCoverageUsage() {
@@ -20653,7 +20850,7 @@ func keysCreateKeyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys create-key --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"delegated_grants_version\": 2,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"name\": \"aaa\",\n      \"policy_grants\": [\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         }\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ],\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys create-key --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"auth_client_choices\": [\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"delegated_grants_version\": 2,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"name\": \"aaa\",\n      \"policy_grants\": [\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         }\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ],\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func keysRotateKeyUsage() {
@@ -32665,6 +32862,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    run-upstreamoauth-migration: Migrates one organization's upstream OAuth configuration: records the server to client associations its configuration proves, then each live credential's client choice. Idempotent, so it is safe to run again; a server the configuration does not prove is reported and never guessed.`)
 	fmt.Fprintln(os.Stderr, `    enable-upstream-auth-enforcement: Enables upstream auth enforcement for one organization: its direct proxied servers and assistant turns are served by the typed auth client resolver, and using the chosen auth client requires mcp:auth. Refused unless the organization is migrated, its auth clients are recorded, its default auth permissions are granted, every credential choice that can name an auth client does, and its assistant profiles are recorded. Choices left ambiguous and profile gaps are not blocking: those credentials are asked to reconnect and those turns are refused with the reason. Shadow parity and the cross-organization denial notice are confirmed by the caller, since they are read from telemetry and communication outside the database. Enabled enforcement does not depend on the auth-client-resolver flags.`)
 	fmt.Fprintln(os.Stderr, `    disable-upstream-auth-enforcement: Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.`)
+	fmt.Fprintln(os.Stderr, `    backfill-mcp-auth-grants: Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -34803,6 +35001,24 @@ func adminDisableUpstreamAuthEnforcementUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin disable-upstream-auth-enforcement --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminBackfillMcpAuthGrantsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin backfill-mcp-auth-grants", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin backfill-mcp-auth-grants --admin-session-token \"abc123\"")
 }
 
 // userSessionClientsUsage displays the usage of the user-session-clients

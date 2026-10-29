@@ -29,9 +29,25 @@ type Client struct {
 	// updateAuthClient endpoint.
 	UpdateAuthClientDoer goahttp.Doer
 
+	// CreateAuthClient Doer is the HTTP client used to make requests to the
+	// createAuthClient endpoint.
+	CreateAuthClientDoer goahttp.Doer
+
+	// AttachAuthClientToMcpServer Doer is the HTTP client used to make requests to
+	// the attachAuthClientToMcpServer endpoint.
+	AttachAuthClientToMcpServerDoer goahttp.Doer
+
+	// SetAuthClientHeaders Doer is the HTTP client used to make requests to the
+	// setAuthClientHeaders endpoint.
+	SetAuthClientHeadersDoer goahttp.Doer
+
 	// DetachAuthClientFromMcpServer Doer is the HTTP client used to make requests
 	// to the detachAuthClientFromMcpServer endpoint.
 	DetachAuthClientFromMcpServerDoer goahttp.Doer
+
+	// ListMcpServerAuthClientChoices Doer is the HTTP client used to make requests
+	// to the listMcpServerAuthClientChoices endpoint.
+	ListMcpServerAuthClientChoicesDoer goahttp.Doer
 
 	// GetMcpServerAuthentication Doer is the HTTP client used to make requests to
 	// the getMcpServerAuthentication endpoint.
@@ -72,7 +88,11 @@ func NewClient(
 		ListAuthClientsDoer:                     doer,
 		GetAuthClientDoer:                       doer,
 		UpdateAuthClientDoer:                    doer,
+		CreateAuthClientDoer:                    doer,
+		AttachAuthClientToMcpServerDoer:         doer,
+		SetAuthClientHeadersDoer:                doer,
 		DetachAuthClientFromMcpServerDoer:       doer,
+		ListMcpServerAuthClientChoicesDoer:      doer,
 		GetMcpServerAuthenticationDoer:          doer,
 		SetMcpServerUpstreamAuthRequirementDoer: doer,
 		GetAuthClientAudienceDoer:               doer,
@@ -157,6 +177,78 @@ func (c *Client) UpdateAuthClient() goa.Endpoint {
 	}
 }
 
+// CreateAuthClient returns an endpoint that makes HTTP requests to the
+// authClients service createAuthClient server.
+func (c *Client) CreateAuthClient() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateAuthClientRequest(c.encoder)
+		decodeResponse = DecodeCreateAuthClientResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateAuthClientRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateAuthClientDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("authClients", "createAuthClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// AttachAuthClientToMcpServer returns an endpoint that makes HTTP requests to
+// the authClients service attachAuthClientToMcpServer server.
+func (c *Client) AttachAuthClientToMcpServer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeAttachAuthClientToMcpServerRequest(c.encoder)
+		decodeResponse = DecodeAttachAuthClientToMcpServerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildAttachAuthClientToMcpServerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.AttachAuthClientToMcpServerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("authClients", "attachAuthClientToMcpServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetAuthClientHeaders returns an endpoint that makes HTTP requests to the
+// authClients service setAuthClientHeaders server.
+func (c *Client) SetAuthClientHeaders() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetAuthClientHeadersRequest(c.encoder)
+		decodeResponse = DecodeSetAuthClientHeadersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetAuthClientHeadersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetAuthClientHeadersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("authClients", "setAuthClientHeaders", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // DetachAuthClientFromMcpServer returns an endpoint that makes HTTP requests
 // to the authClients service detachAuthClientFromMcpServer server.
 func (c *Client) DetachAuthClientFromMcpServer() goa.Endpoint {
@@ -176,6 +268,30 @@ func (c *Client) DetachAuthClientFromMcpServer() goa.Endpoint {
 		resp, err := c.DetachAuthClientFromMcpServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("authClients", "detachAuthClientFromMcpServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListMcpServerAuthClientChoices returns an endpoint that makes HTTP requests
+// to the authClients service listMcpServerAuthClientChoices server.
+func (c *Client) ListMcpServerAuthClientChoices() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListMcpServerAuthClientChoicesRequest(c.encoder)
+		decodeResponse = DecodeListMcpServerAuthClientChoicesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListMcpServerAuthClientChoicesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListMcpServerAuthClientChoicesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("authClients", "listMcpServerAuthClientChoices", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -395,8 +395,7 @@ check_openclaw_hooks() {
   case "$reason" in
     *"permission denied"* | *[Ff]orbidden* | *"HTTP 403"*)
       echo "This agent's key may not send hooks yet. It needs org:hooks_ingest on the"
-      echo "agent's project, and project:read. Ask an admin to grant both, then run a"
-      echo "new install command."
+      echo "agent's project. Ask an admin to grant it, then run a new install command."
       ;;
     *"unauthorized"* | *"HTTP 401"*)
       echo "Speakeasy did not accept this agent's key. It may be revoked or expired:"

@@ -491,6 +491,14 @@ const (
 	// different pinned version when one MCP surface resolved a skill linked
 	// several times.
 	McpSkillPinConflictCountKey = attribute.Key("gram.mcp.skill.pin_conflict_count")
+	// McpSkillIDKey is the managed skill a skill:// resources/read served.
+	McpSkillIDKey = attribute.Key("gram.mcp.skill.id")
+	// McpSkillVersionIDKey is the skill version whose content a skill://
+	// resources/read served.
+	McpSkillVersionIDKey = attribute.Key("gram.mcp.skill.version_id")
+	// McpSkillDigestKey is the SEP-2640 digest ("sha256:<hex>") of the
+	// content a skill:// resources/read served.
+	McpSkillDigestKey = attribute.Key("gram.mcp.skill.digest")
 	// McpSkillTargetKindKey is the kind of MCP surface a skill resolution
 	// served: "mcp_server", "meta_mcp_server" or "organization_gateway".
 	McpSkillTargetKindKey = attribute.Key("gram.mcp.skill.target_kind")
@@ -520,6 +528,16 @@ const (
 	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
 	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
 	McpURLKey              = attribute.Key("gram.mcp.url")
+
+	// Gateway consent diagnostics contain IDs and comparison results only,
+	// never credentials, configuration hashes, or captured tool definitions.
+	McpConsentMemberProjectIDKey = attribute.Key("gram.mcp.consent.member_project_id")
+	McpConsentCatalogIDKey       = attribute.Key("gram.mcp.consent.catalog_id")
+	McpConsentDiscoveryModeKey   = attribute.Key("gram.mcp.consent.discovery_mode")
+	McpConsentCatalogModeKey     = attribute.Key("gram.mcp.consent.catalog_mode")
+	McpConsentExecuteKey         = attribute.Key("gram.mcp.consent.execute")
+	McpConsentComparisonsKey     = attribute.Key("gram.mcp.consent.comparisons")
+	McpConsentExpiresAtKey       = attribute.Key("gram.mcp.consent.expires_at")
 
 	// Legacy toolsets.mcp_slug fallback attribution; logs only, never metric dimensions.
 	McpFallbackRequestHostKey         = attribute.Key("gram.mcp.fallback.request_host")
@@ -3345,6 +3363,26 @@ func MetaDispatchOutcome[V ~string](v V) attribute.KeyValue {
 	return MetaDispatchOutcomeKey.String(string(v))
 }
 
+func SlogMcpConsentMemberProjectID(v string) slog.Attr {
+	return slog.String(string(McpConsentMemberProjectIDKey), v)
+}
+func SlogMcpConsentCatalogID(v string) slog.Attr {
+	return slog.String(string(McpConsentCatalogIDKey), v)
+}
+func SlogMcpConsentDiscoveryMode(v string) slog.Attr {
+	return slog.String(string(McpConsentDiscoveryModeKey), v)
+}
+func SlogMcpConsentCatalogMode(v string) slog.Attr {
+	return slog.String(string(McpConsentCatalogModeKey), v)
+}
+func SlogMcpConsentExecute(v bool) slog.Attr { return slog.Bool(string(McpConsentExecuteKey), v) }
+func SlogMcpConsentComparisons(v map[string]bool) slog.Attr {
+	return slog.Any(string(McpConsentComparisonsKey), v)
+}
+func SlogMcpConsentExpiresAt(v time.Time) slog.Attr {
+	return slog.Time(string(McpConsentExpiresAtKey), v)
+}
+
 func ToolsetID(v string) attribute.KeyValue { return ToolsetIDKey.String(v) }
 func SlogToolsetID(v string) slog.Attr      { return slog.String(string(ToolsetIDKey), v) }
 
@@ -3393,6 +3431,17 @@ func McpSkillPinConflictCount(v int) attribute.KeyValue { return McpSkillPinConf
 func SlogMcpSkillPinConflictCount(v int) slog.Attr {
 	return slog.Int(string(McpSkillPinConflictCountKey), v)
 }
+
+func McpSkillID(v string) attribute.KeyValue { return McpSkillIDKey.String(v) }
+func SlogMcpSkillID(v string) slog.Attr      { return slog.String(string(McpSkillIDKey), v) }
+
+func McpSkillVersionID(v string) attribute.KeyValue { return McpSkillVersionIDKey.String(v) }
+func SlogMcpSkillVersionID(v string) slog.Attr {
+	return slog.String(string(McpSkillVersionIDKey), v)
+}
+
+func McpSkillDigest(v string) attribute.KeyValue { return McpSkillDigestKey.String(v) }
+func SlogMcpSkillDigest(v string) slog.Attr      { return slog.String(string(McpSkillDigestKey), v) }
 
 func McpSkillTargetKind[V ~string](v V) attribute.KeyValue {
 	return McpSkillTargetKindKey.String(string(v))

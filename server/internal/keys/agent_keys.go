@@ -25,6 +25,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -76,6 +78,9 @@ func (s *Service) createAgentKey(ctx context.Context, payload *gen.CreateKeyPayl
 	}
 	created, err := s.createPreparedAgentKey(ctx, tx, human, prepared)
 	if err != nil {
+		return nil, err
+	}
+	if err := recordAgentKeyAuthClientChoices(ctx, tx, human, created.ID, payload.AuthClientChoices); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -186,6 +191,15 @@ func (s *Service) RotateKey(ctx context.Context, payload *gen.RotateKeyPayload) 
 	created, err := s.createPreparedAgentKey(ctx, tx, human, prepared)
 	if err != nil {
 		return nil, err
+	}
+	// The replacement keeps the credentials the rotated key was set up with.
+	if _, err := upstreamclientsrepo.New(tx).CopyCredentialChoices(ctx, upstreamclientsrepo.CopyCredentialChoicesParams{
+		ToCredentialID:   created.ID,
+		CredentialKind:   upstreamclients.CredentialKindAPIKey,
+		FromCredentialID: oldKey.ID,
+		OrganizationID:   human.Auth.ActiveOrganizationID,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "copy agent API key credential choices").LogError(ctx, s.logger)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save agent API key rotation").LogError(ctx, s.logger)

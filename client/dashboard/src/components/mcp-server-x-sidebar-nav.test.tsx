@@ -92,7 +92,7 @@ describe("RemoteIdentitySummary", () => {
 
   it.each([
     ["user", "User"],
-    ["agent", "Service Account"],
+    ["agent", "Shared credential"],
     ["none", "Manual"],
   ] as const)("makes the %s pill the way into settings", (mode, label) => {
     renderSummary({ mode });

@@ -86,6 +86,23 @@ func (q *Queries) PostflightCountApprovalsServers(ctx context.Context, projectID
 	return count, err
 }
 
+const postflightCountAttestedDeviceAgentStateReports = `-- name: PostflightCountAttestedDeviceAgentStateReports :one
+SELECT count(*)
+FROM device_agent_state_reports r
+JOIN device_agent_syncs s
+  ON s.organization_id = r.organization_id
+ AND LOWER(s.email) = LOWER(r.email)
+WHERE r.organization_id = $1::text
+  AND r.applied_etag = s.served_etag
+`
+
+func (q *Queries) PostflightCountAttestedDeviceAgentStateReports(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountAttestedDeviceAgentStateReports, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountAuthClientAssociations = `-- name: PostflightCountAuthClientAssociations :one
 SELECT count(*) FROM mcp_server_auth_clients
 WHERE organization_id = $1::text AND deleted IS FALSE
@@ -118,6 +135,20 @@ SELECT count(*) FROM chats WHERE organization_id = $1::text
 
 func (q *Queries) PostflightCountChats(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountChats, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountDeviceAgentStateReports = `-- name: PostflightCountDeviceAgentStateReports :one
+
+SELECT count(*) FROM device_agent_state_reports WHERE organization_id = $1::text
+`
+
+// State reports: one attested machine and one enforcing an older policy.
+// Without them every active device reads unreported.
+func (q *Queries) PostflightCountDeviceAgentStateReports(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountDeviceAgentStateReports, orgID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -702,6 +733,27 @@ func (q *Queries) PostflightCountKillswitchVersions(ctx context.Context, orgID s
 	return count, err
 }
 
+const postflightCountMCPSkillLinks = `-- name: PostflightCountMCPSkillLinks :one
+SELECT count(*)
+FROM mcp_skill_links l
+LEFT JOIN mcp_servers ms
+  ON ms.project_id = l.project_id AND ms.id = l.mcp_server_id AND ms.deleted IS FALSE
+LEFT JOIN meta_mcp_servers mm
+  ON mm.project_id = l.project_id AND mm.id = l.meta_mcp_server_id AND mm.deleted IS FALSE
+WHERE l.project_id = $1::uuid AND l.deleted IS FALSE
+  AND (l.target_kind = 'organization_gateway'
+    OR (l.target_kind = 'mcp_server' AND ms.id IS NOT NULL)
+    OR (l.target_kind = 'meta_mcp_server' AND mm.id IS NOT NULL))
+`
+
+// Skills served over MCP must point at targets that survived the reseed.
+func (q *Queries) PostflightCountMCPSkillLinks(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountMCPSkillLinks, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountMDMDevices = `-- name: PostflightCountMDMDevices :one
 
 SELECT count(*) FROM mdm_devices WHERE organization_id = $1::text
@@ -748,6 +800,26 @@ WHERE organization_id = $1::text
 
 func (q *Queries) PostflightCountNetworkIngresses(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountNetworkIngresses, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountOutdatedDeviceAgentStateReports = `-- name: PostflightCountOutdatedDeviceAgentStateReports :one
+SELECT count(*)
+FROM device_agent_state_reports r
+JOIN device_agent_syncs s
+  ON s.organization_id = r.organization_id
+ AND LOWER(s.email) = LOWER(r.email)
+WHERE r.organization_id = $1::text
+  AND r.applied_etag IS DISTINCT FROM s.served_etag
+  AND r.tools @> '[{"outcome": "error", "error_kind": "permission_denied"}]'::jsonb
+`
+
+// Behind on policy because a tool hit a permission error, the case the
+// device panel exists to explain.
+func (q *Queries) PostflightCountOutdatedDeviceAgentStateReports(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountOutdatedDeviceAgentStateReports, orgID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

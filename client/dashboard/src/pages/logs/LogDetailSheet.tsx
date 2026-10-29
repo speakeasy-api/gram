@@ -25,6 +25,7 @@ import {
   type CodeLine,
   type CodeToken,
 } from "@/components/ui/lib/codeUtils";
+import { getNestedAttribute, httpStatusCode } from "./log-attributes";
 import { formatNanoTimestamp } from "./utils";
 
 interface LogDetailSheetProps {
@@ -71,25 +72,15 @@ const HOOK_BLOCK_REASON_KEY = "gram.hook.block_reason";
 const HOOK_ERROR_KEY = "gram.hook.error";
 
 /**
- * Extract a deeply nested value from an object using a dot-separated path.
- * e.g. getNestedValue(obj, "gram.tool_call.input.content")
+ * Extract a deeply nested value of any type from an object using a
+ * dot-separated path.
  */
 function getNestedValue(
   obj: Record<string, unknown>,
   path: string,
 ): string | undefined {
-  const parts = path.split(".");
-  let current: unknown = obj;
-  for (const part of parts) {
-    if (
-      current === null ||
-      current === undefined ||
-      typeof current !== "object"
-    )
-      return undefined;
-    current = (current as Record<string, unknown>)[part];
-  }
-  return typeof current === "string" ? current : undefined;
+  const value = getNestedAttribute(obj, path);
+  return typeof value === "string" ? value : undefined;
 }
 
 /**
@@ -220,9 +211,7 @@ function LogDetailContent({
 
   // The row this was opened from derives failure from the HTTP status, so a
   // 500 with no hook error must not read as a success here.
-  const statusCode = attrs
-    ? Number(getNestedValue(attrs, "http.response.status_code"))
-    : Number.NaN;
+  const statusCode = attrs ? httpStatusCode(attrs) : Number.NaN;
   const failed =
     Boolean(toolError) || (Number.isFinite(statusCode) && statusCode >= 400);
   // A span with no status, no error and no result has not finished — the same

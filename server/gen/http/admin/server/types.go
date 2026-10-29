@@ -2852,6 +2852,13 @@ type DisableUpstreamAuthEnforcementResponseBody struct {
 	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
 }
 
+// BackfillMcpAuthGrantsResponseBody is the type of the "admin" service
+// "backfillMcpAuthGrants" endpoint HTTP response body.
+type BackfillMcpAuthGrantsResponseBody struct {
+	// How many principals gained the mcp:auth grant.
+	Granted int64 `form:"granted" json:"granted" xml:"granted"`
+}
+
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
 // endpoint HTTP response body for the "unauthorized" error.
 type LoginUnauthorizedResponseBody struct {
@@ -22592,6 +22599,194 @@ type DisableUpstreamAuthEnforcementGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// BackfillMcpAuthGrantsUnauthorizedResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "unauthorized" error.
+type BackfillMcpAuthGrantsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsForbiddenResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "forbidden" error.
+type BackfillMcpAuthGrantsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsBadRequestResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "bad_request" error.
+type BackfillMcpAuthGrantsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsNotFoundResponseBody is the type of the "admin" service
+// "backfillMcpAuthGrants" endpoint HTTP response body for the "not_found"
+// error.
+type BackfillMcpAuthGrantsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsConflictResponseBody is the type of the "admin" service
+// "backfillMcpAuthGrants" endpoint HTTP response body for the "conflict" error.
+type BackfillMcpAuthGrantsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsUnsupportedMediaResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "unsupported_media" error.
+type BackfillMcpAuthGrantsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsInvalidResponseBody is the type of the "admin" service
+// "backfillMcpAuthGrants" endpoint HTTP response body for the "invalid" error.
+type BackfillMcpAuthGrantsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsInvariantViolationResponseBody is the type of the
+// "admin" service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "invariant_violation" error.
+type BackfillMcpAuthGrantsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsUnexpectedResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "unexpected" error.
+type BackfillMcpAuthGrantsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsGatewayErrorResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "gateway_error" error.
+type BackfillMcpAuthGrantsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -26703,6 +26898,15 @@ func NewDisableUpstreamAuthEnforcementResponseBody(res *admin.AdminUpstreamOAuth
 	}
 	if res.Enforcement != nil {
 		body.Enforcement = marshalAdminAdminUpstreamAuthEnforcementToAdminUpstreamAuthEnforcementResponseBody(res.Enforcement)
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsResponseBody builds the HTTP response body from the
+// result of the "backfillMcpAuthGrants" endpoint of the "admin" service.
+func NewBackfillMcpAuthGrantsResponseBody(res *admin.AdminBackfillMCPAuthGrantsResult) *BackfillMcpAuthGrantsResponseBody {
+	body := &BackfillMcpAuthGrantsResponseBody{
+		Granted: res.Granted,
 	}
 	return body
 }
@@ -42188,6 +42392,156 @@ func NewDisableUpstreamAuthEnforcementGatewayErrorResponseBody(res *goa.ServiceE
 	return body
 }
 
+// NewBackfillMcpAuthGrantsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsUnauthorizedResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsUnauthorizedResponseBody {
+	body := &BackfillMcpAuthGrantsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsForbiddenResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsForbiddenResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsForbiddenResponseBody {
+	body := &BackfillMcpAuthGrantsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsBadRequestResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsBadRequestResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsBadRequestResponseBody {
+	body := &BackfillMcpAuthGrantsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsNotFoundResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsNotFoundResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsNotFoundResponseBody {
+	body := &BackfillMcpAuthGrantsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsConflictResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsConflictResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsConflictResponseBody {
+	body := &BackfillMcpAuthGrantsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "backfillMcpAuthGrants" endpoint of the
+// "admin" service.
+func NewBackfillMcpAuthGrantsUnsupportedMediaResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsUnsupportedMediaResponseBody {
+	body := &BackfillMcpAuthGrantsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsInvalidResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsInvalidResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsInvalidResponseBody {
+	body := &BackfillMcpAuthGrantsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "backfillMcpAuthGrants" endpoint of the
+// "admin" service.
+func NewBackfillMcpAuthGrantsInvariantViolationResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsInvariantViolationResponseBody {
+	body := &BackfillMcpAuthGrantsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsUnexpectedResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsUnexpectedResponseBody {
+	body := &BackfillMcpAuthGrantsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsGatewayErrorResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsGatewayErrorResponseBody {
+	body := &BackfillMcpAuthGrantsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -43568,6 +43922,15 @@ func NewDisableUpstreamAuthEnforcementPayload(body *DisableUpstreamAuthEnforceme
 	v := &admin.DisableUpstreamAuthEnforcementPayload{
 		OrganizationID: *body.OrganizationID,
 	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewBackfillMcpAuthGrantsPayload builds a admin service backfillMcpAuthGrants
+// endpoint payload.
+func NewBackfillMcpAuthGrantsPayload(adminSessionToken *string) *admin.BackfillMcpAuthGrantsPayload {
+	v := &admin.BackfillMcpAuthGrantsPayload{}
 	v.AdminSessionToken = adminSessionToken
 
 	return v

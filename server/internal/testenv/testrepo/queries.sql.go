@@ -2153,6 +2153,32 @@ func (q *Queries) GetDeploymentFunctionInfraOverrides(ctx context.Context, deplo
 	return items, nil
 }
 
+const getDeviceAgentServedEtagFixture = `-- name: GetDeviceAgentServedEtagFixture :one
+SELECT served_etag, served_etag_changed_at
+FROM device_agent_syncs
+WHERE organization_id = $1
+  AND email = $2
+`
+
+type GetDeviceAgentServedEtagFixtureParams struct {
+	OrganizationID string
+	Email          string
+}
+
+type GetDeviceAgentServedEtagFixtureRow struct {
+	ServedEtag          pgtype.Text
+	ServedEtagChangedAt pgtype.Timestamptz
+}
+
+// Reads back the etag GetPlugins last served a user, which attestation
+// compares reported applied etags against.
+func (q *Queries) GetDeviceAgentServedEtagFixture(ctx context.Context, arg GetDeviceAgentServedEtagFixtureParams) (GetDeviceAgentServedEtagFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getDeviceAgentServedEtagFixture, arg.OrganizationID, arg.Email)
+	var i GetDeviceAgentServedEtagFixtureRow
+	err := row.Scan(&i.ServedEtag, &i.ServedEtagChangedAt)
+	return i, err
+}
+
 const getDeviceIntegrationCredentialsCiphertext = `-- name: GetDeviceIntegrationCredentialsCiphertext :one
 SELECT credentials_encrypted
 FROM device_integration_configs
@@ -2940,6 +2966,46 @@ func (q *Queries) InsertDeviceAgentDeviceSyncFixture(ctx context.Context, arg In
 		arg.Email,
 		arg.Hostname,
 		arg.SeenAt,
+	)
+	return err
+}
+
+const insertDeviceAgentStateReportFixture = `-- name: InsertDeviceAgentStateReportFixture :exec
+INSERT INTO device_agent_state_reports (
+    organization_id, email, serial_number, schema_version, generated_at, reported_at,
+    applied_etag, enforcement_halted, current_blocked, speakeasyd_version, tools
+)
+VALUES (
+    $1, $2, NULLIF($3::text, ''), 1, $4, $4,
+    NULLIF($5::text, ''), $6, $7, NULLIF($8::text, ''), $9
+)
+`
+
+type InsertDeviceAgentStateReportFixtureParams struct {
+	OrganizationID    string
+	Email             string
+	SerialNumber      string
+	ReportedAt        pgtype.Timestamptz
+	AppliedEtag       string
+	EnforcementHalted bool
+	CurrentBlocked    bool
+	SpeakeasydVersion string
+	Tools             []byte
+}
+
+// Seeds one stored state report for coverage tests; the write path is
+// agent.reportState.
+func (q *Queries) InsertDeviceAgentStateReportFixture(ctx context.Context, arg InsertDeviceAgentStateReportFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertDeviceAgentStateReportFixture,
+		arg.OrganizationID,
+		arg.Email,
+		arg.SerialNumber,
+		arg.ReportedAt,
+		arg.AppliedEtag,
+		arg.EnforcementHalted,
+		arg.CurrentBlocked,
+		arg.SpeakeasydVersion,
+		arg.Tools,
 	)
 	return err
 }
@@ -3758,6 +3824,67 @@ func (q *Queries) ListDeviceAgentEnvironmentSyncsFixture(ctx context.Context, or
 	return items, nil
 }
 
+const listDeviceAgentStateReportsFixture = `-- name: ListDeviceAgentStateReportsFixture :many
+SELECT id, organization_id, email, serial_number, hostname, schema_version, generated_at, reported_at, applied_etag, applied_at, enforcement_halted, remote_config_etag, remote_config_failed, withheld_plugins, tools, degraded_tool_count, drift_counting_since, speakeasyd_version, speakeasy_version, speakeasy_ui_version, os, arch, auto_update, update_channel, pinned_target, current_blocked, last_rollback_at, last_rollback_from, last_rollback_to, created_at, updated_at
+FROM device_agent_state_reports
+WHERE organization_id = $1
+ORDER BY email ASC, serial_number ASC NULLS FIRST
+`
+
+// Reads back stored agent state reports so tests can assert the upsert's
+// dedup key and what a report stores.
+func (q *Queries) ListDeviceAgentStateReportsFixture(ctx context.Context, organizationID string) ([]DeviceAgentStateReport, error) {
+	rows, err := q.db.Query(ctx, listDeviceAgentStateReportsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeviceAgentStateReport
+	for rows.Next() {
+		var i DeviceAgentStateReport
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Email,
+			&i.SerialNumber,
+			&i.Hostname,
+			&i.SchemaVersion,
+			&i.GeneratedAt,
+			&i.ReportedAt,
+			&i.AppliedEtag,
+			&i.AppliedAt,
+			&i.EnforcementHalted,
+			&i.RemoteConfigEtag,
+			&i.RemoteConfigFailed,
+			&i.WithheldPlugins,
+			&i.Tools,
+			&i.DegradedToolCount,
+			&i.DriftCountingSince,
+			&i.SpeakeasydVersion,
+			&i.SpeakeasyVersion,
+			&i.SpeakeasyUiVersion,
+			&i.Os,
+			&i.Arch,
+			&i.AutoUpdate,
+			&i.UpdateChannel,
+			&i.PinnedTarget,
+			&i.CurrentBlocked,
+			&i.LastRollbackAt,
+			&i.LastRollbackFrom,
+			&i.LastRollbackTo,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDirectoryReviewItemsFixture = `-- name: ListDirectoryReviewItemsFixture :many
 SELECT
   i.kind,
@@ -4154,6 +4281,21 @@ func (q *Queries) LockExternalOAuthMetadataNowaitFixture(ctx context.Context, ar
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const lockMCPServerForUpdateFixture = `-- name: LockMCPServerForUpdateFixture :one
+SELECT id
+FROM mcp_servers
+WHERE id = $1
+FOR UPDATE
+`
+
+// Test-only synchronization: holds an MCP server's row lock.
+func (q *Queries) LockMCPServerForUpdateFixture(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockMCPServerForUpdateFixture, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
 }
 
 const lockMCPServerRowFixture = `-- name: LockMCPServerRowFixture :one
@@ -5900,6 +6042,67 @@ type SetDeploymentFunctionInfraOverridesParams struct {
 
 func (q *Queries) SetDeploymentFunctionInfraOverrides(ctx context.Context, arg SetDeploymentFunctionInfraOverridesParams) error {
 	_, err := q.db.Exec(ctx, setDeploymentFunctionInfraOverrides, arg.MemoryMibOverride, arg.ScaleOverride, arg.DeploymentID)
+	return err
+}
+
+const setDeviceAgentServedEtagFixture = `-- name: SetDeviceAgentServedEtagFixture :exec
+UPDATE device_agent_syncs
+SET served_etag = $1, served_etag_changed_at = clock_timestamp()
+WHERE organization_id = $2
+  AND email = $3
+`
+
+type SetDeviceAgentServedEtagFixtureParams struct {
+	ServedEtag     pgtype.Text
+	OrganizationID string
+	Email          string
+}
+
+// Records the etag GetPlugins last served a user, as a poll would.
+func (q *Queries) SetDeviceAgentServedEtagFixture(ctx context.Context, arg SetDeviceAgentServedEtagFixtureParams) error {
+	_, err := q.db.Exec(ctx, setDeviceAgentServedEtagFixture, arg.ServedEtag, arg.OrganizationID, arg.Email)
+	return err
+}
+
+const setDeviceAgentStateReportUpdateFixture = `-- name: SetDeviceAgentStateReportUpdateFixture :exec
+UPDATE device_agent_state_reports
+SET auto_update = $1
+  , update_channel = $2
+  , pinned_target = $3
+  , last_rollback_at = $4
+  , last_rollback_from = $5
+  , last_rollback_to = $6
+WHERE organization_id = $7
+  AND LOWER(email) = LOWER($8)
+  AND LOWER(serial_number) IS NOT DISTINCT FROM LOWER(NULLIF($9::text, ''))
+`
+
+type SetDeviceAgentStateReportUpdateFixtureParams struct {
+	AutoUpdate       pgtype.Text
+	UpdateChannel    pgtype.Text
+	PinnedTarget     pgtype.Text
+	LastRollbackAt   pgtype.Timestamptz
+	LastRollbackFrom pgtype.Text
+	LastRollbackTo   pgtype.Text
+	OrganizationID   string
+	Email            string
+	SerialNumber     string
+}
+
+// Sets one seeded state report's update posture and last rollback. Matches
+// the report key: an empty serial selects the serial-less report.
+func (q *Queries) SetDeviceAgentStateReportUpdateFixture(ctx context.Context, arg SetDeviceAgentStateReportUpdateFixtureParams) error {
+	_, err := q.db.Exec(ctx, setDeviceAgentStateReportUpdateFixture,
+		arg.AutoUpdate,
+		arg.UpdateChannel,
+		arg.PinnedTarget,
+		arg.LastRollbackAt,
+		arg.LastRollbackFrom,
+		arg.LastRollbackTo,
+		arg.OrganizationID,
+		arg.Email,
+		arg.SerialNumber,
+	)
 	return err
 }
 

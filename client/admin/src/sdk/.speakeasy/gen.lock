@@ -33,6 +33,7 @@ trackedFiles:
   REACT_QUERY.md: {}
   src/core.ts: {}
   src/funcs/adminAssignOrganizationOnboardingPlaybook.ts: {}
+  src/funcs/adminBackfillMcpAuthGrants.ts: {}
   src/funcs/adminBulkUpdateAccountType.ts: {}
   src/funcs/adminCancelStripeSubscription.ts: {}
   src/funcs/adminChangeTrialEndDate.ts: {}
@@ -149,6 +150,7 @@ trackedFiles:
   src/lib/sdks.ts: {}
   src/lib/security.ts: {}
   src/lib/url.ts: {}
+  src/models/components/adminbackfillmcpauthgrantsresult.ts: {}
   src/models/components/adminbulkupdateaccounttyperesult.ts: {}
   src/models/components/adminchatanalysissettings.ts: {}
   src/models/components/adminchatanalysistriggerresult.ts: {}
@@ -380,6 +382,7 @@ trackedFiles:
   src/models/operations/adminserveimage.ts: {}
   src/react-query/_context.tsx: {}
   src/react-query/_types.ts: {}
+  src/react-query/adminBackfillMcpAuthGrants.ts: {}
   src/react-query/adminBulkUpdateAccountType.ts: {}
   src/react-query/adminCancelStripeSubscription.ts: {}
   src/react-query/adminChangeTrialEndDate.ts: {}
@@ -572,6 +575,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminBackfillMcpAuthGrants:
+    speakeasy-default-admin-backfill-mcp-auth-grants:
+      responses:
+        "200":
+          application/json: {"granted": 56749}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminBulkUpdateAccountType:
     speakeasy-default-admin-bulk-update-account-type:
       requestBody:

@@ -1,4 +1,4 @@
-h1:eMquKeG/CBtY3JyKtRiQfUhEyrKPR31scLCgoN0v48I=
+h1:9+9M62Uko+8tgAGdD2KOia3SUsA/kqcDAlO5YyiOYzg=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -510,4 +510,6 @@ h1:eMquKeG/CBtY3JyKtRiQfUhEyrKPR31scLCgoN0v48I=
 20261028003803_organization-metadata-add-adoption-dashboard-url.sql h1:JDvWHOBnTMF3u5XwTw6CSM/AIFDXRVHe7nIhcsYKp9A=
 20261028140800_mcp-skill-links.sql h1:IgMxVGJmyR4+WU1ddGru8vK3p9ax8etFRVn39jw8ktw=
 20261028210842_device-agent-state-reports.sql h1:Az5YrfbmmRxN/b4w7Eb9bAPulW6TYcQUrw3k66OW0rM=
-20261028214249_audit_logs_category.sql h1:uX9jRx2l41oImSloK0eEMVH+feW2GF0jN9PicrNGnag=
+20261029113832_plugins-auto-sync-enabled.sql h1:24UlBjM20cI64FOlFoc7MZRaD6VOE51PPX8whnLLVBk=
+20261029190024_okta-connections-drop-issuer-url-override-reason.sql h1:ip+eQgQ7fp/sWMfIBGQwcTbYerxSguGi6tldfbnzfCM=
+20261029221223_issuance-selection-profiles.sql h1:zDp3qzwycXN2ERapb3Banp5O0jp+P5Ox0jMPnIoBaEY=

@@ -436,6 +436,55 @@ FROM device_agent_environment_syncs
 WHERE organization_id = @organization_id
 ORDER BY environment ASC, email ASC;
 
+-- name: ListDeviceAgentStateReportsFixture :many
+-- Reads back stored agent state reports so tests can assert the upsert's
+-- dedup key and what a report stores.
+SELECT *
+FROM device_agent_state_reports
+WHERE organization_id = @organization_id
+ORDER BY email ASC, serial_number ASC NULLS FIRST;
+
+-- name: GetDeviceAgentServedEtagFixture :one
+-- Reads back the etag GetPlugins last served a user, which attestation
+-- compares reported applied etags against.
+SELECT served_etag, served_etag_changed_at
+FROM device_agent_syncs
+WHERE organization_id = @organization_id
+  AND email = @email;
+
+-- name: InsertDeviceAgentStateReportFixture :exec
+-- Seeds one stored state report for coverage tests; the write path is
+-- agent.reportState.
+INSERT INTO device_agent_state_reports (
+    organization_id, email, serial_number, schema_version, generated_at, reported_at,
+    applied_etag, enforcement_halted, current_blocked, speakeasyd_version, tools
+)
+VALUES (
+    @organization_id, @email, NULLIF(@serial_number::text, ''), 1, @reported_at, @reported_at,
+    NULLIF(@applied_etag::text, ''), @enforcement_halted, @current_blocked, NULLIF(@speakeasyd_version::text, ''), @tools
+);
+
+-- name: SetDeviceAgentStateReportUpdateFixture :exec
+-- Sets one seeded state report's update posture and last rollback. Matches
+-- the report key: an empty serial selects the serial-less report.
+UPDATE device_agent_state_reports
+SET auto_update = @auto_update
+  , update_channel = @update_channel
+  , pinned_target = @pinned_target
+  , last_rollback_at = @last_rollback_at
+  , last_rollback_from = @last_rollback_from
+  , last_rollback_to = @last_rollback_to
+WHERE organization_id = @organization_id
+  AND LOWER(email) = LOWER(@email)
+  AND LOWER(serial_number) IS NOT DISTINCT FROM LOWER(NULLIF(@serial_number::text, ''));
+
+-- name: SetDeviceAgentServedEtagFixture :exec
+-- Records the etag GetPlugins last served a user, as a poll would.
+UPDATE device_agent_syncs
+SET served_etag = @served_etag, served_etag_changed_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND email = @email;
+
 -- name: InsertMdmDeviceFixture :exec
 INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
 VALUES (@device_integration_config_id, @organization_id, @external_id, NULLIF(@user_email::text, ''), sqlc.narg('user_id')::text, NULLIF(@serial_number::text, ''), sqlc.narg('missing_since')::timestamptz);
@@ -2269,6 +2318,13 @@ SELECT EXISTS (
       AND wait_event_type = 'Lock'
       AND query LIKE '%LockWorkloadIssuerForWrite%'
 )::boolean;
+
+-- name: LockMCPServerForUpdateFixture :one
+-- Test-only synchronization: holds an MCP server's row lock.
+SELECT id
+FROM mcp_servers
+WHERE id = @id
+FOR UPDATE;
 
 -- name: SetHostedToolsetVisibilityFixture :execrows
 -- Sets a toolset's hosting visibility on its canonical MCP server, which owns it.

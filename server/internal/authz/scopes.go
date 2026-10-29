@@ -97,6 +97,7 @@ var adminScopes = []Scope{
 	ScopeMCPRead,
 	ScopeMCPWrite,
 	ScopeMCPConnect,
+	ScopeMCPAuth,
 	ScopeEnvironmentRead,
 	ScopeEnvironmentWrite,
 	ScopeSkillRead,
@@ -125,10 +126,6 @@ var adminScopes = []Scope{
 	// handlers regardless. chat:write satisfies chat:read via scopeExpansions,
 	// so a session reviewer who should not be able to delete gets chat:read
 	// alone.
-	//
-	// mcp:auth is NOT a default for any system role either: administering an
-	// organization implies no use of its auth clients, so use is granted
-	// explicitly per client, type, or personal connection.
 	//
 	// log:read is likewise NOT a default for any system role: raw tool-call
 	// logs carry tool arguments, results, prompt text, and hook payloads from
@@ -195,6 +192,7 @@ var memberScopes = []Scope{
 	ScopeProjectRead,
 	ScopeMCPRead,
 	ScopeMCPConnect,
+	ScopeMCPAuth,
 	ScopeSkillRead,
 	ScopeAssistantRead,
 	// environment:read is intentionally NOT a default for members: environment

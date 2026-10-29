@@ -373,3 +373,20 @@ func TestResolveAuthClientAccessTokens_ServesAServiceAccountWithoutTheSignInLink
 	_, err = mgr.ResolveClientAccessTokens(ctx, fx.projectID, fx.organizationID, otherSignIn, subject, fx.clientID, false)
 	require.ErrorIs(t, err, remotesessions.ErrChosenClientUnbound)
 }
+
+// An agent key's caller resolves people's connections through attachments,
+// but a service account's token belongs to nobody, so it is served the same
+// way to an agent as to anyone.
+func TestResolveAuthClientAccessTokens_ServesAServiceAccountToAnAgent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	source := &fakeClientCredentials{answers: []clientCredentialAnswer{{token: "self-token"}}}
+	mgr := newClientCredentialManager(t, ti.conn, testenv.NewEncryptionClient(t), source)
+	fx := seedSelfClient(t, ctx, ti.conn, "ac-self-agent")
+	agentID := uuid.New()
+	agentCtx := contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: fx.organizationID}, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()))
+
+	tokens, err := mgr.ResolveAuthClientAccessTokens(agentCtx, remotesessions.AuthClientTokenRequest{ProjectID: fx.projectID, OrganizationID: fx.organizationID, UserSessionIssuerID: uuid.Nil, Subject: urn.NewAgentSubject(agentID), RegistrationID: fx.clientID, SkipUnusable: false})
+	require.NoError(t, err)
+	require.Equal(t, "self-token", tokens[fx.remoteIssuerID].Token)
+}
