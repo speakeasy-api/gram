@@ -449,13 +449,14 @@ func (s *Service) admitMetaMembers(
 			backend = metaMemberBackendHosted
 		}
 
-		// Visibility gates exposure and fails closed: public members are open,
-		// private members require mcp:connect (as authorizeProxyBackendAccess)
-		// with denied members filtered so unauthorized reads as nonexistent,
-		// and any other value (malformed or future) is filtered the same way.
-		// This gates on the member server's own visibility only: a hosted
-		// member whose toolset is private still lists here (its endpoint is
-		// public), then reads as nonexistent on drill-down (loadMemberToolset).
+		// Visibility gates exposure and fails closed: public members are open
+		// unless connectPublic is set, private members require mcp:connect (as
+		// authorizeProxyBackendAccess) with denied members filtered so
+		// unauthorized reads as nonexistent, and any other value (malformed or
+		// future) is filtered the same way. This gates on the member server's
+		// own visibility only: a hosted member whose toolset is private still
+		// lists here (its endpoint is public), then reads as nonexistent on
+		// drill-down (loadMemberToolset).
 		connect := metaMemberConnectCheck(candidate.serverID, candidate.toolsetID, candidate.projectID)
 		public := candidate.visibility == mcpservers.VisibilityPublic
 		switch {
