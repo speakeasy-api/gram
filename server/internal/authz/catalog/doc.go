@@ -26,6 +26,9 @@
 //   - client.go: Target, Request, Decision, and Client.
 //   - backend.go: the Backend over authz.Engine.
 //   - mcpserver.go: request builders for MCP servers.
+//   - walkthroughs/: one request followed end to end, with diagrams.
+//     01-mcp-server-configure-vs-use.md: an editor pins a server's scopes
+//     but is refused when using it.
 //
 // # Relationship to package authz
 //
