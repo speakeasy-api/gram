@@ -4319,16 +4319,6 @@ type ToolUsageTraceSummary struct {
 	ClientVersion     *string `ch:"client_version"`
 }
 
-// GetToolUsageFilterOptionsParams defines the parameters for tool usage filter option queries.
-type GetToolUsageFilterOptionsParams struct {
-	GramProjectID     string
-	TimeStart         int64
-	TimeEnd           int64
-	HostedMCPMatchers []HostedMCPMatcher
-	MCPServerMatchers []MCPServerMatcher
-	MetaMCPMatchers   []MetaMCPMatcher
-}
-
 // ToolUsageFilterOptions contains all selectable usage-derived filter options for a time window.
 type ToolUsageFilterOptions struct {
 	HostedServers []ToolUsageHostedServerFilterOptionRow
@@ -4556,42 +4546,32 @@ func (q *Queries) GetToolUsageSummary(ctx context.Context, arg GetToolUsageSumma
 	return &summary, nil
 }
 
-// GetToolUsageFilterOptions retrieves usage-derived tool usage filter options for a time window.
-func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsageFilterOptionsParams) (*ToolUsageFilterOptions, error) {
-	summaryArg := GetToolUsageSummaryParams{
-		GramProjectID:      arg.GramProjectID,
-		TimeStart:          arg.TimeStart,
-		TimeEnd:            arg.TimeEnd,
-		BucketSizeNs:       0,
-		HostedMCPMatchers:  arg.HostedMCPMatchers,
-		MCPServerMatchers:  arg.MCPServerMatchers,
-		MetaMCPMatchers:    arg.MetaMCPMatchers,
-		TargetTypes:        nil,
-		HostedToolsetSlugs: nil,
-		MCPServerIDs:       nil,
-		ShadowServerNames:  nil,
-		MetaMCPServerIDs:   nil,
-		UserFilters:        nil,
-		AuthorizerUserIDs:  nil,
-		AgentIDs:           nil,
-		HookSources:        nil,
-		ClientKeys:         nil,
-		AccountType:        "", // filter options enumerate all values, never scoped
-		TargetLimit:        0,
-		UserLimit:          0,
-		UsersByTargetLimit: 0,
-		TargetToolRowLimit: 0,
-		TimeSeriesRowLimit: 0,
-		UserSeriesRowLimit: 0,
-		ClientLimit:        0,
-		ClientToolRowLimit: 0,
-		// Unscoped for the same reason as AccountType above: a dropdown that
-		// narrows itself by what is already applied dead-ends the moment a
-		// reader picks a value that excludes everything else.
-		Statuses: nil,
-		Query:    "",
-		Filters:  nil,
-	}
+// GetToolUsageFilterOptions retrieves usage-derived tool usage filter options.
+//
+// Each option group is counted under every applied filter except its own. A
+// group narrowed by its own selection would offer nothing but what is already
+// picked, so the reader could never add a second value; narrowed by the others
+// it answers "which of these still have calls, given everything else".
+func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) (*ToolUsageFilterOptions, error) {
+	serverArg := arg
+	serverArg.HostedToolsetSlugs = nil
+	serverArg.MCPServerIDs = nil
+	serverArg.ShadowServerNames = nil
+	serverArg.MetaMCPServerIDs = nil
+
+	clientArg := arg
+	clientArg.ClientKeys = nil
+
+	// Users and agents share one column set, so one read serves both unless a
+	// user or agent filter is applied — then each needs the other's filter but
+	// not its own.
+	userArg := arg
+	userArg.UserFilters = nil
+	userArg.AuthorizerUserIDs = nil
+
+	agentArg := arg
+	agentArg.AgentIDs = nil
+	splitAgents := len(arg.UserFilters) > 0 || len(arg.AgentIDs) > 0
 
 	// Independent reads of the same window — run concurrently; each goroutine
 	// writes a distinct field of options.
@@ -4599,36 +4579,59 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		var err error
-		options.HostedServers, err = q.getToolUsageHostedServerFilterOptions(egCtx, summaryArg)
+		options.HostedServers, err = q.getToolUsageHostedServerFilterOptions(egCtx, serverArg)
 		return err
 	})
 	eg.Go(func() error {
 		var err error
-		options.ShadowServers, err = q.getToolUsageShadowServerFilterOptions(egCtx, summaryArg)
+		options.ShadowServers, err = q.getToolUsageShadowServerFilterOptions(egCtx, serverArg)
 		return err
 	})
 	eg.Go(func() error {
 		var err error
-		options.Gateways, err = q.getToolUsageGatewayFilterOptions(egCtx, summaryArg)
+		options.Gateways, err = q.getToolUsageGatewayFilterOptions(egCtx, serverArg)
 		return err
 	})
 	eg.Go(func() error {
 		var err error
-		options.Users, err = q.getToolUsageUserFilterOptions(egCtx, summaryArg)
+		options.Users, err = q.getToolUsageUserFilterOptions(egCtx, userArg)
 		return err
 	})
 	eg.Go(func() error {
 		var err error
-		options.Authorizers, err = q.getToolUsageAuthorizerFilterOptions(egCtx, summaryArg)
+		options.Authorizers, err = q.getToolUsageAuthorizerFilterOptions(egCtx, userArg)
 		return err
 	})
 	eg.Go(func() error {
 		var err error
-		options.Clients, err = q.getToolUsageClientFilterOptions(egCtx, summaryArg)
+		options.Clients, err = q.getToolUsageClientFilterOptions(egCtx, clientArg)
 		return err
 	})
+	var agents []ToolUsageUserFilterOptionRow
+	if splitAgents {
+		eg.Go(func() error {
+			var err error
+			agents, err = q.getToolUsageUserFilterOptions(egCtx, agentArg)
+			return err
+		})
+	}
 	if err := eg.Wait(); err != nil {
 		return nil, fmt.Errorf("tool usage filter option queries: %w", err)
+	}
+
+	if splitAgents {
+		users := make([]ToolUsageUserFilterOptionRow, 0, len(options.Users)+len(agents))
+		for _, row := range options.Users {
+			if row.UserKind != toolUsageUserKindAgentID {
+				users = append(users, row)
+			}
+		}
+		for _, row := range agents {
+			if row.UserKind == toolUsageUserKindAgentID {
+				users = append(users, row)
+			}
+		}
+		options.Users = users
 	}
 
 	return &options, nil
@@ -5431,7 +5434,7 @@ func (q *Queries) GetToolUsageTargetToolBreakdown(ctx context.Context, arg GetTo
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageHostedServerFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageHostedServerFilterOptionRow, error) {
-	sb, err := toolUsageBaseSelect(arg,
+	sb, err := toolUsageFilteredSelect(arg,
 		"target_id AS toolset_slug",
 		"if(uniqExact(mcp_server_id) = 1, any(mcp_server_id), '') AS target_mcp_server_id",
 		"count() AS event_count",
@@ -5471,7 +5474,7 @@ func (q *Queries) getToolUsageHostedServerFilterOptions(ctx context.Context, arg
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageShadowServerFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageShadowServerFilterOptionRow, error) {
-	sb, err := toolUsageBaseSelect(arg,
+	sb, err := toolUsageFilteredSelect(arg,
 		"target_id AS server_name",
 		"count() AS event_count",
 	)
@@ -5510,7 +5513,7 @@ func (q *Queries) getToolUsageShadowServerFilterOptions(ctx context.Context, arg
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageGatewayFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageGatewayFilterOptionRow, error) {
-	sb, err := toolUsageBaseSelect(arg,
+	sb, err := toolUsageFilteredSelect(arg,
 		toolUsageGatewayIDExpr+" AS gateway_id",
 		"count() AS event_count",
 	)
@@ -5549,7 +5552,7 @@ func (q *Queries) getToolUsageGatewayFilterOptions(ctx context.Context, arg GetT
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageClientFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageClientFilterOptionRow, error) {
-	sb, err := toolUsageBaseSelect(arg,
+	sb, err := toolUsageFilteredSelect(arg,
 		"client_key",
 		"max(client_label) AS client_label",
 		"count() AS event_count",
@@ -5588,7 +5591,7 @@ func (q *Queries) getToolUsageClientFilterOptions(ctx context.Context, arg GetTo
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageUserFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserFilterOptionRow, error) {
-	sb, err := toolUsageBaseSelect(arg,
+	sb, err := toolUsageFilteredSelect(arg,
 		"user_key",
 		"user_label",
 		"user_kind",
@@ -5629,7 +5632,7 @@ func (q *Queries) getToolUsageUserFilterOptions(ctx context.Context, arg GetTool
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageAuthorizerFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageAuthorizerFilterOptionRow, error) {
-	sb, err := toolUsageBaseSelect(arg,
+	sb, err := toolUsageFilteredSelect(arg,
 		"authorizer_user_id",
 		"count() AS event_count",
 	)
@@ -5891,11 +5894,13 @@ func appendMetaMCPTargetBranch(typeArgs, kindArgs, idArgs, labelArgs *[]string, 
 
 // Only the authenticated managed-agent actor is an agent identity; owners and
 // approving humans are credential provenance, never the caller. Keep in sync
-// with trace_summaries_mv.agent_id. Client-supplied hook attributes are untrusted.
-const toolUsageAgentIDExpr = "if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')"
+// with trace_summaries_mv.agent_id. Hook rows count because the hooks service
+// drops any client-supplied actor and stamps the authenticated agent's.
+const toolUsageAgentIDExpr = "if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery', 'hook') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')"
 
-// The person an agent call acted on behalf of, read under the same trust rule
-// as the agent itself. Keep in sync with trace_summaries_mv.authorizer_user_id.
+// The person an agent call acted on behalf of. Gateway rows only: the hooks
+// service does not strip a client-supplied authorizer, so on a hook row it is
+// self-reported. Keep in sync with trace_summaries_mv.authorizer_user_id.
 const toolUsageAuthorizerUserIDExpr = "if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.authorizer_user_id), '')"
 
 // The gateway an event belongs to: the target itself, else the gateway that dispatched it.
@@ -5946,6 +5951,15 @@ func toolUsageMCPServerIDCTE(name string, hosted []HostedMCPMatcher, servers []M
 // calls carry a real trace_id (recorded by the gateway in ToolProxy.Do), so hosted
 // MCP, shadow MCP, skill, and local tool events are all present in the view; only
 // free-text/custom-attribute search and traceless trigger events need the raw scan.
+// A skill served over MCP is logged as a resource_read row whose skill_name is
+// set (see the hosted MCP skill:// read path). It is a skill activation, not a
+// call to the server it was read through, so it classifies as a skill target
+// ahead of the hosted-server branch, the same as a hook-reported Skill call.
+const (
+	toolUsageRawMCPSkillLoad     = "event_source = 'resource_read' AND skill_name != ''"
+	toolUsageSummaryMCPSkillLoad = "g_event_source = 'resource_read' AND g_skill_name != ''"
+)
+
 func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, []any, error) {
 	groupedSB := sq.Select(
 		"toString(trace_id) AS g_trace_id",
@@ -5982,7 +5996,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		GroupBy("trace_id").
 		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
 		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
-		Having("((startsWith(g_gram_urn, 'tools:') AND (g_toolset_slug != '' OR g_tool_source != '')) OR (g_event_source = 'hook' AND (g_tool_name != '' OR g_skill_name != '')))")
+		Having("((startsWith(g_gram_urn, 'tools:') AND (g_toolset_slug != '' OR g_tool_source != '')) OR (g_event_source = 'hook' AND (g_tool_name != '' OR g_skill_name != '')) OR (" + toolUsageSummaryMCPSkillLoad + "))")
 	groupedSB = withTraceWindowScanBounds(groupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
 
 	groupedSQL, groupedArgs, err := groupedSB.ToSql()
@@ -6021,20 +6035,25 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 
 	isSkillCall := "g_skill_name != ''"
 	skillLabel := "g_skill_name"
+	mcpSkillLoad := toolUsageSummaryMCPSkillLoad
 	toolName := chMultiIf(isSkillCall, skillLabel, "g_tool_name")
 
 	var targetType, targetKind, targetID, targetLabel string
 	if hasMatchers || hasMCPServerMatchers || hasMetaMatchers {
 		targetTypeArgs := []string{
+			mcpSkillLoad, "'" + ToolUsageTargetTypeSkill + "'",
 			"g_event_source != 'hook' AND g_toolset_slug != ''", "'" + ToolUsageTargetTypeHostedMCP + "'",
 		}
 		targetKindArgs := []string{
+			mcpSkillLoad, "'" + toolUsageTargetKindSkill + "'",
 			"g_event_source != 'hook' AND g_toolset_slug != ''", "'" + toolUsageTargetKindServer + "'",
 		}
 		targetIDArgs := []string{
+			mcpSkillLoad, skillLabel,
 			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
 		}
 		targetLabelArgs := []string{
+			mcpSkillLoad, skillLabel,
 			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
 		}
 		if hasMCPServerMatchers {
@@ -6083,24 +6102,28 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		targetLabel = chMultiIf(targetLabelArgs...)
 	} else {
 		targetType = chMultiIf(
+			mcpSkillLoad, "'"+ToolUsageTargetTypeSkill+"'",
 			"g_event_source != 'hook' AND g_toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
 			isSkillCall, "'"+ToolUsageTargetTypeSkill+"'",
 			"g_tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
 			"'"+ToolUsageTargetTypeLocalTool+"'",
 		)
 		targetKind = chMultiIf(
+			mcpSkillLoad, "'"+toolUsageTargetKindSkill+"'",
 			"g_event_source != 'hook' AND g_toolset_slug != ''", "'"+toolUsageTargetKindServer+"'",
 			isSkillCall, "'"+toolUsageTargetKindSkill+"'",
 			"g_tool_source != ''", "'"+toolUsageTargetKindServer+"'",
 			"'"+toolUsageTargetKindLocalTools+"'",
 		)
 		targetID = chMultiIf(
+			mcpSkillLoad, skillLabel,
 			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
 			isSkillCall, skillLabel,
 			"g_tool_source != ''", "g_tool_source",
 			"'local'",
 		)
 		targetLabel = chMultiIf(
+			mcpSkillLoad, skillLabel,
 			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
 			isSkillCall, skillLabel,
 			"g_tool_source != ''", "g_tool_source",
@@ -6256,7 +6279,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
 
-	sourceCondition := "((startsWith(gram_urn, 'tools:') AND (toolset_slug != '' OR tool_source != '')) OR (event_source = 'hook' AND (tool_name != '' OR skill_name != '' OR " + toolCallSkillName + " != '')))"
+	sourceCondition := "((startsWith(gram_urn, 'tools:') AND (toolset_slug != '' OR tool_source != '')) OR (event_source = 'hook' AND (tool_name != '' OR skill_name != '' OR " + toolCallSkillName + " != '')) OR (" + toolUsageRawMCPSkillLoad + "))"
 	includeTriggerRows := arg.Query != ""
 	for _, filter := range arg.Filters {
 		if strings.HasPrefix(filter.Path, "gram.trigger.") {
@@ -6358,25 +6381,30 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 	hasSkillTool := "max(toUInt8(raw_tool_name = 'Skill')) OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ") = 1"
 	isSkillCall := "(" + hasSkillTool + " OR " + skillName + " != '')"
 	skillLabel := chFirstNonEmpty(skillName, "''")
+	mcpSkillLoad := toolUsageRawMCPSkillLoad
 	targetType := chMultiIf(
+		mcpSkillLoad, "'"+ToolUsageTargetTypeSkill+"'",
 		"event_source != 'hook' AND toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
 		isSkillCall, "'"+ToolUsageTargetTypeSkill+"'",
 		"tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
 		"'"+ToolUsageTargetTypeLocalTool+"'",
 	)
 	targetKind := chMultiIf(
+		mcpSkillLoad, "'"+toolUsageTargetKindSkill+"'",
 		"event_source != 'hook' AND toolset_slug != ''", "'"+toolUsageTargetKindServer+"'",
 		isSkillCall, "'"+toolUsageTargetKindSkill+"'",
 		"tool_source != ''", "'"+toolUsageTargetKindServer+"'",
 		"'"+toolUsageTargetKindLocalTools+"'",
 	)
 	targetID := chMultiIf(
+		mcpSkillLoad, skillLabel,
 		"event_source != 'hook' AND toolset_slug != ''", "toolset_slug",
 		isSkillCall, skillLabel,
 		"tool_source != ''", "tool_source",
 		"'local'",
 	)
 	targetLabel := chMultiIf(
+		mcpSkillLoad, skillLabel,
 		"event_source != 'hook' AND toolset_slug != ''", "toolset_slug",
 		isSkillCall, skillLabel,
 		"tool_source != ''", "tool_source",
@@ -6384,15 +6412,19 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 	)
 	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 || len(metaURLSuffixes) > 0 {
 		targetTypeArgs := []string{
+			mcpSkillLoad, "'" + ToolUsageTargetTypeSkill + "'",
 			"event_source != 'hook' AND toolset_slug != ''", "'" + ToolUsageTargetTypeHostedMCP + "'",
 		}
 		targetKindArgs := []string{
+			mcpSkillLoad, "'" + toolUsageTargetKindSkill + "'",
 			"event_source != 'hook' AND toolset_slug != ''", "'" + toolUsageTargetKindServer + "'",
 		}
 		targetIDArgs := []string{
+			mcpSkillLoad, skillLabel,
 			"event_source != 'hook' AND toolset_slug != ''", "toolset_slug",
 		}
 		targetLabelArgs := []string{
+			mcpSkillLoad, skillLabel,
 			"event_source != 'hook' AND toolset_slug != ''", "toolset_slug",
 		}
 		if len(mcpSourceIDs) > 0 {
@@ -6686,6 +6718,8 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"max(meta_mcp_server_id) AS g_meta_mcp_server_id",
 		"max(mcp_client_name) AS g_mcp_client_name",
 		"max(mcp_client_version) AS g_mcp_client_version",
+		"any(event_source) AS g_event_source",
+		"any(skill_name) AS g_skill_name",
 		"max(mcp_server_id) AS g_mcp_server_id",
 	).
 		From("trace_summaries").
@@ -6694,8 +6728,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
 		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
 		Having("any(event_source) != 'hook'").
-		Having("startsWith(g_gram_urn, 'tools:')").
-		Having("(g_toolset_slug != '' OR g_tool_source != '')")
+		Having("((startsWith(g_gram_urn, 'tools:') AND (g_toolset_slug != '' OR g_tool_source != '')) OR (" + toolUsageSummaryMCPSkillLoad + "))")
 	directGroupedSB = withTraceWindowScanBounds(directGroupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
 
 	hookGroupedSB := sq.Select(
@@ -6747,16 +6780,19 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	}
 
 	directTargetType := chMultiIf(
+		toolUsageSummaryMCPSkillLoad, "'"+ToolUsageTargetTypeSkill+"'",
 		"g_toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
 		"g_tool_source != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
 		"'"+ToolUsageTargetTypeLocalTool+"'",
 	)
 	directTargetID := chMultiIf(
+		toolUsageSummaryMCPSkillLoad, "g_skill_name",
 		"g_toolset_slug != ''", "g_toolset_slug",
 		"g_tool_source != ''", "g_tool_source",
 		"'local'",
 	)
 	directTargetLabel := chMultiIf(
+		toolUsageSummaryMCPSkillLoad, "g_skill_name",
 		"g_toolset_slug != ''", "g_toolset_slug",
 		"g_tool_source != ''", "g_tool_source",
 		"'Local Tools'",
@@ -6764,18 +6800,21 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	if len(mcpSourceIDs) > 0 {
 		mcpServerMatchCondition := "mcp_server_match_index > 0"
 		directTargetType = chMultiIf(
+			toolUsageSummaryMCPSkillLoad, "'"+ToolUsageTargetTypeSkill+"'",
 			"g_toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
 			mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)",
 			"g_tool_source != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
 			"'"+ToolUsageTargetTypeLocalTool+"'",
 		)
 		directTargetID = chMultiIf(
+			toolUsageSummaryMCPSkillLoad, "g_skill_name",
 			"g_toolset_slug != ''", "g_toolset_slug",
 			mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)",
 			"g_tool_source != ''", "g_tool_source",
 			"'local'",
 		)
 		directTargetLabel = chMultiIf(
+			toolUsageSummaryMCPSkillLoad, "g_skill_name",
 			"g_toolset_slug != ''", "g_toolset_slug",
 			mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)",
 			"g_tool_source != ''", "g_tool_source",
@@ -6787,7 +6826,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 SELECT
 	event_time_ns,
 	%s AS target_type,
-	'%s' AS target_kind,
+	%s AS target_kind,
 	%s AS target_id,
 	%s AS target_label,
 	%s AS tool_name,
@@ -6808,10 +6847,10 @@ SELECT
 	g_mcp_server_id AS row_mcp_server_id
 FROM (%s)`,
 		directTargetType,
-		toolUsageTargetKindServer,
+		chMultiIf(toolUsageSummaryMCPSkillLoad, "'"+toolUsageTargetKindSkill+"'", "'"+toolUsageTargetKindServer+"'"),
 		directTargetID,
 		directTargetLabel,
-		chFirstNonEmpty("g_tool_name", "g_gram_urn"),
+		chMultiIf(toolUsageSummaryMCPSkillLoad, "g_skill_name", chFirstNonEmpty("g_tool_name", "g_gram_urn")),
 		userKey,
 		userLabel,
 		userKind,

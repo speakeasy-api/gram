@@ -22,9 +22,9 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
+  ListRiskPolicyApprovalsQueryParamStatus,
   ListRiskPolicyApprovalsRequest,
   ListRiskPolicyApprovalsSecurity,
-  Status,
 } from "../models/operations/listriskpolicyapprovals.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -115,7 +115,7 @@ export function setRiskListApprovalsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      status?: Status | undefined;
+      status?: ListRiskPolicyApprovalsQueryParamStatus | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramKey?: string | undefined;
@@ -134,7 +134,7 @@ export function invalidateRiskListApprovals(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      status?: Status | undefined;
+      status?: ListRiskPolicyApprovalsQueryParamStatus | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramKey?: string | undefined;

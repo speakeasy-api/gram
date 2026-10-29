@@ -15,111 +15,30 @@ import type { DeviceIntegrationCoverage } from "@gram/client/models/components/d
 import type {
   CoverageBucket,
   ManagedDevice,
+  PolicyState,
 } from "@gram/client/models/components/manageddevice.js";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { type Column, Table } from "@/components/ui/Table";
-import {
-  CheckCircle2,
-  CircleSlash,
-  HelpCircle,
-  Laptop,
-  MailX,
-  MonitorX,
-  TriangleAlert,
-  UserX,
-} from "lucide-react";
+import { cn } from "@/lib/utils";
 import { memo, useDeferredValue, useMemo, useState } from "react";
+import { useLocation, useSearchParams } from "react-router";
+import {
+  BUCKETS,
+  type CoverageDisplay,
+  coverageDisplay,
+  deviceCoverageKey,
+  LINKED_DEVICE_PARAM,
+  type LinkedDeviceState,
+  matchesCoverageFilter,
+  POLICY_STATES,
+  UNMANAGED_USERS,
+} from "./coverage-states";
+import { DeviceDetailSheet } from "./device-detail-sheet";
 
-// Coverage joins the MDM-reported fleet against device agent heartbeats, in
-// one of two modes the server selects per org. Under device-level matching
-// (hardware serial) an active heartbeat proves THIS machine ran the agent.
-// Under user-level matching it proves only "this device's assigned user runs
-// the agent somewhere" — never "this device is monitored".
-//
-// Copy below must hold under BOTH modes, because the client is not told which
-// one produced the counts. That is why the agent_active detail speaks of "the
-// device agent" without asserting whose machine it ran on, while
-// agent_other_device — which only device-level matching can produce — is free
-// to be specific.
-type BucketDisplay = {
-  label: string;
-  variant: "destructive" | "neutral" | "success" | "warning";
-  icon: React.ComponentType<{ className?: string }>;
-  detail: string;
-};
-
-const FALLBACK_BUCKET: BucketDisplay = {
-  label: "Unknown",
-  variant: "neutral",
-  icon: HelpCircle,
-  detail: "Unrecognized coverage state.",
-};
-
-const BUCKETS: Record<CoverageBucket, BucketDisplay> = {
-  agent_active: {
-    label: "Agent active",
-    variant: "success",
-    icon: CheckCircle2,
-    detail: "The device agent reported a heartbeat within the active window.",
-  },
-  agent_stale: {
-    label: "Agent stale",
-    variant: "warning",
-    icon: TriangleAlert,
-    detail:
-      "The agent has gone quiet while the MDM still sees the device checking in — the drift case. The agent may be disabled or removed.",
-  },
-  agent_other_device: {
-    label: "Agent on another device",
-    variant: "warning",
-    icon: Laptop,
-    detail:
-      "The assigned user runs the device agent, but not on this machine. Install it here — unlike No agent, the user is already onboarded.",
-  },
-  no_agent: {
-    label: "No agent",
-    variant: "destructive",
-    icon: CircleSlash,
-    detail:
-      "The assigned user has never reported a device agent heartbeat. This device's user is not running the agent.",
-  },
-  no_email: {
-    label: "No email in MDM",
-    variant: "neutral",
-    icon: MailX,
-    detail:
-      "The MDM record has no assigned-user email, so agent coverage cannot be attested. Set the user's email on the device record in your MDM.",
-  },
-  unresolved_email: {
-    label: "Unknown user",
-    variant: "neutral",
-    icon: HelpCircle,
-    detail:
-      "The MDM-assigned email does not match any member of this organization.",
-  },
-  missing: {
-    label: "Missing from MDM",
-    variant: "neutral",
-    icon: MonitorX,
-    detail:
-      "The device stopped appearing in the MDM inventory. It may have been unenrolled or retired.",
-  },
-};
-
-// Safe lookup: the SDK enum is closed today, but an unrecognized value from
-// a newer server must degrade to a neutral badge, not a crash.
-function bucketDisplay(bucket: CoverageBucket): BucketDisplay {
-  return BUCKETS[bucket] ?? FALLBACK_BUCKET;
-}
-
-function CoverageBucketBadge({
-  bucket,
-}: {
-  bucket: CoverageBucket;
-}): JSX.Element {
-  const display = bucketDisplay(bucket);
+function CoverageBadge({ device }: { device: ManagedDevice }): JSX.Element {
+  const display = coverageDisplay(deviceCoverageKey(device));
   const Icon = display.icon;
   return (
     <SimpleTooltip tooltip={display.detail}>
@@ -138,12 +57,22 @@ export function CoverageSummaryTiles({
 }: {
   coverage: DeviceIntegrationCoverage;
 }): JSX.Element {
-  const tiles: { key: string; display: BucketDisplay; count: number }[] = [
+  const tiles: { key: string; display: CoverageDisplay; count: number }[] = [
+    // agent_active, split by whether each device enforces its policy. The
+    // three problem states appear only when non-zero, so a healthy fleet
+    // reads as one tile.
     {
-      key: "agent_active",
-      display: BUCKETS.agent_active,
-      count: coverage.agentActive,
+      key: "attested",
+      display: POLICY_STATES.attested,
+      count: coverage.policyAttested,
     },
+    ...nonZero("outdated", POLICY_STATES.outdated, coverage.policyOutdated),
+    ...nonZero("halted", POLICY_STATES.halted, coverage.enforcementHalted),
+    ...nonZero(
+      "unreported",
+      POLICY_STATES.unreported,
+      coverage.policyUnreported,
+    ),
     {
       key: "agent_stale",
       display: BUCKETS.agent_stale,
@@ -152,15 +81,11 @@ export function CoverageSummaryTiles({
     // Only rendered when non-zero: user-level matching cannot produce this
     // bucket, so an always-present "0" tile would be dead weight for every
     // org that has not moved to device-level matching yet.
-    ...(coverage.agentOtherDevice > 0
-      ? [
-          {
-            key: "agent_other_device",
-            display: BUCKETS.agent_other_device,
-            count: coverage.agentOtherDevice,
-          },
-        ]
-      : []),
+    ...nonZero(
+      "agent_other_device",
+      BUCKETS.agent_other_device,
+      coverage.agentOtherDevice,
+    ),
     { key: "no_agent", display: BUCKETS.no_agent, count: coverage.noAgent },
     { key: "no_email", display: BUCKETS.no_email, count: coverage.noEmail },
     {
@@ -173,18 +98,24 @@ export function CoverageSummaryTiles({
     // inverse gap the ticket's bucket list requires.
     {
       key: "unmanaged_agent_users",
-      display: UNMANAGED_USERS_TILE,
+      display: UNMANAGED_USERS,
       count: coverage.unmanagedAgentUsers,
     },
   ];
 
   return (
     <div
-      className={
-        tiles.length > 7
-          ? "grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8"
-          : "grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7"
-      }
+      className={cn(
+        "grid grid-cols-2 gap-3 sm:grid-cols-4",
+        // One row up to eight tiles; past that, two near-even rows.
+        tiles.length <= 7
+          ? "lg:grid-cols-7"
+          : tiles.length === 8
+            ? "lg:grid-cols-8"
+            : tiles.length <= 10
+              ? "lg:grid-cols-5"
+              : "lg:grid-cols-6",
+      )}
     >
       {tiles.map(({ key, display, count }) => (
         <CoverageStatTile key={key} display={display} count={count} />
@@ -193,19 +124,19 @@ export function CoverageSummaryTiles({
   );
 }
 
-const UNMANAGED_USERS_TILE: BucketDisplay = {
-  label: "Agent users w/o device",
-  variant: "neutral",
-  icon: UserX,
-  detail:
-    "Users reporting device agent heartbeats whose email matches no managed device in the MDM inventory.",
-};
+function nonZero(
+  key: string,
+  display: CoverageDisplay,
+  count: number,
+): { key: string; display: CoverageDisplay; count: number }[] {
+  return count > 0 ? [{ key, display, count }] : [];
+}
 
 function CoverageStatTile({
   display,
   count,
 }: {
-  display: BucketDisplay;
+  display: CoverageDisplay;
   count: number;
 }) {
   return (
@@ -262,17 +193,63 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
           device.userEmail,
           device.externalId,
         ].some((value) => value?.toLowerCase().includes(normalizedSearch));
-      const matchesBucket =
-        !selectedBuckets ||
-        selectedBuckets.length === 0 ||
-        selectedBuckets.includes(device.coverageBucket);
-      return matchesSearch && matchesBucket;
+      return matchesSearch && matchesCoverageFilter(device, selectedBuckets);
     });
   }, [devices, deferredSearch, selectedBuckets]);
 
   const columns = useMemo(() => deviceColumns(), []);
+  // The device outlives `open`, so the sheet keeps its content while it
+  // slides out. A refreshed list replaces the clicked snapshot.
+  const [selected, setSelected] = useState<ManagedDevice | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const selectedDevice = selected
+    ? (devices.find((device) => device.id === selected.id) ?? selected)
+    : null;
+  // A Command K result links here with ?device=<id> and carries the device
+  // it matched, so the panel opens before that device's page has loaded.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const linkedId = searchParams.get(LINKED_DEVICE_PARAM);
+  const linkedSnapshot = (location.state as LinkedDeviceState | null)?.device;
+  const linkedDevice = linkedId
+    ? (devices.find((device) => device.id === linkedId) ??
+      (linkedSnapshot?.id === linkedId ? linkedSnapshot : null))
+    : null;
+  const clearLinkedDevice = () => {
+    if (!linkedId) return;
+    setSearchParams(
+      (params) => {
+        params.delete(LINKED_DEVICE_PARAM);
+        return params;
+      },
+      { replace: true },
+    );
+  };
 
-  if (isLoading) return <SkeletonTable />;
+  // Rendered in every state, so a Command K link opens its snapshot while
+  // the inventory loads or after it fails.
+  const detailSheet = (
+    <DeviceDetailSheet
+      device={linkedDevice ?? selectedDevice}
+      open={linkedDevice ? true : sheetOpen}
+      onOpenChange={(open) => {
+        // Keep the linked device as the selection so the panel keeps its
+        // content while it slides out.
+        if (!open && linkedDevice) setSelected(linkedDevice);
+        if (!open) clearLinkedDevice();
+        setSheetOpen(open);
+      }}
+    />
+  );
+
+  if (isLoading) {
+    return (
+      <>
+        <SkeletonTable />
+        {detailSheet}
+      </>
+    );
+  }
   if (isError) {
     return (
       <Stack gap={2} align="start">
@@ -282,6 +259,7 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
             <Button.Text>Retry</Button.Text>
           </Button>
         ) : null}
+        {detailSheet}
       </Stack>
     );
   }
@@ -298,7 +276,7 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
         <Page.Toolbar.Filters
           schema={DEVICE_FILTERS}
           values={values}
-          optionsById={{ coverage: BUCKET_OPTIONS }}
+          optionsById={{ coverage: COVERAGE_OPTIONS }}
           onChange={setValue as (id: string, value: FilterValue) => void}
           onClear={clearValue as (id: string) => void}
           onClearAll={clearAll}
@@ -308,6 +286,11 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
         columns={columns}
         data={filteredDevices}
         rowKey={(row) => row.id}
+        onRowClick={(device) => {
+          clearLinkedDevice();
+          setSelected(device);
+          setSheetOpen(true);
+        }}
         noResultsMessage={<WidgetEmptyState message="No matching devices" />}
       />
       {hasMore ? (
@@ -328,17 +311,24 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
           </Text>
         </Stack>
       ) : null}
+      {detailSheet}
     </Stack>
   );
 });
 
-const BUCKET_OPTIONS = (Object.keys(BUCKETS) as CoverageBucket[]).map(
-  (bucket) => ({
-    label: bucketDisplay(bucket).label,
-    value: bucket,
-  }),
-);
-
+// The policy states match what the Coverage column shows. agent_active stays
+// as the whole bucket, for existing links and rows from a server that sends
+// no policy state.
+const COVERAGE_OPTIONS = [
+  ...(Object.keys(POLICY_STATES) as PolicyState[]),
+  ...(Object.keys(BUCKETS) as CoverageBucket[]),
+].map((key) => ({
+  label:
+    key === "agent_active"
+      ? "Agent active (any policy state)"
+      : coverageDisplay(key).label,
+  value: key,
+}));
 const DEVICE_FILTERS = defineFilters([
   { id: "coverage", label: "Coverage", kind: "multiselect", pinned: true },
 ]);
@@ -416,8 +406,8 @@ const trailingDeviceColumns: Column<ManagedDevice>[] = [
   {
     key: "coverage",
     header: "Coverage",
-    width: "170px",
-    render: (device) => <CoverageBucketBadge bucket={device.coverageBucket} />,
+    width: "220px",
+    render: (device) => <CoverageBadge device={device} />,
   },
 ];
 

@@ -175,6 +175,55 @@ func attachedCaller(ctx context.Context, subject urn.SessionSubject) (bool, erro
 	return attached, err
 }
 
+// AttachedConnection is the stored connection an agent attachment serves for
+// one registration: the exact remote session row and the user who owns it.
+type AttachedConnection struct {
+	RemoteSessionID uuid.UUID
+	OwnerUserID     string
+}
+
+// AuthClientAttachedConnection reports the connection an attached caller's
+// binding serves for req.RegistrationID, through the same exact, tenant- and
+// sign-in-scoped lookup token resolution uses: a revoked, deleted, replaced or
+// out-of-reach binding serves nothing. It is metadata only and never a grant:
+// it returns no token, and the caller still decides permission for the owner
+// it names. attached is false for a caller that is not served by attachments
+// (a user, a principal credential, a workload) and for an attached caller with
+// no usable binding; the caller's own subject still governs those.
+func (m *ChallengeManager) AuthClientAttachedConnection(ctx context.Context, req AuthClientTokenRequest) (conn AttachedConnection, attached bool, err error) {
+	var zero AttachedConnection
+	if req.Subject.IsZero() {
+		return zero, false, ErrInvalidAuthorizationRequest
+	}
+	if attached, err := attachedCaller(ctx, req.Subject); err != nil || !attached {
+		return zero, false, err
+	}
+	principalID, _, err := remoteSessionCallerPrincipal(ctx, req.Subject)
+	if err != nil {
+		return zero, false, err
+	}
+	if req.ProjectID == uuid.Nil || req.OrganizationID == "" || req.UserSessionIssuerID == uuid.Nil || req.RegistrationID == uuid.Nil {
+		return zero, false, ErrInvalidAuthorizationRequest
+	}
+	source, err := remotesessions_repo.New(m.db).GetPrincipalRemoteSessionBinding(ctx, remotesessions_repo.GetPrincipalRemoteSessionBindingParams{
+		ProjectID:             req.ProjectID,
+		OrganizationID:        req.OrganizationID,
+		PrincipalID:           principalID,
+		UserSessionIssuerID:   req.UserSessionIssuerID,
+		RemoteSessionClientID: req.RegistrationID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return zero, false, nil
+	case err != nil:
+		return zero, false, fmt.Errorf("get principal remote session binding: %w", err)
+	}
+	if source.SubjectUrn.Kind != urn.SessionSubjectKindUser || source.SubjectUrn.ID == "" {
+		return zero, false, nil
+	}
+	return AttachedConnection{RemoteSessionID: source.ID, OwnerUserID: source.SubjectUrn.ID}, true, nil
+}
+
 func (m *ChallengeManager) reachableClient(ctx context.Context, projectID uuid.UUID, organizationID string, registrationID uuid.UUID) (remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow, error) {
 	row, err := remotesessions_repo.New(m.db).GetReachableRemoteSessionClient(ctx, remotesessions_repo.GetReachableRemoteSessionClientParams{
 		ProjectID:             projectID,

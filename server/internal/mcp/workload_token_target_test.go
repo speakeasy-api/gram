@@ -78,17 +78,16 @@ func TestWorkloadTokenTargetFor_NoWorkloadGrant(t *testing.T) {
 
 	f := newWorkloadGrantFixture(t)
 	slug := "no-workload-" + uuid.NewString()[:8]
-	_, err := toolsets_repo.New(f.ti.conn).CreateToolset(f.fixtureContext(t), toolsets_repo.CreateToolsetParams{
+	toolset, err := toolsets_repo.New(f.ti.conn).CreateToolset(f.fixtureContext(t), toolsets_repo.CreateToolsetParams{
 		OrganizationID:         f.fx.orgID,
 		ProjectID:              f.fx.target.ProjectID,
 		Name:                   "Ungated MCP " + slug,
 		Slug:                   slug,
 		Description:            conv.ToPGText("an MCP server with no user session issuer"),
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	hostLegacyToolset(t, f.fixtureContext(t), f.ti, toolset, slug, "private", noIssuer())
 
 	base := strings.TrimSuffix(f.ti.serverURL.String(), "/")
 	for _, mcpURL := range []string{

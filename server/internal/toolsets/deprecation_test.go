@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
-	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
 type lockedBuffer struct {
@@ -66,7 +66,7 @@ func TestToolsetsService_DeprecatedHostingInputsLog(t *testing.T) {
 	require.Empty(t, buf.deprecationRecords(t))
 
 	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: created.Slug, McpIsPublic: new(false)})
-	require.NoError(t, err)
+	require.ErrorIs(t, err, toolsets.ErrHostingFieldsMoved, "a rejected request is still attributed")
 	records := buf.deprecationRecords(t)
 	require.Len(t, records, 1)
 	require.Equal(t, []any{"mcp_is_public"}, records[0]["gram.deprecated.fields"])
@@ -74,12 +74,4 @@ func TestToolsetsService_DeprecatedHostingInputsLog(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, authCtx.ActiveOrganizationID, records[0]["gram.org.id"])
 	require.Equal(t, authCtx.UserID, records[0]["user.id"])
-
-	_, err = ti.service.SetUserSessionIssuer(ctx, &gen.SetUserSessionIssuerPayload{Slug: created.Slug})
-	require.NoError(t, err)
-	require.Len(t, buf.deprecationRecords(t), 1)
-
-	_, err = ti.service.CheckMCPSlugAvailability(ctx, &gen.CheckMCPSlugAvailabilityPayload{Slug: types.Slug("deprecation-log-probe")})
-	require.NoError(t, err)
-	require.Len(t, buf.deprecationRecords(t), 1)
 }

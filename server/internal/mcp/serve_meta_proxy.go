@@ -199,7 +199,7 @@ func (s *Service) routeMetaMember(
 	if err != nil {
 		return memberDial{}, "", fmt.Errorf("load meta MCP member server: %w", err)
 	}
-	tokens, err := gate.memberTokens(ctx, member)
+	tokens, err := s.resolveMemberTokens(ctx, &gate, member)
 	if err != nil {
 		return memberDial{}, "", err
 	}

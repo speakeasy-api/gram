@@ -131,7 +131,7 @@ func TestKitGKEStopRetriesSupersededCleanupAfterDurableReplacement(t *testing.T)
 			require.NotEqual(t, "verified-snapshot", deletion.GetName())
 		}
 	}
-	_, err = k.get(t.Context(), r, kitTemplateGVR, kitGKEName(r), state.Metadata.TemplateUID)
+	_, err = k.get(t.Context(), r, kitTemplateGVR, kitGKETemplateName(kitGKEName(r)), state.Metadata.TemplateUID)
 	require.NoError(t, err)
 	_, err = k.get(t.Context(), r, kitSecretGVR, state.Metadata.SecretName, state.Metadata.SecretUID)
 	require.NoError(t, err)

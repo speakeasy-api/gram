@@ -10,19 +10,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
-// openAIToolAllowlist is the whole catalogue a ChatGPT or Codex connection
-// sees: the golden path from finding an MCP server to installing it. ChatGPT
-// reviews every tool an app lists and shows them all to the user, and the
-// ChatGPT desktop app, where the Speakeasy ChatGPT plugin runs, signs in as
-// Codex and does not reliably surface a catalogue as large as the full
-// administrator one. A short list that covers one complete outcome is easier
-// to review and to use. list_projects is the one read outside that path: the
-// default_project_not_found recovery tells the agent to call it.
+// chatGPTToolAllowlist is the whole catalogue a ChatGPT connection sees: the
+// golden path from finding an MCP server to installing it. ChatGPT reviews
+// every tool an app lists and shows them all to the user, so a short list that
+// covers one complete outcome is easier to review and to use than the full
+// administrator catalogue. list_projects is the one read outside that path:
+// the default_project_not_found recovery tells the agent to call it.
 //
 // This is a usability filter, not a security boundary. Every caller is still
 // entitled to every tool its grants allow; RBAC discovery filtering and each
 // handler's own authorization apply on top of this list unchanged.
-var openAIToolAllowlist = []string{
+var chatGPTToolAllowlist = []string{
 	"search_mcp_catalog",
 	"inspect_mcp_candidate",
 	"register_catalog_mcp",
@@ -31,42 +29,42 @@ var openAIToolAllowlist = []string{
 	"get_setup_handoff",
 	"get_mcp_readiness",
 	"get_my_install_instructions",
-	"search_gram_docs",
+	"search_speakeasy_docs",
 	"list_projects",
 }
 
-// openAIProductIDs are the aivendors registry products whose CIMD documents
-// identify a caller limited to openAIToolAllowlist.
-var openAIProductIDs = []string{"chatgpt", "codex"}
+// chatGPTProductID is the aivendors registry product whose CIMD documents
+// identify a ChatGPT caller.
+const chatGPTProductID = "chatgpt"
 
-// openAIClientIDs are the CIMD document URLs of the openAIProductIDs products,
-// resolved once because the registry is static.
-var openAIClientIDs = sync.OnceValue(func() []string {
-	var clientIDs []string
+// chatGPTClientIDs are the CIMD document URLs of the aivendors registry's
+// ChatGPT product, resolved once because the registry is static.
+var chatGPTClientIDs = sync.OnceValue(func() []string {
 	for _, product := range aivendors.Products() {
-		if slices.Contains(openAIProductIDs, product.ID) {
-			clientIDs = append(clientIDs, aivendors.GatewayMatchersFor(product).ClientIDs...)
+		if product.ID == chatGPTProductID {
+			return aivendors.GatewayMatchersFor(product).ClientIDs
 		}
 	}
-	return clientIDs
+	return nil
 })
 
-// isOpenAIClient reports whether a verified OAuth client_id belongs to ChatGPT
-// or Codex. It resolves the client_id through the CIMD admission catalog the
+// isChatGPTClient reports whether a verified OAuth client_id belongs to
+// ChatGPT. It resolves the client_id through the CIMD admission catalog the
 // same way the MCP gateway does for AI tool blocks, then asks whether the entry
-// that admitted it is one of those products' documents. A dynamically
-// registered client has an opaque client_id that matches no entry, so it keeps
-// the full catalogue.
-func isOpenAIClient(clientID string) bool {
+// that admitted it is one of ChatGPT's documents. Resolving the entry rather
+// than the vendor key keeps Codex, which OpenAI also publishes, out of this
+// list. A dynamically registered client has an opaque client_id that matches
+// no entry, so it keeps the full catalogue.
+func isChatGPTClient(clientID string) bool {
 	preset, ok := admission.CatalogPreset(clientID)
-	return ok && slices.Contains(openAIClientIDs(), preset.URL)
+	return ok && slices.Contains(chatGPTClientIDs(), preset.URL)
 }
 
 // clientToolAllowlist returns the tools a client is limited to, or nil when it
 // may see the full catalogue.
 func clientToolAllowlist(clientID string) []string {
-	if isOpenAIClient(clientID) {
-		return openAIToolAllowlist
+	if isChatGPTClient(clientID) {
+		return chatGPTToolAllowlist
 	}
 	return nil
 }

@@ -152,6 +152,10 @@ type Client struct {
 	// setStripeCustomer endpoint.
 	SetStripeCustomerDoer goahttp.Doer
 
+	// SetAdoptionDashboardURL Doer is the HTTP client used to make requests to the
+	// setAdoptionDashboardUrl endpoint.
+	SetAdoptionDashboardURLDoer goahttp.Doer
+
 	// GetStripeSubscription Doer is the HTTP client used to make requests to the
 	// getStripeSubscription endpoint.
 	GetStripeSubscriptionDoer goahttp.Doer
@@ -478,6 +482,7 @@ func NewClient(
 		GetPaygBillingSummaryDoer:                   doer,
 		GetStripeCustomerDoer:                       doer,
 		SetStripeCustomerDoer:                       doer,
+		SetAdoptionDashboardURLDoer:                 doer,
 		GetStripeSubscriptionDoer:                   doer,
 		CancelStripeSubscriptionDoer:                doer,
 		ResumeStripeSubscriptionDoer:                doer,
@@ -1365,6 +1370,30 @@ func (c *Client) SetStripeCustomer() goa.Endpoint {
 		resp, err := c.SetStripeCustomerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "setStripeCustomer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetAdoptionDashboardURL returns an endpoint that makes HTTP requests to the
+// admin service setAdoptionDashboardUrl server.
+func (c *Client) SetAdoptionDashboardURL() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetAdoptionDashboardURLRequest(c.encoder)
+		decodeResponse = DecodeSetAdoptionDashboardURLResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetAdoptionDashboardURLRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetAdoptionDashboardURLDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setAdoptionDashboardUrl", err)
 		}
 		return decodeResponse(resp)
 	}

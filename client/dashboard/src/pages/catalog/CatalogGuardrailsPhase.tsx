@@ -44,14 +44,12 @@ const DETECTOR_CHIP_LABELS: Partial<Record<RuleCategory, string>> = {
 };
 
 /** The catalog install's Guardrails step: a recommended, pre-filled guardrail
- *  the user can switch off (Add to Project then installs without one),
+ *  the user can switch off or skip (either installs without one),
  *  summarized, with the full editor one click away. */
 export function CatalogGuardrailsPhase({
   releaseState,
-  onClose,
 }: {
   releaseState: GuardrailsPhase;
-  onClose: () => void;
 }): JSX.Element {
   const mode = useDetectorMode();
   const [enabled, setEnabled] = useState(true);
@@ -149,8 +147,8 @@ export function CatalogGuardrailsPhase({
               Back
             </Button>
           ) : null}
-          <Button variant="tertiary" onClick={onClose}>
-            Cancel
+          <Button variant="tertiary" onClick={() => void releaseState.skip()}>
+            Skip
           </Button>
         </div>
         <Button
