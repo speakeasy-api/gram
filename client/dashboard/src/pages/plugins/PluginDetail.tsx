@@ -227,10 +227,12 @@ function PluginDetailContent({
   const [serverSearch, setServerSearch] = useState("");
   const [assignmentSearch, setAssignmentSearch] = useState("");
   // The component stays mounted when only :pluginId changes, so stale searches
-  // would filter the new plugin's lists.
+  // would filter the new plugin's lists and an auto sync refusal would show
+  // on a plugin it wasn't about.
   useEffect(() => {
     setServerSearch("");
     setAssignmentSearch("");
+    setAutoSyncError(null);
   }, [pluginId]);
 
   const scope = usePluginQueryScope();

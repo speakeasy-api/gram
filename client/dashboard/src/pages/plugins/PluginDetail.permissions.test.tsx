@@ -8,7 +8,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import type { ReactNode } from "react";
 import PluginDetail from "./PluginDetail";
 vi.mock("@gram/client/react-query/requestAccess", () => ({
@@ -182,10 +182,23 @@ const hostedServer = {
   mcpServerId: "toolset-a",
   createdAt: new Date(),
 };
+const autoSyncRefusal =
+  "This plugin has changes that haven't been synced yet. Sync changes first, then turn off auto sync.";
+// Moves to another plugin while PluginDetail stays mounted, as following a link
+// from one plugin to another does.
+function OpenPlugin({ id }: { id: string }) {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => navigate(`/plugins/${id}/settings`)}>
+      Open {id}
+    </button>
+  );
+}
 function renderAdmin(
   section = "overview",
   servers: object[] = [hostedServer],
   plugin: object = {},
+  outside?: ReactNode,
 ) {
   adminQuery.mockReturnValue({
     data: {
@@ -199,6 +212,7 @@ function renderAdmin(
     <TooltipProvider>
       <QueryClientProvider client={new QueryClient()}>
         <MemoryRouter initialEntries={[`/plugins/plugin-a/${section}`]}>
+          {outside}
           <Routes>
             <Route path="/plugins" element={<h1>Plugins</h1>} />
             <Route
@@ -269,10 +283,8 @@ describe("plugin detail permission boundary", () => {
     });
     expect(toggle.getAttribute("aria-checked")).toBe("true");
 
-    const refusal =
-      "This plugin has changes that haven't been synced yet. Sync changes first, then turn off auto sync.";
     updateOutcome.mockImplementationOnce((options) =>
-      options.onError?.(new Error(refusal)),
+      options.onError?.(new Error(autoSyncRefusal)),
     );
     fireEvent.click(toggle);
     expect(update).toHaveBeenCalledWith(
@@ -287,10 +299,29 @@ describe("plugin detail permission boundary", () => {
         },
       }),
     );
-    expect(screen.getByText(refusal)).toBeTruthy();
+    expect(screen.getByText(autoSyncRefusal)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Sync changes" }));
     expect(publish).toHaveBeenCalled();
+  });
+  it("drops an auto sync refusal when moving to another plugin", () => {
+    state.pluginWrite = true;
+    renderAdmin(
+      "settings",
+      [hostedServer],
+      { autoSyncEnabled: true },
+      <OpenPlugin id="plugin-b" />,
+    );
+    updateOutcome.mockImplementationOnce((options) =>
+      options.onError?.(new Error(autoSyncRefusal)),
+    );
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Sync changes automatically" }),
+    );
+    expect(screen.getByText(autoSyncRefusal)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open plugin-b" }));
+    expect(screen.queryByText(autoSyncRefusal)).toBeNull();
   });
   it("says a paused plugin's changes wait for Sync changes", () => {
     state.pluginWrite = true;
