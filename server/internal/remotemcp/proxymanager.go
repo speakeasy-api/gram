@@ -559,7 +559,7 @@ func (f *ProxyManager) BuildTarget(
 	}
 	if options.renewCredential != nil {
 		built.UpstreamResponseRetryer = func(ctx context.Context, response *http.Response) (*proxy.UpstreamResponseRetry, error) {
-			if response.StatusCode != http.StatusUnauthorized {
+			if response.StatusCode != http.StatusUnauthorized || built.AuthorizationOverride != "" {
 				return nil, nil
 			}
 			token, renewed, err := options.renewCredential(ctx)

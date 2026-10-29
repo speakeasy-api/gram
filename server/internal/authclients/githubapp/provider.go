@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,6 +27,8 @@ type Credential struct {
 }
 
 type Provider struct {
+	mu             sync.Mutex
+	now            func() time.Time
 	tracerProvider trace.TracerProvider
 	queries        *repo.Queries
 	enc            *encryption.Client
@@ -35,7 +38,7 @@ type Provider struct {
 }
 
 func New(db repo.DBTX, enc *encryption.Client, policy *guardian.Policy, tracerProvider trace.TracerProvider) *Provider {
-	return &Provider{tracerProvider: tracerProvider, flights: singleflight.Group{}, queries: repo.New(db), enc: enc,
+	return &Provider{mu: sync.Mutex{}, now: time.Now, tracerProvider: tracerProvider, flights: singleflight.Group{}, queries: repo.New(db), enc: enc,
 		http:   policy.PooledClient(guardian.WithCheckRedirect(func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse })),
 		tokens: expirable.NewLRU[string, ClientCredential](1024, nil, time.Hour),
 	}
@@ -84,11 +87,11 @@ func (p *Provider) Credential(ctx context.Context, organizationID string, client
 		return none, fmt.Errorf("MCP destination does not match the GitHub App credential's allowed origin")
 	}
 	key := organizationID + ":" + clientID.String() + ":" + config.CredentialVersion.String()
-	if token, ok := p.tokens.Get(key); ok && time.Now().Before(token.ExpiresAt()) {
+	if token, ok := p.tokens.Get(key); ok && p.now().Before(token.ExpiresAt()) {
 		return Credential{ClientCredential: token, Origin: config.UpstreamOrigin}, nil
 	}
 	result := p.flights.DoChan(key, func() (any, error) {
-		if token, ok := p.tokens.Get(key); ok && time.Now().Before(token.ExpiresAt()) {
+		if token, ok := p.tokens.Get(key); ok && p.now().Before(token.ExpiresAt()) {
 			return token, nil
 		}
 		pem, err := p.enc.Decrypt(config.PrivateKeyEncrypted)
@@ -105,15 +108,21 @@ func (p *Provider) Credential(ctx context.Context, organizationID string, client
 		if err != nil {
 			return none, fmt.Errorf("mint GitHub App credential: %w", err)
 		}
-		minted := time.Now()
+		minted := p.now()
 		token := newClientCredential(value, expires.Add(-time.Minute), func(context.Context) (bool, error) {
-			if time.Since(minted) < 30*time.Second {
+			if p.now().Sub(minted) < 30*time.Second {
 				return false, nil
 			}
-			p.tokens.Remove(key)
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			if current, ok := p.tokens.Get(key); ok && current.Value() == value {
+				p.tokens.Remove(key)
+			}
 			return true, nil
 		})
+		p.mu.Lock()
 		p.tokens.Add(key, token)
+		p.mu.Unlock()
 		return token, nil
 	})
 	select {

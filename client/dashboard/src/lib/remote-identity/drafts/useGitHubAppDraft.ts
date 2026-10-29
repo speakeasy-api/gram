@@ -1,7 +1,7 @@
 import type { AuthClient } from "@gram/client/models/components/authclient.js";
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useState, useEffect, type Dispatch, type SetStateAction } from "react";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useAuthClients } from "@gram/client/react-query/authClients.js";
+import { useAuthClientsInfinite } from "@gram/client/react-query/authClients.js";
 import { toast } from "sonner";
 import {
   gitHubAppReady,
@@ -28,12 +28,32 @@ export function useGitHubAppDraft(
   enabled: boolean,
 ): GitHubAppDraftState {
   const client = useSdkClient();
-  const query = useAuthClients(
+  const query = useAuthClientsInfinite(
     { mcpServerId: serverId, clientType: "service_account", limit: 100 },
     undefined,
     { enabled, throwOnError: false },
   );
-  const bound = query.data?.result.items.find((item) => item.githubApp);
+  useEffect(() => {
+    if (
+      !enabled ||
+      !query.hasNextPage ||
+      query.isFetchingNextPage ||
+      query.isFetchNextPageError
+    )
+      return;
+    void query.fetchNextPage().catch(() => undefined);
+  }, [
+    enabled,
+    query.hasNextPage,
+    query.isFetchingNextPage,
+    query.isFetchNextPageError,
+    query.fetchNextPage,
+  ]);
+  const incomplete =
+    query.hasNextPage || query.isFetchingNextPage || query.isFetchNextPageError;
+  const bound = query.data?.pages
+    .flatMap((page) => page.result.items)
+    .find((item) => item.githubApp);
   const [draft, setDraft] = useState<GitHubAppDraft | null>(null);
   const [saving, setSaving] = useState(false);
   const value =
@@ -46,7 +66,12 @@ export function useGitHubAppDraft(
           privateKey: "",
         }
       : newGitHubAppDraft());
-  const canSave = !!upstreamUrl && gitHubAppReady(value);
+  const canSave =
+    !incomplete &&
+    !query.isLoading &&
+    !query.isError &&
+    !!upstreamUrl &&
+    gitHubAppReady(value);
   const save = async () => {
     if (!canSave || !upstreamUrl) return false;
     setSaving(true);
@@ -92,7 +117,7 @@ export function useGitHubAppDraft(
     canSave,
     save,
     detach,
-    loading: enabled && query.isLoading,
-    error: enabled && query.isError,
+    loading: enabled && (query.isLoading || !!incomplete),
+    error: enabled && (query.isError || query.isFetchNextPageError),
   };
 }

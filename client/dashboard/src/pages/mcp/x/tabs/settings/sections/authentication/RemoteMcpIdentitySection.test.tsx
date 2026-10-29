@@ -19,6 +19,8 @@ import type { AuthTarget } from "./authTarget";
 import type { CommitServerIdentityConfigurationForm } from "@gram/client/models/components/commitserveridentityconfigurationform.js";
 
 const mocks = vi.hoisted(() => ({
+  githubClients: vi.fn(),
+  detachGitHub: vi.fn(),
   headers: vi.fn(),
   sessions: vi.fn(),
   clients: vi.fn(),
@@ -52,8 +54,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@gram/client/react-query/authClients.js", () => ({
-  useAuthClients: () => ({
-    data: { result: { items: [] } },
+  useAuthClientsInfinite: () => ({
+    data: { pages: [{ result: { items: mocks.githubClients() } }] },
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -72,6 +74,7 @@ vi.mock("sonner", () => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
+    authClients: { detachServer: mocks.detachGitHub },
     remoteSessions: { commitServerIdentityConfiguration: mocks.commit },
     remoteSessionIssuers: { fetchMetadata: mocks.fetchMetadata },
     remoteMcp: {
@@ -531,6 +534,8 @@ beforeEach(() => {
       },
     };
   });
+  mocks.githubClients.mockReturnValue([]);
+  mocks.detachGitHub.mockResolvedValue({});
   mocks.impact.mockReturnValue({
     data: { servers: [], hiddenServerCount: 0 },
     isLoading: false,
@@ -3797,6 +3802,30 @@ describe("RemoteMcpIdentitySectionBody", () => {
       (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
         .disabled,
     ).toBe(false);
+  });
+
+  it("keeps a bound GitHub App when an unfinished OAuth choice only saves headers", async () => {
+    mocks.githubClients.mockReturnValue([
+      {
+        id: "github-client",
+        githubApp: {
+          instanceUrl: "https://github.com",
+          appId: 123,
+          installationId: 456,
+          upstreamOrigin: "https://mcp.example.com",
+        },
+      },
+    ]);
+    renderIdentity();
+    fireEvent.click(
+      within(
+        screen.getByRole("radiogroup", { name: "Service account" }),
+      ).getByRole("radio", { name: /^Client Secret/ }),
+    );
+    addCustomHeader("X-Team", "platform");
+    confirmSave();
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled());
+    expect(mocks.detachGitHub).not.toHaveBeenCalled();
   });
 
   it("keeps a static credential an unfinished OAuth client would not replace", async () => {
