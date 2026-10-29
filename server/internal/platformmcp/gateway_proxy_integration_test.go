@@ -106,7 +106,7 @@ func TestGatewayProxyRefusesWhenFlagIsOff(t *testing.T) {
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)
 	require.Equal(t, unavailableCode, refusal.Code)
-	require.Contains(t, refusal.Payload, "get_my_organization_gateway")
+	require.Contains(t, refusal.Payload, "not switched on")
 	require.Empty(t, proxy.calls)
 }
 

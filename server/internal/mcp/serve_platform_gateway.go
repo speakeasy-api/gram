@@ -88,7 +88,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 	}
 	id := mcpjsonrpc.StringID(uuid.NewString())
 	if unavailable != orggateway.UnavailabilityNone {
-		return platformGatewayResult(marshalToolErrorResult(ctx, logger, id, "Your organization's gateway is not available ("+string(unavailable)+"); call get_my_organization_gateway for the next step.", serverInfoMetaServer))
+		return platformGatewayResult(marshalToolErrorResult(ctx, logger, id, "Your organization's gateway is not available ("+string(unavailable)+"); ask an organization administrator to review the Organization Gateway on the MCP Servers page.", serverInfoMetaServer))
 	}
 	resolved := NewResolvedMcpEndpointFromMetaMcpServer(endpoint, metaServer, organization.ID, mcproute.OrganizationGateway)
 	if err := s.RequireUserSessionIssuer(ctx, resolved); err != nil {
@@ -130,6 +130,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		apiKeyID:            "",
 		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 		connectURL:          connectURL,
+		consentDiagnostics:  nil,
 	}
 	params, err := json.Marshal(toolsCallParams{Name: tool, Arguments: arguments, Meta: nil})
 	if err != nil {

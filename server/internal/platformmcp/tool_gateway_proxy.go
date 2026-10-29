@@ -159,7 +159,7 @@ func (s *GatewayProxyService) call(ctx context.Context, principal Principal, too
 	var zero proxiedToolResult
 	enabled, err := s.flags.IsFlagEnabled(ctx, feature.FlagPlatformMCPGatewayProxy, principal.OrganizationID, nil)
 	if err != nil || !enabled {
-		return zero, gatewayProxyUnavailable("Using your MCP servers through Speakeasy is not switched on for your organization yet. Call get_my_organization_gateway to connect to them directly.")
+		return zero, gatewayProxyUnavailable("Using your MCP servers through this Speakeasy connection is not switched on for your organization yet.")
 	}
 	gateway, err := s.gateway.getForPlatformMCP(ctx, principal)
 	if err != nil {
@@ -469,6 +469,6 @@ func myServersInstructions(servers []MyServer) string {
 	if more := len(servers) - len(names); more > 0 {
 		paragraph += fmt.Sprintf(", and %d more", more)
 	}
-	return paragraph + ". When the user asks for data or an action in one of these systems, call search_my_tools with the task in plain words, then execute_tool with the server and tool it returns. " +
+	return paragraph + ". When the user asks for data or an action in one of these systems, call search_my_tools with the task in plain words, then execute_tool with the server and tool it returns; when those tools are not listed, reach them through call_platform_tool. " +
 		"Servers added later in this conversation are usable too; call list_my_servers to see the current list."
 }

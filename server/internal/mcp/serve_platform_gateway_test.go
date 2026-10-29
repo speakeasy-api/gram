@@ -103,7 +103,9 @@ func TestCallPlatformGatewayTool_RefusesAnyOtherIdentity(t *testing.T) {
 	authCtx, _ := contextvalues.GetAuthContext(seedCtx)
 	organizationID := authCtx.ActiveOrganizationID
 	userCtx := platformCallerContext(t, ti, organizationID, fx.organizationSlug, urn.NewPrincipal(urn.PrincipalTypeUser, fx.subject.ID))
-	agentCtx := contextvalues.WithAuthenticatedActor(userCtx, authCtx, urn.NewPrincipal(urn.PrincipalTypeAgent, fx.subject.ID))
+	// Only the actor changes: the AuthContext still names this user.
+	userAuth, _ := contextvalues.GetAuthContext(userCtx)
+	agentCtx := contextvalues.WithAuthenticatedActor(userCtx, userAuth, urn.NewPrincipal(urn.PrincipalTypeAgent, fx.subject.ID))
 
 	call := func(ctx context.Context, organizationID, userID string) error {
 		if _, err := ti.service.CallPlatformGatewayTool(ctx, organizationID, userID, metamcp.ToolListServers, json.RawMessage(`{}`)); err != nil {
