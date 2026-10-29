@@ -39,3 +39,23 @@ func TestParseAssistantRoleGrantsFlagsRequiresWriteConfirmations(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, cfg.apply)
 }
+
+func TestParseAssistantRoleGrantsFlagsRejectsExplicitlyEmptyOrg(t *testing.T) {
+	t.Parallel()
+	getenv := func(string) string { return "postgres://user@db.internal:5432/gram" }
+
+	_, err := parseAssistantRoleGrantsFlags([]string{"-environment=staging", "-org="}, getenv)
+	require.ErrorContains(t, err, "-org must not be empty")
+
+	cfg, err := parseAssistantRoleGrantsFlags([]string{"-environment=staging"}, getenv)
+	require.NoError(t, err)
+	require.Empty(t, cfg.orgID)
+}
+
+func TestParseAssistantRoleGrantsFlagsRejectsFallbackHosts(t *testing.T) {
+	t.Parallel()
+	getenv := func(string) string { return "postgres://user@db.internal:5432,other.internal:5432/gram" }
+
+	_, err := parseAssistantRoleGrantsFlags([]string{"-environment=staging"}, getenv)
+	require.ErrorContains(t, err, "single host")
+}

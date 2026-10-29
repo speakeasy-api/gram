@@ -8,7 +8,7 @@ A built-in role principal (`role:global:<id>`) in an organization is backfilled 
 - the role has no stored assistant-kind grant, including `assistant:blocked_*` exceptions;
 - no `access_role:update` audit entry for the role has an assistant grant in its before or after snapshot. A role that once held a stored assistant grant and now holds none had it removed deliberately, and stays revoked.
 
-Rows go through `authz.PatchRoleGrantsTx`, one transaction per role principal. Each principal is rechecked under an advisory lock before writing, so rerunning the command (preview or apply) never restores a later revocation.
+Rows go through `authz.PatchRoleGrantsTx`, one transaction per role principal. Each principal is rechecked before writing under the same per-role lock that role edits take, so neither a concurrent revocation nor rerunning the command (preview or apply) can restore revoked access.
 
 Run from `server/`. `GRAM_DATABASE_URL` must point directly at the intended PostgreSQL database. Output contains aggregate counts only.
 

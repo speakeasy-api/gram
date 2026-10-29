@@ -44,7 +44,8 @@ type Report struct {
 var systemRoleSlugs = []string{authz.SystemRoleAdmin, authz.SystemRoleMember}
 
 // Run stores the canonical assistant grants for every legacy built-in role
-// principal. Each principal is rechecked under a lock in its own transaction,
+// principal. Each principal is rechecked under the role grant write lock in its
+// own transaction,
 // so rerunning is a no-op once a role holds an assistant grant or has an
 // audited assistant grant change.
 func Run(ctx context.Context, db DB, opts Options) (Report, error) {
@@ -60,7 +61,7 @@ func Run(ctx context.Context, db DB, opts Options) (Report, error) {
 	for _, candidate := range candidates {
 		added, err := backfillRole(ctx, db, candidate, opts.Apply)
 		if err != nil {
-			return report, err
+			return report, fmt.Errorf("backfill organization %s: %w", candidate.OrganizationID, err)
 		}
 		if added > 0 {
 			report.Roles++
@@ -79,7 +80,10 @@ func backfillRole(ctx context.Context, db DB, candidate ListCandidatesRow, apply
 
 	principalURN := candidate.PrincipalUrn.String()
 	q := New(tx)
-	if err := q.LockCandidate(ctx, LockCandidateParams{OrganizationID: candidate.OrganizationID, PrincipalUrn: principalURN}); err != nil {
+	// Role edits take the same lock in PatchRoleGrantsTx. A revocation that
+	// commits first is seen by the recheck below; one that starts later waits
+	// for this transaction and then removes what it wrote.
+	if err := authz.LockRolePrincipalGrants(ctx, tx, candidate.OrganizationID, principalURN); err != nil {
 		return 0, fmt.Errorf("lock candidate role: %w", err)
 	}
 	current, err := q.ListCandidates(ctx, ListCandidatesParams{

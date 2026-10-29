@@ -41,6 +41,13 @@ func parseAssistantRoleGrantsFlags(args []string, getenv func(string) string) (a
 	if *environment == "" {
 		return assistantRoleGrantsConfig{}, errors.New("environment is required")
 	}
+	// An explicitly empty -org (for example an unset shell variable) must not
+	// silently widen the run to every organization.
+	orgSet := false
+	fs.Visit(func(f *flag.Flag) { orgSet = orgSet || f.Name == "org" })
+	if orgSet && *orgID == "" {
+		return assistantRoleGrantsConfig{}, errors.New("-org must not be empty; omit it to cover every organization")
+	}
 	if *apply && *confirmEnvironment != *environment {
 		return assistantRoleGrantsConfig{}, errors.New("writes require -confirm-environment to exactly match -environment")
 	}
@@ -51,6 +58,13 @@ func parseAssistantRoleGrantsFlags(args []string, getenv func(string) string) (a
 	dbConfig, err := pgx.ParseConfig(dbURL)
 	if err != nil {
 		return assistantRoleGrantsConfig{}, errors.New("invalid $GRAM_DATABASE_URL")
+	}
+	// pgx dials fallbacks when the primary fails, so a fallback on another host
+	// would send confirmed writes to an unconfirmed target.
+	for _, fallback := range dbConfig.Fallbacks {
+		if fallback.Host != dbConfig.Host || fallback.Port != dbConfig.Port {
+			return assistantRoleGrantsConfig{}, errors.New("$GRAM_DATABASE_URL must name a single host; fallbacks to other hosts are not allowed")
+		}
 	}
 	target := net.JoinHostPort(dbConfig.Host, strconv.Itoa(int(dbConfig.Port))) + "/" + dbConfig.Database
 	if *apply && *confirmTarget != target {

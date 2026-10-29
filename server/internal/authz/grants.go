@@ -93,6 +93,20 @@ func SystemRoleAssistantGrants(roleSlug string) []*RoleGrant {
 	return grants
 }
 
+// LockRolePrincipalGrants holds the per-role grant write lock until dbtx's
+// transaction ends. PatchRoleGrantsTx takes it, so callers that read a role's
+// grants and then decide what to write can take it first to make that read
+// consistent with every concurrent role edit.
+func LockRolePrincipalGrants(ctx context.Context, dbtx repo.DBTX, orgID, principalURN string) error {
+	if err := repo.New(dbtx).LockRolePrincipalGrants(ctx, repo.LockRolePrincipalGrantsParams{
+		OrganizationID: orgID,
+		PrincipalUrn:   principalURN,
+	}); err != nil {
+		return fmt.Errorf("lock grants for %s: %w", principalURN, err)
+	}
+	return nil
+}
+
 // SeedSystemRoleGrants bootstraps the fixed grant sets for system roles once.
 func SeedSystemRoleGrants(ctx context.Context, db *pgxpool.Pool, organizationID string) error {
 	tx, err := db.Begin(ctx)
@@ -196,6 +210,9 @@ func PatchRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSl
 	}
 
 	q := repo.New(dbtx)
+	if err := LockRolePrincipalGrants(ctx, dbtx, orgID, principal.String()); err != nil {
+		return nil, err
+	}
 	// An unrestricted removal deletes every wildcard row for the scope, not
 	// only the one this release would write: the editor shows any of them as
 	// "all", so removing "all" has to remove whichever one is stored.

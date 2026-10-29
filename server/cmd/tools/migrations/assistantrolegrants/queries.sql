@@ -35,7 +35,3 @@ WHERE roles.workos_slug = ANY(@role_slugs::text[])
   )
 GROUP BY grants.organization_id, roles.workos_slug, grants.principal_urn
 ORDER BY grants.organization_id, roles.workos_slug;
-
--- name: LockCandidate :exec
--- Serializes concurrent runs of this backfill for one role principal.
-SELECT pg_advisory_xact_lock(hashtextextended('assistant-role-grants:' || @organization_id::text || ':' || @principal_urn::text, 0));

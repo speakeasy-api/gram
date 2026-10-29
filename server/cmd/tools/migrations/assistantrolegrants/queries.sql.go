@@ -81,18 +81,3 @@ func (q *Queries) ListCandidates(ctx context.Context, arg ListCandidatesParams) 
 	}
 	return items, nil
 }
-
-const lockCandidate = `-- name: LockCandidate :exec
-SELECT pg_advisory_xact_lock(hashtextextended('assistant-role-grants:' || $1::text || ':' || $2::text, 0))
-`
-
-type LockCandidateParams struct {
-	OrganizationID string
-	PrincipalUrn   string
-}
-
-// Serializes concurrent runs of this backfill for one role principal.
-func (q *Queries) LockCandidate(ctx context.Context, arg LockCandidateParams) error {
-	_, err := q.db.Exec(ctx, lockCandidate, arg.OrganizationID, arg.PrincipalUrn)
-	return err
-}
