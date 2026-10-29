@@ -7,26 +7,17 @@ import (
 )
 
 func testDefinition() Definition {
-	org := &Type{
-		Name:       "org",
-		StoredKind: "*",
-		Grants:     map[string]*Grant{"admin": {Name: "admin", StoredScope: "root", Anchors: []string{Self}}},
-		Perms:      map[string]*Perm{},
-	}
-	doc := &Type{
-		Name:       "doc",
-		Parent:     "org",
-		StoredKind: "doc",
-		Grants: map[string]*Grant{
-			"reader":  {Name: "reader", StoredScope: "doc:read", Anchors: []string{Self, "org"}},
-			"blocked": {Name: "blocked", StoredScope: "doc:blocked_read", Anchors: []string{Self}, Block: true},
-		},
-		Perms: map[string]*Perm{
-			"read": {Name: "read", Expr: ExcludedBy(Union(Rel("reader"), AncestorRel("org", "admin")), "blocked")},
-		},
-	}
 	return Definition{
-		Types:       []*Type{org, doc},
+		Types: []*Type{
+			NewType("org", StoredKind("*"),
+				Grant("admin", StoredAs("root"), AnchoredAt("org")),
+			),
+			NewType("doc", Parent("org"), StoredKind("doc"),
+				Grant("reader", StoredAs("doc:read"), AnchoredAt("doc", "org")),
+				Block("blocked", StoredAs("doc:blocked_read"), AnchoredAt("doc")),
+				Permission("read", Union(Rel("reader"), AncestorRel("org", "admin")), ExcludedBy("blocked")),
+			),
+		},
 		Root:        "org",
 		KnownScopes: []string{"root", "doc:read", "doc:blocked_read", "other:read"},
 		OutOfSchema: []string{"other:read"},
@@ -51,11 +42,11 @@ func TestCompile_RejectsInvalidDefinitions(t *testing.T) {
 		{"scope neither mapped nor out of schema", func(d *Definition) { d.KnownScopes = append(d.KnownScopes, "new:scope") }, "neither mapped"},
 		{"scope both mapped and out of schema", func(d *Definition) { d.OutOfSchema = append(d.OutOfSchema, "doc:read") }, "both mapped"},
 		{"exclusion that is not a block", func(d *Definition) {
-			d.Types[1].Perms["read"] = &Perm{Name: "read", Expr: ExcludedBy(Rel("blocked"), "reader")}
+			Permission("read", Rel("blocked"), ExcludedBy("reader"))(d.Types[1])
 		}, "not a block"},
 		{"anchor that is not an ancestor", func(d *Definition) { d.Types[1].Grants["reader"].Anchors = []string{"elsewhere"} }, "not the type or an ancestor"},
 		{"narrowing without a selector key", func(d *Definition) { d.Types[1].Grants["reader"].Narrowable = []string{"org"} }, "no selector key"},
-		{"unknown relation", func(d *Definition) { d.Types[1].Perms["read"] = &Perm{Name: "read", Expr: Rel("writer")} }, "unknown relation"},
+		{"unknown relation", func(d *Definition) { Permission("read", Rel("writer"))(d.Types[1]) }, "unknown relation"},
 		{"chain not ending at root", func(d *Definition) { d.Types[1].Parent = "" }, "does not end at"},
 		{"scope mapped twice", func(d *Definition) { d.Types[1].Grants["blocked"].StoredScope = "doc:read" }, "mapped twice"},
 	}

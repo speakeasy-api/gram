@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/speakeasy-api/gram/server/internal/authz/relschema"
+	s "github.com/speakeasy-api/gram/server/internal/authz/relschema"
 )
 
 // The relationship schema for MCP servers. It is the one place that decides
@@ -67,7 +67,7 @@ var mcpServerSchemaScopes = []Scope{
 
 var mcpServerSchema = mustCompileMCPServerSchema()
 
-func mustCompileMCPServerSchema() *relschema.Schema {
+func mustCompileMCPServerSchema() *s.Schema {
 	sc, err := compileMCPServerSchema()
 	if err != nil {
 		panic(fmt.Sprintf("compile mcp server relationship schema: %v", err))
@@ -75,62 +75,44 @@ func mustCompileMCPServerSchema() *relschema.Schema {
 	return sc
 }
 
-func compileMCPServerSchema() (*relschema.Schema, error) {
-	serverAnchors := []string{relschema.Self, relTypeProject, relTypeOrganization}
-	toolConstraints := []string{SelectorKeyTool, SelectorKeyDisposition}
-	project := []string{relTypeProject}
+func compileMCPServerSchema() (*s.Schema, error) {
+	const (
+		org     = relTypeOrganization
+		project = relTypeProject
+		server  = relTypeMCPServer
+	)
+	root := s.AncestorRel(org, "root")
 
-	organization := &relschema.Type{
-		Name:       relTypeOrganization,
-		StoredKind: ResourceKindOrg,
-		Grants: map[string]*relschema.Grant{
+	types := []*s.Type{
+		s.NewType(org, s.StoredKind(ResourceKindOrg),
 			// root administers everything except auth clients, as the legacy
 			// engine's expansion does.
-			"root": {Name: "root", StoredScope: string(ScopeRoot), StoredKind: ResourceKindWildcard, Anchors: []string{relschema.Self}},
-		},
-		Perms: map[string]*relschema.Perm{},
-	}
-	projectType := &relschema.Type{
-		Name:       relTypeProject,
-		Parent:     relTypeOrganization,
-		StoredKind: ResourceKindProject,
-		Grants:     map[string]*relschema.Grant{},
-		Perms:      map[string]*relschema.Perm{},
-	}
-	root := relschema.AncestorRel(relTypeOrganization, "root")
-	server := &relschema.Type{
-		Name:       relTypeMCPServer,
-		Parent:     relTypeProject,
-		StoredKind: ResourceKindMCP,
-		Grants: map[string]*relschema.Grant{
-			"viewer": {Name: "viewer", StoredScope: string(ScopeMCPRead), Anchors: serverAnchors, Narrowable: project},
-			"editor": {Name: "editor", StoredScope: string(ScopeMCPWrite), Anchors: serverAnchors, Narrowable: project},
-			"connector": {
-				Name: "connector", StoredScope: string(ScopeMCPConnect),
-				Anchors:       []string{relschema.Self},
-				LegacyAnchors: []string{relTypeProject, relTypeOrganization},
-				Narrowable:    project,
-				Constraints:   toolConstraints,
-			},
-			"read_blocked":    {Name: "read_blocked", StoredScope: string(ScopeMCPBlockedRead), Anchors: serverAnchors, Narrowable: project, Block: true},
-			"edit_blocked":    {Name: "edit_blocked", StoredScope: string(ScopeMCPBlockedWrite), Anchors: serverAnchors, Narrowable: project, Block: true},
-			"connect_blocked": {Name: "connect_blocked", StoredScope: string(ScopeMCPBlockedConnect), Anchors: serverAnchors, Narrowable: project, Constraints: toolConstraints, Block: true},
-		},
-		Perms: map[string]*relschema.Perm{
-			string(MCPServerRead): {
-				Name: string(MCPServerRead),
-				Expr: relschema.ExcludedBy(relschema.Union(relschema.Rel("viewer"), relschema.Rel("editor"), root), "read_blocked"),
-			},
-			string(MCPServerEdit): {
-				Name: string(MCPServerEdit),
-				Expr: relschema.ExcludedBy(relschema.Union(relschema.Rel("editor"), root), "edit_blocked"),
-			},
+			s.Grant("root", s.StoredAs(string(ScopeRoot)), s.StoredKindAs(ResourceKindWildcard), s.AnchoredAt(org)),
+		),
+
+		s.NewType(project, s.Parent(org), s.StoredKind(ResourceKindProject)),
+
+		s.NewType(server, s.Parent(project), s.StoredKind(ResourceKindMCP),
+			s.Grant("viewer", s.StoredAs(string(ScopeMCPRead)), s.AnchoredAt(server, project, org), s.NarrowableBy(project),
+				s.Describe("View the server's configuration")),
+			s.Grant("editor", s.StoredAs(string(ScopeMCPWrite)), s.AnchoredAt(server, project, org), s.NarrowableBy(project),
+				s.Describe("Change the server's configuration")),
+			// A connection grant names one server. Project- and
+			// organization-wide rows are honored until they are migrated.
+			s.Grant("connector", s.StoredAs(string(ScopeMCPConnect)), s.AnchoredAt(server), s.LegacyAnchoredAt(project, org),
+				s.NarrowableBy(project), s.ConstrainedBy(SelectorKeyTool, SelectorKeyDisposition),
+				s.Describe("Connect to the server and call its tools")),
+
+			s.Block("read_blocked", s.StoredAs(string(ScopeMCPBlockedRead)), s.AnchoredAt(server, project, org), s.NarrowableBy(project)),
+			s.Block("edit_blocked", s.StoredAs(string(ScopeMCPBlockedWrite)), s.AnchoredAt(server, project, org), s.NarrowableBy(project)),
+			s.Block("connect_blocked", s.StoredAs(string(ScopeMCPBlockedConnect)), s.AnchoredAt(server, project, org), s.NarrowableBy(project),
+				s.ConstrainedBy(SelectorKeyTool, SelectorKeyDisposition)),
+
+			s.Permission(string(MCPServerRead), s.Union(s.Rel("viewer"), s.Rel("editor"), root), s.ExcludedBy("read_blocked")),
+			s.Permission(string(MCPServerEdit), s.Union(s.Rel("editor"), root), s.ExcludedBy("edit_blocked")),
 			// No edge from read or edit: configuration authority is not use.
-			string(MCPServerConnect): {
-				Name: string(MCPServerConnect),
-				Expr: relschema.ExcludedBy(relschema.Union(relschema.Rel("connector"), root), "connect_blocked"),
-			},
-		},
+			s.Permission(string(MCPServerConnect), s.Union(s.Rel("connector"), root), s.ExcludedBy("connect_blocked")),
+		),
 	}
 
 	known := make([]string, 0, len(scopeVisibilityByScope))
@@ -142,8 +124,8 @@ func compileMCPServerSchema() (*relschema.Schema, error) {
 		}
 	}
 
-	sc, err := relschema.Compile(relschema.Definition{
-		Types:        []*relschema.Type{organization, projectType, server},
+	sc, err := s.Compile(s.Definition{
+		Types:        types,
 		AncestorKeys: map[string]string{SelectorKeyProjectID: relTypeProject},
 		Root:         relTypeOrganization,
 		KnownScopes:  known,

@@ -193,7 +193,7 @@ func (c *evalCtx) expr(t *Type, obj Object, e Expr) tri {
 // rel reports whether any relationship confers g on obj: anchored at obj or
 // one of its ancestors, within every narrowing, and with every constraint
 // satisfied by the request.
-func (c *evalCtx) rel(t *Type, obj Object, g *Grant) tri {
+func (c *evalCtx) rel(t *Type, obj Object, g *GrantDef) tri {
 	reach := append([]ObjectRef{obj.ref()}, obj.Ancestors...)
 	for _, r := range c.rels {
 		if r.Type != t.Name || r.Grant != g.Name {
@@ -229,7 +229,7 @@ func narrowingHolds(obj Object, narrowing map[string]string) bool {
 // resource-level request: an ordinary allow still applies there, so a
 // tool-limited grant admits its server before any tool is known, while a
 // strict allow and any block apply only where every constraint is proven.
-func (c *evalCtx) constraintsHold(g *Grant, r Relationship) bool {
+func (c *evalCtx) constraintsHold(g *GrantDef, r Relationship) bool {
 	for key, want := range r.Constraints {
 		got, has := c.req.Facts[key]
 		if has {

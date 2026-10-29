@@ -14,7 +14,8 @@ import (
 	"slices"
 )
 
-// Self names the object itself as a grant anchor.
+// Self names the object itself as a grant anchor. Declarations name the
+// type instead; both are accepted.
 const Self = "self"
 
 // Type is one protected object type.
@@ -24,21 +25,22 @@ type Type struct {
 	Parent string
 	// StoredKind is the resource_kind stored rows use for grants on this type.
 	StoredKind string
-	Grants     map[string]*Grant
-	Perms      map[string]*Perm
+	Grants     map[string]*GrantDef
+	Perms      map[string]*PermDef
 
 	chain []string // resolved ancestors, nearest first
 }
 
-// Grant is a relation a stored row can confer on a type.
-type Grant struct {
+// GrantDef is a relation a stored row can confer on a type.
+type GrantDef struct {
 	Name string
 	// StoredScope is the principal_grants scope this relation reads.
 	StoredScope string
 	// StoredKind overrides the type's resource_kind for this relation, e.g.
 	// root rows use "*".
 	StoredKind string
-	// Anchors lists where a row may attach: Self or an ancestor type.
+	// Anchors lists the types a row may attach at: the type itself or an
+	// ancestor.
 	Anchors []string
 	// LegacyAnchors are anchors accepted only as legacy broad grants. A
 	// relationship decoded at one is marked Legacy and says so in its trace.
@@ -51,10 +53,12 @@ type Grant struct {
 	Constraints []string
 	// Block marks a relation that withdraws permissions rather than granting.
 	Block bool
+	// Description says what the grant lets someone do.
+	Description string
 }
 
-// Perm is a computed permission.
-type Perm struct {
+// PermDef is a computed permission.
+type PermDef struct {
 	Name string
 	Expr Expr
 }
@@ -79,11 +83,10 @@ func (AncestorRelExpr) isExpr() {}
 func (UnionExpr) isExpr()       {}
 func (MinusExpr) isExpr()       {}
 
-func Rel(name string) Expr                    { return RelExpr{Name: name} }
-func AncestorRel(typ, name string) Expr       { return AncestorRelExpr{Type: typ, Name: name} }
-func Union(items ...Expr) Expr                { return UnionExpr{Items: items} }
-func Minus(base, sub Expr) Expr               { return MinusExpr{Base: base, Sub: sub} }
-func ExcludedBy(base Expr, block string) Expr { return Minus(base, Rel(block)) }
+func Rel(name string) Expr              { return RelExpr{Name: name} }
+func AncestorRel(typ, name string) Expr { return AncestorRelExpr{Type: typ, Name: name} }
+func Union(items ...Expr) Expr          { return UnionExpr{Items: items} }
+func Minus(base, sub Expr) Expr         { return MinusExpr{Base: base, Sub: sub} }
 
 // Schema is a compiled, validated set of types.
 type Schema struct {
@@ -99,7 +102,7 @@ type Schema struct {
 
 type scopeTarget struct {
 	typ   *Type
-	grant *Grant
+	grant *GrantDef
 }
 
 // Definition is everything Compile needs.
@@ -183,7 +186,7 @@ func Compile(def Definition) (*Schema, error) {
 	return s, nil
 }
 
-func (s *Schema) compileGrant(t *Type, g *Grant) error {
+func (s *Schema) compileGrant(t *Type, g *GrantDef) error {
 	if g.StoredScope == "" {
 		return fmt.Errorf("%s.%s: no stored scope", t.Name, g.Name)
 	}
@@ -263,7 +266,7 @@ func (t *Type) anchorable(anchor string) bool {
 	return anchor == Self || anchor == t.Name || slices.Contains(t.chain, anchor)
 }
 
-func (g *Grant) kind(t *Type) string {
+func (g *GrantDef) kind(t *Type) string {
 	if g.StoredKind != "" {
 		return g.StoredKind
 	}
