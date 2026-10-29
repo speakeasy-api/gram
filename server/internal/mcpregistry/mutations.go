@@ -73,6 +73,10 @@ func (s *Service) CreateTx(ctx context.Context, tx pgx.Tx, data json.RawMessage)
 		return Entry{}, err
 	}
 	q := repo.New(tx)
+	data, err = s.canonicalIcons(ctx, q, data)
+	if err != nil {
+		return Entry{}, err
+	}
 	if err := checkOktaMappingConflicts(ctx, q, uuid.Nil, data); err != nil {
 		return Entry{}, err
 	}
@@ -127,6 +131,17 @@ func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data j
 		return Entry{}, fmt.Errorf("begin registry mutation: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	result, err := s.mutateTx(ctx, tx, id, token, data, published)
+	if err != nil {
+		return Entry{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Entry{}, fmt.Errorf("commit registry mutation: %w", err)
+	}
+	return result, nil
+}
+
+func (s *Service) mutateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, token string, data json.RawMessage, published *bool) (Entry, error) {
 	q := repo.New(tx)
 	old, err := entry(q.LockEntry(ctx, id))
 	if err != nil {
@@ -142,6 +157,10 @@ func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data j
 	if published == nil {
 		if issues := s.validator.Validate(data); len(issues) > 0 {
 			return Entry{}, &InvalidError{Issues: issues}
+		}
+		data, err = s.canonicalIcons(ctx, q, data)
+		if err != nil {
+			return Entry{}, err
 		}
 		// Save replaces the full raw record, including unknown metadata. Its name
 		// is required by the record schema and must preserve the stored identity.
@@ -211,9 +230,6 @@ func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data j
 	}
 	if err != nil {
 		return Entry{}, err
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return Entry{}, fmt.Errorf("commit registry mutation: %w", err)
 	}
 	return result, nil
 }
@@ -347,4 +363,43 @@ func recordName(raw json.RawMessage) string {
 
 func storedSizeError() error {
 	return &InvalidError{Issues: []Issue{{Path: "", Message: "stored record exceeds serialized byte limit"}}}
+}
+
+// CheckCatalogIconsTx locks the exact revision and validates a full icon replacement without writing.
+func (s *Service) CheckCatalogIconsTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, token string, icons CatalogIcons) (Entry, error) {
+	old, err := entry(repo.New(tx).LockEntry(ctx, id))
+	if err != nil {
+		return Entry{}, err
+	}
+	parsed, err := ParseToken(token)
+	if err != nil {
+		return Entry{}, err
+	}
+	if !parsed.Equal(old.UpdatedAt) {
+		return Entry{}, ErrConflict
+	}
+	data, err := WithCatalogIcons(old.Data, icons)
+	if err != nil {
+		return Entry{}, err
+	}
+	if issues := s.validator.Validate(data); len(issues) > 0 {
+		return Entry{}, &InvalidError{Issues: issues}
+	}
+	if _, err := s.canonicalIcons(ctx, repo.New(tx), data); err != nil {
+		return Entry{}, err
+	}
+	return old, nil
+}
+
+// SetCatalogIconsTx participates in the caller's transaction, including its receipt.
+func (s *Service) SetCatalogIconsTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, token string, icons CatalogIcons) (Entry, error) {
+	old, err := s.CheckCatalogIconsTx(ctx, tx, id, token, icons)
+	if err != nil {
+		return Entry{}, err
+	}
+	data, err := WithCatalogIcons(old.Data, icons)
+	if err != nil {
+		return Entry{}, err
+	}
+	return s.mutateTx(ctx, tx, id, token, data, nil)
 }

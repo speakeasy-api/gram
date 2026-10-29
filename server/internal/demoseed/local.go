@@ -1,16 +1,22 @@
 package demoseed
 
 import (
+	"bytes"
 	"context"
+	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os/exec"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidentity"
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -18,6 +24,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
@@ -47,6 +55,8 @@ func localMCPAppFunctionID() string { return LocalSpec().FixedUUID("0000-4000-a0
 
 // LocalFixturesOptions configures RunLocalFixtures.
 type LocalFixturesOptions struct {
+	// SiteURL is the canonical public asset origin; nil skips the catalog logo fixture.
+	SiteURL *url.URL
 	// DeveloperEmail identifies the developer to adopt into the local org.
 	// Empty means "read it from `git config user.email`", which is exactly
 	// what the dev-idp does when it bootstraps its default user.
@@ -173,6 +183,11 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		return fmt.Errorf("commit local fixtures: %w", err)
 	}
 
+	if opts.SiteURL != nil {
+		if err := seedLocalCatalogIcon(ctx, logger, db, blob, opts.SiteURL); err != nil {
+			return fmt.Errorf("seed local catalog icon: %w", err)
+		}
+	}
 	logger.InfoContext(ctx, "local fixtures applied")
 
 	warnOnStaleOverrides(ctx, logger, opts.ObservedEnv, apiKey)
@@ -461,4 +476,41 @@ func emailDomain(email string) string {
 		return ""
 	}
 	return strings.ToLower(email[at+1:])
+}
+
+//go:embed fixtures/catalog-logo.svg
+var localCatalogLogo []byte
+
+const localCatalogName = "example.test/local-catalog-logo"
+
+// seedLocalCatalogIcon is global staff data, never part of tenant demo phases.
+func seedLocalCatalogIcon(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, blob assets.BlobStore, siteURL *url.URL) error {
+	validator, err := mcpregistry.LoadValidator()
+	if err != nil {
+		return err
+	}
+	registry := mcpregistry.New(db, validator).WithAssetBaseURL(siteURL)
+	// Preserve staff edits on reseed, including removal of either icon slot.
+	if _, err := registry.GetByName(ctx, localCatalogName); err == nil {
+		return nil
+	} else if !errors.Is(err, mcpregistry.ErrNotFound) {
+		return err
+	}
+	tp := otel.GetTracerProvider()
+	images := assets.NewPlatformService(logger, tp, guardian.NewDefaultPolicy(tp), db, blob)
+	uploaded, err := images.StorePlatformImage(ctx, logger, "local-fixture@example.test", bytes.NewReader(localCatalogLogo), int64(len(localCatalogLogo)), "image/svg+xml")
+	if err != nil {
+		return err
+	}
+	id, err := uuid.Parse(uploaded.Asset.ID)
+	if err != nil {
+		return err
+	}
+	icon := &mcpregistry.CatalogIcon{Src: assets.ServeImageURL(siteURL, id), MimeType: "image/svg+xml", Sizes: []string{"any"}}
+	raw, err := mcpregistry.WithCatalogIcons(json.RawMessage(`{"server":{"name":"example.test/local-catalog-logo","description":"Fictional local catalog logo fixture","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.test/mcp"}]}}`), mcpregistry.CatalogIcons{Default: icon, Dark: icon})
+	if err != nil {
+		return err
+	}
+	_, err = registry.Create(ctx, raw)
+	return err
 }

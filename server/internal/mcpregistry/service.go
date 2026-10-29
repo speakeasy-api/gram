@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -54,11 +55,12 @@ type Page struct {
 const ListPageByteBudget = 8 << 20
 
 type Service struct {
-	logger    *slog.Logger
-	auth      *auth.Auth
-	authz     *authz.Engine
-	db        *pgxpool.Pool
-	validator *Validator
+	assetBaseURL *url.URL
+	logger       *slog.Logger
+	auth         *auth.Auth
+	authz        *authz.Engine
+	db           *pgxpool.Pool
+	validator    *Validator
 }
 
 var ErrNotFound = errors.New("registry entry not found")

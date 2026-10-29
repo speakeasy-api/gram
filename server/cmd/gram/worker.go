@@ -870,7 +870,7 @@ func newWorkerCommand() *cli.Command {
 			}
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-				CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, catalogValidator), productFeatures, telemetry.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
+				CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, catalogValidator).WithAssetBaseURL(siteURL), productFeatures, telemetry.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
 				CatalogPromotionDeliveryPaused: c.Bool("catalog-promotion-delivery-paused"),
 				GuardianPolicy:                 guardianPolicy,
 				TunnelHTTPClient:               tunnelHTTPClient,
@@ -911,7 +911,7 @@ func newWorkerCommand() *cli.Command {
 				IssuerMetadataRefresher:        issuerMetadataRefresher,
 				RemoteSessionAssertionSigner:   clientAssertionSigner,
 				IssuerKeySweeper:               issuerKeySweeper(issuerProvisioner),
-				StartupSeeds:                   startupSeeds(logger, db),
+				StartupSeeds:                   startupSeeds(logger, db, siteURL),
 				AssistantsCore:                 assistantsCore,
 				TemporalEnv:                    temporalEnv,
 				PIScanner:                      piScanner,
