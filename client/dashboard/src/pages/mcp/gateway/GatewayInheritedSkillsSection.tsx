@@ -1,9 +1,11 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Page } from "@/components/page-layout";
+import { Button } from "@/components/ui/Button";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
+import { mcpServerRouteParam } from "@/lib/sources";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { skillLinkTargetName } from "@/pages/skills/skill-links";
 import { useRoutes } from "@/routes";
@@ -11,16 +13,23 @@ import type { MetaMcpMember } from "@gram/client/models/components/metamcpmember
 import type { SkillLink } from "@gram/client/models/components/skilllink.js";
 import { useMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
 import { useSkillLinksInfinite } from "@gram/client/react-query/skillLinks.js";
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import { Link } from "react-router";
+
+/** A member server a skill is inherited from. */
+export type InheritedSkillServer = {
+  name: string;
+  /** The server's route segment: its slug, or its id when it has none. */
+  routeParam: string;
+};
 
 /** One skill a gateway inherits, with the member servers it comes from. */
 export type InheritedSkill = {
   skillId: string;
   skillName: string;
   skillDisplayName: string;
-  /** Member server names, sorted. */
-  servers: string[];
+  /** Member servers, sorted by name. */
+  servers: InheritedSkillServer[];
 };
 
 /**
@@ -30,30 +39,40 @@ export type InheritedSkill = {
  */
 export function inheritedSkills(
   links: readonly SkillLink[],
-  members: readonly Pick<MetaMcpMember, "mcpServerId" | "mcpServerName">[],
+  members: readonly Pick<
+    MetaMcpMember,
+    "mcpServerId" | "mcpServerName" | "mcpServerSlug"
+  >[],
 ): InheritedSkill[] {
-  const memberNames = new Map(
-    members.map((member) => [member.mcpServerId, member.mcpServerName]),
+  const membersById = new Map(
+    members.map((member) => [member.mcpServerId, member]),
   );
   const bySkill = new Map<string, InheritedSkill>();
   for (const link of links) {
     if (link.targetKind !== "mcp_server" || !link.mcpServerId) continue;
-    if (!memberNames.has(link.mcpServerId)) continue;
-    const server =
-      memberNames.get(link.mcpServerId) || skillLinkTargetName(link);
-    const entry = bySkill.get(link.skillId) ?? {
+    const member = membersById.get(link.mcpServerId);
+    if (!member) continue;
+    const server: InheritedSkillServer = {
+      name: member.mcpServerName || skillLinkTargetName(link),
+      routeParam: mcpServerRouteParam({
+        id: member.mcpServerId,
+        slug: member.mcpServerSlug,
+      }),
+    };
+    const entry: InheritedSkill = bySkill.get(link.skillId) ?? {
       skillId: link.skillId,
       skillName: link.skillName,
       skillDisplayName: link.skillDisplayName,
       servers: [],
     };
-    if (!entry.servers.includes(server)) entry.servers.push(server);
+    if (!entry.servers.some((known) => known.routeParam === server.routeParam))
+      entry.servers.push(server);
     bySkill.set(link.skillId, entry);
   }
   return [...bySkill.values()]
     .map((entry) => ({
       ...entry,
-      servers: [...entry.servers].sort((a, b) => a.localeCompare(b)),
+      servers: [...entry.servers].sort((a, b) => a.name.localeCompare(b.name)),
     }))
     .sort((a, b) => a.skillDisplayName.localeCompare(b.skillDisplayName));
 }
@@ -100,6 +119,21 @@ export function GatewayInheritedSkillsSection({
         icon="triangle-alert"
         heading="Couldn't load inherited skills"
         description={`The skills ${surfaceName} inherits from its servers could not be loaded.`}
+        action={
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              if (membersQuery.error) void membersQuery.refetch();
+              if (linksQuery.error)
+                void (linksQuery.data && linksQuery.hasNextPage
+                  ? linksQuery.fetchNextPage()
+                  : linksQuery.refetch());
+            }}
+          >
+            Retry
+          </Button>
+        }
       />
     );
   } else if (!isLoaded) {
@@ -145,16 +179,7 @@ const inheritedSkillColumns: Column<InheritedSkill>[] = [
     key: "servers",
     header: "From",
     width: "1fr",
-    render: (skill) => (
-      <Text
-        small
-        muted
-        className="block truncate"
-        title={skill.servers.join(", ")}
-      >
-        {skill.servers.join(", ")}
-      </Text>
-    ),
+    render: (skill) => <InheritedFromCell servers={skill.servers} />,
   },
 ];
 
@@ -173,5 +198,33 @@ function InheritedSkillCell({ skill }: { skill: InheritedSkill }): JSX.Element {
         {skill.skillName}
       </Text>
     </div>
+  );
+}
+
+function InheritedFromCell({
+  servers,
+}: {
+  servers: InheritedSkillServer[];
+}): JSX.Element {
+  const routes = useRoutes();
+  return (
+    <Text
+      small
+      muted
+      className="block truncate"
+      title={servers.map((server) => server.name).join(", ")}
+    >
+      {servers.map((server, index) => (
+        <Fragment key={server.routeParam}>
+          {index > 0 && ", "}
+          <Link
+            to={routes.mcp.details.skills.href(server.routeParam)}
+            className="hover:underline"
+          >
+            {server.name}
+          </Link>
+        </Fragment>
+      ))}
+    </Text>
   );
 }

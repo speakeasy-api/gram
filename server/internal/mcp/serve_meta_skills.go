@@ -79,16 +79,10 @@ func (s *Service) metaSkillScope(ctx context.Context, logger *slog.Logger, metaS
 	if err != nil {
 		return scope, false, err
 	}
-	members = catalogSelectedMembers(gate, members)
-	memberIDs := make([]uuid.UUID, 0, len(members))
-	for _, member := range members {
-		memberIDs = append(memberIDs, member.serverID)
-	}
-
 	return mcpskills.Scope{
 		OrganizationID:     gate.organizationID,
 		Target:             target,
-		MemberMCPServerIDs: memberIDs,
+		MemberMCPServerIDs: skillMemberServerIDs(gate, members),
 		UserID:             gate.userID,
 	}, true, nil
 }
@@ -141,4 +135,16 @@ func (s *Service) readMetaSkill(ctx context.Context, logger *slog.Logger, metaSe
 		protocolVersion: gate.protocolVersion,
 	}
 	return readServedSkill(ctx, logger, s.skillResolver, s.metrics, s.telemLogger, s.sessionClientInfo, attribution, scope, ok, req, uri, time.Now(), mcpmetrics.SurfaceMeta, serverInfoMetaServer)
+}
+
+// skillMemberServerIDs is the servers whose skills a gateway inherits from a
+// request's served members: for a consented connection that does not cover
+// every tool, only the members with at least one selected tool.
+func skillMemberServerIDs(gate *metaGateContext, members []metaMember) []uuid.UUID {
+	selected := catalogSelectedMembers(gate, members)
+	ids := make([]uuid.UUID, 0, len(selected))
+	for _, member := range selected {
+		ids = append(ids, member.serverID)
+	}
+	return ids
 }

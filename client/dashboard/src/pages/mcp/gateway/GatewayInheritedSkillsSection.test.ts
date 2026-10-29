@@ -22,8 +22,8 @@ function serverLink(
 
 describe("inheritedSkills", () => {
   const members = [
-    { mcpServerId: "notion", mcpServerName: "Notion" },
-    { mcpServerId: "linear", mcpServerName: "Linear" },
+    { mcpServerId: "notion", mcpServerName: "Notion", mcpServerSlug: "notion" },
+    { mcpServerId: "linear", mcpServerName: "Linear", mcpServerSlug: "linear" },
   ];
 
   it("groups member links by skill and names their servers", () => {
@@ -40,13 +40,16 @@ describe("inheritedSkills", () => {
         skillId: "s1",
         skillName: "release",
         skillDisplayName: "Release",
-        servers: ["Linear"],
+        servers: [{ name: "Linear", routeParam: "linear" }],
       },
       {
         skillId: "s2",
         skillName: "triage",
         skillDisplayName: "Triage",
-        servers: ["Linear", "Notion"],
+        servers: [
+          { name: "Linear", routeParam: "linear" },
+          { name: "Notion", routeParam: "notion" },
+        ],
       },
     ]);
   });
@@ -67,11 +70,13 @@ describe("inheritedSkills", () => {
     expect(skills).toEqual([]);
   });
 
-  it("falls back to the link's target name for an unnamed member", () => {
+  it("falls back to the link's name and the server id for a bare member", () => {
     const skills = inheritedSkills(
       [serverLink("s1", "Release", "unnamed", "From link")],
       [{ mcpServerId: "unnamed", mcpServerName: undefined }],
     );
-    expect(skills[0]?.servers).toEqual(["From link"]);
+    expect(skills[0]?.servers).toEqual([
+      { name: "From link", routeParam: "unnamed" },
+    ]);
   });
 });
