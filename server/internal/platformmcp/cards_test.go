@@ -134,10 +134,16 @@ func TestServerCardNextStep(t *testing.T) {
 	} {
 		card := serverCard("Example", "", project, tc.nextAction, tc.setupURL, false, "")
 		require.Equal(t, "Example", card.Title)
-		require.Equal(t, cardStatus{Label: "MCP server created", Tone: cardToneDone}, card.Eyebrow)
-		require.Equal(t, &cardField{Label: "Project", Value: "support"}, card.Field)
 		require.Equal(t, []string{"Catalog"}, card.Tags)
 		require.Equal(t, tc.action, card.Action, tc.nextAction)
+		if tc.action == nil && tc.nextAction != nextActionStartSetup && tc.nextAction != "ready" {
+			require.Equal(t, cardStatus{Label: "Setup required", Tone: cardToneAction}, card.Eyebrow, tc.nextAction)
+			require.Nil(t, card.Field, tc.nextAction)
+			require.Equal(t, "Finish setup from the MCP server's page in the dashboard.", card.Description, tc.nextAction)
+			continue
+		}
+		require.Equal(t, cardStatus{Label: "MCP server created", Tone: cardToneDone}, card.Eyebrow, tc.nextAction)
+		require.Equal(t, &cardField{Label: "Project", Value: "support"}, card.Field)
 	}
 
 	unnamed := serverCard("", "", ResolvedProject{Name: "", Slug: "support"}, "ready", "", false, "")

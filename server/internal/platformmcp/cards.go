@@ -216,8 +216,15 @@ func serverCard(serverName string, logo template.URL, project ResolvedProject, n
 	case nextActionSecureDashboardSetup:
 		label = "Add credentials"
 	}
-	if label != "" && dashboardSetupURL != "" {
+	switch {
+	case label != "" && dashboardSetupURL != "":
 		card.Action = &cardAction{Label: label, URL: dashboardSetupURL}
+	case label != "":
+		// Setup is still needed but there is no link to it: say where to
+		// finish instead of showing the project.
+		card.Eyebrow = cardStatus{Label: "Setup required", Tone: cardToneAction}
+		card.Field = nil
+		card.Description = "Finish setup from the MCP server's page in the dashboard."
 	}
 	return card
 }
