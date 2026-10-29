@@ -6,6 +6,12 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useMemo, useRef } from "react";
 import { trackError } from "@/elements/lib/errorTracking";
 import { createMCPClientWithVersionFallback } from "@/lib/mcp-client";
+import {
+  createLoadSkillTool,
+  LOAD_SKILL_TOOL_NAME,
+  listServedSkills,
+  serverServesSkills,
+} from "@/elements/lib/mcpSkills";
 import { Auth } from "./useAuth";
 
 type MCPToolsResult = Awaited<
@@ -120,7 +126,11 @@ export function useMCPTools({
                 globalThis.fetch(...args),
             },
           });
-          return { server, tools: await client.tools() };
+          const tools = await client.tools();
+          return {
+            server,
+            tools: await withSkillTool(client, server, headers, tools),
+          };
         }),
       );
 
@@ -261,4 +271,44 @@ function transformEnvironmentToHeaders(environment: Record<string, unknown>) {
     },
     {} as Record<string, string>,
   );
+}
+
+/**
+ * Adds the load-skill tool when the server serves skills over the Skills
+ * extension and serves this caller at least one. Skill discovery is best
+ * effort: a failure is tracked and leaves the server's tools as they are, and
+ * a server tool that already uses the name keeps it.
+ */
+async function withSkillTool(
+  client: Awaited<ReturnType<typeof createMCPClientWithVersionFallback>>,
+  server: NormalizedServer,
+  headers: Record<string, string>,
+  tools: MCPToolsResult,
+): Promise<MCPToolsResult> {
+  if (!serverServesSkills(client) || LOAD_SKILL_TOOL_NAME in tools) {
+    return tools;
+  }
+  try {
+    const skills = await listServedSkills({
+      url: server.url,
+      headers,
+      protocolVersion: client.initializeResult.protocolVersion,
+    });
+    if (skills.length === 0) return tools;
+    return {
+      ...tools,
+      [LOAD_SKILL_TOOL_NAME]: createLoadSkillTool(
+        client,
+        skills,
+      ) as unknown as MCPToolsResult[string],
+    };
+  } catch (error) {
+    trackError(error, {
+      source: "custom",
+      scope: "mcp-skills",
+      serverName: server.name ?? deriveNameFromUrl(server.url),
+      serverUrl: server.url,
+    });
+    return tools;
+  }
 }
