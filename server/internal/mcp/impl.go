@@ -2121,15 +2121,20 @@ func parseTagsFilter(raw string) []string {
 // RequirePrivateIdentityAuth runs identity authentication for a non-public
 // MCP. It tries the Authorization header first, then the
 // Gram-Chat-Session header, returning the authenticated context on success.
-// On failure, when isOAuthCapable, it sets a WWW-Authenticate header with
+// On credential rejection, when isOAuthCapable, it sets a WWW-Authenticate header with
 // the supplied resource_metadata URL so MCP clients can initiate OAuth, and
-// returns 401.
+// returns 401. Infrastructure failures retain their server-error status.
 func (s *Service) RequirePrivateIdentityAuth(ctx context.Context, w http.ResponseWriter, r *http.Request, isOAuthCapable bool, oauthResourceID uuid.UUID, wwwAuthResourceMetadataURL string) (context.Context, error) {
 	token := httpheaders.AuthorizationOrChatSessionToken(r)
 
 	authedCtx, err := s.authenticateToken(ctx, token, oauthResourceID, isOAuthCapable)
 	if err == nil {
 		return authedCtx, nil
+	}
+
+	var authErr *oops.ShareableError
+	if errors.As(err, &authErr) && authErr.HTTPStatus(ctx) >= http.StatusInternalServerError {
+		return ctx, err
 	}
 
 	if isOAuthCapable {
@@ -2222,6 +2227,11 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 	ctx, err = s.chatSessionsManager.Authorize(ctx, token)
 	if err == nil {
 		return s.identityValidator.StampChatSession(ctx), nil
+	}
+
+	var authErr *oops.ShareableError
+	if errors.As(err, &authErr) && authErr.HTTPStatus(ctx) >= http.StatusInternalServerError {
+		return ctx, err
 	}
 
 	return ctx, oops.E(oops.CodeUnauthorized, errors.New("failed to authorize token using any strategy"), "failed to authorize").LogWarn(ctx, s.logger, attr.SlogToolsetID(oauthResourceID.String()))
