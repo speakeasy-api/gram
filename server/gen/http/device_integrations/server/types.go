@@ -277,9 +277,12 @@ type GetFleetCoverageResponseBody struct {
 	// provider, when set). Without one, the gap buckets are always 0 because
 	// nothing lists the devices that lack the agent.
 	MdmConnected bool `form:"mdm_connected" json:"mdm_connected" xml:"mdm_connected"`
-	// device when every active device was matched on its own hardware serial, user
-	// when at least one counts only because its assigned user runs the agent
-	// somewhere.
+	// The strongest claim that holds for EVERY active device in this response —
+	// not merely the org's matching mode. "device": every active device was
+	// matched on its own hardware serial, so each one ran the agent. "user": at
+	// least one active device was matched only on its assigned-user email, so the
+	// set as a whole supports only the weaker claim that assigned users ran the
+	// agent somewhere.
 	Attestation string `form:"attestation" json:"attestation" xml:"attestation"`
 	// Devices with an agent heartbeat or state report within the window,
 	// agent-only machines included.
@@ -2802,8 +2805,9 @@ type FleetDeviceResponseBody struct {
 	// The latest sign of life that classified this device, a policy poll or a
 	// state report. Omitted when no agent has ever synced.
 	AgentLastSeenAt *string `form:"agent_last_seen_at,omitempty" json:"agent_last_seen_at,omitempty" xml:"agent_last_seen_at,omitempty"`
-	// Coverage classification for the device. An agent-only machine is
-	// agent_active or agent_stale.
+	// Coverage classification for the device. What agent_active attests depends on
+	// the org's matching mode and on whether this device matched by serial or by
+	// assigned-user email.
 	CoverageBucket string `form:"coverage_bucket" json:"coverage_bucket" xml:"coverage_bucket"`
 	// When the device went absent from the MDM inventory. Omitted while present,
 	// and for an agent-only machine.

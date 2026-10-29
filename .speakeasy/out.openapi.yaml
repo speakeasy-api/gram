@@ -22565,6 +22565,278 @@ paths:
       x-speakeasy-name-override: getCoverage
       x-speakeasy-react-hook:
         name: DeviceIntegrationCoverage
+  /rpc/deviceIntegrations.getFleetCoverage:
+    get:
+      description: Summarize agent coverage and policy enforcement across every device the org can see, with or without a connected MDM, optionally scoped to one provider's inventory.
+      operationId: getFleetCoverage
+      parameters:
+        - allowEmptyValue: true
+          description: Optionally scope coverage to one provider's inventory (e.g. jamf), which excludes agent-only machines.
+          in: query
+          name: provider
+          schema:
+            description: Optionally scope coverage to one provider's inventory (e.g. jamf), which excludes agent-only machines.
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetCoverage'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: getFleetCoverage deviceIntegrations
+      tags:
+        - deviceIntegrations
+      x-speakeasy-name-override: getFleetCoverage
+      x-speakeasy-react-hook:
+        name: FleetCoverage
+  /rpc/deviceIntegrations.listFleetDevices:
+    get:
+      description: 'Page through every device the org can see, newest first: its connected MDM inventories plus the machines running the agent that no inventory holds, each with its coverage bucket and policy state.'
+      operationId: listFleetDevices
+      parameters:
+        - allowEmptyValue: true
+          description: Only devices synced from this provider. Excludes agent-only machines.
+          in: query
+          name: provider
+          schema:
+            description: Only devices synced from this provider. Excludes agent-only machines.
+            type: string
+        - allowEmptyValue: true
+          description: true for devices a connected MDM holds, false for agent-only machines.
+          in: query
+          name: in_inventory
+          schema:
+            description: true for devices a connected MDM holds, false for agent-only machines.
+            type: boolean
+        - allowEmptyValue: true
+          description: Only devices in this coverage bucket.
+          in: query
+          name: coverage_bucket
+          schema:
+            description: Only devices in this coverage bucket.
+            enum:
+              - agent_active
+              - agent_stale
+              - agent_other_device
+              - no_agent
+              - no_email
+              - unresolved_email
+              - missing
+            type: string
+        - allowEmptyValue: true
+          description: Only agent_active devices in this policy state.
+          in: query
+          name: policy_state
+          schema:
+            description: Only agent_active devices in this policy state.
+            enum:
+              - attested
+              - outdated
+              - unreported
+              - halted
+            type: string
+        - allowEmptyValue: true
+          description: Only devices of these Speakeasy users. Combined with user_emails as an OR.
+          in: query
+          name: user_ids
+          schema:
+            description: Only devices of these Speakeasy users. Combined with user_emails as an OR.
+            items:
+              type: string
+            type: array
+        - allowEmptyValue: true
+          description: Only devices whose user_email is one of these, matched case-insensitively.
+          in: query
+          name: user_emails
+          schema:
+            description: Only devices whose user_email is one of these, matched case-insensitively.
+            items:
+              type: string
+            type: array
+        - allowEmptyValue: true
+          description: Pagination cursor from a previous page.
+          in: query
+          name: cursor
+          schema:
+            description: Pagination cursor from a previous page.
+            type: string
+        - allowEmptyValue: true
+          description: Page size. Defaults to 50, maximum 200.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Page size. Defaults to 50, maximum 200.
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFleetDevicesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: listFleetDevices deviceIntegrations
+      tags:
+        - deviceIntegrations
+      x-speakeasy-name-override: listFleetDevices
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: FleetDevices
   /rpc/deviceIntegrations.listManagedDevices:
     get:
       description: Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.
@@ -95478,6 +95750,182 @@ components:
         - id
         - label
         - count
+    FleetCoverage:
+      type: object
+      properties:
+        active_window_minutes:
+          type: integer
+          description: 'Freshness window: an agent counts as active when its heartbeat or state report is within this many minutes.'
+          format: int64
+        agent_active:
+          type: integer
+          description: Devices with an agent heartbeat or state report within the window, agent-only machines included.
+          format: int64
+        agent_active_device_attested:
+          type: integer
+          description: How many of agent_active are backed by that machine's own heartbeat or state report.
+          format: int64
+        agent_only_devices:
+          type: integer
+          description: Machines running the agent that no connected MDM inventory holds. Always 0 when provider is set.
+          format: int64
+        agent_other_device:
+          type: integer
+          description: MDM devices whose assigned user runs the agent, but not on this machine. Device-level matching only.
+          format: int64
+        agent_stale:
+          type: integer
+          description: Devices with a known agent that went quiet.
+          format: int64
+        attestation:
+          type: string
+          description: 'The strongest claim that holds for EVERY active device in this response — not merely the org''s matching mode. "device": every active device was matched on its own hardware serial, so each one ran the agent. "user": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere.'
+          enum:
+            - device
+            - user
+        enforcement_halted:
+          type: integer
+          description: agent_active devices whose latest state report says the kill switch halted enforcement.
+          format: int64
+        mdm_connected:
+          type: boolean
+          description: True when the organization has a connected MDM integration (the one named by provider, when set). Without one, the gap buckets are always 0 because nothing lists the devices that lack the agent.
+        missing:
+          type: integer
+          description: MDM devices absent from the latest completed inventory snapshot.
+          format: int64
+        no_agent:
+          type: integer
+          description: MDM devices whose assigned email resolves to an org member with no agent at all.
+          format: int64
+        no_email:
+          type: integer
+          description: MDM devices with no assigned-user email.
+          format: int64
+        organization_id:
+          type: string
+          description: Organization the coverage describes.
+        policy_attested:
+          type: integer
+          description: agent_active devices whose latest report applies the policy last served to the reporting user.
+          format: int64
+        policy_outdated:
+          type: integer
+          description: agent_active devices that report a different policy, or none.
+          format: int64
+        policy_unreported:
+          type: integer
+          description: agent_active devices with no state report within the window.
+          format: int64
+        total_devices:
+          type: integer
+          description: Every device counted here, missing and agent-only ones included.
+          format: int64
+        unresolved_email:
+          type: integer
+          description: MDM devices whose assigned email matches neither an agent user nor an org member.
+          format: int64
+      description: 'Agent coverage and policy enforcement across every device the organization can see: its MDM inventories plus the agent machines no inventory holds. Works with no MDM connected, when every device is an agent-only machine.'
+      required:
+        - organization_id
+        - active_window_minutes
+        - mdm_connected
+        - attestation
+        - agent_active
+        - agent_active_device_attested
+        - agent_stale
+        - agent_other_device
+        - no_agent
+        - no_email
+        - unresolved_email
+        - missing
+        - agent_only_devices
+        - total_devices
+        - policy_attested
+        - policy_outdated
+        - policy_unreported
+        - enforcement_halted
+    FleetDevice:
+      type: object
+      properties:
+        agent_last_seen_at:
+          type: string
+          description: The latest sign of life that classified this device, a policy poll or a state report. Omitted when no agent has ever synced.
+          format: date-time
+        agent_state:
+          $ref: '#/components/schemas/ManagedDeviceAgentState'
+        coverage_bucket:
+          type: string
+          description: Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.
+          enum:
+            - agent_active
+            - agent_stale
+            - agent_other_device
+            - no_agent
+            - no_email
+            - unresolved_email
+            - missing
+        external_id:
+          type: string
+          description: The MDM's identifier for the device. Omitted for an agent-only machine.
+        first_seen_at:
+          type: string
+          description: When the MDM or the agent first reported this device.
+          format: date-time
+        hostname:
+          type: string
+          description: Device hostname, from the MDM or the agent.
+        id:
+          type: string
+          description: 'Stable device ID: mdm:<uuid> for an MDM device, agent:<uuid> for an agent-only machine.'
+        in_inventory:
+          type: boolean
+          description: True when a connected MDM's inventory holds this device. False for a machine only its agent reports.
+        last_seen_at:
+          type: string
+          description: When the MDM or the agent last reported this device.
+          format: date-time
+        mdm_last_check_in_at:
+          type: string
+          description: Last device check-in as reported by the MDM.
+          format: date-time
+        missing_since:
+          type: string
+          description: When the device went absent from the MDM inventory. Omitted while present, and for an agent-only machine.
+          format: date-time
+        os_name:
+          type: string
+          description: Operating system name as the MDM reports it. Omitted for an agent-only machine; agent_state.os carries the agent's.
+        os_version:
+          type: string
+          description: Operating system version as the MDM reports it.
+        policy_state:
+          type: string
+          description: 'Whether the agent that answers for an agent_active device verifiably applies its policy; agent_state.attestation says whether that agent runs on this machine. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different policy, or none. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the reporting agent''s kill switch stopped enforcement on a blocked build. Omitted for every other bucket.'
+          enum:
+            - attested
+            - outdated
+            - unreported
+            - halted
+        provider:
+          type: string
+          description: Provider the device was synced from. Omitted for an agent-only machine.
+        serial_number:
+          type: string
+          description: Hardware serial number, from the MDM or the agent. Omitted when neither reported one.
+        user_email:
+          type: string
+          description: The MDM's assigned user, or for an agent-only machine the user its agent runs as.
+        user_id:
+          type: string
+          description: Resolved Speakeasy user for user_email. Omitted when it does not resolve to an org member.
+      description: 'One device the organization can see: a device from a connected MDM''s inventory, or a machine running the Speakeasy device agent that no connected inventory holds. MDM devices carry the same coverage bucket as listManagedDevices; agent-only devices are only ever agent_active or agent_stale, classified by their own heartbeat and state reports.'
+      required:
+        - id
+        - in_inventory
+        - coverage_bucket
+        - first_seen_at
+        - last_seen_at
     FunctionEnvironmentVariable:
       type: object
       properties:
@@ -100186,6 +100634,19 @@ components:
       description: Result of listing filter options
       required:
         - options
+    ListFleetDevicesResult:
+      type: object
+      properties:
+        devices:
+          type: array
+          items:
+            $ref: '#/components/schemas/FleetDevice'
+          description: Devices, newest first.
+        next_cursor:
+          type: string
+          description: Cursor for the next page. Omitted on the last page.
+      required:
+        - devices
     ListGlobalRemoteSessionIssuersResult:
       type: object
       properties:

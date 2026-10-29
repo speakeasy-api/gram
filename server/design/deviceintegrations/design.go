@@ -139,6 +139,9 @@ var policyStates = []any{"attested", "outdated", "unreported", "halted"}
 
 const policyStateDescription = "Whether the agent that answers for an agent_active device verifiably applies its policy; agent_state.attestation says whether that agent runs on this machine. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different policy, or none. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the reporting agent's kill switch stopped enforcement on a blocked build. Omitted for every other bucket."
 
+// Shared by both coverage reads so the SDK generates one attestation enum.
+const coverageAttestationDescription = "The strongest claim that holds for EVERY active device in this response — not merely the org's matching mode. \"device\": every active device was matched on its own hardware serial, so each one ran the agent. \"user\": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere."
+
 var ManagedDeviceAgentState = Type("ManagedDeviceAgentState", func() {
 	Description("What a device's agent last reported it enforces. Carries no error text or user-facing message.")
 	Required("reported_at", "attestation", "enforcement_halted", "current_blocked", "tools")
@@ -207,7 +210,7 @@ var Coverage = Type("DeviceIntegrationCoverage", func() {
 	// that is true depends on the matching mode. Without this they would have
 	// to infer it (agent_other_device > 0 only implies device-level, never
 	// rules it out) and would eventually claim more than the data supports.
-	Attribute("attestation", String, "The strongest claim that holds for EVERY active device in this response — not merely the org's matching mode. \"device\": every active device was matched on its own hardware serial, so each one ran the agent. \"user\": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere.", func() {
+	Attribute("attestation", String, coverageAttestationDescription, func() {
 		Enum("device", "user")
 	})
 	Attribute("agent_active", Int64, "Devices with an agent heartbeat or state report within the window. What that attests depends on the matching mode and, per device, on whether the match was by serial or by email — compare against agent_active_device_attested.")
@@ -246,7 +249,7 @@ var FleetDevice = Type("FleetDevice", func() {
 	Attribute("agent_last_seen_at", String, "The latest sign of life that classified this device, a policy poll or a state report. Omitted when no agent has ever synced.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("coverage_bucket", String, "Coverage classification for the device. An agent-only machine is agent_active or agent_stale.", func() {
+	Attribute("coverage_bucket", String, "Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.", func() {
 		Enum("agent_active", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing")
 	})
 	Attribute("missing_since", String, "When the device went absent from the MDM inventory. Omitted while present, and for an agent-only machine.", func() {
@@ -276,7 +279,7 @@ var FleetCoverage = Type("FleetCoverage", func() {
 	Attribute("organization_id", String, "Organization the coverage describes.")
 	Attribute("active_window_minutes", Int, "Freshness window: an agent counts as active when its heartbeat or state report is within this many minutes.")
 	Attribute("mdm_connected", Boolean, "True when the organization has a connected MDM integration (the one named by provider, when set). Without one, the gap buckets are always 0 because nothing lists the devices that lack the agent.")
-	Attribute("attestation", String, "device when every active device was matched on its own hardware serial, user when at least one counts only because its assigned user runs the agent somewhere.", func() {
+	Attribute("attestation", String, coverageAttestationDescription, func() {
 		Enum("device", "user")
 	})
 	Attribute("agent_active", Int64, "Devices with an agent heartbeat or state report within the window, agent-only machines included.")
