@@ -112,6 +112,7 @@ import {
   memberMapByUrn,
   roleMapByUrn,
 } from "./principals";
+import { pluginUpToDate } from "./plugin-sync-state";
 import { PublishDialog } from "./PublishDialog";
 import { SectionEmptyState } from "./SectionEmptyState";
 import { usePluginAssignmentsVisible } from "./use-plugin-assignments-visible";
@@ -893,7 +894,10 @@ function PluginDetailContent({
                 )}
               </StatTileGroup>
 
-              <PublishFreshnessIndicator publishStatus={publishStatus} />
+              <PublishFreshnessIndicator
+                publishStatus={publishStatus}
+                pluginSlug={plugin?.slug}
+              />
             </section>
           )}
 
@@ -1429,15 +1433,18 @@ export function PluginInstallControl({
 // freshness is unknown and there's nothing published to show.
 function PublishFreshnessIndicator({
   publishStatus,
+  pluginSlug,
 }: {
   publishStatus: PublishStatusResult | undefined;
+  pluginSlug: string | undefined;
 }): JSX.Element | null {
   if (!publishStatus?.connected) return null;
 
   // up_to_date is absent when freshness can't be determined (connection
   // predates fingerprinting) — treat only the explicit booleans as known.
-  const hasUnpublishedChanges = publishStatus.upToDate === false;
-  const isUpToDate = publishStatus.upToDate === true;
+  const upToDate = pluginUpToDate(publishStatus, pluginSlug);
+  const hasUnpublishedChanges = upToDate === false;
+  const isUpToDate = upToDate === true;
 
   // Each row is omitted when its value is unknown rather than guessed. The
   // live version is rendered in its own mono cell so the long timestamp-based

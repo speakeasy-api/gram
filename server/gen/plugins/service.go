@@ -358,6 +358,19 @@ type PluginAudience struct {
 	PrincipalUrn string
 }
 
+type PluginPublishStatus struct {
+	// The plugin's slug.
+	Slug string
+	// Whether the plugin's published package is current. With auto sync on: an
+	// automatic publish would push nothing new for it, its package and the
+	// marketplace manifests alike. With auto sync off: its package matches what it
+	// was last published with.
+	UpToDate bool
+	// Whether the plugin's auto sync is off and it has changes, or has never been
+	// published, so only a manual sync publishes it.
+	AwaitingManualSync bool
+}
+
 // PluginServer is the result type of the plugins service addPluginServer
 // method.
 type PluginServer struct {
@@ -431,9 +444,16 @@ type PublishStatusResult struct {
 	// is not connected.
 	HasCollaborators *bool
 	// Whether the project's current plugin state matches what was last published
-	// to GitHub. Absent when the project is not connected, or when the connection
-	// predates content fingerprinting (freshness can't be determined).
+	// to GitHub, including changes of plugins whose auto sync is off that wait for
+	// a manual sync. Absent when the project is not connected, or when the
+	// connection predates content fingerprinting (freshness can't be determined).
 	UpToDate *bool
+	// Whether an automatic publish would change the published marketplace. False
+	// while the only pending changes belong to plugins whose auto sync is off,
+	// which publish only on a manual sync. Absent when up_to_date is absent.
+	AutomaticSyncPending *bool
+	// Each live plugin's own freshness. Absent when up_to_date is absent.
+	Plugins []*PluginPublishStatus
 	// When the project was last published to GitHub. Absent when the project is
 	// not connected.
 	LastPublishedAt *string

@@ -105,16 +105,34 @@ func (s *Service) planPausedPlugins(
 	fingerprintCfg GenerateConfig,
 	includeObservability bool,
 ) (pausedPluginPlan, error) {
+	plan, pending, _, err := s.classifyPausedPlugins(ctx, projectID, live, published, fingerprintCfg, includeObservability)
+	if err != nil || len(pending) == 0 {
+		return plan, err
+	}
+	return s.holdPendingPlugins(ctx, projectID, repoOwner, repoName, live, published, plan, pending)
+}
+
+// classifyPausedPlugins is the part of planPausedPlugins that needs no repo
+// files: it returns the plan without the plugins still to hold, which come
+// back as pending, and the slugs of every paused plugin.
+func (s *Service) classifyPausedPlugins(
+	ctx context.Context,
+	projectID uuid.UUID,
+	live []PluginInfo,
+	published map[string]string,
+	fingerprintCfg GenerateConfig,
+	includeObservability bool,
+) (pausedPluginPlan, map[string]PluginInfo, map[string]bool, error) {
 	pausedSlugs, err := s.repo.ListAutoSyncPausedPluginSlugs(ctx, projectID)
 	if err != nil {
-		return pausedPluginPlan{}, oops.E(oops.CodeUnexpected, err, "list plugins with auto sync off").LogError(ctx, s.logger)
-	}
-	if len(pausedSlugs) == 0 {
-		return allPluginsActive(live), nil
+		return pausedPluginPlan{}, nil, nil, oops.E(oops.CodeUnexpected, err, "list plugins with auto sync off").LogError(ctx, s.logger)
 	}
 	paused := make(map[string]bool, len(pausedSlugs))
 	for _, slug := range pausedSlugs {
 		paused[slug] = true
+	}
+	if len(paused) == 0 {
+		return allPluginsActive(live), nil, paused, nil
 	}
 
 	plan := pausedPluginPlan{Active: make([]PluginInfo, 0, len(live)), Held: nil, Omitted: nil}
@@ -131,7 +149,7 @@ func (s *Service) planPausedPlugins(
 		}
 		current, err := PluginMCPFingerprint(info, fingerprintCfg, includeObservability)
 		if err != nil {
-			return pausedPluginPlan{}, oops.E(oops.CodeUnexpected, err, "compute paused plugin fingerprint").LogError(ctx, s.logger)
+			return pausedPluginPlan{}, nil, nil, oops.E(oops.CodeUnexpected, err, "compute paused plugin fingerprint").LogError(ctx, s.logger)
 		}
 		if current == stored {
 			plan.Active = append(plan.Active, info)
@@ -139,10 +157,25 @@ func (s *Service) planPausedPlugins(
 		}
 		pending[info.Slug] = info
 	}
-	if len(pending) == 0 {
-		return plan, nil
-	}
+	return plan, pending, paused, nil
+}
 
+// holdPendingPlugins finishes planPausedPlugins: it reads each pending
+// plugin's published files from the repo and holds it, or falls back to its
+// live state when its files are unreadable or it shares a directory with
+// another plugin.
+func (s *Service) holdPendingPlugins(
+	ctx context.Context,
+	projectID uuid.UUID,
+	repoOwner, repoName string,
+	live []PluginInfo,
+	published map[string]string,
+	plan pausedPluginPlan,
+	pending map[string]PluginInfo,
+) (pausedPluginPlan, error) {
+	if s.github == nil {
+		return pausedPluginPlan{}, oops.E(oops.CodeUnavailable, nil, "github publishing is not configured").LogError(ctx, s.logger)
+	}
 	owners := ownersOfPlugins(live)
 	existing, err := s.github.Client.GetRepoFiles(ctx, s.github.InstallationID, repoOwner, repoName, "main", func(filePath string) bool {
 		owner, ok := owners.ownerOf(filePath)

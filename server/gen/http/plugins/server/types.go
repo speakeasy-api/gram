@@ -370,9 +370,16 @@ type GetPublishStatusResponseBody struct {
 	// is not connected.
 	HasCollaborators *bool `form:"has_collaborators,omitempty" json:"has_collaborators,omitempty" xml:"has_collaborators,omitempty"`
 	// Whether the project's current plugin state matches what was last published
-	// to GitHub. Absent when the project is not connected, or when the connection
-	// predates content fingerprinting (freshness can't be determined).
+	// to GitHub, including changes of plugins whose auto sync is off that wait for
+	// a manual sync. Absent when the project is not connected, or when the
+	// connection predates content fingerprinting (freshness can't be determined).
 	UpToDate *bool `form:"up_to_date,omitempty" json:"up_to_date,omitempty" xml:"up_to_date,omitempty"`
+	// Whether an automatic publish would change the published marketplace. False
+	// while the only pending changes belong to plugins whose auto sync is off,
+	// which publish only on a manual sync. Absent when up_to_date is absent.
+	AutomaticSyncPending *bool `form:"automatic_sync_pending,omitempty" json:"automatic_sync_pending,omitempty" xml:"automatic_sync_pending,omitempty"`
+	// Each live plugin's own freshness. Absent when up_to_date is absent.
+	Plugins []*PluginPublishStatusResponseBody `form:"plugins,omitempty" json:"plugins,omitempty" xml:"plugins,omitempty"`
 	// When the project was last published to GitHub. Absent when the project is
 	// not connected.
 	LastPublishedAt *string `form:"last_published_at,omitempty" json:"last_published_at,omitempty" xml:"last_published_at,omitempty"`
@@ -4658,6 +4665,21 @@ type RotatedObservabilityKeyResponseBody struct {
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
+// PluginPublishStatusResponseBody is used to define fields on response body
+// types.
+type PluginPublishStatusResponseBody struct {
+	// The plugin's slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Whether the plugin's published package is current. With auto sync on: an
+	// automatic publish would push nothing new for it, its package and the
+	// marketplace manifests alike. With auto sync off: its package matches what it
+	// was last published with.
+	UpToDate bool `form:"up_to_date" json:"up_to_date" xml:"up_to_date"`
+	// Whether the plugin's auto sync is off and it has changes, or has never been
+	// published, so only a manual sync publishes it.
+	AwaitingManualSync bool `form:"awaiting_manual_sync" json:"awaiting_manual_sync" xml:"awaiting_manual_sync"`
+}
+
 // MarketplaceSettingsResultResponseBody is used to define fields on response
 // body types.
 type MarketplaceSettingsResultResponseBody struct {
@@ -4962,8 +4984,19 @@ func NewGetPublishStatusResponseBody(res *plugins.PublishStatusResult) *GetPubli
 		CursorObservabilityPlugin: res.CursorObservabilityPlugin,
 		HasCollaborators:          res.HasCollaborators,
 		UpToDate:                  res.UpToDate,
+		AutomaticSyncPending:      res.AutomaticSyncPending,
 		LastPublishedAt:           res.LastPublishedAt,
 		LiveVersion:               res.LiveVersion,
+	}
+	if res.Plugins != nil {
+		body.Plugins = make([]*PluginPublishStatusResponseBody, len(res.Plugins))
+		for i, val := range res.Plugins {
+			if val == nil {
+				body.Plugins[i] = nil
+				continue
+			}
+			body.Plugins[i] = marshalPluginsPluginPublishStatusToPluginPublishStatusResponseBody(val)
+		}
 	}
 	return body
 }

@@ -1,57 +1,82 @@
 package plugins
 
 import (
-	"encoding/json"
+	"maps"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestPublicationFreshness(t *testing.T) {
+// Freshness is per plugin. A plugin with auto sync on is current when an
+// automatic publish would push nothing new for it, its package and the shared
+// manifests alike; one with auto sync off only answers for its own package, so
+// another plugin's held change never makes it, or the auto-synced plugins,
+// read stale.
+func TestPluginFreshness(t *testing.T) {
 	t.Parallel()
 
-	current := map[string]string{
-		"weather":               "plugin-fingerprint",
-		mcpSharedFingerprintKey: "shared-fingerprint",
+	infos := []PluginInfo{
+		{Name: "Active", Slug: "active", Description: "", Servers: nil, Skills: nil, AgentPluginsV1Issues: nil},
+		{Name: "Paused Current", Slug: "paused-current", Description: "", Servers: nil, Skills: nil, AgentPluginsV1Issues: nil},
+		{Name: "Paused Held", Slug: "paused-held", Description: "", Servers: nil, Skills: nil, AgentPluginsV1Issues: nil},
+		{Name: "Paused New", Slug: "paused-new", Description: "", Servers: nil, Skills: nil, AgentPluginsV1Issues: nil},
 	}
-	fingerprints := func(values map[string]string) []byte {
-		t.Helper()
-		data, err := json.Marshal(values)
-		require.NoError(t, err)
-		return data
+	paused := map[string]bool{"paused-current": true, "paused-held": true, "paused-new": true}
+	plan := pausedPluginPlan{
+		Active:  infos[:2],
+		Held:    []heldPlugin{{Slug: "paused-held", Fingerprint: "held", Files: nil, Entry: sharedPluginEntry{Slug: "paused-held", Name: "", Description: "", ServerCount: 0, CodexAuthentication: "", AgentPluginsPackage: false}}},
+		Omitted: []string{"paused-new"},
 	}
+	published := map[string]string{
+		"active":                "active",
+		"paused-current":        "paused-current",
+		"paused-held":           "held",
+		mcpSharedFingerprintKey: "shared",
+	}
+	automatic := maps.Clone(published)
 
-	tests := []struct {
+	for _, test := range []struct {
 		name      string
-		raw       []byte
-		slug      string
-		current   map[string]string
-		wantKnown bool
-		wantFresh bool
+		automatic map[string]string
+		published map[string]string
+		want      map[string]bool
 	}{
-		{name: "absent fingerprint is unknown", slug: "weather", current: current},
-		{name: "malformed fingerprint is stale", raw: []byte("{"), slug: "weather", current: current, wantKnown: true},
-		{name: "empty map is stale", raw: []byte(`{}`), slug: "weather", current: current, wantKnown: true},
-		{name: "matching plugin and shared fingerprints are fresh", raw: fingerprints(current), slug: "weather", current: current, wantKnown: true, wantFresh: true},
-		{name: "plugin mismatch is stale", raw: fingerprints(map[string]string{"weather": "old", mcpSharedFingerprintKey: "shared-fingerprint"}), slug: "weather", current: current, wantKnown: true},
-		{name: "missing plugin fingerprint is stale", raw: fingerprints(map[string]string{mcpSharedFingerprintKey: "shared-fingerprint"}), slug: "weather", current: current, wantKnown: true},
-		{name: "missing shared fingerprint is stale", raw: fingerprints(map[string]string{"weather": "plugin-fingerprint"}), slug: "weather", current: current, wantKnown: true},
-		{name: "missing current plugin fingerprint is stale", raw: fingerprints(current), slug: "absent", current: current, wantKnown: true},
-		{name: "missing current shared fingerprint is stale", raw: fingerprints(current), slug: "weather", current: map[string]string{"weather": "plugin-fingerprint"}, wantKnown: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		{
+			name:      "held and never published plugins alone wait for a manual sync",
+			automatic: automatic,
+			published: published,
+			want:      map[string]bool{"active": true, "paused-current": true, "paused-held": false, "paused-new": false},
+		},
+		{
+			name:      "an auto-synced plugin's own change",
+			automatic: withFingerprint(automatic, "active", "edited"),
+			published: published,
+			want:      map[string]bool{"active": false, "paused-current": true, "paused-held": false, "paused-new": false},
+		},
+		{
+			name:      "manifests an automatic publish would change stale the auto-synced plugins only",
+			automatic: withFingerprint(automatic, mcpSharedFingerprintKey, "renamed"),
+			published: published,
+			want:      map[string]bool{"active": false, "paused-current": true, "paused-held": false, "paused-new": false},
+		},
+		{
+			name:      "nothing recorded is stale",
+			automatic: automatic,
+			published: nil,
+			want:      map[string]bool{"active": false, "paused-current": false, "paused-held": false, "paused-new": false},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			fresh := publicationFreshness(tt.raw, tt.current, tt.slug)
-			if !tt.wantKnown {
-				require.Nil(t, fresh)
-				return
-			}
-			require.NotNil(t, fresh)
-			require.Equal(t, tt.wantFresh, *fresh)
+			require.Equal(t, test.want, pluginFreshness(infos, paused, plan, test.automatic, test.published))
 		})
 	}
+}
+
+func withFingerprint(fingerprints map[string]string, key, value string) map[string]string {
+	out := maps.Clone(fingerprints)
+	out[key] = value
+	return out
 }
 
 func TestPublicationAddressesPreserveResolvedServerOrder(t *testing.T) {

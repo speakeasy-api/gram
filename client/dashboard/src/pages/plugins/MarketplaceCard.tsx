@@ -43,6 +43,9 @@ export function MarketplaceCard({
   // connection that predates fingerprinting) — only the explicit `false`
   // case is a known, real drift worth warning about.
   const hasUnpublishedChanges = publishStatus.upToDate === false;
+  // False when the only pending changes belong to plugins whose auto sync is
+  // off: no automatic publish will send them.
+  const changesSyncAutomatically = publishStatus.automaticSyncPending !== false;
 
   return (
     <Collapsible
@@ -131,9 +134,11 @@ export function MarketplaceCard({
                     : "font-medium text-default-success"
                 }
               >
-                {hasUnpublishedChanges
-                  ? "Not up to date yet. Changes sync automatically, or click 'Sync changes' to publish now"
-                  : "Marketplace set up"}
+                {!hasUnpublishedChanges
+                  ? "Marketplace set up"
+                  : changesSyncAutomatically
+                    ? "Not up to date yet. Changes sync automatically, or click 'Sync changes' to publish now"
+                    : "Not up to date. The waiting changes belong to plugins with auto sync off, so they publish only when you click 'Sync changes'"}
               </span>
             </span>
             <div className="flex flex-wrap items-center gap-2">

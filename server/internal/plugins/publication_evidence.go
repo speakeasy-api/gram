@@ -27,9 +27,12 @@ type PublicationPackageAddress struct {
 }
 
 // ResolvePublicationEvidence returns freshness and selected package addresses
-// for exact plugin slugs in a project. It only reads Speakeasy's current package
-// inputs and stored publication fingerprints. It does not contact GitHub, expose
-// the marketplace bearer URL, or mint credentials.
+// for exact plugin slugs in a project. Freshness is per plugin, as the
+// dashboard reports it (see marketplaceFreshness). It reads Speakeasy's current
+// package inputs and stored publication fingerprints, and the published files
+// of plugins whose auto sync is off and whose changes are held, which it reads
+// from the repo once per published state. It does not expose the marketplace
+// bearer URL or mint credentials.
 func (s *Service) ResolvePublicationEvidence(ctx context.Context, organizationID string, projectID uuid.UUID, pluginSlugs []string) ([]PublicationEvidence, error) {
 	if s == nil || s.authz == nil || organizationID == "" {
 		return nil, fmt.Errorf("publication evidence authorization unavailable")
@@ -82,36 +85,24 @@ func (s *Service) ResolvePublicationEvidence(ctx context.Context, organizationID
 	if err != nil {
 		return nil, fmt.Errorf("read observability plugin setting: %w", err)
 	}
+	if len(conn.PublishedMcpFingerprints) == 0 {
+		return evidenceWithAddresses(selectedInfos, nil, false), nil
+	}
 	cfg := s.generateConfig(ctx, project.ID, project.Slug, project.ProjectSlug, projectID, serverURL, conn.PublishedHooksConfig)
-	fingerprints, err := MCPFingerprints(allInfos, cfg, observabilityEnabled)
+	freshness, err := s.resolveMarketplaceFreshness(ctx, project.ID, project.Slug, projectID, allInfos, conn, cfg, observabilityEnabled)
 	if err != nil {
-		return nil, fmt.Errorf("compute publication fingerprints: %w", err)
+		return nil, fmt.Errorf("compare with the published marketplace: %w", err)
 	}
 	result := make([]PublicationEvidence, 0, len(selectedInfos))
 	for _, info := range selectedInfos {
 		result = append(result, PublicationEvidence{
 			PluginSlug:    info.Slug,
 			NotConfigured: false,
-			Fresh:         publicationFreshness(conn.PublishedMcpFingerprints, fingerprints, info.Slug),
+			Fresh:         new(freshness.Plugins[info.Slug]),
 			Packages:      publicationAddresses(info),
 		})
 	}
 	return result, nil
-}
-
-func publicationFreshness(raw []byte, current map[string]string, slug string) *bool {
-	if len(raw) == 0 {
-		return nil
-	}
-
-	published := decodeMCPFingerprints(raw)
-	currentPlugin, hasCurrentPlugin := current[slug]
-	publishedPlugin, hasPublishedPlugin := published[slug]
-	currentShared, hasCurrentShared := current[mcpSharedFingerprintKey]
-	publishedShared, hasPublishedShared := published[mcpSharedFingerprintKey]
-	fresh := hasCurrentPlugin && hasPublishedPlugin && hasCurrentShared && hasPublishedShared &&
-		currentPlugin == publishedPlugin && currentShared == publishedShared
-	return &fresh
 }
 
 func evidenceWithAddresses(infos []PluginInfo, fresh *bool, notConfigured bool) []PublicationEvidence {

@@ -4793,6 +4793,22 @@ func marshalPluginsRotatedObservabilityKeyToRotatedObservabilityKeyResponseBody(
 	return res
 }
 
+// marshalPluginsPluginPublishStatusToPluginPublishStatusResponseBody builds a
+// value of type *PluginPublishStatusResponseBody from a value of type
+// *plugins.PluginPublishStatus.
+func marshalPluginsPluginPublishStatusToPluginPublishStatusResponseBody(v *plugins.PluginPublishStatus) *PluginPublishStatusResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &PluginPublishStatusResponseBody{
+		Slug:               v.Slug,
+		UpToDate:           v.UpToDate,
+		AwaitingManualSync: v.AwaitingManualSync,
+	}
+
+	return res
+}
+
 // marshalPluginsMarketplaceSettingsResultToMarketplaceSettingsResultResponseBody
 // builds a value of type *MarketplaceSettingsResultResponseBody from a value
 // of type *plugins.MarketplaceSettingsResult.

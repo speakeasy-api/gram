@@ -370,9 +370,16 @@ type GetPublishStatusResponseBody struct {
 	// is not connected.
 	HasCollaborators *bool `form:"has_collaborators,omitempty" json:"has_collaborators,omitempty" xml:"has_collaborators,omitempty"`
 	// Whether the project's current plugin state matches what was last published
-	// to GitHub. Absent when the project is not connected, or when the connection
-	// predates content fingerprinting (freshness can't be determined).
+	// to GitHub, including changes of plugins whose auto sync is off that wait for
+	// a manual sync. Absent when the project is not connected, or when the
+	// connection predates content fingerprinting (freshness can't be determined).
 	UpToDate *bool `form:"up_to_date,omitempty" json:"up_to_date,omitempty" xml:"up_to_date,omitempty"`
+	// Whether an automatic publish would change the published marketplace. False
+	// while the only pending changes belong to plugins whose auto sync is off,
+	// which publish only on a manual sync. Absent when up_to_date is absent.
+	AutomaticSyncPending *bool `form:"automatic_sync_pending,omitempty" json:"automatic_sync_pending,omitempty" xml:"automatic_sync_pending,omitempty"`
+	// Each live plugin's own freshness. Absent when up_to_date is absent.
+	Plugins []*PluginPublishStatusResponseBody `form:"plugins,omitempty" json:"plugins,omitempty" xml:"plugins,omitempty"`
 	// When the project was last published to GitHub. Absent when the project is
 	// not connected.
 	LastPublishedAt *string `form:"last_published_at,omitempty" json:"last_published_at,omitempty" xml:"last_published_at,omitempty"`
@@ -4658,6 +4665,21 @@ type RotatedObservabilityKeyResponseBody struct {
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
+// PluginPublishStatusResponseBody is used to define fields on response body
+// types.
+type PluginPublishStatusResponseBody struct {
+	// The plugin's slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Whether the plugin's published package is current. With auto sync on: an
+	// automatic publish would push nothing new for it, its package and the
+	// marketplace manifests alike. With auto sync off: its package matches what it
+	// was last published with.
+	UpToDate *bool `form:"up_to_date,omitempty" json:"up_to_date,omitempty" xml:"up_to_date,omitempty"`
+	// Whether the plugin's auto sync is off and it has changes, or has never been
+	// published, so only a manual sync publishes it.
+	AwaitingManualSync *bool `form:"awaiting_manual_sync,omitempty" json:"awaiting_manual_sync,omitempty" xml:"awaiting_manual_sync,omitempty"`
+}
+
 // MarketplaceSettingsResultResponseBody is used to define fields on response
 // body types.
 type MarketplaceSettingsResultResponseBody struct {
@@ -7787,8 +7809,19 @@ func NewGetPublishStatusPublishStatusResultOK(body *GetPublishStatusResponseBody
 		CursorObservabilityPlugin: body.CursorObservabilityPlugin,
 		HasCollaborators:          body.HasCollaborators,
 		UpToDate:                  body.UpToDate,
+		AutomaticSyncPending:      body.AutomaticSyncPending,
 		LastPublishedAt:           body.LastPublishedAt,
 		LiveVersion:               body.LiveVersion,
+	}
+	if body.Plugins != nil {
+		v.Plugins = make([]*plugins.PluginPublishStatus, len(body.Plugins))
+		for i, val := range body.Plugins {
+			if val == nil {
+				v.Plugins[i] = nil
+				continue
+			}
+			v.Plugins[i] = unmarshalPluginPublishStatusResponseBodyToPluginsPluginPublishStatus(val)
+		}
 	}
 
 	return v
@@ -8862,6 +8895,13 @@ func ValidateGetPublishStatusResponseBody(body *GetPublishStatusResponseBody) (e
 	}
 	if body.Connected == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connected", "body"))
+	}
+	for _, e := range body.Plugins {
+		if e != nil {
+			if err2 := ValidatePluginPublishStatusResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.LastPublishedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_published_at", *body.LastPublishedAt, goa.FormatDateTime))
@@ -14437,6 +14477,21 @@ func ValidateRotatedObservabilityKeyResponseBody(body *RotatedObservabilityKeyRe
 	}
 	if body.ExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidatePluginPublishStatusResponseBody runs the validations defined on
+// PluginPublishStatusResponseBody
+func ValidatePluginPublishStatusResponseBody(body *PluginPublishStatusResponseBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.UpToDate == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("up_to_date", "body"))
+	}
+	if body.AwaitingManualSync == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("awaiting_manual_sync", "body"))
 	}
 	return
 }

@@ -1,5 +1,6 @@
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
+import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import {
   cleanup,
   fireEvent,
@@ -95,13 +96,14 @@ function plugin(agentPluginsV1Compatible: boolean): Plugin {
 function renderCard(
   agentPluginsV1Compatible: boolean,
   overrides: Partial<Plugin> = {},
+  publishStatus: PublishStatusResult | undefined = undefined,
 ): void {
   render(
     <MemoryRouter>
       <TooltipProvider>
         <PluginCard
           plugin={{ ...plugin(agentPluginsV1Compatible), ...overrides }}
-          publishStatus={undefined}
+          publishStatus={publishStatus}
         />
       </TooltipProvider>
     </MemoryRouter>,
@@ -173,5 +175,43 @@ describe("PluginCard auto sync", () => {
   it("stays quiet while auto sync is on", () => {
     renderCard(true);
     expect(screen.queryByText("Auto sync off")).toBeNull();
+  });
+});
+
+describe("PluginCard sync status", () => {
+  // Another plugin, whose auto sync is off, holds a change: the project is
+  // not up to date, but this plugin is.
+  const heldElsewhere: PublishStatusResult = {
+    configured: true,
+    connected: true,
+    upToDate: false,
+    automaticSyncPending: false,
+    plugins: [
+      { slug: "portable-plugin", upToDate: true, awaitingManualSync: false },
+      { slug: "paused-plugin", upToDate: false, awaitingManualSync: true },
+    ],
+  };
+
+  it("stays quiet when only another plugin needs syncing", () => {
+    renderCard(true, {}, heldElsewhere);
+    expect(screen.queryByText("Needs syncing")).toBeNull();
+  });
+
+  it("marks the plugin whose own package needs syncing", () => {
+    renderCard(
+      true,
+      { slug: "paused-plugin", autoSyncEnabled: false },
+      heldElsewhere,
+    );
+    expect(screen.getByText("Needs syncing")).toBeTruthy();
+  });
+
+  it("falls back to the project's status without per-plugin entries", () => {
+    renderCard(
+      true,
+      {},
+      { configured: true, connected: true, upToDate: false },
+    );
+    expect(screen.getByText("Needs syncing")).toBeTruthy();
   });
 });

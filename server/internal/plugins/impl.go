@@ -1753,6 +1753,8 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 		CursorObservabilityPlugin: nil,
 		HasCollaborators:          nil,
 		UpToDate:                  nil,
+		AutomaticSyncPending:      nil,
+		Plugins:                   nil,
 		LastPublishedAt:           nil,
 		LiveVersion:               nil,
 	}
@@ -1810,7 +1812,11 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				lastPublishedAt := formatTime(conn.UpdatedAt)
 				result.LastPublishedAt = &lastPublishedAt
 			}
-			result.UpToDate = s.publishUpToDate(ctx, ac, conn)
+			if freshness := s.publishFreshness(ctx, ac, conn); freshness != nil {
+				result.UpToDate = new(freshness.UpToDate())
+				result.AutomaticSyncPending = new(freshness.AutomaticPublishPending)
+				result.Plugins = publishStatusPlugins(*freshness)
+			}
 			result.LiveVersion = s.cachedLiveManifestVersion(ctx, ac, conn)
 
 			if admin {
@@ -1981,15 +1987,11 @@ func (s *Service) liveManifestVersion(ctx context.Context, ac *contextvalues.Aut
 	return "", true
 }
 
-// publishUpToDate reports whether the project's current plugin state matches
-// what a publish would produce for this org, by recomputing the live MCP
-// fingerprint the same way publishProject does and — only when the org is
-// cleared for the current hooks version by the phased rollout — comparing the
-// hooks generator version and config to what the connection last recorded. It
-// returns nil ("unknown") when freshness can't be determined — the connection
-// predates the hooks/MCP split, or recomputing the fingerprint fails — so a
-// transient compute error degrades the status read rather than failing it.
-func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthContext, conn repo.PluginGithubConnection) *bool {
+// publishFreshness compares the project's current plugin state with what was
+// last published, project-wide and per plugin (see marketplaceFreshness). Nil
+// means unknown: the connection predates fingerprints, or a transient compute
+// error degraded the status read rather than failing it.
+func (s *Service) publishFreshness(ctx context.Context, ac *contextvalues.AuthContext, conn repo.PluginGithubConnection) *marketplaceFreshness {
 	// Connections published before the hooks/MCP split carry no stored MCP
 	// fingerprints, so there's nothing to compare against.
 	if len(conn.PublishedMcpFingerprints) == 0 {
@@ -2015,45 +2017,31 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 	}
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID, serverURL, conn.PublishedHooksConfig)
-	publishedMCPFingerprints := decodeMCPFingerprints(conn.PublishedMcpFingerprints)
-
 	observabilityEnabled, err := s.projectObservabilityEnabled(ctx, *ac.ProjectID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "publish freshness: read observability plugin setting", attr.SlogError(err))
 		return nil
 	}
-	fingerprints, err := MCPFingerprints(pluginInfos, cfg, observabilityEnabled)
+	// The eligibility inputs for the hooks component mirror the dashboard
+	// publish path (PublishPlugins), which passes the same auth-context org id
+	// and slug.
+	freshness, err := s.resolveMarketplaceFreshness(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID, pluginInfos, conn, cfg, observabilityEnabled)
 	if err != nil {
-		s.logger.WarnContext(ctx, "publish freshness: compute mcp fingerprints", attr.SlogError(err))
+		s.logger.WarnContext(ctx, "publish freshness: compare with the published marketplace", attr.SlogError(err))
 		return nil
 	}
-	// The hooks component counts against freshness only when the org is cleared
-	// for the current generator version. publishProject applies the same
-	// eligibility gate and carries a gated org's published hooks subtree
-	// verbatim, so for a gated org the published hooks ARE its target: comparing
-	// them against the current constant would read "stale" on every generator
-	// bump, and no publish could ever clear it. A hook-affecting config change
-	// while gated (hooksConfigDeferred) is likewise not actionable — it applies
-	// automatically once the rollout pin advances — so it must not read as stale
-	// either. The eligibility inputs mirror the dashboard publish path
-	// (PublishPlugins), which passes the same auth-context org id and slug.
-	// A project that disabled observability is current when no hooks subtree
-	// remains published; leftover hooks from before the toggle still read stale.
-	hooksCurrent := true
-	if !observabilityEnabled {
-		hooksCurrent = conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == ""
-	} else if s.hooksRolloutEligible(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug) {
-		hooksCurrent = conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == hooksGeneratorVersion &&
-			storedHooksConfigHash(conn.PublishedHooksConfig) == hooksConfigHash(hooksConfigSnapshot(cfg))
-	}
+	return &freshness
+}
 
-	// Up to date only when both components match what was last published: the
-	// MCP per-plugin fingerprints, and (for rollout-cleared orgs) the hooks
-	// generator version plus the hook-affecting config (so a marketplace rename
-	// or browser-login toggle that hasn't propagated to the hooks subtree yet
-	// reads as stale rather than current).
-	upToDate := maps.Equal(fingerprints, publishedMCPFingerprints) && hooksCurrent
-	return &upToDate
+// publishStatusPlugins lists each plugin's freshness for the status result,
+// in slug order.
+func publishStatusPlugins(freshness marketplaceFreshness) []*gen.PluginPublishStatus {
+	out := make([]*gen.PluginPublishStatus, 0, len(freshness.Plugins))
+	for _, slug := range slices.Sorted(maps.Keys(freshness.Plugins)) {
+		fresh := freshness.Plugins[slug]
+		out = append(out, &gen.PluginPublishStatus{Slug: slug, UpToDate: fresh, AwaitingManualSync: freshness.Paused[slug] && !fresh})
+	}
+	return out
 }
 
 // decodeMCPFingerprints parses the JSON per-plugin fingerprint map stored on a

@@ -5204,6 +5204,22 @@ func unmarshalRotatedObservabilityKeyResponseBodyToPluginsRotatedObservabilityKe
 	return res
 }
 
+// unmarshalPluginPublishStatusResponseBodyToPluginsPluginPublishStatus builds
+// a value of type *plugins.PluginPublishStatus from a value of type
+// *PluginPublishStatusResponseBody.
+func unmarshalPluginPublishStatusResponseBodyToPluginsPluginPublishStatus(v *PluginPublishStatusResponseBody) *plugins.PluginPublishStatus {
+	if v == nil {
+		return nil
+	}
+	res := &plugins.PluginPublishStatus{
+		Slug:               *v.Slug,
+		UpToDate:           *v.UpToDate,
+		AwaitingManualSync: *v.AwaitingManualSync,
+	}
+
+	return res
+}
+
 // unmarshalMarketplaceSettingsResultResponseBodyToPluginsMarketplaceSettingsResult
 // builds a value of type *plugins.MarketplaceSettingsResult from a value of
 // type *MarketplaceSettingsResultResponseBody.

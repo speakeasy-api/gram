@@ -680,3 +680,70 @@ func countPluginMCPKeysForOrg(t *testing.T, ctx context.Context, ti *testInstanc
 	require.NoError(t, err)
 	return countPluginMCPKeys(keys)
 }
+
+// publishStatusBySlug maps each plugin's slug to its reported freshness.
+func publishStatusBySlug(t *testing.T, status *gen.PublishStatusResult) map[string]gen.PluginPublishStatus {
+	t.Helper()
+	out := make(map[string]gen.PluginPublishStatus, len(status.Plugins))
+	for _, plugin := range status.Plugins {
+		out[plugin.Slug] = *plugin
+	}
+	return out
+}
+
+// Freshness is per plugin. A paused plugin's held change makes only that
+// plugin wait for a manual sync: plugins whose auto sync is on still read as
+// current, and the marketplace reports no automatic publish pending, on the
+// dashboard and through the Platform MCP's evidence alike.
+func TestAutoSync_HeldChangeLeavesOtherPluginsCurrent(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newAutoSyncFixture(t, "fresh")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, err := f.setAutoSync(ctx, f.paused, false)
+	require.NoError(t, err)
+	f.addServer(t, ctx, f.paused, "fresh-paused-two", "Paused Two", 1)
+
+	status, err := f.ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.Equal(t, new(false), status.UpToDate, "the held change still needs a manual sync")
+	require.Equal(t, new(false), status.AutomaticSyncPending, "no automatic publish would change anything")
+	require.Equal(t, map[string]gen.PluginPublishStatus{
+		f.active.Slug: {Slug: f.active.Slug, UpToDate: true, AwaitingManualSync: false},
+		f.paused.Slug: {Slug: f.paused.Slug, UpToDate: false, AwaitingManualSync: true},
+	}, publishStatusBySlug(t, status))
+
+	evidence, err := f.ti.service.ResolvePublicationEvidence(ctx, authCtx.ActiveOrganizationID, f.projectID, []string{f.active.Slug, f.paused.Slug})
+	require.NoError(t, err)
+	fresh := make(map[string]*bool, len(evidence))
+	for _, plugin := range evidence {
+		fresh[plugin.PluginSlug] = plugin.Fresh
+	}
+	require.Equal(t, map[string]*bool{f.active.Slug: new(true), f.paused.Slug: new(false)}, fresh)
+
+	// The held plugin's published files only change with a publish, so a
+	// repeated read answers from the cache instead of the repo.
+	f.mock.getRepoFilesCalled = false
+	_, err = f.ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.False(t, f.mock.getRepoFilesCalled)
+
+	// A change to the auto-synced plugin is what an automatic publish sends.
+	f.addServer(t, ctx, f.active, "fresh-active-two", "Active Two", 1)
+	status, err = f.ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.Equal(t, new(true), status.AutomaticSyncPending)
+	require.Equal(t, map[string]gen.PluginPublishStatus{
+		f.active.Slug: {Slug: f.active.Slug, UpToDate: false, AwaitingManualSync: false},
+		f.paused.Slug: {Slug: f.paused.Slug, UpToDate: false, AwaitingManualSync: true},
+	}, publishStatusBySlug(t, status))
+
+	// Once that publish runs, only the paused plugin still waits.
+	f.automaticPublish(t, ctx)
+	status, err = f.ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.Equal(t, new(false), status.AutomaticSyncPending)
+	require.True(t, publishStatusBySlug(t, status)[f.active.Slug].UpToDate)
+	require.True(t, publishStatusBySlug(t, status)[f.paused.Slug].AwaitingManualSync)
+}
