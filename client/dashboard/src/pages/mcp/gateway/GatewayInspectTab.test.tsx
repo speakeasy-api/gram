@@ -67,7 +67,9 @@ vi.mock("@/hooks/useToolsetUrl", () => ({
     loading: false,
   }),
 }));
-vi.mock("@/routes", () => ({ useRoutes: () => ({}) }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
 vi.mock("./GatewayDetailsRouting", () => ({
   gatewayTabHref: () => "/settings",
 }));

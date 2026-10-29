@@ -13,10 +13,8 @@ vi.mock("./useIdentityQueries", () => ({
   useCanReadAgentChats: () => mocks.canRead(),
   useAgentChats: (...args: unknown[]) => mocks.chats(...args),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    agentSessions: { href: () => "/p/agent-sessions" },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 const agent = {
@@ -57,8 +55,12 @@ it("lists the agent's sessions, each opening its transcript, and hands off to th
     .getAllByRole("link")
     .map((link) => link.getAttribute("href"));
   // The window carries over, and unrelated params on the agent page do not.
-  expect(hrefs).toContain("/p/agent-sessions?range=7d&agentId=agent_example");
-  expect(hrefs).toContain("/p/agent-sessions?chatId=chat_one");
+  expect(hrefs).toContain(
+    "/org/projects/project/agent-sessions?range=7d&agentId=agent_example",
+  );
+  expect(hrefs).toContain(
+    "/org/projects/project/agent-sessions?chatId=chat_one",
+  );
 });
 
 it("explains the refusal instead of claiming the agent has no sessions", () => {
@@ -94,6 +96,8 @@ it.each(["/agent", "/agent?range=invalid"])(
     );
     expect(
       screen.getByRole("link", { name: /Agent Sessions/ }).getAttribute("href"),
-    ).toBe("/p/agent-sessions?range=7d&agentId=agent_example");
+    ).toBe(
+      "/org/projects/project/agent-sessions?range=7d&agentId=agent_example",
+    );
   },
 );
