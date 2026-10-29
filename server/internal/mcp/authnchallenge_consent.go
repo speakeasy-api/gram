@@ -1269,11 +1269,15 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// For each server offering several upstream clients, the one usable card
 	// the credential goes through is recorded as its choice. Read before the
 	// challenge is consumed, so a failure leaves the page retryable.
-	upstreamPicks, err := s.consentUpstreamClientPicks(ctx, endpoint, pickState)
+	cards, err := s.buildRemoteSessionCards(ctx, endpoint, pickState, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
+	if err != nil {
+		return oops.E(oops.CodeUnavailable, err, "build remote session cards").LogError(ctx, logger)
+	}
+	upstreamPicks, err := s.consentUpstreamClientPicks(ctx, endpoint, pickState, cards)
 	if err != nil {
 		return oops.E(oops.CodeUnavailable, err, "read upstream client picks").LogError(ctx, logger)
 	}
-	authClientPicks, err := s.consentDirectAuthClientPick(ctx, endpoint, pickState, r.PostForm.Get("auth_client"), upstreamPicks)
+	authClientPicks, err := s.consentDirectAuthClientPick(ctx, endpoint, pickState, r.PostForm.Get("auth_client"), upstreamPicks, cards)
 	if err != nil {
 		if errors.Is(err, errConsentConfigurationChanged) {
 			return oops.E(oops.CodeFailedPrecondition, err, "The credential you chose can no longer be used. Reload this page to choose again.").LogWarn(ctx, logger)

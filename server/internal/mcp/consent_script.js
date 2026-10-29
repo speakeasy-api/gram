@@ -778,6 +778,9 @@
 
   // A gateway server's credential decides which of its tools can be
   // approved, so changing it reloads the page with every server's pick.
+  // Unsaved session length, agent selection, and tool toggles reset on this
+  // reload: approval must be reviewed against the newly selected credentials,
+  // rather than carrying a stale authorization selection into the new page.
   var gatewayAuthForm = document.querySelector("#gateway-auth-form");
   if (gatewayAuthForm) {
     var authSelects = document.querySelectorAll("select[data-auto-submit]");

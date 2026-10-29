@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestTypedConsentRegistrationsSkipsMembersUnlessEnforced(t *testing.T) {
@@ -27,14 +28,19 @@ func TestTypedConsentRegistrationsSkipsMembersUnlessEnforced(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Empty(t, typed)
+		subject := urn.NewUserSubject("user_1")
+		picks, err := f.service.consentDirectAuthClientPick(t.Context(), &ResolvedMcpEndpoint{OrganizationID: f.orgID, McpServerID: validUUID(f.serverID)}, AuthnChallengeState{Subject: &subject}, "", nil, nil)
+		require.NoError(t, err)
+		require.Nil(t, picks, "non-enforced approval must not need card-building dependencies")
 	}
+	f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
 	f.enforce()
 	calls := 0
 	typed, err := f.service.typedConsentRegistrations(t.Context(), endpoint, func() ([]metaMember, error) {
 		calls++
-		return nil, nil
+		return []metaMember{{serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied}}, nil
 	})
 	require.NoError(t, err)
-	require.Empty(t, typed)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{f.registration: f.projectID}, typed)
 	require.Equal(t, 1, calls)
 }
