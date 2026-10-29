@@ -347,11 +347,10 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 	if err := tx.Commit(ctx); err != nil {
 		return Distribution{}, fmt.Errorf("commit platform mcp distribution: %w", err)
 	}
-	distribution, err := s.publishCommittedDistribution(ctx, principal, row, plugin.Name, "Distribute Platform MCP to "+plugin.Name+" plugin")
+	distribution, err := s.publishCommittedDistribution(ctx, principal, row, plugin.Name, target.McpServerName, "Distribute Platform MCP to "+plugin.Name+" plugin")
 	if err != nil {
 		return Distribution{}, err
 	}
-	distribution.MCPServer = target.McpServerName
 	distribution.ShadowMCP = shadowMCPStanding(ctx, s.reads, s.links, principal, ResolvedProject{ID: target.ProjectID, Name: target.ProjectName, Slug: target.ProjectSlug}, remoteURL)
 	return distribution, nil
 }
@@ -474,7 +473,7 @@ func (s *DistributionService) Remove(ctx context.Context, principal Principal, i
 	if err := tx.Commit(ctx); err != nil {
 		return Distribution{}, fmt.Errorf("commit platform mcp distribution removal: %w", err)
 	}
-	if _, err := s.publishCommittedDistribution(ctx, principal, row, plugin.Name, "Remove Platform MCP from "+plugin.Name+" plugin"); err != nil {
+	if _, err := s.publishCommittedDistribution(ctx, principal, row, plugin.Name, target.McpServerName, "Remove Platform MCP from "+plugin.Name+" plugin"); err != nil {
 		return Distribution{}, err
 	}
 	// Current reads the attachment authority after publication, including an
@@ -530,7 +529,7 @@ func (s *DistributionService) RepairPublication(ctx context.Context, principal P
 	if err := tx.Commit(ctx); err != nil {
 		return Distribution{}, fmt.Errorf("commit platform mcp publication repair admission: %w", err)
 	}
-	distribution, err := s.publishCommittedDistribution(ctx, principal, row, plugin.Name, "Repair Platform MCP "+plugin.Name+" plugin publication")
+	distribution, err := s.publishCommittedDistribution(ctx, principal, row, plugin.Name, target.McpServerName, "Repair Platform MCP "+plugin.Name+" plugin publication")
 	if err != nil {
 		return Distribution{}, err
 	}
@@ -540,7 +539,7 @@ func (s *DistributionService) RepairPublication(ctx context.Context, principal P
 	return distribution, nil
 }
 
-func (s *DistributionService) publishCommittedDistribution(ctx context.Context, principal Principal, row repo.PlatformMcpDistribution, pluginName, commitMessage string) (Distribution, error) {
+func (s *DistributionService) publishCommittedDistribution(ctx context.Context, principal Principal, row repo.PlatformMcpDistribution, pluginName, mcpServerName, commitMessage string) (Distribution, error) {
 	publicationState := publicationStateRepairRequired
 	if s.publish != nil && s.publish(ctx, row.ProjectID, principal.UserID, commitMessage) == nil {
 		publicationState = publicationStateCurrent
@@ -555,12 +554,12 @@ func (s *DistributionService) publishCommittedDistribution(ctx context.Context, 
 		Version:          row.Version,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Distribution{State: row.State, Version: row.Version, AttachmentLive: row.State == distributionStateAttached, PublicationState: publicationStatePending, Plugin: pluginName}, nil
+		return Distribution{State: row.State, Version: row.Version, AttachmentLive: row.State == distributionStateAttached, PublicationState: publicationStatePending, Plugin: pluginName, MCPServer: mcpServerName}, nil
 	}
 	if err != nil {
 		return Distribution{}, fmt.Errorf("record platform mcp publication outcome: %w", err)
 	}
-	return Distribution{State: updated.State, Version: updated.Version, AttachmentLive: updated.State == distributionStateAttached, PublicationState: updated.PublicationState, Plugin: pluginName}, nil
+	return Distribution{State: updated.State, Version: updated.Version, AttachmentLive: updated.State == distributionStateAttached, PublicationState: updated.PublicationState, Plugin: pluginName, MCPServer: mcpServerName}, nil
 }
 
 // distributionTarget resolves the server a distribution acts on: the named MCP

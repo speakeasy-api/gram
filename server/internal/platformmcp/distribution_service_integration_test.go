@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -525,14 +526,6 @@ func TestDistributeToolSharesTheNamedServerNotTheSessionSelection(t *testing.T) 
 	call := func(mcpID string) json.RawMessage {
 		return json.RawMessage(`{"project_slug":"` + project.Slug + `","mcp_id":"` + mcpID + `","plugin":"` + defaultPlugin.ID.String() + `"}`)
 	}
-	// Invoke surfaces a tool refusal as an error carrying the refusal JSON.
-	refusal := func(err error) distributionErrorResult {
-		t.Helper()
-		require.Error(t, err)
-		var decoded distributionErrorResult
-		require.NoError(t, json.Unmarshal([]byte(err.Error()), &decoded))
-		return decoded
-	}
 
 	output, err := distribute.Invoke(callCtx, call(ready.McpServerID.UUID.String()))
 	require.NoError(t, err)
@@ -553,14 +546,14 @@ func TestDistributeToolSharesTheNamedServerNotTheSessionSelection(t *testing.T) 
 	require.ErrorIs(t, err, pgx.ErrNoRows, "the session's selection must not be shared")
 
 	_, err = distribute.Invoke(callCtx, call(unchecked.McpServerID.UUID.String()))
-	notReady := refusal(err)
+	notReady := decodeDistributionRefusal(t, err)
 	require.Equal(t, "not_ready", notReady.Code)
 	require.NotEmpty(t, notReady.MCPServer)
 	require.Contains(t, notReady.Message, notReady.MCPServer)
 
 	for _, mcpID := range []string{uuid.NewString(), "", "not-a-uuid"} {
 		_, err = distribute.Invoke(callCtx, call(mcpID))
-		require.Equal(t, "mcp_not_found", refusal(err).Code, "mcp_id %q", mcpID)
+		require.Equal(t, "mcp_not_found", decodeDistributionRefusal(t, err).Code, "mcp_id %q", mcpID)
 	}
 
 	remove := descriptorByName(t, reg, "remove_mcp_from_plugin")
@@ -570,4 +563,89 @@ func TestDistributeToolSharesTheNamedServerNotTheSessionSelection(t *testing.T) 
 	require.True(t, ok, "expected a removal, got %T", output)
 	require.False(t, removed.Attached)
 	require.Equal(t, shared.MCPServer, removed.MCPServer)
+}
+
+// decodeDistributionRefusal reads the refusal JSON that Invoke surfaces as the
+// error of a refused tool call.
+func decodeDistributionRefusal(t *testing.T, err error) distributionErrorResult {
+	t.Helper()
+	require.Error(t, err)
+	var decoded distributionErrorResult
+	require.NoError(t, json.Unmarshal([]byte(err.Error()), &decoded))
+	return decoded
+}
+
+// readinessByRegistrationAdapter is the deterministic fixture adapter, except
+// that it reports the notReady registration as needing configuration and counts
+// every probe.
+type readinessByRegistrationAdapter struct {
+	deterministicProviderAdapter
+	notReady uuid.UUID
+	probes   *atomic.Int32
+}
+
+func (a readinessByRegistrationAdapter) ProbeReadiness(ctx context.Context, request ProviderReadinessProbeRequest) (ProviderReadinessProbeResult, error) {
+	a.probes.Add(1)
+	result, err := a.deterministicProviderAdapter.ProbeReadiness(ctx, request)
+	if err == nil && request.RegistrationID == a.notReady {
+		result.State = ReadinessNeedsConfiguration
+		result.EvidenceCode = "upstream_identity_provider_not_configured"
+	}
+	return result, err
+}
+
+// A server with no stored readiness check is checked when it is shared, so a
+// working server is shared without a separate readiness call and one that is
+// not working is refused by name.
+func TestDistributeToolChecksTheNamedServerWhenNoCheckIsStored(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_distribution_call_time_probe")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	working := seedRegisteredMCP(t, ctx, conn, principal, project, "working-fixture")
+	broken := seedRegisteredMCP(t, ctx, conn, principal, project, "broken-fixture")
+	plugins := pluginsrepo.New(conn)
+	defaultPlugin, err := plugins.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID})
+	require.NoError(t, err)
+	attachment := func(mcpServerID uuid.NullUUID) error {
+		_, err := plugins.GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{
+			PluginID: defaultPlugin.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, McpServerID: mcpServerID,
+		})
+		return err
+	}
+
+	probes := &atomic.Int32{}
+	adapter := readinessByRegistrationAdapter{deterministicProviderAdapter: deterministicProviderAdapter{providerKey: "fixture"}, notReady: broken.ID, probes: probes}
+	gate := &testRegistrationGate{enabled: true}
+	readiness := NewReadinessService(store, gate, NewProviderAdapters([]ProviderAdapter{adapter}), allowOperationLimiter{}, allowBudget())
+	registrations := NewRegistrationService(nil, gate, store).WithReadiness(readiness)
+
+	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(conn))
+	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	registerDistributionTools(reg, NewOnboardingService(conn), service, registrations)
+	distribute := descriptorByName(t, reg, "distribute_mcp_to_plugin")
+	callCtx := ContextWithPrincipal(ctx, principal)
+	call := func(mcpID string) json.RawMessage {
+		return json.RawMessage(`{"project_slug":"` + project.Slug + `","mcp_id":"` + mcpID + `","plugin":"` + defaultPlugin.ID.String() + `"}`)
+	}
+
+	output, err := distribute.Invoke(callCtx, call(working.McpServerID.UUID.String()))
+	require.NoError(t, err)
+	shared, ok := output.(DistributeMCPToolOutput)
+	require.True(t, ok, "expected a distribution, got %T", output)
+	require.True(t, shared.Attached)
+	require.Equal(t, int32(1), probes.Load(), "a server with no stored check must be checked once")
+	require.NoError(t, attachment(working.McpServerID), "the checked server must be shared")
+
+	_, err = distribute.Invoke(callCtx, call(broken.McpServerID.UUID.String()))
+	refusal := decodeDistributionRefusal(t, err)
+	require.Equal(t, "not_ready", refusal.Code)
+	require.NotEmpty(t, refusal.MCPServer)
+	require.Equal(t, int32(2), probes.Load())
+	require.ErrorIs(t, attachment(broken.McpServerID), pgx.ErrNoRows, "a server that is not working must not be shared")
 }

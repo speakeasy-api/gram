@@ -152,16 +152,24 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 			result, _ := distributionToolError(ErrDistributionMCPNotFound, "")
 			return result, DistributeMCPToolOutput{}, nil
 		}
-		current, err := distributions.Current(ctx, principal, input.ProjectSlug, mcpServerID, input.Plugin)
+		// Resolve the server first so a plugin refusal still names it.
+		target, err := distributions.Target(ctx, principal, input.ProjectSlug, mcpServerID)
 		if err != nil {
 			if result, ok := distributionToolError(err, ""); ok {
 				return result, DistributeMCPToolOutput{}, nil
 			}
 			return nil, DistributeMCPToolOutput{}, err
 		}
+		current, err := distributions.Current(ctx, principal, input.ProjectSlug, mcpServerID, input.Plugin)
+		if err != nil {
+			if result, ok := distributionToolError(err, target.MCPServerName); ok {
+				return result, DistributeMCPToolOutput{}, nil
+			}
+			return nil, DistributeMCPToolOutput{}, err
+		}
 		distribution, err := distributions.Remove(ctx, principal, DistributionInput{ProjectSlug: input.ProjectSlug, MCPServerID: mcpServerID, Plugin: input.Plugin, ExpectedVersion: current.Version})
 		if err != nil {
-			if result, ok := distributionToolError(err, current.MCPServer); ok {
+			if result, ok := distributionToolError(err, target.MCPServerName); ok {
 				return result, DistributeMCPToolOutput{}, nil
 			}
 			return nil, DistributeMCPToolOutput{}, err
@@ -196,7 +204,7 @@ func distributionToolError(err error, server string) (*mcp.CallToolResult, bool)
 	case errors.Is(err, ErrDistributionDefaultAbsent):
 		result = distributionErrorResult{Code: "default_plugin_missing", Message: "This project has no Default plugin, so the MCP server cannot be added there. Name an existing plugin instead."}
 	case errors.Is(err, ErrDistributionInvalid):
-		result = distributionErrorResult{Code: "no_distribution_target", Message: "No MCP server from this session has been added to that project. Give the exact slug of the project you added it to, and add the MCP server there with register_catalog_mcp or register_remote_mcp first."}
+		result = distributionErrorResult{Code: "no_distribution_target", Message: "There is no MCP server added through setup in that project to act on. Give the exact slug of the project the server was added to and the server's ID from find_mcp in that project; do not add the server again."}
 	case errors.Is(err, ErrDistributionTargetUnavailable):
 		result = distributionErrorResult{Code: "distribution_target_unavailable", Message: "That project, or this MCP server's setup in it, is no longer available. Check where setup got to and take the next step it offers."}
 	case errors.Is(err, ErrDistributionConflict):
