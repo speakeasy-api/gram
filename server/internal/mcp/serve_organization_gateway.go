@@ -398,7 +398,44 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 // the organization, and one person reaches only some of them. Listing the
 // rest would show a person connections, and the services behind them, for
 // servers their access does not include.
+//
+// Where typed auth client resolution is enforced, the registrations its
+// servers offer through typed auth clients are listed too, whether or not the
+// sign-in links them.
 func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]remotesessions.Client, error) {
+	clients, _, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
+	return clients, err
+}
+
+// listEndpointClientsAndRegistrations shares one lazy member snapshot between
+// sign-in filtering and typed registration discovery. Disabled enforcement
+// does not trigger member discovery just to return an empty registration map.
+func (s *Service) listEndpointClientsAndRegistrations(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]remotesessions.Client, map[uuid.UUID]uuid.UUID, error) {
+	var members []metaMember
+	var membersErr error
+	loaded := false
+	loadMembers := func() ([]metaMember, error) {
+		if !loaded {
+			members, membersErr = s.consentSubjectMembers(ctx, endpoint, challengeState)
+			loaded = true
+		}
+		return members, membersErr
+	}
+	clients, err := s.listSignInClients(ctx, endpoint, challengeState, loadMembers)
+	if err != nil {
+		return nil, nil, err
+	}
+	typed, err := s.typedConsentRegistrations(ctx, endpoint, loadMembers)
+	if err != nil {
+		return nil, nil, err
+	}
+	clients, err = s.withTypedRegistrationClients(ctx, endpoint.OrganizationID, clients, typed)
+	return clients, typed, err
+}
+
+// listSignInClients is the clients the endpoint's sign-in links that
+// listEndpointClients offers.
+func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, loadMembers func() ([]metaMember, error)) ([]remotesessions.Client, error) {
 	if endpoint.IsOrganizationGateway() {
 		clients, err := s.remoteChallengeMgr.ListOrganizationClients(ctx, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 		if err != nil {
@@ -407,7 +444,7 @@ func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcp
 		if len(clients) == 0 {
 			return nil, nil
 		}
-		members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
+		members, err := loadMembers()
 		if err != nil {
 			return nil, err
 		}
@@ -441,7 +478,7 @@ func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcp
 			return !own[client.ID] || (challengeState.WorkloadReconnect != nil && client.ID != challengeState.WorkloadReconnect.ClientID)
 		}), nil
 	case endpoint.MetaMcpServerID.Valid:
-		members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
+		members, err := loadMembers()
 		if err != nil {
 			return nil, err
 		}
@@ -466,6 +503,9 @@ func (s *Service) consentSubjectMembers(ctx context.Context, endpoint *ResolvedM
 	_, members, err := s.resolveEndpointMemberSnapshot(memberCtx, s.logger, mandatorySurfaceConsent, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("resolve gateway members: %w", err)
+	}
+	if err := s.withTypedMemberRegistrations(ctx, endpoint.OrganizationID, members); err != nil {
+		return nil, err
 	}
 	return members, nil
 }

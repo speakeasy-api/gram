@@ -475,7 +475,7 @@ func (q *Queries) GetRequiresUpstreamAuthFixture(ctx context.Context, id uuid.UU
 }
 
 const getSelectionFixture = `-- name: GetSelectionFixture :one
-SELECT remote_session_client_id, auth_client_id, no_auth
+SELECT remote_session_client_id, auth_client_id, no_auth, source
 FROM upstream_client_selections
 WHERE credential_id = $1 AND mcp_server_id = $2 AND deleted IS FALSE
 `
@@ -489,12 +489,18 @@ type GetSelectionFixtureRow struct {
 	RemoteSessionClientID uuid.NullUUID
 	AuthClientID          uuid.NullUUID
 	NoAuth                bool
+	Source                string
 }
 
 func (q *Queries) GetSelectionFixture(ctx context.Context, arg GetSelectionFixtureParams) (GetSelectionFixtureRow, error) {
 	row := q.db.QueryRow(ctx, getSelectionFixture, arg.CredentialID, arg.McpServerID)
 	var i GetSelectionFixtureRow
-	err := row.Scan(&i.RemoteSessionClientID, &i.AuthClientID, &i.NoAuth)
+	err := row.Scan(
+		&i.RemoteSessionClientID,
+		&i.AuthClientID,
+		&i.NoAuth,
+		&i.Source,
+	)
 	return i, err
 }
 
@@ -5059,7 +5065,7 @@ INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id,
 VALUES (
     $1, $2, $3, $4,
     (SELECT ac.attachment_scope FROM mcp_auth_clients AS ac WHERE ac.id = $4),
-    'admin'
+    $5
 )
 `
 
@@ -5068,6 +5074,7 @@ type SeedServerAuthClientLinkFixtureParams struct {
 	OrganizationID string
 	McpServerID    uuid.UUID
 	AuthClientID   uuid.UUID
+	Source         string
 }
 
 func (q *Queries) SeedServerAuthClientLinkFixture(ctx context.Context, arg SeedServerAuthClientLinkFixtureParams) error {
@@ -5076,6 +5083,7 @@ func (q *Queries) SeedServerAuthClientLinkFixture(ctx context.Context, arg SeedS
 		arg.OrganizationID,
 		arg.McpServerID,
 		arg.AuthClientID,
+		arg.Source,
 	)
 	return err
 }

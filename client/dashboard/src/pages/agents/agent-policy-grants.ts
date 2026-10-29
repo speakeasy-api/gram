@@ -383,14 +383,24 @@ export interface AgentPolicyView {
 }
 
 /**
+ * Credential restrictions share the policy but are listed and edited in their
+ * own panel, so the permission editor neither shows nor rewrites them.
+ */
+export const AGENT_CREDENTIAL_BLOCK_SCOPE = "mcp:blocked_auth";
+
+/**
  * Split the stored ceiling into what the editor may rewrite and what it must
  * leave alone. A scope with even one unrepresentable grant is locked whole:
  * editing half of one would let a save drop the constrained grant and re-add a
- * broader one under the same scope.
+ * broader one under the same scope. Credential restrictions are left out of
+ * both; the fingerprint of the full ceiling still covers them.
  */
 export function agentPolicyViewFromGrants(
-  grants: AgentPolicyGrant[],
+  stored: AgentPolicyGrant[],
 ): AgentPolicyView {
+  const grants = stored.filter(
+    (grant) => grant.scope !== AGENT_CREDENTIAL_BLOCK_SCOPE,
+  );
   const locked = new Set(
     grants
       .filter((grant) => !isAgentPolicyGrantRepresentable(grant))

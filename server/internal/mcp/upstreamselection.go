@@ -394,6 +394,10 @@ type memberChoices struct {
 	// which has no upstream client choice to fall back to.
 	profile bool
 
+	// metaServerID is the gateway the members belong to; invalid for the
+	// organization gateway, which has no member list.
+	metaServerID uuid.NullUUID
+
 	mu       sync.Mutex
 	byServer map[uuid.UUID]*memberTokens
 }
@@ -431,10 +435,11 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 		selector, profile = s.profileSelector(authenticated.Credential, endpoint), true
 	}
 	return &memberChoices{
-		selector: selector,
-		enforced: enforced,
-		subject:  authentication.subject,
-		profile:  profile,
+		selector:     selector,
+		enforced:     enforced,
+		subject:      authentication.subject,
+		profile:      profile,
+		metaServerID: endpoint.MetaMcpServerID,
 		resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 			return s.resolveChosenMemberTokens(ctx, endpoint, authentication.subject, enforced, member)
 		},
@@ -512,14 +517,21 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	var err error
 	if typed {
 		resolved, err = c.selector.resolveAuthClients(ctx, ids)
+		if err == nil && c.enforced && !c.profile && c.recordNewMemberChoices(ctx, logger, members, resolved) {
+			resolved, err = c.selector.resolveAuthClients(ctx, ids)
+		}
 		ids = ids[:0]
 		for id, res := range resolved {
 			if res.outcome != authClientLegacy {
 				continue
 			}
-			// An enforced choice that names no auth client is a gap, never
-			// served by the upstream client choice; a profile has none.
-			if c.profile || (c.enforced && res.clientID == uuid.Nil) {
+			// An enforced choice that names no auth client is never served
+			// by the upstream client choice; a profile has none.
+			if (c.profile || c.enforced) && res.clientID == uuid.Nil {
+				resolved[id] = withoutLegacyFallback(res)
+				continue
+			}
+			if c.profile {
 				res.outcome = authClientGap
 				resolved[id] = res
 				continue
@@ -545,7 +557,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 			}, res, nil)
 			resolved[id] = prepared
 			memberErrors[id] = prepareErr
-			if prepareErr == nil && prepared.outcome == authClientResolved && !prepared.tunneled {
+			if prepareErr == nil && prepared.sendsClientHeaders() {
 				headerIDs = append(headerIDs, prepared.clientID)
 			}
 		}
@@ -564,7 +576,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 					res = choice
 				}
 				memberErr = memberErrors[member.serverID]
-				if memberErr == nil && res.outcome == authClientResolved && !res.tunneled {
+				if memberErr == nil && res.sendsClientHeaders() {
 					memberErr = headerErr
 					if memberErr == nil {
 						clientHeaders := headers[res.clientID]

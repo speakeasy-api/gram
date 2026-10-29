@@ -525,6 +525,16 @@ const (
 	MetaDispatchOutcomeKey        = attribute.Key("gram.meta.dispatch.outcome")
 	McpURLKey                     = attribute.Key("gram.mcp.url")
 
+	// Gateway consent diagnostics contain IDs and comparison results only,
+	// never credentials, configuration hashes, or captured tool definitions.
+	McpConsentMemberProjectIDKey = attribute.Key("gram.mcp.consent.member_project_id")
+	McpConsentCatalogIDKey       = attribute.Key("gram.mcp.consent.catalog_id")
+	McpConsentDiscoveryModeKey   = attribute.Key("gram.mcp.consent.discovery_mode")
+	McpConsentCatalogModeKey     = attribute.Key("gram.mcp.consent.catalog_mode")
+	McpConsentExecuteKey         = attribute.Key("gram.mcp.consent.execute")
+	McpConsentComparisonsKey     = attribute.Key("gram.mcp.consent.comparisons")
+	McpConsentExpiresAtKey       = attribute.Key("gram.mcp.consent.expires_at")
+
 	// McpClientNameKey / McpClientVersionKey carry the MCP caller's
 	// self-reported identity from the initialize handshake (or the
 	// per-request _meta hint). Untrusted client input: attribution only,
@@ -3342,6 +3352,26 @@ func SlogMetaMcpServerID(v string) slog.Attr        { return slog.String(string(
 func MetaMemberBackend(v string) attribute.KeyValue { return MetaMemberBackendKey.String(v) }
 func MetaDispatchOutcome[V ~string](v V) attribute.KeyValue {
 	return MetaDispatchOutcomeKey.String(string(v))
+}
+
+func SlogMcpConsentMemberProjectID(v string) slog.Attr {
+	return slog.String(string(McpConsentMemberProjectIDKey), v)
+}
+func SlogMcpConsentCatalogID(v string) slog.Attr {
+	return slog.String(string(McpConsentCatalogIDKey), v)
+}
+func SlogMcpConsentDiscoveryMode(v string) slog.Attr {
+	return slog.String(string(McpConsentDiscoveryModeKey), v)
+}
+func SlogMcpConsentCatalogMode(v string) slog.Attr {
+	return slog.String(string(McpConsentCatalogModeKey), v)
+}
+func SlogMcpConsentExecute(v bool) slog.Attr { return slog.Bool(string(McpConsentExecuteKey), v) }
+func SlogMcpConsentComparisons(v map[string]bool) slog.Attr {
+	return slog.Any(string(McpConsentComparisonsKey), v)
+}
+func SlogMcpConsentExpiresAt(v time.Time) slog.Attr {
+	return slog.Time(string(McpConsentExpiresAtKey), v)
 }
 
 func ToolsetID(v string) attribute.KeyValue { return ToolsetIDKey.String(v) }

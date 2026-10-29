@@ -22,6 +22,9 @@ type Server struct {
 	ListAuthClients                     http.Handler
 	GetAuthClient                       http.Handler
 	UpdateAuthClient                    http.Handler
+	CreateAuthClient                    http.Handler
+	AttachAuthClientToMcpServer         http.Handler
+	SetAuthClientHeaders                http.Handler
 	DetachAuthClientFromMcpServer       http.Handler
 	GetMcpServerAuthentication          http.Handler
 	SetMcpServerUpstreamAuthRequirement http.Handler
@@ -59,6 +62,9 @@ func New(
 			{"ListAuthClients", "GET", "/rpc/authClients.list"},
 			{"GetAuthClient", "GET", "/rpc/authClients.get"},
 			{"UpdateAuthClient", "POST", "/rpc/authClients.update"},
+			{"CreateAuthClient", "POST", "/rpc/authClients.create"},
+			{"AttachAuthClientToMcpServer", "POST", "/rpc/authClients.attachToMcpServer"},
+			{"SetAuthClientHeaders", "POST", "/rpc/authClients.setHeaders"},
 			{"DetachAuthClientFromMcpServer", "POST", "/rpc/authClients.detachFromMcpServer"},
 			{"GetMcpServerAuthentication", "GET", "/rpc/authClients.getMcpServerAuthentication"},
 			{"SetMcpServerUpstreamAuthRequirement", "POST", "/rpc/authClients.setMcpServerUpstreamAuthRequirement"},
@@ -68,6 +74,9 @@ func New(
 		ListAuthClients:                     NewListAuthClientsHandler(e.ListAuthClients, mux, decoder, encoder, errhandler, formatter),
 		GetAuthClient:                       NewGetAuthClientHandler(e.GetAuthClient, mux, decoder, encoder, errhandler, formatter),
 		UpdateAuthClient:                    NewUpdateAuthClientHandler(e.UpdateAuthClient, mux, decoder, encoder, errhandler, formatter),
+		CreateAuthClient:                    NewCreateAuthClientHandler(e.CreateAuthClient, mux, decoder, encoder, errhandler, formatter),
+		AttachAuthClientToMcpServer:         NewAttachAuthClientToMcpServerHandler(e.AttachAuthClientToMcpServer, mux, decoder, encoder, errhandler, formatter),
+		SetAuthClientHeaders:                NewSetAuthClientHeadersHandler(e.SetAuthClientHeaders, mux, decoder, encoder, errhandler, formatter),
 		DetachAuthClientFromMcpServer:       NewDetachAuthClientFromMcpServerHandler(e.DetachAuthClientFromMcpServer, mux, decoder, encoder, errhandler, formatter),
 		GetMcpServerAuthentication:          NewGetMcpServerAuthenticationHandler(e.GetMcpServerAuthentication, mux, decoder, encoder, errhandler, formatter),
 		SetMcpServerUpstreamAuthRequirement: NewSetMcpServerUpstreamAuthRequirementHandler(e.SetMcpServerUpstreamAuthRequirement, mux, decoder, encoder, errhandler, formatter),
@@ -84,6 +93,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListAuthClients = m(s.ListAuthClients)
 	s.GetAuthClient = m(s.GetAuthClient)
 	s.UpdateAuthClient = m(s.UpdateAuthClient)
+	s.CreateAuthClient = m(s.CreateAuthClient)
+	s.AttachAuthClientToMcpServer = m(s.AttachAuthClientToMcpServer)
+	s.SetAuthClientHeaders = m(s.SetAuthClientHeaders)
 	s.DetachAuthClientFromMcpServer = m(s.DetachAuthClientFromMcpServer)
 	s.GetMcpServerAuthentication = m(s.GetMcpServerAuthentication)
 	s.SetMcpServerUpstreamAuthRequirement = m(s.SetMcpServerUpstreamAuthRequirement)
@@ -99,6 +111,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListAuthClientsHandler(mux, h.ListAuthClients)
 	MountGetAuthClientHandler(mux, h.GetAuthClient)
 	MountUpdateAuthClientHandler(mux, h.UpdateAuthClient)
+	MountCreateAuthClientHandler(mux, h.CreateAuthClient)
+	MountAttachAuthClientToMcpServerHandler(mux, h.AttachAuthClientToMcpServer)
+	MountSetAuthClientHeadersHandler(mux, h.SetAuthClientHeaders)
 	MountDetachAuthClientFromMcpServerHandler(mux, h.DetachAuthClientFromMcpServer)
 	MountGetMcpServerAuthenticationHandler(mux, h.GetMcpServerAuthentication)
 	MountSetMcpServerUpstreamAuthRequirementHandler(mux, h.SetMcpServerUpstreamAuthRequirement)
@@ -247,6 +262,166 @@ func NewUpdateAuthClientHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateAuthClient")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "authClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateAuthClientHandler configures the mux to serve the "authClients"
+// service "createAuthClient" endpoint.
+func MountCreateAuthClientHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/authClients.create", f)
+}
+
+// NewCreateAuthClientHandler creates a HTTP handler which loads the HTTP
+// request and calls the "authClients" service "createAuthClient" endpoint.
+func NewCreateAuthClientHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateAuthClientRequest(mux, decoder)
+		encodeResponse = EncodeCreateAuthClientResponse(encoder)
+		encodeError    = EncodeCreateAuthClientError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createAuthClient")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "authClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountAttachAuthClientToMcpServerHandler configures the mux to serve the
+// "authClients" service "attachAuthClientToMcpServer" endpoint.
+func MountAttachAuthClientToMcpServerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/authClients.attachToMcpServer", f)
+}
+
+// NewAttachAuthClientToMcpServerHandler creates a HTTP handler which loads the
+// HTTP request and calls the "authClients" service
+// "attachAuthClientToMcpServer" endpoint.
+func NewAttachAuthClientToMcpServerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeAttachAuthClientToMcpServerRequest(mux, decoder)
+		encodeResponse = EncodeAttachAuthClientToMcpServerResponse(encoder)
+		encodeError    = EncodeAttachAuthClientToMcpServerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "attachAuthClientToMcpServer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "authClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetAuthClientHeadersHandler configures the mux to serve the
+// "authClients" service "setAuthClientHeaders" endpoint.
+func MountSetAuthClientHeadersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/authClients.setHeaders", f)
+}
+
+// NewSetAuthClientHeadersHandler creates a HTTP handler which loads the HTTP
+// request and calls the "authClients" service "setAuthClientHeaders" endpoint.
+func NewSetAuthClientHeadersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetAuthClientHeadersRequest(mux, decoder)
+		encodeResponse = EncodeSetAuthClientHeadersResponse(encoder)
+		encodeError    = EncodeSetAuthClientHeadersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setAuthClientHeaders")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "authClients")
 		payload, err := decodeRequest(r)
 		if err != nil {

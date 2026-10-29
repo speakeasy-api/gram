@@ -201,3 +201,144 @@ WHERE msac.mcp_server_id = @mcp_server_id
   AND msac.organization_id = @organization_id
   AND msac.deleted IS FALSE
 ORDER BY ac.name, ac.id;
+
+-- name: GetAuthClientRegistration :one
+-- An OAuth registration a new remote_session or service_account client may
+-- name: live, with a live issuer, and in the client's project, shared across
+-- the organization, or platform-global.
+SELECT c.id,
+       c.attachment_scope,
+       c.credential_owner,
+       c.project_id,
+       c.organization_id
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS rsi
+  ON rsi.id = c.remote_session_issuer_id
+ AND rsi.deleted IS FALSE
+ AND (
+   (rsi.project_id IS NOT NULL AND rsi.project_id = sqlc.narg(project_id)::uuid)
+   OR (rsi.project_id IS NULL AND rsi.organization_id = @organization_id::text)
+   OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL)
+ )
+WHERE c.id = @id
+  AND c.deleted IS FALSE
+  AND (
+    (c.project_id IS NOT NULL AND c.project_id = sqlc.narg(project_id)::uuid)
+    OR (c.project_id IS NULL AND c.organization_id = @organization_id::text)
+    OR (c.project_id IS NULL AND c.organization_id IS NULL)
+  )
+  AND (c.project_id IS NULL OR EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.id = c.project_id
+      AND p.organization_id = @organization_id::text
+      AND p.deleted IS FALSE
+  ));
+
+-- name: GetOrganizationProject :one
+SELECT p.id
+FROM projects p
+WHERE p.id = @id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE;
+
+-- name: CreateAuthClient :one
+INSERT INTO mcp_auth_clients (
+  organization_id,
+  project_id,
+  client_type,
+  source,
+  name,
+  created_by_user_id,
+  remote_session_client_id,
+  client_attachment_scope
+) VALUES (
+  @organization_id,
+  sqlc.narg(project_id)::uuid,
+  @client_type,
+  'admin',
+  @name,
+  @created_by_user_id,
+  sqlc.narg(remote_session_client_id)::uuid,
+  sqlc.narg(client_attachment_scope)::text
+)
+RETURNING *;
+
+-- name: LockAttachableMCPServer :one
+-- A proxied (remote or tunneled) MCP server in the organization, locked so an
+-- attachment serializes with SetMcpServerUpstreamAuthRequirement.
+SELECT
+  ms.id,
+  ms.project_id,
+  ms.name,
+  ms.requires_upstream_auth,
+  (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS proxied,
+  (ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS tunneled
+FROM mcp_servers ms
+JOIN projects p
+  ON p.id = ms.project_id
+ AND p.organization_id = @organization_id
+ AND p.deleted IS FALSE
+WHERE ms.id = @id
+  AND ms.deleted IS FALSE
+FOR UPDATE OF ms;
+
+-- name: AttachAuthClientToServer :one
+-- Offers the client on the server as an administrator-owned association. An
+-- existing live association is kept as it is.
+INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+SELECT ms.project_id, ac.organization_id, ms.id, ac.id, ac.attachment_scope, 'admin'
+FROM mcp_auth_clients ac
+JOIN mcp_servers ms
+  ON ms.id = @mcp_server_id
+ AND ms.deleted IS FALSE
+ AND (ac.project_id IS NULL OR ac.project_id = ms.project_id)
+JOIN projects p
+  ON p.id = ms.project_id
+ AND p.organization_id = ac.organization_id
+ AND p.deleted IS FALSE
+WHERE ac.id = @auth_client_id
+  AND ac.organization_id = @organization_id
+  AND ac.deleted IS FALSE
+ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO NOTHING
+RETURNING id;
+
+-- name: ListAuthClientStoredHeaders :many
+-- A client's live headers with their stored values, for a writer that keeps a
+-- secret's stored value when no new one is given. Values stay encrypted.
+SELECT h.name,
+       h.is_secret,
+       h.value
+FROM mcp_auth_client_headers h
+WHERE h.auth_client_id = @auth_client_id
+  AND h.organization_id = @organization_id
+  AND h.deleted IS FALSE;
+
+-- name: DeleteAuthClientHeaders :exec
+UPDATE mcp_auth_client_headers
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE auth_client_id = @auth_client_id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;
+
+-- name: CreateAuthClientHeader :exec
+INSERT INTO mcp_auth_client_headers (
+  auth_client_id,
+  organization_id,
+  name,
+  description,
+  is_required,
+  is_secret,
+  value,
+  value_from_request_header
+) VALUES (
+  @auth_client_id,
+  @organization_id,
+  @name,
+  @description,
+  @is_required,
+  @is_secret,
+  @value,
+  @value_from_request_header
+);
