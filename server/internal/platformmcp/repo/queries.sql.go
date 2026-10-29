@@ -3303,6 +3303,40 @@ func (q *Queries) GetPlatformMCPReadiness(ctx context.Context, arg GetPlatformMC
 	return i, err
 }
 
+const getPlatformMCPRegistrationLogo = `-- name: GetPlatformMCPRegistrationLogo :one
+SELECT a.url, a.content_type, a.content_length
+FROM platform_mcp_catalog_registrations r
+JOIN mcp_metadata m ON m.mcp_server_id = r.mcp_server_id AND m.project_id = r.project_id
+JOIN assets a ON a.id = m.logo_id AND a.project_id = r.project_id
+WHERE r.id = $1
+  AND r.organization_id = $2
+  AND r.project_id = $3
+  AND r.deleted IS FALSE
+  AND a.kind = 'image'
+  AND a.deleted IS FALSE
+`
+
+type GetPlatformMCPRegistrationLogoParams struct {
+	RegistrationID uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformMCPRegistrationLogoRow struct {
+	Url           string
+	ContentType   string
+	ContentLength int64
+}
+
+// The stored logo of a registration's MCP server, for its result card. Every
+// join is pinned to the registration's organization and project.
+func (q *Queries) GetPlatformMCPRegistrationLogo(ctx context.Context, arg GetPlatformMCPRegistrationLogoParams) (GetPlatformMCPRegistrationLogoRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPRegistrationLogo, arg.RegistrationID, arg.OrganizationID, arg.ProjectID)
+	var i GetPlatformMCPRegistrationLogoRow
+	err := row.Scan(&i.Url, &i.ContentType, &i.ContentLength)
+	return i, err
+}
+
 const getPlatformMCPSelectedUseTarget = `-- name: GetPlatformMCPSelectedUseTarget :one
 SELECT
     distribution.id AS distribution_id,
