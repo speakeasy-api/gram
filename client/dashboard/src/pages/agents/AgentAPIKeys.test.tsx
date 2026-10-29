@@ -564,6 +564,12 @@ describe("Agent API keys", () => {
     expect(
       screen.getByRole("button", { name: "Back to agent" }),
     ).toHaveProperty("disabled", true);
+    for (const name of ["Cancel", "Back", "Servers", "Accounts", "Access"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button).toHaveProperty("disabled", true);
+      fireEvent.click(button);
+    }
+    expect(screen.getByRole("button", { name: "Creating…" })).toBeTruthy();
     expect(mocks.create).not.toHaveBeenCalled();
     finishChoices({ choices: [] });
     await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
@@ -622,6 +628,25 @@ describe("Agent API keys", () => {
       expect(screen.queryByText("secret_example_once")).toBeNull();
     },
   );
+  it("does not issue a key after switching agents during credential discovery", async () => {
+    mocks.selectedKind = "Remote";
+    let finishChoices!: (value: { choices: [] }) => void;
+    const { change } = setup();
+    await openCreate();
+    mocks.listChoices.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishChoices = resolve;
+        }),
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    submitKey();
+    await waitFor(() => expect(finishChoices).toBeTypeOf("function"));
+    change({ ...agent, id: "agent_other" });
+    finishChoices({ choices: [] });
+    await screen.findByText("Example key");
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
   it("does not reveal an in-flight creation after switching agents", async () => {
     let resolve!: (value: unknown) => void;
     mocks.create.mockImplementation(

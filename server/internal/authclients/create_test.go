@@ -422,9 +422,28 @@ func TestListMcpServerChoicesOffersWhatAnAgentKeyCanUse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	personal := seedRegistration(t, ctx, ti.conn, ti.organizationID, ti.projectID, "subject")
+	_, err = ti.service.CreateAuthClient(ctx, &gen.CreateAuthClientPayload{
+		ClientType:            authz.AuthClientTypeRemoteSession,
+		Name:                  "Personal connection",
+		ProjectID:             new(ti.projectID.String()),
+		RemoteSessionClientID: new(personal.String()),
+		McpServerIds:          []string{server.id.String()},
+	})
+	require.NoError(t, err)
+	disabled, err := ti.service.CreateAuthClient(ctx, &gen.CreateAuthClientPayload{
+		ClientType:   authz.AuthClientTypeStaticCredential,
+		Name:         "Disabled team token",
+		Headers:      []*gen.AuthClientHeaderInput{{Name: "X-Api-Key", IsSecret: true, Value: new("sk-disabled")}},
+		McpServerIds: []string{server.id.String()},
+	})
+	require.NoError(t, err)
+	_, err = ti.service.UpdateAuthClient(ctx, &gen.UpdateAuthClientPayload{ID: disabled.ID, Enabled: new(false)})
+	require.NoError(t, err)
+
 	connectCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPConnect, server.id.String()))
 	listed, err := ti.service.ListMcpServerAuthClientChoices(connectCtx, &gen.ListMcpServerAuthClientChoicesPayload{McpServerID: server.id.String()})
 	require.NoError(t, err)
-	require.Len(t, listed.Choices, 1, "a pass-through needs the caller's headers, which the agent gateway does not forward")
+	require.Len(t, listed.Choices, 1, "only enabled shared credentials are offered, never personal or pass-through clients")
 	require.Equal(t, static.ID, listed.Choices[0].ID)
 }
