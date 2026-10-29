@@ -1759,7 +1759,11 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 
 	// RFC 6749 §5.1: a response that omits scope granted exactly what was
 	// requested, so the requested set is what the session records.
-	scopes := tok.Scopes()
+	scopeIssuer, err := queries.GetRemoteSessionClientWithIssuerByID(ctx, client.ID)
+	if err != nil {
+		return none, oops.E(oops.CodeUnexpected, err, "load token scope issuer").LogError(ctx, logger)
+	}
+	scopes := tok.scopesForIssuer(scopeIssuer.IssuerUrl)
 	if !tok.ScopeReported() {
 		if jwtAccess.ok() && jwtAccess.scopePresent {
 			scopes = jwtAccess.scopes

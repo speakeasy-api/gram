@@ -47,6 +47,11 @@ type Service interface {
 	// and agent write permission. Attachment requires ownership of the upstream
 	// session; editors can remove any assignment. Never returns credentials.
 	DetachBinding(context.Context, *DetachBindingPayload) (err error)
+	// Initialize a directly Remote MCP-backed server and discover all tools using
+	// the signed-in user's saved authorization. Never executes tools. A provider
+	// tab returning is not evidence of authorization. Requires an ordinary
+	// dashboard session and mcp:connect on the exact server; API keys are refused.
+	TestServerConnection(context.Context, *TestServerConnectionPayload) (res *ServerConnectionTestResult, err error)
 	// Atomically configure identity for a Remote MCP-backed MCP server. The
 	// complete plan selects or creates a project Remote Identity Provider and
 	// links an existing client, creates a manual client, or automatically prefers
@@ -122,7 +127,7 @@ const ServiceName = "remoteSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"beginBindingRefresh", "completeBindingRefresh", "listBindings", "attachBinding", "detachBinding", "commitServerIdentityConfiguration", "getServerIdentityImpact", "listServerClientAssociations", "detachServerClientAssociation", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
+var MethodNames = [13]string{"beginBindingRefresh", "completeBindingRefresh", "listBindings", "attachBinding", "detachBinding", "testServerConnection", "commitServerIdentityConfiguration", "getServerIdentityImpact", "listServerClientAssociations", "detachServerClientAssociation", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
 
 // AttachBindingPayload is the payload type of the remoteSessions service
 // attachBinding method.
@@ -170,6 +175,10 @@ type CommitServerIdentityConfigurationPayload struct {
 	McpServerID string
 	// An existing Remote Identity Provider visible to the target project.
 	ProviderID *string
+	// Refuse a save if the user session issuer also serves another MCP server.
+	// Setup screens must set this to avoid changing shared sign-in bindings.
+	// Explicitly assign a dedicated issuer before retrying.
+	TargetServerOnly *bool
 	// A new project-scoped Remote Identity Provider to create.
 	CreateProvider *CreateRemoteSessionIssuerForm
 	// How to provide the OAuth client.
@@ -493,6 +502,19 @@ type ServerClientAssociation struct {
 	AssociatedAt string
 }
 
+// ServerConnectionTestResult is the result type of the remoteSessions service
+// testServerConnection method.
+type ServerConnectionTestResult struct {
+	// Live result of this test, never a persisted completion record.
+	Status string
+	// Stable, credential-free reason suitable for choosing a recovery action.
+	Code string
+	// Safe message for display in the failed setup step.
+	Message string
+	// Tools discovered, present only after every tools/list page succeeds.
+	ToolCount *int
+}
+
 // Configuration for a newly-created project remote-session client. Manual mode
 // requires client_id. Auto mode forbids client_id and client_secret and uses
 // scope, audience, and token_endpoint_auth_method as registration preferences.
@@ -554,6 +576,15 @@ type ServerIdentityRegistrationFailure struct {
 	ProviderMessage *string
 	// Optional upstream HTTP status.
 	HTTPStatus *int
+}
+
+// TestServerConnectionPayload is the payload type of the remoteSessions
+// service testServerConnection method.
+type TestServerConnectionPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Exact MCP server to test.
+	McpServerID string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
