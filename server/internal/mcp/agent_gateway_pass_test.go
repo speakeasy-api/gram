@@ -20,8 +20,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -178,6 +181,52 @@ func (g workloadGatewayFixture) callTool(t *testing.T, token, tool string, argum
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	return decodeRPCResponse(t, w)
+}
+
+// attachMember makes serverID a member of the gateway.
+func (g workloadGatewayFixture) attachMember(t *testing.T, serverID uuid.UUID) {
+	t.Helper()
+
+	_, err := metamcprepo.New(g.ti.conn).CreateMetaMCPMember(g.fixtureContext(t), metamcprepo.CreateMetaMCPMemberParams{
+		ProjectID:       g.fx.target.ProjectID,
+		MetaMcpServerID: g.metaID,
+		McpServerID:     serverID,
+		SortOrder:       0,
+	})
+	require.NoError(t, err)
+}
+
+// recreate deletes the gateway and creates another at its slug, on the same
+// issuer and in the same project, whose one member is the granted server.
+func (g workloadGatewayFixture) recreate(t *testing.T) workloadGatewayFixture {
+	t.Helper()
+
+	ctx := g.fixtureContext(t)
+	project := g.fx.target.ProjectID
+	_, err := metamcprepo.New(g.ti.conn).DeleteMetaMCPMembersByMetaMCPServerID(ctx, metamcprepo.DeleteMetaMCPMembersByMetaMCPServerIDParams{MetaMcpServerID: g.metaID, ProjectID: project})
+	require.NoError(t, err)
+	_, err = mcpendpointsrepo.New(g.ti.conn).SoftDeleteMCPEndpointsByMetaMCPServerID(ctx, mcpendpointsrepo.SoftDeleteMCPEndpointsByMetaMCPServerIDParams{MetaMcpServerID: g.metaID, ProjectID: project})
+	require.NoError(t, err)
+	_, err = metamcprepo.New(g.ti.conn).DeleteMetaMCPServer(ctx, metamcprepo.DeleteMetaMCPServerParams{ID: g.metaID, OrganizationID: g.fx.orgID, ProjectID: project})
+	require.NoError(t, err)
+
+	recreated := g
+	recreated.metaID = createMetaMcpEndpoint(t, ctx, g.ti.conn, project, g.fx.orgID, g.slug, g.fx.target.UserSessionIssuerID).ID
+	recreated.attachMember(t, g.grantedServerID)
+	return recreated
+}
+
+// requireInvalidToken asserts the gateway refuses token with invalid_token,
+// which tells a workload to exchange for a new session.
+func (g workloadGatewayFixture) requireInvalidToken(t *testing.T, token string) {
+	t.Helper()
+
+	w, err := servePublicHTTP(t, t.Context(), g.ti, g.slug, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      metamcp.ToolListServers,
+		"arguments": map[string]any{},
+	}), token, nil)
+	requireShareableCode(t, err, oops.CodeUnauthorized)
+	require.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`)
 }
 
 // requireUnknownServer asserts describe_server answers token as if the member
@@ -496,4 +545,24 @@ func TestWorkloadGateway_PersonReachesPublicMemberWithoutAGrant(t *testing.T) {
 	token := mintMetaIssuerBearer(t, g.ti, g.slug, g.fx.target.UserSessionIssuerID, urn.NewUserSubject(person))
 
 	require.Equal(t, []string{public}, g.listServers(t, token))
+}
+
+// A gateway session names its gateway, not only its URL: once the gateway is
+// deleted and another takes its slug on the same issuer and project, the old
+// session is refused there, and a fresh exchange is served.
+func TestWorkloadGateway_SessionIsRefusedAtARecreatedGateway(t *testing.T) {
+	t.Parallel()
+
+	g := newWorkloadGatewayFixture(t)
+	w := g.exchangeAtGateway(t)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	token := decodeSharedTokenResponse(t, w).AccessToken
+	require.Equal(t, []string{g.granted}, g.listServers(t, token))
+
+	recreated := g.recreate(t)
+	recreated.requireInvalidToken(t, token)
+
+	w = recreated.exchangeAtGateway(t)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Equal(t, []string{g.granted}, recreated.listServers(t, decodeSharedTokenResponse(t, w).AccessToken))
 }

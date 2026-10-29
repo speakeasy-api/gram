@@ -9,6 +9,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -55,6 +56,27 @@ func (f workloadSessionCeilingFixture) issuerCeiling(t *testing.T, projectID uui
 	t.Helper()
 
 	encoded, err := encodeIssuerWorkloadSessionPolicy(projectID, f.version)
+	require.NoError(t, err)
+	return encoded
+}
+
+// gateway is a stored gateway on the fixture's issuer, in its project and
+// organization.
+func (f workloadSessionCeilingFixture) gateway() *ResolvedMcpEndpoint {
+	return &ResolvedMcpEndpoint{
+		OrganizationID:      f.endpoint.OrganizationID,
+		ProjectID:           f.endpoint.ProjectID,
+		UserSessionIssuerID: f.endpoint.UserSessionIssuerID,
+		RouteBase:           mcproute.MCP,
+		Slug:                "gateway",
+		MetaMcpServerID:     uuid.NullUUID{UUID: uuid.New(), Valid: true},
+	}
+}
+
+func (f workloadSessionCeilingFixture) gatewayCeiling(t *testing.T, gateway *ResolvedMcpEndpoint) []byte {
+	t.Helper()
+
+	encoded, err := encodeGatewayWorkloadSessionPolicy(gateway.MetaMcpServerID.UUID, gateway.ProjectID, f.version)
 	require.NoError(t, err)
 	return encoded
 }
@@ -160,5 +182,89 @@ func TestLoadWorkloadSessionCredential_RejectsIssuerWideCeiling(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = loadWorkloadSessionCredential(f.endpoint, f.subject, f.subject, f.organization(), f.issuerCeiling(t, f.endpoint.ProjectID), f.storedVersion())
+	require.Error(t, err)
+}
+
+// A gateway session's ceiling is mcp:connect on every MCP server in the
+// gateway's project, plus mcp:connect on the gateway itself, which names it.
+func TestEncodeGatewayWorkloadSessionPolicy_NamesItsGateway(t *testing.T) {
+	t.Parallel()
+
+	f := newWorkloadSessionCeilingFixture()
+	gateway := f.gateway()
+	decoded, err := runtimepolicy.DecodeDelegatedPolicy(f.version, f.gatewayCeiling(t, gateway))
+	require.NoError(t, err)
+
+	project := gateway.ProjectID.String()
+	wildcard := authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: authz.WildcardResource, authz.SelectorKeyProjectID: project}
+	named := authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: gateway.MetaMcpServerID.UUID.String(), authz.SelectorKeyProjectID: project}
+	grants := decoded.RuntimeGrants()
+	require.True(t, authz.GrantsContainSelector(grants, authz.ScopeMCPConnect, wildcard))
+	require.True(t, authz.GrantsContainSelector(grants, authz.ScopeMCPConnect, named))
+	connectClosure := authz.ScopeImplicationClosure(authz.ScopeMCPConnect)
+	for _, grant := range grants {
+		require.Contains(t, connectClosure, grant.Scope)
+		require.Contains(t, []authz.Selector{wildcard, named}, grant.Selector)
+	}
+
+	_, err = encodeGatewayWorkloadSessionPolicy(uuid.Nil, gateway.ProjectID, f.version)
+	require.Error(t, err)
+	_, err = encodeGatewayWorkloadSessionPolicy(gateway.MetaMcpServerID.UUID, uuid.Nil, f.version)
+	require.Error(t, err)
+}
+
+func TestLoadWorkloadSessionCredential_GatewayAcceptsItsOwnCeiling(t *testing.T) {
+	t.Parallel()
+
+	f := newWorkloadSessionCeilingFixture()
+	gateway := f.gateway()
+	_, err := loadWorkloadSessionCredential(gateway, f.subject, f.subject, f.organization(), f.gatewayCeiling(t, gateway), f.storedVersion())
+	require.NoError(t, err)
+}
+
+// A gateway accepts only the ceiling minted for it. In particular it refuses
+// the ceiling of an earlier gateway at the same URL, issuer and project, so a
+// session outlives neither the gateway it was minted for nor a replacement.
+func TestLoadWorkloadSessionCredential_GatewayRejectsAnyOtherCeiling(t *testing.T) {
+	t.Parallel()
+
+	f := newWorkloadSessionCeilingFixture()
+	gateway := f.gateway()
+	replaced := *gateway
+	replaced.MetaMcpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	otherProject := *gateway
+	otherProject.ProjectID = uuid.New()
+	cases := map[string]struct {
+		ceiling      []byte
+		organization pgtype.Text
+	}{
+		"replaced gateway":     {ceiling: f.gatewayCeiling(t, &replaced), organization: f.organization()},
+		"another project":      {ceiling: f.gatewayCeiling(t, &otherProject), organization: f.organization()},
+		"issuer-wide":          {ceiling: f.issuerCeiling(t, gateway.ProjectID), organization: f.organization()},
+		"organization-wide":    {ceiling: f.issuerCeiling(t, uuid.Nil), organization: f.organization()},
+		"single server":        {ceiling: f.singleServerCeiling(t), organization: f.organization()},
+		"another organization": {ceiling: f.gatewayCeiling(t, gateway), organization: pgtype.Text{String: uuid.NewString(), Valid: true}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := loadWorkloadSessionCredential(gateway, f.subject, f.subject, tc.organization, tc.ceiling, f.storedVersion())
+			require.Error(t, err)
+		})
+	}
+}
+
+// A gateway's ceiling authorizes nothing outside it: not at a single server,
+// and not on the audience naming all of the issuer's MCP servers.
+func TestLoadWorkloadSessionCredential_GatewayCeilingIsRefusedElsewhere(t *testing.T) {
+	t.Parallel()
+
+	f := newWorkloadSessionCeilingFixture()
+	ceiling := f.gatewayCeiling(t, f.gateway())
+
+	_, err := loadWorkloadSessionCredential(f.endpoint, f.subject, f.subject, f.organization(), ceiling, f.storedVersion())
+	require.Error(t, err)
+	_, err = loadIssuerWorkloadSessionCredential(f.endpoint.OrganizationID, f.endpoint.ProjectID, f.subject, f.subject, f.organization(), ceiling, f.storedVersion())
 	require.Error(t, err)
 }

@@ -38,19 +38,46 @@ func agentGatewayAddressable(endpoint *ResolvedMcpEndpoint) bool {
 
 // encodeGatewayWorkloadSessionPolicy is the ceiling of a workload session
 // minted for a stored gateway: mcp:connect on every MCP server in the
-// gateway's project, the ceiling an issuer-wide session over that project
-// carries. A stored gateway's members all live in its project.
+// gateway's project, the authority an issuer-wide session over that project
+// carries, and mcp:connect on the gateway itself. A stored gateway's members
+// all live in its project.
+//
+// The gateway's own grant adds no authority, since the project wildcard
+// already covers it. It names the gateway the session was minted for, as a
+// single-server ceiling names its server, so the byte-for-byte check at the
+// gate refuses the session at a gateway created later at the same URL, issuer
+// and project.
 //
 // It bounds nothing finer, for the reason an issuer-wide ceiling does not.
 // The session's audience confines it to the gateway, the gateway's live
 // membership decides which servers a request can name, and authorization
 // intersects this ceiling with the assigned agent's and owner's live policy
 // at each of them.
-func encodeGatewayWorkloadSessionPolicy(gatewayProjectID uuid.UUID, version runtimepolicy.DelegatedPolicyVersion) ([]byte, error) {
-	if gatewayProjectID == uuid.Nil {
-		return nil, errors.New("gateway workload session policy requires a project")
+func encodeGatewayWorkloadSessionPolicy(gatewayID, gatewayProjectID uuid.UUID, version runtimepolicy.DelegatedPolicyVersion) ([]byte, error) {
+	if gatewayID == uuid.Nil || gatewayProjectID == uuid.Nil {
+		return nil, errors.New("gateway workload session policy requires a gateway and its project")
 	}
-	return encodeIssuerWorkloadSessionPolicy(gatewayProjectID, version)
+	connect := func(resourceID string) authz.Grant {
+		return authz.Grant{
+			PrincipalUrn: "",
+			Scope:        authz.ScopeMCPConnect,
+			Selector: authz.Selector{
+				authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+				authz.SelectorKeyResourceID:   resourceID,
+				authz.SelectorKeyProjectID:    gatewayProjectID.String(),
+			},
+			Inferred: false,
+		}
+	}
+	policy, err := runtimepolicy.NewDelegatedPolicy(version, []authz.Grant{connect(authz.WildcardResource), connect(gatewayID.String())})
+	if err != nil {
+		return nil, fmt.Errorf("construct gateway workload session policy: %w", err)
+	}
+	encoded, err := runtimepolicy.EncodeDelegatedPolicy(version, policy)
+	if err != nil {
+		return nil, fmt.Errorf("encode gateway workload session policy: %w", err)
+	}
+	return encoded, nil
 }
 
 // endpointWorkloadSessionPolicy is the ceiling of a workload session minted
@@ -58,7 +85,7 @@ func encodeGatewayWorkloadSessionPolicy(gatewayProjectID uuid.UUID, version runt
 // stored gateway's. ok is false for an endpoint that can carry neither.
 func endpointWorkloadSessionPolicy(endpoint *ResolvedMcpEndpoint, version runtimepolicy.DelegatedPolicyVersion) ([]byte, bool, error) {
 	if agentGatewayAddressable(endpoint) {
-		policy, err := encodeGatewayWorkloadSessionPolicy(endpoint.ProjectID, version)
+		policy, err := encodeGatewayWorkloadSessionPolicy(endpoint.MetaMcpServerID.UUID, endpoint.ProjectID, version)
 		return policy, true, err
 	}
 	target, ok := agentAuthorizationTarget(endpoint)
