@@ -37,6 +37,10 @@ export type Skill = {
    */
   id: string;
   /**
+   * When an agent last loaded the skill over MCP from a Speakeasy-hosted server, absent when it never has. Returned by list and get only.
+   */
+  lastLoadedOverMcpAt?: Date | undefined;
+  /**
    * When this skill was most recently activated.
    */
   lastSeenAt?: Date | undefined;
@@ -96,6 +100,9 @@ export const Skill$inboundSchema: z.ZodMiniType<Skill, unknown> = z.pipe(
     ),
     has_valid_version: z.boolean(),
     id: z.string(),
+    last_loaded_over_mcp_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     last_seen_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -119,6 +126,7 @@ export const Skill$inboundSchema: z.ZodMiniType<Skill, unknown> = z.pipe(
       "display_name": "displayName",
       "first_seen_at": "firstSeenAt",
       "has_valid_version": "hasValidVersion",
+      "last_loaded_over_mcp_at": "lastLoadedOverMcpAt",
       "last_seen_at": "lastSeenAt",
       "latest_version_id": "latestVersionId",
       "project_id": "projectId",

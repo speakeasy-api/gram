@@ -112,6 +112,15 @@ type Service interface {
 	// scans. Fire-and-forget from the agent's perspective: the daemon must never
 	// block on this call.
 	ReportAIScan(context.Context, *ReportAIScanPayload) (err error)
+	// Record the device agent's applied state: the policy etag it enforces, each
+	// tool's enforcement outcome, its versions and update posture. A snapshot: the
+	// latest report per enrolled user per machine replaces the previous one.
+	// Accepts the per-user key and the org install key (with a vouched email),
+	// mirroring reportAIScan; agent keys and device-agent tokens are refused. A
+	// report from a non-endpoint environment is accepted and not stored, because
+	// device coverage matches managed endpoints only. Contract: device-agent
+	// ADR-0029.
+	ReportState(context.Context, *ReportStatePayload) (res *ReportStateResult, err error)
 	// Report device agent crashes: fatal crashes, recovered panics and
 	// self-rollbacks (device-agent ADR-0030). Forwarded to Speakeasy's monitoring
 	// and not stored. Accepts the credentials getPlugins accepts: the per-user
@@ -154,7 +163,7 @@ const ServiceName = "agent"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [15]string{"getPlugins", "getMyConnections", "hideMcpServer", "unhideMcpServer", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "reportCrash", "createSessionHandoff"}
+var MethodNames = [16]string{"getPlugins", "getMyConnections", "hideMcpServer", "unhideMcpServer", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "reportState", "reportCrash", "createSessionHandoff"}
 
 // One AI detection target a device-agent scan matched.
 type AIScanMatch struct {
@@ -341,6 +350,101 @@ type AgentSessionMeta struct {
 	Title *string
 	// Last activity recorded for the captured session.
 	UpdatedAt string
+}
+
+// The policy the agent's last reconcile applied.
+type AgentStatePolicy struct {
+	// Etag of the getPlugins snapshot the last reconcile applied. Omitted before
+	// the agent has applied one.
+	AppliedEtag *string
+	// When the agent first applied this etag. Later reconciles of the same etag
+	// keep this time.
+	AppliedAt *string
+	// Optional plugins the agent left out of the applied set because of a user
+	// choice. Required plugins are never withheld.
+	WithheldPlugins []*AgentStateWithheldPlugin
+	// Etag of the remote configuration the agent applied.
+	RemoteConfigEtag *string
+	// True when the agent could not apply the remote configuration it last
+	// received and kept its previous settings.
+	RemoteConfigFailed *bool
+}
+
+// A self-rollback: the daemon reverted an update that did not stabilize.
+type AgentStateRollback struct {
+	// When the rollback happened.
+	At string
+	// Version that failed to stabilize.
+	From *string
+	// Version the daemon reverted to.
+	To *string
+}
+
+// One managed tool's outcome from the agent's last reconcile. Carries no error
+// text or user-facing message: those can name paths and entries the agent does
+// not own.
+type AgentStateTool struct {
+	// Stable tool id, e.g. claude_code.
+	Tool string
+	// Resolved enforcement layer: user, managed, or off.
+	Layer string
+	// Reconcile outcome: armed, pending, skipped (tool not installed), error, or
+	// unmanaged.
+	Outcome string
+	// Why a pending tool is not yet enforcing: privileged_writer_not_ready or
+	// plugin_bundle_not_cloned.
+	PendingReason *string
+	// Class of a reconcile error: permission_denied, not_found, invalid_config, or
+	// unknown.
+	ErrorKind *string
+	// True when the agent wrote configuration the tool loads only after it
+	// restarts.
+	RestartRequired *bool
+	// True when a problem the user can fix is blocking this tool.
+	ActionRequired *bool
+	// Times since drift_counting_since the agent rewrote what it owns in this tool
+	// although the applied policy had not changed. Omitted when this tool's syncer
+	// does not measure drift.
+	DriftCorrections *int
+}
+
+// The device agent's update posture.
+type AgentStateUpdate struct {
+	// Auto-update mode: disabled, notify, or automatic.
+	AutoUpdate *string
+	// Release channel the agent resolved to.
+	Channel *string
+	// Version the organization pinned the fleet to, when set.
+	PinnedTarget *string
+	// True when the running build is in blocked_versions.
+	CurrentBlocked *bool
+	// The most recent time the daemon reverted a failed update, when it has.
+	LastRollback *AgentStateRollback
+}
+
+// Versions of the device agent's binaries and the platform they run on.
+type AgentStateVersions struct {
+	// Version of the speakeasyd daemon.
+	Speakeasyd string
+	// Version of the speakeasy CLI, when the agent could read it.
+	Speakeasy *string
+	// Version of the menu bar app, when the agent could read it.
+	SpeakeasyUI *string
+	// Operating system (Go GOOS), e.g. darwin.
+	Os *string
+	// CPU architecture (Go GOARCH), e.g. arm64.
+	Arch *string
+}
+
+// One optional plugin the agent left out of the applied set.
+type AgentStateWithheldPlugin struct {
+	// Marketplace the plugin belongs to.
+	Marketplace *string
+	// The plugin's slug.
+	Slug string
+	// Why it was withheld: user_disabled for a default-on plugin the user turned
+	// off, not_opted_in for an opt-in plugin the user has not turned on.
+	Reason string
 }
 
 // One Shadow AI scan target in an organization's list: a Speakeasy built-in,
@@ -722,6 +826,56 @@ type ReportSessionMovedPayload struct {
 	SerialNumber *string
 	// Hostname of the machine the move happened on, when the agent can read it.
 	Hostname *string
+}
+
+// ReportStatePayload is the payload type of the agent service reportState
+// method.
+type ReportStatePayload struct {
+	ApikeyToken *string
+	// Report envelope version. Fields are added within a version; a change of
+	// meaning bumps it. Newer versions are accepted and stored as far as this
+	// server understands them.
+	SchemaVersion int
+	// When the agent assembled the report, by its own clock.
+	GeneratedAt string
+	// Versions of the agent binaries and the platform they run on.
+	Agent *AgentStateVersions
+	// True when the kill switch has halted policy enforcement because the running
+	// build is in blocked_versions. The tool outcomes are then those of the last
+	// reconcile before the halt.
+	EnforcementHalted bool
+	// The policy the agent's last reconcile applied.
+	Policy *AgentStatePolicy
+	// Each managed tool's outcome from the last reconcile.
+	Tools []*AgentStateTool
+	// Start of the window tools[].drift_corrections counts over (the daemon's
+	// start).
+	DriftCountingSince *string
+	// The agent's update posture.
+	Update *AgentStateUpdate
+	// Email of the enrolled user, sent in the Gram-User-Email header.
+	// Authoritative when authenticating with an org-scoped agent install key (the
+	// MDM zero-touch path); ignored for a per-user key, whose owner is the
+	// enrolled user.
+	Email *string
+	// Hardware serial number of the reporting machine, when the agent can read it.
+	SerialNumber *string
+	// Hostname of the reporting machine, when the agent can read it.
+	Hostname *string
+	// What kind of machine the agent runs on, as in getPlugins: endpoint (the
+	// default when omitted), ephemeral, or server.
+	Environment *string
+}
+
+// ReportStateResult is the result type of the agent service reportState method.
+type ReportStateResult struct {
+	// False when the report was accepted but not stored because it came from a
+	// non-endpoint environment.
+	Stored bool
+	// The applied etag the server now holds for this device.
+	AppliedEtag *string
+	// When the server received the report.
+	ReceivedAt string
 }
 
 type SyncedAgentUser struct {

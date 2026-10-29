@@ -436,6 +436,22 @@ FROM device_agent_environment_syncs
 WHERE organization_id = @organization_id
 ORDER BY environment ASC, email ASC;
 
+-- name: ListDeviceAgentStateReportsFixture :many
+-- Reads back stored agent state reports so tests can assert the upsert's
+-- dedup key and what a report stores.
+SELECT *
+FROM device_agent_state_reports
+WHERE organization_id = @organization_id
+ORDER BY email ASC, serial_number ASC NULLS FIRST;
+
+-- name: GetDeviceAgentServedEtagFixture :one
+-- Reads back the etag GetPlugins last served a user, which attestation
+-- compares reported applied etags against.
+SELECT served_etag, served_etag_changed_at
+FROM device_agent_syncs
+WHERE organization_id = @organization_id
+  AND email = @email;
+
 -- name: InsertMdmDeviceFixture :exec
 INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
 VALUES (@device_integration_config_id, @organization_id, @external_id, NULLIF(@user_email::text, ''), sqlc.narg('user_id')::text, NULLIF(@serial_number::text, ''), sqlc.narg('missing_since')::timestamptz);
@@ -2251,14 +2267,6 @@ VALUES (
     'backfill'
 );
 
--- name: SetToolsetCustomDomain :exec
--- Points a toolset's legacy alias at a custom domain; the canonical wrapper's endpoints are left as they are.
-UPDATE toolsets
-SET
-    custom_domain_id = @custom_domain_id
-  , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id;
-
 -- name: SetWorkloadIssuerWildcardAdmissionForTest :execrows
 -- Test-only fixture for an issuer policy change while admission waits on its lock.
 UPDATE workload_issuers SET allow_wildcard_admission = @allow_wildcard_admission
@@ -2300,12 +2308,6 @@ INSERT INTO mcp_endpoints (project_id, mcp_server_id, custom_domain_id, slug)
 SELECT s.project_id, s.id, sqlc.narg('custom_domain_id')::uuid, @slug
 FROM mcp_servers s
 WHERE s.id = @id AND s.toolset_id = @id AND s.project_id = @project_id AND s.deleted IS FALSE;
-
--- name: SetToolsetLegacyAliasFixture :exec
--- Sets the legacy /mcp/<slug> alias a toolset created before hosted servers owned their endpoints still carries.
-UPDATE toolsets
-SET mcp_slug = sqlc.narg('mcp_slug')::text, custom_domain_id = sqlc.narg('custom_domain_id')::uuid, updated_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id;
 
 -- name: SetRemoteSessionListFixture :exec
 -- Test fixture for effective expiry and timestamp pagination.

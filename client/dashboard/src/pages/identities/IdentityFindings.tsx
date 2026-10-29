@@ -98,6 +98,7 @@ export default function IdentityFindingsPage(): JSX.Element {
   return (
     <IdentitySection
       title="Findings"
+      timeRange
       meta={sectionMeta([{ count: findings, singular: "finding" }])}
       action={
         <FindingsFilterControls

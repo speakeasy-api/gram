@@ -14,6 +14,7 @@ import { agentListSyncedUsers } from "../funcs/agentListSyncedUsers.js";
 import { agentReportAIScan } from "../funcs/agentReportAIScan.js";
 import { agentReportCrash } from "../funcs/agentReportCrash.js";
 import { agentReportSessionMoved } from "../funcs/agentReportSessionMoved.js";
+import { agentReportState } from "../funcs/agentReportState.js";
 import { agentUnhideMcpServer } from "../funcs/agentUnhideMcpServer.js";
 import { agentUpdateConfiguration } from "../funcs/agentUpdateConfiguration.js";
 import { agentUpsertAiScanTarget } from "../funcs/agentUpsertAiScanTarget.js";
@@ -28,6 +29,7 @@ import { GetSessionMetaResult } from "../models/components/getsessionmetaresult.
 import { ListAiScanTargetsResult } from "../models/components/listaiscantargetsresult.js";
 import { ListSyncedUsersResult } from "../models/components/listsyncedusersresult.js";
 import { ReportCrashResult } from "../models/components/reportcrashresult.js";
+import { ReportStateResult } from "../models/components/reportstateresult.js";
 import {
   CreateAgentSessionHandoffRequest,
   CreateAgentSessionHandoffSecurity,
@@ -76,6 +78,10 @@ import {
   ReportAgentSessionMovedRequest,
   ReportAgentSessionMovedSecurity,
 } from "../models/operations/reportagentsessionmoved.js";
+import {
+  ReportAgentStateRequest,
+  ReportAgentStateSecurity,
+} from "../models/operations/reportagentstate.js";
 import {
   UnhideAgentMcpServerRequest,
   UnhideAgentMcpServerSecurity,
@@ -312,6 +318,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(agentReportSessionMoved(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * reportState agent
+   *
+   * @remarks
+   * Record the device agent's applied state: the policy etag it enforces, each tool's enforcement outcome, its versions and update posture. A snapshot: the latest report per enrolled user per machine replaces the previous one. Accepts the per-user key and the org install key (with a vouched email), mirroring reportAIScan; agent keys and device-agent tokens are refused. A report from a non-endpoint environment is accepted and not stored, because device coverage matches managed endpoints only. Contract: device-agent ADR-0029.
+   */
+  async reportState(
+    request: ReportAgentStateRequest,
+    security?: ReportAgentStateSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ReportStateResult> {
+    return unwrapAsync(agentReportState(
       this,
       request,
       security,

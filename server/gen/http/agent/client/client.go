@@ -69,6 +69,10 @@ type Client struct {
 	// reportAIScan endpoint.
 	ReportAIScanDoer goahttp.Doer
 
+	// ReportState Doer is the HTTP client used to make requests to the reportState
+	// endpoint.
+	ReportStateDoer goahttp.Doer
+
 	// ReportCrash Doer is the HTTP client used to make requests to the reportCrash
 	// endpoint.
 	ReportCrashDoer goahttp.Doer
@@ -110,6 +114,7 @@ func NewClient(
 		GetSessionMetaDoer:       doer,
 		ReportSessionMovedDoer:   doer,
 		ReportAIScanDoer:         doer,
+		ReportStateDoer:          doer,
 		ReportCrashDoer:          doer,
 		CreateSessionHandoffDoer: doer,
 		RestoreResponseBody:      restoreBody,
@@ -427,6 +432,30 @@ func (c *Client) ReportAIScan() goa.Endpoint {
 		resp, err := c.ReportAIScanDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agent", "reportAIScan", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ReportState returns an endpoint that makes HTTP requests to the agent
+// service reportState server.
+func (c *Client) ReportState() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeReportStateRequest(c.encoder)
+		decodeResponse = DecodeReportStateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildReportStateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ReportStateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "reportState", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -34,9 +34,9 @@ const (
 	// vendor-delivered.
 	observationSourceLevel = "mcp"
 
-	// idempotencyKeyPrefix namespaces MCP activation keys from the keys hook
+	// IdempotencyKeyPrefix namespaces MCP activation keys from the keys hook
 	// adapters choose, which share the per-project unique index.
-	idempotencyKeyPrefix = "mcp:"
+	IdempotencyKeyPrefix = "mcp:"
 
 	// servedSkillLimit is the most skills one resolution serves. A listing is
 	// answered in one page, so the cap bounds the work of a single call. The
@@ -140,7 +140,7 @@ func (r *Resolver) Get(ctx context.Context, scope Scope, uri string) (*Entry, er
 
 func (r *Resolver) resolve(ctx context.Context, scope Scope, key skillKey) ([]Entry, error) {
 	if err := scope.Target.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve served skills: %w", err)
 	}
 
 	recipient, err := r.isRecipient(ctx, scope.OrganizationID, scope.UserID)
@@ -268,7 +268,7 @@ func ObservationIdempotencyKey(sessionID, rawSHA256 string) string {
 	if sessionID == "" {
 		return ""
 	}
-	return idempotencyKeyPrefix + sessionID + ":" + rawSHA256
+	return IdempotencyKeyPrefix + sessionID + ":" + rawSHA256
 }
 
 // isRecipient reports whether userID is a live user holding an active

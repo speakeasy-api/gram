@@ -121,6 +121,7 @@ export default function IdentityUsage(): JSX.Element {
   return (
     <IdentitySection
       title="Usage"
+      timeRange
       meta={sectionMeta([
         { count: tools.length, singular: "tool" },
         { count: models.length, singular: "model" },

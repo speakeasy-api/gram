@@ -97,6 +97,10 @@ type Service struct {
 	// it unlimited.
 	connectionsLimiter *ratelimit.Limiter
 
+	// stateReportLimiter bounds reportState writes per device. Nil leaves it
+	// unlimited.
+	stateReportLimiter *ratelimit.Limiter
+
 	// crashReportLimiter bounds reportCrash batches per device. Nil leaves it
 	// unlimited.
 	crashReportLimiter *ratelimit.Limiter
@@ -158,6 +162,7 @@ func NewService(
 		crashReportLimiter:           nil,
 		crashReports:                 nil,
 		crashReportCredentialLimiter: nil,
+		stateReportLimiter:           nil,
 	}
 }
 
@@ -176,6 +181,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// Only the agentPrincipalMethods accept device-agent tokens.
 	server.GetPlugins = deviceagenttoken.BearerChallenge(server.GetPlugins)
 	server.ReportCrash = deviceagenttoken.BearerChallenge(limitCrashReportBody(server.ReportCrash))
+	server.ReportState = limitStateReportBody(server.ReportState)
 	srv.Mount(mux, server)
 	// Public capability-URL route for minted session handoffs (see
 	// handoffs.go): unauthenticated by design, the token is the credential.
@@ -390,7 +396,27 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	}
 
 	result, _, err := s.pluginSetFor(ctx, authCtx, principals)
-	return result, err
+	if err != nil {
+		return nil, err
+	}
+
+	// Device attestation compares an agent's reported applied etag against
+	// this one (device-agent ADR-0029). Best-effort and endpoints only, like
+	// the heartbeat row it lands on.
+	if environment == deviceidentity.EnvironmentEndpoint {
+		if err := s.repo.RecordDeviceAgentServedEtag(ctx, repo.RecordDeviceAgentServedEtagParams{
+			ServedEtag:     conv.ToPGText(result.Etag),
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Email:          email,
+		}); err != nil {
+			s.logger.WarnContext(ctx, "failed to record device agent served etag",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+			)
+		}
+	}
+
+	return result, nil
 }
 
 // pollingEmail resolves the enrolled user's email by credential type. An org

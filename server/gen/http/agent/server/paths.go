@@ -72,6 +72,11 @@ func ReportAIScanAgentPath() string {
 	return "/rpc/agent.reportAIScan"
 }
 
+// ReportStateAgentPath returns the URL path to the agent service reportState HTTP endpoint.
+func ReportStateAgentPath() string {
+	return "/rpc/agent.reportState"
+}
+
 // ReportCrashAgentPath returns the URL path to the agent service reportCrash HTTP endpoint.
 func ReportCrashAgentPath() string {
 	return "/rpc/agent.reportCrash"
