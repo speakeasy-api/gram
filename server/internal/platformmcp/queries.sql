@@ -2220,7 +2220,8 @@ SELECT
     project.id AS project_id,
     project.name AS project_name,
     project.slug AS project_slug,
-    registration.mcp_server_id
+    registration.mcp_server_id,
+    COALESCE(mcp_server.name, mcp_server.slug, '')::text AS mcp_server_name
 FROM platform_mcp_onboarding_workflows AS workflow
 JOIN projects AS project
   ON project.id = workflow.selected_project_id
@@ -2231,12 +2232,44 @@ JOIN platform_mcp_catalog_registrations AS registration
  AND registration.organization_id = workflow.organization_id
  AND registration.project_id = project.id
  AND registration.deleted IS FALSE
+LEFT JOIN mcp_servers AS mcp_server
+  ON mcp_server.id = registration.mcp_server_id
+ AND mcp_server.project_id = registration.project_id
 WHERE workflow.organization_id = @organization_id
   AND workflow.initiating_subject_urn = @initiating_subject_urn
   AND workflow.status = 'active'
   AND workflow.expires_at > clock_timestamp()
   AND registration.status = 'registered'
   AND registration.mcp_server_id IS NOT NULL;
+
+-- name: GetPlatformMCPDistributionTargetByServer :one
+-- Resolves the MCP server a distribution names, by its ID as find_mcp reports
+-- it, rather than the one the onboarding workflow last selected. Only a server
+-- added through Platform MCP setup has a registration, and so readiness evidence
+-- that distribution can require.
+SELECT
+    registration.id AS registration_id,
+    project.id AS project_id,
+    project.name AS project_name,
+    project.slug AS project_slug,
+    registration.mcp_server_id,
+    COALESCE(mcp_server.name, mcp_server.slug, '')::text AS mcp_server_name
+FROM platform_mcp_catalog_registrations AS registration
+JOIN projects AS project
+  ON project.id = registration.project_id
+ AND project.organization_id = registration.organization_id
+ AND project.deleted IS FALSE
+JOIN mcp_servers AS mcp_server
+  ON mcp_server.id = registration.mcp_server_id
+ AND mcp_server.project_id = registration.project_id
+ AND mcp_server.deleted IS FALSE
+WHERE registration.organization_id = @organization_id
+  AND project.slug = @project_slug
+  AND registration.mcp_server_id = @mcp_server_id
+  AND registration.status = 'registered'
+  AND registration.deleted IS FALSE
+ORDER BY registration.created_at DESC, registration.id DESC
+LIMIT 1;
 
 -- name: HasPlatformMCPOrganizationSetupComplete :one
 -- Setup completion counts an attached distribution to any live plugin. A

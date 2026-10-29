@@ -2544,6 +2544,65 @@ func (q *Queries) GetPlatformMCPDistribution(ctx context.Context, arg GetPlatfor
 	return i, err
 }
 
+const getPlatformMCPDistributionTargetByServer = `-- name: GetPlatformMCPDistributionTargetByServer :one
+SELECT
+    registration.id AS registration_id,
+    project.id AS project_id,
+    project.name AS project_name,
+    project.slug AS project_slug,
+    registration.mcp_server_id,
+    COALESCE(mcp_server.name, mcp_server.slug, '')::text AS mcp_server_name
+FROM platform_mcp_catalog_registrations AS registration
+JOIN projects AS project
+  ON project.id = registration.project_id
+ AND project.organization_id = registration.organization_id
+ AND project.deleted IS FALSE
+JOIN mcp_servers AS mcp_server
+  ON mcp_server.id = registration.mcp_server_id
+ AND mcp_server.project_id = registration.project_id
+ AND mcp_server.deleted IS FALSE
+WHERE registration.organization_id = $1
+  AND project.slug = $2
+  AND registration.mcp_server_id = $3
+  AND registration.status = 'registered'
+  AND registration.deleted IS FALSE
+ORDER BY registration.created_at DESC, registration.id DESC
+LIMIT 1
+`
+
+type GetPlatformMCPDistributionTargetByServerParams struct {
+	OrganizationID string
+	ProjectSlug    string
+	McpServerID    uuid.NullUUID
+}
+
+type GetPlatformMCPDistributionTargetByServerRow struct {
+	RegistrationID uuid.UUID
+	ProjectID      uuid.UUID
+	ProjectName    string
+	ProjectSlug    string
+	McpServerID    uuid.NullUUID
+	McpServerName  string
+}
+
+// Resolves the MCP server a distribution names, by its ID as find_mcp reports
+// it, rather than the one the onboarding workflow last selected. Only a server
+// added through Platform MCP setup has a registration, and so readiness evidence
+// that distribution can require.
+func (q *Queries) GetPlatformMCPDistributionTargetByServer(ctx context.Context, arg GetPlatformMCPDistributionTargetByServerParams) (GetPlatformMCPDistributionTargetByServerRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPDistributionTargetByServer, arg.OrganizationID, arg.ProjectSlug, arg.McpServerID)
+	var i GetPlatformMCPDistributionTargetByServerRow
+	err := row.Scan(
+		&i.RegistrationID,
+		&i.ProjectID,
+		&i.ProjectName,
+		&i.ProjectSlug,
+		&i.McpServerID,
+		&i.McpServerName,
+	)
+	return i, err
+}
+
 const getPlatformMCPFeedbackByIdempotencyKey = `-- name: GetPlatformMCPFeedbackByIdempotencyKey :one
 SELECT id, delivery_state, expires_at, input_hash
 FROM platform_mcp_feedback
@@ -2873,7 +2932,8 @@ SELECT
     project.id AS project_id,
     project.name AS project_name,
     project.slug AS project_slug,
-    registration.mcp_server_id
+    registration.mcp_server_id,
+    COALESCE(mcp_server.name, mcp_server.slug, '')::text AS mcp_server_name
 FROM platform_mcp_onboarding_workflows AS workflow
 JOIN projects AS project
   ON project.id = workflow.selected_project_id
@@ -2884,6 +2944,9 @@ JOIN platform_mcp_catalog_registrations AS registration
  AND registration.organization_id = workflow.organization_id
  AND registration.project_id = project.id
  AND registration.deleted IS FALSE
+LEFT JOIN mcp_servers AS mcp_server
+  ON mcp_server.id = registration.mcp_server_id
+ AND mcp_server.project_id = registration.project_id
 WHERE workflow.organization_id = $1
   AND workflow.initiating_subject_urn = $2
   AND workflow.status = 'active'
@@ -2904,6 +2967,7 @@ type GetPlatformMCPOnboardingDistributionTargetRow struct {
 	ProjectName    string
 	ProjectSlug    string
 	McpServerID    uuid.NullUUID
+	McpServerName  string
 }
 
 func (q *Queries) GetPlatformMCPOnboardingDistributionTarget(ctx context.Context, arg GetPlatformMCPOnboardingDistributionTargetParams) (GetPlatformMCPOnboardingDistributionTargetRow, error) {
@@ -2916,6 +2980,7 @@ func (q *Queries) GetPlatformMCPOnboardingDistributionTarget(ctx context.Context
 		&i.ProjectName,
 		&i.ProjectSlug,
 		&i.McpServerID,
+		&i.McpServerName,
 	)
 	return i, err
 }
