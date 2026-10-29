@@ -19,7 +19,7 @@ import (
 //     agent's per-user [agent,hooks] key by default, or the Speakeasy CLI's
 //     organization-wide producer key) and returns the raw key exactly once.
 var _ = Service("cliAuth", func() {
-	Description("Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for an API key of the scope requested at authorize: the device agent's per-user key by default, or the Speakeasy CLI's organization-wide producer key.")
+	Description("Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for an API key of the scope requested at authorize, which is the device agent's per-user key by default or the Speakeasy CLI's organization-wide producer key.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
 
