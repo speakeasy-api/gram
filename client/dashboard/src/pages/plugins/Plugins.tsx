@@ -241,7 +241,7 @@ function PluginsContent({
   const pausedPluginNames = useMemo(
     () =>
       (data?.plugins ?? [])
-        .filter((plugin) => !plugin.autoSyncEnabled)
+        .filter((plugin) => plugin.autoSyncEnabled === false)
         .map((plugin) => plugin.name),
     [data?.plugins],
   );

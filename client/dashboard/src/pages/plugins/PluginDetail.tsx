@@ -52,6 +52,8 @@ import { useMembers } from "@gram/client/react-query/members";
 import { useRoles } from "@gram/client/react-query/roles";
 import { useSyncedAgentUsers } from "@gram/client/react-query/syncedAgentUsers.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { handleError } from "@/lib/errors";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -497,11 +499,13 @@ function PluginDetailContent({
       );
     },
     onError: (error) => {
-      setAutoSyncError(
-        error instanceof Error && error.message
-          ? error.message
-          : "Couldn't change auto sync. Try again.",
-      );
+      // A 412 is the server refusing to turn auto sync off, which the admin
+      // fixes next to the switch. Any other failure is a toast.
+      if (error instanceof GramError && error.statusCode === 412) {
+        setAutoSyncError(error.message);
+        return;
+      }
+      handleError(error, { title: "Couldn't change auto sync" });
     },
   });
 

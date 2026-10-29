@@ -10,6 +10,7 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import type { ReactNode } from "react";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import PluginDetail from "./PluginDetail";
 vi.mock("@gram/client/react-query/requestAccess", () => ({
   useRequestAccessMutation: () => ({ mutateAsync: vi.fn() }),
@@ -48,8 +49,9 @@ const deletion = vi.hoisted(() => ({
 }));
 const adminQuery = vi.hoisted(() => vi.fn());
 const toastSuccess = vi.hoisted(() => vi.fn());
+const toastError = vi.hoisted(() => vi.fn());
 vi.mock("sonner", () => ({
-  toast: Object.assign(vi.fn(), { success: toastSuccess, error: vi.fn() }),
+  toast: Object.assign(vi.fn(), { success: toastSuccess, error: toastError }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
@@ -184,12 +186,22 @@ const hostedServer = {
 };
 const autoSyncRefusal =
   "This plugin has changes that haven't been synced yet. Sync changes first, then turn off auto sync.";
+function updateError(status: number, message: string): GramError {
+  return new GramError(message, {
+    response: new Response(null, { status }),
+    request: new Request("https://app.getgram.ai/rpc/plugins.update"),
+    body: "",
+  });
+}
 // Moves to another plugin while PluginDetail stays mounted, as following a link
 // from one plugin to another does.
 function OpenPlugin({ id }: { id: string }) {
   const navigate = useNavigate();
   return (
-    <button type="button" onClick={() => navigate(`/plugins/${id}/settings`)}>
+    <button
+      type="button"
+      onClick={() => void navigate(`/plugins/${id}/settings`)}
+    >
       Open {id}
     </button>
   );
@@ -284,7 +296,7 @@ describe("plugin detail permission boundary", () => {
     expect(toggle.getAttribute("aria-checked")).toBe("true");
 
     updateOutcome.mockImplementationOnce((options) =>
-      options.onError?.(new Error(autoSyncRefusal)),
+      options.onError?.(updateError(412, autoSyncRefusal)),
     );
     fireEvent.click(toggle);
     expect(update).toHaveBeenCalledWith(
@@ -304,6 +316,25 @@ describe("plugin detail permission boundary", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sync changes" }));
     expect(publish).toHaveBeenCalled();
   });
+  it("toasts an auto sync failure that isn't a refusal", () => {
+    state.pluginWrite = true;
+    // handleError logs the failure it toasts.
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    renderAdmin("settings", [hostedServer], { autoSyncEnabled: true });
+    updateOutcome.mockImplementationOnce((options) =>
+      options.onError?.(updateError(503, "service unavailable")),
+    );
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Sync changes automatically" }),
+    );
+    expect(toastError).toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalled();
+    expect(screen.queryByText("service unavailable")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sync changes" })).toBeNull();
+    consoleError.mockRestore();
+  });
   it("drops an auto sync refusal when moving to another plugin", () => {
     state.pluginWrite = true;
     renderAdmin(
@@ -313,7 +344,7 @@ describe("plugin detail permission boundary", () => {
       <OpenPlugin id="plugin-b" />,
     );
     updateOutcome.mockImplementationOnce((options) =>
-      options.onError?.(new Error(autoSyncRefusal)),
+      options.onError?.(updateError(412, autoSyncRefusal)),
     );
     fireEvent.click(
       screen.getByRole("switch", { name: "Sync changes automatically" }),
