@@ -128,7 +128,6 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 	}
 	mcpSlug := input.OrganizationSlug + "-" + slugSuffix
 
-	// Hosting state lives on the canonical wrapper, so the toolset hosting columns stay unset.
 	params := repo.CreateToolsetParams{
 		OrganizationID:         input.OrganizationID,
 		ProjectID:              input.ProjectID,
@@ -136,8 +135,6 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 		Slug:                   slug,
 		Description:            conv.PtrToPGText(input.Description),
 		DefaultEnvironmentSlug: conv.PtrToPGText(nil),
-		McpSlug:                conv.PtrToPGText(nil),
-		McpEnabled:             false,
 	}
 	// The first toolset in an organization is enabled as an MCP server and
 	// joins the Default plugin, which publishes it to everyone holding that
@@ -222,7 +219,7 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 	}
 	created, err = repo.New(tx).GetToolsetByIDAndProject(ctx, repo.GetToolsetByIDAndProjectParams{ID: created.ID, ProjectID: created.ProjectID})
 	if err != nil {
-		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "reload mirrored toolset").LogError(ctx, logger)
+		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "reload created toolset").LogError(ctx, logger)
 	}
 
 	result := ToolsetCreateResult{Toolset: created, McpEnabled: mcpEnabled, AddedToDefaultPlugin: false, PluginCreated: false}

@@ -3,13 +3,14 @@ package mv
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	tsr "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -40,29 +41,39 @@ func canonicalHosting(ctx context.Context, db tsr.DBTX, organizationID string, t
 	return byID, nil
 }
 
-// toolsetHostingColumns are the toolset columns the hosting derivation reads, including the OAuth attachments that
-// decide how a disabled server re-enables.
-type toolsetHostingColumns struct {
-	McpSlug               pgtype.Text
-	CustomDomainID        uuid.NullUUID
-	McpEnabled            bool
-	McpIsPublic           bool
-	UserSessionIssuerID   uuid.NullUUID
-	ExternalOauthServerID uuid.NullUUID
+// deriveToolsetHosting applies hostingstate.Derive given the toolset's legacy alias and external OAuth server, which
+// decides how a disabled server re-enables.
+func deriveToolsetHosting(alias legacyalias.Alias, externalOAuthServerID uuid.NullUUID, row *hostingstate.Row) toolsetHosting {
+	hosting, address := hostingstate.Derive(externalOAuthServerID, row)
+	if row != nil && row.Canonical && !row.HasEndpoint {
+		// The legacy alias still serves a hosted server without a servable endpoint.
+		address = hostingstate.Address{Slug: alias.Slug, CustomDomainID: alias.CustomDomainID}
+	}
+	return toolsetHosting{
+		McpSlug:             conv.FromPGText[types.Slug](address.Slug),
+		CustomDomainID:      conv.FromNullableUUID(address.CustomDomainID),
+		McpEnabled:          hosting.Enabled,
+		McpIsPublic:         hosting.Public,
+		UserSessionIssuerID: hosting.UserSessionIssuerID,
+	}
 }
 
-// deriveToolsetHosting applies hostingstate.Apply to a toolset's hosting columns.
-func deriveToolsetHosting(columns toolsetHostingColumns, row *hostingstate.Row) toolsetHosting {
-	//nolint:exhaustruct // Only the hosting columns feed the derivation.
-	derived := hostingstate.Apply(tsr.Toolset{
-		McpSlug: columns.McpSlug, CustomDomainID: columns.CustomDomainID, McpEnabled: columns.McpEnabled, McpIsPublic: columns.McpIsPublic,
-		UserSessionIssuerID: columns.UserSessionIssuerID, ExternalOauthServerID: columns.ExternalOauthServerID,
-	}, row)
-	return toolsetHosting{
-		McpSlug:             conv.FromPGText[types.Slug](derived.McpSlug),
-		CustomDomainID:      conv.FromNullableUUID(derived.CustomDomainID),
-		McpEnabled:          derived.McpEnabled,
-		McpIsPublic:         derived.McpIsPublic,
-		UserSessionIssuerID: derived.UserSessionIssuerID,
+// toolsetAliases loads the legacy alias of each canonically hosted toolset without a servable endpoint, the only
+// toolsets whose view reports it; toolsetProjects maps toolset ids to their projects.
+func toolsetAliases(ctx context.Context, db tsr.DBTX, hostingByID map[uuid.UUID]hostingstate.Row, toolsetProjects map[uuid.UUID]uuid.UUID) (map[uuid.UUID]legacyalias.Alias, error) {
+	byProject := make(map[uuid.UUID][]uuid.UUID)
+	for id, projectID := range toolsetProjects {
+		if row, ok := hostingByID[id]; ok && row.Canonical && !row.HasEndpoint {
+			byProject[projectID] = append(byProject[projectID], id)
+		}
 	}
+	aliases := make(map[uuid.UUID]legacyalias.Alias)
+	for projectID, ids := range byProject {
+		listed, err := legacyalias.List(ctx, db, projectID, ids)
+		if err != nil {
+			return nil, fmt.Errorf("load legacy toolset aliases: %w", err)
+		}
+		maps.Copy(aliases, listed)
+	}
+	return aliases, nil
 }

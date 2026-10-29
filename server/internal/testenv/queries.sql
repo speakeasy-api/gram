@@ -436,6 +436,22 @@ FROM device_agent_environment_syncs
 WHERE organization_id = @organization_id
 ORDER BY environment ASC, email ASC;
 
+-- name: ListDeviceAgentStateReportsFixture :many
+-- Reads back stored agent state reports so tests can assert the upsert's
+-- dedup key and what a report stores.
+SELECT *
+FROM device_agent_state_reports
+WHERE organization_id = @organization_id
+ORDER BY email ASC, serial_number ASC NULLS FIRST;
+
+-- name: GetDeviceAgentServedEtagFixture :one
+-- Reads back the etag GetPlugins last served a user, which attestation
+-- compares reported applied etags against.
+SELECT served_etag, served_etag_changed_at
+FROM device_agent_syncs
+WHERE organization_id = @organization_id
+  AND email = @email;
+
 -- name: InsertMdmDeviceFixture :exec
 INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
 VALUES (@device_integration_config_id, @organization_id, @external_id, NULLIF(@user_email::text, ''), sqlc.narg('user_id')::text, NULLIF(@serial_number::text, ''), sqlc.narg('missing_since')::timestamptz);
@@ -2070,6 +2086,14 @@ FROM sign_in_revocation_deliveries
 WHERE organization_id = @organization_id
 ORDER BY created_at, id;
 
+-- name: ListMCPSkillObservations :many
+-- The skill observations one project recorded with one provider, oldest first.
+SELECT *
+FROM skill_observations
+WHERE project_id = @project_id
+  AND provider = @provider::text
+ORDER BY seen_at ASC, id ASC;
+
 -- name: SetDirectoryGroupWorkOSDeletedFixture :exec
 -- Deletes a directory group as a WorkOS deletion does, setting both markers,
 -- or with deleted false brings it back by clearing them.
@@ -2243,52 +2267,6 @@ VALUES (
     'backfill'
 );
 
--- name: SetToolsetCustomDomain :exec
--- Points a toolset's legacy alias at a custom domain; the canonical wrapper's endpoints are left as they are.
-UPDATE toolsets
-SET
-    custom_domain_id = @custom_domain_id
-  , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id;
-
--- name: SetToolsetMCPPublicByID :exec
--- Sets publicness as an MCP server update would: on the canonical wrapper, and on the columns for wrapper-less toolsets.
-WITH toolset AS (
-    UPDATE toolsets
-    SET mcp_is_public = @mcp_is_public
-    WHERE toolsets.id = @id AND toolsets.project_id = @project_id
-    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
-)
-UPDATE mcp_servers
-SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
-FROM toolset
-WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE;
-
--- name: SetToolsetMCPPublicBySlug :exec
-WITH toolset AS (
-    UPDATE toolsets
-    SET mcp_is_public = @mcp_is_public
-    WHERE toolsets.mcp_slug = @mcp_slug AND toolsets.project_id = @project_id
-    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
-)
-UPDATE mcp_servers
-SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
-FROM toolset
-WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE;
-
--- name: SetToolsetMCPEnabledByID :exec
--- Enables or disables as an MCP server update would: on the canonical wrapper, and on the column for wrapper-less toolsets.
-WITH toolset AS (
-    UPDATE toolsets
-    SET mcp_enabled = @mcp_enabled
-    WHERE toolsets.id = @id AND toolsets.project_id = @project_id
-    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
-)
-UPDATE mcp_servers
-SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
-FROM toolset
-WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE;
-
 -- name: SetWorkloadIssuerWildcardAdmissionForTest :execrows
 -- Test-only fixture for an issuer policy change while admission waits on its lock.
 UPDATE workload_issuers SET allow_wildcard_admission = @allow_wildcard_admission
@@ -2314,3 +2292,43 @@ SELECT id
 FROM mcp_servers
 WHERE id = @id
 FOR UPDATE;
+
+-- name: SetHostedToolsetVisibilityFixture :execrows
+-- Sets a toolset's hosting visibility on its canonical MCP server, which owns it.
+UPDATE mcp_servers
+SET visibility = @visibility, updated_at = clock_timestamp()
+WHERE id = @id AND toolset_id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: SetHostedToolsetIssuerFixture :execrows
+UPDATE mcp_servers
+SET user_session_issuer_id = @user_session_issuer_id, updated_at = clock_timestamp()
+WHERE id = @id AND toolset_id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: RetireHostedToolsetEndpointsFixture :exec
+UPDATE mcp_endpoints
+SET deleted_at = clock_timestamp()
+WHERE mcp_server_id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: CreateHostedToolsetEndpointFixture :execrows
+-- Gives the canonical MCP server of a toolset an endpoint.
+INSERT INTO mcp_endpoints (project_id, mcp_server_id, custom_domain_id, slug)
+SELECT s.project_id, s.id, sqlc.narg('custom_domain_id')::uuid, @slug
+FROM mcp_servers s
+WHERE s.id = @id AND s.toolset_id = @id AND s.project_id = @project_id AND s.deleted IS FALSE;
+
+-- name: SetRemoteSessionListFixture :exec
+-- Test fixture for effective expiry and timestamp pagination.
+UPDATE remote_sessions s
+SET created_at = @created_at, last_used_at = sqlc.narg('last_used_at'),
+    access_expires_at = sqlc.narg('access_expires_at'), refresh_expires_at = sqlc.narg('refresh_expires_at'),
+    authorization_expires_at = sqlc.narg('authorization_expires_at'), refresh_token_encrypted = sqlc.narg('refresh_token_encrypted')
+FROM remote_session_clients c
+WHERE s.id = @id AND c.id = s.remote_session_client_id AND c.organization_id = @organization_id;
+
+-- name: SetGatewaySessionListFixture :exec
+-- Test fixture for endpoint, ordering, and expiry boundaries.
+UPDATE user_sessions
+SET resource = sqlc.narg('resource'), created_at = @created_at,
+    last_used_at = sqlc.narg('last_used_at'), refresh_expires_at = @refresh_expires_at,
+    deleted_at = sqlc.narg('deleted_at')
+WHERE id = @id AND organization_id = @organization_id;

@@ -1,3 +1,5 @@
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { IdentitySyncCallout } from "@/components/setup-empty-state";
 import {
   buildEmployees,
@@ -20,7 +22,7 @@ import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useSdkClient, useProjectSlugForRequests } from "@/contexts/Sdk";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { AgentOwner } from "@/pages/agents/agent-admin";
+import { AgentOwner, AgentStatus } from "@/pages/agents/agent-admin";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -559,6 +561,9 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const { hasScope } = useRBAC();
   const canReadOrganization = hasScope("org:read", organization.id);
   const canAdminOrganization = hasScope("org:admin", organization.id);
+  const inferenceSetupFlag = useFeatureFlag(
+    FEATURE_FLAGS.inferenceWorkloadSetup,
+  );
   // Match the existing agent screen's supported sessions, without changing scope.
   const agentsEnabled =
     organization.slug !== DEMO_ORG_SLUG &&
@@ -1086,24 +1091,11 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       {
         key: "status",
         header: "Status",
-        width: "140px",
+        width: "220px",
         render: (identity) => {
           const agent = agentsById.get(identity.registeredAgentId ?? "");
           if (!agent) return null;
-          return (
-            <Badge
-              size="sm"
-              variant={
-                agent.lifecycle === "active"
-                  ? "success"
-                  : agent.lifecycle === "revoked"
-                    ? "destructive"
-                    : "warning"
-              }
-            >
-              {agent.lifecycle}
-            </Badge>
-          );
+          return <AgentStatus agent={agent} />;
         },
       },
       {
@@ -1275,13 +1267,15 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
                 Set up Claude Tag
               </Link>
             </Button>
-            <Button asChild variant="secondary">
-              <Link
-                to={`${routes.identities.agents.new.href()}?capability=inference`}
-              >
-                Set up inference
-              </Link>
-            </Button>
+            {inferenceSetupFlag.status === "enabled" && (
+              <Button asChild variant="secondary">
+                <Link
+                  to={`${routes.identities.agents.new.href()}?capability=inference`}
+                >
+                  Set up inference
+                </Link>
+              </Button>
+            )}
             <Button asChild variant="primary">
               <Link to={routes.identities.agents.new.href()}>
                 <Plus className="size-4" aria-hidden="true" />
@@ -1516,7 +1510,7 @@ function IdentityGroup({
               at all. It is collapsed to nothing instead of removed: the column
               tracks come from the grid template, so a zero-height row costs no
               layout, where sr-only would take the cells out of the subgrid. */}
-          <div className="border-border min-h-0 flex-1 overflow-y-auto overscroll-y-contain border-b [&_table]:border-t-0 [&_table]:border-b-0 [&_thead]:h-0 [&_thead]:overflow-hidden [&_thead_th]:h-0 [&_thead_th]:overflow-hidden [&_thead_th]:border-0 [&_thead_th]:p-0">
+          <div className="border-border min-h-0 overflow-y-auto overscroll-y-contain border-b [&_table]:border-t-0 [&_table]:border-b-0 [&_thead]:h-0 [&_thead]:overflow-hidden [&_thead_th]:h-0 [&_thead_th]:overflow-hidden [&_thead_th]:border-0 [&_thead_th]:p-0">
             <Table
               columns={columns}
               data={rows.slice(0, visible)}

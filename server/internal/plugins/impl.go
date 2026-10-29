@@ -13,7 +13,9 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -44,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
@@ -80,9 +83,10 @@ type GitHubPublisher interface {
 	HasDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error)
 	// GetRepoFiles returns the current published files so a publish can carry an
 	// unchanged plugin component (hooks or MCP) verbatim into a fresh push,
-	// leaving the other component's files and configuration untouched. Returns
-	// ghclient.ErrRepoNotFound when nothing has been published yet.
-	GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error)
+	// leaving the other component's files and configuration untouched. A non-nil
+	// include restricts the result (and the blobs fetched) to accepted paths.
+	// Returns ghclient.ErrRepoNotFound when nothing has been published yet.
+	GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string, include func(path string) bool) (map[string][]byte, error)
 	// GetFileContent returns one file's raw content from the given branch.
 	// GetPublishStatus uses it to read the live plugin.json manifest version
 	// without walking the whole repo. Returns ghclient.ErrFileNotFound when
@@ -836,12 +840,16 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 			}
 			return nil, oops.E(oops.CodeUnexpected, tErr, "verify toolset").LogError(ctx, s.logger)
 		}
-		toolset, wrapper, wErr := hostedmcp.LoadServerState(ctx, s.db, toolset)
+		hosting, wrapper, wErr := hostedmcp.LoadServerState(ctx, s.db, toolset)
 		if wErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, wErr, "verify toolset mcp server").LogError(ctx, s.logger)
 		}
-		hosted := toolset.McpEnabled && toolset.McpSlug.Valid && toolset.McpSlug.String != ""
-		if wrapper != nil && toolset.McpEnabled && !hosted {
+		alias, aErr := legacyalias.Get(ctx, s.db, *ac.ProjectID, toolset.ID)
+		if aErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, aErr, "verify toolset mcp server").LogError(ctx, s.logger)
+		}
+		hosted := hosting.Enabled && alias.Slug.Valid && alias.Slug.String != ""
+		if wrapper != nil && hosting.Enabled && !hosted {
 			// Without the legacy slug alias the server needs an endpoint of its own.
 			server, mcpErr := s.repo.GetMcpServerForPluginServer(ctx, repo.GetMcpServerForPluginServerParams{McpServerID: wrapper.ID, ProjectID: *ac.ProjectID})
 			if mcpErr != nil && !errors.Is(mcpErr, pgx.ErrNoRows) {
@@ -850,7 +858,7 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 			hosted = mcpErr == nil && server.HasEndpoint
 		}
 		switch {
-		case !hosted && toolset.McpEnabled:
+		case !hosted && hosting.Enabled:
 			return nil, oops.E(oops.CodeBadRequest, nil, "toolset has no published MCP endpoint")
 		case !hosted:
 			return nil, oops.E(oops.CodeBadRequest, nil, "toolset does not have MCP enabled")
@@ -1443,14 +1451,9 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug, *ac.ProjectID, s.projectServerURL(ctx, *ac.ProjectID), publishedHooksConfig)
 	cfg.HooksAPIKey = candidate.fullKey
 
-	files, err := GenerateObservabilityPluginPackage(cfg, payload.Platform)
+	archive, err := ObservabilityPluginZip(cfg, payload.Platform)
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate observability plugin package").LogError(ctx, s.logger)
-	}
-
-	var buf bytes.Buffer
-	if err := writePluginZip(&buf, files); err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "build plugin zip").LogError(ctx, s.logger)
 	}
 
 	filename := "observability"
@@ -1471,7 +1474,7 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 	return &gen.DownloadObservabilityPluginResult{
 		ContentType:        "application/zip",
 		ContentDisposition: fmt.Sprintf(`attachment; filename="%s.zip"`, filename),
-	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+	}, io.NopCloser(bytes.NewReader(archive)), nil
 }
 
 func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.DownloadCodexInstallScriptPayload) (*gen.DownloadCodexInstallScriptResult, io.ReadCloser, error) {
@@ -1537,7 +1540,9 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 // writePluginZip serializes the file map as a deterministic ZIP, marking shell
 // scripts executable so the bootstrapper runs after extraction. The GitHub
 // publish path applies the same rule via Tree mode 100755 in
-// thirdparty/github/repo.go; keep them in sync.
+// thirdparty/github/repo.go; keep them in sync. Git has no owner-only mode, so
+// only the ZIP marks the key-bearing files (speakeasy.json, the root
+// install.sh) owner-only.
 func writePluginZip(w io.Writer, files map[string][]byte) error {
 	zw := zip.NewWriter(w)
 	paths := make([]string, 0, len(files))
@@ -1571,8 +1576,16 @@ func writePluginZip(w io.Writer, files map[string][]byte) error {
 			ExternalAttrs:      0,
 		}
 		var mode os.FileMode = 0o644
-		if strings.HasSuffix(p, ".sh") {
+		switch {
+		case p == "install.sh":
+			// The root install script embeds the hooks API key, so it stays
+			// owner-only while still runnable.
+			mode = 0o700
+		case strings.HasSuffix(p, ".sh"):
 			mode = 0o755
+		case path.Base(p) == "speakeasy.json":
+			// Carries the hooks API key, so extraction must leave it owner-only.
+			mode = 0o600
 		}
 		header.SetMode(mode)
 		f, err := zw.CreateHeader(header)
@@ -1667,6 +1680,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				ServerURL:        "",
 				APIKey:           "",
 				HooksAPIKey:      "",
+				HooksKeyIsAgent:  false,
 				ProjectSlug:      "",
 				IsDefaultProject: false,
 				Version:          "",
@@ -2418,11 +2432,36 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 
 	// When exactly one component changed, carry the other verbatim from the
 	// existing repo so its files (and their embedded API key) are untouched.
-	// Fetch the repo only in that case; a first publish or a both-components
-	// change regenerates everything and needs no fetch.
+	// Fetch only the files a carry reads: each is a GitHub round trip, and a
+	// dashboard publish regenerates MCP, so fetching the whole repo would spend
+	// most of the publish downloading files that are about to be replaced. A
+	// first publish or a both-components change regenerates everything and
+	// needs no fetch.
+	var mcpPaths []string
+	if !mcpChanged {
+		mcpPaths, err = mcpFilePaths(pluginInfos, cfg)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "enumerate mcp files").LogError(ctx, s.logger)
+		}
+	}
+	carryHooks := observabilityEnabled && !hooksChanged
+	_, hooksPrefixes := hooksCarryPrefixes(targetHooksConfigJSON, cfg.OrgName)
+
 	var existingFiles map[string][]byte
-	if !firstPublish && (!mcpChanged || !hooksChanged) {
-		existingFiles, err = s.github.Client.GetRepoFiles(ctx, s.github.InstallationID, repoOwner, repoName, "main")
+	if !firstPublish && (!mcpChanged || carryHooks) {
+		mcpPathSet := make(map[string]struct{}, len(mcpPaths))
+		for _, p := range mcpPaths {
+			mcpPathSet[p] = struct{}{}
+		}
+		include := func(path string) bool {
+			if _, ok := mcpPathSet[path]; ok {
+				return true
+			}
+			return carryHooks && slices.ContainsFunc(hooksPrefixes, func(prefix string) bool {
+				return strings.HasPrefix(path, prefix)
+			})
+		}
+		existingFiles, err = s.github.Client.GetRepoFiles(ctx, s.github.InstallationID, repoOwner, repoName, "main", include)
 		if err != nil {
 			if !errors.Is(err, ghclient.ErrRepoNotFound) {
 				return nil, oops.E(oops.CodeGatewayError, err, "get existing repo files").LogError(ctx, s.logger)
@@ -2463,11 +2502,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// MCP component: carry when unchanged, otherwise regenerate with a fresh key.
 	carriedMCP := false
 	if !mcpChanged {
-		paths, err := mcpFilePaths(pluginInfos, cfg)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "enumerate mcp files").LogError(ctx, s.logger)
-		}
-		carriedMCP = carry(files, paths)
+		carriedMCP = carry(files, mcpPaths)
 	}
 	if rotateHooks && !carriedMCP {
 		// Regenerating MCP here would mint a replacement consumer key and rewrite
@@ -2498,7 +2533,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// and silently regenerate past the rollout gate.
 	carriedHooks := false
 	carriedHooksOrgName := ""
-	if observabilityEnabled && !hooksChanged {
+	if carryHooks {
 		carriedHooksOrgName, carriedHooks = carryHooksSubtree(files, existingFiles, targetHooksConfigJSON, cfg.OrgName)
 	}
 	if observabilityEnabled && !carriedHooks {
@@ -2653,11 +2688,19 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	return &publishOutcome{RepoURL: repoURL, Skipped: false, HooksConfigDeferred: hooksConfigDeferred, HooksKeyPublished: rotatedKeyPublished}, nil
 }
 
+// hooksCarryPrefixes resolves the org name a published hooks subtree was
+// generated under — the published hooks config's org name, since the org may
+// have been renamed since publish, falling back to the current org name when
+// the stored config predates the snapshot — and every directory prefix
+// (required and optional) carryHooksSubtree reads under it.
+func hooksCarryPrefixes(publishedConfig []byte, currentOrgName string) (string, []string) {
+	orgName := conv.Default(naming.PublishedHooksOrgName(publishedConfig), currentOrgName)
+	return orgName, slices.Concat(hooksSubtreePrefixes(orgName), hooksOptionalSubtreePrefixes(orgName))
+}
+
 // carryHooksSubtree copies the published hooks (observability) subtree
-// verbatim into dst by directory prefix (see hooksSubtreePrefixes). The
-// prefixes derive from the published hooks config's org name — the org may
-// have been renamed since publish — falling back to the current org name when
-// the stored config predates the snapshot. Returns the org name the carried
+// verbatim into dst by directory prefix (see hooksSubtreePrefixes), with the
+// org name resolved by hooksCarryPrefixes. Returns the org name the carried
 // directories derive from (for GenerateConfig.HooksOrgName) and whether the
 // carry succeeded; false means a platform's subtree is missing and the caller
 // must regenerate.
@@ -2665,7 +2708,7 @@ func carryHooksSubtree(dst, existing map[string][]byte, publishedConfig []byte, 
 	if len(existing) == 0 {
 		return "", false
 	}
-	orgName := conv.Default(naming.PublishedHooksOrgName(publishedConfig), currentOrgName)
+	orgName, _ := hooksCarryPrefixes(publishedConfig, currentOrgName)
 	staged := make(map[string][]byte)
 	for _, prefix := range hooksSubtreePrefixes(orgName) {
 		found := false
@@ -3247,7 +3290,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 	if err != nil {
 		return nil, "", oops.E(oops.CodeUnexpected, err, "list active plugins").LogError(ctx, s.logger)
 	}
-	mcpRows, err := lockedRepo.ListPluginsWithMcpServersForProject(ctx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
+	mcpRows, err := listPluginMCPServers(ctx, tx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
 		return nil, "", oops.E(oops.CodeUnexpected, err, "list plugins with mcp servers").LogError(ctx, s.logger)
 	}
@@ -3441,13 +3484,14 @@ func (s *Service) resolveAgentPluginCompatibility(ctx context.Context, projectID
 // projectServerURL, so server_url matches the plugins' MCP addresses.
 func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlug string, projectID uuid.UUID, serverURL string, publishedHooksConfig []byte) GenerateConfig {
 	cfg := GenerateConfig{
-		OrgName:     orgSlug,
-		OrgEmail:    "",
-		OrgID:       orgID,
-		ServerURL:   serverURL,
-		APIKey:      "",
-		HooksAPIKey: "",
-		ProjectSlug: projectSlug,
+		OrgName:         orgSlug,
+		OrgEmail:        "",
+		OrgID:           orgID,
+		ServerURL:       serverURL,
+		APIKey:          "",
+		HooksAPIKey:     "",
+		HooksKeyIsAgent: false,
+		ProjectSlug:     projectSlug,
 		// Milliseconds rather than seconds so publishes close together (e.g. a
 		// settings flip right after a publish) still mint distinct manifest
 		// versions; the 13-digit patch also sorts numerically above the

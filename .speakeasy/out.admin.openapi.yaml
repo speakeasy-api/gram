@@ -3409,6 +3409,81 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: resumeStripeSubscription
+  /admin/organization.setAdoptionDashboardUrl:
+    post:
+      description: Sets or clears the link to an organization's adoption dashboard shown on the admin overview. An empty or absent URL clears it.
+      operationId: adminSetAdoptionDashboardUrl
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAdoptionDashboardURLRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganization'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: setAdoptionDashboardUrl admin
+      tags:
+        - admin
+      x-speakeasy-name-override: setAdoptionDashboardUrl
   /admin/organization.setInferenceKeyMonthlyLimit:
     post:
       tags:
@@ -9922,6 +9997,10 @@ components:
         account_type:
           type: string
           description: Speakeasy account type (e.g. free, pro, payg, enterprise).
+        adoption_dashboard_url:
+          type: string
+          description: Staff-entered link to the organization's adoption dashboard. Absent when none has been set.
+          format: uri
         created_at:
           type: string
           description: The creation date of the organization.
@@ -10355,9 +10434,39 @@ components:
           type: string
       required:
         - entries
+    AdminRegistryPromotionAuthDiscovery:
+      type: object
+      properties:
+        auth_setup:
+          type: string
+          enum:
+            - none
+            - dcr
+            - cimd
+            - manual
+            - unknown
+        status:
+          type: string
+          enum:
+            - complete
+            - partial
+            - unavailable
+            - not_required
+        supports_cimd:
+          type: boolean
+        supports_dcr:
+          type: boolean
+      description: Publicly advertised authentication capabilities, not a verified OAuth connection.
+      required:
+        - supports_dcr
+        - supports_cimd
+        - auth_setup
+        - status
     AdminRegistryPromotionCandidate:
       type: object
       properties:
+        auth_discovery:
+          $ref: '#/components/schemas/AdminRegistryPromotionAuthDiscovery'
         can_override_eligibility:
           type: boolean
           description: Whether staff may explicitly accept this candidate's health evidence.
@@ -10719,6 +10828,10 @@ components:
         associations:
           type: integer
           description: Configured identities and server links decided.
+          format: int64
+        attachments_waiting:
+          type: integer
+          description: Agent attachments whose grants a run does not write while the organization's upstream selector writes are not allowed. While any wait, complete is false.
           format: int64
         complete:
           type: boolean
@@ -11382,12 +11495,23 @@ components:
     CreateOrganizationRequestBody:
       type: object
       properties:
+        name:
+          type: string
+          description: Organization display name. When omitted, a name is derived from the registrable company domain.
+          minLength: 1
+          maxLength: 100
         ownership_confirmed:
           type: boolean
           description: The operator confirms that domain ownership was established outside this form.
+        slug:
+          type: string
+          description: Preferred organization URL slug. When omitted, a unique slug is derived from the organization name. Explicit slugs use lowercase letters, numbers, and hyphens.
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          minLength: 2
+          maxLength: 100
         url:
           type: string
-          description: Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the name and verified email domain.
+          description: Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the verified email domain.
           minLength: 1
       required:
         - url
@@ -12624,6 +12748,17 @@ components:
         - id
         - updated_at
         - data_json
+    SetAdoptionDashboardURLRequestBody:
+      type: object
+      properties:
+        adoption_dashboard_url:
+          type: string
+          description: An https URL, or empty to clear the link.
+          maxLength: 2048
+        organization_id:
+          type: string
+      required:
+        - organization_id
     SetInferenceKeyMonthlyLimitRequestBody:
       type: object
       properties:

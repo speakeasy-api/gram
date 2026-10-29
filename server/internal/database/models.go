@@ -1801,6 +1801,73 @@ type DeviceAgentEnvironmentSync struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type DeviceAgentStateReport struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential-pii
+	Email string
+	// @access: confidential-pii
+	SerialNumber pgtype.Text
+	// @access: confidential-pii
+	Hostname pgtype.Text
+	// @access: confidential
+	SchemaVersion int32
+	// @access: confidential
+	GeneratedAt pgtype.Timestamptz
+	// @access: confidential
+	ReportedAt pgtype.Timestamptz
+	// @access: confidential
+	AppliedEtag pgtype.Text
+	// @access: confidential
+	AppliedAt pgtype.Timestamptz
+	// @access: confidential
+	EnforcementHalted bool
+	// @access: confidential
+	RemoteConfigEtag pgtype.Text
+	// @access: confidential
+	RemoteConfigFailed bool
+	// Marketplace and plugin slugs chosen by the organization.
+	// @access: opaque-confidential
+	WithheldPlugins []byte
+	// Speakeasy-defined tool ids and enforcement enums.
+	// @access: confidential
+	Tools []byte
+	// @access: confidential
+	DegradedToolCount int32
+	// @access: confidential
+	DriftCountingSince pgtype.Timestamptz
+	// @access: confidential
+	SpeakeasydVersion pgtype.Text
+	// @access: confidential
+	SpeakeasyVersion pgtype.Text
+	// @access: confidential
+	SpeakeasyUiVersion pgtype.Text
+	// @access: confidential
+	Os pgtype.Text
+	// @access: confidential
+	Arch pgtype.Text
+	// @access: confidential
+	AutoUpdate pgtype.Text
+	// @access: confidential
+	UpdateChannel pgtype.Text
+	// @access: confidential
+	PinnedTarget pgtype.Text
+	// @access: confidential
+	CurrentBlocked bool
+	// @access: confidential
+	LastRollbackAt pgtype.Timestamptz
+	// @access: confidential
+	LastRollbackFrom pgtype.Text
+	// @access: confidential
+	LastRollbackTo pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type DeviceAgentSync struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -1808,6 +1875,10 @@ type DeviceAgentSync struct {
 	OrganizationID string
 	// @access: confidential-pii
 	Email string
+	// @access: confidential
+	ServedEtag pgtype.Text
+	// @access: confidential
+	ServedEtagChangedAt pgtype.Timestamptz
 	// @access: confidential
 	FirstSeenAt pgtype.Timestamptz
 	// @access: confidential
@@ -3404,6 +3475,35 @@ type McpServerToolMetadatum struct {
 	Deleted bool
 }
 
+type McpSkillLink struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	SkillID uuid.UUID
+	// @access: confidential
+	PinnedVersionID uuid.NullUUID
+	// @access: confidential
+	TargetKind string
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: confidential
+	MetaMcpServerID uuid.NullUUID
+	// @access: confidential
+	CreatedByUserID string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type MdmDevice struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -3760,8 +3860,6 @@ type OktaIdentityProviderConnection struct {
 	OrgUrl string
 	// @access: restricted
 	IssuerUrl string
-	// @access: opaque-restricted
-	IssuerUrlOverrideReason pgtype.Text
 	// @access: confidential
 	OwnershipClaimed bool
 	// @access: confidential
@@ -4054,6 +4152,9 @@ type OrganizationMetadatum struct {
 	CreationSource pgtype.Text
 	// @access: confidential
 	DefaultHost pgtype.Text
+	// Staff-entered link to the adoption dashboard for this organization.
+	// @access: restricted
+	AdoptionDashboardUrl pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -7376,19 +7477,9 @@ type Toolset struct {
 	// @access: confidential
 	DefaultEnvironmentSlug pgtype.Text
 	// @access: confidential
-	McpSlug pgtype.Text
-	// @access: confidential
-	McpIsPublic bool
-	// @access: confidential
-	McpEnabled bool
-	// @access: confidential
 	ToolSelectionMode string
 	// @access: confidential
-	CustomDomainID uuid.NullUUID
-	// @access: confidential
 	ExternalOauthServerID uuid.NullUUID
-	// @access: confidential
-	UserSessionIssuerID uuid.NullUUID
 	// @access: confidential
 	ToolVariationsGroupID uuid.NullUUID
 	// @access: confidential
@@ -7885,6 +7976,21 @@ type UserAccount struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type UserHiddenMcpServer struct {
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	UserID string
+	// @access: confidential
+	McpServerID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type UserOauthToken struct {

@@ -482,6 +482,29 @@ const (
 	// (whose detail stays on gram.oauth.failure_reason), or the request
 	// validation failure class such as "header_mismatch".
 	McpRejectionReasonKey = attribute.Key("gram.mcp.rejection_reason")
+	// McpSkillOriginKey is the bounded origin of a skill served over MCP:
+	// "distribution" for a managed skill linked to the MCP surface, or
+	// "embedded" for a reviewed skill compiled into the platform toolset.
+	// Never a skill name or identifier.
+	McpSkillOriginKey = attribute.Key("gram.mcp.skill.origin")
+	// McpSkillPinConflictCountKey is how many pinned skill links lost to a
+	// different pinned version when one MCP surface resolved a skill linked
+	// several times.
+	McpSkillPinConflictCountKey = attribute.Key("gram.mcp.skill.pin_conflict_count")
+	// McpSkillIDKey is the managed skill a skill:// resources/read served.
+	McpSkillIDKey = attribute.Key("gram.mcp.skill.id")
+	// McpSkillVersionIDKey is the skill version whose content a skill://
+	// resources/read served.
+	McpSkillVersionIDKey = attribute.Key("gram.mcp.skill.version_id")
+	// McpSkillDigestKey is the SEP-2640 digest ("sha256:<hex>") of the
+	// content a skill:// resources/read served.
+	McpSkillDigestKey = attribute.Key("gram.mcp.skill.digest")
+	// McpSkillTargetKindKey is the kind of MCP surface a skill resolution
+	// served: "mcp_server", "meta_mcp_server" or "organization_gateway".
+	McpSkillTargetKindKey = attribute.Key("gram.mcp.skill.target_kind")
+	// McpSkillTargetIDKey is the id of the stored MCP surface a skill
+	// resolution served, or the nil UUID for a row-less surface.
+	McpSkillTargetIDKey = attribute.Key("gram.mcp.skill.target_id")
 	// McpKillswitchSurfaceKey is the kill-switch enforcement surface a covered
 	// MCP tools/call reached: "hosted" or "private_proxy".
 	McpKillswitchSurfaceKey = attribute.Key("gram.mcp.killswitch.surface")
@@ -1100,9 +1123,21 @@ const (
 	RemoteMCPConfiguredHeaderNameKey   = attribute.Key("gram.remote_mcp.configured_header.name")
 	RemoteMCPProxyRemoteStatusCodeKey  = attribute.Key("gram.remote_mcp.proxy.remote_status_code")
 	RemoteMCPProxyRemoteStatusClassKey = attribute.Key("gram.remote_mcp.proxy.remote_status_class")
-	RemoteMCPServerIDKey               = attribute.Key("gram.remote_mcp_server.id")
-	RemoteMCPServerURLKey              = attribute.Key("gram.remote_mcp_server.url")
-	TunneledMCPServerIDKey             = attribute.Key("gram.tunneled_mcp_server.id")
+	// RemoteMCPProxyStreamEndReasonKey names why a relayed SSE stream ended.
+	// Closed set, see proxy.StreamEndReason.
+	RemoteMCPProxyStreamEndReasonKey = attribute.Key("gram.remote_mcp.proxy.stream.end_reason")
+	// RemoteMCPProxyStreamResponseRelayedKey reports whether a POST stream had
+	// already relayed the JSON-RPC response to its request when it ended.
+	RemoteMCPProxyStreamResponseRelayedKey = attribute.Key("gram.remote_mcp.proxy.stream.response_relayed")
+	// RemoteMCPProxyStreamResumableKey reports whether the upstream stream
+	// carried SSE event ids, which lets a client resume it with Last-Event-ID.
+	RemoteMCPProxyStreamResumableKey = attribute.Key("gram.remote_mcp.proxy.stream.resumable")
+	// RemoteMCPProxyStreamResumeRequestedKey reports whether the client opened
+	// the stream with Last-Event-ID to resume an earlier one.
+	RemoteMCPProxyStreamResumeRequestedKey = attribute.Key("gram.remote_mcp.proxy.stream.resume_requested")
+	RemoteMCPServerIDKey                   = attribute.Key("gram.remote_mcp_server.id")
+	RemoteMCPServerURLKey                  = attribute.Key("gram.remote_mcp_server.url")
+	TunneledMCPServerIDKey                 = attribute.Key("gram.tunneled_mcp_server.id")
 	// TunnelPublicRejectionReasonKey names why the anonymous public tunnel
 	// path rejected a request before proxying. Closed set, see
 	// mcpmetrics.TunnelPublicRejectReason.
@@ -3010,6 +3045,38 @@ func SlogRemoteMCPProxyRemoteStatusClass(v string) slog.Attr {
 	return slog.String(string(RemoteMCPProxyRemoteStatusClassKey), v)
 }
 
+func RemoteMCPProxyStreamEndReason(v string) attribute.KeyValue {
+	return RemoteMCPProxyStreamEndReasonKey.String(v)
+}
+
+func SlogRemoteMCPProxyStreamEndReason(v string) slog.Attr {
+	return slog.String(string(RemoteMCPProxyStreamEndReasonKey), v)
+}
+
+func RemoteMCPProxyStreamResponseRelayed(v bool) attribute.KeyValue {
+	return RemoteMCPProxyStreamResponseRelayedKey.Bool(v)
+}
+
+func SlogRemoteMCPProxyStreamResponseRelayed(v bool) slog.Attr {
+	return slog.Bool(string(RemoteMCPProxyStreamResponseRelayedKey), v)
+}
+
+func RemoteMCPProxyStreamResumable(v bool) attribute.KeyValue {
+	return RemoteMCPProxyStreamResumableKey.Bool(v)
+}
+
+func SlogRemoteMCPProxyStreamResumable(v bool) slog.Attr {
+	return slog.Bool(string(RemoteMCPProxyStreamResumableKey), v)
+}
+
+func RemoteMCPProxyStreamResumeRequested(v bool) attribute.KeyValue {
+	return RemoteMCPProxyStreamResumeRequestedKey.Bool(v)
+}
+
+func SlogRemoteMCPProxyStreamResumeRequested(v bool) slog.Attr {
+	return slog.Bool(string(RemoteMCPProxyStreamResumeRequestedKey), v)
+}
+
 func RiskPolicyCount(v int) attribute.KeyValue { return RiskPolicyCountKey.Int(v) }
 func SlogRiskPolicyCount(v int) slog.Attr      { return slog.Int(string(RiskPolicyCountKey), v) }
 
@@ -3323,6 +3390,39 @@ func McpRejectionReason[V ~string](v V) attribute.KeyValue {
 }
 func SlogMcpRejectionReason[V ~string](v V) slog.Attr {
 	return slog.String(string(McpRejectionReasonKey), string(v))
+}
+
+func McpSkillOrigin[V ~string](v V) attribute.KeyValue { return McpSkillOriginKey.String(string(v)) }
+func SlogMcpSkillOrigin[V ~string](v V) slog.Attr {
+	return slog.String(string(McpSkillOriginKey), string(v))
+}
+
+func McpSkillPinConflictCount(v int) attribute.KeyValue { return McpSkillPinConflictCountKey.Int(v) }
+func SlogMcpSkillPinConflictCount(v int) slog.Attr {
+	return slog.Int(string(McpSkillPinConflictCountKey), v)
+}
+
+func McpSkillID(v string) attribute.KeyValue { return McpSkillIDKey.String(v) }
+func SlogMcpSkillID(v string) slog.Attr      { return slog.String(string(McpSkillIDKey), v) }
+
+func McpSkillVersionID(v string) attribute.KeyValue { return McpSkillVersionIDKey.String(v) }
+func SlogMcpSkillVersionID(v string) slog.Attr {
+	return slog.String(string(McpSkillVersionIDKey), v)
+}
+
+func McpSkillDigest(v string) attribute.KeyValue { return McpSkillDigestKey.String(v) }
+func SlogMcpSkillDigest(v string) slog.Attr      { return slog.String(string(McpSkillDigestKey), v) }
+
+func McpSkillTargetKind[V ~string](v V) attribute.KeyValue {
+	return McpSkillTargetKindKey.String(string(v))
+}
+func SlogMcpSkillTargetKind[V ~string](v V) slog.Attr {
+	return slog.String(string(McpSkillTargetKindKey), string(v))
+}
+
+func McpSkillTargetID(v string) attribute.KeyValue { return McpSkillTargetIDKey.String(v) }
+func SlogMcpSkillTargetID(v string) slog.Attr {
+	return slog.String(string(McpSkillTargetIDKey), v)
 }
 
 func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }

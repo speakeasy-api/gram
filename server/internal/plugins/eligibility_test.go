@@ -25,7 +25,6 @@ func TestEligibleServerDeliversPriorRoleGrant(t *testing.T) {
 	ac, _ := contextvalues.GetAuthContext(ctx)
 	role := createTestRolePrincipal(t, ctx, ti, "eligibility")
 	server := createTestToolset(t, ctx, ti.conn, "Later enabled")
-	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{ID: server.ID, ProjectID: *ac.ProjectID, McpEnabled: false}))
 	require.NoError(t, testrepo.New(ti.conn).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{Visibility: visibility.Disabled, ID: server.ID, ProjectID: *ac.ProjectID}))
 	principal, err := urn.ParsePrincipal(role)
 	require.NoError(t, err)
@@ -44,7 +43,6 @@ func TestEligibleServerDeliversPriorRoleGrant(t *testing.T) {
 		tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: Exercise the public attachment hook in its enclosing eligibility transaction.
 		require.NoError(t, err)
 		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-		require.NoError(t, testrepo.New(tx).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{ID: server.ID, ProjectID: *ac.ProjectID, McpEnabled: true}))
 		require.NoError(t, testrepo.New(tx).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{Visibility: visibility.Private, ID: server.ID, ProjectID: *ac.ProjectID}))
 		_, err = plugins.AttachToDefaultAndRolePluginsAudited(ctx, tx, audit.NewLogger(), ac, plugins.AttachToDefaultPluginParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: server.ID, Valid: true}, DisplayName: server.Name}, nil)
 		require.NoError(t, err)

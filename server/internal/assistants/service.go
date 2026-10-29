@@ -576,9 +576,10 @@ func (s *ServiceCore) SetFeatureProvider(p feature.Provider) {
 }
 
 // SetSiteURL wires the dashboard base URL used to smart-link CIMD client
-// metadata back to the assistant UI. Set after construction to match the
+// metadata and callback recovery links back to the assistant UI. Set after
+// construction to match the
 // existing post-construction injection pattern. A nil URL omits client_uri
-// from served documents.
+// from served documents and recovery links from callback error pages.
 func (s *ServiceCore) SetSiteURL(u *url.URL) {
 	s.siteURL = u
 }
@@ -1057,10 +1058,21 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 	if len(toolsetSlugs) == 0 {
 		return nil, nil
 	}
+	var aliasCandidates []uuid.UUID
+	for _, row := range toolsetRows {
+		if row.DisabledWrapper && !row.EnablesMcp {
+			aliasCandidates = append(aliasCandidates, row.ID)
+		}
+	}
+	// A disabled hosted server with only its legacy alias still serves once enabled.
+	aliased, err := hasLegacyAlias(ctx, tx, projectID, aliasCandidates)
+	if err != nil {
+		return nil, err
+	}
 	enablesMCP := map[uuid.UUID]bool{}
 	for _, row := range toolsetRows {
 		toolsetIDs[row.Slug] = row.ID
-		enablesMCP[row.ID] = row.EnablesMcp
+		enablesMCP[row.ID] = row.EnablesMcp || aliased[row.ID]
 	}
 	for _, slug := range toolsetSlugs {
 		if _, ok := toolsetIDs[slug]; !ok {
@@ -1272,7 +1284,7 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 	if len(assistantIDs) == 0 {
 		return out, nil
 	}
-	rows, err := assistantrepo.New(s.db).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{
+	rows, err := loadAssistantMcpServers(ctx, s.db, assistantrepo.LoadAssistantMcpServersParams{
 		AssistantIds: assistantIDs,
 		ProjectID:    projectID,
 	})

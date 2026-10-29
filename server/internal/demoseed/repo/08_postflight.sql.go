@@ -327,19 +327,14 @@ JOIN mcp_servers s
   ON s.id = t.id AND s.toolset_id = t.id AND s.project_id = t.project_id AND s.deleted IS FALSE
 WHERE t.project_id = $1::uuid AND t.deleted IS FALSE
   AND (s.name IS DISTINCT FROM t.name
-    OR s.slug IS DISTINCT FROM t.mcp_slug
-    OR s.tool_variations_group_id IS DISTINCT FROM t.tool_variations_group_id
-    OR s.user_session_issuer_id IS DISTINCT FROM t.user_session_issuer_id
-    OR s.visibility <> CASE WHEN NOT t.mcp_enabled THEN 'disabled' WHEN t.mcp_is_public THEN 'public' ELSE 'private' END
-    OR 1 <> (SELECT count(*) FROM mcp_endpoints e WHERE e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE)
-    OR NOT EXISTS (
-      SELECT 1 FROM mcp_endpoints e
-      WHERE e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
-        AND e.slug = t.mcp_slug AND e.custom_domain_id IS NOT DISTINCT FROM t.custom_domain_id))
+       OR s.tool_variations_group_id IS DISTINCT FROM t.tool_variations_group_id
+       OR NOT EXISTS (
+         SELECT 1 FROM mcp_endpoints e
+         WHERE e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE))
 `
 
-// Hosted toolsets mirror their canonical wrapper: name, tool variations group, visibility, issuer, and the
-// single endpoint's address, so the toolset-to-server sync older pods run writes nothing.
+// A hosted toolset's canonical wrapper mirrors the toolset's name and tool
+// variations group, and serves from at least one endpoint.
 func (q *Queries) PostflightCountHostedToolsetDrift(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountHostedToolsetDrift, projectID)
 	var count int64
@@ -702,6 +697,27 @@ WHERE organization_id = $1::text
 
 func (q *Queries) PostflightCountKillswitchVersions(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountKillswitchVersions, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountMCPSkillLinks = `-- name: PostflightCountMCPSkillLinks :one
+SELECT count(*)
+FROM mcp_skill_links l
+LEFT JOIN mcp_servers ms
+  ON ms.project_id = l.project_id AND ms.id = l.mcp_server_id AND ms.deleted IS FALSE
+LEFT JOIN meta_mcp_servers mm
+  ON mm.project_id = l.project_id AND mm.id = l.meta_mcp_server_id AND mm.deleted IS FALSE
+WHERE l.project_id = $1::uuid AND l.deleted IS FALSE
+  AND (l.target_kind = 'organization_gateway'
+    OR (l.target_kind = 'mcp_server' AND ms.id IS NOT NULL)
+    OR (l.target_kind = 'meta_mcp_server' AND mm.id IS NOT NULL))
+`
+
+// Skills served over MCP must point at targets that survived the reseed.
+func (q *Queries) PostflightCountMCPSkillLinks(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountMCPSkillLinks, projectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

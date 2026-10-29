@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,8 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -39,45 +40,68 @@ const maxHostedSlugLength = 40
 // references keep its identity, under the hosted address rules: a hosted server only moves onto the
 // organization's verified custom domain and leaves a domain only once it can no longer serve.
 func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, preexisting repo.McpEndpoint, requestedDomainID uuid.NullUUID, slug string) (*types.McpEndpoint, error) {
-	serverID := preexisting.McpServerID.UUID
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
-		return nil, err
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	afterView, reconcileDomains, err := s.updateHostedEndpointInTx(ctx, dbtx, logger, authCtx, preexisting, requestedDomainID, slug)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{preexisting.McpServerID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+	s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{preexisting.McpServerID})
+
+	if len(reconcileDomains) > 0 {
+		if err := s.reconcileCustomDomains(ctx, reconcileDomains); err != nil {
+			return nil, err
+		}
+	}
+	return afterView, nil
+}
+
+// updateHostedEndpointInTx applies a hosted endpoint update in the caller's transaction, which owns publication
+// and commit. It returns the custom domains whose root it cleared, to reconcile after commit.
+func (s *Service) updateHostedEndpointInTx(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, preexisting repo.McpEndpoint, requestedDomainID uuid.NullUUID, slug string) (*types.McpEndpoint, []uuid.UUID, error) {
+	serverID := preexisting.McpServerID.UUID
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+		return nil, nil, err
+	}
+
 	if err := lockEndpointMutationScope(ctx, dbtx, authCtx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock endpoint mutation scope").LogError(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "lock endpoint mutation scope").LogError(ctx, logger)
 	}
 	if err := lockHostedToolset(ctx, dbtx, *authCtx.ProjectID, serverID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock hosted toolset").LogError(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "lock hosted toolset").LogError(ctx, logger)
 	}
 	dead, err := tombstone.LockCustomDomains(ctx, dbtx, authCtx.ActiveOrganizationID, uniqueIDs(preexisting.CustomDomainID, requestedDomainID))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock custom domains").LogError(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "lock custom domains").LogError(ctx, logger)
 	}
 	txRepo := repo.New(dbtx)
 	existing, err := txRepo.LockMCPEndpointByID(ctx, repo.LockMCPEndpointByIDParams{ID: preexisting.ID, ProjectID: *authCtx.ProjectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found").LogWarn(ctx, logger)
+		return nil, nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found").LogWarn(ctx, logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint").LogError(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint").LogError(ctx, logger)
 	case existing.CustomDomainID != preexisting.CustomDomainID || existing.McpServerID != preexisting.McpServerID:
-		return nil, oops.E(oops.CodeConflict, nil, "mcp endpoint changed concurrently; retry the request").LogWarn(ctx, logger)
+		return nil, nil, oops.E(oops.CodeConflict, nil, "mcp endpoint changed concurrently; retry the request").LogWarn(ctx, logger)
 	}
 	server, err := mcpserversrepo.New(dbtx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: *authCtx.ProjectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found").LogWarn(ctx, logger)
+		return nil, nil, oops.E(oops.CodeNotFound, err, "mcp server not found").LogWarn(ctx, logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 	case !server.ToolsetID.Valid || server.ToolsetID.UUID != server.ID:
-		return nil, oops.E(oops.CodeConflict, nil, "mcp server changed concurrently; retry the request").LogWarn(ctx, logger)
+		return nil, nil, oops.E(oops.CodeConflict, nil, "mcp server changed concurrently; retry the request").LogWarn(ctx, logger)
 	}
 
 	customDomainID := existing.CustomDomainID
@@ -85,33 +109,33 @@ func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger,
 	case requestedDomainID == existing.CustomDomainID:
 	case requestedDomainID.Valid:
 		if err := requireOrganizationDomain(ctx, dbtx, logger, authCtx, requestedDomainID.UUID); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if existing.CustomDomainID.Valid {
 			if err := requireDomainLeavable(ctx, dbtx, logger, authCtx.ActiveOrganizationID, existing.CustomDomainID.UUID, dead); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 		customDomainID = requestedDomainID
 	default:
 		if err := requireDomainLeavable(ctx, dbtx, logger, authCtx.ActiveOrganizationID, existing.CustomDomainID.UUID, dead); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		customDomainID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	}
 
 	if slug != existing.Slug && len(slug) > maxHostedSlugLength {
-		return nil, oops.E(oops.CodeBadRequest, nil, "a hosted MCP slug must be at most %d characters", maxHostedSlugLength).LogWarn(ctx, logger)
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "a hosted MCP slug must be at most %d characters", maxHostedSlugLength).LogWarn(ctx, logger)
 	}
 	if slug != existing.Slug || customDomainID != existing.CustomDomainID {
 		if err := requireHostedSlugPrefix(ctx, logger, authCtx, customDomainID, slug); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := LockSlugScope(ctx, dbtx, customDomainID, slug); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope").LogError(ctx, logger)
+			return nil, nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope").LogError(ctx, logger)
 		}
 		// The scope is the endpoint's own domain or the organization's verified one, so a
-		// soft-deleted domain must not block a move within it; the server's own mirrored toolset address does not count.
+		// soft-deleted domain must not block a move within it; the server's frozen toolset alias does not count.
 		available, err := CheckSlugAvailable(ctx, dbtx, SlugAvailabilityCheck{
 			Slug:                     slug,
 			CustomDomainID:           customDomainID,
@@ -121,10 +145,10 @@ func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger,
 			SkipDomainOwnershipCheck: true,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").LogError(ctx, logger)
+			return nil, nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").LogError(ctx, logger)
 		}
 		if !available {
-			return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken").LogWarn(ctx, logger)
+			return nil, nil, oops.E(oops.CodeConflict, nil, "this slug is already taken").LogWarn(ctx, logger)
 		}
 	}
 
@@ -134,7 +158,7 @@ func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger,
 			OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, McpServerID: server.ID,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "list hosted MCP endpoints").LogError(ctx, logger)
+			return nil, nil, oops.E(oops.CodeUnexpected, err, "list hosted MCP endpoints").LogError(ctx, logger)
 		}
 		addresses := []repo.McpEndpoint{proposedAddress(customDomainID, slug)}
 		for _, sibling := range siblings {
@@ -143,7 +167,7 @@ func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger,
 			}
 		}
 		if err := checkHostedIngress(ctx, dbtx, logger, authCtx, server, addresses); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -159,9 +183,9 @@ func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger,
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, oops.E(oops.CodeConflict, err, "this slug is already taken").LogWarn(ctx, logger)
+			return nil, nil, oops.E(oops.CodeConflict, err, "this slug is already taken").LogWarn(ctx, logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "update hosted mcp endpoint address").LogError(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "update hosted mcp endpoint address").LogError(ctx, logger)
 	}
 	afterView := mv.BuildMcpEndpointView(updated)
 	if err := s.audit.LogMcpEndpointUpdate(ctx, dbtx, audit.LogMcpEndpointUpdateEvent{
@@ -175,36 +199,20 @@ func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger,
 		McpEndpointSnapshotBefore: mv.BuildMcpEndpointView(existing),
 		McpEndpointSnapshotAfter:  afterView,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint update").LogError(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint update").LogError(ctx, logger)
 	}
-	lostRoot := wasRoot && !keepRoot && existing.CustomDomainID.Valid
-	if lostRoot {
+	var reconcileDomains []uuid.UUID
+	if wasRoot && !keepRoot && existing.CustomDomainID.Valid {
 		if err := s.logRootAutoClear(ctx, dbtx, authCtx, existing.CustomDomainID.UUID, existing.ID); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
+		reconcileDomains = append(reconcileDomains, existing.CustomDomainID.UUID)
 	}
 
-	if err := s.followHostedSlug(ctx, dbtx, logger, authCtx, server, &existing, slug); err != nil {
-		return nil, err
+	if err := legacyalias.FollowAlias(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, server.ID); err != nil {
+		return nil, nil, err //nolint:wrapcheck // oops errors pass through.
 	}
-	if err := hostingstate.MirrorToToolset(ctx, dbtx, *authCtx.ProjectID, server.ID); err != nil {
-		return nil, err //nolint:wrapcheck // oops errors pass through.
-	}
-
-	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{existing.McpServerID}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
-	}
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
-	}
-	s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{existing.McpServerID})
-
-	if lostRoot {
-		if err := s.reconcileCustomDomains(ctx, []uuid.UUID{existing.CustomDomainID.UUID}); err != nil {
-			return nil, err
-		}
-	}
-	return afterView, nil
+	return afterView, reconcileDomains, nil
 }
 
 // requireDomainLeavable lets a hosted endpoint leave a missing, deleted or never-live domain only;
@@ -252,59 +260,36 @@ func isCanonicalHosted(server mcpserversrepo.McpServer) bool {
 	return server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID
 }
 
-// checkHostedIngress requires a live private ingress covering every endpoint of a hosted server whose network
-// mode is not public_only, even while it is disabled, so a re-enable cannot bypass it.
-func checkHostedIngress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, endpoints []repo.McpEndpoint) error {
-	mode, err := networkaccess.Effective(server.NetworkAccessMode)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "invalid stored hosted MCP network mode").LogError(ctx, logger)
-	}
-	if mode.IsPublicOnly() {
-		return nil
-	}
-	if err := hostingstate.CheckPrivateIngress(ctx, tx, authCtx.ActiveOrganizationID, endpoints); err != nil {
-		return err //nolint:wrapcheck // oops errors pass through.
-	}
-	return nil
-}
-
-// proposedAddress is an endpoint address not yet written, for checks that only read its domain and slug.
-func proposedAddress(customDomainID uuid.NullUUID, slug string) repo.McpEndpoint {
-	unset := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
-	return repo.McpEndpoint{
-		ID: uuid.Nil, ProjectID: uuid.Nil, CustomDomainID: customDomainID, McpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Slug: slug, IsDomainRoot: pgtype.Bool{Bool: false, Valid: false},
-		CreatedAt: unset, UpdatedAt: unset, DeletedAt: unset, Deleted: false,
-	}
-}
-
-// checkHostedCreate applies the hosted address rules to a new endpoint for a canonical hosted server, which may
-// add one only while it has no address that can serve.
-func checkHostedCreate(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, customDomainID uuid.NullUUID, slug string) error {
-	live, err := repo.New(tx).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, repo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
-		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: server.ProjectID, McpServerID: server.ID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list hosted MCP addresses").LogError(ctx, logger)
-	}
-	if len(live) > 0 {
-		return oops.E(oops.CodeInvalid, nil, "a hosted MCP server keeps a single address; change that address instead").LogWarn(ctx, logger)
+// checkHostedNewAddress applies the hosted address rules to an endpoint created on a canonical hosted server: the
+// slug length, the organization's verified and activated custom domain only, the organization prefix on the
+// platform and for free accounts, and a private network mode's ingress namespace.
+func checkHostedNewAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, slug string, customDomainID uuid.NullUUID) error {
+	if len(slug) > maxHostedSlugLength {
+		return oops.E(oops.CodeBadRequest, nil, "a hosted MCP slug must be at most %d characters", maxHostedSlugLength).LogWarn(ctx, logger)
 	}
 	if customDomainID.Valid {
 		if err := requireOrganizationDomain(ctx, tx, logger, authCtx, customDomainID.UUID); err != nil {
 			return err
 		}
 	}
-	if len(slug) > maxHostedSlugLength {
-		return oops.E(oops.CodeBadRequest, nil, "a hosted MCP slug must be at most %d characters", maxHostedSlugLength).LogWarn(ctx, logger)
-	}
 	if err := requireHostedSlugPrefix(ctx, logger, authCtx, customDomainID, slug); err != nil {
 		return err
 	}
-	return checkHostedIngress(ctx, tx, logger, authCtx, server, []repo.McpEndpoint{proposedAddress(customDomainID, slug)})
+	// Endpoints left on a deleted domain cannot serve, so they do not hold back a new address.
+	live, err := repo.New(tx).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, repo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: server.ProjectID, McpServerID: server.ID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list hosted MCP endpoints").LogError(ctx, logger)
+	}
+	addresses := make([]repo.McpEndpoint, 0, len(live)+1)
+	for _, row := range live {
+		addresses = append(addresses, row.McpEndpoint)
+	}
+	return checkHostedIngress(ctx, tx, logger, authCtx, server, append(addresses, proposedAddress(customDomainID, slug)))
 }
 
-// requireOrganizationDomain lets a hosted address sit only on the organization's verified custom domain.
+// requireOrganizationDomain lets a hosted address sit only on the organization's verified, activated custom domain.
 func requireOrganizationDomain(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, domainID uuid.UUID) error {
 	domain, err := customdomainsrepo.New(tx).GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
 	switch {
@@ -324,53 +309,51 @@ func requireHostedSlugPrefix(ctx context.Context, logger *slog.Logger, authCtx *
 	return nil
 }
 
-// followHostedSlug renames a hosted server to its single address's new slug, as pods that compare it with the
-// toolset's mcp_slug expect. It follows only while the server slug and the toolset's address slug both still name
-// the address being replaced (from; the toolset's own address when nil), so a server with several endpoints or a
-// slug of its own keeps it. A slug another server holds is refused.
-func (s *Service) followHostedSlug(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, from *repo.McpEndpoint, slug string) error {
-	if !server.Slug.Valid || server.Slug.String == slug {
-		return nil
-	}
-	toolset, err := toolsetsrepo.New(tx).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: server.ID, ProjectID: server.ProjectID})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "load hosted toolset").LogError(ctx, logger)
-	}
-	fromSlug := toolset.McpSlug.String
-	if from != nil {
-		fromSlug = from.Slug
-	}
-	if server.Slug.String != fromSlug || toolset.McpSlug.String != fromSlug {
-		return nil
-	}
-	serversRepo := mcpserversrepo.New(tx)
-	holder, err := serversRepo.GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: pgtype.Text{String: slug, Valid: true}, ProjectID: server.ProjectID})
-	switch {
-	case err == nil && holder.ID != server.ID:
-		// Pods that still sync the server slug from the toolset's mcp_slug would fail on the taken name.
-		return oops.E(oops.CodeConflict, nil, "name is taken by another MCP server in the project").LogWarn(ctx, logger)
-	case err != nil && !errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeUnexpected, err, "check hosted MCP server slug").LogError(ctx, logger)
-	}
-	renamed, err := serversRepo.SyncHostedMCPServer(ctx, mcpserversrepo.SyncHostedMCPServerParams{
-		Name: server.Name, Slug: pgtype.Text{String: slug, Valid: true}, Visibility: server.Visibility,
-		UserSessionIssuerID: server.UserSessionIssuerID, ToolVariationsGroupID: server.ToolVariationsGroupID,
-		NetworkAccessMode: server.NetworkAccessMode, ID: server.ID, ProjectID: server.ProjectID,
-	})
+// checkHostedIngress requires a live private ingress covering every endpoint of a hosted server whose network
+// mode is not public_only, even while it is disabled, so a re-enable cannot bypass it.
+func checkHostedIngress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, endpoints []repo.McpEndpoint) error {
+	mode, err := networkaccess.Effective(server.NetworkAccessMode)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return oops.E(oops.CodeConflict, err, "name is taken by another MCP server in the project").LogWarn(ctx, logger)
-		}
-		return oops.E(oops.CodeUnexpected, err, "update hosted MCP server slug").LogError(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "invalid stored hosted MCP network mode").LogError(ctx, logger)
 	}
-	if err := hostedmcp.LogUpdate(ctx, tx, s.audit, hostedmcp.Actor{UserID: authCtx.UserID, Email: authCtx.Email, System: ""}, authCtx.ActiveOrganizationID, server, renamed); err != nil {
+	if mode.IsPublicOnly() {
+		return nil
+	}
+	if err := hostingstate.CheckPrivateIngress(ctx, tx, authCtx.ActiveOrganizationID, endpoints); err != nil {
 		return err //nolint:wrapcheck // oops errors pass through.
 	}
 	return nil
+}
+
+// rejectLastHostedAddress keeps an enabled hosted server from losing its last endpoint that can serve. Removing an
+// endpoint that cannot serve, such as one on a deleted or unverified domain, is always allowed.
+func rejectLastHostedAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, endpointID uuid.UUID) error {
+	if !isCanonicalHosted(server) || server.Visibility == mcpservers.VisibilityDisabled {
+		return nil
+	}
+	servable, err := repo.New(tx).ListServableMCPEndpointsByMCPServerID(ctx, repo.ListServableMCPEndpointsByMCPServerIDParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: server.ProjectID, McpServerID: server.ID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list hosted MCP endpoints").LogError(ctx, logger)
+	}
+	if !slices.ContainsFunc(servable, func(row repo.ListServableMCPEndpointsByMCPServerIDRow) bool { return row.McpEndpoint.ID == endpointID }) {
+		return nil
+	}
+	if len(servable) > 1 {
+		return nil
+	}
+	return oops.E(oops.CodeInvalid, nil, "disable the server before removing its last address").LogWarn(ctx, logger)
+}
+
+// proposedAddress is an endpoint address not yet written, for checks that only read its domain and slug.
+func proposedAddress(customDomainID uuid.NullUUID, slug string) repo.McpEndpoint {
+	unset := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+	return repo.McpEndpoint{
+		ID: uuid.Nil, ProjectID: uuid.Nil, CustomDomainID: customDomainID, McpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Slug: slug, IsDomainRoot: pgtype.Bool{Bool: false, Valid: false},
+		CreatedAt: unset, UpdatedAt: unset, DeletedAt: unset, Deleted: false,
+	}
 }
 
 // lockHostedToolset takes the toolset row lock hosting writes take before domains, endpoints and the server; id is

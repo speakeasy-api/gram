@@ -11,15 +11,13 @@ import (
 
 	domainsgen "github.com/speakeasy-api/gram/server/gen/domains"
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_endpoints"
-	toolsetsgen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
-	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -61,15 +59,12 @@ func TestHostedServerRecoversAddressAfterDomainDelete(t *testing.T) {
 		p.CustomDomainID = new(domain.ID.String())
 	}))
 	require.NoError(t, err)
-	f.requireMirrored(t, ctx)
 
 	f.deleteDomain(t, ctx)
 	require.Empty(t, f.endpoints(t, ctx))
-	hostedmcptest.RequireMirroredWithoutAddress(t, ctx, f.ti.conn, f.projectID, f.toolset.ID)
-	toolset, err := toolsetsrepo.New(f.ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.toolset.ID, ProjectID: f.projectID})
+	alias, err := legacyalias.Get(ctx, f.ti.conn, f.projectID, f.toolset.ID)
 	require.NoError(t, err)
-	require.Equal(t, "on-domain", toolset.McpSlug.String, "the mirror never invents an address")
-	require.Equal(t, uuid.NullUUID{UUID: domain.ID, Valid: true}, toolset.CustomDomainID)
+	require.Equal(t, legacyalias.None(), alias, "the frozen toolset alias is not written")
 
 	recovered := f.authCtx.OrganizationSlug + "-recovered"
 	_, err = f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(recovered)})
@@ -78,11 +73,6 @@ func TestHostedServerRecoversAddressAfterDomainDelete(t *testing.T) {
 	require.Equal(t, recovered, endpoint.Slug)
 	require.False(t, endpoint.CustomDomainID.Valid)
 	require.True(t, f.resolves(t, ctx, recovered))
-	f.requireMirrored(t, ctx)
-
-	_, err = f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(recovered + "-2")})
-	requireOopsCode(t, err, oops.CodeInvalid)
-	require.ErrorContains(t, err, "single address")
 }
 
 func TestHostedServerWithoutAddressCannotBeEnabled(t *testing.T) {
@@ -106,52 +96,26 @@ func TestHostedServerWithoutAddressCannotBeEnabled(t *testing.T) {
 	require.NoError(t, err)
 	toolset, err := toolsetsrepo.New(tx).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.toolset.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
-	require.True(t, toolset.McpSlug.Valid, "the toolset still names its address on the deleted domain")
 
 	_, err = hostedmcp.Enable(ctx, tx, audit.NewLogger(), hostedmcp.SystemActor("test"), toolset)
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.ErrorContains(t, err, "no address")
 }
 
-// A platform address with no endpoint can only come from legacy rows; hosting writes leave the toolset's address
-// as it is and add no endpoint. An older pod's sync would recreate the platform endpoint for such a row, as #8009
-// itself does for that state, which restores the address; no write here creates the state.
-func TestHostedWritesLeavePlatformAliasWithoutEndpoint(t *testing.T) {
+func TestHostedEndpointCreateChecksServerScopedWrite(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedAddressFixture(t, "pro")
-	_, err := mcpendpointsrepo.New(f.ti.conn).DeleteMCPEndpoint(ctx, mcpendpointsrepo.DeleteMCPEndpointParams{ID: f.endpoint.ID, ProjectID: f.projectID})
-	require.NoError(t, err)
+	before := len(f.endpoints(t, ctx))
 
-	_, err = f.toolsets.UpdateToolset(ctx, &toolsetsgen.UpdateToolsetPayload{Slug: types.Slug(f.toolset.Slug), Name: new("Renamed without address")})
-	require.NoError(t, err)
-	require.Empty(t, f.endpoints(t, ctx), "a hosting write adds no endpoint")
-	toolset, err := toolsetsrepo.New(f.ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.toolset.ID, ProjectID: f.projectID})
-	require.NoError(t, err)
-	require.Equal(t, f.toolset.McpSlug, toolset.McpSlug, "the mirror never invents or drops an address")
-	require.Equal(t, f.toolset.CustomDomainID, toolset.CustomDomainID)
-	require.Equal(t, "Renamed without address", toolset.Name)
-}
-
-func TestHostedServerAddressRecoveryChecksServerScopedWrite(t *testing.T) {
-	t.Parallel()
-	ctx, f := newHostedAddressFixture(t, "pro")
-	domain := f.activeDomain(t, ctx, "mcp.scoped.example.com")
-	_, err := f.ti.service.UpdateMcpEndpoint(ctx, f.payload("on-domain", func(p *gen.UpdateMcpEndpointPayload) {
-		p.CustomDomainID = new(domain.ID.String())
-	}))
-	require.NoError(t, err)
-	f.deleteDomain(t, ctx)
-	require.Empty(t, f.endpoints(t, ctx))
-
-	payload := &gen.CreateMcpEndpointPayload{McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(f.authCtx.OrganizationSlug + "-recovered")}
+	payload := &gen.CreateMcpEndpointPayload{McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(f.authCtx.OrganizationSlug + "-scoped")}
 	projectOnly := withExactAuthzGrants(t, ctx, f.ti.conn, authz.NewGrant(authz.ScopeMCPWrite, f.projectID.String()))
-	_, err = f.ti.service.CreateMcpEndpoint(projectOnly, payload)
+	_, err := f.ti.service.CreateMcpEndpoint(projectOnly, payload)
 	requireOopsCode(t, err, oops.CodeForbidden)
-	require.Empty(t, f.endpoints(t, ctx))
+	require.Len(t, f.endpoints(t, ctx), before)
 
 	scoped := withExactAuthzGrants(t, ctx, f.ti.conn, authz.NewGrant(authz.ScopeMCPWrite, f.toolset.ID.String()))
-	_, err = f.ti.service.CreateMcpEndpoint(scoped, payload)
+	created, err := f.ti.service.CreateMcpEndpoint(scoped, payload)
 	require.NoError(t, err)
-	require.Equal(t, string(payload.Slug), f.requireProjected(t, ctx).Slug)
-	f.requireMirrored(t, ctx)
+	require.Equal(t, payload.Slug, created.Slug)
+	require.Len(t, f.endpoints(t, ctx), before+1)
 }

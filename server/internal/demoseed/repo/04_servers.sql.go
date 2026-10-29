@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const serversInsertAgentConnectGrant = `-- name: ServersInsertAgentConnectGrant :exec
@@ -128,7 +129,7 @@ INSERT INTO remote_sessions
 VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
+        'DEMO-NOT-VALID-CIPHERTEXT', now() + $5::interval, false,
         ARRAY['releases:read'], 'Fictional release account',
         now() - interval '3 days', now() - interval '40 minutes')
 `
@@ -138,6 +139,7 @@ type ServersInsertAttachmentSessionParams struct {
 	UserID                string
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
+	ExpiresIn             pgtype.Interval
 }
 
 func (q *Queries) ServersInsertAttachmentSession(ctx context.Context, arg ServersInsertAttachmentSessionParams) error {
@@ -146,6 +148,7 @@ func (q *Queries) ServersInsertAttachmentSession(ctx context.Context, arg Server
 		arg.UserID,
 		arg.UserSessionIssuerID,
 		arg.RemoteSessionClientID,
+		arg.ExpiresIn,
 	)
 	return err
 }
@@ -1300,6 +1303,66 @@ func (q *Queries) ServersInsertMetaMCPServerMembers(ctx context.Context, arg Ser
 	return err
 }
 
+const serversInsertOrganizationGatewayClient = `-- name: ServersInsertOrganizationGatewayClient :exec
+INSERT INTO user_session_clients
+ (id, project_id, organization_id, user_session_issuer_id, client_id, client_name,
+ redirect_uris, client_id_issued_at, token_endpoint_auth_method)
+VALUES ($1::uuid, NULL, $2::text, $3::uuid,
+ ($1::uuid)::text, 'Example desktop client', ARRAY['http://127.0.0.1:41296/callback'], now(), 'none')
+`
+
+type ServersInsertOrganizationGatewayClientParams struct {
+	ID       uuid.UUID
+	OrgID    string
+	IssuerID uuid.UUID
+}
+
+func (q *Queries) ServersInsertOrganizationGatewayClient(ctx context.Context, arg ServersInsertOrganizationGatewayClientParams) error {
+	_, err := q.db.Exec(ctx, serversInsertOrganizationGatewayClient, arg.ID, arg.OrgID, arg.IssuerID)
+	return err
+}
+
+const serversInsertOrganizationGatewaySession = `-- name: ServersInsertOrganizationGatewaySession :exec
+INSERT INTO user_sessions
+ (id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn,
+ jti, refresh_token_hash, refresh_expires_at, expires_at, last_used_at, created_at)
+VALUES ($1::uuid, $2::text, $3::uuid, $4::uuid, 'user:' || $5::text,
+ $6::text, $7::text,
+ now() + ($8::text)::interval,
+ now() - interval '1 hour', now() - ($9::text)::interval, now() - ($10::text)::interval)
+`
+
+type ServersInsertOrganizationGatewaySessionParams struct {
+	ID               uuid.UUID
+	OrgID            string
+	IssuerID         uuid.UUID
+	ClientID         uuid.UUID
+	UserID           string
+	Jti              string
+	RefreshTokenHash string
+	RefreshExpiresIn string
+	LastUsedAgo      string
+	CreatedAgo       string
+}
+
+// Inert authorizations remain visible while the gateway is disabled.
+// Access tokens expired one hour ago; refresh authorization has its own deadline.
+func (q *Queries) ServersInsertOrganizationGatewaySession(ctx context.Context, arg ServersInsertOrganizationGatewaySessionParams) error {
+	_, err := q.db.Exec(ctx, serversInsertOrganizationGatewaySession,
+		arg.ID,
+		arg.OrgID,
+		arg.IssuerID,
+		arg.ClientID,
+		arg.UserID,
+		arg.Jti,
+		arg.RefreshTokenHash,
+		arg.RefreshExpiresIn,
+		arg.LastUsedAgo,
+		arg.CreatedAgo,
+	)
+	return err
+}
+
 const serversInsertPrivateInventoryEndpoint = `-- name: ServersInsertPrivateInventoryEndpoint :exec
 INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug) VALUES
   ($1::uuid, $2::uuid, $3::uuid, $4::text)
@@ -1802,7 +1865,7 @@ type ServersInsertUserSessionIssuersParams struct {
 // (mcp_servers_issuer_required_check); the gateway gets its own so clients
 // authenticate to it rather than to a member.
 // session_duration must be a Microseconds-only interval: the user-session
-// mint rejects Months/Days components (see usersessions/minthandler.go).
+// mint rejects Months components (see conv.PGIntervalToDuration).
 // The workforce issuer serves one shared authorization server for its MCP
 // servers at /oauth/usi/{id}. It is left unpinned: this seed runs against
 // every deployment, and an unpinned issuer URL follows the deployment's own
@@ -1880,27 +1943,6 @@ type ServersMarkRequiresUpstreamAuthParams struct {
 
 func (q *Queries) ServersMarkRequiresUpstreamAuth(ctx context.Context, arg ServersMarkRequiresUpstreamAuthParams) error {
 	_, err := q.db.Exec(ctx, serversMarkRequiresUpstreamAuth, arg.ProjectID, arg.Ids)
-	return err
-}
-
-const serversMirrorHostedToolsets = `-- name: ServersMirrorHostedToolsets :exec
-UPDATE toolsets AS t
-SET
-    mcp_slug = e.slug
-  , custom_domain_id = e.custom_domain_id
-  , mcp_enabled = s.visibility <> 'disabled'
-  , mcp_is_public = s.visibility = 'public'
-  , user_session_issuer_id = s.user_session_issuer_id
-  , tool_variations_group_id = s.tool_variations_group_id
-FROM mcp_servers AS s
-JOIN mcp_endpoints AS e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
-WHERE s.id = t.id AND s.toolset_id = t.id AND s.project_id = t.project_id AND s.deleted IS FALSE
-  AND t.project_id = $1::uuid AND t.deleted IS FALSE
-`
-
-// Hosted toolsets mirror their canonical server's hosting state for pods that still read the toolset columns.
-func (q *Queries) ServersMirrorHostedToolsets(ctx context.Context, projectID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, serversMirrorHostedToolsets, projectID)
 	return err
 }
 

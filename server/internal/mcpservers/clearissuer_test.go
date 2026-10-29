@@ -16,12 +16,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -135,7 +133,7 @@ func TestUpdateMcpServer_ClearIssuerRefusals(t *testing.T) {
 	require.Equal(t, issuerID, stored.UserSessionIssuerID.UUID.String(), "a refused clear keeps the issuer")
 }
 
-func TestUpdateMcpServer_ClearsHostedIssuerAndMirrorsIt(t *testing.T) {
+func TestUpdateMcpServer_ClearsHostedIssuer(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedFixture(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -145,7 +143,6 @@ func TestUpdateMcpServer_ClearsHostedIssuerAndMirrorsIt(t *testing.T) {
 
 	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) { p.UserSessionIssuerID = &issuer }))
 	require.NoError(t, err)
-	hostedmcptest.RequireMirrored(t, ctx, f.ti.conn, f.projectID, f.toolset.ID)
 
 	both := f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) {
 		p.UserSessionIssuerID = &issuer
@@ -158,15 +155,10 @@ func TestUpdateMcpServer_ClearsHostedIssuerAndMirrorsIt(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, updated.UserSessionIssuerID)
 	requireNoIssuer(t, ctx, f.ti, f.projectID, f.toolset.ID.String())
-	toolset, err := toolsetsrepo.New(f.ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.toolset.ID, ProjectID: f.projectID})
-	require.NoError(t, err)
-	require.False(t, toolset.UserSessionIssuerID.Valid, "the toolset column mirrors the cleared issuer")
-	hostedmcptest.RequireMirrored(t, ctx, f.ti.conn, f.projectID, f.toolset.ID)
 
 	reattached, err := f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) { p.UserSessionIssuerID = &issuer }))
 	require.NoError(t, err)
 	require.Equal(t, issuer, *reattached.UserSessionIssuerID)
-	hostedmcptest.RequireMirrored(t, ctx, f.ti.conn, f.projectID, f.toolset.ID)
 }
 
 func usersessionsIssuerForTest(t *testing.T, ctx context.Context, f *hostedFixture, organizationID string) (string, error) {
@@ -311,7 +303,6 @@ func TestUpdateMcpServer_ClearsHostedOrganizationIssuer(t *testing.T) {
 	updated, err := f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) { p.ClearUserSessionIssuer = new(true) }))
 	require.NoError(t, err, "an organization-owned issuer can be detached from a hosted server")
 	require.Nil(t, updated.UserSessionIssuerID)
-	hostedmcptest.RequireMirrored(t, ctx, f.ti.conn, f.projectID, f.toolset.ID)
 }
 
 func TestUpdateMcpServer_HostedClearRefusedWhileEMABound(t *testing.T) {
@@ -334,5 +325,4 @@ func TestUpdateMcpServer_HostedClearRefusedWhileEMABound(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeConflict)
 	stored := storedServer(t, ctx, f.ti, f.projectID, f.toolset.ID.String())
 	require.Equal(t, issuer, stored.UserSessionIssuerID.UUID.String(), "a refused clear keeps the issuer")
-	hostedmcptest.RequireMirrored(t, ctx, f.ti.conn, f.projectID, f.toolset.ID)
 }

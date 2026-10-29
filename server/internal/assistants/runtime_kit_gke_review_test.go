@@ -62,7 +62,7 @@ func TestKitGKEStoppedReapPreservesReusableLineage(t *testing.T) {
 	state, _, err := k.loadAuthority(t.Context(), r)
 	require.NoError(t, err)
 	require.Equal(t, "stopped", state.Phase)
-	_, err = k.get(t.Context(), r, kitTemplateGVR, kitGKEName(r), state.Metadata.TemplateUID)
+	_, err = k.get(t.Context(), r, kitTemplateGVR, kitGKETemplateName(kitGKEName(r)), state.Metadata.TemplateUID)
 	require.NoError(t, err)
 	_, err = k.get(t.Context(), r, kitSecretGVR, state.Metadata.SecretName, state.Metadata.SecretUID)
 	require.NoError(t, err)
@@ -158,7 +158,7 @@ func TestKitGKEColdCreationFailureCleansOwnedResources(t *testing.T) {
 			}
 			expected := []objectIdentity{{gvr: kitServiceAccountGVR, name: serviceAccountName}, {gvr: kitSecretGVR, name: secretName}}
 			if failed == gkeSandboxClaimGVR.Resource {
-				expected = append(expected, objectIdentity{gvr: kitTemplateGVR, name: kitGKEName(r)})
+				expected = append(expected, objectIdentity{gvr: kitTemplateGVR, name: kitGKETemplateName(kitGKEName(r))})
 			}
 			deleted := []objectIdentity{}
 			for _, action := range client.Actions() {
