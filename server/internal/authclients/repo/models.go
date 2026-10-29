@@ -47,7 +47,7 @@ type McpAuthClientGithubApp struct {
 	AuthClientID uuid.UUID
 	// @access: confidential
 	OrganizationID string
-	// @access: confidential
+	// @access: restricted
 	InstanceUrl string
 	// @access: confidential
 	AppID int64
@@ -55,7 +55,7 @@ type McpAuthClientGithubApp struct {
 	InstallationID int64
 	// @access: secret-restricted
 	PrivateKeyEncrypted string
-	// @access: confidential
+	// @access: restricted
 	UpstreamOrigin string
 	// @access: confidential
 	CredentialVersion uuid.UUID
