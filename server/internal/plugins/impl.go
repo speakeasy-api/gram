@@ -2506,10 +2506,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			return nil, err
 		}
 	}
-	mcpFingerprints, err := publishMCPFingerprints(plan.Active, plan.Held, cfg, observabilityEnabled)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "compute mcp fingerprints").LogError(ctx, s.logger)
-	}
 
 	// Decide which components to (re)generate. A human publish refreshes customer
 	// MCP packages so installed copies pick up a new manifest version. A
@@ -2518,14 +2514,29 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// output-affecting config. A credential rotation is hooks-only: it never
 	// treats MCP as changed, so the consumer packages customers installed -- and
 	// the consumer key baked into them -- are carried untouched.
-	mcpChanged := !rotateHooks && (firstPublish ||
-		!input.SkipIfUnchanged ||
-		!maps.Equal(mcpFingerprints, publishedMCPFingerprints))
-
 	hooksChanged := firstPublish ||
 		rotateHooks ||
 		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != targetHooksVersion ||
 		publishedHooksConfigHash != targetHooksConfigHash
+	carryHooks := observabilityEnabled && !hooksChanged
+	carryHooksOrgName, hooksPrefixes := hooksCarryPrefixes(targetHooksConfigJSON, cfg.OrgName)
+
+	// The shared manifests list the observability plugin under the directories
+	// its hooks subtree sits in, and a carried subtree keeps the ones it was
+	// published under even after an org rename. Fingerprint the manifests as
+	// this publish will push them, or every automatic publish after such a
+	// rename would read them as changed and regenerate the MCP packages.
+	fingerprintCfg := cfg
+	if carryHooks {
+		fingerprintCfg.HooksOrgName = carryHooksOrgName
+	}
+	mcpFingerprints, err := publishMCPFingerprints(plan.Active, plan.Held, fingerprintCfg, observabilityEnabled)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "compute mcp fingerprints").LogError(ctx, s.logger)
+	}
+	mcpChanged := !rotateHooks && (firstPublish ||
+		!input.SkipIfUnchanged ||
+		!maps.Equal(mcpFingerprints, publishedMCPFingerprints))
 
 	if input.SkipIfUnchanged && !mcpChanged && !hooksChanged {
 		// The shared MCP fingerprint hashes the marketplace manifests, so a match
@@ -2569,9 +2580,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			return nil, oops.E(oops.CodeUnexpected, err, "enumerate mcp files").LogError(ctx, s.logger)
 		}
 	}
-	carryHooks := observabilityEnabled && !hooksChanged
-	_, hooksPrefixes := hooksCarryPrefixes(targetHooksConfigJSON, cfg.OrgName)
-
 	var existingFiles map[string][]byte
 	if !firstPublish && (!mcpChanged || carryHooks) {
 		mcpPathSet := make(map[string]struct{}, len(mcpPaths))
