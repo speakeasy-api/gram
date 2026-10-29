@@ -74,7 +74,7 @@ vi.mock("sonner", () => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
-    authClients: { detachServer: mocks.detachGitHub },
+    authClients: { detachFromMcpServer: mocks.detachGitHub },
     remoteSessions: { commitServerIdentityConfiguration: mocks.commit },
     remoteSessionIssuers: { fetchMetadata: mocks.fetchMetadata },
     remoteMcp: {
