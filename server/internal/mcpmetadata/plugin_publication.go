@@ -77,9 +77,6 @@ func hasPluginMembershipForBackend(ctx context.Context, queries *pluginsrepo.Que
 // requestPluginPublicationForBackend records a durable package refresh in the
 // metadata transaction when a plugin carries the metadata's server.
 func (s *Service) requestPluginPublicationForBackend(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext, backend *resolvedMetadataBackend) error {
-	if !s.publicationRequests.Enabled {
-		return nil
-	}
 	attached, err := hasPluginMembershipForBackend(ctx, pluginsrepo.New(tx), authCtx, backend)
 	if err != nil {
 		return err

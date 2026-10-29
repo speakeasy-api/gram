@@ -27,9 +27,6 @@ func toolsetCarriedByPlugin(ctx context.Context, tx pgx.Tx, authCtx *contextvalu
 // requestPluginPublication records a durable package refresh in the
 // mutation's transaction for a toolset change a plugin carries.
 func (s *Service) requestPluginPublication(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext) error {
-	if !s.publicationRequests.Enabled {
-		return nil
-	}
 	if err := s.publicationRequests.Project(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
 		return fmt.Errorf("request plugin publication: %w", err)
 	}

@@ -14,9 +14,6 @@ import (
 // requestPublicationForMCPMembership only enqueues when an affected backend is
 // distributed by a plugin. The probes share the endpoint mutation transaction.
 func (s *Service) requestPublicationForMCPMembership(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext, serverIDs []uuid.NullUUID, gatewayIDs ...uuid.NullUUID) error {
-	if !s.publicationRequests.Enabled {
-		return nil
-	}
 	attached, err := hasPluginMembershipForEndpoint(ctx, pluginsrepo.New(tx), *authCtx.ProjectID, serverIDs, gatewayIDs)
 	if err != nil {
 		return err
