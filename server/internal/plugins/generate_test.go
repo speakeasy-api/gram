@@ -2449,6 +2449,72 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 	}
 }
 
+// OpenClaw's built-in runtime can fire agent_end just before the run's last
+// llm_output. The shim must still send agent_end once, carrying that
+// llm_output's final message, and must not hold an agent_end forever when no
+// llm_output follows.
+func TestGenerateOpenClawShimSplicesFinalMessageInEitherOrder(t *testing.T) {
+	t.Parallel()
+	nodePath, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is not installed")
+	}
+	files, err := GenerateObservabilityPluginPackage(GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}, "openclaw")
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "index.js"), files["index.js"], 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"type":"module"}`), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "hooks"), 0o700))
+	// The fake daemon records each frame and acknowledges it.
+	daemon := "while IFS= read -r line; do\n" +
+		"  printf '%s\\n' \"$line\" >>\"$FRAMES\"\n" +
+		"  seq=$(printf '%s' \"$line\" | sed -n 's/^{\"seq\":\\([0-9]*\\).*/\\1/p')\n" +
+		"  printf '{\"seq\":%s}\\n' \"$seq\"\n" +
+		"done\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hooks", "bootstrap.sh"), []byte(daemon), 0o600))
+	driver := `import plugin from "./index.js"
+const handlers = {}
+plugin.register({ on(name, fn) { handlers[name] = fn } })
+const ctx = (runId) => ({ runId, sessionId: "session-" + runId, agentId: "main" })
+handlers.agent_end({ runId: "late-output", success: true, messages: [] }, ctx("late-output"))
+handlers.llm_output({ runId: "late-output", assistantTexts: ["hello world"], usage: { input: 1, output: 2 } }, ctx("late-output"))
+handlers.agent_end({ runId: "no-output", success: true, messages: [] }, ctx("no-output"))
+setTimeout(() => process.exit(0), 3000)
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "driver.mjs"), []byte(driver), 0o600))
+
+	frames := filepath.Join(dir, "frames.ndjson")
+	cmd := exec.CommandContext(t.Context(), nodePath, "driver.mjs")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "FRAMES="+frames)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "shim driver failed: %s", out)
+
+	raw, err := os.ReadFile(frames)
+	require.NoError(t, err)
+	ends := map[string][]map[string]any{}
+	for line := range strings.SplitSeq(strings.TrimSpace(string(raw)), "\n") {
+		var frame struct {
+			Hook  string         `json:"hook"`
+			Event map[string]any `json:"event"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(line), &frame))
+		if frame.Hook == "agent_end" {
+			runID, _ := frame.Event["runId"].(string)
+			ends[runID] = append(ends[runID], frame.Event)
+		}
+	}
+	require.Len(t, ends["late-output"], 1, "agent_end is sent once")
+	require.Equal(t, "hello world", ends["late-output"][0]["finalMessage"])
+	require.Len(t, ends["no-output"], 1, "agent_end without an llm_output is still sent")
+	require.NotContains(t, ends["no-output"][0], "finalMessage")
+}
+
 // OpenClaw's Codex app-server harness fires llm_input but no before_agent_run,
 // so the shim must forward llm_input for the daemon to report the prompt of
 // those runs. OpenClaw does not await llm_input, so the shim registers it

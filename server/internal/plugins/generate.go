@@ -2099,6 +2099,9 @@ const HOOKS = ["before_tool_call", "after_tool_call", "before_agent_run", "sessi
 // no hook stalls the agent longer than ~10s.
 const GATE_TIMEOUT_MS = { before_tool_call: 10000, before_agent_run: 10000 }
 const DEFAULT_TIMEOUT_MS = 30000
+// How long an agent_end that arrived before its run's llm_output waits for it
+// before it is sent without the final message.
+const AGENT_END_WAIT_MS = 2000
 // The relay resolves the org's fail-open posture in-process; shim-level
 // fail-closed covers the binary being unavailable (mirrors cursor failClosed).
 const FAIL_CLOSED = true
@@ -2116,6 +2119,9 @@ export default {
     // agent_end carries no final message or usage; cache the turn's
     // llm_output and splice it into the agent_end frame.
     const llmByRun = new Map()
+    // The built-in runtime can fire agent_end just before the run's last
+    // llm_output, so an agent_end with nothing to splice waits briefly for it.
+    const pendingEnds = new Map()
 
     createInterface({ input: child.stdout }).on("line", (line) => {
       if (!line.trim()) return
@@ -2202,6 +2208,14 @@ export default {
           const key = event?.runId ?? event?.sessionId ?? ""
           llmByRun.set(key, { finalMessage: texts.join("\n") || undefined, usage: event?.usage })
           void call(hook, event, sanitizeCtx(hook, ctx))
+          const waiting = pendingEnds.get(key)
+          if (waiting !== undefined) {
+            clearTimeout(waiting.timer)
+            pendingEnds.delete(key)
+            const cached = llmByRun.get(key)
+            llmByRun.delete(key)
+            void call("agent_end", { ...waiting.event, finalMessage: cached.finalMessage, usage: cached.usage }, waiting.ctx)
+          }
           return
         }
         if (hook === "agent_end") {
@@ -2215,6 +2229,15 @@ export default {
             const sessionKey = ctx?.sessionId ?? ""
             cached = llmByRun.get(sessionKey)
             if (cached !== undefined) llmByRun.delete(sessionKey)
+          }
+          if (cached === undefined && runKey !== "") {
+            const waitingCtx = sanitizeCtx(hook, ctx)
+            const timer = setTimeout(() => {
+              pendingEnds.delete(runKey)
+              void call(hook, event, waitingCtx)
+            }, AGENT_END_WAIT_MS)
+            pendingEnds.set(runKey, { event, ctx: waitingCtx, timer })
+            return
           }
           const spliced = cached ? { ...event, finalMessage: cached.finalMessage, usage: cached.usage } : event
           void call(hook, spliced, sanitizeCtx(hook, ctx))
