@@ -666,6 +666,22 @@ WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
   AND s.deleted IS FALSE
   AND s.remote_session_issuer_id IS DISTINCT FROM resolved.remote_session_issuer_id;
 
+-- name: ListProjectsSharingOrganizationUserSessionIssuers :many
+-- Projects of the organization with a live MCP server on one of the named
+-- organization-level user session issuers. Their servers share the issuer's
+-- client bindings, so a binding change on it is resynced in each of them.
+SELECT DISTINCT s.project_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
+WHERE s.user_session_issuer_id = ANY(@user_session_issuer_ids::uuid[])
+  AND usi.project_id IS NULL
+  AND usi.organization_id = @organization_id::text
+  AND p.organization_id = @organization_id::text
+  AND p.deleted IS FALSE
+  AND s.deleted IS FALSE
+ORDER BY s.project_id;
+
 -- name: DeleteAssistantMCPServersByMCPServer :exec
 DELETE FROM assistant_mcp_servers
 WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id;

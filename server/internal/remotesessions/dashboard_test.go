@@ -985,7 +985,7 @@ func requireClientBound(t *testing.T, ctx context.Context, ti *testInstance, cli
 	require.Equal(t, bound, slices.Contains(client.UserSessionIssuerIds, userIssuerID))
 }
 
-func TestCommitServerIdentityConfigurationRefusesReplacingOrgClientOnOrgIssuerBeforeDCR(t *testing.T) {
+func TestCommitServerIdentityConfigurationRefusesReplacingOrgClientOnOrgIssuerWithoutOrganizationAdminBeforeDCR(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -1002,8 +1002,8 @@ func TestCommitServerIdentityConfigurationRefusesReplacingOrgClientOnOrgIssuerBe
 	t.Cleanup(registrationServer.Close)
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "org-replace-next", registrationServer.URL, false, []string{"client_secret_basic"})
 
-	_, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, nextProviderID))
-	requireOopsCode(t, err, oops.CodeConflict)
+	_, err := ti.service.CommitServerIdentityConfiguration(withoutOrganizationAdmin(t, ctx), autoServerIdentityPayload(targetID, nextProviderID))
+	requireOopsCode(t, err, oops.CodeForbidden)
 	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
 	require.Zero(t, requests.Load(), "the refusal must come before an upstream client is registered")
 	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, true)
@@ -1034,7 +1034,7 @@ func TestCommitServerIdentityConfigurationRefusesReplacingClientWithLiveAgentBin
 	requireLiveAgentBindings(t, ctx, ti, currentClientID, userIssuerID)
 }
 
-func TestCommitServerIdentityConfigurationRefusesLinkingOrgClientToOrgIssuer(t *testing.T) {
+func TestCommitServerIdentityConfigurationRefusesLinkingOrgClientToOrgIssuerWithoutOrganizationAdmin(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -1043,10 +1043,34 @@ func TestCommitServerIdentityConfigurationRefusesLinkingOrgClientToOrgIssuer(t *
 	providerID := createServerIdentityProvider(t, ctx, ti, "org-link-provider", "", false, []string{"none"})
 	orgClientID := createServerIdentityClient(t, ctx, ti, "org-link-client", providerID, true)
 
-	_, err := ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(targetID, providerID, orgClientID))
-	requireOopsCode(t, err, oops.CodeConflict)
+	_, err := ti.service.CommitServerIdentityConfiguration(withoutOrganizationAdmin(t, ctx), existingServerIdentityPayload(targetID, providerID, orgClientID))
+	requireOopsCode(t, err, oops.CodeForbidden)
 	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
 	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, false)
+}
+
+// An organization admin may link an organization-level client to an
+// organization-level user session issuer, and every project's servers on the
+// issuer pick up its provider.
+func TestCommitServerIdentityConfigurationLinksOrgClientToOrgIssuerForOrganizationAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "org-admin-link-issuer")
+	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "org-admin-link-target", userIssuerID)
+	otherProjectID := createProject(t, ctx, ti.conn, "org-admin-link-other")
+	otherServerID := createImpactServer(t, ctx, ti, otherProjectID, "org-admin-link-other-server", userIssuerID)
+	providerID := createServerIdentityProvider(t, ctx, ti, "org-admin-link-provider", "", false, []string{"none"})
+	orgClientID := createServerIdentityClient(t, ctx, ti, "org-admin-link-client", providerID, true)
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(targetID, providerID, orgClientID))
+	require.NoError(t, err)
+	require.Equal(t, "linked", *result.Status)
+	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, true)
+
+	otherServer, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: otherServerID, ProjectID: otherProjectID})
+	require.NoError(t, err)
+	require.Equal(t, uuid.NullUUID{UUID: providerID, Valid: true}, otherServer.RemoteSessionIssuerID)
 }
 
 func TestCommitServerIdentityConfigurationKeepsAlreadyBoundOrgClientOnOrgIssuer(t *testing.T) {

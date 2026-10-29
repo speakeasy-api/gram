@@ -69,9 +69,10 @@ var (
 	ErrIdentityInvariant = errors.New("identity: invariant violation")
 
 	// ErrIdentityOrgWideBinding marks a binding write that would reach beyond
-	// the scope's project: linking or unlinking an organization-owned client on
-	// an organization-level user session issuer, whose binding every project's
-	// MCP servers on that issuer share.
+	// the scope's project by an actor without organization admin: linking or
+	// unlinking an organization-owned client on an organization-level user
+	// session issuer, whose binding every project's MCP servers on that issuer
+	// share.
 	ErrIdentityOrgWideBinding = errors.New("identity: organization-wide binding change")
 
 	// ErrIdentityStepOrder marks a commit step run out of order, which is a
@@ -81,7 +82,7 @@ var (
 
 // OrgWideBindingMessage is the caller-facing message for
 // ErrIdentityOrgWideBinding.
-const OrgWideBindingMessage = "this MCP server shares an organization identity binding; change it from the organization's identity provider settings"
+const OrgWideBindingMessage = "this MCP server shares its sign-in client with MCP servers in other projects; changing it needs organization admin access"
 
 const (
 	agentBindingsOnReplacedClientMessage = "agents are still bound to this MCP server through its current client; unlink them before changing its Remote Identity Provider"
@@ -175,6 +176,11 @@ type IdentityScope struct {
 	// ActorIsPlatformAdmin gates the registration paths that reach a private
 	// network. mcp:write on one server is not enough to borrow a tunnel.
 	ActorIsPlatformAdmin bool
+
+	// ActorIsOrganizationAdmin gates linking and unlinking organization-owned
+	// clients on an organization-level user session issuer, which every
+	// project's servers on that issuer share.
+	ActorIsOrganizationAdmin bool
 }
 
 // IdentityPlan is what a caller wants configured. It holds only the choices
@@ -1070,14 +1076,15 @@ func listUserSessionIssuerClients(ctx context.Context, q *repo.Queries, projectI
 }
 
 // refuseOrgWideBinding refuses to link or unlink client when that binding is
-// shared across projects. A project-owned client is invisible to other
-// projects, so its binding only ever changes the scope's own project.
+// shared across projects and the actor is not an organization admin. A
+// project-owned client is invisible to other projects, so its binding only
+// ever changes the scope's own project.
 func (c *IdentityCommit) refuseOrgWideBinding(client repo.RemoteSessionClient) error {
-	return refuseOrgWideBinding(c.userIssuerOrgLevel, client.ProjectID)
+	return refuseOrgWideBinding(c.userIssuerOrgLevel, c.plan.Scope.ActorIsOrganizationAdmin, client.ProjectID)
 }
 
-func refuseOrgWideBinding(userIssuerOrgLevel bool, clientProjectID uuid.NullUUID) error {
-	if userIssuerOrgLevel && !clientProjectID.Valid {
+func refuseOrgWideBinding(userIssuerOrgLevel, actorIsOrganizationAdmin bool, clientProjectID uuid.NullUUID) error {
+	if userIssuerOrgLevel && !clientProjectID.Valid && !actorIsOrganizationAdmin {
 		return identityRefusal(ErrIdentityOrgWideBinding, nil, OrgWideBindingMessage)
 	}
 	return nil

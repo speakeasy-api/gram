@@ -1322,6 +1322,48 @@ func (q *Queries) ListMCPServersForTelemetryByProjectID(ctx context.Context, pro
 	return items, nil
 }
 
+const listProjectsSharingOrganizationUserSessionIssuers = `-- name: ListProjectsSharingOrganizationUserSessionIssuers :many
+SELECT DISTINCT s.project_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
+WHERE s.user_session_issuer_id = ANY($1::uuid[])
+  AND usi.project_id IS NULL
+  AND usi.organization_id = $2::text
+  AND p.organization_id = $2::text
+  AND p.deleted IS FALSE
+  AND s.deleted IS FALSE
+ORDER BY s.project_id
+`
+
+type ListProjectsSharingOrganizationUserSessionIssuersParams struct {
+	UserSessionIssuerIds []uuid.UUID
+	OrganizationID       string
+}
+
+// Projects of the organization with a live MCP server on one of the named
+// organization-level user session issuers. Their servers share the issuer's
+// client bindings, so a binding change on it is resynced in each of them.
+func (q *Queries) ListProjectsSharingOrganizationUserSessionIssuers(ctx context.Context, arg ListProjectsSharingOrganizationUserSessionIssuersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProjectsSharingOrganizationUserSessionIssuers, arg.UserSessionIssuerIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listServableMCPServersByOrganizationID = `-- name: ListServableMCPServersByOrganizationID :many
 SELECT
     s.id AS mcp_server_id,
