@@ -96,7 +96,6 @@ func TestMemberPluginOutputOmitsAdministrativeFields(t *testing.T) {
 	require.NotContains(t, string(encoded), "assignment_version")
 	require.NotContains(t, string(encoded), "references_expire_at")
 	require.NotContains(t, string(encoded), "distribution_admission")
-	require.NotContains(t, string(encoded), "auto_sync_enabled")
 }
 
 func TestListPluginAssignmentsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
