@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   scopes: [] as string[],
+  gatewayCandidateOptions: [] as Array<{ enabled: boolean }>,
   includeNewResourceFixtures: false,
   /**
    * When set, the mcp:write grant is selector-scoped to these server ids:
@@ -24,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   }>,
   toolsets: [] as unknown[],
   mcpServers: [] as unknown[],
+  gateways: [] as unknown[],
   catalogServers: [] as unknown[],
   publishStatus: undefined as unknown,
   deployment: undefined as unknown,
@@ -37,6 +39,7 @@ const mocks = vi.hoisted(() => ({
   goToPlugins: vi.fn(),
   goToToolsetDetails: vi.fn(),
   goToMcpServerOverview: vi.fn(),
+  goToGatewayOverview: vi.fn(),
   goToCatalogDetail: vi.fn(),
   goToSourceDetail: vi.fn(),
   goToSources: vi.fn(),
@@ -56,6 +59,13 @@ const mocks = vi.hoisted(() => ({
   calls: {} as Record<string, unknown[]>,
 }));
 
+vi.mock("./useGatewayConnectionCandidates", () => ({
+  useGatewayConnectionCandidates: (options: { enabled: boolean }) => {
+    mocks.gatewayCandidateOptions.push(options);
+    return [];
+  },
+}));
+
 function record(name: string, args: unknown[]) {
   (mocks.calls[name] ??= []).push(args);
 }
@@ -72,6 +82,12 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
     return { data: { mcpServers: mocks.mcpServers } };
   },
   invalidateAllMcpServers: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
+  useMetaMcpServers: (...args: unknown[]) => {
+    record("useMetaMcpServers", args);
+    return { data: { metaMcpServers: mocks.gateways } };
+  },
 }));
 vi.mock("@gram/client/react-query/listMCPCatalog.js", () => ({
   useListMCPCatalog: (...args: unknown[]) => {
@@ -190,6 +206,12 @@ vi.mock("@/hooks/usePluginWriteAccess", () => ({
   usePluginWriteAccess: () => mocks.pluginWriteAccess,
 }));
 vi.mock("@/contexts/Telemetry", () => ({
+  useTelemetryContext: () => ({
+    featureFlags: { status: "ready" },
+    telemetry: {
+      isFeatureEnabled: (flag: string) => mocks.flags.includes(flag),
+    },
+  }),
   useTelemetry: () => ({
     isFeatureEnabled: (flag: string) => mocks.flags.includes(flag),
   }),
@@ -284,6 +306,7 @@ vi.mock("@/routes", () => ({
     mcp: {
       goTo: vi.fn(),
       details: { overview: { goTo: mocks.goToMcpServerOverview } },
+      gateway: { overview: { goTo: mocks.goToGatewayOverview } },
       catalog: { detail: { goTo: mocks.goToCatalogDetail } },
       sources: {
         goTo: mocks.goToSources,
@@ -401,6 +424,7 @@ beforeEach(() => {
   mocks.rbacCalls = [];
   mocks.toolsets = [];
   mocks.mcpServers = [];
+  mocks.gateways = [];
   mocks.catalogServers = [];
   mocks.publishStatus = undefined;
   mocks.deployment = undefined;
@@ -427,6 +451,63 @@ beforeEach(() => {
   mocks.invalidateAllPublishStatus.mockResolvedValue(undefined);
 });
 afterEach(cleanup);
+
+describe("useGatewayCandidates", () => {
+  beforeEach(() => {
+    mocks.scopes = ["mcp:read"];
+  });
+
+  it("lists each gateway by name, findable by id, and opens its overview", () => {
+    mocks.gateways = [
+      { id: "gateway-1", name: "Support Gateway", memberCount: 3 },
+      { id: "gateway-2", name: "Empty Gateway", memberCount: 1 },
+    ];
+    const { result } = renderCandidates();
+
+    const gateways = byKind(result.current, "gateway");
+    expect(gateways.map((c) => [c.title, c.detail])).toEqual([
+      ["Support Gateway", "MCP gateway · 3 servers"],
+      ["Empty Gateway", "MCP gateway · 1 server"],
+    ]);
+    expect(gateways[0]?.keywords).toContain("gateway-1");
+    expect(gateways[0]?.verbs).toEqual(["open"]);
+    void gateways[0]?.run("open");
+    expect(mocks.goToGatewayOverview).toHaveBeenCalledWith("gateway-1");
+  });
+
+  it("stays hidden, and does not fetch, without mcp:read or mcp:write", () => {
+    mocks.scopes = ["project:read"];
+    mocks.gateways = [{ id: "gateway-1", name: "Support Gateway" }];
+    const { result } = renderCandidates();
+
+    expect(byKind(result.current, "gateway")).toHaveLength(0);
+    for (const args of mocks.calls["useMetaMcpServers"] ?? []) {
+      expect(optionsOf(args).enabled).toBe(false);
+    }
+  });
+
+  it("checks MCP access on the active project, not on any resource", () => {
+    mocks.gateways = [{ id: "gateway-1", name: "Support Gateway" }];
+    renderCandidates();
+
+    expect(mocks.rbacCalls).toContainEqual({
+      fn: "hasAnyScope",
+      scopes: ["mcp:read", "mcp:write"],
+      resourceId: "project-default",
+    });
+  });
+
+  it("is absent outside a project", () => {
+    mocks.inProject = false;
+    mocks.gateways = [{ id: "gateway-1", name: "Support Gateway" }];
+    const { result } = renderCandidates();
+
+    expect(byKind(result.current, "gateway")).toHaveLength(0);
+    for (const args of mocks.calls["useMetaMcpServers"] ?? []) {
+      expect(optionsOf(args).enabled).toBe(false);
+    }
+  });
+});
 
 describe("useMcpServerCandidates", () => {
   // The MCP page opens for mcp:read or mcp:write; every test here holds the
@@ -485,6 +566,7 @@ describe("useMcpServerCandidates", () => {
         id: "toolset-1",
         name: "Hosted wrapper",
         toolset: { ...HOSTED_ROW.toolset, name: "Hosted tools" },
+        platformEndpointSlug: "acme-renamed-address",
         visibility: "private",
       },
     ];
@@ -493,6 +575,7 @@ describe("useMcpServerCandidates", () => {
 
     expect(hosted?.title).toBe("Hosted tools");
     expect(hosted?.keywords).toContain("hosted");
+    expect(hosted?.keywords).toContain("acme-renamed-address");
     await act(async () => {
       await hosted?.run("open");
     });
@@ -1528,7 +1611,13 @@ describe("useRuleCandidates", () => {
 });
 
 describe("useLauncherCandidates", () => {
-  it("orders sources: actions, recents, marketplace, mcp servers, catalog, …, people", () => {
+  it("registers gateway discovery with the palette open state", () => {
+    renderCandidates({ enabled: false });
+    expect(mocks.gatewayCandidateOptions.at(-1)).toMatchObject({
+      enabled: false,
+    });
+  });
+  it("orders sources: actions, recents, marketplace, mcp servers, gateways, catalog, …, people", () => {
     mocks.scopes = ["org:read", "org:admin", "mcp:write", "project:read"];
     mocks.actions = [
       { id: "a", label: "A", group: "Pages", onSelect: vi.fn() },
@@ -1536,6 +1625,7 @@ describe("useLauncherCandidates", () => {
     mocks.recents = [{ label: "R", href: "/r", visitedAt: 1 }];
     mocks.publishStatus = { configured: true, connected: true, upToDate: true };
     mocks.mcpServers = [mcpServer("Slack", "slack-a1", "private")];
+    mocks.gateways = [{ id: "gateway-1", name: "Support Gateway" }];
     mocks.catalogServers = [catalogServer("Datadog", "com.datadoghq/datadog")];
     mocks.members = [
       {
@@ -1555,6 +1645,7 @@ describe("useLauncherCandidates", () => {
       "recent",
       "marketplace",
       "mcp_server",
+      "gateway",
       "catalog",
       "rule",
       "person",
@@ -1571,6 +1662,7 @@ describe("useLauncherCandidates", () => {
       expect.arrayContaining([
         "useListToolsets",
         "useMcpServers",
+        "useMetaMcpServers",
         "useListMCPCatalog",
         "usePublishStatus",
         "usePlugins",
@@ -1618,6 +1710,7 @@ describe("useLauncherCandidates", () => {
     for (const name of [
       "useListToolsets",
       "useMcpServers",
+      "useMetaMcpServers",
       "useListMCPCatalog",
       "usePublishStatus",
       "usePlugins",

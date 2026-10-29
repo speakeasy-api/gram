@@ -107,6 +107,10 @@ func TestDecideAuthClient(t *testing.T) {
 		{"an unknown type is a gap", live("smoke_signal"), authClientGap, authClientReasonUnknownType},
 		{"an unmapped OAuth choice is served the old way", with(authClientTypeRemoteSession, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.AuthClientID = uuid.NullUUID{} }), authClientLegacy, authClientReasonUnmapped},
 		{"a personal connection that may chain is served the old way", with(authClientTypeRemoteSession, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.RegistrationHasEma = true }), authClientLegacy, authClientReasonLegacyMayChain},
+		{"a personal connection that may chain but misses a server credential header is a setup gap", with(authClientTypeRemoteSession, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) {
+			r.RegistrationHasEma = true
+			r.CredentialHeadersUncovered = true
+		}), authClientGap, authClientReasonSetup},
 		{"a service account never chains", with(authClientTypeServiceAccount, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.RegistrationHasEma = true }), authClientResolved, ""},
 		{"an OAuth client missing a server credential header is a setup gap", with(authClientTypeRemoteSession, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.CredentialHeadersUncovered = true }), authClientGap, authClientReasonSetup},
 		{"an OAuth client requiring the inbound Authorization is a setup gap", with(authClientTypeServiceAccount, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.RequiresDeniedSource = true }), authClientGap, authClientReasonSetup},
@@ -126,6 +130,11 @@ func TestDecideAuthClient(t *testing.T) {
 			row.ServerHasHeaderClients = true
 			return row
 		}(), authClientLegacy, authClientReasonUnmapped},
+		{"no-auth on a server that declares none and keeps header clients is served the old way until enforced", func() upstreamclientsrepo.GetAuthClientSelectionRow {
+			row := noAuth(pgtype.Bool{Bool: false, Valid: true}, true)
+			row.ServerHasHeaderClients = true
+			return row
+		}(), authClientLegacy, authClientReasonNoAuthDeclared},
 		{"no-auth on a server with header and OAuth clients is a gap", func() upstreamclientsrepo.GetAuthClientSelectionRow {
 			row := noAuth(pgtype.Bool{Bool: true, Valid: true}, true)
 			row.ServerHasHeaderClients = true
@@ -282,11 +291,21 @@ func (f *authClientFixture) tunneled() {
 // client creates an auth client; registration is set for OAuth-backed types.
 func (f *authClientFixture) client(clientType string, registration uuid.NullUUID, linked bool) uuid.UUID {
 	f.t.Helper()
-	id, err := f.q.SeedAuthClientFixture(f.t.Context(), authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: f.orgID, ProjectID: validUUID(f.projectID), ClientType: clientType, Source: "admin", RemoteSessionClientID: registration})
+	id, err := f.q.SeedAuthClientFixture(f.t.Context(), authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: f.orgID, ProjectID: validUUID(f.projectID), ClientType: clientType, Source: "backfill", RemoteSessionClientID: registration})
 	require.NoError(f.t, err)
 	if linked {
-		require.NoError(f.t, f.q.SeedServerAuthClientLinkFixture(f.t.Context(), authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: f.serverID, AuthClientID: id}))
+		require.NoError(f.t, f.q.SeedServerAuthClientLinkFixture(f.t.Context(), authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: f.serverID, AuthClientID: id, Source: "backfill"}))
 	}
+	return id
+}
+
+// adminClient creates an auth client an administrator configured, offered on
+// the fixture's server by an administrator.
+func (f *authClientFixture) adminClient(clientType string, registration uuid.NullUUID) uuid.UUID {
+	f.t.Helper()
+	id, err := f.q.SeedAuthClientFixture(f.t.Context(), authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: f.orgID, ProjectID: validUUID(f.projectID), ClientType: clientType, Source: "admin", RemoteSessionClientID: registration})
+	require.NoError(f.t, err)
+	require.NoError(f.t, f.q.SeedServerAuthClientLinkFixture(f.t.Context(), authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: f.serverID, AuthClientID: id, Source: "admin"}))
 	return id
 }
 
@@ -632,6 +651,44 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 
 		require.NoError(t, f.q.SetAuthClientEnabledFixture(ctx, authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: ema}))
 		require.Equal(t, authClientResolved, f.resolve(f.choose(validUUID(id))).outcome, "a disabled EMA client chains nothing")
+	})
+
+	t.Run("an enforced no-auth choice on a server that declares none is served with a header client attached", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		f.client(authClientTypeStaticCredential, uuid.NullUUID{}, true)
+		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true}, ID: f.serverID}))
+		selector := f.choose(uuid.NullUUID{})
+		subject := urn.NewUserSubject("user_1")
+		for range 2 {
+			res, err := f.service.resolveEnforcedAuthClient(ctx, selector, f.serverID, f.projectID, subject)
+			require.NoError(t, err)
+			require.Equal(t, authClientNoAuth, res.outcome)
+		}
+
+		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: pgtype.Bool{Bool: true, Valid: true}, ID: f.serverID}))
+		res, err := f.service.resolveEnforcedAuthClient(ctx, selector, f.serverID, f.projectID, subject)
+		require.NoError(t, err)
+		require.Equal(t, authClientGap, res.outcome, "a server that needs auth still refuses the old no-auth choice")
+	})
+
+	t.Run("a personal connection that may chain sends its own headers", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		f.attach()
+		id := f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
+		f.copyHeader(id, "X-Upstream", false, false, pgtype.Text{}, text("X-Caller"))
+		ema := f.client(authClientTypeEMA, validUUID(f.registration), true)
+		require.NoError(t, f.q.SeedAuthClientEMAFixture(ctx, authclientbackfill.SeedAuthClientEMAFixtureParams{Resource: "https://mcp.example.com", AuthClientID: ema}))
+		res := f.serve(f.choose(validUUID(id)))
+		require.Equal(t, authClientLegacy, res.outcome)
+		require.Equal(t, authClientReasonLegacyMayChain, res.reason)
+		require.Equal(t, []proxy.ConfiguredHeader{{IsRequired: false, Name: "X-Upstream", StaticValue: "", ValueFromRequestHeader: "X-Caller"}}, res.headers)
+
+		authentication := &issuerGateAuthentication{chainingAuthClient: &res}
+		require.Len(t, authClientBuildOptions(authentication), 1, "the client's headers replace the server's")
+		authentication.chosenNoAuth = true
+		require.Empty(t, authClientBuildOptions(authentication), "a no-auth choice sends no client's headers")
 	})
 
 	t.Run("headers-only clients on a tunneled server are served the old way", func(t *testing.T) {
@@ -1148,7 +1205,8 @@ func TestResolveAuthClientsBatchesMemberChoices(t *testing.T) {
 	require.NoError(t, err)
 	f := newAuthClientFixture(t, pool)
 	id := f.oauthClient(authClientTypeRemoteSession)
-	secondID := f.client(authClientTypeRemoteSession, validUUID(f.registration), false)
+	secondID, err := f.q.SeedAuthClientFixture(t.Context(), authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: f.orgID, ProjectID: validUUID(f.projectID), ClientType: authClientTypeRemoteSession, Source: "admin", RemoteSessionClientID: validUUID(f.registration)})
+	require.NoError(t, err)
 	selector := f.choose(validUUID(id))
 	expected := map[uuid.UUID]uuid.UUID{f.serverID: id}
 	ids := []uuid.UUID{f.serverID}
@@ -1159,7 +1217,7 @@ func TestResolveAuthClientsBatchesMemberChoices(t *testing.T) {
 			clientID = secondID
 		}
 		expected[server] = clientID
-		require.NoError(t, f.q.SeedServerAuthClientLinkFixture(t.Context(), authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: server, AuthClientID: clientID}))
+		require.NoError(t, f.q.SeedServerAuthClientLinkFixture(t.Context(), authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: server, AuthClientID: clientID, Source: "backfill"}))
 		_, err := f.q.SeedAssociationFixture(t.Context(), authclientbackfill.SeedAssociationFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: server, RemoteSessionClientID: f.registration})
 		require.NoError(t, err)
 		require.NoError(t, f.q.SeedUpstreamSelectionFixture(t.Context(), authclientbackfill.SeedUpstreamSelectionFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, CredentialID: selector.credentialID, McpServerID: server, AuthClientID: validUUID(clientID)}))
@@ -1272,7 +1330,7 @@ func TestAuthClientConsentUsesSharedResolver(t *testing.T) {
 		t.Parallel()
 		f := newAuthClientFixture(t, pool)
 		f.oauthClient(authClientTypeRemoteSession)
-		f.client(authClientTypeRemoteSession, validUUID(f.registration), true)
+		f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
 		res, err := f.service.resolveAuthClientForConsent(t.Context(), f.orgID, f.serverID, f.projectID, validUUID(f.registration), urn.NewUserSubject("test-user"))
 		require.NoError(t, err)
 		require.Equal(t, authClientGap, res.outcome)
@@ -1394,4 +1452,55 @@ func TestRefuseForeignPublicCallerOnlyUnderEnforcement(t *testing.T) {
 	require.NoError(t, f.service.refuseForeignCaller(t.Context(), f.orgID), "an anonymous caller is unaffected")
 	orgless := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: ""})
 	require.NoError(t, f.service.refuseForeignCaller(orgless, f.orgID), "a caller with no organization is served as anonymous")
+}
+
+func TestResolveAuthClientTrustsAdministratorConfiguration(t *testing.T) {
+	t.Parallel()
+
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_auth_client_admin")
+	require.NoError(t, err)
+
+	t.Run("an administrator's client sends its own headers, whatever the server's say", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		f.sourceHeader("Authorization", true, text("sealed-server"), pgtype.Text{})
+		id := f.adminClient(authClientTypeStaticCredential, uuid.NullUUID{})
+		f.copyHeader(id, "X-Api-Key", false, false, text("client-value"), pgtype.Text{})
+		res := f.serve(f.choose(validUUID(id)))
+		require.Equal(t, authClientResolved, res.outcome)
+		require.Len(t, res.headers, 1)
+		require.Equal(t, "X-Api-Key", res.headers[0].Name)
+	})
+
+	t.Run("an administrator's OAuth client needs no legacy attachment", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		id := f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
+		res := f.resolve(f.choose(validUUID(id)))
+		require.Equal(t, authClientResolved, res.outcome)
+		require.Equal(t, validUUID(f.registration), res.choice.clientID)
+	})
+
+	t.Run("a copied client offered on another server by an administrator is not a stale copy there", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		f.sourceHeader("Authorization", true, text("sealed-first"), pgtype.Text{})
+		id := f.client(authClientTypeStaticCredential, uuid.NullUUID{}, true)
+		f.copyHeader(id, "Authorization", false, true, text("sealed-first"), pgtype.Text{})
+		require.Equal(t, authClientResolved, f.resolve(f.choose(validUUID(id))).outcome)
+
+		f.serverID, f.remoteID = f.server()
+		f.sourceHeader("Authorization", true, text("sealed-second"), pgtype.Text{})
+		require.NoError(t, f.q.SeedServerAuthClientLinkFixture(t.Context(), authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: f.serverID, AuthClientID: id, Source: "admin"}))
+		require.Equal(t, authClientResolved, f.resolve(f.choose(validUUID(id))).outcome)
+	})
+
+	t.Run("a copied client on its backfilled server is still checked against the server's settings", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		f.sourceHeader("Authorization", true, text("sealed-server"), pgtype.Text{})
+		id := f.client(authClientTypeStaticCredential, uuid.NullUUID{}, true)
+		f.copyHeader(id, "Authorization", false, true, text("sealed-old"), pgtype.Text{})
+		require.Equal(t, authClientReasonHeadersStale, f.resolve(f.choose(validUUID(id))).reason)
+	})
 }

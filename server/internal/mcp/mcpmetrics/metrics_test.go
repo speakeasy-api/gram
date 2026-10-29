@@ -466,3 +466,75 @@ func collectMetric(t *testing.T, reader *sdkmetric.ManualReader, name string) me
 	t.Fatalf("metric %q not found", name)
 	return metricdata.Metrics{}
 }
+
+// TestRecordSkillRead_PinsInstrumentAndDimensions pins the wiring a noop
+// meter cannot see: the instrument name and the three bounded attribute keys.
+func TestRecordSkillRead_PinsInstrumentAndDimensions(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	require.NotNil(t, m.mcpSkillReadCounter)
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution)
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution)
+
+	got := collectMetric(t, reader, InstrumentMCPSkillRead)
+	metricdatatest.AssertHasAttributes(t, got,
+		attr.McpSurface(string(SurfaceHosting)),
+		attr.McpSkillOrigin(SkillOriginDistribution),
+		attr.NetworkSurface(NetworkSurfacePublic),
+	)
+
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok)
+	require.Len(t, sum.DataPoints, 1)
+	require.Equal(t, int64(2), sum.DataPoints[0].Value)
+}
+
+func TestRecordSkillRead_SeparatesSurfaceAndOrigin(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution)
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginEmbedded)
+	m.RecordSkillRead(t.Context(), SurfacePlatform, SkillOriginEmbedded)
+
+	sum, ok := collectMetric(t, reader, InstrumentMCPSkillRead).Data.(metricdata.Sum[int64])
+	require.True(t, ok)
+	require.Len(t, sum.DataPoints, 3)
+}
+
+func TestRecordSkillRead_UsesTrustedPrivateOrigin(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	ctx := requestorigin.WithContext(t.Context(), requestorigin.Origin{
+		Surface:          requestorigin.SurfacePrivateNetwork,
+		BaseURL:          "https://private.example",
+		OrganizationID:   "<ORG_ID>",
+		NetworkIngressID: uuid.New(),
+	})
+
+	NewMetrics(meter, testenv.NewLogger(t)).RecordSkillRead(ctx, SurfaceHosting, SkillOriginDistribution)
+
+	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, InstrumentMCPSkillRead),
+		attr.McpSurface(string(SurfaceHosting)),
+		attr.McpSkillOrigin(SkillOriginDistribution),
+		attr.NetworkSurface(NetworkSurfacePrivate),
+	)
+}
+
+func TestRecordSkillRead_IsNilSafe(t *testing.T) {
+	t.Parallel()
+
+	var nilMetrics *Metrics
+	nilMetrics.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution)
+	empty := &Metrics{}
+	empty.RecordSkillRead(t.Context(), SurfacePlatform, SkillOriginEmbedded)
+}

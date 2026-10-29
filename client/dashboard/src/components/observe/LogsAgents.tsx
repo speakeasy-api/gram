@@ -26,7 +26,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { useQueryClient } from "@tanstack/react-query";
+import { hashKey, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pin } from "lucide-react";
 import {
   useState,
@@ -38,7 +38,8 @@ import {
 } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useProject } from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
 import { useOrgRoutes } from "@/routes";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { ChatLogsTable } from "@/pages/chatLogs/ChatLogsTable";
@@ -52,7 +53,10 @@ import { ResourceListPage } from "@/components/page-templates";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { type DateRangePreset, getPresetRange } from "@/elements";
 import { isValidPreset } from "@/components/observe/observeFilterUtils";
-import { AGENT_SESSION_CHAT_PARAM } from "@/pages/chatLogs/agentSessionLink";
+import {
+  AGENT_SESSION_CHAT_PARAM,
+  AGENT_SESSIONS_AGENT_PARAM,
+} from "@/pages/chatLogs/agentSessionLink";
 
 type SortField = "chronological" | "messageCount";
 type SortOrder = "asc" | "desc";
@@ -202,8 +206,8 @@ const AGENT_SESSIONS_DESCRIPTION = (
 );
 
 // Shown when the caller lacks chat:read: the list is scoped to their own
-// sessions, so explain why and (for admins) point at the roles page where
-// chat:read is granted.
+// sessions and those of the agents they own, so explain why and (for admins)
+// point at the roles page where chat:read is granted.
 function OwnSessionsNotice(): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
   const { hasScope, isLoading } = useRBAC();
@@ -212,7 +216,7 @@ function OwnSessionsNotice(): JSX.Element | null {
 
   return (
     <Alert variant="info" dismissible={false} className="text-sm">
-      Only your own sessions are shown.{" "}
+      Only your own sessions and those of agents you own are shown.{" "}
       <code className="font-mono">chat:read</code> is required to view other
       members&apos; sessions.
       {hasScope("org:admin") && (
@@ -267,6 +271,8 @@ function AgentSessionsContent({
   scope?: Scope | Scope[];
 }): JSX.Element {
   const project = useProject();
+  const organization = useOrganization();
+  const sdk = useSdkClient();
   const { hasScope } = useRBAC();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -322,6 +328,7 @@ function AgentSessionsContent({
   const urlSource = searchParams.get("source");
   const urlMinRiskScore = searchParams.get("min_risk_score");
   const urlAssistantId = searchParams.get("assistantId");
+  const urlAgentId = searchParams.get(AGENT_SESSIONS_AGENT_PARAM);
   const urlSort = searchParams.get("sort") as SortField | null;
   const urlOrder = searchParams.get("order") as SortOrder | null;
 
@@ -381,6 +388,21 @@ function AgentSessionsContent({
     },
   );
   const filteredAssistant = canReadAssistant ? assistantData : undefined;
+
+  const agentId = isUuid(urlAgentId) ? urlAgentId : "";
+  // Read for the chip's label only. A caller who may list the agent's sessions
+  // need not be able to read the agent, so a refusal falls back to the name
+  // the session rows carry.
+  const { data: agentData } = useQuery({
+    queryKey: ["managed-agents", organization.id, "detail", agentId],
+    queryKeyHashFn: hashKey,
+    queryFn: ({ signal }) =>
+      sdk.agents.get({ id: agentId }, undefined, { signal }),
+    enabled: !!agentId,
+    retry: false,
+    throwOnError: false,
+    refetchOnWindowFocus: false,
+  });
 
   const timeRange = useMemo(() => {
     if (customRange) {
@@ -508,6 +530,10 @@ function AgentSessionsContent({
     updateSearchParams({ assistantId: null });
   }, [updateSearchParams]);
 
+  const clearAgentFilter = useCallback(() => {
+    updateSearchParams({ [AGENT_SESSIONS_AGENT_PARAM]: null });
+  }, [updateSearchParams]);
+
   const setSortField = useCallback(
     (value: SortField) => {
       updateSearchParams({ sort: value === "chronological" ? null : value });
@@ -558,6 +584,7 @@ function AgentSessionsContent({
           accountType: toApiAccountType(accountType),
           pinned: toApiPinned(sessionsView === "pinned" ? "true" : ""),
           assistantId: assistantId || undefined,
+          agentId: agentId || undefined,
           source: sources.length ? sources.join(",") : undefined,
           from: timeRange.from,
           to: timeRange.to,
@@ -572,6 +599,10 @@ function AgentSessionsContent({
     );
 
   const chats = useMemo(() => data?.chats ?? [], [data?.chats]);
+  const filteredAgentName =
+    agentData?.name ??
+    chats.find((chat) => chat.agentId === agentId)?.agentName ??
+    null;
 
   // Agent-type filter options derived from the sources actually present in the
   // project's chats, so the list stays in sync with the data.
@@ -663,8 +694,14 @@ function AgentSessionsContent({
       filteredAssistant
         ? `. Scoped to assistant "${filteredAssistant.name}".`
         : ""
-    }`;
-  }, [timeRange.from, timeRange.to, searchQuery, filteredAssistant]);
+    }${filteredAgentName ? `. Scoped to agent "${filteredAgentName}".` : ""}`;
+  }, [
+    timeRange.from,
+    timeRange.to,
+    searchQuery,
+    filteredAssistant,
+    filteredAgentName,
+  ]);
 
   return (
     <>
@@ -702,6 +739,9 @@ function AgentSessionsContent({
         assistantName={filteredAssistant?.name ?? null}
         hasAssistantFilter={!!assistantId}
         clearAssistantFilter={clearAssistantFilter}
+        agentName={filteredAgentName}
+        hasAgentFilter={!!agentId}
+        clearAgentFilter={clearAgentFilter}
         sortField={sortField}
         setSortField={setSortField}
         sortOrder={sortOrder}
@@ -730,6 +770,35 @@ function AgentSessionsContent({
   );
 }
 
+// Names a scope the list arrived narrowed to from another page. It is a chip
+// rather than a filter in the toolbar because nothing on this page sets it.
+function ScopeChip({
+  label,
+  name,
+  onClear,
+}: {
+  label: string;
+  name: string;
+  onClear: () => void;
+}): JSX.Element {
+  return (
+    <Badge variant="neutral" className="w-fit gap-1.5 px-2.5 py-1 text-xs">
+      <Icon name="bot" className="size-3" />
+      <span>
+        {label}: <span className="font-medium">{name}</span>
+      </span>
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label={`Clear ${label.toLowerCase()} filter`}
+        className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center"
+      >
+        <Icon name="x" className="size-3" />
+      </button>
+    </Badge>
+  );
+}
+
 function AgentSessionsPageContent({
   scope,
   dateRange,
@@ -754,6 +823,9 @@ function AgentSessionsPageContent({
   assistantName,
   hasAssistantFilter,
   clearAssistantFilter,
+  agentName,
+  hasAgentFilter,
+  clearAgentFilter,
   sortField,
   setSortField,
   sortOrder,
@@ -801,6 +873,9 @@ function AgentSessionsPageContent({
   assistantName: string | null;
   hasAssistantFilter: boolean;
   clearAssistantFilter: () => void;
+  agentName: string | null;
+  hasAgentFilter: boolean;
+  clearAgentFilter: () => void;
   sortField: SortField;
   setSortField: (value: SortField) => void;
   sortOrder: SortOrder;
@@ -844,25 +919,23 @@ function AgentSessionsPageContent({
       // below are narrowing. Suppressed with the rest of the list while
       // logging is off, where it would describe a filter on nothing.
       belowHeader={
-        hasAssistantFilter && !isLogsDisabled ? (
-          <Badge
-            variant="neutral"
-            className="mb-4 w-fit gap-1.5 px-2.5 py-1 text-xs"
-          >
-            <Icon name="bot" className="size-3" />
-            <span>
-              Assistant:{" "}
-              <span className="font-medium">{assistantName ?? "Loading…"}</span>
-            </span>
-            <button
-              type="button"
-              onClick={clearAssistantFilter}
-              aria-label="Clear assistant filter"
-              className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center"
-            >
-              <Icon name="x" className="size-3" />
-            </button>
-          </Badge>
+        (hasAssistantFilter || hasAgentFilter) && !isLogsDisabled ? (
+          <div className="mb-4 flex flex-wrap gap-2">
+            {hasAssistantFilter && (
+              <ScopeChip
+                label="Assistant"
+                name={assistantName ?? "Loading…"}
+                onClear={clearAssistantFilter}
+              />
+            )}
+            {hasAgentFilter && (
+              <ScopeChip
+                label="Agent"
+                name={agentName ?? "Unknown agent"}
+                onClear={clearAgentFilter}
+              />
+            )}
+          </div>
         ) : null
       }
       search={{

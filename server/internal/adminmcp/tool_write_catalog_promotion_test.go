@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/catalogauth"
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/stretchr/testify/require"
@@ -22,11 +23,21 @@ type promotionMutatorFake struct {
 	calls         atomic.Int32
 }
 
+func (f *promotionMutatorFake) DiscoverAuth(context.Context, string, string) catalogauth.Discovery {
+	if f.candidate.AuthDiscovery != nil {
+		return *f.candidate.AuthDiscovery
+	}
+	return catalogauth.Discovery{}
+}
+
 func (f *promotionMutatorFake) GetCandidate(context.Context, catalogpromotion.Target) (catalogpromotion.Candidate, error) {
 	return f.candidate, nil
 }
 
-func (f *promotionMutatorFake) ValidateTx(_ context.Context, _ pgx.Tx, target catalogpromotion.Target, revision, curationRevision string, _ catalogpromotion.PublicMetadata) (catalogpromotion.Candidate, error) {
+func (f *promotionMutatorFake) ValidateTx(_ context.Context, _ pgx.Tx, target catalogpromotion.Target, revision, curationRevision string, _ catalogpromotion.PublicMetadata, override bool) (catalogpromotion.Candidate, error) {
+	if !f.candidate.Eligible && (!override || !catalogpromotion.CanOverrideEligibility(f.candidate.Reason)) {
+		return catalogpromotion.Candidate{}, catalogpromotion.ErrIneligible
+	}
 	if f.validationErr != nil {
 		return catalogpromotion.Candidate{}, f.validationErr
 	}
@@ -73,6 +84,20 @@ func TestCatalogPromotionApprovalAndReplay(t *testing.T) {
 	view, err := w.view(p)
 	require.NoError(t, err)
 	require.Contains(t, view.SideEffects, "setup-docs")
+	require.Contains(t, view.Changes, proposalViewChange{Setting: "Allow health eligibility override", Before: "", After: "No"})
+	stored, err := storedCatalogPromotion(p)
+	require.NoError(t, err)
+	require.False(t, stored.OverrideEligibility)
+	expected, err := catalogPromotionRequest(input)
+	require.NoError(t, err)
+	args, err := json.Marshal(expected)
+	require.NoError(t, err)
+	require.JSONEq(t, string(args), string(p.Arguments))
+	require.JSONEq(t, string(args), string(p.Preview))
+	digest, err := stateDigest(args)
+	require.NoError(t, err)
+	require.Equal(t, digest, p.ExpectedStateDigest)
+
 	require.Equal(t, f.orgA, view.OrganizationID)
 	_, err = f.store.Approve(ctx, p.ID, f.owner.SubjectURN, p.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
 	require.NoError(t, err)
@@ -190,4 +215,300 @@ func TestCatalogPromotionRejectsApprovalAfterCurationCycle(t *testing.T) {
 	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
 	require.ErrorIs(t, err, ErrStaleState)
 	require.Zero(t, mutator.calls.Load())
+}
+
+func TestCatalogPromotionOverrideApprovalAndReplay(t *testing.T) {
+	t.Parallel()
+	f := newProposalFixture(t, "catalog_promotion_override")
+	seededProject, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{OrganizationID: f.orgA, Name: "Example", Slug: "example"})
+	require.NoError(t, err)
+	project, server := seededProject.ID.String(), uuid.NewString()
+	mutator := &promotionMutatorFake{candidate: catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project, MCPServerID: server, SourceRevision: "source-v1", CurationRevision: uuid.NewString(), Status: "candidate", Eligible: false, Reason: "errors_observed"}}
+	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPromoteRegistryCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
+	w := &catalogPromotionWriter{store: f.store, writes: writes, baseURL: "https://staff.example.test/admin-mcp", mutator: mutator, now: time.Now}
+	input := PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project, MCPServerID: server, SourceRevision: "source-v1", CurationRevision: mutator.candidate.CurationRevision, PublicMetadataConfirmed: true, RetryKey: "publish-example", Public: catalogpromotion.PublicMetadata{Name: "com.example/mcp", Title: "Example", Description: "Public example server", URL: "https://mcp.example.test/mcp", DocumentationURL: "https://example.test/docs", DocsSlug: "example", AuthMode: "oauth"}}
+	ctx := writeContext(t, f)
+	_, err = w.prepare(ctx, input)
+	require.ErrorIs(t, err, ErrStaleState)
+	input.OverrideEligibility = true
+	prepared, err := w.prepare(ctx, input)
+	require.NoError(t, err)
+	require.Zero(t, mutator.calls.Load())
+	replayed, err := w.prepare(ctx, input)
+	require.NoError(t, err)
+	require.True(t, replayed.Replay)
+	require.Equal(t, prepared.ProposalID, replayed.ProposalID)
+	tools := newWriteTools(f.store, writes, w.baseURL, map[WriteOperation]operationWriter{OperationPromoteRegistryCandidate: w}) //nolint:exhaustive // Only this operation is enabled.
+	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
+	require.ErrorIs(t, err, ErrProposalNotApproved)
+	p, err := f.store.GetForOwner(ctx, uuid.MustParse(prepared.ProposalID), f.owner)
+	require.NoError(t, err)
+	_, err = f.store.Approve(ctx, p.ID, "user:other-staff", p.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
+	require.Error(t, err)
+	view, err := w.view(p)
+	require.NoError(t, err)
+	require.Contains(t, view.SideEffects, "setup-docs")
+	require.Contains(t, view.Changes, proposalViewChange{Setting: "Allow health eligibility override", Before: "", After: "Yes — allow promotion if health evidence does not meet the criteria"})
+	stored, err := storedCatalogPromotion(p)
+	require.NoError(t, err)
+	require.True(t, stored.OverrideEligibility)
+	require.Equal(t, f.orgA, view.OrganizationID)
+	_, err = f.store.Approve(ctx, p.ID, f.owner.SubjectURN, p.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
+	require.NoError(t, err)
+	result, err := tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
+	require.NoError(t, err)
+	require.Equal(t, string(ProposalSucceeded), result.Status)
+	result, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
+	require.NoError(t, err)
+	require.True(t, result.Replay)
+	require.Equal(t, int32(1), mutator.calls.Load())
+}
+
+func TestCatalogPromotionOverrideReplayPreservesConsentAcrossHealthChanges(t *testing.T) {
+	t.Parallel()
+	for _, initiallyEligible := range []bool{true, false} {
+		name := "becomes eligible"
+		if initiallyEligible {
+			name = "becomes ineligible"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := newProposalFixture(t, "catalog_promotion_health_replay")
+			project, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{OrganizationID: f.orgA, Name: "Example", Slug: "example"})
+			require.NoError(t, err)
+			reason := "errors_observed"
+			if initiallyEligible {
+				reason = "eligible"
+			}
+			mutator := &promotionMutatorFake{candidate: catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: uuid.NewString(), SourceRevision: "source-v1", CurationRevision: uuid.NewString(), Status: "candidate", Eligible: initiallyEligible, Reason: reason}}
+			writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPromoteRegistryCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
+			w := &catalogPromotionWriter{store: f.store, writes: writes, mutator: mutator, now: time.Now}
+			ctx := writeContext(t, f)
+			input := PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: mutator.candidate.MCPServerID, SourceRevision: mutator.candidate.SourceRevision, CurationRevision: mutator.candidate.CurationRevision, PublicMetadataConfirmed: true, OverrideEligibility: true, RetryKey: "stable-consent"}
+			prepared, err := w.prepare(ctx, input)
+			require.NoError(t, err)
+			original, err := f.store.GetForOwner(ctx, uuid.MustParse(prepared.ProposalID), f.owner)
+			require.NoError(t, err)
+			stored, err := storedCatalogPromotion(original)
+			require.NoError(t, err)
+			require.True(t, stored.OverrideEligibility)
+			view, err := w.view(original)
+			require.NoError(t, err)
+			require.Contains(t, view.Changes, proposalViewChange{Setting: "Allow health eligibility override", After: "Yes — allow promotion if health evidence does not meet the criteria"})
+			_, err = f.store.Approve(ctx, original.ID, f.owner.SubjectURN, original.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
+			require.NoError(t, err)
+			mutator.candidate.Eligible = !initiallyEligible
+			mutator.candidate.Reason = "errors_observed"
+			if mutator.candidate.Eligible {
+				mutator.candidate.Reason = "eligible"
+			}
+			replayed, err := w.prepare(ctx, input)
+			require.NoError(t, err)
+			require.True(t, replayed.Replay)
+			require.Equal(t, prepared.ProposalID, replayed.ProposalID)
+			persisted, err := f.store.GetForOwner(ctx, original.ID, f.owner)
+			require.NoError(t, err)
+			require.Equal(t, ProposalApproved, persisted.Status)
+			require.Equal(t, original.Arguments, persisted.Arguments)
+			require.Equal(t, original.Preview, persisted.Preview)
+			require.Equal(t, original.ExpectedStateDigest, persisted.ExpectedStateDigest)
+			require.Equal(t, original.ProposalDigest, persisted.ProposalDigest)
+			replayView, err := w.view(persisted)
+			require.NoError(t, err)
+			require.Equal(t, view, replayView)
+			// A healthy source permits both inputs through validation, so the stored consent must reject the changed request.
+			mutator.candidate.Eligible = true
+			mutator.candidate.Reason = "eligible"
+			input.OverrideEligibility = false
+			_, err = w.prepare(ctx, input)
+			require.ErrorIs(t, err, ErrProposalConflict)
+		})
+	}
+}
+
+func TestCatalogPromotionLengthErrorsGiveSafeFieldGuidance(t *testing.T) {
+	t.Parallel()
+	for _, cause := range []error{catalogpromotion.ErrPublicTitleTooLong, catalogpromotion.ErrPublicDescriptionTooLong} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			t.Parallel()
+			err := catalogPromotionValidationError(errors.Join(catalogpromotion.ErrInvalid, cause, errors.New("private rejected value")))
+			require.EqualError(t, err, cause.Error())
+			require.NotErrorIs(t, err, ErrStaleState)
+		})
+	}
+}
+
+func TestCatalogPromotionLengthErrorsInvalidateStoredProposals(t *testing.T) {
+	t.Parallel()
+	for _, cause := range []error{catalogpromotion.ErrPublicTitleTooLong, catalogpromotion.ErrPublicDescriptionTooLong} {
+		for _, atExecution := range []bool{false, true} {
+			stage := "approval"
+			if atExecution {
+				stage = "execution"
+			}
+			t.Run(stage+"/"+cause.Error(), func(t *testing.T) {
+				t.Parallel()
+				f := newProposalFixture(t, "catalog_promotion_length")
+				project, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{OrganizationID: f.orgA, Name: "Example", Slug: "example"})
+				require.NoError(t, err)
+				mutator := &promotionMutatorFake{candidate: catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: uuid.NewString(), SourceRevision: "source-v1", CurationRevision: uuid.NewString(), Status: "candidate", Eligible: true}}
+				writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPromoteRegistryCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
+				w := &catalogPromotionWriter{store: f.store, writes: writes, mutator: mutator, now: time.Now}
+				ctx := writeContext(t, f)
+				input := PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: mutator.candidate.MCPServerID, SourceRevision: "source-v1", CurationRevision: mutator.candidate.CurationRevision, PublicMetadataConfirmed: true, RetryKey: "length-validation"}
+				mutator.validationErr = errors.Join(catalogpromotion.ErrInvalid, cause, errors.New("private rejected value"))
+				_, err = w.prepare(ctx, input)
+				require.EqualError(t, err, cause.Error())
+
+				// A stored proposal may have passed validation under an earlier metadata policy.
+				mutator.validationErr = nil
+				prepared, err := w.prepare(ctx, input)
+				require.NoError(t, err)
+				proposal, err := f.store.GetForOwner(ctx, uuid.MustParse(prepared.ProposalID), f.owner)
+				require.NoError(t, err)
+				tools := newWriteTools(f.store, writes, "", map[WriteOperation]operationWriter{OperationPromoteRegistryCandidate: w}) //nolint:exhaustive // Only this operation is enabled.
+				if atExecution {
+					_, err = f.store.Approve(ctx, proposal.ID, f.owner.SubjectURN, proposal.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
+					require.NoError(t, err)
+				}
+				mutator.validationErr = errors.Join(catalogpromotion.ErrInvalid, cause, errors.New("private rejected value"))
+				if atExecution {
+					_, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
+				} else {
+					_, err = f.store.Approve(ctx, proposal.ID, f.owner.SubjectURN, proposal.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
+				}
+				require.ErrorIs(t, err, ErrStaleState)
+				require.NotContains(t, err.Error(), "private rejected value")
+				persisted, err := f.store.GetForOwner(ctx, proposal.ID, f.owner)
+				require.NoError(t, err)
+				require.Equal(t, ProposalInvalidated, persisted.Status)
+				require.Equal(t, reasonStaleState, persisted.InvalidationReason)
+				require.Zero(t, mutator.calls.Load())
+				mutator.validationErr = nil
+				_, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
+				require.ErrorIs(t, err, ErrProposalInvalidated)
+				require.Zero(t, mutator.calls.Load())
+			})
+		}
+	}
+}
+
+func TestCatalogPromotionRetryRetainsDiscoveredCapabilities(t *testing.T) {
+	t.Parallel()
+	f := newProposalFixture(t, "catalog_auth_snapshot")
+	project, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{OrganizationID: f.orgA, Name: "Example", Slug: "example"})
+	require.NoError(t, err)
+	evidence := catalogauth.Discovery{SupportsCIMD: true, AuthSetup: "cimd", Status: "complete"}
+	mutator := &promotionMutatorFake{candidate: catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: uuid.NewString(), SourceRevision: "source-v1", CurationRevision: uuid.NewString(), Status: "candidate", Eligible: true, AuthDiscovery: &evidence}}
+	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPromoteRegistryCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
+	w := &catalogPromotionWriter{store: f.store, writes: writes, mutator: mutator, now: time.Now}
+	ctx := writeContext(t, f)
+	input := PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: mutator.candidate.MCPServerID, SourceRevision: "source-v1", CurationRevision: mutator.candidate.CurationRevision, PublicMetadataConfirmed: true, RetryKey: "stable-auth"}
+	prepared, err := w.prepare(ctx, input)
+	require.NoError(t, err)
+	original, err := f.store.GetForOwner(ctx, uuid.MustParse(prepared.ProposalID), f.owner)
+	require.NoError(t, err)
+	_, err = f.store.Approve(ctx, original.ID, f.owner.SubjectURN, original.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
+	require.NoError(t, err)
+	changed := catalogauth.Unknown()
+	mutator.candidate.AuthDiscovery = &changed
+	replay, err := w.prepare(ctx, input)
+	require.NoError(t, err)
+	require.True(t, replay.Replay)
+	require.Equal(t, prepared.ProposalID, replay.ProposalID)
+	persisted, err := f.store.GetForOwner(ctx, original.ID, f.owner)
+	require.NoError(t, err)
+	require.Equal(t, original.Arguments, persisted.Arguments)
+	require.Equal(t, original.ProposalDigest, persisted.ProposalDigest)
+	request, err := storedCatalogPromotion(persisted)
+	require.NoError(t, err)
+	require.Equal(t, evidence, request.AuthDiscovery)
+	tools := newWriteTools(f.store, writes, "", map[WriteOperation]operationWriter{OperationPromoteRegistryCandidate: w}) //nolint:exhaustive // Only this operation is enabled.
+	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, mutator.calls.Load())
+	input.Public.AuthMode = "none"
+	_, err = w.prepare(ctx, input)
+	require.ErrorIs(t, err, ErrProposalConflict)
+}
+
+// concurrentPromotionDiscovery synchronizes requests after both missed the retry-key lookup.
+type concurrentPromotionDiscovery struct {
+	*promotionMutatorFake
+	calls       atomic.Int32
+	bothStarted chan struct{}
+}
+
+func (f *concurrentPromotionDiscovery) DiscoverAuth(ctx context.Context, _, _ string) catalogauth.Discovery {
+	call := f.calls.Add(1)
+	if call == 2 {
+		close(f.bothStarted)
+	}
+	select {
+	case <-ctx.Done():
+		return catalogauth.Unknown()
+	case <-f.bothStarted:
+	}
+	if call == 1 {
+		return catalogauth.Discovery{SupportsCIMD: true, AuthSetup: "cimd", Status: "complete"}
+	}
+	return catalogauth.Unknown()
+}
+
+func TestCatalogPromotionConcurrentPrepareReusesWinningEvidence(t *testing.T) {
+	t.Parallel()
+	for _, changed := range []bool{false, true} {
+		name := "identical caller input"
+		if changed {
+			name = "changed caller input conflicts"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := newProposalFixture(t, "catalog_auth_concurrent")
+			project, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{OrganizationID: f.orgA, Name: "Example", Slug: "example"})
+			require.NoError(t, err)
+			candidate := catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: uuid.NewString(), SourceRevision: "source-v1", CurationRevision: uuid.NewString(), Status: "candidate", Eligible: true}
+			mutator := &concurrentPromotionDiscovery{promotionMutatorFake: &promotionMutatorFake{candidate: candidate}, bothStarted: make(chan struct{})}
+			writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPromoteRegistryCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
+			w := &catalogPromotionWriter{store: f.store, writes: writes, mutator: mutator, now: time.Now}
+			ctx, cancel := context.WithTimeout(writeContext(t, f), 10*time.Second)
+			defer cancel()
+			input := PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: candidate.MCPServerID, SourceRevision: candidate.SourceRevision, CurationRevision: candidate.CurationRevision, PublicMetadataConfirmed: true, RetryKey: "concurrent-auth"}
+			type outcome struct {
+				proposal ProposalOutput
+				err      error
+			}
+			outcomes := make(chan outcome, 2)
+			for i := range 2 {
+				request := input
+				if changed && i == 1 {
+					request.Public.Description = "Different public metadata"
+				}
+				go func() { proposal, err := w.prepare(ctx, request); outcomes <- outcome{proposal: proposal, err: err} }()
+			}
+			first, second := <-outcomes, <-outcomes
+			require.EqualValues(t, 2, mutator.calls.Load())
+			if changed {
+				if first.err != nil {
+					first, second = second, first
+				}
+				require.NoError(t, first.err)
+				require.ErrorIs(t, second.err, ErrProposalConflict)
+			} else {
+				require.NoError(t, first.err)
+				require.NoError(t, second.err)
+				require.Equal(t, first.proposal.ProposalID, second.proposal.ProposalID)
+				require.NotEqual(t, first.proposal.Replay, second.proposal.Replay)
+			}
+			persisted, err := f.store.GetForOwner(ctx, uuid.MustParse(first.proposal.ProposalID), f.owner)
+			require.NoError(t, err)
+			stored, err := storedCatalogPromotion(persisted)
+			require.NoError(t, err)
+			require.Contains(t, []catalogauth.Discovery{
+				{SupportsCIMD: true, AuthSetup: "cimd", Status: "complete"},
+				catalogauth.Unknown(),
+			}, stored.AuthDiscovery)
+			require.Zero(t, mutator.promotionMutatorFake.calls.Load())
+		})
+	}
 }

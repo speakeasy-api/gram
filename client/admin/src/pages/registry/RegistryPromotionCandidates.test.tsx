@@ -2,7 +2,9 @@ import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { queryOptions, useMutation } from "@tanstack/react-query";
 import { renderWithApp } from "@/test/harness";
+import { toast } from "sonner";
 import { RegistryPromotionCandidates } from "./RegistryPromotionCandidates";
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 const api = vi.hoisted(() => ({
   list: vi.fn(),
   retry: vi.fn(),
@@ -164,7 +166,7 @@ it("shows candidate creation time and newest-first ordering", async () => {
   await screen.findByText("Ready for staff review");
   expect(screen.getByRole("columnheader", { name: "Created" })).toBeTruthy();
   expect(screen.getByText(/Jan 2/)).toBeTruthy();
-  expect(screen.getByText("Newest first")).toBeTruthy();
+  expect(screen.getByText(/Newest first/)).toBeTruthy();
 });
 
 it.each(["reject", "archive"] as const)(
@@ -190,6 +192,9 @@ it.each(["reject", "archive"] as const)(
       }),
     );
     await screen.findByText("No promotion candidates match this status.");
+    expect(toast.success).toHaveBeenCalledWith(
+      action === "reject" ? "Candidate rejected" : "Candidate archived",
+    );
     expect(api.curate.mock.calls[0]?.[0]).toEqual({
       request: {
         organizationId: "org",

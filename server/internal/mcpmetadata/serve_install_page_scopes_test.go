@@ -15,12 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -37,24 +35,9 @@ func createPublicToolsetWithTools(t *testing.T, ctx context.Context, ti *testIns
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   slug,
-		Slug:                   slug,
-		McpSlug:                conv.ToPGText(slug),
-		Description:            conv.ToPGText("scopes test toolset"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	toolset := createServedToolset(t, ctx, ti, servedToolsetOptions{
+		name: slug, slug: slug, mcpSlug: slug, description: "scopes test toolset", visibility: mcpservers.VisibilityPublic,
 	})
-	require.NoError(t, err)
-
-	err = testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
 
 	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
 		ProjectID:      *authCtx.ProjectID,

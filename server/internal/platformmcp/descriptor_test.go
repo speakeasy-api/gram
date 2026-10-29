@@ -237,7 +237,7 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 		"get_platform_context", "list_projects", "find_mcp", "get_mcp",
 		"request_mcp_review", "get_my_mcp_review_request",
 		"get_project_overview", "get_mcp_diagnostics", "get_tool_usage_summary", "list_recent_tool_calls", "list_attribute_keys",
-		"search_gram_docs", "list_skills", "get_skill", "list_skill_versions",
+		"search_speakeasy_docs", "list_skills", "get_skill", "list_skill_versions",
 		"list_skill_feedback", "list_skill_suggestions", "list_skill_suggestion_feedback",
 		"create_skill", "add_skill_version", "update_skill_metadata", "list_skill_distributions",
 		"list_my_sessions", "continue_session", searchChatsToolName, readChatToolName,
@@ -255,6 +255,8 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	}
 	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["distribute_skill"])
 	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["undistribute_skill"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["link_skill_to_mcp"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["unlink_skill_from_mcp"])
 	for _, name := range []string{"list_skill_insights", "compare_skill_versions"} {
 		require.Equal(t, ExternalAuthorizationOrgAdmin, byName[name], "session cost is organization spend: %s", name)
 	}
@@ -700,4 +702,12 @@ func TestClientAdmissionToolInputsInferSchemas(t *testing.T) {
 	schema, err := jsonschema.For[SetMCPClientAdmissionToolInput](nil)
 	require.NoError(t, err)
 	require.Contains(t, schema.Properties["mode"].Description, "presets, open, or disabled")
+}
+
+func TestPlatformOverviewExplainsAssertionReuseSafeguards(t *testing.T) {
+	t.Parallel()
+	require.Contains(t, platformOverview, "use set_workload_assertion_reuse only after explicit confirmation of the exact issuer, desired policy, and organization-wide impact")
+	require.Contains(t, platformOverview, "Reuse of assertions with jti or uti identifiers defaults to disabled")
+	require.Contains(t, platformOverview, "authorized workload administrator must explicitly opt in")
+	require.Contains(t, platformOverview, "Tokens without replay identifiers retain existing exact-token compatibility")
 }

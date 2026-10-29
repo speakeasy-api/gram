@@ -34,6 +34,27 @@ type Service interface {
 	// upstream credentials; elsewhere, including in shadow mode, an MCP server's
 	// existing upstream configuration keeps serving. Requires org:admin.
 	UpdateAuthClient(context.Context, *UpdateAuthClientPayload) (res *types.AuthClient, err error)
+	// Create an auth client and, optionally, offer it on MCP servers. A
+	// remote_session or service_account client authenticates through an existing
+	// OAuth registration whose credential owner matches its type; a
+	// static_credential or pass_through client authenticates with its own headers.
+	// Creating a client gives nobody permission to use it: set its audience to
+	// decide who may. Takes effect only where typed auth client resolution is
+	// enforced. Requires org:admin.
+	CreateAuthClient(context.Context, *CreateAuthClientPayload) (res *types.AuthClient, err error)
+	// Offer an existing auth client on another MCP server instead of creating a
+	// copy. The client stays one client: changing or rotating it changes upstream
+	// behavior on every server that offers it. Offering a client grants nobody
+	// permission to use it or access to the server. Takes effect only where typed
+	// auth client resolution is enforced. Requires org:admin.
+	AttachAuthClientToMcpServer(context.Context, *AttachAuthClientToMcpServerPayload) (res *types.AuthClient, err error)
+	// Replace the headers an auth client sends upstream. Rotating a shared
+	// client's credential changes upstream behavior on every server that offers
+	// it. Token-generating clients produce their own Authorization header, which
+	// cannot be configured. Clients created from a server's existing settings
+	// follow those settings and are edited there. Takes effect only where typed
+	// auth client resolution is enforced. Requires org:admin.
+	SetAuthClientHeaders(context.Context, *SetAuthClientHeadersPayload) (res *types.AuthClient, err error)
 	// Stop an MCP server offering an auth client in its typed auth configuration.
 	// The client and its other servers are unchanged. Takes effect only where
 	// typed auth client resolution is enforced. It revokes no upstream credentials
@@ -80,7 +101,18 @@ const ServiceName = "authClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"listAuthClients", "getAuthClient", "updateAuthClient", "detachAuthClientFromMcpServer", "getMcpServerAuthentication", "setMcpServerUpstreamAuthRequirement", "getAuthClientAudience", "setAuthClientAudience"}
+var MethodNames = [11]string{"listAuthClients", "getAuthClient", "updateAuthClient", "createAuthClient", "attachAuthClientToMcpServer", "setAuthClientHeaders", "detachAuthClientFromMcpServer", "getMcpServerAuthentication", "setMcpServerUpstreamAuthRequirement", "getAuthClientAudience", "setAuthClientAudience"}
+
+// AttachAuthClientToMcpServerPayload is the payload type of the authClients
+// service attachAuthClientToMcpServer method.
+type AttachAuthClientToMcpServerPayload struct {
+	// The auth client id.
+	ID string
+	// The MCP server id.
+	McpServerID  string
+	SessionToken *string
+	ApikeyToken  *string
+}
 
 // A rule to store for an auth client.
 type AuthClientAudienceRule struct {
@@ -88,6 +120,48 @@ type AuthClientAudienceRule struct {
 	PrincipalUrn string
 	// use or blocked.
 	Level string
+}
+
+// A header an auth client sends upstream. Exactly one of value and
+// value_from_request_header is set, except that a secret header already
+// storing a value may omit both to keep it.
+type AuthClientHeaderInput struct {
+	// The header name.
+	Name string
+	// What the header is for.
+	Description *string
+	// Whether a caller must supply the header when it is copied from the request.
+	IsRequired bool
+	// Whether the value is secret. Secret values are stored encrypted and never
+	// returned.
+	IsSecret bool
+	// The value to send. Omit it on a secret header that already stores one to
+	// keep the stored value.
+	Value *string
+	// The caller's request header to copy the value from, for pass-through headers.
+	ValueFromRequestHeader *string
+}
+
+// CreateAuthClientPayload is the payload type of the authClients service
+// createAuthClient method.
+type CreateAuthClientPayload struct {
+	// How the client authenticates upstream.
+	ClientType string
+	// The client's name.
+	Name string
+	// Confine the client to one project. Omit to share it across the
+	// organization's projects.
+	ProjectID *string
+	// The OAuth registration behind a remote_session or service_account client.
+	RemoteSessionClientID *string
+	// The headers the client sends upstream. Required for static_credential and
+	// pass_through clients. Token-generating clients produce their own
+	// Authorization header, which cannot be configured.
+	Headers []*AuthClientHeaderInput
+	// MCP servers that should offer the client.
+	McpServerIds []string
+	SessionToken *string
+	ApikeyToken  *string
 }
 
 // DetachAuthClientFromMcpServerPayload is the payload type of the authClients
@@ -159,6 +233,17 @@ type SetAuthClientAudiencePayload struct {
 	ExpectedVersion string
 	// Every rule that should name the client.
 	Entries      []*AuthClientAudienceRule
+	SessionToken *string
+	ApikeyToken  *string
+}
+
+// SetAuthClientHeadersPayload is the payload type of the authClients service
+// setAuthClientHeaders method.
+type SetAuthClientHeadersPayload struct {
+	// The auth client id.
+	ID string
+	// Every header the client should send.
+	Headers      []*AuthClientHeaderInput
 	SessionToken *string
 	ApikeyToken  *string
 }

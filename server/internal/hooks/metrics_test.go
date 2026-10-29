@@ -55,6 +55,60 @@ func TestMetrics_RecordHookEventDuration(t *testing.T) {
 	require.True(t, value.AsBool())
 }
 
+func TestMetrics_RecordDeliveryFailureFillsEmptyDimensions(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	metrics := newMetrics(meterProvider, testenv.NewLogger(t))
+
+	metrics.RecordDeliveryFailure(ctx, deliveryFailureMetricParams{
+		EventType:     "tool.requested",
+		Phase:         "drain",
+		Cause:         "dns",
+		Harness:       "",
+		OS:            "linux",
+		BinaryVersion: "",
+		OrgSlug:       "",
+	})
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(ctx, &rm))
+
+	var point metricdata.DataPoint[int64]
+	found := false
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != meterHooksDeliveryFailure {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			require.Len(t, sum.DataPoints, 1)
+			point = sum.DataPoints[0]
+			found = true
+		}
+	}
+	require.True(t, found, "missing metric %q", meterHooksDeliveryFailure)
+	require.Equal(t, int64(1), point.Value)
+
+	value, ok := point.Attributes.Value(attr.HookDeliveryCauseKey)
+	require.True(t, ok)
+	require.Equal(t, "dns", value.AsString())
+
+	value, ok = point.Attributes.Value(attr.HookDeviceHarnessKey)
+	require.True(t, ok)
+	require.Equal(t, hookMetricDimensionUnknown, value.AsString(), "an empty dimension becomes a bucket, not an absent tag")
+
+	value, ok = point.Attributes.Value(attr.HookDeviceBinaryVersionKey)
+	require.True(t, ok)
+	require.Equal(t, hookMetricDimensionUnknown, value.AsString())
+
+	_, ok = point.Attributes.Value(attr.OrganizationSlugKey)
+	require.False(t, ok, "an empty org slug is omitted, matching the duration histogram")
+}
+
 func TestClaudeHookDecision(t *testing.T) {
 	t.Parallel()
 

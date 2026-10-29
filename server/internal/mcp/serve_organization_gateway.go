@@ -438,7 +438,9 @@ func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcp
 			return nil, err
 		}
 		own := associated[endpoint.McpServerID.UUID]
-		return slices.DeleteFunc(clients, func(client remotesessions.Client) bool { return !own[client.ID] }), nil
+		return slices.DeleteFunc(clients, func(client remotesessions.Client) bool {
+			return !own[client.ID] || (challengeState.WorkloadReconnect != nil && client.ID != challengeState.WorkloadReconnect.ClientID)
+		}), nil
 	case endpoint.MetaMcpServerID.Valid:
 		members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
 		if err != nil {

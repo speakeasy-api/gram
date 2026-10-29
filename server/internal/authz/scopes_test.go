@@ -503,8 +503,8 @@ func TestScopeExpansions_isDAG(t *testing.T) {
 	t.Parallel()
 
 	for start := range scopeExpansions {
-		inStack := map[Scope]bool{}
-		visited := map[Scope]bool{}
+		inStack := make(map[Scope]bool)
+		visited := make(map[Scope]bool)
 		var hasCycle func(s Scope) bool
 		hasCycle = func(s Scope) bool {
 			if inStack[s] {

@@ -24,15 +24,26 @@ type LogMcpServerPromoteCatalogueEvent struct {
 	Actor urn.Principal
 	// McpServerURN identifies the source deployment.
 	McpServerURN urn.McpServer
+	// EligibilityOverridden records deliberate staff acceptance of failing health criteria.
+	EligibilityOverridden bool
+	// EligibilityReason is the bounded evidence code observed during promotion.
+	EligibilityReason string
 }
 
 // LogMcpServerPromoteCatalogue records promotion in the publication transaction.
 func (l *Logger) LogMcpServerPromoteCatalogue(ctx context.Context, dbtx repo.DBTX, event LogMcpServerPromoteCatalogueEvent) error {
+	metadata, err := marshalAuditPayload(struct {
+		EligibilityOverridden bool   `json:"eligibility_overridden"`
+		EligibilityReason     string `json:"eligibility_reason"`
+	}{EligibilityOverridden: event.EligibilityOverridden, EligibilityReason: event.EligibilityReason})
+	if err != nil {
+		return fmt.Errorf("encode catalogue promotion audit: %w", err)
+	}
 	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: event.ProjectID, Valid: true},
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.ToPGTextEmpty(""), ActorSlug: conv.ToPGTextEmpty(""),
 		Action: string(ActionMcpServerPromoteCatalogue), SubjectID: event.McpServerURN.ID.String(), SubjectType: string(subjectTypeMcpServer),
-		SubjectDisplayName: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""), BeforeSnapshot: nil, AfterSnapshot: nil, Metadata: nil,
+		SubjectDisplayName: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""), BeforeSnapshot: nil, AfterSnapshot: nil, Metadata: metadata,
 	}, OutboxEvent: events.McpServerV1})
 }
 

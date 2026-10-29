@@ -52,27 +52,6 @@ func (q *Queries) CountServerPluginEntries(ctx context.Context, arg CountServerP
 	return entries, err
 }
 
-const disableToolset = `-- name: DisableToolset :execrows
-UPDATE toolsets
-SET mcp_enabled = FALSE, updated_at = clock_timestamp()
-WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-`
-
-type DisableToolsetParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-}
-
-// The toolset stays for undo: pointing the server back at it and enabling it
-// restores the old backend.
-func (q *Queries) DisableToolset(ctx context.Context, arg DisableToolsetParams) (int64, error) {
-	result, err := q.db.Exec(ctx, disableToolset, arg.ID, arg.ProjectID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const fillRemoteSessionResources = `-- name: FillRemoteSessionResources :execrows
 UPDATE remote_sessions AS rs
 SET resource = $1
@@ -169,21 +148,16 @@ func (q *Queries) GetToolsetServerID(ctx context.Context, arg GetToolsetServerID
 }
 
 const getToolsetStateFixture = `-- name: GetToolsetStateFixture :one
-SELECT mcp_enabled, deleted
+SELECT deleted
 FROM toolsets
 WHERE id = $1
 `
 
-type GetToolsetStateFixtureRow struct {
-	McpEnabled bool
-	Deleted    bool
-}
-
-func (q *Queries) GetToolsetStateFixture(ctx context.Context, id uuid.UUID) (GetToolsetStateFixtureRow, error) {
+func (q *Queries) GetToolsetStateFixture(ctx context.Context, id uuid.UUID) (bool, error) {
 	row := q.db.QueryRow(ctx, getToolsetStateFixture, id)
-	var i GetToolsetStateFixtureRow
-	err := row.Scan(&i.McpEnabled, &i.Deleted)
-	return i, err
+	var deleted bool
+	err := row.Scan(&deleted)
+	return deleted, err
 }
 
 const listCandidates = `-- name: ListCandidates :many
@@ -205,17 +179,20 @@ scoped_toolsets AS (
     t.project_id,
     t.name,
     t.slug,
-    t.mcp_slug,
-    -- The canonical wrapper owns hosting state; the toolset columns stand only without one,
-    -- and a server that kept the toolset's id but left it leaves the toolset disabled.
-    (CASE WHEN cw.id IS NOT NULL THEN cw.visibility <> 'disabled' WHEN kept.id IS NOT NULL THEN FALSE ELSE t.mcp_enabled END)::boolean AS mcp_enabled,
-    t.custom_domain_id,
-    COALESCE(cw.user_session_issuer_id, CASE WHEN cw.id IS NULL THEN t.user_session_issuer_id END) AS user_session_issuer_id,
+    -- The canonical wrapper owns hosting state; a toolset without one is not hosted.
+    (cw.id IS NOT NULL AND cw.visibility <> 'disabled')::boolean AS mcp_enabled,
+    -- The issuer of the server fronting the toolset: its canonical wrapper, else the server that holds it.
+    (
+      SELECT ms.user_session_issuer_id
+      FROM mcp_servers AS ms
+      WHERE ms.toolset_id = t.id AND ms.project_id = t.project_id AND ms.deleted IS FALSE
+      ORDER BY (ms.id = t.id) DESC, ms.id
+      LIMIT 1
+    ) AS user_session_issuer_id,
     t.external_oauth_server_id,
-    t.oauth_proxy_server_id,
     t.tool_variations_group_id,
     (
-      (CASE WHEN cw.id IS NOT NULL THEN cw.visibility <> 'disabled' WHEN kept.id IS NOT NULL THEN FALSE ELSE t.mcp_enabled END)
+      (cw.id IS NOT NULL AND cw.visibility <> 'disabled')
       OR EXISTS (
         SELECT 1
         FROM mcp_servers AS ms
@@ -225,7 +202,6 @@ scoped_toolsets AS (
   FROM toolsets AS t
   JOIN projects AS p ON p.id = t.project_id AND p.deleted IS FALSE
   LEFT JOIN mcp_servers AS cw ON cw.id = t.id AND cw.toolset_id = t.id AND cw.project_id = t.project_id AND cw.deleted IS FALSE
-  LEFT JOIN mcp_servers AS kept ON kept.id = t.id AND kept.toolset_id IS DISTINCT FROM t.id AND kept.project_id = t.project_id AND kept.deleted IS FALSE
   WHERE t.deleted IS FALSE
     AND ($1::uuid[] IS NULL OR t.id = ANY($1::uuid[]))
 ),
@@ -282,11 +258,8 @@ SELECT
   p.slug AS project_slug,
   t.name AS toolset_name,
   t.slug AS toolset_slug,
-  t.mcp_slug,
-  t.custom_domain_id,
   t.user_session_issuer_id,
   t.external_oauth_server_id,
-  t.oauth_proxy_server_id,
   (t.tool_variations_group_id IS NOT NULL)::boolean AS toolset_has_variations,
   usi.slug AS user_session_issuer_slug,
   COALESCE(t.live, FALSE)::boolean AS live,
@@ -327,21 +300,8 @@ SELECT
     JOIN mcp_servers AS ms ON ms.id = me.mcp_server_id AND ms.project_id = me.project_id
     WHERE ms.toolset_id = t.id AND ms.project_id = t.project_id AND ms.deleted IS FALSE AND me.deleted IS FALSE
   )::bigint AS endpoint_count,
-  -- The legacy /mcp/<mcp_slug> route stops answering once the toolset is
-  -- disabled, so the address must also be an endpoint of the server.
-  (
-    t.mcp_slug IS NULL
-    OR t.mcp_slug = ''
-    OR EXISTS (
-      SELECT 1
-      FROM mcp_endpoints AS me
-      WHERE me.mcp_server_id = wrapper.id
-        AND me.project_id = t.project_id
-        AND me.deleted IS FALSE
-        AND me.slug = t.mcp_slug
-        AND me.custom_domain_id IS NOT DISTINCT FROM t.custom_domain_id
-    )
-  )::boolean AS mcp_slug_is_endpoint,
+  -- The caller checks the legacy alias (legacyalias) is one of this server's endpoints.
+  COALESCE(wrapper.id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS wrapper_id,
   EXISTS (SELECT 1 FROM toolset_prompts AS tp WHERE tp.toolset_id = t.id)::boolean AS has_prompts,
   EXISTS (SELECT 1 FROM slack_app_toolsets AS sat WHERE sat.toolset_id = t.id)::boolean AS has_slack_apps,
   EXISTS (SELECT 1 FROM user_oauth_tokens AS uot WHERE uot.toolset_id = t.id AND uot.deleted IS FALSE)::boolean AS has_user_oauth_tokens,
@@ -396,12 +356,11 @@ SELECT
     SELECT count(*)
     FROM toolsets AS other
     JOIN projects AS op ON op.id = other.project_id AND op.deleted IS FALSE
-    LEFT JOIN mcp_servers AS ocw ON ocw.id = other.id AND ocw.toolset_id = other.id AND ocw.project_id = other.project_id AND ocw.deleted IS FALSE
-    LEFT JOIN mcp_servers AS okept ON okept.id = other.id AND okept.toolset_id IS DISTINCT FROM other.id AND okept.project_id = other.project_id AND okept.deleted IS FALSE
-    WHERE COALESCE(ocw.user_session_issuer_id, CASE WHEN ocw.id IS NULL THEN other.user_session_issuer_id END) = t.user_session_issuer_id
+    JOIN mcp_servers AS ocw ON ocw.id = other.id AND ocw.toolset_id = other.id AND ocw.project_id = other.project_id AND ocw.deleted IS FALSE
+    WHERE ocw.user_session_issuer_id = t.user_session_issuer_id
       AND other.id <> t.id
       AND other.deleted IS FALSE
-      AND (CASE WHEN ocw.id IS NOT NULL THEN ocw.visibility <> 'disabled' WHEN okept.id IS NOT NULL THEN FALSE ELSE other.mcp_enabled END)
+      AND ocw.visibility <> 'disabled'
   )::bigint AS other_toolsets_on_issuer,
   COALESCE((
     SELECT array_agg(DISTINCT rtrim(rs.resource, '/') ORDER BY rtrim(rs.resource, '/'))
@@ -459,11 +418,8 @@ type ListCandidatesRow struct {
 	ProjectSlug                   string
 	ToolsetName                   string
 	ToolsetSlug                   string
-	McpSlug                       pgtype.Text
-	CustomDomainID                uuid.NullUUID
 	UserSessionIssuerID           uuid.NullUUID
 	ExternalOauthServerID         uuid.NullUUID
-	OauthProxyServerID            uuid.NullUUID
 	ToolsetHasVariations          bool
 	UserSessionIssuerSlug         pgtype.Text
 	Live                          bool
@@ -479,7 +435,7 @@ type ListCandidatesRow struct {
 	ServerUserSessionIssuerID     uuid.NullUUID
 	ServerHasVariations           bool
 	EndpointCount                 int64
-	McpSlugIsEndpoint             bool
+	WrapperID                     uuid.UUID
 	HasPrompts                    bool
 	HasSlackApps                  bool
 	HasUserOauthTokens            bool
@@ -525,11 +481,8 @@ func (q *Queries) ListCandidates(ctx context.Context, toolsetIds []uuid.UUID) ([
 			&i.ProjectSlug,
 			&i.ToolsetName,
 			&i.ToolsetSlug,
-			&i.McpSlug,
-			&i.CustomDomainID,
 			&i.UserSessionIssuerID,
 			&i.ExternalOauthServerID,
-			&i.OauthProxyServerID,
 			&i.ToolsetHasVariations,
 			&i.UserSessionIssuerSlug,
 			&i.Live,
@@ -545,7 +498,7 @@ func (q *Queries) ListCandidates(ctx context.Context, toolsetIds []uuid.UUID) ([
 			&i.ServerUserSessionIssuerID,
 			&i.ServerHasVariations,
 			&i.EndpointCount,
-			&i.McpSlugIsEndpoint,
+			&i.WrapperID,
 			&i.HasPrompts,
 			&i.HasSlackApps,
 			&i.HasUserOauthTokens,

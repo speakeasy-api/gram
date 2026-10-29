@@ -20,6 +20,7 @@ func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutati
 	update := unavailableAccessRoleMutationHandler[UpdateMCPAccessRoleInput, UpdateMCPAccessRoleOutput]()
 	assign := unavailableAccessRoleMutationHandler[AssignMCPAccessRoleInput, AssignMCPAccessRoleOutput]()
 	authClientAccess := unavailableAccessRoleMutationHandler[SetMCPRoleAuthClientAccessInput, SetMCPRoleAuthClientAccessOutput]()
+	offerCredential := unavailableAccessRoleMutationHandler[OfferMCPUpstreamCredentialInput, OfferMCPUpstreamCredentialOutput]()
 	if mutations != nil && mutations.valid() {
 		create = func(ctx context.Context, _ *mcp.CallToolRequest, input CreateMCPAccessRoleInput) (*mcp.CallToolResult, CreateMCPAccessRoleOutput, error) {
 			return principalToolCall(ctx, accessRoleMutationToolResult, func(principal Principal) (CreateMCPAccessRoleOutput, error) {
@@ -35,6 +36,11 @@ func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutati
 			authClientAccess = func(ctx context.Context, _ *mcp.CallToolRequest, input SetMCPRoleAuthClientAccessInput) (*mcp.CallToolResult, SetMCPRoleAuthClientAccessOutput, error) {
 				return principalToolCall(ctx, accessRoleMutationToolResult, func(principal Principal) (SetMCPRoleAuthClientAccessOutput, error) {
 					return mutations.SetRoleAuthClientAccess(ctx, principal, input)
+				})
+			}
+			offerCredential = func(ctx context.Context, _ *mcp.CallToolRequest, input OfferMCPUpstreamCredentialInput) (*mcp.CallToolResult, OfferMCPUpstreamCredentialOutput, error) {
+				return principalToolCall(ctx, accessRoleMutationToolResult, func(principal Principal) (OfferMCPUpstreamCredentialOutput, error) {
+					return mutations.OfferUpstreamCredential(ctx, principal, input)
 				})
 			}
 		}
@@ -67,6 +73,11 @@ func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutati
 		Description: "Set whether one role may use one shared credential an MCP server offers to reach its upstream service: allowed, blocked, or not_granted (removes the role's own rule). Read get_mcp_access first and pass a role reference and auth_client_id it returned. The rule is on the credential, so it applies on every server that offers it. Rules on every credential or credential type, and a member's other roles, can still allow or block it; the result reports the role's effective access after the change. Personal connections cannot be set here because each member only ever uses their own. Requires explicit confirmation.",
 		Annotations: writeAnnotations(true, true, false),
 	}, meta, authClientAccess)
+	addTool(reg, &mcp.Tool{
+		Name: operationOfferMCPUpstreamCredential, Title: "Offer an Upstream Credential on Another Server",
+		Description: "Let one more configured MCP offer an upstream credential another server already offers, instead of creating a copy. Read get_mcp_connection_settings on the server that offers it and pass the auth_client_id it reports. The credential stays one credential: changing, rotating or disabling it changes every server that offers it. Offering it grants nobody permission to use it or access to the server; set who may use it with set_mcp_role_auth_client_access. A credential confined to another project, a server that declares it needs no upstream authentication, hosted toolsets, and header credentials on tunneled servers are refused. New credentials and their secret values are created in the dashboard. Requires explicit confirmation.",
+		Annotations: writeAnnotations(false, false, false),
+	}, meta, offerCredential)
 }
 
 func unavailableAccessRoleMutationHandler[In, Out any]() mcp.ToolHandlerFor[In, Out] {

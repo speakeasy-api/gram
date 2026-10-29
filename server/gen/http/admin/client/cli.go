@@ -895,10 +895,33 @@ func BuildCreateOrganizationPayload(adminCreateOrganizationBody string, adminCre
 	{
 		err = json.Unmarshal([]byte(adminCreateOrganizationBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ownership_confirmed\": false,\n      \"url\": \"aa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\",\n      \"ownership_confirmed\": false,\n      \"slug\": \"aaa\",\n      \"url\": \"aa\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.URL) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.url", body.URL, utf8.RuneCountInString(body.URL), 1, true))
+		}
+		if body.Name != nil {
+			if utf8.RuneCountInString(*body.Name) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+			}
+		}
+		if body.Name != nil {
+			if utf8.RuneCountInString(*body.Name) > 100 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 100, false))
+			}
+		}
+		if body.Slug != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9]+(?:-[a-z0-9]+)*$"))
+		}
+		if body.Slug != nil {
+			if utf8.RuneCountInString(*body.Slug) < 2 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 2, true))
+			}
+		}
+		if body.Slug != nil {
+			if utf8.RuneCountInString(*body.Slug) > 100 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 100, false))
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -912,6 +935,8 @@ func BuildCreateOrganizationPayload(adminCreateOrganizationBody string, adminCre
 	}
 	v := &admin.CreateOrganizationPayload{
 		URL:                body.URL,
+		Name:               body.Name,
+		Slug:               body.Slug,
 		OwnershipConfirmed: body.OwnershipConfirmed,
 	}
 	v.AdminSessionToken = adminSessionToken
@@ -1193,6 +1218,40 @@ func BuildSetStripeCustomerPayload(adminSetStripeCustomerBody string, adminSetSt
 	v := &admin.SetStripeCustomerPayload{
 		OrganizationID:   body.OrganizationID,
 		StripeCustomerID: body.StripeCustomerID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildSetAdoptionDashboardURLPayload builds the payload for the admin
+// setAdoptionDashboardUrl endpoint from CLI flags.
+func BuildSetAdoptionDashboardURLPayload(adminSetAdoptionDashboardURLBody string, adminSetAdoptionDashboardURLAdminSessionToken string) (*admin.SetAdoptionDashboardURLPayload, error) {
+	var err error
+	var body SetAdoptionDashboardURLRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetAdoptionDashboardURLBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"adoption_dashboard_url\": \"aaa\",\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+		if body.AdoptionDashboardURL != nil {
+			if utf8.RuneCountInString(*body.AdoptionDashboardURL) > 2048 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.adoption_dashboard_url", *body.AdoptionDashboardURL, utf8.RuneCountInString(*body.AdoptionDashboardURL), 2048, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetAdoptionDashboardURLAdminSessionToken != "" {
+			adminSessionToken = &adminSetAdoptionDashboardURLAdminSessionToken
+		}
+	}
+	v := &admin.SetAdoptionDashboardURLPayload{
+		OrganizationID:       body.OrganizationID,
+		AdoptionDashboardURL: body.AdoptionDashboardURL,
 	}
 	v.AdminSessionToken = adminSessionToken
 
@@ -2484,7 +2543,7 @@ func BuildPromoteRegistryCandidatePayload(adminPromoteRegistryCandidateBody stri
 	{
 		err = json.Unmarshal([]byte(adminPromoteRegistryCandidateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"auth_mode\": \"oauth\",\n      \"curation_revision\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"docs_slug\": \"abc123\",\n      \"documentation_url\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"public_description\": \"abc123\",\n      \"public_metadata_confirmed\": false,\n      \"public_name\": \"abc123\",\n      \"public_title\": \"abc123\",\n      \"public_url\": \"abc123\",\n      \"retry_key\": \"abc123\",\n      \"source_revision\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"auth_mode\": \"oauth\",\n      \"curation_revision\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"docs_slug\": \"abc123\",\n      \"documentation_url\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"override_eligibility\": false,\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"public_description\": \"abc123\",\n      \"public_metadata_confirmed\": false,\n      \"public_name\": \"abc123\",\n      \"public_title\": \"abc123\",\n      \"public_url\": \"abc123\",\n      \"retry_key\": \"abc123\",\n      \"source_revision\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
@@ -2517,6 +2576,13 @@ func BuildPromoteRegistryCandidatePayload(adminPromoteRegistryCandidateBody stri
 		AuthMode:                body.AuthMode,
 		RetryKey:                body.RetryKey,
 		PublicMetadataConfirmed: body.PublicMetadataConfirmed,
+		OverrideEligibility:     body.OverrideEligibility,
+	}
+	{
+		var zero bool
+		if v.OverrideEligibility == zero {
+			v.OverrideEligibility = false
+		}
 	}
 	v.AdminSessionToken = adminSessionToken
 

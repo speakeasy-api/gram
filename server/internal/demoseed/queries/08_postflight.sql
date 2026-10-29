@@ -395,6 +395,19 @@ SELECT count(*)
 FROM meta_mcp_server_members m
 WHERE m.project_id = @project_id::uuid AND m.deleted IS TRUE;
 
+-- Skills served over MCP must point at targets that survived the reseed.
+-- name: PostflightCountMCPSkillLinks :one
+SELECT count(*)
+FROM mcp_skill_links l
+LEFT JOIN mcp_servers ms
+  ON ms.project_id = l.project_id AND ms.id = l.mcp_server_id AND ms.deleted IS FALSE
+LEFT JOIN meta_mcp_servers mm
+  ON mm.project_id = l.project_id AND mm.id = l.meta_mcp_server_id AND mm.deleted IS FALSE
+WHERE l.project_id = @project_id::uuid AND l.deleted IS FALSE
+  AND (l.target_kind = 'organization_gateway'
+    OR (l.target_kind = 'mcp_server' AND ms.id IS NOT NULL)
+    OR (l.target_kind = 'meta_mcp_server' AND mm.id IS NOT NULL));
+
 -- The approval policy is only usable when the approvals server it points
 -- agents at has an endpoint and sits in the Default plugin.
 
@@ -407,26 +420,25 @@ JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = s.project_id AND p.is_d
 WHERE s.project_id = @project_id::uuid AND s.builtin_backend = 'approvals'
   AND s.deleted IS FALSE;
 
--- name: PostflightCountUnwrappedToolsets :one
+-- A hosted toolset's canonical wrapper mirrors the toolset's name and tool
+-- variations group, and serves from at least one endpoint.
+-- name: PostflightCountHostedToolsetDrift :one
 SELECT count(*)
 FROM toolsets t
-LEFT JOIN mcp_servers s
-  ON s.id = t.id AND s.toolset_id = t.id AND s.deleted IS FALSE
- AND s.slug = t.mcp_slug AND s.name = t.name
- AND s.user_session_issuer_id IS NOT DISTINCT FROM t.user_session_issuer_id
- AND s.tool_variations_group_id IS NOT DISTINCT FROM t.tool_variations_group_id
- AND s.visibility = CASE WHEN NOT t.mcp_enabled THEN 'disabled'
-                         WHEN t.mcp_is_public THEN 'public'
-                         ELSE 'private' END
-WHERE t.project_id = @project_id::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL
-  AND (s.id IS NULL
-    OR 1 <> (SELECT count(*) FROM mcp_endpoints e
-             WHERE e.mcp_server_id = t.id AND e.deleted IS FALSE)
-    OR NOT EXISTS (
-      SELECT 1 FROM mcp_endpoints e
-      WHERE e.mcp_server_id = t.id AND e.deleted IS FALSE
-        AND e.slug = t.mcp_slug
-        AND e.custom_domain_id IS NOT DISTINCT FROM t.custom_domain_id));
+JOIN mcp_servers s
+  ON s.id = t.id AND s.toolset_id = t.id AND s.project_id = t.project_id AND s.deleted IS FALSE
+WHERE t.project_id = @project_id::uuid AND t.deleted IS FALSE
+  AND (s.name IS DISTINCT FROM t.name
+       OR s.tool_variations_group_id IS DISTINCT FROM t.tool_variations_group_id
+       OR NOT EXISTS (
+         SELECT 1 FROM mcp_endpoints e
+         WHERE e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE));
+
+-- name: PostflightCountCanonicalWrappers :one
+SELECT count(*)
+FROM mcp_servers s
+JOIN toolsets t ON t.id = s.id AND t.project_id = s.project_id AND t.deleted IS FALSE
+WHERE s.project_id = @project_id::uuid AND s.toolset_id = s.id AND s.deleted IS FALSE;
 
 -- name: PostflightCountGatewayEndpoints :one
 SELECT count(*)

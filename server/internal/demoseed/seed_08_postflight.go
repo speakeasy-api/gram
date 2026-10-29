@@ -136,7 +136,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "auth client associations",
 			count: byOrg(s.q.PostflightCountAuthClientAssociations),
-			fail:  postflightMustEqual(3, "expected 3 auth client associations, found %d"),
+			fail:  postflightMustEqual(4, "expected 4 auth client associations, found %d"),
 		},
 		{
 			what:  "setup tasks",
@@ -409,14 +409,24 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			fail:  postflightMustEqual(1, "expected 1 removed gateway member, found %d"),
 		},
 		{
+			what:  "mcp skill links",
+			count: byProject(s.q.PostflightCountMCPSkillLinks),
+			fail:  postflightMustEqual(5, "expected 5 MCP skill links, found %d"),
+		},
+		{
 			what:  "approvals server",
 			count: byProject(s.q.PostflightCountApprovalsServers),
 			fail:  postflightMustEqual(1, "expected 1 approvals server with an endpoint in the Default plugin, found %d"),
 		},
 		{
 			what:  "hosted toolset wrappers",
-			count: byProject(s.q.PostflightCountUnwrappedToolsets),
-			fail:  postflightMustBeZero("%d hosted toolsets lack a matching canonical wrapper and endpoint"),
+			count: byProject(s.q.PostflightCountHostedToolsetDrift),
+			fail:  postflightMustBeZero("%d toolsets have a canonical wrapper out of step with them"),
+		},
+		{
+			what:  "canonical wrappers",
+			count: byProject(s.q.PostflightCountCanonicalWrappers),
+			fail:  postflightMustEqual(4, "expected 4 canonical hosted MCP servers (support, ops, partner, discovery), found %d"),
 		},
 		{
 			what:  "gateway endpoints",

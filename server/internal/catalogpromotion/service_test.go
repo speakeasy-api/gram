@@ -16,11 +16,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/catalogauth"
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
+	remoterepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -236,7 +238,7 @@ func TestDiscoveryFailureAdvancesScheduleAndReportsHealth(t *testing.T) {
 	status, err = f.service.Status(t.Context())
 	require.NoError(t, err)
 	require.EqualValues(t, 1, status.DiscoveryFailures)
-	f.service.now = func() time.Time { return f.health.now.Add(2 * time.Hour) }
+	f.service.now = func() time.Time { return f.health.now.Add(7 * 24 * time.Hour) }
 	require.NoError(t, f.service.Discover(t.Context()))
 	status, err = f.service.Status(t.Context())
 	require.NoError(t, err)
@@ -373,7 +375,7 @@ func TestPromotionDNSOutagesRemainOperationalErrors(t *testing.T) {
 				return []net.IP{net.ParseIP(tc.ip)}, nil
 			}})))
 			tx := testenv.BeginTx(t, t.Context(), f.db)
-			_, err := f.service.ValidateTx(t.Context(), tx, f.target, f.request.SourceRevision, f.request.CurationRevision, f.request.Public)
+			_, err := f.service.ValidateTx(t.Context(), tx, f.target, f.request.SourceRevision, f.request.CurationRevision, f.request.Public, false)
 			require.ErrorIs(t, err, tc.expected)
 			if errors.Is(tc.expected, ErrUnavailable) {
 				require.ErrorIs(t, err, tc.lookupErr)
@@ -404,4 +406,316 @@ func TestCandidateListRetainsPublishedDeletedSources(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, published.ID, rows[0].ID)
+}
+
+func TestPromotionHealthOverrideRequiresExplicitConsentAndAudits(t *testing.T) {
+	t.Parallel()
+	for _, reason := range []string{"insufficient_evidence", "errors_observed", "logging_disabled", "telemetry_unavailable"} {
+		t.Run(reason, func(t *testing.T) {
+			t.Parallel()
+			f := newPromotionFixture(t)
+			source, err := repo.New(f.db).GetSource(t.Context(), repo.GetSourceParams{OrganizationID: f.target.OrganizationID, ProjectID: f.target.ProjectID, McpServerID: f.target.MCPServerID})
+			require.NoError(t, err)
+			_, err = repo.New(f.db).StoreEvidence(t.Context(), repo.StoreEvidenceParams{OrganizationID: f.target.OrganizationID, ProjectID: uuid.NullUUID{UUID: f.target.ProjectID, Valid: true}, McpServerID: uuid.NullUUID{UUID: f.target.MCPServerID, Valid: true}, RemoteMcpServerID: uuid.NullUUID{UUID: source.RemoteMcpServerID, Valid: true}, SourceRevision: f.request.SourceRevision, Reason: reason, Eligible: false, CheckedAt: conv.ToPGTimestamptz(f.health.now.Add(time.Second))})
+			require.NoError(t, err)
+			_, err = f.promote(t)
+			require.ErrorIs(t, err, ErrIneligible)
+			f.request.OverrideEligibility = true
+			published, err := f.promote(t)
+			require.NoError(t, err)
+			require.Equal(t, "promoted", published.Status)
+			event, err := audittest.LatestAuditLogByAction(t.Context(), f.db, audit.ActionMcpServerPromoteCatalogue)
+			require.NoError(t, err)
+			var metadata struct {
+				EligibilityOverridden bool   `json:"eligibility_overridden"`
+				EligibilityReason     string `json:"eligibility_reason"`
+			}
+			require.NoError(t, json.Unmarshal(event.Metadata, &metadata))
+			require.True(t, metadata.EligibilityOverridden)
+			require.Equal(t, reason, metadata.EligibilityReason)
+			_, err = f.promote(t)
+			require.NoError(t, err, "identical override retry is idempotent")
+			f.request.OverrideEligibility = false
+			_, err = f.promote(t)
+			require.ErrorIs(t, err, ErrConflict, "retry key is bound to override decision")
+		})
+	}
+}
+
+func TestPromotionOverrideRejectsNonHealthReasons(t *testing.T) {
+	t.Parallel()
+	for _, reason := range []string{"unsupported_configuration", "disabled", "already_catalogued", "source_changed", "authentication_required", "unknown_future_reason"} {
+		t.Run(reason, func(t *testing.T) {
+			t.Parallel()
+			f := newPromotionFixture(t)
+			candidate, err := f.service.GetCandidate(t.Context(), f.target)
+			require.NoError(t, err)
+			_, err = repo.New(f.db).StoreEvidence(t.Context(), repo.StoreEvidenceParams{OrganizationID: f.target.OrganizationID, ProjectID: uuid.NullUUID{UUID: f.target.ProjectID, Valid: true}, McpServerID: uuid.NullUUID{UUID: f.target.MCPServerID, Valid: true}, RemoteMcpServerID: uuid.NullUUID{UUID: uuid.MustParse(candidate.RemoteMCPServerID), Valid: true}, SourceRevision: f.request.SourceRevision, Reason: reason, CheckedAt: conv.ToPGTimestamptz(f.health.now.Add(time.Second))})
+			require.NoError(t, err)
+			f.request.OverrideEligibility = true
+			_, err = f.promote(t)
+			require.ErrorIs(t, err, ErrIneligible)
+		})
+	}
+}
+
+func TestAlreadyCataloguedCandidatesHiddenByDefault(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	candidate, err := f.service.GetCandidate(t.Context(), f.target)
+	require.NoError(t, err)
+	_, err = repo.New(f.db).StoreEvidence(t.Context(), repo.StoreEvidenceParams{OrganizationID: f.target.OrganizationID, ProjectID: uuid.NullUUID{UUID: f.target.ProjectID, Valid: true}, McpServerID: uuid.NullUUID{UUID: f.target.MCPServerID, Valid: true}, RemoteMcpServerID: uuid.NullUUID{UUID: uuid.MustParse(candidate.RemoteMCPServerID), Valid: true}, SourceRevision: f.request.SourceRevision, Reason: "already_catalogued", CheckedAt: conv.ToPGTimestamptz(f.health.now.Add(time.Second))})
+	require.NoError(t, err)
+	for _, status := range []string{"", "active", "candidate", "all"} {
+		rows, next, err := f.service.ListCandidates(t.Context(), "", 1, status)
+		require.NoError(t, err)
+		require.Empty(t, next)
+		if status == "" || status == "active" {
+			require.Empty(t, rows)
+		} else {
+			require.Len(t, rows, 1)
+			require.Equal(t, candidate.ID, rows[0].ID)
+		}
+	}
+}
+
+func TestCataloguedURLsExcludedBeforeDiscoveryAndPagination(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		url       string
+		sourceURL string
+		matches   bool
+	}{
+		{url: "https://catalog.example.com/mcp", matches: true},
+		{url: "https://CATALOG.example.com:443/mcp", matches: true},
+		{url: "https://catalog.example.com/mcp", sourceURL: "HTTPS://CATALOG.example.com:443/mcp", matches: true},
+		{url: "https://catalog.example.com/other", matches: false},
+		{url: "https://other.example.com/mcp", matches: false},
+	} {
+		t.Run(tc.url, func(t *testing.T) {
+			t.Parallel()
+			f := newPromotionFixture(t)
+			public := f.request.Public
+			public.URL = tc.url
+			if tc.sourceURL != "" {
+				require.NoError(t, repo.New(f.db).ChangePromotionSourceURLFixture(t.Context(), repo.ChangePromotionSourceURLFixtureParams{ProjectID: f.target.ProjectID, McpServerID: f.target.MCPServerID, Url: tc.sourceURL}))
+			}
+			record, err := buildRecord(public, "streamable-http")
+			require.NoError(t, err)
+			_, err = f.service.registry.Create(t.Context(), record)
+			require.NoError(t, err)
+			// The evidence still says eligible: URL filtering must not wait for the next health refresh.
+			targets, err := repo.New(f.db).DiscoveryTargets(t.Context(), repo.DiscoveryTargetsParams{Now: conv.ToPGTimestamptz(f.health.now), ExcludedOrganizationID: "excluded-example"})
+			require.NoError(t, err)
+			rows, next, err := f.service.ListCandidates(t.Context(), "", 1, "active")
+			require.NoError(t, err)
+			require.Empty(t, next)
+			if tc.matches {
+				require.Empty(t, targets)
+				require.Empty(t, rows)
+			} else {
+				require.Len(t, targets, 1)
+				require.Len(t, rows, 1)
+			}
+			rows, _, err = f.service.ListCandidates(t.Context(), "", 1, "candidate")
+			require.NoError(t, err)
+			require.Len(t, rows, 1, "staff can explicitly include catalogued endpoints")
+		})
+	}
+}
+
+func TestPromotionOverrideDoesNotBypassSourceChecks(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"disabled", "header"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			f := newPromotionFixture(t)
+			q := repo.New(f.db)
+			params := repo.GetSourceParams{OrganizationID: f.target.OrganizationID, ProjectID: f.target.ProjectID, McpServerID: f.target.MCPServerID}
+			source, err := q.GetSource(t.Context(), params)
+			require.NoError(t, err)
+			if kind == "disabled" {
+				require.NoError(t, q.ChangePromotionSourceFixture(t.Context(), repo.ChangePromotionSourceFixtureParams{ProjectID: f.target.ProjectID, ID: f.target.MCPServerID, Visibility: "disabled"}))
+			} else {
+				_, err = remoterepo.New(f.db).CreateServerHeader(t.Context(), remoterepo.CreateServerHeaderParams{ProjectID: f.target.ProjectID, RemoteMcpServerID: source.RemoteMcpServerID, Name: "X-API-Key", IsRequired: true, IsSecret: true, Value: conv.ToPGText("synthetic")})
+				require.NoError(t, err)
+			}
+			source, err = q.GetSource(t.Context(), params)
+			require.NoError(t, err)
+			// Matching evidence reaches the physical source checks rather than failing the revision check.
+			_, err = q.StoreEvidence(t.Context(), repo.StoreEvidenceParams{OrganizationID: f.target.OrganizationID, ProjectID: uuid.NullUUID{UUID: f.target.ProjectID, Valid: true}, McpServerID: uuid.NullUUID{UUID: f.target.MCPServerID, Valid: true}, RemoteMcpServerID: uuid.NullUUID{UUID: source.RemoteMcpServerID, Valid: true}, SourceRevision: source.SourceRevision, Reason: "insufficient_evidence", CheckedAt: conv.ToPGTimestamptz(f.health.now.Add(time.Second))})
+			require.NoError(t, err)
+			f.request.SourceRevision = source.SourceRevision
+			f.request.OverrideEligibility = true
+			_, err = f.promote(t)
+			require.ErrorIs(t, err, ErrIneligible)
+			require.NotErrorIs(t, err, ErrStale)
+		})
+	}
+}
+
+func TestCandidateOverrideCapability(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, reason, status string
+		eligible, allowed    bool
+	}{
+		{name: "insufficient", reason: "insufficient_evidence", status: "candidate", allowed: true},
+		{name: "errors", reason: "errors_observed", status: "candidate", allowed: true},
+		{name: "logging", reason: "logging_disabled", status: "candidate", allowed: true},
+		{name: "telemetry", reason: "telemetry_unavailable", status: "candidate", allowed: true},
+		{name: "eligible", reason: "eligible", status: "candidate", eligible: true},
+		{name: "disabled", reason: "disabled", status: "candidate"},
+		{name: "unknown", reason: "future_reason", status: "candidate"},
+		{name: "rejected", reason: "errors_observed", status: "rejected"},
+		{name: "archived", reason: "errors_observed", status: "archived"},
+		{name: "promoted", reason: "errors_observed", status: "promoted"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			candidate := Candidate{Eligible: tc.eligible, Reason: tc.reason, Status: tc.status}
+			require.Equal(t, tc.allowed, candidate.CanOverrideEligibility())
+		})
+	}
+}
+
+func TestCandidateDetailRefreshRevokesOverrideForChangedSource(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"disabled", "header"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			f := newPromotionFixture(t)
+			f.service.features = fakePromotionFeatures{enabled: false}
+			before, err := f.service.GetCandidate(t.Context(), f.target)
+			require.NoError(t, err)
+			require.True(t, before.CanOverrideEligibility())
+			q := repo.New(f.db)
+			if kind == "disabled" {
+				require.NoError(t, q.ChangePromotionSourceFixture(t.Context(), repo.ChangePromotionSourceFixtureParams{ProjectID: f.target.ProjectID, ID: f.target.MCPServerID, Visibility: "disabled"}))
+			} else {
+				_, err = remoterepo.New(f.db).CreateServerHeader(t.Context(), remoterepo.CreateServerHeaderParams{ProjectID: f.target.ProjectID, RemoteMcpServerID: uuid.MustParse(before.RemoteMCPServerID), Name: "X-API-Key", IsRequired: true, IsSecret: true, Value: conv.ToPGText("synthetic")})
+				require.NoError(t, err)
+			}
+			f.service.now = func() time.Time { return f.health.now.Add(time.Second) }
+			refreshed, err := f.service.GetCandidate(t.Context(), f.target)
+			require.NoError(t, err)
+			require.False(t, refreshed.CanOverrideEligibility())
+			require.False(t, refreshed.Eligible)
+			require.NotEqual(t, before.SourceRevision, refreshed.SourceRevision)
+			if kind == "disabled" {
+				require.Equal(t, "disabled", refreshed.Reason)
+			} else {
+				require.Equal(t, "unsupported_configuration", refreshed.Reason)
+			}
+		})
+	}
+}
+
+func TestPromotionUnusedHealthOverrideAudit(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	f.request.OverrideEligibility = true
+	_, err := f.promote(t)
+	require.NoError(t, err)
+	event, err := audittest.LatestAuditLogByAction(t.Context(), f.db, audit.ActionMcpServerPromoteCatalogue)
+	require.NoError(t, err)
+	var metadata struct {
+		EligibilityOverridden bool   `json:"eligibility_overridden"`
+		EligibilityReason     string `json:"eligibility_reason"`
+	}
+	require.NoError(t, json.Unmarshal(event.Metadata, &metadata))
+	require.False(t, metadata.EligibilityOverridden)
+	require.Equal(t, "eligible", metadata.EligibilityReason)
+}
+
+func TestPromotionPublicTextMatchesCatalogueSchema(t *testing.T) {
+	t.Parallel()
+	for _, field := range []string{"title", "description"} {
+		for _, tc := range []struct {
+			name, value string
+			valid       bool
+		}{
+			{name: "short", value: "Public example service", valid: true},
+			{name: "100 ASCII", value: strings.Repeat("a", 100), valid: true},
+			{name: "101 ASCII", value: strings.Repeat("a", 101)},
+			{name: "126 ASCII", value: strings.Repeat("a", 126)},
+			{name: "100 Unicode", value: strings.Repeat("界", 100), valid: true},
+			{name: "100 supplementary", value: strings.Repeat("🌍", 100), valid: true},
+			{name: "101 supplementary", value: strings.Repeat("🌍", 101)},
+		} {
+			t.Run(field+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				f := newPromotionFixture(t)
+				f.health.failures = 1
+				candidate, err := f.service.GetCandidate(t.Context(), f.target)
+				require.NoError(t, err)
+				require.True(t, candidate.CanOverrideEligibility())
+				f.request.OverrideEligibility = true
+				expected := ErrPublicDescriptionTooLong
+				if field == "title" {
+					f.request.Public.Title = tc.value
+					expected = ErrPublicTitleTooLong
+				} else {
+					f.request.Public.Description = tc.value
+				}
+				record, err := buildRecord(f.request.Public, "streamable-http")
+				require.NoError(t, err)
+				require.Equal(t, tc.valid, len(f.service.registry.Validate(record)) == 0, "promotion validation must match the pinned catalogue schema")
+				_, err = f.promote(t)
+				if tc.valid {
+					require.NoError(t, err)
+				} else {
+					require.ErrorIs(t, err, expected)
+					require.ErrorIs(t, err, ErrInvalid)
+					require.NotContains(t, err.Error(), tc.value)
+				}
+			})
+		}
+	}
+}
+
+func TestPromotionPersistsAuthEvidenceAndReplaysWithoutRediscovery(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	evidence := catalogauth.Discovery{SupportsCIMD: true, AuthSetup: "cimd", Status: "complete"}
+	f.request.Public.AuthMode = "oauth"
+	f.request.AuthDiscovery = evidence
+	delivered := &recordingDelivery{}
+	f.service.delivery = delivered
+	result, err := f.promote(t)
+	require.NoError(t, err)
+	require.Equal(t, &evidence, result.AuthDiscovery)
+	entry, err := f.service.registry.GetByName(t.Context(), f.request.Public.Name)
+	require.NoError(t, err)
+	require.Empty(t, f.service.registry.Validate(entry.Data))
+	var record struct {
+		Meta map[string]struct {
+			SupportsDCR  bool   `json:"supportsDcr"`
+			SupportsCIMD bool   `json:"supportsCimd"`
+			AuthSetup    string `json:"authSetup"`
+		} `json:"_meta"`
+	}
+	require.NoError(t, json.Unmarshal(entry.Data, &record))
+	require.True(t, record.Meta["com.speakeasy.ai/catalog"].SupportsCIMD)
+	require.Equal(t, "cimd", record.Meta["com.speakeasy.ai/catalog"].AuthSetup)
+	require.NotContains(t, string(entry.Data), f.target.OrganizationID)
+	f.request.AuthDiscovery = catalogauth.Unknown()
+	// An unavailable discovery policy cannot erase or delay a completed receipt's evidence.
+	f.service.policy = nil
+	prepared, err := f.service.PreparePublication(t.Context(), f.request)
+	require.NoError(t, err)
+	require.Equal(t, evidence, prepared.AuthDiscovery)
+	f.request = prepared
+	replay, err := f.promote(t)
+	require.NoError(t, err)
+	require.Equal(t, result.RegistryEntryID, replay.RegistryEntryID)
+	require.Equal(t, &evidence, replay.AuthDiscovery)
+	require.NoError(t, f.service.Dispatch(t.Context()))
+	require.Len(t, delivered.guides, 1)
+	require.Equal(t, evidence, delivered.guides[0].AuthDiscovery)
+	f.request.Public.Description = "Different reviewed metadata"
+	f.request, err = f.service.PreparePublication(t.Context(), f.request)
+	require.NoError(t, err)
+	_, err = f.promote(t)
+	require.ErrorIs(t, err, ErrConflict)
 }

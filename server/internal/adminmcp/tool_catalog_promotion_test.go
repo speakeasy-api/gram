@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/catalogauth"
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
@@ -35,7 +36,7 @@ func (r *recordingCatalogPromotionReader) ListCandidates(_ context.Context, curs
 	return r.candidates, r.next, r.err
 }
 
-func (r *recordingCatalogPromotionReader) GetCandidate(_ context.Context, target catalogpromotion.Target) (catalogpromotion.Candidate, error) {
+func (r *recordingCatalogPromotionReader) InspectCandidate(_ context.Context, target catalogpromotion.Target) (catalogpromotion.Candidate, error) {
 	r.getCalls++
 	r.target = target
 	return r.candidate, r.err
@@ -88,6 +89,7 @@ func TestCatalogPromotionListBoundsAndCursor(t *testing.T) {
 	require.Len(t, page.Candidates, 1)
 	require.Equal(t, "next-page", page.NextCursor)
 	require.Equal(t, int64(12), page.Candidates[0].ObservedSuccesses)
+	require.False(t, page.Candidates[0].CanOverrideEligibility)
 }
 
 func TestCatalogPromotionListRejectsInvalidBoundsBeforeReading(t *testing.T) {
@@ -142,6 +144,7 @@ func TestCatalogPromotionDetailRejectsDifferentTenantResult(t *testing.T) {
 func TestCatalogPromotionProjectionRejectsUnsafeOutput(t *testing.T) {
 	t.Parallel()
 	for _, candidate := range []catalogpromotion.Candidate{
+		{ID: testRegistryID, OrganizationID: "org-example", ProjectID: testRegistryID, MCPServerID: testRegistryID, RemoteMCPServerID: testRegistryID, SourceRevision: "aabbccdd", Status: "candidate", Reason: "eligible", AuthDiscovery: &catalogauth.Discovery{Status: "complete", AuthSetup: "none"}},
 		{ID: testRegistryID, OrganizationID: "org-example", ProjectID: testRegistryID, MCPServerID: testRegistryID, RemoteMCPServerID: testRegistryID, SourceRevision: "aabbccdd", Status: "candidate", Reason: "eligible", DocsURL: "https://private.example.com?credential=secret"},
 		{ID: testRegistryID, OrganizationID: "org-example", ProjectID: testRegistryID, MCPServerID: testRegistryID, RemoteMCPServerID: testRegistryID, SourceRevision: "aabbccdd", Status: "candidate", Reason: "eligible", DeliveryError: "private upstream failure"},
 	} {
@@ -203,6 +206,7 @@ func TestCatalogPromotionListsSyntheticReviewStates(t *testing.T) {
 			require.NoError(t, json.Unmarshal(data, &result))
 			require.Len(t, result.Candidates, 1)
 			require.Equal(t, status, result.Candidates[0].Status)
+			require.Equal(t, status == "candidate", result.Candidates[0].CanOverrideEligibility)
 		})
 	}
 }

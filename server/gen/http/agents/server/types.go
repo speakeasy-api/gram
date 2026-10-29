@@ -45,6 +45,19 @@ type RenameRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
+// CheckPolicyGrantsRequestBody is the type of the "agents" service
+// "checkPolicyGrants" endpoint HTTP request body.
+type CheckPolicyGrantsRequestBody struct {
+	// The agent the grants would be written to. Omit for an agent the caller would
+	// create.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Owner of the agent the caller would create, as agents.create takes it;
+	// defaults to the caller. Not allowed with agent_id, whose owner is its own.
+	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
+	// The grants to check, answered in the same order.
+	PolicyGrants []*AgentPolicyGrantFormRequestBodyRequestBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
+}
+
 // CreatePolicyGrantRequestBody is the type of the "agents" service
 // "createPolicyGrant" endpoint HTTP request body.
 type CreatePolicyGrantRequestBody struct {
@@ -176,11 +189,14 @@ type CreateResponseBody struct {
 	Name                    string  `form:"name" json:"name" xml:"name"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle string  `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt              string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt              string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetResponseBody is the type of the "agents" service "get" endpoint HTTP
@@ -198,11 +214,14 @@ type GetResponseBody struct {
 	Name                    string  `form:"name" json:"name" xml:"name"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle string  `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt              string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt              string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // RenameResponseBody is the type of the "agents" service "rename" endpoint
@@ -220,11 +239,14 @@ type RenameResponseBody struct {
 	Name                    string  `form:"name" json:"name" xml:"name"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle string  `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt              string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt              string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListDelegableGrantsResponseBody is the type of the "agents" service
@@ -234,6 +256,13 @@ type ListDelegableGrantsResponseBody []*AgentPolicyGrantFormResponse
 // ListPolicyGrantsResponseBody is the type of the "agents" service
 // "listPolicyGrants" endpoint HTTP response body.
 type ListPolicyGrantsResponseBody []*AgentPolicyGrantResponse
+
+// CheckPolicyGrantsResponseBody is the type of the "agents" service
+// "checkPolicyGrants" endpoint HTTP response body.
+type CheckPolicyGrantsResponseBody struct {
+	// One answer per requested grant, in request order.
+	Results []*AgentPolicyGrantCheckResponseBody `form:"results" json:"results" xml:"results"`
+}
 
 // CreatePolicyGrantResponseBody is the type of the "agents" service
 // "createPolicyGrant" endpoint HTTP response body.
@@ -293,11 +322,14 @@ type TransferResponseBody struct {
 	Name                    string  `form:"name" json:"name" xml:"name"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle string  `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt              string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt              string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ReassignResponseBody is the type of the "agents" service "reassign" endpoint
@@ -315,11 +347,14 @@ type ReassignResponseBody struct {
 	Name                    string  `form:"name" json:"name" xml:"name"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle string  `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt              string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt              string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // SuspendResponseBody is the type of the "agents" service "suspend" endpoint
@@ -337,11 +372,14 @@ type SuspendResponseBody struct {
 	Name                    string  `form:"name" json:"name" xml:"name"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle string  `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt              string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt              string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ResumeResponseBody is the type of the "agents" service "resume" endpoint
@@ -359,11 +397,14 @@ type ResumeResponseBody struct {
 	Name                    string  `form:"name" json:"name" xml:"name"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle string  `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt              string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt              string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // RevokeResponseBody is the type of the "agents" service "revoke" endpoint
@@ -381,11 +422,14 @@ type RevokeResponseBody struct {
 	Name                    string  `form:"name" json:"name" xml:"name"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle string  `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt              string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt              string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListSessionsUnauthorizedResponseBody is the type of the "agents" service
@@ -1824,6 +1868,190 @@ type ListPolicyGrantsUnexpectedResponseBody struct {
 // ListPolicyGrantsGatewayErrorResponseBody is the type of the "agents" service
 // "listPolicyGrants" endpoint HTTP response body for the "gateway_error" error.
 type ListPolicyGrantsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsUnauthorizedResponseBody is the type of the "agents"
+// service "checkPolicyGrants" endpoint HTTP response body for the
+// "unauthorized" error.
+type CheckPolicyGrantsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsForbiddenResponseBody is the type of the "agents" service
+// "checkPolicyGrants" endpoint HTTP response body for the "forbidden" error.
+type CheckPolicyGrantsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsBadRequestResponseBody is the type of the "agents" service
+// "checkPolicyGrants" endpoint HTTP response body for the "bad_request" error.
+type CheckPolicyGrantsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsNotFoundResponseBody is the type of the "agents" service
+// "checkPolicyGrants" endpoint HTTP response body for the "not_found" error.
+type CheckPolicyGrantsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsConflictResponseBody is the type of the "agents" service
+// "checkPolicyGrants" endpoint HTTP response body for the "conflict" error.
+type CheckPolicyGrantsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsUnsupportedMediaResponseBody is the type of the "agents"
+// service "checkPolicyGrants" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CheckPolicyGrantsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsInvalidResponseBody is the type of the "agents" service
+// "checkPolicyGrants" endpoint HTTP response body for the "invalid" error.
+type CheckPolicyGrantsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsInvariantViolationResponseBody is the type of the "agents"
+// service "checkPolicyGrants" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CheckPolicyGrantsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsUnexpectedResponseBody is the type of the "agents" service
+// "checkPolicyGrants" endpoint HTTP response body for the "unexpected" error.
+type CheckPolicyGrantsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsGatewayErrorResponseBody is the type of the "agents"
+// service "checkPolicyGrants" endpoint HTTP response body for the
+// "gateway_error" error.
+type CheckPolicyGrantsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4065,11 +4293,14 @@ type ManagedAgentResponseBody struct {
 	Name                    string  `form:"name" json:"name" xml:"name"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle string  `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
+	Permissions            *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt              string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt              string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // AgentOwnerProfileResponseBody is used to define fields on response body
@@ -4136,6 +4367,15 @@ type AgentPolicyGrantResponse struct {
 	Selector  *AgentPolicySelectorResponse `form:"selector" json:"selector" xml:"selector"`
 	CreatedAt string                       `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt string                       `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// AgentPolicyGrantCheckResponseBody is used to define fields on response body
+// types.
+type AgentPolicyGrantCheckResponseBody struct {
+	// Whether the grant fits within the caller's and the owner's permissions.
+	Allowed bool `form:"allowed" json:"allowed" xml:"allowed"`
+	// Whose permissions the grant exceeds; absent when allowed.
+	LimitedBy *string `form:"limited_by,omitempty" json:"limited_by,omitempty" xml:"limited_by,omitempty"`
 }
 
 // AgentPolicySelectorResponseBody is used to define fields on response body
@@ -4308,6 +4548,7 @@ func NewCreateResponseBody(res *agents.ManagedAgent) *CreateResponseBody {
 		Name:                        res.Name,
 		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
+		ConnectionNeedsRefresh:      res.ConnectionNeedsRefresh,
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
@@ -4331,6 +4572,7 @@ func NewGetResponseBody(res *agents.ManagedAgent) *GetResponseBody {
 		Name:                        res.Name,
 		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
+		ConnectionNeedsRefresh:      res.ConnectionNeedsRefresh,
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
@@ -4354,6 +4596,7 @@ func NewRenameResponseBody(res *agents.ManagedAgent) *RenameResponseBody {
 		Name:                        res.Name,
 		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
+		ConnectionNeedsRefresh:      res.ConnectionNeedsRefresh,
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
@@ -4390,6 +4633,25 @@ func NewListPolicyGrantsResponseBody(res []*agents.AgentPolicyGrant) ListPolicyG
 			continue
 		}
 		body[i] = marshalAgentsAgentPolicyGrantToAgentPolicyGrantResponse(val)
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsResponseBody builds the HTTP response body from the
+// result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsResponseBody(res *agents.CheckAgentPolicyGrantsResult) *CheckPolicyGrantsResponseBody {
+	body := &CheckPolicyGrantsResponseBody{}
+	if res.Results != nil {
+		body.Results = make([]*AgentPolicyGrantCheckResponseBody, len(res.Results))
+		for i, val := range res.Results {
+			if val == nil {
+				body.Results[i] = nil
+				continue
+			}
+			body.Results[i] = marshalAgentsAgentPolicyGrantCheckToAgentPolicyGrantCheckResponseBody(val)
+		}
+	} else {
+		body.Results = []*AgentPolicyGrantCheckResponseBody{}
 	}
 	return body
 }
@@ -4470,6 +4732,7 @@ func NewTransferResponseBody(res *agents.ManagedAgent) *TransferResponseBody {
 		Name:                        res.Name,
 		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
+		ConnectionNeedsRefresh:      res.ConnectionNeedsRefresh,
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
@@ -4493,6 +4756,7 @@ func NewReassignResponseBody(res *agents.ManagedAgent) *ReassignResponseBody {
 		Name:                        res.Name,
 		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
+		ConnectionNeedsRefresh:      res.ConnectionNeedsRefresh,
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
@@ -4516,6 +4780,7 @@ func NewSuspendResponseBody(res *agents.ManagedAgent) *SuspendResponseBody {
 		Name:                        res.Name,
 		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
+		ConnectionNeedsRefresh:      res.ConnectionNeedsRefresh,
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
@@ -4539,6 +4804,7 @@ func NewResumeResponseBody(res *agents.ManagedAgent) *ResumeResponseBody {
 		Name:                        res.Name,
 		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
+		ConnectionNeedsRefresh:      res.ConnectionNeedsRefresh,
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
@@ -4562,6 +4828,7 @@ func NewRevokeResponseBody(res *agents.ManagedAgent) *RevokeResponseBody {
 		Name:                        res.Name,
 		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
+		ConnectionNeedsRefresh:      res.ConnectionNeedsRefresh,
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
@@ -5695,6 +5962,148 @@ func NewListPolicyGrantsUnexpectedResponseBody(res *goa.ServiceError) *ListPolic
 // from the result of the "listPolicyGrants" endpoint of the "agents" service.
 func NewListPolicyGrantsGatewayErrorResponseBody(res *goa.ServiceError) *ListPolicyGrantsGatewayErrorResponseBody {
 	body := &ListPolicyGrantsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsUnauthorizedResponseBody(res *goa.ServiceError) *CheckPolicyGrantsUnauthorizedResponseBody {
+	body := &CheckPolicyGrantsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsForbiddenResponseBody builds the HTTP response body from
+// the result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsForbiddenResponseBody(res *goa.ServiceError) *CheckPolicyGrantsForbiddenResponseBody {
+	body := &CheckPolicyGrantsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsBadRequestResponseBody builds the HTTP response body
+// from the result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsBadRequestResponseBody(res *goa.ServiceError) *CheckPolicyGrantsBadRequestResponseBody {
+	body := &CheckPolicyGrantsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsNotFoundResponseBody builds the HTTP response body from
+// the result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsNotFoundResponseBody(res *goa.ServiceError) *CheckPolicyGrantsNotFoundResponseBody {
+	body := &CheckPolicyGrantsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsConflictResponseBody builds the HTTP response body from
+// the result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsConflictResponseBody(res *goa.ServiceError) *CheckPolicyGrantsConflictResponseBody {
+	body := &CheckPolicyGrantsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "checkPolicyGrants" endpoint of the "agents"
+// service.
+func NewCheckPolicyGrantsUnsupportedMediaResponseBody(res *goa.ServiceError) *CheckPolicyGrantsUnsupportedMediaResponseBody {
+	body := &CheckPolicyGrantsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsInvalidResponseBody builds the HTTP response body from
+// the result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsInvalidResponseBody(res *goa.ServiceError) *CheckPolicyGrantsInvalidResponseBody {
+	body := &CheckPolicyGrantsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "checkPolicyGrants" endpoint of the "agents"
+// service.
+func NewCheckPolicyGrantsInvariantViolationResponseBody(res *goa.ServiceError) *CheckPolicyGrantsInvariantViolationResponseBody {
+	body := &CheckPolicyGrantsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsUnexpectedResponseBody(res *goa.ServiceError) *CheckPolicyGrantsUnexpectedResponseBody {
+	body := &CheckPolicyGrantsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsGatewayErrorResponseBody(res *goa.ServiceError) *CheckPolicyGrantsGatewayErrorResponseBody {
+	body := &CheckPolicyGrantsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7524,6 +7933,26 @@ func NewListPolicyGrantsPayload(agentID string, sessionToken *string) *agents.Li
 	return v
 }
 
+// NewCheckPolicyGrantsPayload builds a agents service checkPolicyGrants
+// endpoint payload.
+func NewCheckPolicyGrantsPayload(body *CheckPolicyGrantsRequestBody, sessionToken *string) *agents.CheckPolicyGrantsPayload {
+	v := &agents.CheckPolicyGrantsPayload{
+		AgentID:     body.AgentID,
+		OwnerUserID: body.OwnerUserID,
+	}
+	v.PolicyGrants = make([]*agents.AgentPolicyGrantForm, len(body.PolicyGrants))
+	for i, val := range body.PolicyGrants {
+		if val == nil {
+			v.PolicyGrants[i] = nil
+			continue
+		}
+		v.PolicyGrants[i] = unmarshalAgentPolicyGrantFormRequestBodyRequestBodyToAgentsAgentPolicyGrantForm(val)
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewCreatePolicyGrantPayload builds a agents service createPolicyGrant
 // endpoint payload.
 func NewCreatePolicyGrantPayload(body *CreatePolicyGrantRequestBody, sessionToken *string) *agents.CreatePolicyGrantPayload {
@@ -7726,6 +8155,31 @@ func ValidateRenameRequestBody(body *RenameRequestBody) (err error) {
 	if body.Name != nil {
 		if utf8.RuneCountInString(*body.Name) > 120 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 120, false))
+		}
+	}
+	return
+}
+
+// ValidateCheckPolicyGrantsRequestBody runs the validations defined on
+// CheckPolicyGrantsRequestBody
+func ValidateCheckPolicyGrantsRequestBody(body *CheckPolicyGrantsRequestBody) (err error) {
+	if body.PolicyGrants == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_grants", "body"))
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if len(body.PolicyGrants) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.policy_grants", body.PolicyGrants, len(body.PolicyGrants), 1, true))
+	}
+	if len(body.PolicyGrants) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.policy_grants", body.PolicyGrants, len(body.PolicyGrants), 100, false))
+	}
+	for _, e := range body.PolicyGrants {
+		if e != nil {
+			if err2 := ValidateAgentPolicyGrantFormRequestBodyRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return

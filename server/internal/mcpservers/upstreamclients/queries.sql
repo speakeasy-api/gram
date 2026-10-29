@@ -442,10 +442,13 @@ WHERE a.mcp_server_id = ANY(@mcp_server_ids::uuid[])
 -- client is still usable for the server, and what the server says about
 -- needing upstream authentication. A client outside the server's tenant reads
 -- as absent, never as another tenant's client.
--- Admin edits still write only the legacy tables, so the typed rows are
--- checked against them: an OAuth client's registration must still be attached
--- to the server, header copies must still match the server's headers, and the
--- server's credential headers must be carried by the chosen client.
+-- A client the backfill copied from a server's settings, offered through a
+-- backfilled association, is checked against the settings it mirrors, which
+-- server edits still write: its OAuth registration must still be attached to
+-- the server, its header copies must still match the server's headers, and the
+-- server's credential headers must be carried by it. A client or association
+-- an administrator created is authoritative and mirrors nothing, so those
+-- checks do not apply to it.
 WITH selected AS (
   SELECT no_auth, auth_client_id, remote_session_client_id, mcp_server_id, project_id, organization_id,
          FALSE AS ambiguous
@@ -500,13 +503,16 @@ SELECT sel.mcp_server_id,
          AND rsi.id IS NOT NULL
          AND rsi.deleted IS FALSE
        )::boolean AS registration_live,
-       EXISTS (
-         SELECT 1
-         FROM mcp_server_remote_session_clients AS a
-         WHERE a.mcp_server_id = sel.mcp_server_id
-           AND a.remote_session_client_id = ac.remote_session_client_id
-           AND a.organization_id = sel.organization_id
-           AND a.deleted IS FALSE
+       (
+         NOT copy.mirrored
+         OR EXISTS (
+           SELECT 1
+           FROM mcp_server_remote_session_clients AS a
+           WHERE a.mcp_server_id = sel.mcp_server_id
+             AND a.remote_session_client_id = ac.remote_session_client_id
+             AND a.organization_id = sel.organization_id
+             AND a.deleted IS FALSE
+         )
        )::boolean AS registration_attached,
        EXISTS (
          SELECT 1
@@ -570,7 +576,7 @@ SELECT sel.mcp_server_id,
              AND a.deleted IS FALSE
          )
        )::boolean AS server_has_oauth_clients,
-       EXISTS (
+       (copy.mirrored AND EXISTS (
          SELECT 1
          FROM mcp_auth_client_headers AS c
          WHERE c.auth_client_id = ac.id
@@ -587,8 +593,8 @@ SELECT sel.mcp_server_id,
                AND h.is_required = c.is_required
                AND h.is_secret = c.is_secret
            )
-       )::boolean AS headers_stale,
-       EXISTS (
+       ))::boolean AS headers_stale,
+       (copy.mirrored AND EXISTS (
          SELECT 1
          FROM remote_mcp_server_headers AS h
          WHERE h.remote_mcp_server_id = m.remote_mcp_server_id
@@ -604,7 +610,7 @@ SELECT sel.mcp_server_id,
                AND c.deleted IS FALSE
                AND lower(c.name) = lower(h.name)
            )
-       )::boolean AS credential_headers_uncovered,
+       ))::boolean AS credential_headers_uncovered,
        EXISTS (
          SELECT 1
          FROM mcp_auth_client_headers AS c
@@ -642,6 +648,19 @@ LEFT JOIN mcp_auth_clients AS ac
   ON ac.id = sel.auth_client_id
  AND ac.organization_id = sel.organization_id
  AND (ac.project_id IS NULL OR ac.project_id = sel.project_id)
+CROSS JOIN LATERAL (
+  -- No client reads as mirrored, so a no-auth choice keeps being checked
+  -- against the server's credential headers.
+  SELECT (ac.id IS NULL OR (ac.source = 'backfill' AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_server_auth_clients AS link
+    WHERE link.mcp_server_id = sel.mcp_server_id
+      AND link.auth_client_id = ac.id
+      AND link.organization_id = sel.organization_id
+      AND link.deleted IS FALSE
+      AND link.source <> 'backfill'
+  )))::boolean AS mirrored
+) AS copy
 LEFT JOIN remote_session_clients AS reg
   ON reg.id = COALESCE(ac.remote_session_client_id, CASE WHEN @proposed::boolean THEN sel.remote_session_client_id END)
 LEFT JOIN remote_session_issuers AS rsi

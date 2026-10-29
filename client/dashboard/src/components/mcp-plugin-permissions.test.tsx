@@ -39,12 +39,22 @@ const state = vi.hoisted(() => ({
     id: string;
     name: string;
     tunneledMcpServerId?: string;
+    remoteMcpServerId?: string;
   },
   tunnelConnections: vi.fn(() => ({
     data: undefined as unknown,
     isLoading: false,
     isError: false,
   })),
+  skillsOverMcp: false,
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: (flag: string) => ({
+    status:
+      flag === "skills-over-mcp" && state.skillsOverMcp
+        ? "enabled"
+        : "disabled",
+  }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-a" }),
@@ -203,6 +213,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   state.grants = [];
   state.mcpServer = { id: "server-a", name: "Server" };
+  state.skillsOverMcp = false;
   state.tunnelConnections.mockReturnValue({
     data: undefined,
     isLoading: false,
@@ -364,6 +375,52 @@ describe("MCP plugin permission boundaries", () => {
       }
     },
   );
+});
+
+describe("remote MCP server Skills tab", () => {
+  const remote = {
+    id: "server-a",
+    name: "Server",
+    remoteMcpServerId: "remote-source-a",
+  };
+
+  it("shows for a remote server with the flag on and project skill read", () => {
+    state.skillsOverMcp = true;
+    state.mcpServer = remote;
+    state.grants = [{ scope: "skill:read" }];
+    render(<McpServerXSidebarNav />);
+    expect(screen.getByText("Skills")).toBeTruthy();
+  });
+
+  it.each([
+    {
+      case: "flag off",
+      flag: false,
+      server: remote,
+      grants: [{ scope: "skill:read" }],
+    },
+    {
+      case: "server not remote-backed",
+      flag: true,
+      server: { id: "server-a", name: "Server", tunneledMcpServerId: "t-1" },
+      grants: [{ scope: "skill:read" }],
+    },
+    { case: "no skill read", flag: true, server: remote, grants: [] },
+    {
+      case: "skill read on another project",
+      flag: true,
+      server: remote,
+      grants: [
+        { scope: "skill:read", selectors: [{ resourceId: "project-b" }] },
+      ],
+    },
+  ])("is hidden with $case", ({ flag, server, grants }) => {
+    state.skillsOverMcp = flag;
+    state.mcpServer = server;
+    state.grants = grants;
+    render(<McpServerXSidebarNav />);
+    expect(screen.queryByText("Skills")).toBeNull();
+  });
 });
 
 describe("MCP server readiness", () => {

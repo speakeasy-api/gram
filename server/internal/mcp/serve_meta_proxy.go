@@ -199,7 +199,7 @@ func (s *Service) routeMetaMember(
 	if err != nil {
 		return memberDial{}, "", fmt.Errorf("load meta MCP member server: %w", err)
 	}
-	tokens, err := gate.memberTokens(ctx, member)
+	tokens, err := s.resolveMemberTokens(ctx, &gate, member)
 	if err != nil {
 		return memberDial{}, "", err
 	}
@@ -232,7 +232,7 @@ func (s *Service) routeMetaMember(
 			return memberDial{}, "remote", terr
 		}
 		options := []remotemcp.BuildOption{remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String())}
-		if member.authClient != nil && member.authClient.outcome != authClientLegacy {
+		if member.authClient != nil && (member.authClient.outcome != authClientLegacy || member.authClient.sendsClientHeaders()) {
 			options = append(options, remotemcp.WithAuthClientHeaders(member.authClient.headers))
 		}
 		var authHeaders []proxy.ConfiguredHeader

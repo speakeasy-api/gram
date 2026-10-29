@@ -7,16 +7,24 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/catalogauth"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	delivery "github.com/speakeasy-api/gram/server/internal/thirdparty/catalogpromotion"
 )
 
 var (
-	ErrNotFound    = errors.New("promotion candidate not found")
-	ErrStale       = errors.New("promotion source or evidence changed; refresh the candidate")
-	ErrIneligible  = errors.New("remote server is not eligible for promotion")
-	ErrConflict    = errors.New("this source, endpoint, name, or retry key already belongs to a promotion")
-	ErrInvalid     = errors.New("invalid public catalogue metadata")
+	ErrNotFound   = errors.New("promotion candidate not found")
+	ErrStale      = errors.New("promotion source or evidence changed; refresh the candidate")
+	ErrIneligible = errors.New("remote server is not eligible for promotion")
+	ErrConflict   = errors.New("this source, endpoint, name, or retry key already belongs to a promotion")
+	ErrInvalid    = errors.New("invalid public catalogue metadata")
+
+	// ErrPublicTitleTooLong identifies the bounded public-title validation failure.
+	ErrPublicTitleTooLong = errors.New("public title must be 100 characters or fewer")
+
+	// ErrPublicDescriptionTooLong identifies the bounded public-description validation failure.
+	ErrPublicDescriptionTooLong = errors.New("public description must be 100 characters or fewer")
+
 	ErrUnavailable = errors.New("catalogue promotion validation temporarily unavailable")
 )
 
@@ -34,10 +42,10 @@ type Target struct {
 type PublicMetadata struct {
 	// Name is the reviewed registry identity.
 	Name string `json:"public_name"`
-	// Title is the reviewed public display name.
-	Title string `json:"public_title"`
-	// Description is the reviewed public service description.
-	Description string `json:"public_description"`
+	// Title is the reviewed public display name, at most 100 Unicode code points.
+	Title string `json:"public_title" jsonschema:"Public title, at most 100 Unicode code points"`
+	// Description is the reviewed public service description, at most 100 Unicode code points.
+	Description string `json:"public_description" jsonschema:"Public description, at most 100 Unicode code points"`
 	// URL is the reviewed canonical public MCP endpoint.
 	URL string `json:"public_url"`
 	// DocumentationURL is the reviewed primary setup reference.
@@ -60,6 +68,10 @@ type Request struct {
 	Public PublicMetadata `json:"public"`
 	// PublicMetadataConfirmed records explicit staff review of public suitability.
 	PublicMetadataConfirmed bool `json:"public_metadata_confirmed"`
+	// OverrideEligibility explicitly accepts insufficient or unhealthy usage evidence.
+	OverrideEligibility bool `json:"override_eligibility,omitempty"`
+	// AuthDiscovery is the server-owned public capability snapshot bound to an Admin MCP proposal.
+	AuthDiscovery catalogauth.Discovery `json:"auth_discovery,omitzero"`
 	// RetryKey identifies one exact requested change.
 	RetryKey string `json:"retry_key"`
 }
@@ -83,6 +95,8 @@ type Candidate struct {
 	CurationRevision string `json:"curation_revision"`
 	// SuggestedMetadata is untrusted draft input, never an approval or published value.
 	SuggestedMetadata *PublicMetadata `json:"suggested_metadata,omitempty"`
+	// AuthDiscovery is public metadata evidence from the reviewed source endpoint.
+	AuthDiscovery *catalogauth.Discovery `json:"auth_discovery,omitempty"`
 	// SourceName is a bounded private label for the staff UI only.
 	SourceName string `json:"source_name,omitempty"`
 	// SourceRevision binds the change to the observed source configuration.
@@ -126,6 +140,11 @@ type Candidate struct {
 	PublicTitle string `json:"public_title,omitempty"`
 	// DeliveryError is a bounded delivery failure or configuration code.
 	DeliveryError string `json:"delivery_error,omitempty"`
+}
+
+// CanOverrideEligibility reports whether staff may explicitly accept this candidate's health evidence.
+func (c Candidate) CanOverrideEligibility() bool {
+	return c.Status == "candidate" && !c.Eligible && CanOverrideEligibility(c.Reason)
 }
 
 // HealthReader supplies the existing server-specific outcomes and direct-call series.
@@ -177,4 +196,11 @@ type CurationRequest struct {
 	Action string `json:"action"`
 	// RetryKey identifies the exact staff request.
 	RetryKey string `json:"retry_key"`
+}
+
+// publicSnapshot persists public metadata and server-owned discovery without changing reviewed input.
+type publicSnapshot struct {
+	PublicMetadata
+	// AuthDiscovery contains only bounded public capability evidence.
+	AuthDiscovery catalogauth.Discovery `json:"auth_discovery,omitzero"`
 }

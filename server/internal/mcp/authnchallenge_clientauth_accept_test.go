@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -337,8 +336,8 @@ func TestHandleGetAuthorizationServer_AdvertisesPrivateKeyJWT(t *testing.T) {
 		Grants  []string `json:"grant_types_supported"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &meta))
-	// NewService installs the production issuer without a test-only setter.
-	require.Contains(t, meta.Grants, "client_credentials")
+	// Client authentication remains supported without the removed runtime token issuer.
+	require.NotContains(t, meta.Grants, "client_credentials")
 	require.Contains(t, meta.Methods, "private_key_jwt")
 	require.Contains(t, meta.Algs, "RS256")
 	require.Contains(t, meta.Algs, "ES256")
@@ -381,7 +380,7 @@ func TestHandleGetAuthorizationServer_OmitsIDJAGWithoutTrustedIssuer(t *testing.
 	// workload grant, which is a different use of the same grant type. The
 	// ID-JAG profile is what says the endpoint accepts an authenticated
 	// identity assertion, and it stays absent.
-	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeClientCredentials, oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
+	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
 	require.Empty(t, meta.GrantProfiles)
 }
 
@@ -414,14 +413,9 @@ func TestHandleGetAuthorizationServer_AdvertisesIDJAGWithTrustedIssuer(t *testin
 		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: remoteIssuer.ID, Valid: true},
 	})
 	require.NoError(t, err)
-	toolset, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, *authCtx.ProjectID, toolset, issuer.ID)
 
 	meta := loadAuthorizationServerGrantMetadata(t, ctx, ti, toolset.McpSlug.String)
-	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeClientCredentials, oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
+	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
 	require.Equal(t, []string{oauthwire.GrantProfileIDJAG}, meta.GrantProfiles)
 }

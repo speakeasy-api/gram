@@ -20,7 +20,7 @@ INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
 -- (mcp_servers_issuer_required_check); the gateway gets its own so clients
 -- authenticate to it rather than to a member.
 -- session_duration must be a Microseconds-only interval: the user-session
--- mint rejects Months/Days components (see usersessions/minthandler.go).
+-- mint rejects Months components (see conv.PGIntervalToDuration).
 -- The workforce issuer serves one shared authorization server for its MCP
 -- servers at /oauth/usi/{id}. It is left unpinned: this seed runs against
 -- every deployment, and an unpinned issuer URL follows the deployment's own
@@ -64,30 +64,30 @@ INSERT INTO registry_promotion_candidates (id, organization_id, project_id, mcp_
 VALUES (@id::uuid, @org_id::text, @project_id::uuid, @mcp_server_id::uuid, @remote_mcp_server_id::uuid, 'unobserved', false, 'insufficient_evidence', @curation_status::text, clock_timestamp() - make_interval(days => @age_days::integer))
 ON CONFLICT (project_id,mcp_server_id) DO NOTHING;
 
--- Every toolset with an MCP slug owns a canonical hosted wrapper (id = the
--- toolset id) and one endpoint at its address, mirroring its hosting
--- columns. The fresh-id servers above stay separate servers over the same
--- toolsets.
+-- Each hosted toolset owns a canonical wrapper (id = the toolset id) that
+-- holds its hosting state, and one platform endpoint at the wrapper's slug.
+-- The fresh-id servers above stay separate servers over the same toolsets.
 -- name: ServersInsertHostedToolsetMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
-                         user_session_issuer_id, tool_variations_group_id,
-                         visibility)
-SELECT t.id, t.project_id, t.name, t.mcp_slug, t.id, t.user_session_issuer_id,
-       t.tool_variations_group_id,
-       CASE WHEN NOT t.mcp_enabled THEN 'disabled'
-            WHEN t.mcp_is_public THEN 'public'
-            ELSE 'private' END
-FROM toolsets t
-WHERE t.project_id = @project_id::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL;
+                         user_session_issuer_id, visibility)
+SELECT t.id, t.project_id, t.name, v.slug, t.id, v.user_session_issuer_id, v.visibility
+FROM (VALUES
+  (@toolset_1::uuid, @support_mcp_slug::text, NULL::uuid, 'private'),
+  (@toolset_2::uuid, @ops_mcp_slug::text, NULL::uuid, 'private'),
+  (@toolset_3::uuid, @partner_mcp_slug::text, @partner_issuer_id::uuid, 'private'),
+  (@toolset_4::uuid, @discovery_mcp_slug::text, NULL::uuid, 'public')
+) AS v(toolset_id, slug, user_session_issuer_id, visibility)
+JOIN toolsets t ON t.id = v.toolset_id AND t.project_id = @project_id::uuid AND t.deleted IS FALSE;
 
 -- The endpoint id is det_uuid(<name seed> || 'endpoint-hosted-' || slug),
 -- computed in SQL with the same md5 formula as detUUID in names.go.
 -- name: ServersInsertHostedToolsetEndpoints :exec
 INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, custom_domain_id, slug)
 SELECT overlay(overlay(md5(@endpoint_name_prefix::text || t.slug) placing '5' from 13) placing '8' from 17)::uuid,
-       t.project_id, t.id, t.custom_domain_id, t.mcp_slug
-FROM toolsets t
-WHERE t.project_id = @project_id::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL;
+       s.project_id, s.id, NULL, s.slug
+FROM mcp_servers s
+JOIN toolsets t ON t.id = s.id AND t.project_id = s.project_id AND t.deleted IS FALSE
+WHERE s.project_id = @project_id::uuid AND s.toolset_id = s.id AND s.deleted IS FALSE;
 
 -- Check Access scenarios on GitHub. Contractors blocks connecting, which
 -- wins over every other role's grant: Mateo (a contractor through the
@@ -569,7 +569,7 @@ INSERT INTO remote_sessions
 VALUES (@id::uuid,
         'user:' || @user_id::text, @user_session_issuer_id::uuid,
         @remote_session_client_id::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
+        'DEMO-NOT-VALID-CIPHERTEXT', now() + @expires_in::interval, false,
         ARRAY['releases:read'], 'Fictional release account',
         now() - interval '3 days', now() - interval '40 minutes');
 
@@ -745,7 +745,7 @@ INSERT INTO mcp_auth_clients
   (id, organization_id, project_id, client_type, source, name,
    remote_session_client_id, client_attachment_scope)
 SELECT @id::uuid, @org_id::text, @project_id::uuid, @client_type::text,
-       'backfill', @name::text, c.id, c.attachment_scope
+       @source::text, @name::text, c.id, c.attachment_scope
 FROM (SELECT 1) AS one
 LEFT JOIN remote_session_clients AS c
   ON c.id = sqlc.narg(remote_session_client_id)::uuid;
@@ -758,12 +758,19 @@ VALUES
   (@id::uuid, @auth_client_id::uuid, @org_id::text, @name::text, TRUE,
    @value::text);
 
+-- name: ServersInsertAuthClientForwardedHeader :exec
+INSERT INTO mcp_auth_client_headers
+  (id, auth_client_id, organization_id, name, is_required, value_from_request_header)
+VALUES
+  (@id::uuid, @auth_client_id::uuid, @org_id::text, @name::text, TRUE,
+   @value_from_request_header::text);
+
 -- name: ServersInsertServerAuthClient :exec
 INSERT INTO mcp_server_auth_clients
   (id, project_id, organization_id, mcp_server_id, auth_client_id,
    client_attachment_scope, source)
 SELECT @id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
-       ac.id, ac.attachment_scope, 'backfill'
+       ac.id, ac.attachment_scope, ac.source
 FROM mcp_auth_clients AS ac
 WHERE ac.id = @auth_client_id::uuid;
 
@@ -786,3 +793,21 @@ FROM (VALUES
 ) AS v(id, slug, scope)
 JOIN organization_roles r
   ON r.organization_id = @org_id::text AND r.workos_slug = v.slug;
+
+-- name: ServersInsertOrganizationGatewayClient :exec
+INSERT INTO user_session_clients
+ (id, project_id, organization_id, user_session_issuer_id, client_id, client_name,
+ redirect_uris, client_id_issued_at, token_endpoint_auth_method)
+VALUES (@id::uuid, NULL, @org_id::text, @issuer_id::uuid,
+ (@id::uuid)::text, 'Example desktop client', ARRAY['http://127.0.0.1:41296/callback'], now(), 'none');
+
+-- name: ServersInsertOrganizationGatewaySession :exec
+-- Inert authorizations remain visible while the gateway is disabled.
+-- Access tokens expired one hour ago; refresh authorization has its own deadline.
+INSERT INTO user_sessions
+ (id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn,
+ jti, refresh_token_hash, refresh_expires_at, expires_at, last_used_at, created_at)
+VALUES (@id::uuid, @org_id::text, @issuer_id::uuid, @client_id::uuid, 'user:' || @user_id::text,
+ @jti::text, @refresh_token_hash::text,
+ now() + (@refresh_expires_in::text)::interval,
+ now() - interval '1 hour', now() - (@last_used_ago::text)::interval, now() - (@created_ago::text)::interval);

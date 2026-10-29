@@ -45,9 +45,8 @@ func CanonicalExecutionID(id string) string {
 	return id
 }
 
-// listResultsByProjectFromClickHouse serves the project-wide (non-chat-scoped)
-// ListRiskResults page from the ClickHouse risk_findings table, the only store
-// holding MCP-seam findings. Rows come back pre-redacted (the store never
+// listResultsByProjectFromClickHouse serves the ListRiskResults page,
+// project-wide or chat-scoped, from the ClickHouse risk_findings table. Rows come back pre-redacted (the store never
 // holds raw match content), so Match and Spans are always nil and
 // MatchRedacted carries the ingest-time display string.
 // Chat titles and tool-call block ids are enriched from Postgres per page
@@ -66,13 +65,17 @@ func (s *Service) listResultsByProjectFromClickHouse(
 	uniqueMatch, nonAssistant bool,
 	assistantID uuid.NullUUID,
 	from, to *time.Time,
-	enabledPoliciesOnly bool,
 ) (*gen.ListRiskResultsResult, error) {
+	if s.findingsCH == nil {
+		return nil, oops.E(oops.CodeNotImplemented, nil, "risk results require the ClickHouse findings store").LogError(ctx, s.logger)
+	}
 	projectID := *authCtx.ProjectID
 
 	var policyIDs []string
 	var err error
-	if enabledPoliciesOnly {
+	// A chat-scoped listing shows only findings under enabled policies, the
+	// same set the chat page counts and highlights.
+	if chatID != "" {
 		policyIDs, err = s.enabledPolicyIDs(ctx, authCtx.ActiveOrganizationID, projectID, policyID)
 	} else {
 		policyIDs, err = s.visiblePolicyIDs(ctx, projectID, policyID)
@@ -202,6 +205,9 @@ func (s *Service) enabledPolicyIDs(ctx context.Context, organizationID string, p
 }
 
 func (s *Service) listRiskResultsByChatFromClickHouse(ctx context.Context, authCtx *contextvalues.AuthContext, cursor uuid.NullUUID, pageSize int) (*gen.ListRiskResultsByChatResult, error) {
+	if s.findingsCH == nil {
+		return nil, oops.E(oops.CodeNotImplemented, nil, "risk results require the ClickHouse findings store").LogError(ctx, s.logger)
+	}
 	projectID := *authCtx.ProjectID
 	policyIDs, err := s.enabledPolicyIDs(ctx, authCtx.ActiveOrganizationID, projectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	if err != nil {

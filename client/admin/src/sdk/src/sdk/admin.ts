@@ -85,6 +85,7 @@ import { adminRetryRegistryPromotionDocs } from "../funcs/adminRetryRegistryProm
 import { adminRunUpstreamOAuthMigration } from "../funcs/adminRunUpstreamOAuthMigration.js";
 import { adminSaveRegistryEntry } from "../funcs/adminSaveRegistryEntry.js";
 import { adminServeImage } from "../funcs/adminServeImage.js";
+import { adminSetAdoptionDashboardUrl } from "../funcs/adminSetAdoptionDashboardUrl.js";
 import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
@@ -191,6 +192,7 @@ import { RetryRegistryPromotionDocsRequestBody } from "../models/components/retr
 import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
 import { RunUpstreamOAuthMigrationRequestBody } from "../models/components/runupstreamoauthmigrationrequestbody.js";
 import { SaveRegistryEntryRequestBody } from "../models/components/saveregistryentryrequestbody.js";
+import { SetAdoptionDashboardURLRequestBody } from "../models/components/setadoptiondashboardurlrequestbody.js";
 import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
 import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
@@ -922,6 +924,23 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * setAdoptionDashboardUrl admin
+   *
+   * @remarks
+   * Sets or clears the link to an organization's adoption dashboard shown on the admin overview. An empty or absent URL clears it.
+   */
+  async setAdoptionDashboardUrl(
+    request: SetAdoptionDashboardURLRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganization> {
+    return unwrapAsync(adminSetAdoptionDashboardUrl(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * setInferenceKeyMonthlyLimit admin
    *
    * @remarks
@@ -1346,7 +1365,7 @@ export class Admin extends ClientSDK {
    * listRegistryPromotionCandidates admin
    *
    * @remarks
-   * List observed remote MCP candidates and durable promotion delivery status. No source URLs or credentials are returned.
+   * List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.
    */
   async listRegistryPromotionCandidates(
     request?: AdminListRegistryPromotionCandidatesRequest | undefined,

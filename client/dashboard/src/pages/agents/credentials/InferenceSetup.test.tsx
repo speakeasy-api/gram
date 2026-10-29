@@ -69,6 +69,7 @@ const issuer = {
   issuer: "https://issuer.example.test",
   jwksUri: "https://issuer.example.test/jwks",
   tags: [],
+  allowAssertionReuse: false,
 };
 vi.mock("@gram/client/react-query/workloadIdentities.js", async () => {
   const { useQuery } = await import("@tanstack/react-query");
@@ -188,7 +189,7 @@ function fill() {
 }
 afterEach(cleanup);
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   mocks.workloadWrite = true;
   mocks.inferenceProject = "project_one";
   mocks.projectWrite = true;
@@ -231,7 +232,11 @@ describe("inference workload setup", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Allow inference:execute in Project one. No MCP or administration permissions.",
+      }),
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Create inference identity" }),
     );
@@ -286,7 +291,11 @@ describe("inference workload setup", () => {
     mocks.admit.mockRejectedValueOnce(new Error("Admission unavailable"));
     setup();
     fill();
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Allow inference:execute in Project one. No MCP or administration permissions.",
+      }),
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Create inference identity" }),
     );
@@ -329,7 +338,11 @@ it("requires an eligible exchange issuer before creating an inference identity",
   mocks.emptyEndpoints = true;
   setup();
   fill();
-  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: "Allow inference:execute in Project one. No MCP or administration permissions.",
+    }),
+  );
   expect(
     screen.getByText(
       "No shared Speakeasy authorization server is available for this project or organization.",
@@ -378,7 +391,11 @@ it("does not require project:write to use an existing exchange authorization ser
   mocks.projectWrite = false;
   setup();
   fill();
-  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: "Allow inference:execute in Project one. No MCP or administration permissions.",
+    }),
+  );
   fireEvent.click(
     screen.getByRole("button", { name: "Create inference identity" }),
   );
@@ -389,7 +406,11 @@ it("blocks provisioning when the configured inference destination is plaintext o
   mocks.serverURL = "http://api.example.test";
   setup();
   fill();
-  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: "Allow inference:execute in Project one. No MCP or administration permissions.",
+    }),
+  );
   expect(screen.getByRole("alert").textContent).toContain("must use HTTPS");
   expect(
     (
@@ -411,7 +432,11 @@ it.each(["connected", "partial"])(
       mocks.admit.mockRejectedValueOnce(new Error("Admission unavailable"));
     const view = setup();
     fill();
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Allow inference:execute in Project one. No MCP or administration permissions.",
+      }),
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Create inference identity" }),
     );
@@ -434,15 +459,23 @@ it.each(["connected", "partial"])(
     expect(
       (screen.getByLabelText("Agent identity name") as HTMLInputElement).value,
     ).toBe("");
-    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(
-      false,
-    );
+    expect(
+      (
+        screen.getByRole("checkbox", {
+          name: "Allow inference:execute in Project two. No MCP or administration permissions.",
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(false);
     expect(screen.queryByRole("status")).toBeNull();
     fill();
     fireEvent.change(screen.getByLabelText("Subject"), {
       target: { value: "workload:second" },
     });
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Allow inference:execute in Project two. No MCP or administration permissions.",
+      }),
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Create inference identity" }),
     );
@@ -510,7 +543,11 @@ it("creates issuer trust separately before provisioning an inference identity", 
   expect(mocks.create).not.toHaveBeenCalled();
   expect(mocks.admit).not.toHaveBeenCalled();
   fill();
-  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: "Allow inference:execute in Project one. No MCP or administration permissions.",
+    }),
+  );
   fireEvent.click(
     screen.getByRole("button", { name: "Create inference identity" }),
   );
@@ -539,7 +576,11 @@ it("offers only organization and current-project trust and scopes project admiss
   fireEvent.change(screen.getByLabelText("Workload issuer"), {
     target: { value: "issuer_project" },
   });
-  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: "Allow inference:execute in Project one. No MCP or administration permissions.",
+    }),
+  );
   fireEvent.click(
     screen.getByRole("button", { name: "Create inference identity" }),
   );
@@ -575,7 +616,11 @@ it.each([
     fireEvent.change(screen.getByLabelText("Workload issuer"), {
       target: { value: selected },
     });
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Allow inference:execute in Project one. No MCP or administration permissions.",
+      }),
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Create inference identity" }),
     );

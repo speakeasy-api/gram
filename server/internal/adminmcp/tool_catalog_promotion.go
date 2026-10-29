@@ -10,12 +10,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/speakeasy-api/gram/server/internal/catalogauth"
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 )
 
 type catalogPromotionReader interface {
 	ListCandidates(context.Context, string, int, string) ([]catalogpromotion.Candidate, string, error)
-	GetCandidate(context.Context, catalogpromotion.Target) (catalogpromotion.Candidate, error)
+	InspectCandidate(context.Context, catalogpromotion.Target) (catalogpromotion.Candidate, error)
 }
 
 // CatalogPromotionTargetInput selects one source without accepting credentials or URLs.
@@ -50,7 +51,7 @@ func registerCatalogPromotionTools(server *mcp.Server, reader catalogPromotionRe
 	mcp.AddTool(server, &mcp.Tool{
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Name: "list_registry_promotion_candidates", Title: "List Catalogue Promotion Candidates",
-		Description: "List newest-first remote MCP promotion candidates, defaulting to active unpublished candidates; status filters include all, candidate, rejected, archived, and promoted. Returns a bounded staff-only page with aggregate health evidence and setup documentation delivery status. Source URLs, credentials, headers, tool arguments and customer text are omitted. Eligibility does not authorize publication.",
+		Description: "List newest-first remote MCP promotion candidates, defaulting to active unpublished candidates excluding endpoints already in the catalogue; status filters include all, candidate, rejected, archived, and promoted. Returns a bounded staff-only page with aggregate health evidence, setup documentation delivery status, and auth_discovery for promoted entries when available. Authentication capabilities are advertised evidence, not a verified connection; unknown setup does not mean manual setup. Source URLs, credentials, headers, tool arguments and customer text are omitted. Eligibility does not authorize publication.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false), Title: ""},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListCatalogPromotionInput) (*mcp.CallToolResult, CatalogPromotionPage, error) {
 		out := CatalogPromotionPage{Candidates: []CatalogPromotionCandidate{}, NextCursor: ""}
@@ -90,8 +91,8 @@ func registerCatalogPromotionTools(server *mcp.Server, reader catalogPromotionRe
 	mcp.AddTool(server, &mcp.Tool{
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Name: "get_registry_promotion_candidate", Title: "Inspect Catalogue Promotion Candidate",
-		Description: "Refresh aggregate promotion eligibility for an exact organization, project and remote MCP server. Returns current source revision, eligibility reasons and delivery status without source URLs or credentials. Use the revision to prepare_registry_promotion; staff must independently review every public field before approval.",
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false), Title: ""},
+		Description: "Refresh aggregate promotion eligibility for an exact organization, project and remote MCP server. Returns current source revision, eligibility reasons, bounded advertised authentication capabilities and delivery status without source URLs or credentials. Authentication discovery is metadata evidence, not a verified connection. Use the revision to prepare_registry_promotion; staff must independently review every public field before approval.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(true), Title: ""},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input CatalogPromotionTargetInput) (*mcp.CallToolResult, CatalogPromotionCandidate, error) {
 		if reader == nil || !verifiedStaff(ctx) {
 			return nil, CatalogPromotionCandidate{}, errRegistryUnavailable
@@ -99,7 +100,7 @@ func registerCatalogPromotionTools(server *mcp.Server, reader catalogPromotionRe
 		if input.OrganizationID == "" || len(input.OrganizationID) > maxRegistryQuery || !validRegistryUUID(input.ProjectID) || !validRegistryUUID(input.MCPServerID) {
 			return nil, CatalogPromotionCandidate{}, errors.New("provide exact organization, project and server IDs")
 		}
-		candidate, err := reader.GetCandidate(ctx, catalogpromotion.Target{OrganizationID: input.OrganizationID, ProjectID: uuid.MustParse(input.ProjectID), MCPServerID: uuid.MustParse(input.MCPServerID)})
+		candidate, err := reader.InspectCandidate(ctx, catalogpromotion.Target{OrganizationID: input.OrganizationID, ProjectID: uuid.MustParse(input.ProjectID), MCPServerID: uuid.MustParse(input.MCPServerID)})
 		if err != nil || candidate.OrganizationID != input.OrganizationID || candidate.ProjectID != input.ProjectID || candidate.MCPServerID != input.MCPServerID {
 			return nil, CatalogPromotionCandidate{}, errRegistryUnavailable
 		}
@@ -113,6 +114,8 @@ func registerCatalogPromotionTools(server *mcp.Server, reader catalogPromotionRe
 
 // CatalogPromotionCandidate is the bounded staff projection; source configuration is never serialized.
 type CatalogPromotionCandidate struct {
+	// AuthDiscovery reports bounded public capability evidence without issuer URLs.
+	AuthDiscovery *catalogauth.Discovery `json:"auth_discovery,omitempty"`
 	// ID identifies the stored observation.
 	ID string `json:"id"`
 	// OrganizationID identifies the canonical source tenant.
@@ -131,6 +134,8 @@ type CatalogPromotionCandidate struct {
 	SourceRevision string `json:"source_revision"`
 	// Eligible reports current qualification.
 	Eligible bool `json:"eligible"`
+	// CanOverrideEligibility reports whether staff may explicitly accept the health evidence.
+	CanOverrideEligibility bool `json:"can_override_eligibility"`
 	// Reason is a fixed qualification category.
 	Reason string `json:"reason"`
 	// Status distinguishes candidates from published entries.
@@ -240,9 +245,13 @@ func projectCatalogPromotion(candidate catalogpromotion.Candidate) (CatalogPromo
 	if candidate.DocsURL != "" && (len(candidate.DocsURL) > maxRegistryCursor || !promotionGuideIssue.MatchString(candidate.DocsURL)) {
 		return empty, false
 	}
+	if candidate.AuthDiscovery != nil && !candidate.AuthDiscovery.Valid() {
+		return empty, false
+	}
 	return CatalogPromotionCandidate{
-		ID: candidate.ID, OrganizationID: candidate.OrganizationID, ProjectID: candidate.ProjectID, MCPServerID: candidate.MCPServerID, RemoteMCPServerID: candidate.RemoteMCPServerID,
-		CreatedAt: candidate.CreatedAt, CurationRevision: candidate.CurationRevision, SourceRevision: candidate.SourceRevision, Eligible: candidate.Eligible, Reason: candidate.Reason, Status: candidate.Status,
+		AuthDiscovery: candidate.AuthDiscovery,
+		ID:            candidate.ID, OrganizationID: candidate.OrganizationID, ProjectID: candidate.ProjectID, MCPServerID: candidate.MCPServerID, RemoteMCPServerID: candidate.RemoteMCPServerID,
+		CreatedAt: candidate.CreatedAt, CurationRevision: candidate.CurationRevision, SourceRevision: candidate.SourceRevision, Eligible: candidate.Eligible, CanOverrideEligibility: candidate.CanOverrideEligibility(), Reason: candidate.Reason, Status: candidate.Status,
 		ObservedSuccesses: candidate.ObservedSuccesses, ObservedFailures: candidate.ObservedFailures, ObservedDays: candidate.ObservedDays, CheckedAt: candidate.CheckedAt,
 		DocsRevision: candidate.DocsRevision, DocsRetryAllowed: candidate.DocsRetryAllowed, DocsAttempts: candidate.DocsAttempts,
 		DocsLastAttemptAt: candidate.DocsLastAttemptAt, DocsNextAttemptAt: candidate.DocsNextAttemptAt, DocsQueuedAt: candidate.DocsQueuedAt, PromotedAt: candidate.PromotedAt, PublicTitle: candidate.PublicTitle,

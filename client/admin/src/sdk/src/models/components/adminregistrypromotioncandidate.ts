@@ -8,11 +8,23 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  AdminRegistryPromotionAuthDiscovery,
+  AdminRegistryPromotionAuthDiscovery$inboundSchema,
+} from "./adminregistrypromotionauthdiscovery.js";
+import {
   AdminRegistryPromotionSuggestions,
   AdminRegistryPromotionSuggestions$inboundSchema,
 } from "./adminregistrypromotionsuggestions.js";
 
 export type AdminRegistryPromotionCandidate = {
+  /**
+   * Publicly advertised authentication capabilities, not a verified OAuth connection.
+   */
+  authDiscovery?: AdminRegistryPromotionAuthDiscovery | undefined;
+  /**
+   * Whether staff may explicitly accept this candidate's health evidence.
+   */
+  canOverrideEligibility: boolean;
   checkedAt?: Date | undefined;
   createdAt: Date;
   curationRevision: string;
@@ -53,6 +65,10 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    auth_discovery: z.optional(
+      AdminRegistryPromotionAuthDiscovery$inboundSchema,
+    ),
+    can_override_eligibility: z.boolean(),
     checked_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -100,6 +116,8 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "auth_discovery": "authDiscovery",
+      "can_override_eligibility": "canOverrideEligibility",
       "checked_at": "checkedAt",
       "created_at": "createdAt",
       "curation_revision": "curationRevision",

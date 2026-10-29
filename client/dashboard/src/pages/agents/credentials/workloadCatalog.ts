@@ -272,6 +272,46 @@ export function connectedIssuer(
 }
 
 /**
+ * The values a filled template was made from, read back out of it, or null
+ * when it was not made from this template. A placeholder reads up to the next
+ * "/", and each value it reads must then pass its variable's own pattern, so
+ * text of the right shape but with values the catalog would refuse, or split
+ * at the wrong delimiter, is not read as this entry's.
+ */
+function readTemplate(
+  entry: CatalogEntry,
+  template: string,
+  filled: string,
+): VariableValues | null {
+  const keys: string[] = [];
+  let source = "";
+  let last = 0;
+  for (const match of template.matchAll(PLACEHOLDER)) {
+    source += escapeRegExp(template.slice(last, match.index)) + "([^/]+)";
+    keys.push(match[1] ?? "");
+    last = match.index + match[0].length;
+  }
+  source += escapeRegExp(template.slice(last));
+  const match = new RegExp(`^${source}$`).exec(filled);
+  if (match === null) return null;
+  const values = Object.fromEntries(
+    keys.map((key, index) => [key, match[index + 1] ?? ""]),
+  );
+  const valid = keys.every((key) => {
+    const variable = entry.variables.find((v) => v.key === key);
+    return (
+      variable !== undefined &&
+      variableProblem(variable, values[key] ?? "") === null
+    );
+  });
+  return valid ? values : null;
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
  * The variable values a subject was built from, read back out of it.
  *
  * Editing shows what the rule says, and the rule is all there is: the values
@@ -281,22 +321,46 @@ export function valuesFromSubject(
   entry: CatalogEntry,
   subject: string,
 ): VariableValues {
-  const keys: string[] = [];
-  const pattern = entry.subject.template.replace(
-    PLACEHOLDER,
-    (_, key: string) => {
-      keys.push(key);
-      return "([^/]+)";
-    },
-  );
-  const escaped = pattern
-    .split("([^/]+)")
-    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .join("([^/]+)");
   const stem = entry.subject.wildcard ? subject.replace(/\*$/, "") : subject;
-  const match = new RegExp(`^${escaped}$`).exec(stem);
-  if (match === null) return {};
-  return Object.fromEntries(
-    keys.map((key, index) => [key, match[index + 1] ?? ""]),
+  return readTemplate(entry, entry.subject.template, stem) ?? {};
+}
+
+/**
+ * The platform-tier values an issuer was built from, such as a cluster's
+ * project, location and name. Empty for an entry whose issuer is a constant.
+ */
+export function valuesFromIssuer(
+  entry: CatalogEntry,
+  issuer: string,
+): VariableValues {
+  return readTemplate(entry, entry.issuer.value, issuer) ?? {};
+}
+
+/**
+ * The catalog entry a trusted issuer came from. An entry whose issuer varies
+ * per platform, such as one per cluster, produces many issuers, so the match
+ * is on the template rather than on its text.
+ */
+export function catalogEntryForIssuer(
+  entries: CatalogEntry[],
+  issuer: string,
+): CatalogEntry | undefined {
+  return entries.find(
+    (entry) => readTemplate(entry, entry.issuer.value, issuer) !== null,
   );
+}
+
+/**
+ * The issuer and key URL these values make, or null while any platform-tier
+ * value they need is missing or invalid. Identical to the entry's own for an
+ * entry whose issuer is a constant.
+ */
+export function platformEndpoints(
+  entry: CatalogEntry,
+  values: VariableValues,
+): { issuer: string; jwksUri: string } | null {
+  const issuer = fillTemplate(entry, entry.issuer.value, values);
+  const jwksUri = fillTemplate(entry, entry.jwksUri.value, values);
+  if (issuer === null || jwksUri === null) return null;
+  return { issuer, jwksUri };
 }

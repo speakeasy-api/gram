@@ -49,23 +49,24 @@ func DecodeCallbackRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 	return func(r *http.Request) (*auth.CallbackPayload, error) {
 		var payload *auth.CallbackPayload
 		var (
-			code  string
-			state *string
-			err   error
+			code   *string
+			error_ *string
+			state  *string
 		)
 		qp := r.URL.Query()
-		code = qp.Get("code")
-		if code == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("code", "query string"))
+		codeRaw := qp.Get("code")
+		if codeRaw != "" {
+			code = &codeRaw
+		}
+		error_Raw := qp.Get("error")
+		if error_Raw != "" {
+			error_ = &error_Raw
 		}
 		stateRaw := qp.Get("state")
 		if stateRaw != "" {
 			state = &stateRaw
 		}
-		if err != nil {
-			return payload, err
-		}
-		payload = NewCallbackPayload(code, state)
+		payload = NewCallbackPayload(code, error_, state)
 
 		return payload, nil
 	}

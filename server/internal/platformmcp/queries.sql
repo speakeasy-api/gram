@@ -879,11 +879,28 @@ WHERE m.deleted IS FALSE
       OR m.id::text ILIKE '%' || @query_text::text || '%'
       OR COALESCE(m.name, '') ILIKE '%' || @query_text::text || '%'
       OR COALESCE(m.slug, '') ILIKE '%' || @query_text::text || '%'
+      OR EXISTS (
+          SELECT 1
+          FROM platform_mcp_catalog_registrations AS source
+          WHERE source.organization_id = @organization_id
+            AND source.project_id = m.project_id
+            AND source.mcp_server_id = m.id
+            AND source.deleted IS FALSE
+            AND source.catalog_reference ILIKE '%' || @query_text::text || '%'
+      )
   )
 ORDER BY
     CASE
         WHEN @query_text::text <> ''
-         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text))
+         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text) OR EXISTS (
+             SELECT 1
+             FROM platform_mcp_catalog_registrations AS source
+             WHERE source.organization_id = @organization_id
+               AND source.project_id = m.project_id
+               AND source.mcp_server_id = m.id
+               AND source.deleted IS FALSE
+               AND LOWER(source.catalog_reference) = LOWER(@query_text::text)
+         ))
         THEN 0
         ELSE 1
     END,
@@ -970,6 +987,15 @@ WHERE m.deleted IS FALSE
       OR m.id::text ILIKE '%' || @query_text::text || '%'
       OR COALESCE(m.name, '') ILIKE '%' || @query_text::text || '%'
       OR COALESCE(m.slug, '') ILIKE '%' || @query_text::text || '%'
+      OR EXISTS (
+          SELECT 1
+          FROM platform_mcp_catalog_registrations AS source
+          WHERE source.organization_id = @organization_id
+            AND source.project_id = m.project_id
+            AND source.mcp_server_id = m.id
+            AND source.deleted IS FALSE
+            AND source.catalog_reference ILIKE '%' || @query_text::text || '%'
+      )
   )
   AND (
       sqlc.narg(readiness_state)::text IS NULL
@@ -984,7 +1010,15 @@ WHERE m.deleted IS FALSE
 ORDER BY
     CASE
         WHEN @query_text::text <> ''
-         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text))
+         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text) OR EXISTS (
+             SELECT 1
+             FROM platform_mcp_catalog_registrations AS source
+             WHERE source.organization_id = @organization_id
+               AND source.project_id = m.project_id
+               AND source.mcp_server_id = m.id
+               AND source.deleted IS FALSE
+               AND LOWER(source.catalog_reference) = LOWER(@query_text::text)
+         ))
         THEN 0
         ELSE 1
     END,
@@ -1154,6 +1188,18 @@ INSERT INTO platform_mcp_catalog_registrations (
     @acting_surface
 )
 RETURNING *;
+
+-- name: RetirePlatformMCPCatalogRegistration :exec
+-- Retires a registration whose MCP server was deleted outside Platform MCP, so
+-- adding the same catalogue server again creates a fresh registration instead
+-- of reusing one that points at a deleted server.
+UPDATE platform_mcp_catalog_registrations
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
 
 -- name: UpdatePlatformMCPCatalogRegistrationComponents :one
 UPDATE platform_mcp_catalog_registrations
@@ -2174,7 +2220,8 @@ SELECT
     project.id AS project_id,
     project.name AS project_name,
     project.slug AS project_slug,
-    registration.mcp_server_id
+    registration.mcp_server_id,
+    COALESCE(mcp_server.name, mcp_server.slug, '')::text AS mcp_server_name
 FROM platform_mcp_onboarding_workflows AS workflow
 JOIN projects AS project
   ON project.id = workflow.selected_project_id
@@ -2185,12 +2232,44 @@ JOIN platform_mcp_catalog_registrations AS registration
  AND registration.organization_id = workflow.organization_id
  AND registration.project_id = project.id
  AND registration.deleted IS FALSE
+LEFT JOIN mcp_servers AS mcp_server
+  ON mcp_server.id = registration.mcp_server_id
+ AND mcp_server.project_id = registration.project_id
 WHERE workflow.organization_id = @organization_id
   AND workflow.initiating_subject_urn = @initiating_subject_urn
   AND workflow.status = 'active'
   AND workflow.expires_at > clock_timestamp()
   AND registration.status = 'registered'
   AND registration.mcp_server_id IS NOT NULL;
+
+-- name: GetPlatformMCPDistributionTargetByServer :one
+-- Resolves the MCP server a distribution names, by its ID as find_mcp reports
+-- it, rather than the one the onboarding workflow last selected. Only a server
+-- added through Platform MCP setup has a registration, and so readiness evidence
+-- that distribution can require.
+SELECT
+    registration.id AS registration_id,
+    project.id AS project_id,
+    project.name AS project_name,
+    project.slug AS project_slug,
+    registration.mcp_server_id,
+    COALESCE(mcp_server.name, mcp_server.slug, '')::text AS mcp_server_name
+FROM platform_mcp_catalog_registrations AS registration
+JOIN projects AS project
+  ON project.id = registration.project_id
+ AND project.organization_id = registration.organization_id
+ AND project.deleted IS FALSE
+JOIN mcp_servers AS mcp_server
+  ON mcp_server.id = registration.mcp_server_id
+ AND mcp_server.project_id = registration.project_id
+ AND mcp_server.deleted IS FALSE
+WHERE registration.organization_id = @organization_id
+  AND project.slug = @project_slug
+  AND registration.mcp_server_id = @mcp_server_id
+  AND registration.status = 'registered'
+  AND registration.deleted IS FALSE
+ORDER BY registration.created_at DESC, registration.id DESC
+LIMIT 1;
 
 -- name: HasPlatformMCPOrganizationSetupComplete :one
 -- Setup completion counts an attached distribution to any live plugin. A
@@ -2723,6 +2802,58 @@ WHERE plugins.project_id = @project_id
 ORDER BY plugins.is_default DESC NULLS LAST, plugins.name ASC
 LIMIT @result_limit;
 
+-- name: ListPlatformMCPProjectSkillLinkServers :many
+-- The live MCP servers or gateways of one kind in one project that an exact
+-- identifier names: the id, the slug, or the name, ignoring case. A server is
+-- named by its own name, falling back to its toolset's name and then its slug.
+-- Matching here, rather than over a capped list of every server, means a
+-- target the project has is never refused as not found because it sorted past
+-- the cap.
+SELECT
+    candidates.kind,
+    candidates.id,
+    candidates.name,
+    candidates.slug
+FROM (
+    SELECT
+        'mcp_server'::text AS kind,
+        mcp_servers.id,
+        COALESCE(mcp_servers.name, toolsets.name, mcp_servers.slug, mcp_servers.id::text)::text AS name,
+        COALESCE(mcp_servers.slug, '')::text AS slug
+    FROM mcp_servers
+    JOIN projects
+      ON projects.id = mcp_servers.project_id
+    LEFT JOIN toolsets
+      ON toolsets.id = mcp_servers.toolset_id
+      AND toolsets.project_id = mcp_servers.project_id
+      AND toolsets.deleted IS FALSE
+    WHERE @kind::text = 'mcp_server'
+      AND mcp_servers.project_id = @project_id
+      AND projects.organization_id = @organization_id
+      AND projects.deleted IS FALSE
+      AND mcp_servers.deleted IS FALSE
+    UNION ALL
+    SELECT
+        'meta_mcp_server'::text AS kind,
+        meta_mcp_servers.id,
+        meta_mcp_servers.name,
+        ''::text AS slug
+    FROM meta_mcp_servers
+    JOIN projects
+      ON projects.id = meta_mcp_servers.project_id
+    WHERE @kind::text = 'meta_mcp_server'
+      AND meta_mcp_servers.project_id = @project_id
+      AND meta_mcp_servers.organization_id = @organization_id
+      AND projects.organization_id = @organization_id
+      AND projects.deleted IS FALSE
+      AND meta_mcp_servers.deleted IS FALSE
+) AS candidates
+WHERE candidates.id::text = @wanted::text
+   OR (candidates.slug <> '' AND lower(candidates.slug) = lower(@wanted::text))
+   OR lower(candidates.name) = lower(@wanted::text)
+ORDER BY candidates.name ASC, candidates.id ASC
+LIMIT @result_limit;
+
 -- name: ListPlatformMCPProjectAssistants :many
 SELECT
     assistants.id,
@@ -2876,34 +3007,6 @@ WHERE cm.chat_id = @chat_id
   )
 ORDER BY cm.created_at DESC, cm.seq DESC
 LIMIT @row_limit;
-
--- name: ListRiskFindingSpansForRecall :many
--- Findings that drive inline masking of the recall digest. Message-anchored
--- rows only (the digest does not render content parts): found, not excluded,
--- not swept as false positive, policy still enabled and not deleted.
--- Latest generation only, matching the transcript read: findings on
--- superseded generations mask nothing the digest renders, so loading them
--- would only let long, repeatedly compacted sessions inflate the scan.
-SELECT rr.chat_message_id, rr.source, rr.rule_id, rr.match, rr.spans, rr.start_pos, rr.end_pos
-FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-JOIN chats c ON c.id = cm.chat_id
-LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-WHERE cm.chat_id = @chat_id
-  AND rr.project_id = @project_id
-  AND c.organization_id = @organization_id
-  AND c.user_id = @user_id::text
-  AND c.deleted IS FALSE
-  AND (ua.id IS NULL OR ua.account_type <> 'personal')
-  AND cm.generation = (
-    SELECT COALESCE(MAX(generation), 0)
-    FROM chat_messages
-    WHERE chat_id = @chat_id
-      AND project_id = @project_id
-  )
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-ORDER BY cm.created_at ASC, cm.seq ASC, rr.id ASC;
 
 -- name: InsertChatSessionRecallLink :exec
 -- Sibling of agent's InsertChatSessionLink with kind='recall'. A v1 recall
@@ -3303,15 +3406,18 @@ WHERE p.id = @plugin_id
 -- name: ListPlatformMCPPluginServers :many
 -- Member-facing compatibility projection. It deliberately omits membership and
 -- backend IDs, which are administrative identity and must not cross this path.
--- A canonical wrapper with no endpoint falls back to its toolset's MCP slug.
+-- A canonical wrapper with no endpoint falls back to its toolset's legacy alias,
+-- which the caller reads through legacyalias for alias_toolset_id.
 SELECT
     ps.id,
     ps.display_name,
     ps.policy,
     ps.sort_order,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
-    COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
-    COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
+    COALESCE(ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
+    -- legacyalias: drop with AIM-670.
+    t.id AS alias_toolset_id,
+    COALESCE(s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
 JOIN plugins p
   ON p.id = ps.plugin_id
@@ -3385,8 +3491,10 @@ SELECT
     CASE WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server' ELSE 'gateway' END::text AS target_kind,
     COALESCE(ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
-    COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
-    COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
+    COALESCE(ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
+    -- legacyalias: drop with AIM-670.
+    t.id AS alias_toolset_id,
+    COALESCE(s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
     membership_version.value AS membership_version
 FROM plugin_servers ps
 CROSS JOIN membership_version
@@ -4012,3 +4120,17 @@ SELECT n.id, n.seq, n.created_at, n.role, n.generation,
                ORDER BY cp.provider, cp.provider_user_id, cp.id LIMIT 5) cp
        ), '[]')::jsonb AS participants
 FROM neighbors n ORDER BY n.seq;
+
+-- name: GetPlatformMCPRegistrationLogo :one
+-- The stored logo of a registration's MCP server, for its result card. Every
+-- join is pinned to the registration's organization and project.
+SELECT a.url, a.content_type, a.content_length
+FROM platform_mcp_catalog_registrations r
+JOIN mcp_metadata m ON m.mcp_server_id = r.mcp_server_id AND m.project_id = r.project_id
+JOIN assets a ON a.id = m.logo_id AND a.project_id = r.project_id
+WHERE r.id = @registration_id
+  AND r.organization_id = @organization_id
+  AND r.project_id = @project_id
+  AND r.deleted IS FALSE
+  AND a.kind = 'image'
+  AND a.deleted IS FALSE;

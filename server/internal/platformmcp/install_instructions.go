@@ -2,9 +2,12 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -29,6 +33,9 @@ type InstallInstruction struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	URL         string `json:"url,omitempty"`
+	// Snippet is a command or config the user can paste as-is. It never
+	// carries a credential: sign-in happens in the browser.
+	Snippet string `json:"snippet,omitempty" jsonschema:"command or configuration to paste as-is, shown verbatim in a code block"`
 }
 
 type GetMyInstallInstructionsOutput struct {
@@ -143,8 +150,8 @@ func (s *PluginsService) pluginInstallInstructions(ctx context.Context, organiza
 	output := GetMyInstallInstructionsOutput{
 		TargetKind: "plugin", TargetName: name, ClientFamily: client,
 		Supported: true, Instructions: []InstallInstruction{
-			{Title: "Use the Speakeasy device agent", Description: "Assigned published plugins are delivered through the Speakeasy device agent. Installation never grants MCP access by itself.", URL: deviceAgentURL},
-			{Title: "Refresh your AI client", Description: "After the device agent syncs, restart or reload your AI client so it discovers the assigned plugin.", URL: ""},
+			{Title: "Use the Speakeasy device agent", Description: "Assigned published plugins are delivered through the Speakeasy device agent. Installation never grants MCP access by itself.", URL: deviceAgentURL, Snippet: ""},
+			{Title: "Refresh your AI client", Description: "After the device agent syncs, restart or reload your AI client so it discovers the assigned plugin.", URL: "", Snippet: ""},
 		},
 		Fallback: "",
 	}
@@ -161,7 +168,9 @@ func (s *PluginsService) standaloneMCPInstallInstructions(ctx context.Context, o
 		TargetKind: "mcp", TargetName: name, ClientFamily: client,
 		Supported: false, Instructions: []InstallInstruction{}, Fallback: "",
 	}
-	if slug == "" || s.serverURL == nil {
+	// The slug goes into shell commands and config snippets. The API enforces
+	// this pattern, but the database does not, so check it again here.
+	if !installSlugPattern.MatchString(slug) || s.serverURL == nil {
 		output.Fallback = "This MCP server does not have a public installation endpoint. Use the dashboard or ask an organization administrator for the supported setup path."
 		return output, nil
 	}
@@ -170,12 +179,55 @@ func (s *PluginsService) standaloneMCPInstallInstructions(ctx context.Context, o
 	switch client {
 	case OnboardingClientClaudeCode, OnboardingClientClaudeCowork, OnboardingClientCodex, OnboardingClientCursor, OnboardingClientOpencode, OnboardingClientOther:
 		output.Supported = true
-		output.Instructions = []InstallInstruction{
-			{Title: "Add a remote Streamable HTTP MCP server", Description: "Add this endpoint in your client's MCP settings. The client will open browser sign-in when it first connects.", URL: endpoint},
-			{Title: "Complete sign-in", Description: "Finish the browser authorization flow, then return to the client and retry the connection.", URL: ""},
-		}
+		output.Instructions = append(clientInstallSteps(client, slug, endpoint),
+			InstallInstruction{Title: "Complete sign-in", Description: "Finish the browser authorization flow, then return to the client and retry the connection.", URL: "", Snippet: ""})
 	default:
 		output.Fallback = "This client does not have reviewed installation guidance. Add the server as a remote Streamable HTTP MCP only if the client supports browser OAuth."
 	}
 	return output, nil
+}
+
+var installSlugPattern = regexp.MustCompile(constants.SlugPattern)
+
+// clientInstallSteps returns the shortest working way to add one remote MCP
+// endpoint in a client: a one-click link where the client has one, and a
+// command or config to paste otherwise. key names the server in the client's
+// config and must be a URL-safe slug.
+func clientInstallSteps(client OnboardingClientFamily, key, endpoint string) []InstallInstruction {
+	addEndpoint := InstallInstruction{Title: "Add a remote Streamable HTTP MCP server", Description: "Add this endpoint in your client's MCP settings. The client will open browser sign-in when it first connects.", URL: endpoint, Snippet: ""}
+	switch client {
+	case OnboardingClientCursor:
+		config := base64.StdEncoding.EncodeToString(mustJSON(map[string]string{"url": endpoint}))
+		link := "cursor://anysphere.cursor-deeplink/mcp/install?" + url.Values{"name": {key}, "config": {config}}.Encode()
+		return []InstallInstruction{
+			{Title: "Install in Cursor", Description: "Open this link to add the server to Cursor in one step.", URL: link, Snippet: ""},
+			{Title: "Or add it to ~/.cursor/mcp.json", Description: "Merge this into the mcpServers object of your Cursor MCP config.", URL: endpoint, Snippet: string(mustJSONIndent(map[string]any{"mcpServers": map[string]any{key: map[string]string{"url": endpoint}}}))},
+		}
+	case OnboardingClientClaudeCode:
+		return []InstallInstruction{
+			{Title: "Add it with the Claude Code CLI", Description: "Run this in a terminal, then run /mcp in Claude Code to sign in.", URL: endpoint, Snippet: fmt.Sprintf("claude mcp add --transport http %s %s", key, endpoint)},
+		}
+	case OnboardingClientCodex:
+		return []InstallInstruction{
+			{Title: "Add it to ~/.codex/config.toml", Description: "Add this block, then run the login command to sign in.", URL: endpoint, Snippet: fmt.Sprintf("[mcp_servers.%s]\nurl = %q", key, endpoint)},
+			{Title: "Sign in from Codex", Description: "Run this in a terminal to open browser sign-in.", URL: "", Snippet: "codex mcp login " + key},
+		}
+	case OnboardingClientOpencode:
+		return []InstallInstruction{
+			{Title: "Add it to opencode.json", Description: "Merge this into the mcp object of your OpenCode config.", URL: endpoint, Snippet: string(mustJSONIndent(map[string]any{"mcp": map[string]any{key: map[string]any{"type": "remote", "url": endpoint, "enabled": true}}}))},
+		}
+	case OnboardingClientOther:
+		addEndpoint.Snippet = string(mustJSONIndent(map[string]any{"mcpServers": map[string]any{key: map[string]string{"url": endpoint}}}))
+		addEndpoint.Description = "Add this endpoint in your client's MCP settings. Many clients accept this JSON shape. The client will open browser sign-in when it first connects."
+		return []InstallInstruction{addEndpoint}
+	default:
+		return []InstallInstruction{addEndpoint}
+	}
+}
+
+// mustJSONIndent encodes an install config built from strings and maps, which
+// cannot fail to encode.
+func mustJSONIndent(value any) []byte {
+	payload, _ := json.MarshalIndent(value, "", "  ")
+	return payload
 }
