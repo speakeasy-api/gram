@@ -14,29 +14,11 @@ import (
 
 const countKitRuntimeAuditLogs = `-- name: CountKitRuntimeAuditLogs :one
 SELECT COUNT(*)::bigint
-FROM audit_logs a
-WHERE a.subject_type = 'workload_admission'
-  AND a.action IN ('workload-admission:admit', 'workload-admission:withdraw')
-  AND (
-    EXISTS (
-      SELECT 1
-      FROM audit_logs admit
-      WHERE admit.organization_id = a.organization_id
-        AND admit.subject_type = 'workload_admission'
-        AND admit.subject_id = a.subject_id
-        AND admit.action = 'workload-admission:admit'
-        AND admit.actor_type = 'system'
-        AND admit.actor_id = 'kit-runtime'
-    )
-    OR EXISTS (
-      SELECT 1
-      FROM security_audit_logs admit
-      WHERE admit.organization_id = a.organization_id
-        AND admit.subject_type = 'workload_admission'
-        AND admit.subject_id = a.subject_id
-        AND admit.action = 'workload-admission:admit'
-    )
-  )
+FROM audit_logs
+WHERE subject_type = 'workload_admission'
+  AND action IN ('workload-admission:admit', 'workload-admission:withdraw')
+  AND actor_type = 'system'
+  AND actor_id = 'kit-runtime'
 `
 
 // Counts the audit_logs entries MoveKitRuntimeAuditLogs would move.
@@ -527,31 +509,13 @@ func (q *Queries) ListSecuritySurfaceFacets(ctx context.Context, arg ListSecurit
 
 const moveKitRuntimeAuditLogs = `-- name: MoveKitRuntimeAuditLogs :execrows
 WITH batch AS (
-  SELECT a.id
-  FROM audit_logs a
-  WHERE a.subject_type = 'workload_admission'
-    AND a.action IN ('workload-admission:admit', 'workload-admission:withdraw')
-    AND (
-      EXISTS (
-        SELECT 1
-        FROM audit_logs admit
-        WHERE admit.organization_id = a.organization_id
-          AND admit.subject_type = 'workload_admission'
-          AND admit.subject_id = a.subject_id
-          AND admit.action = 'workload-admission:admit'
-          AND admit.actor_type = 'system'
-          AND admit.actor_id = 'kit-runtime'
-      )
-      OR EXISTS (
-        SELECT 1
-        FROM security_audit_logs admit
-        WHERE admit.organization_id = a.organization_id
-          AND admit.subject_type = 'workload_admission'
-          AND admit.subject_id = a.subject_id
-          AND admit.action = 'workload-admission:admit'
-      )
-    )
-  ORDER BY a.seq
+  SELECT id
+  FROM audit_logs
+  WHERE subject_type = 'workload_admission'
+    AND action IN ('workload-admission:admit', 'workload-admission:withdraw')
+    AND actor_type = 'system'
+    AND actor_id = 'kit-runtime'
+  ORDER BY seq
   LIMIT $1
   FOR UPDATE SKIP LOCKED
 ), moved AS (
@@ -562,6 +526,7 @@ WITH batch AS (
 )
 INSERT INTO security_audit_logs (
   id,
+  seq,
   organization_id,
   project_id,
   actor_id,
@@ -580,8 +545,10 @@ INSERT INTO security_audit_logs (
   acting_client_id,
   created_at
 )
+OVERRIDING SYSTEM VALUE
 SELECT
   id,
+  seq,
   organization_id,
   project_id,
   actor_id,
@@ -600,16 +567,16 @@ SELECT
   acting_client_id,
   created_at
 FROM moved
-ORDER BY seq
 `
 
-// Moves admit and withdraw entries for admissions a Kit runtime admitted for
-// itself from audit_logs to security_audit_logs, including withdrawals a
-// person caused by withdrawing the issuer. A runtime's admission counts as
-// such when its admit entry is in either table, so withdrawals still move
-// after an earlier batch has moved their admit. Entries keep their id and
-// created_at and take new seq values in their original order. Moves at most
-// batch_size rows; callers repeat until no rows move.
+// Moves the admit and withdraw entries a Kit runtime wrote for its own
+// workload admissions from audit_logs to security_audit_logs. Withdrawals a
+// person made stay: older entries cannot tell an issuer withdrawal's cascade
+// from a direct withdrawal, and a direct one is a configuration change.
+// Entries keep every column, including seq, which sits below the security
+// log's identity range so moved entries sort before the ones written there
+// directly, in their original order. Moves at most batch_size rows; callers
+// repeat until no rows move.
 func (q *Queries) MoveKitRuntimeAuditLogs(ctx context.Context, batchSize int32) (int64, error) {
 	result, err := q.db.Exec(ctx, moveKitRuntimeAuditLogs, batchSize)
 	if err != nil {

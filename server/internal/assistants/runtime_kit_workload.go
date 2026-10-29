@@ -332,9 +332,6 @@ func (s *ServiceCore) revokeKitWorkload(ctx context.Context, db assistantrepo.DB
 			return ErrKitRuntimeBinding
 		}
 		owned = true
-		if s.audit == nil {
-			return errors.New("kit workload withdrawal requires audit logging")
-		}
 		admission, err := q.GetWorkloadAdmission(ctx, workloadrepo.GetWorkloadAdmissionParams{OrganizationID: b.Identity.OrganizationID, ProjectID: project, ID: a.ID})
 		if err != nil {
 			return fmt.Errorf("revoke kit workload: %w", err)

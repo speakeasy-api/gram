@@ -21,12 +21,10 @@ import (
 	"fmt"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit/securityevent/repo"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // Subject types share their values with the audit package so both logs filter
@@ -34,54 +32,19 @@ import (
 const subjectTypeWorkloadAdmission = "workload_admission"
 
 // record writes one security entry and publishes its webhook event in the
-// caller's transaction.
+// caller's transaction. Request attribution and the webhook payload come from
+// the audit package, so both logs stamp and publish entries alike; the two
+// tables share their columns, which is what lets the params convert.
 func record(ctx context.Context, dbtx repo.DBTX, params repo.InsertSecurityAuditLogParams, event *outbox.EventDef[events.AuditLogCreatedPayloadV1]) error {
-	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
-		params.ActorID = actor.ID
-		params.ActorType = string(actor.Type)
-		params.ActorDisplayName = conv.ToPGTextEmpty("")
-		params.ActorSlug = conv.ToPGTextEmpty("")
-	}
-	clientID, _ := contextvalues.GetOAuthClientID(ctx)
-	params.ActingSurface = conv.ToPGText(string(audit.SurfaceFromContext(ctx)))
-	params.ActingClientID = conv.ToPGTextEmpty(clientID)
+	entry := auditrepo.InsertAuditLogParams(params)
+	audit.StampRequest(ctx, &entry)
 
-	row, err := repo.New(dbtx).InsertSecurityAuditLog(ctx, params)
+	row, err := repo.New(dbtx).InsertSecurityAuditLog(ctx, repo.InsertSecurityAuditLogParams(entry))
 	if err != nil {
-		return fmt.Errorf("log security event %s: %w", params.Action, err)
+		return fmt.Errorf("log security event %s: %w", entry.Action, err)
 	}
-
-	actorID := params.ActorID
-	actorDisplayName := conv.FromPGTextOrEmpty[string](params.ActorDisplayName)
-	actorSlug := conv.FromPGTextOrEmpty[string](params.ActorSlug)
-	actingClientID := clientID
-	if audit.IsStaffAdminSurface(audit.Surface(conv.FromPGTextOrEmpty[string](params.ActingSurface))) {
-		actorID = ""
-		actorDisplayName = audit.SpeakeasyTeamActorLabel
-		actorSlug = ""
-		actingClientID = ""
-	}
-	if _, err := outbox.PublishWebhookEvent(ctx, dbtx, row.OrganizationID, event, events.AuditLogCreatedPayloadV1{
-		ID:                 row.ID,
-		OrganizationID:     row.OrganizationID,
-		ProjectID:          params.ProjectID,
-		ActorID:            actorID,
-		ActorType:          params.ActorType,
-		ActorDisplayName:   actorDisplayName,
-		ActorSlug:          actorSlug,
-		Action:             params.Action,
-		SubjectID:          params.SubjectID,
-		SubjectType:        params.SubjectType,
-		SubjectDisplayName: conv.FromPGTextOrEmpty[string](params.SubjectDisplayName),
-		SubjectSlug:        conv.FromPGTextOrEmpty[string](params.SubjectSlug),
-		BeforeSnapshot:     params.BeforeSnapshot,
-		AfterSnapshot:      params.AfterSnapshot,
-		Metadata:           params.Metadata,
-		ActingSurface:      conv.FromPGTextOrEmpty[string](params.ActingSurface),
-		Category:           string(audit.CategorySecurity),
-		ActingClientID:     actingClientID,
-	}); err != nil {
-		return fmt.Errorf("log security event %s: append to outbox: %w", params.Action, err)
+	if err := audit.PublishWebhook(ctx, dbtx, entry, auditrepo.InsertAuditLogRow(row), audit.CategorySecurity, event); err != nil {
+		return fmt.Errorf("publish security event: %w", err)
 	}
 	return nil
 }

@@ -26,7 +26,7 @@ Audit logging is how Speakeasy records _who did what to which resource_. Every m
 
 **Atomicity.** Audit entries are written inside the same database transaction as the mutation they describe, so the state and the record of the state commit together or not at all.
 
-**Configuration log and security log.** Entries go to one of two tables, and the caller decides which by the package it calls. Both are stored, delivered as webhooks (the payload's `category` says which log), returned by the staff admin activity view, and readable by customers. The audit log page shows the configuration log by default and the security log on request. Before adding an event, decide which it is:
+**Configuration log and security log.** Entries go to one of two tables, and the caller decides which by the package it calls. Both are returned by the staff admin activity view and readable by customers, and entries written through either package publish webhooks (the payload's `category` says which log). Rows written directly, such as demo seed rows and backfills, publish none. The audit log page shows the configuration log by default and the security log on request. Before adding an event, decide which it is:
 
 - **Configuration** (`audit` package, `audit_logs`): a person or the Speakeasy team changed the platform's configuration — created, updated or deleted a resource, granted or revoked access, admitted or withdrew a workload, registered a credential or trust relationship.
 - **Security** (`audit/securityevent` package, `security_audit_logs`): machine access or other security-relevant activity that is not a configuration decision — for example a runtime admitting and withdrawing its own workload identity on every start and teardown. Its frequency follows runtime churn or traffic rather than decisions, and no person chose it, which is why it has its own table. Customers still need it when auditing what their users and automated processes did, so it is kept and delivered rather than dropped.
@@ -79,12 +79,13 @@ Audit logging lives in `server/internal/audit/` with its management-API surface 
 
 Files under `server/gen/**` and any `repo/` subdirectory carry a `DO NOT EDIT` header.
 
-| Path                                                               | Generator                                                                                                                       |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| `server/gen/auditlogs/`, `server/gen/http/auditlogs/`              | `mise run gen:goa-server` from `server/design/auditlogs/design.go`.                                                             |
-| `server/internal/audit/audittest/repo/`                            | `mise run gen:sqlc-server` from `server/internal/audit/audittest/queries.sql` (separate stanza in `server/database/sqlc.yaml`). |
-| `server/internal/audit/repo/`                                      | `mise run gen:sqlc-server` from `server/internal/audit/queries.sql` (via the `audit` stanza in `server/database/sqlc.yaml`).    |
-| `server/internal/outbox/events/catalog_gen.go`, `catalog_gen.yaml` | `mise run gen:webhooks-server` from `server/cmd/gen-webhooks`. Run after adding a new event def to `audit_log.go`.              |
+| Path                                                               | Generator                                                                                                                              |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `server/gen/auditlogs/`, `server/gen/http/auditlogs/`              | `mise run gen:goa-server` from `server/design/auditlogs/design.go`.                                                                    |
+| `server/internal/audit/audittest/repo/`                            | `mise run gen:sqlc-server` from `server/internal/audit/audittest/queries.sql` (separate stanza in `server/database/sqlc.yaml`).        |
+| `server/internal/audit/repo/`                                      | `mise run gen:sqlc-server` from `server/internal/audit/queries.sql` (via the `audit` stanza in `server/database/sqlc.yaml`).           |
+| `server/internal/audit/securityevent/repo/`                        | `mise run gen:sqlc-server` from `server/internal/audit/securityevent/queries.sql` (via its own stanza in `server/database/sqlc.yaml`). |
+| `server/internal/outbox/events/catalog_gen.go`, `catalog_gen.yaml` | `mise run gen:webhooks-server` from `server/cmd/gen-webhooks`. Run after adding a new event def to `audit_log.go`.                     |
 
 ## Server-client contract
 
@@ -172,14 +173,14 @@ Use `audittest` helpers in the service's test package — do not query the audit
 
 ## Relevant mise tasks
 
-| Task                           | Purpose                                                                                                                                                                                                             |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mise run gen:goa-server`      | Regenerate `server/gen/auditlogs/**` whenever you edit `server/design/auditlogs/design.go`.                                                                                                                         |
-| `mise run gen:sdk`             | Regenerate the TypeScript SDK and CLI bindings after a Goa design change.                                                                                                                                           |
-| `mise run gen:sqlc-server`     | Regenerate `server/internal/audit/repo/` and `audittest/repo/`. Run whenever you change `queries.sql` in either place. Requires `mise run infra:start` (sqlc connects to the local Postgres to type-check queries). |
-| `mise run gen:webhooks-server` | Regenerate `catalog_gen.go` and `catalog_gen.yaml` after adding a new event def to `server/internal/outbox/events/audit_log.go`.                                                                                    |
-| `mise run lint:server`         | `golangci-lint` including `exhaustruct` — keep struct literals complete when adding fields to `Log*Event`.                                                                                                          |
-| `mise run test:server`         | Runs the full server test suite. Takes the same arguments as `go test` (e.g. `./internal/audit/... ./internal/remotemcp/...`).                                                                                      |
+| Task                           | Purpose                                                                                                                                                                                                                                   |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mise run gen:goa-server`      | Regenerate `server/gen/auditlogs/**` whenever you edit `server/design/auditlogs/design.go`.                                                                                                                                               |
+| `mise run gen:sdk`             | Regenerate the TypeScript SDK and CLI bindings after a Goa design change.                                                                                                                                                                 |
+| `mise run gen:sqlc-server`     | Regenerate `server/internal/audit/repo/`, `audittest/repo/` and `securityevent/repo/`. Run whenever you change `queries.sql` in any of them. Requires `mise run infra:start` (sqlc connects to the local Postgres to type-check queries). |
+| `mise run gen:webhooks-server` | Regenerate `catalog_gen.go` and `catalog_gen.yaml` after adding a new event def to `server/internal/outbox/events/audit_log.go`.                                                                                                          |
+| `mise run lint:server`         | `golangci-lint` including `exhaustruct` — keep struct literals complete when adding fields to `Log*Event`.                                                                                                                                |
+| `mise run test:server`         | Runs the full server test suite. Takes the same arguments as `go test` (e.g. `./internal/audit/... ./internal/remotemcp/...`).                                                                                                            |
 
 ## Maintaining this skill
 

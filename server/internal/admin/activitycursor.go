@@ -45,8 +45,8 @@ func (p activityLogPosition) encode() string {
 	}
 }
 
-// ValidateActivityCursor reports whether cursor is one a previous staff
-// activity page returned, for callers that check input before listing.
+// ValidateActivityCursor reports whether cursor has the staff activity cursor
+// format, for callers that check input before listing.
 func ValidateActivityCursor(cursor string) error {
 	_, err := decodeActivityCursor(cursor)
 	return err
