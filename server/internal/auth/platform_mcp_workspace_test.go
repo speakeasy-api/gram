@@ -32,6 +32,15 @@ func TestProvisionPlatformMCPWorkspace(t *testing.T) {
 	require.Equal(t, "Acme Workspace", orgName)
 	require.Equal(t, []string{orgID}, instance.trialNotifier.trialStarted)
 
+	// The signup is attributed to the flow and to the MCP client connecting.
+	activities := instance.growthEvents.captured()
+	require.Len(t, activities, 1)
+	require.Equal(t, "organization_created", activities[0]["activity"])
+	require.Equal(t, orgID, activities[0]["organization_id"])
+	require.Equal(t, "platform_mcp", activities[0]["created_via"])
+	require.Equal(t, "platform_mcp", activities[0]["signup_source"])
+	require.Equal(t, "Claude Code", activities[0]["client"])
+
 	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, orgID)
 	require.NoError(t, err)
 	require.Equal(t, orgprovision.SourcePlatformMCP, conv.FromPGTextOrEmpty[string](org.CreationSource))
