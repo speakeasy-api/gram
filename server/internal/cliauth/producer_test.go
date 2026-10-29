@@ -49,8 +49,12 @@ func TestAuthorize_ProducerKeyForAdmin(t *testing.T) {
 	require.Equal(t, []string{auth.APIKeyScopeProducer.String()}, key.Scopes)
 	require.True(t, strings.HasPrefix(key.Name, "CLI Key (Generated) - "))
 
-	_, err = audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionKeyCreate, key.ID.String())
+	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionKeyCreate, key.ID.String())
 	require.NoError(t, err)
+	require.Equal(t, key.ID.String(), record.SubjectID)
+	created, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyCreate)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), created, "minting the key writes exactly one key.create audit row")
 }
 
 // Producer keys take org:admin, so a member without it cannot get a producer
