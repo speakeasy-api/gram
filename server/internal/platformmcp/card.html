@@ -5,31 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Speakeasy</title>
     <style>
-      /* One shared shell: a 48px leading tile, the title and a status line, one
-   trailing action, and optional label and value rows below a divider. Dark
-   mode mirrors the same structure with dark neutrals. */
+      /* One shared shell: a dotted panel with the resource's tile, a coloured
+   eyebrow, a serif title, one line, tags and one action, over a Speakeasy
+   footer. Square corners and hairline borders throughout. */
       :root {
         color-scheme: light dark;
-        --surface: light-dark(hsl(0 0% 100%), hsl(0 0% 11%));
-        --line: light-dark(hsl(0 0% 90%), hsl(0 0% 21%));
-        --fg: light-dark(hsl(0 0% 7%), hsl(0 0% 96%));
-        --muted: light-dark(hsl(0 0% 42%), hsl(0 0% 64%));
-        --tile: light-dark(hsl(0 0% 96%), hsl(0 0% 17%));
-        --tile-icon: light-dark(hsl(0 0% 45%), hsl(0 0% 64%));
+        --surface: light-dark(hsl(0 0% 100%), hsl(0 0% 9%));
+        --line: light-dark(hsl(0 0% 80%), hsl(0 0% 26%));
+        --hair: light-dark(hsl(0 0% 88%), hsl(0 0% 20%));
+        --dots: light-dark(hsl(0 0% 82%), hsl(0 0% 24%));
+        --fg: light-dark(hsl(0 0% 9%), hsl(0 0% 96%));
+        --muted: light-dark(hsl(0 0% 40%), hsl(0 0% 64%));
+        --tile: light-dark(hsl(0 0% 96%), hsl(0 0% 15%));
+        --tile-icon: light-dark(hsl(0 0% 27%), hsl(0 0% 75%));
+        --tag: light-dark(hsl(0 0% 95%), hsl(0 0% 16%));
+        --tag-fg: light-dark(hsl(0 0% 25%), hsl(0 0% 78%));
         --solid: light-dark(hsl(0 0% 9%), hsl(0 0% 96%));
         --solid-fg: light-dark(hsl(0 0% 100%), hsl(0 0% 7%));
-        --chip: light-dark(hsl(0 0% 95%), hsl(0 0% 18%));
-        --done: light-dark(hsl(142 71% 36%), hsl(142 60% 45%));
-        --done-text: light-dark(hsl(142 72% 29%), hsl(142 65% 62%));
-        --done-soft: light-dark(hsl(138 76% 97%), hsl(142 60% 45% / 12%));
-        --done-line: light-dark(hsl(141 60% 82%), hsl(142 60% 45% / 35%));
-        --action: light-dark(hsl(28 92% 44%), hsl(30 95% 55%));
-        --pending: light-dark(hsl(0 0% 80%), hsl(0 0% 40%));
+        --done: light-dark(hsl(142 70% 30%), hsl(142 60% 55%));
+        --action: light-dark(hsl(24 90% 40%), hsl(28 95% 60%));
         --sans:
           -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI",
           Roboto, Helvetica, Arial, sans-serif;
+        --serif:
+          "Tiempos Headline", "Iowan Old Style", Charter, "Source Serif Pro",
+          Georgia, ui-serif, serif;
         --mono:
-          ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+          "IBM Plex Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+          Consolas, monospace;
       }
       * {
         box-sizing: border-box;
@@ -43,208 +46,156 @@
       }
       p,
       h1,
-      dl,
-      dd {
+      ul {
         margin: 0;
+        padding: 0;
       }
       .card {
         background: var(--surface);
         border: 1px solid var(--line);
-        border-radius: 12px;
-        overflow: hidden;
       }
-      .head {
+      .body {
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 12px 14px;
-        padding: 16px;
       }
-      .tile {
-        position: relative;
+      .panel {
         flex: none;
-        width: 48px;
-        height: 48px;
+        width: 30%;
+        min-width: 112px;
+        max-width: 200px;
         display: grid;
         place-items: center;
-        border-radius: 10px;
-        background: var(--tile);
+        padding: 20px 0;
+        border-right: 1px solid var(--hair);
+        background-image: radial-gradient(var(--dots) 1px, transparent 1.2px);
+        background-size: 8px 8px;
+        background-position: 4px 4px;
+      }
+      .tile {
+        width: 72px;
+        height: 72px;
+        display: grid;
+        place-items: center;
+        background: var(--surface);
+        border: 1px solid var(--line);
         color: var(--tile-icon);
+        font: 500 22px/1 var(--mono);
       }
       .tile-logo {
         background: var(--tile);
+        border-color: transparent;
       }
       .logo {
-        width: 32px;
-        height: 32px;
+        width: 100%;
+        height: 100%;
         object-fit: contain;
-        border-radius: 6px;
-      }
-      .tile-initials {
-        background: var(--solid);
-        color: var(--solid-fg);
-        font-size: 18px;
-        font-weight: 600;
-        letter-spacing: -0.01em;
       }
       .icon {
-        width: 20px;
-        height: 20px;
+        width: 28px;
+        height: 28px;
         fill: none;
         stroke: currentColor;
-        stroke-width: 1.5;
-        stroke-linecap: round;
-      }
-      .badge {
-        position: absolute;
-        right: -5px;
-        bottom: -5px;
-        width: 20px;
-        height: 20px;
-        display: grid;
-        place-items: center;
-        border-radius: 50%;
-        border: 2px solid var(--surface);
-        color: hsl(0 0% 100%);
-        font-size: 11px;
-        font-weight: 700;
-        line-height: 1;
-      }
-      .badge-done {
-        background: var(--done);
-      }
-      .badge-action {
-        background: var(--action);
-      }
-      .badge svg {
-        width: 10px;
-        height: 10px;
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 1.8;
-        stroke-linecap: round;
-        stroke-linejoin: round;
+        stroke-width: 1.75;
       }
       .text {
-        flex: 1 1 200px;
+        flex: 1;
         min-width: 0;
+        padding: 22px 24px 20px;
       }
-      .title {
+      .eyebrow {
+        font: 500 10.5px/1.4 var(--mono);
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .eyebrow-done {
+        color: var(--done);
+      }
+      .eyebrow-action {
+        color: var(--action);
+      }
+      h1 {
+        margin-top: 6px;
+        font: 400 26px/1.15 var(--serif);
+        letter-spacing: -0.01em;
+        overflow-wrap: anywhere;
+      }
+      .line {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 13px;
+        overflow-wrap: anywhere;
+      }
+      code {
+        margin-left: 4px;
+        color: var(--fg);
+        font: 13px/1.4 var(--mono);
+      }
+      .foot {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 4px 8px;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 22px;
       }
-      h1 {
-        font-size: 16px;
-        line-height: 1.35;
-        font-weight: 600;
-        overflow-wrap: anywhere;
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        list-style: none;
       }
-      .pill {
-        padding: 1px 6px;
-        border: 1px solid var(--line);
-        border-radius: 4px;
-        font: 500 11px/1.4 var(--mono);
-        letter-spacing: 0.04em;
+      .tags li {
+        padding: 1px 7px;
+        background: var(--tag);
+        border: 1px solid var(--hair);
+        color: var(--tag-fg);
+        font: 11px/1.5 var(--mono);
+        letter-spacing: 0.06em;
         text-transform: uppercase;
-        color: var(--muted);
-        white-space: nowrap;
-      }
-      .pill-done {
-        color: var(--done-text);
-        background: var(--done-soft);
-        border-color: var(--done-line);
-      }
-      .line {
-        margin-top: 2px;
-        color: var(--muted);
-        overflow-wrap: anywhere;
-      }
-      .dot {
-        display: inline-block;
-        width: 7px;
-        height: 7px;
-        margin: 0 7px 1px 1px;
-        border-radius: 50%;
-        vertical-align: middle;
-      }
-      .dot-pending {
-        background: var(--pending);
-      }
-      .dot-action {
-        background: var(--action);
       }
       .button {
-        flex: none;
+        margin-left: auto;
         display: inline-flex;
         align-items: center;
-        height: 32px;
+        gap: 6px;
+        height: 34px;
         padding: 0 14px;
-        border: 1px solid var(--solid);
-        border-radius: 8px;
         background: var(--solid);
         color: var(--solid-fg);
         font-weight: 500;
         text-decoration: none;
         white-space: nowrap;
       }
-      .button.secondary {
-        background: var(--surface);
-        color: var(--fg);
-        border-color: var(--line);
-      }
-      .button:focus-visible,
-      .copy:focus-visible {
+      .button:focus-visible {
         outline: 2px solid var(--fg);
         outline-offset: 2px;
       }
-      .details {
-        display: grid;
-        gap: 6px;
-        padding: 12px 16px 14px;
-        border-top: 1px solid var(--line);
-      }
-      .row {
+      .brand {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        min-height: 24px;
+        gap: 6px;
+        padding: 7px 14px;
+        border-top: 1px solid var(--hair);
+        font-weight: 500;
+        font-size: 13px;
+        letter-spacing: -0.03em;
       }
-      dt {
-        flex: none;
-        color: var(--muted);
+      .mark {
+        width: 14px;
+        height: 14px;
+        fill: currentColor;
       }
-      dd {
-        min-width: 0;
-        text-align: right;
-        overflow-wrap: anywhere;
-      }
-      .field {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        max-width: 100%;
-        padding: 3px 3px 3px 8px;
-        border: 1px solid var(--line);
-        border-radius: 6px;
-      }
-      code {
-        min-width: 0;
-        font: 13px/1.4 var(--mono);
-        text-align: left;
-        overflow-wrap: anywhere;
-      }
-      .copy {
-        flex: none;
-        padding: 1px 7px;
-        border: 0;
-        border-radius: 4px;
-        cursor: pointer;
-        background: var(--chip);
-        color: var(--muted);
-        font: 12px/1.5 var(--sans);
+      @media (max-width: 380px) {
+        .panel {
+          min-width: 88px;
+        }
+        .tile {
+          width: 56px;
+          height: 56px;
+        }
+        .text {
+          padding: 18px 16px 16px;
+        }
       }
     </style>
   </head>
@@ -331,31 +282,7 @@
           }
         });
 
-        // Copy uses the clipboard the view is allowed; when it is not, nothing
-        // happens and the value stays selectable.
-        function copy(button) {
-          var done = function () {
-            button.textContent = "Copied";
-            setTimeout(function () {
-              button.textContent = "Copy";
-            }, 1500);
-          };
-          try {
-            navigator.clipboard
-              .writeText(button.getAttribute("data-copy"))
-              .then(done, function () {});
-          } catch (error) {
-            // No clipboard in this host.
-          }
-        }
-
         root.addEventListener("click", function (event) {
-          var button =
-            event.target.closest && event.target.closest("button[data-copy]");
-          if (button) {
-            copy(button);
-            return;
-          }
           var link = event.target.closest && event.target.closest("a[href]");
           if (!link) {
             return;

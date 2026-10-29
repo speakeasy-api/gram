@@ -89,7 +89,7 @@ func TestCardRendersLogoAsDataImage(t *testing.T) {
 	require.NotContains(t, rendered, `<span aria-hidden="true">E</span>`, "the logo replaces the initials")
 
 	server := renderCard(t, serverCard("Example", logo, ResolvedProject{Name: "Support", Slug: "support"}, nextActionSecureDashboardSetup, "https://dashboard.example.test/setup", false, ""))
-	require.Contains(t, server, `<img class="logo" src="`+string(logo)+`" alt=""><span class="badge badge-action" role="img" aria-label="Needs action">!</span>`, "the badge stays on a logo tile")
+	require.Contains(t, server, `<div class="tile tile-logo"><img class="logo" src="`+string(logo)+`" alt=""></div>`)
 	require.NotContains(t, server, `<svg class="icon"`, "the logo replaces the server icon")
 }
 
@@ -103,7 +103,7 @@ func TestCardWithoutLogoShowsInitial(t *testing.T) {
 	require.NotContains(t, rendered, "<img")
 
 	signIn := renderCard(t, signInCard("data:image/png;base64,AAAA", "", "https://dashboard.example.test/inspect"))
-	require.Contains(t, signIn, `<div class="tile tile-initials"><span aria-hidden="true">D</span>`)
+	require.Contains(t, signIn, `<div class="tile"><span aria-hidden="true">D</span>`)
 	require.NotContains(t, signIn, "<img")
 }
 

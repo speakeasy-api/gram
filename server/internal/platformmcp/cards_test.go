@@ -101,15 +101,13 @@ func TestCardToolsLinkTheServedCardView(t *testing.T) {
 func TestCardEscapesUntrustedText(t *testing.T) {
 	t.Parallel()
 
-	card := serverCard(`<img src=x onerror="alert(1)">`, "", ResolvedProject{Name: `"><script>alert(2)</script>`, Slug: "project"}, nextActionSecureDashboardSetup, "https://dashboard.example.test/setup?a=1&b=2", false, `https://example.test/mcp?x="><b>`)
+	card := serverCard(`<img src=x onerror="alert(1)">`, "", ResolvedProject{Name: "Support", Slug: `"><script>alert(2)</script>`}, nextActionSecureDashboardSetup, "https://dashboard.example.test/setup?a=1&b=2", false, "")
 	rendered := renderCard(t, card)
 	require.NotContains(t, rendered, "<img")
 	require.NotContains(t, rendered, "<script")
 	require.Contains(t, rendered, "&lt;img src=x onerror=&#34;alert(1)&#34;&gt;")
 	require.Contains(t, rendered, "&lt;script&gt;")
 	require.Contains(t, rendered, `href="https://dashboard.example.test/setup?a=1&amp;b=2"`)
-	require.NotContains(t, rendered, "<b>")
-	require.Contains(t, rendered, `data-copy="https://example.test/mcp?x=&#34;&gt;&lt;b&gt;"`)
 
 	unsafe := renderCard(t, signInCard("Example", "", "javascript:alert(3)"))
 	require.NotContains(t, unsafe, "javascript:")
@@ -121,66 +119,49 @@ func TestServerCardNextStep(t *testing.T) {
 
 	project := ResolvedProject{Name: "Support", Slug: "support"}
 	setupURL := "https://dashboard.example.test/setup"
-	added := &cardStatus{Label: "Added", Tone: cardToneDone}
-	needsAction := &cardStatus{Label: "Needs action", Tone: cardToneAction}
 	for _, tc := range []struct {
 		nextAction string
 		setupURL   string
-		badge      *cardStatus
-		status     *cardStatus
-		nextStep   string
 		action     *cardAction
 	}{
-		{nextActionStartSetup, "", added, nil, "Check that it is ready to use", nil},
-		{"ready", "", added, nil, "Check that it is ready to use", nil},
-		{nextActionContinueDashboardSetup, setupURL, needsAction, &cardStatus{Label: "Needs sign-in before anyone can use it", Tone: cardToneAction}, "Finish sign-in in the dashboard", &cardAction{Label: "Finish setup", URL: setupURL}},
-		{nextActionSecureDashboardSetup, setupURL, needsAction, &cardStatus{Label: "Needs credentials before anyone can use it", Tone: cardToneAction}, "Enter its credentials in the dashboard", &cardAction{Label: "Finish setup", URL: setupURL}},
-		{nextActionConnectSignIn, setupURL, needsAction, &cardStatus{Label: "Needs its sign-in connected before anyone can use it", Tone: cardToneAction}, "Connect its sign-in here in chat", &cardAction{Label: "Set up in dashboard", URL: setupURL, Secondary: true}},
-		{nextActionConnectSignIn, "", needsAction, &cardStatus{Label: "Needs its sign-in connected before anyone can use it", Tone: cardToneAction}, "Connect its sign-in here in chat", nil},
-		{nextActionContinueDashboardSetup, "", needsAction, &cardStatus{Label: "Needs sign-in before anyone can use it", Tone: cardToneAction}, "Finish setup from the MCP server's page in the dashboard", nil},
+		{nextActionStartSetup, "", nil},
+		{"ready", "", nil},
+		{nextActionContinueDashboardSetup, setupURL, &cardAction{Label: "Finish setup", URL: setupURL}},
+		{nextActionSecureDashboardSetup, setupURL, &cardAction{Label: "Add credentials", URL: setupURL}},
+		{nextActionConnectSignIn, setupURL, &cardAction{Label: "Connect", URL: setupURL}},
+		{nextActionConnectSignIn, "", nil},
+		{nextActionContinueDashboardSetup, "", nil},
 	} {
 		card := serverCard("Example", "", project, tc.nextAction, tc.setupURL, false, "")
 		require.Equal(t, "Example", card.Title)
-		require.Equal(t, &cardStatus{Label: "Created", Tone: cardToneDone}, card.Pill)
-		require.Equal(t, "MCP server · Support · private until added to a plugin", card.Meta)
-		require.Equal(t, tc.badge, card.Badge, tc.nextAction)
-		require.Equal(t, tc.status, card.Status, tc.nextAction)
+		require.Equal(t, cardStatus{Label: "MCP server created", Tone: cardToneDone}, card.Eyebrow)
+		require.Equal(t, &cardField{Label: "Project", Value: "support"}, card.Field)
+		require.Equal(t, []string{"Catalog"}, card.Tags)
 		require.Equal(t, tc.action, card.Action, tc.nextAction)
-		want := []cardDetail{{Label: "Next step", Text: tc.nextStep}}
-		if tc.status != nil {
-			want = append([]cardDetail{{Label: "Project", Text: "Support"}}, want...)
-		}
-		require.Equal(t, want, card.Details, tc.nextAction)
 	}
 
 	unnamed := serverCard("", "", ResolvedProject{Name: "", Slug: "support"}, "ready", "", false, "")
 	require.Equal(t, "MCP server", unnamed.Title)
-	require.Equal(t, "MCP server · support · private until added to a plugin", unnamed.Meta)
+
+	rendered := renderCard(t, serverCard("Example", "", project, nextActionConnectSignIn, setupURL, false, ""))
+	require.Contains(t, rendered, `<p class="eyebrow eyebrow-done">MCP server created</p><h1>Example</h1>`)
+	require.Contains(t, rendered, `<p class="line">Project <code>support</code></p>`)
+	require.Contains(t, rendered, `<ul class="tags"><li>Catalog</li></ul>`)
+	require.Contains(t, rendered, `<a class="button" href="`+setupURL+`" target="_blank" rel="noopener noreferrer">Connect <span aria-hidden="true">&rarr;</span></a>`)
+	require.Contains(t, rendered, `<footer class="brand">`)
 }
 
-func TestServerCardShowsAlreadyAddedAndTheServerURL(t *testing.T) {
+func TestServerCardShowsAlreadyAddedAndRemoteTag(t *testing.T) {
 	t.Parallel()
 
 	card := serverCard("Acme Tasks", "", ResolvedProject{Name: "Support", Slug: "support"}, "ready", "", true, "https://mcp.example.test/tasks")
-	require.Equal(t, &cardStatus{Label: "Already added", Tone: cardToneNeutral}, card.Pill)
-	require.Equal(t, cardDetail{Label: "Server URL", Copy: "https://mcp.example.test/tasks"}, card.Details[len(card.Details)-1])
+	require.Equal(t, cardStatus{Label: "MCP server already added", Tone: cardToneNeutral}, card.Eyebrow)
+	require.Equal(t, []string{"Remote"}, card.Tags)
 
 	rendered := renderCard(t, card)
-	require.Contains(t, rendered, `<span class="pill pill-neutral">Already added</span>`)
-	require.Contains(t, rendered, `<code>https://mcp.example.test/tasks</code><button type="button" class="copy" data-copy="https://mcp.example.test/tasks">Copy</button>`)
-	require.Contains(t, rendered, `<span class="badge badge-done" role="img" aria-label="Added">`)
-	require.Contains(t, rendered, `<p class="line">MCP server · Support · private until added to a plugin</p>`)
+	require.Contains(t, rendered, `<p class="eyebrow eyebrow-neutral">MCP server already added</p>`)
+	require.Contains(t, rendered, `<div class="tile"><svg class="icon"`)
 	require.NotContains(t, rendered, "<a ", "a ready server has no next link")
-}
-
-// A card without rows is the compact variant: the header alone, no divider.
-func TestCompactCardHasNoDetailRows(t *testing.T) {
-	t.Parallel()
-
-	rendered := renderCard(t, resultCard{Title: "Example", Badge: &cardStatus{Label: "Needs action", Tone: cardToneAction}, Meta: "MCP server", Action: &cardAction{Label: "View", URL: "https://dashboard.example.test/x", Secondary: true}})
-	require.NotContains(t, rendered, "<dl")
-	require.Contains(t, rendered, `<span class="badge badge-action" role="img" aria-label="Needs action">!</span>`)
-	require.Contains(t, rendered, `<a class="button secondary" href="https://dashboard.example.test/x"`)
 }
 
 func TestSignInCardOpensTheAuthorizationURL(t *testing.T) {
@@ -188,26 +169,24 @@ func TestSignInCardOpensTheAuthorizationURL(t *testing.T) {
 
 	authorizationURL := "https://dashboard.example.test/org/projects/p/mcp/example/inspect"
 	card := signInCard("Acme Tasks", "", authorizationURL)
-	require.Equal(t, "Sign in with Acme Tasks", card.Title)
+	require.Equal(t, "Sign in to Acme Tasks", card.Title)
 	require.Equal(t, "AT", card.Initials)
-	require.Equal(t, &cardStatus{Label: "Connect your Acme Tasks account to continue", Tone: cardTonePending}, card.Status)
-	require.Equal(t, []cardDetail{{Label: "Requested by", Text: "Acme Tasks"}}, card.Details)
+	require.Equal(t, cardStatus{Label: "Sign-in required", Tone: cardToneAction}, card.Eyebrow)
+	require.Equal(t, "Let this MCP server use Acme Tasks on your behalf.", card.Description)
+	require.Equal(t, []string{"OAuth"}, card.Tags)
 
 	rendered := renderCard(t, card)
 	require.Contains(t, rendered, `<a class="button" href="`+authorizationURL+`"`)
-	require.Contains(t, rendered, ">Sign in</a>")
+	require.Contains(t, rendered, `>Sign in <span aria-hidden="true">&rarr;</span></a>`)
 	require.Equal(t, 1, strings.Count(rendered, "<a "), "the card offers one link")
-	require.Contains(t, rendered, `<div class="tile tile-initials"><span aria-hidden="true">AT</span>`)
-	require.Contains(t, rendered, `<span class="dot dot-pending" aria-hidden="true"></span>Connect your Acme Tasks account to continue`)
+	require.Contains(t, rendered, `<div class="tile"><span aria-hidden="true">AT</span>`)
+	require.Contains(t, rendered, `<p class="eyebrow eyebrow-action">Sign-in required</p>`)
 
 	unnamed := signInCard("", "", authorizationURL)
 	require.Equal(t, "Sign in", unnamed.Title)
 	require.Empty(t, unnamed.Initials)
-	require.Nil(t, unnamed.Details)
+	require.Equal(t, "Let this MCP server act on your behalf.", unnamed.Description)
 	require.Equal(t, &cardAction{Label: "Sign in", URL: authorizationURL}, unnamed.Action)
-
-	fallback := renderCard(t, serverCard("Example", "", ResolvedProject{Name: "Support", Slug: "support"}, nextActionConnectSignIn, authorizationURL, false, ""))
-	require.Contains(t, fallback, `<a class="button secondary" href="`+authorizationURL+`"`)
 }
 
 func TestCardInitials(t *testing.T) {

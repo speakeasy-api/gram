@@ -199,8 +199,8 @@ func TestSetupToolsActOnTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 		card, ok := result.Meta[cardMetaKey].(string)
 		require.True(t, ok)
 		require.Contains(t, card, `href="`+attached.AuthorizationURL+`"`)
-		require.Contains(t, card, "Sign in with https://remote.example.test/mcp")
-		require.Contains(t, card, ">Sign in</a>")
+		require.Contains(t, card, "Sign in to https://remote.example.test/mcp")
+		require.Contains(t, card, `>Sign in <span aria-hidden="true">&rarr;</span></a>`)
 	}
 
 	// An omitted project in an organization without a default project is refused.

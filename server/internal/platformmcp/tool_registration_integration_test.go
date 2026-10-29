@@ -145,13 +145,13 @@ func TestCatalogRegistrationToolResultCarriesServerCard(t *testing.T) {
 	require.NoError(t, json.Unmarshal(structured, &output))
 	require.Equal(t, project.Slug, output.ProjectSlug)
 	require.Equal(t, "continue_dashboard_setup", output.NextAction)
-	require.NotContains(t, text.Text, "before anyone can use it", "the card is not part of the model-visible result")
+	require.NotContains(t, text.Text, "MCP server created", "the card is not part of the model-visible result")
 
 	card, ok := result.Meta[cardMetaKey].(string)
 	require.True(t, ok)
 	require.Contains(t, card, "<h1>Reviewed MCP</h1>")
-	require.Contains(t, card, "<dt>Project</dt><dd>"+project.Name+"</dd>")
-	require.Contains(t, card, "Needs sign-in before anyone can use it")
+	require.Contains(t, card, "Project <code>"+project.Slug+"</code>")
+	require.Contains(t, card, "Finish setup")
 	require.Contains(t, card, `href="`+output.DashboardSetupURL+`"`)
 }
 

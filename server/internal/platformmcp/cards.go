@@ -34,55 +34,55 @@ var cardShellHTML string
 // only from stored bytes it has checked, typed as template.URL so the filter
 // lets it through.
 //
-// Every card is one header row — a leading tile, the title and a secondary
-// line, and one trailing action — with optional label and value rows below a
-// divider. A card without detail rows is the compact variant.
+// Every card is a dotted panel holding the resource's tile, and beside it a
+// coloured eyebrow, a serif title, one line below it, tags and one action,
+// over a Speakeasy footer.
 var cardTemplate = template.Must(template.New("card").Parse(`<article class="card">` +
-	`<div class="head">` +
-	`<div class="tile{{if .Logo}} tile-logo{{else if .Initials}} tile-initials{{end}}">` +
+	`<div class="body">` +
+	`<div class="panel"><div class="tile{{if .Logo}} tile-logo{{end}}">` +
 	`{{if .Logo}}<img class="logo" src="{{.Logo}}" alt="">{{else if .Initials}}<span aria-hidden="true">{{.Initials}}</span>{{else}}` + cardServerIcon + `{{end}}` +
-	`{{with .Badge}}<span class="badge badge-{{.Tone}}" role="img" aria-label="{{.Label}}">{{if eq .Tone "done"}}` + cardCheckIcon + `{{else}}!{{end}}</span>{{end}}` +
+	`</div></div>` +
+	`<div class="text">` +
+	`<p class="eyebrow eyebrow-{{.Eyebrow.Tone}}">{{.Eyebrow.Label}}</p>` +
+	`<h1>{{.Title}}</h1>` +
+	`{{with .Field}}<p class="line">{{.Label}} <code>{{.Value}}</code></p>{{else}}{{with .Description}}<p class="line">{{.}}</p>{{end}}{{end}}` +
+	`<div class="foot">{{with .Tags}}<ul class="tags">{{range .}}<li>{{.}}</li>{{end}}</ul>{{end}}` +
+	`{{with .Action}}<a class="button" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}} <span aria-hidden="true">&rarr;</span></a>{{end}}</div>` +
 	`</div>` +
-	`<div class="text"><div class="title"><h1>{{.Title}}</h1>{{with .Pill}}<span class="pill pill-{{.Tone}}">{{.Label}}</span>{{end}}</div>` +
-	`{{with .Status}}<p class="line"><span class="dot dot-{{.Tone}}" aria-hidden="true"></span>{{.Label}}</p>{{else}}{{with .Meta}}<p class="line">{{.}}</p>{{end}}{{end}}` +
 	`</div>` +
-	`{{with .Action}}<a class="button{{if .Secondary}} secondary{{end}}" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{end}}` +
-	`</div>` +
-	`{{with .Details}}<dl class="details">{{range .}}<div class="row"><dt>{{.Label}}</dt>` +
-	`<dd>{{if .Copy}}<span class="field"><code>{{.Copy}}</code><button type="button" class="copy" data-copy="{{.Copy}}">Copy</button></span>{{else}}{{.Text}}{{end}}</dd></div>{{end}}</dl>{{end}}` +
+	`<footer class="brand">` + cardSpeakeasyMark + `<span>speakeasy</span></footer>` +
 	`</article>`))
 
 // cardServerIcon is the line icon on an MCP server's tile.
-const cardServerIcon = `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 12h8M8 15h8"/></svg>`
+const cardServerIcon = `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9.5" y="3" width="5" height="5"/><rect x="4" y="16" width="5" height="5"/><rect x="15" y="16" width="5" height="5"/><path d="M12 8v4M6.5 16v-4h11v4"/></svg>`
 
-// cardCheckIcon is the check inside a done badge.
-const cardCheckIcon = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 6.2 5 8.2 9 4"/></svg>`
+// cardSpeakeasyMark is the Speakeasy mark in the card footer.
+const cardSpeakeasyMark = `<svg class="mark" viewBox="72 75 156 150" aria-hidden="true"><path d="M181.781 215.464L81.7665 201.253L74.0996 207.903L181.781 223.198L225.901 184.921L218.244 183.837L181.781 215.464Z"/><path d="M181.781 192.261L225.901 153.984L218.244 152.899L181.781 184.517L146.095 179.45L97.0809 172.494L81.7665 170.315L74.0996 176.965L89.4237 179.134L74.0996 192.424L181.781 207.719L225.901 169.452L218.244 168.367L181.79 199.995L130.771 192.74L138.428 186.1L181.781 192.261Z"/><path d="M181.781 169.045L81.7665 154.834L74.0996 161.484L181.781 176.779L225.901 138.512L218.244 137.428L181.781 169.045Z"/><path d="M218.244 106.478L202.92 119.767L181.781 138.105L140.443 132.232L81.7665 123.894L74.0996 130.543L132.776 138.872L125.119 145.522L81.7569 139.362L74.0996 146.011L181.781 161.307L225.901 123.04L210.577 120.861L225.901 107.562L218.244 106.478Z"/><path d="M225.901 92.0971L118.22 76.8018L74.0996 115.069L181.781 130.374L225.901 92.0971Z"/></svg>`
 
 // resultCard is what one card shows. Every value except Logo is plain text;
 // the template escapes it.
 type resultCard struct {
-	Title string
+	// Eyebrow is the short coloured label above the title that says what
+	// happened.
+	Eyebrow cardStatus
+	Title   string
 	// Logo is the MCP server's logo as a data: URI built by cardLogoDataURI
 	// from stored, validated bytes. When it is set it fills the tile in place
 	// of the initials or the server icon.
 	Logo template.URL
-	// Initials fill a dark tile, as on a sign-in card. Without them the tile
-	// shows the MCP server icon.
+	// Initials fill the tile when there is no logo, as on a sign-in card.
+	// Without either the tile shows the MCP server icon.
 	Initials string
-	// Badge sits on the tile's corner and says whether the step is done or
-	// waits for the user. Its label is read out by screen readers.
-	Badge *cardStatus
-	// Pill is the short uppercase tag after the title.
-	Pill *cardStatus
-	// Status is a coloured dot and a sentence under the title. When it is
-	// absent, Meta is shown there instead.
-	Status  *cardStatus
-	Meta    string
-	Action  *cardAction
-	Details []cardDetail
+	// Field is a label and a monospaced value under the title. When it is
+	// absent, Description is shown there instead.
+	Field       *cardField
+	Description string
+	// Tags are short uppercase facts about the resource.
+	Tags   []string
+	Action *cardAction
 }
 
-// cardTone colours a badge, pill or status dot.
+// cardTone colours an eyebrow.
 type cardTone string
 
 const (
@@ -90,9 +90,7 @@ const (
 	cardToneDone cardTone = "done"
 	// cardToneAction marks a step that waits for the user.
 	cardToneAction cardTone = "action"
-	// cardTonePending marks a step that has not started.
-	cardTonePending cardTone = "pending"
-	// cardToneNeutral is a tag that reports a fact, not a state.
+	// cardToneNeutral reports a fact, not a state.
 	cardToneNeutral cardTone = "neutral"
 )
 
@@ -102,12 +100,10 @@ type cardStatus struct {
 	Tone  cardTone
 }
 
-// cardDetail is one label and value row below the header. Copy, when set,
-// replaces Text with a monospaced value and a Copy button.
-type cardDetail struct {
+// cardField is a label and a monospaced value, such as a project slug.
+type cardField struct {
 	Label string
-	Text  string
-	Copy  string
+	Value string
 }
 
 // cardAction is the card's one link. Its URL must come from the tool result
@@ -115,10 +111,6 @@ type cardDetail struct {
 type cardAction struct {
 	Label string
 	URL   string
-
-	// Secondary marks a fallback link, drawn as an outlined button instead of
-	// a filled one.
-	Secondary bool
 }
 
 // cardInitials is up to two letters for a tile: the first letter of each of
@@ -197,55 +189,35 @@ const (
 // serverCard describes an MCP server just added to a project and its next
 // step. serverURL is the address the server was added by, when there is one.
 func serverCard(serverName string, logo template.URL, project ResolvedProject, nextAction, dashboardSetupURL string, alreadyRegistered bool, serverURL string) resultCard {
-	projectName := project.Name
-	if projectName == "" {
-		projectName = project.Slug
-	}
-	pill := &cardStatus{Label: "Created", Tone: cardToneDone}
+	eyebrow := cardStatus{Label: "MCP server created", Tone: cardToneDone}
 	if alreadyRegistered {
-		pill = &cardStatus{Label: "Already added", Tone: cardToneNeutral}
+		eyebrow = cardStatus{Label: "MCP server already added", Tone: cardToneNeutral}
+	}
+	tag := "Catalog"
+	if serverURL != "" {
+		tag = "Remote"
 	}
 	card := resultCard{
-		Title:    cardTitle(serverName),
-		Logo:     logo,
-		Initials: "",
-		Badge:    &cardStatus{Label: "Added", Tone: cardToneDone},
-		Pill:     pill,
-		Status:   nil,
-		Meta:     "MCP server · " + projectName + " · private until added to a plugin",
-		Action:   nil,
-		Details:  nil,
+		Eyebrow:     eyebrow,
+		Title:       cardTitle(serverName),
+		Logo:        logo,
+		Initials:    "",
+		Field:       &cardField{Label: "Project", Value: project.Slug},
+		Description: "",
+		Tags:        []string{tag},
+		Action:      nil,
 	}
-	nextStep := "Check that it is ready to use"
-	var action *cardAction
+	label := ""
 	switch nextAction {
 	case nextActionConnectSignIn:
-		card.Status = &cardStatus{Label: "Needs its sign-in connected before anyone can use it", Tone: cardToneAction}
-		nextStep = "Connect its sign-in here in chat"
-		action = &cardAction{Label: "Set up in dashboard", URL: dashboardSetupURL, Secondary: true}
+		label = "Connect"
 	case nextActionContinueDashboardSetup:
-		card.Status = &cardStatus{Label: "Needs sign-in before anyone can use it", Tone: cardToneAction}
-		nextStep = "Finish sign-in in the dashboard"
-		action = &cardAction{Label: "Finish setup", URL: dashboardSetupURL, Secondary: false}
+		label = "Finish setup"
 	case nextActionSecureDashboardSetup:
-		card.Status = &cardStatus{Label: "Needs credentials before anyone can use it", Tone: cardToneAction}
-		nextStep = "Enter its credentials in the dashboard"
-		action = &cardAction{Label: "Finish setup", URL: dashboardSetupURL, Secondary: false}
+		label = "Add credentials"
 	}
-	if card.Status != nil {
-		card.Badge = &cardStatus{Label: "Needs action", Tone: cardToneAction}
-		if dashboardSetupURL != "" {
-			card.Action = action
-		} else if nextAction != nextActionConnectSignIn {
-			nextStep = "Finish setup from the MCP server's page in the dashboard"
-		}
-		// The status line replaces the meta line, so the project moves into
-		// the rows.
-		card.Details = append(card.Details, cardDetail{Label: "Project", Text: projectName, Copy: ""})
-	}
-	card.Details = append(card.Details, cardDetail{Label: "Next step", Text: nextStep, Copy: ""})
-	if serverURL != "" {
-		card.Details = append(card.Details, cardDetail{Label: "Server URL", Text: "", Copy: serverURL})
+	if label != "" && dashboardSetupURL != "" {
+		card.Action = &cardAction{Label: label, URL: dashboardSetupURL}
 	}
 	return card
 }
@@ -253,20 +225,18 @@ func serverCard(serverName string, logo template.URL, project ResolvedProject, n
 // signInCard offers the one sign-in step after a provider is connected.
 func signInCard(serverName string, logo template.URL, authorizationURL string) resultCard {
 	card := resultCard{
-		Title:    "Sign in",
-		Logo:     logo,
-		Initials: cardInitials(serverName),
-		Badge:    nil,
-		Pill:     nil,
-		Status:   &cardStatus{Label: "Connect your account to continue", Tone: cardTonePending},
-		Meta:     "",
-		Action:   &cardAction{Label: "Sign in", URL: authorizationURL, Secondary: false},
-		Details:  nil,
+		Eyebrow:     cardStatus{Label: "Sign-in required", Tone: cardToneAction},
+		Title:       "Sign in",
+		Logo:        logo,
+		Initials:    cardInitials(serverName),
+		Field:       nil,
+		Description: "Let this MCP server act on your behalf.",
+		Tags:        []string{"OAuth"},
+		Action:      &cardAction{Label: "Sign in", URL: authorizationURL},
 	}
 	if serverName != "" {
-		card.Title = "Sign in with " + serverName
-		card.Status.Label = "Connect your " + serverName + " account to continue"
-		card.Details = []cardDetail{{Label: "Requested by", Text: serverName, Copy: ""}}
+		card.Title = "Sign in to " + serverName
+		card.Description = "Let this MCP server use " + serverName + " on your behalf."
 	}
 	return card
 }
