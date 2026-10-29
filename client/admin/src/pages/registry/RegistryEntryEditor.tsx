@@ -1,5 +1,11 @@
 import { lazy, Suspense, useRef, useState, type JSX } from "react";
 import {
+  splitManagedMetadata,
+  mergeManagedMetadata,
+  managedMetadataIssues,
+} from "./registryManagedMetadata";
+import { RegistryIcons } from "./RegistryIcons.tsx";
+import {
   registryEntryName,
   registryEntryNameKey,
 } from "@/lib/registryEntryName";
@@ -66,24 +72,30 @@ export function RegistryEntryEditor({
   const save = useSaveRegistryEntryMutation();
   const visibility = useSetRegistryEntryPublishedMutation();
   const [baseline, setBaseline] = useState(EMPTY);
+  const [managed, setManaged] = useState("{}");
+  const [managedBaseline, setManagedBaseline] = useState("{}");
   const [text, setText] = useState(id ? "" : EMPTY);
   const [serverIssues, setServerIssues] = useState<ValidationIssue[]>([]);
   const [edited, setEdited] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
   const [requestBusy, setBusy] = useState(false);
-  const busy = requestBusy;
+  const [iconBusy, setIconBusy] = useState(false);
+  const iconInFlight = useRef(false);
+  const busy = requestBusy || iconBusy;
   const [conflict, setConflict] = useState(false);
   const inFlight = useRef(false);
   if (id && !base && detail.data && !detail.isFetching && !detail.isError) {
     setBase(detail.data);
-    const formatted =
-      formatRegistryJson(detail.data.dataJson) ?? detail.data.dataJson;
+    const split = splitManagedMetadata(detail.data.dataJson);
+    const formatted = formatRegistryJson(split.text) ?? split.text;
+    setManaged(split.managed);
+    setManagedBaseline(split.managed);
     setBaseline(formatted);
     setText(formatted);
   }
 
   const loaded = id === null || base !== null;
-  const dirty = loaded && text !== baseline;
+  const dirty = loaded && (text !== baseline || managed !== managedBaseline);
   useBlocker({
     shouldBlockFn: () =>
       busy || (dirty && !window.confirm("Discard unsaved registry edits?")),
@@ -94,6 +106,7 @@ export function RegistryEntryEditor({
   const close = (): void => {
     if (
       !inFlight.current &&
+      !iconInFlight.current &&
       (!dirty || window.confirm("Discard unsaved registry edits?"))
     )
       onClose();
@@ -107,7 +120,10 @@ export function RegistryEntryEditor({
     const name = registryEntryName(entry.dataJson);
     queryClient.setQueryData(registryEntryNameKey(entry.id), { name });
     setBase(entry);
-    const formatted = formatRegistryJson(entry.dataJson) ?? entry.dataJson;
+    const split = splitManagedMetadata(entry.dataJson);
+    const formatted = formatRegistryJson(split.text) ?? split.text;
+    setManaged(split.managed);
+    setManagedBaseline(split.managed);
     setBaseline(formatted);
     setText(formatted);
     setIssues([]);
@@ -128,9 +144,12 @@ export function RegistryEntryEditor({
   const perform = async (
     kind: "save" | "visibility" | "reload",
   ): Promise<void> => {
-    if (inFlight.current) return;
+    if (inFlight.current || iconInFlight.current) return;
     if (kind === "save") {
-      const checked = validateRegistryText(text, base ?? undefined);
+      const checked = [
+        ...validateRegistryText(text, base ?? undefined),
+        ...managedMetadataIssues(text),
+      ];
       setIssues(checked);
       if (checked.length > 0) return;
     }
@@ -152,8 +171,10 @@ export function RegistryEntryEditor({
         if (result.error) throw result.error;
         if (result.data) {
           setBase(result.data);
-          const formatted =
-            formatRegistryJson(result.data.dataJson) ?? result.data.dataJson;
+          const split = splitManagedMetadata(result.data.dataJson);
+          const formatted = formatRegistryJson(split.text) ?? split.text;
+          setManaged(split.managed);
+          setManagedBaseline(split.managed);
           setBaseline(formatted);
           setText(formatted);
           setIssues([]);
@@ -172,7 +193,12 @@ export function RegistryEntryEditor({
           }),
         );
       } else if (kind === "save" && loaded && !conflict) {
-        const dataJson = text;
+        const dataJson = mergeManagedMetadata(text, managed);
+        const checked = validateRegistryText(dataJson, base ?? undefined);
+        if (checked.length > 0) {
+          setIssues(checked);
+          return;
+        }
         const entry = base
           ? await save.mutateAsync({
               request: {
@@ -273,6 +299,24 @@ export function RegistryEntryEditor({
                 }}
               />
             )}
+            <RegistryIcons
+              value={managed}
+              disabled={busy}
+              onBusyChange={(value) => {
+                iconInFlight.current = value;
+                setIconBusy(value);
+              }}
+              onChange={(value) => {
+                setManaged(value);
+                setIssues([]);
+                setServerIssues([]);
+                setEdited(true);
+                if (errorStatus(failure) === 422) setFailure(null);
+              }}
+            />
+            <p className="text-muted-foreground text-xs">
+              Icons and publication metadata are managed separately.
+            </p>
             <Suspense fallback={<p role="status">Loading JSON editor…</p>}>
               <RegistryJsonEditor
                 value={text}
@@ -284,7 +328,10 @@ export function RegistryEntryEditor({
                   if (errorStatus(failure) === 422) setFailure(null);
                 }}
                 onBlur={() =>
-                  setIssues(validateRegistryText(text, base ?? undefined))
+                  setIssues([
+                    ...validateRegistryText(text, base ?? undefined),
+                    ...managedMetadataIssues(text),
+                  ])
                 }
                 disabled={busy}
                 invalid={issues.length > 0 || serverIssues.length > 0}

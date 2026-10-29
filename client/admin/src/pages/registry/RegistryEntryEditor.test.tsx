@@ -1,4 +1,10 @@
-import { fireEvent, screen, waitFor, cleanup } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  cleanup,
+} from "@testing-library/react";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createRootRoute, createRoute, Outlet } from "@tanstack/react-router";
@@ -27,6 +33,12 @@ const mutations = vi.hoisted(() => ({
   save: vi.fn(),
   create: vi.fn(),
   visibility: vi.fn(),
+  upload: vi.fn(),
+}));
+vi.mock("@gram/admin-client/react-query/adminUploadPlatformImage", () => ({
+  buildAdminUploadPlatformImageMutation: () => ({
+    mutationFn: mutations.upload,
+  }),
 }));
 const okta = vi.hoisted(() => ({ candidates: [] as unknown[] }));
 vi.mock("@gram/admin-client/react-query/adminSaveRegistryEntry", () => ({
@@ -63,6 +75,8 @@ vi.mock(
   }),
 );
 import { RegistryEntryEditor } from "./RegistryEntryEditor";
+import { NewRegistryEntryPage } from "./RegistryEntryPage";
+import { registryEntryNameKey } from "@/lib/registryEntryName";
 
 const id = "00000000-0000-4000-8000-000000000001";
 const raw =
@@ -242,6 +256,52 @@ it("confirms dirty cancel and performs no save", async () => {
   expect(mutations.save).not.toHaveBeenCalled();
 });
 
+it("closes after one confirmed discard", async () => {
+  const onClose = vi.fn<() => void>();
+  await renderWithApp(<RegistryEntryEditor id={id} onClose={onClose} />, {
+    queryClient: client,
+  });
+  fireEvent.change(await screen.findByLabelText("Record JSON"), {
+    target: { value: "{}" },
+  });
+  vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(window.confirm).toHaveBeenCalledTimes(1);
+  expect(onClose).toHaveBeenCalledTimes(1);
+});
+
+it("titles the page with the entry name and records it for the crumb", async () => {
+  client.removeQueries({ queryKey: registryEntryQuery(id).queryKey });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id,
+          data_json: raw,
+          updated_at: token,
+          created_at: token,
+          published: false,
+          issues: [],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    ),
+  );
+  await mount();
+  expect(
+    await screen.findByRole("heading", {
+      name: "example.test/demo",
+      level: 1,
+    }),
+  ).toBeTruthy();
+  await waitFor(() =>
+    expect(client.getQueryData(registryEntryNameKey(id))).toEqual({
+      name: "example.test/demo",
+    }),
+  );
+});
+
 it.each([401, 422, 503])(
   "preserves dirty text and original token on %i errors",
   async (statusCode) => {
@@ -369,6 +429,45 @@ it("creates from unchanged raw text then saves rather than creating again", asyn
   expect(mutations.create).toHaveBeenCalledTimes(1);
 });
 
+it("reports a created entry only once it is saved and clean", async () => {
+  mutations.create.mockResolvedValue({ ...entry, published: true });
+  const onCreated = vi.fn<(id: string) => void>();
+  await renderWithApp(
+    <RegistryEntryEditor
+      id={null}
+      onClose={vi.fn<() => void>()}
+      onCreated={onCreated}
+    />,
+    { queryClient: client },
+  );
+  expect(
+    screen.getByRole("heading", { name: "New registry entry", level: 1 }),
+  ).toBeTruthy();
+  fireEvent.change(await screen.findByLabelText("Record JSON"), {
+    target: { value: raw },
+  });
+  expect(onCreated).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(onCreated).toHaveBeenCalledWith(id));
+});
+
+it("opens the created entry's page in place of the create page, keeping list filters", async () => {
+  mutations.create.mockResolvedValue({ ...entry, published: true });
+  const { router } = await renderWithApp(<NewRegistryEntryPage />, {
+    queryClient: client,
+    initialPath: "/registry/new?q=demo",
+  });
+  fireEvent.change(await screen.findByLabelText("Record JSON"), {
+    target: { value: raw },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe(`/registry/${id}`),
+  );
+  expect(router.state.location.search).toEqual({ q: "demo" });
+  expect(router.history.length).toBe(1);
+});
+
 it("reloads only after confirmation and uses the freshly fetched token", async () => {
   mutations.save
     .mockRejectedValueOnce(
@@ -483,7 +582,7 @@ it("does not prompt to discard while existing detail is loading", async () => {
     { queryClient: client },
   );
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-  expect(onClose).toHaveBeenCalledWith();
+  expect(onClose).toHaveBeenCalled();
   expect(window.confirm).not.toHaveBeenCalled();
   const unload = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(unload);
@@ -755,4 +854,229 @@ it("replaces the new-entry page with the created entry", async () => {
   );
   expect(router.history.length).toBe(length);
   expect(router.state.location.search).toEqual({ q: "demo" });
+it("locks JSON and Save during upload and saves icons with the same draft after retry", async () => {
+  let resolve!: (value: unknown) => void;
+  mutations.upload.mockImplementation(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  mutations.save.mockRejectedValueOnce(new Error("Temporary save failure"));
+  await mount();
+  const editor = (await screen.findByLabelText(
+    "Record JSON",
+  )) as HTMLTextAreaElement;
+  fireEvent.change(screen.getByLabelText("Upload primary logo file"), {
+    target: {
+      files: [new File(["<svg/>"], "logo.svg", { type: "image/svg+xml" })],
+    },
+  });
+  expect(editor.disabled).toBe(true);
+  expect(
+    (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  await act(async () =>
+    resolve({
+      url: "https://public.example.test/rpc/assets.serveImage?id=accepted",
+      asset: { id: "accepted", contentType: "image/svg+xml" },
+    }),
+  );
+  const draft = editor.value;
+  expect(draft).toContain("9007199254740993");
+  expect(draft).not.toContain("com.speakeasy.ai/icons");
+  expect(screen.getByAltText("Light preview").getAttribute("src")).toContain(
+    "id=accepted",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByText("Temporary save failure");
+  expect(editor.value).toBe(draft);
+  const fullDraft = mutations.save.mock.calls[0]![0].request.dataJson;
+  expect(fullDraft).toContain("9007199254740993");
+  expect(fullDraft).toContain("com.speakeasy.ai/icons");
+  mutations.save.mockResolvedValueOnce({ ...entry, dataJson: fullDraft });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(mutations.save).toHaveBeenCalledTimes(2));
+  expect(mutations.save.mock.calls[1]![0].request.dataJson).toBe(fullDraft);
+});
+
+it("cannot leave through Cancel while an icon upload is in flight", async () => {
+  let resolve!: (value: unknown) => void;
+  mutations.upload.mockImplementation(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  const onClose = vi.fn<() => void>();
+  await renderWithApp(<RegistryEntryEditor id={id} onClose={onClose} />, {
+    queryClient: client,
+  });
+  await screen.findByLabelText("Record JSON");
+  fireEvent.change(screen.getByLabelText("Upload primary logo file"), {
+    target: {
+      files: [new File(["<svg/>"], "logo.svg", { type: "image/svg+xml" })],
+    },
+  });
+  const cancel = screen.getByRole("button", {
+    name: "Cancel",
+  }) as HTMLButtonElement;
+  expect(cancel.disabled).toBe(true);
+  fireEvent.click(cancel);
+  expect(onClose).not.toHaveBeenCalled();
+  await act(async () =>
+    resolve({
+      url: "https://public.example.test/rpc/assets.serveImage?id=accepted",
+      asset: { id: "accepted", contentType: "image/svg+xml" },
+    }),
+  );
+  expect(cancel.disabled).toBe(false);
+});
+
+it("retains icon draft on conflict and keeps Save locked until reload", async () => {
+  mutations.upload.mockResolvedValue({
+    url: "https://public.example.test/rpc/assets.serveImage?id=accepted",
+    asset: { id: "accepted", contentType: "image/svg+xml" },
+  });
+  mutations.save.mockRejectedValue(
+    Object.assign(new Error("Conflict"), { statusCode: 409 }),
+  );
+  await mount();
+  const editor = (await screen.findByLabelText(
+    "Record JSON",
+  )) as HTMLTextAreaElement;
+  fireEvent.change(screen.getByLabelText("Upload primary logo file"), {
+    target: {
+      files: [new File(["<svg/>"], "logo.svg", { type: "image/svg+xml" })],
+    },
+  });
+  await screen.findByAltText("Light preview");
+  const draft = editor.value;
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByRole("button", { name: "Reload" });
+  expect(editor.value).toBe(draft);
+  expect(
+    (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+});
+
+const managedRecord =
+  '{"server":{"name":"example.test/demo"},"future":9007199254740993,"_meta":{"com.speakeasy.ai/icons":{"default":{"src":"https://public.example.test/rpc/assets.serveImage?id=existing","mimeType":"image/svg+xml","sizes":["any"]}},"com.speakeasy.ai/registry":{"published":false,"future":9007199254740995},"com.speakeasy.ai/catalog":{"name":"editable"}}}';
+
+it("hides managed namespaces, keeps them when _meta is removed, and accepts a clean save", async () => {
+  client.setQueryData(registryEntryQuery(id).queryKey, {
+    ...entry,
+    dataJson: managedRecord,
+  });
+  mutations.save.mockImplementation(async ({ request }) => ({
+    ...entry,
+    dataJson: request.dataJson,
+  }));
+  await mount();
+  const editor = (await screen.findByLabelText(
+    "Record JSON",
+  )) as HTMLTextAreaElement;
+  expect(editor.value).not.toContain("com.speakeasy.ai/icons");
+  expect(editor.value).not.toContain("com.speakeasy.ai/registry");
+  expect(editor.value).toContain("com.speakeasy.ai/catalog");
+  expect(
+    screen.getByText("Icons and publication metadata are managed separately."),
+  ).toBeTruthy();
+  fireEvent.change(editor, {
+    target: {
+      value:
+        '{"server":{"name":"example.test/demo"},"future":9007199254740993}',
+    },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(mutations.save).toHaveBeenCalledOnce());
+  const saved = mutations.save.mock.calls[0]![0].request.dataJson;
+  expect(saved).toContain("id=existing");
+  expect(saved).toContain("9007199254740993");
+  expect(saved).toContain("9007199254740995");
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true),
+  );
+  expect(editor.value).not.toContain("com.speakeasy.ai/registry");
+});
+
+it.each(["com.speakeasy.ai/icons", "com.speakeasy.ai/registry"])(
+  "blocks reintroduced %s with actionable feedback",
+  async (key) => {
+    await mount();
+    const editor = await screen.findByLabelText("Record JSON");
+    fireEvent.change(editor, {
+      target: {
+        value: `{"server":{"name":"example.test/demo"},"_meta":{"${key}":{}}}`,
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      `Remove ${key} from Record JSON.`,
+    );
+    expect(mutations.save).not.toHaveBeenCalled();
+  },
+);
+
+it("removes an icon only through the shared explicit Save", async () => {
+  client.setQueryData(registryEntryQuery(id).queryKey, {
+    ...entry,
+    dataJson: managedRecord,
+  });
+  mutations.save.mockImplementation(async ({ request }) => ({
+    ...entry,
+    dataJson: request.dataJson,
+  }));
+  await mount();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Remove primary logo" }),
+  );
+  expect(mutations.save).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(mutations.save).toHaveBeenCalledOnce());
+  const saved = mutations.save.mock.calls[0]![0].request.dataJson;
+  expect(saved).not.toContain("id=existing");
+  expect(saved).toContain("com.speakeasy.ai/registry");
+  expect(saved).toContain("9007199254740995");
+});
+
+it("creates with an uploaded icon without exposing managed JSON", async () => {
+  mutations.upload.mockResolvedValue({
+    url: "https://public.example.test/rpc/assets.serveImage?id=new",
+    asset: { id: "new", contentType: "image/svg+xml" },
+  });
+  mutations.create.mockImplementation(async ({ request }) => ({
+    ...entry,
+    dataJson: request.dataJson,
+  }));
+  await renderWithApp(
+    <RegistryEntryEditor id={null} onClose={vi.fn<() => void>()} />,
+    { queryClient: client },
+  );
+  const editor = (await screen.findByLabelText(
+    "Record JSON",
+  )) as HTMLTextAreaElement;
+  fireEvent.change(editor, {
+    target: {
+      value: '{"server":{"name":"example.test/new"},"future":9007199254740993}',
+    },
+  });
+  fireEvent.change(screen.getByLabelText("Upload primary logo file"), {
+    target: {
+      files: [new File(["<svg/>"], "logo.svg", { type: "image/svg+xml" })],
+    },
+  });
+  await screen.findByAltText("Light preview");
+  expect(editor.value).not.toContain("com.speakeasy.ai/icons");
+  expect(mutations.create).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(mutations.create).toHaveBeenCalledOnce());
+  const saved = mutations.create.mock.calls[0]![0].request.dataJson;
+  expect(saved).toContain("id=new");
+  expect(saved).toContain("9007199254740993");
 });
