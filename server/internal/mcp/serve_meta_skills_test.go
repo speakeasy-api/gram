@@ -11,6 +11,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -172,4 +174,48 @@ func TestServePublic_GatewaySkills_FlagOffAnswersMethodNotFound(t *testing.T) {
 	require.NoError(t, err)
 	_, hasError := decodeRPCResponse(t, w)["error"]
 	require.True(t, hasError, "with the extension off the gateway serves no resource at a skill URI; body=%s", w.Body.String())
+}
+
+// A consented connection inherits skills only from the members it approved
+// with at least one selected tool: not from a member left unselected, and not
+// from a member added after consent.
+func TestServePublic_GatewaySkills_ConsentedConnectionInheritsOnlySelectedMembers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	f := newSkillsFixture(t, ctx, ti)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "gateway-skills-consent-" + uuid.NewString()[:8]
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, f.projectID, f.organizationID, slug, issuer.ID)
+	chosenID := seedMetaMemberWithUpstream(t, ctx, ti.conn, f.projectID, gateway.ID, "Chosen", "chosen", 1, newCatalogUpstream(t, 1).url)
+	otherID := seedMetaMemberWithUpstream(t, ctx, ti.conn, f.projectID, gateway.ID, "Other", "other", 2, newCatalogUpstream(t, 1).url)
+	specific := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeProgressive, []string{"chosen--tool_000"})
+	all := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeProgressive, nil)
+	addedID := seedMetaMemberWithUpstream(t, ctx, ti.conn, f.projectID, gateway.ID, "Added", "added", 3, newCatalogUpstream(t, 1).url)
+
+	servedSkillOn(t, ctx, ti, f, "chosen-skill", chosenID)
+	servedSkillOn(t, ctx, ti, f, "other-skill", otherID)
+	servedSkillOn(t, ctx, ti, f, "added-skill", addedID)
+
+	list := func(token string) []string {
+		t.Helper()
+		w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), token, nil)
+		require.NoError(t, err)
+		return listedSkillURIs(t, requireRPCResult(t, w))
+	}
+	require.ElementsMatch(t, []string{f.uri("chosen-skill")}, list(specific.token),
+		"a member with no selected tool and a member added after consent contribute no skills")
+	require.ElementsMatch(t, []string{f.uri("chosen-skill"), f.uri("other-skill")}, list(all.token),
+		"an all-tools consent inherits from every approved member, still not from one added after consent")
+
+	for _, name := range []string{"other-skill", "added-skill"} {
+		for _, method := range []string{mcpversions.MethodSkillsGet, mcpversions.MethodResourcesRead} {
+			w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, method, map[string]any{"uri": f.uri(name)}), specific.token, nil)
+			require.NoError(t, err)
+			requireRPCErrorCode(t, w, oops.MCPCodeInvalidParams)
+		}
+	}
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, mcpversions.MethodResourcesRead, map[string]any{"uri": f.uri("chosen-skill")}), specific.token, nil)
+	require.NoError(t, err)
+	require.Contains(t, string(requireRPCResult(t, w)["contents"]), "chosen-skill")
 }
