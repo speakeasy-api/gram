@@ -14,6 +14,38 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type AdminMcpAuthDefaultsBackfillRun struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential-pii
+	StaffSubject string
+	// @access: confidential
+	Status string
+	// @access: confidential
+	Version int64
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type AdminMcpAuthDefaultsBackfillTarget struct {
+	// @access: confidential
+	RunID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Fingerprint string
+	// @access: confidential
+	Outcome []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type AdminMcpAuthorizationGrant struct {
 	// @access: confidential
 	ID uuid.UUID
