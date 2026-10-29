@@ -283,6 +283,25 @@ vi.mock("./useAgentIdentityCandidates", () => ({
       : [],
   ),
 }));
+vi.mock("./useManagedDeviceCandidates", () => ({
+  useManagedDeviceCandidates: vi.fn(({ enabled }: { enabled: boolean }) =>
+    enabled && mocks.includeNewResourceFixtures
+      ? [
+          {
+            id: "managed-device:test",
+            kind: "page",
+            title: "Test device",
+            detail: "Device",
+            keywords: [],
+            verbs: ["open"],
+            fuzzyOnly: true,
+            group: "Devices",
+            run: () => {},
+          },
+        ]
+      : [],
+  ),
+}));
 vi.mock("@/contexts/CommandPalette", () => ({
   useCommandPalette: () => ({ actions: mocks.actions }),
 }));
@@ -334,6 +353,7 @@ vi.mock("@/routes", () => ({
 import { useLauncherCandidates } from "./index";
 import { useSkillCandidates } from "./useSkillCandidates";
 import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
+import { useManagedDeviceCandidates } from "./useManagedDeviceCandidates";
 import type { LauncherCandidate } from "./types";
 
 const REMOTE = { remoteMcpServerId: "remote-1" };
@@ -1815,6 +1835,32 @@ describe("new resource source wiring", () => {
       fn: "hasScope",
       scopes: ["skill:read"],
       resourceId: "project-default",
+    });
+  });
+
+  it("includes devices only with organization read access, from either shell", () => {
+    mocks.scopes = ["org:read"];
+    const { result } = renderCandidates({ inProject: false });
+    expect(result.current.some((c) => c.id === "managed-device:test")).toBe(
+      true,
+    );
+    expect(useManagedDeviceCandidates).toHaveBeenLastCalledWith({
+      enabled: true,
+    });
+    expect(mocks.rbacCalls).toContainEqual({
+      fn: "hasAnyScope",
+      scopes: ["org:read", "org:admin"],
+      resourceId: "org-acme",
+    });
+  });
+
+  it("does not request devices without organization read access", () => {
+    const { result } = renderCandidates();
+    expect(result.current.some((c) => c.id === "managed-device:test")).toBe(
+      false,
+    );
+    expect(useManagedDeviceCandidates).toHaveBeenLastCalledWith({
+      enabled: false,
     });
   });
 

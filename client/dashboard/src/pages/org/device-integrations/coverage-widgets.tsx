@@ -23,11 +23,14 @@ import { Stack } from "@/components/ui/Stack";
 import { type Column, Table } from "@/components/ui/Table";
 import { cn } from "@/lib/utils";
 import { memo, useDeferredValue, useMemo, useState } from "react";
+import { useLocation, useSearchParams } from "react-router";
 import {
   BUCKETS,
   type CoverageDisplay,
   coverageDisplay,
   deviceCoverageKey,
+  LINKED_DEVICE_PARAM,
+  type LinkedDeviceState,
   matchesCoverageFilter,
   POLICY_STATES,
   UNMANAGED_USERS,
@@ -202,6 +205,26 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
   const selectedDevice = selected
     ? (devices.find((device) => device.id === selected.id) ?? selected)
     : null;
+  // A Command K result links here with ?device=<id> and carries the device
+  // it matched, so the panel opens before that device's page has loaded.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const linkedId = searchParams.get(LINKED_DEVICE_PARAM);
+  const linkedSnapshot = (location.state as LinkedDeviceState | null)?.device;
+  const linkedDevice = linkedId
+    ? (devices.find((device) => device.id === linkedId) ??
+      (linkedSnapshot?.id === linkedId ? linkedSnapshot : null))
+    : null;
+  const clearLinkedDevice = () => {
+    if (!linkedId) return;
+    setSearchParams(
+      (params) => {
+        params.delete(LINKED_DEVICE_PARAM);
+        return params;
+      },
+      { replace: true },
+    );
+  };
 
   if (isLoading) return <SkeletonTable />;
   if (isError) {
@@ -240,6 +263,7 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
         data={filteredDevices}
         rowKey={(row) => row.id}
         onRowClick={(device) => {
+          clearLinkedDevice();
           setSelected(device);
           setSheetOpen(true);
         }}
@@ -264,9 +288,15 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
         </Stack>
       ) : null}
       <DeviceDetailSheet
-        device={selectedDevice}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
+        device={linkedDevice ?? selectedDevice}
+        open={linkedDevice ? true : sheetOpen}
+        onOpenChange={(open) => {
+          // Keep the linked device as the selection so the panel keeps its
+          // content while it slides out.
+          if (!open && linkedDevice) setSelected(linkedDevice);
+          if (!open) clearLinkedDevice();
+          setSheetOpen(open);
+        }}
       />
     </Stack>
   );

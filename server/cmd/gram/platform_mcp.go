@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/dashboards"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
+	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -564,6 +565,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	platformReader.WithDashboards(platformmcp.NewDashboardsService(config.Logger, config.Dashboards, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
 	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
 	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
+	attachDeviceCoverage(platformReader, config, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithToolUsageBreakdown(config.ToolUsage).
@@ -676,6 +678,21 @@ func attachShadowAI(reader *platformmcp.PostgresReader, config platformMCPConfig
 		return
 	}
 	reader.WithShadowAI(service)
+}
+
+// attachDeviceCoverage registers the MDM coverage reads, authorized live on
+// org:read like the dashboard's device pages.
+func attachDeviceCoverage(reader *platformmcp.PostgresReader, config platformMCPConfig, budget platformmcp.OperationBudget) {
+	service := platformmcp.NewDeviceCoverageService(
+		deviceintegrations.NewReader(config.Logger, config.DB, config.FeatureFlags),
+		config.Authz,
+		budget,
+	)
+	if service == nil {
+		config.Logger.WarnContext(context.Background(), "platform mcp device coverage unavailable")
+		return
+	}
+	reader.WithDeviceCoverage(service)
 }
 
 // platformMCPSetupResources builds the reviewed setup corpus this deployment
@@ -1309,6 +1326,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	// organization-scoped question and share none of the Shadow MCP
 	// inventory's dependencies, so a failure there must not take them down.
 	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
+	attachDeviceCoverage(platformReader, config, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithToolUsageBreakdown(config.ToolUsage).

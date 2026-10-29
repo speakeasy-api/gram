@@ -206,3 +206,9 @@ const OS_LABELS: Record<string, string> = {
 export function osLabel(os: string): string {
   return (Object.hasOwn(OS_LABELS, os) ? OS_LABELS[os] : undefined) ?? os;
 }
+
+// Command K links a device with ?device=<id> and carries the device it
+// matched as navigation state.
+export const LINKED_DEVICE_PARAM = "device";
+
+export type LinkedDeviceState = { device?: ManagedDevice };
