@@ -74,7 +74,9 @@ import (
 
 type platformMCPConfig struct {
 	// GatewaySessions shares dashboard session scoping and pagination.
-	GatewaySessions        platformmcp.GatewaySessionManagement
+	GatewaySessions platformmcp.GatewaySessionManagement
+	// GatewayProxy serves the caller's own MCP servers through their organization gateway.
+	GatewayProxy           platformmcp.GatewayProxy
 	DeploymentRedeploy     platformmcp.DeploymentRedeployManagement
 	AssistantIdentity      platformmcp.AssistantIdentityManagement
 	WorkloadAssertionReuse platformmcp.WorkloadAssertionReuseManagement
@@ -553,6 +555,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
+		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
@@ -1284,6 +1287,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
+		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))

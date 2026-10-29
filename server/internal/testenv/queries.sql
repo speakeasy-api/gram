@@ -2365,3 +2365,8 @@ SET resource = sqlc.narg('resource'), created_at = @created_at,
     last_used_at = sqlc.narg('last_used_at'), refresh_expires_at = @refresh_expires_at,
     deleted_at = sqlc.narg('deleted_at')
 WHERE id = @id AND organization_id = @organization_id;
+
+-- name: ClearOrganizationFeatureSettingFixture :execrows
+-- Returns a feature setting to never configured, removing even the
+-- soft-deleted row that records an explicit opt-in.
+DELETE FROM organization_features WHERE organization_id = @organization_id AND feature_name = @feature_name;

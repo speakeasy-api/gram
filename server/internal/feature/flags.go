@@ -251,6 +251,14 @@ const (
 	// person properties, so a harness joins or leaves the treatment by editing
 	// a condition. Fails closed to the full catalogue.
 	FlagPlatformMCPDiscoveryMode Flag = "platform-mcp-discovery-mode"
+
+	// FlagPlatformMCPGatewayProxy lets a Platform MCP connection use the
+	// person's own MCP servers through list_my_servers, describe_tools and
+	// execute_tool, which run the organization gateway's tools as that person.
+	// Evaluated server-side on every call with the organization ID as distinct
+	// ID. Off, unavailable or failing, the tools refuse and point at
+	// get_my_organization_gateway.
+	FlagPlatformMCPGatewayProxy Flag = "platform-mcp-gateway-proxy"
 )
 
 // Variants of FlagPlatformMCPDiscoveryMode. Anything else — no variant, an

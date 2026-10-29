@@ -164,6 +164,9 @@ func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticato
 	// Discovery is outside the allowlist and catalogue, so a meta-tool's
 	// dispatched call passes through both like a direct call.
 	middlewares := []mcp.Middleware{discoveryMiddleware(runtime, logger), clientToolAllowlistMiddleware(registrar), capabilityCatalogueMiddleware(registrar)}
+	if postgresReader, ok := reader.(*PostgresReader); ok && postgresReader.gatewayProxy.valid() {
+		middlewares = append(middlewares, gatewayServersInstructionsMiddleware(postgresReader.gatewayProxy, logger))
+	}
 	if readiness != nil {
 		middlewares = append([]mcp.Middleware{readinessMiddleware(runtime, logger)}, middlewares...)
 	}
