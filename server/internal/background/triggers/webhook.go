@@ -183,7 +183,7 @@ type WebhookIngest struct {
 // JSON-schema-described config (built by the vendor via buildInputSchema),
 // and a DecodeConfig closure that decodes raw config, validates event types,
 // and compiles the CEL filter. The shared wiring — HMAC authentication with
-// optional pre-verify bypass, envelope assembly with vendor-supplied event id
+// a terminal unsigned Handshake response, envelope assembly with vendor-supplied event id
 // + correlation id, content-hash event-id fallback — lives here so vendors
 // don't reimplement it.
 func NewWebhookDefinition(

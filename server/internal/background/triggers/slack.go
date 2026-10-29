@@ -790,7 +790,7 @@ func slackIngest(body []byte, headers http.Header) (*WebhookIngest, error) {
 		return handleSlackInteraction(body)
 	case slackMediaTypeJSON:
 	default:
-		return nil, fmt.Errorf("decode slack payload: unsupported content type %q", mediaType)
+		return nil, fmt.Errorf("%w: decode slack payload: unsupported content type %q", ErrBadRequest, mediaType)
 	}
 
 	var req slackEventRequest

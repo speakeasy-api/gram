@@ -276,7 +276,7 @@ func TestSlackHandleWebhookRejectsUnsupportedContentType(t *testing.T) {
 			}, config))
 
 			result, err := definition.HandleWebhook(body, headers, config)
-			require.Error(t, err)
+			require.ErrorIs(t, err, ErrBadRequest)
 			require.Nil(t, result)
 		})
 	}
