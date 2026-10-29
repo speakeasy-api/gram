@@ -284,8 +284,6 @@ func TestAdmitMetaMembersShadowLeavesAdmissionUnchanged(t *testing.T) {
 	}, on.points(t), "each member is recorded once under the caller's surface")
 }
 
-// With connectPublic, a public member is admitted only on the caller's
-// mcp:connect, like a private one.
 func TestAdmitMetaMembersConnectPublicChecksPublicMembers(t *testing.T) {
 	t.Parallel()
 

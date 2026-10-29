@@ -347,9 +347,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		})
 	}
 
-	// Public members stay open to every caller of a derived gateway: the agent
-	// gateway serves its key the organization's public servers, and the
-	// organization gateway admits people only.
+	// Derived gateways keep public members open to every caller.
 	ctx, members, err := s.admitMetaMembers(ctx, logger, authzSurface, organizationID, candidates, false)
 	if err != nil {
 		return ctx, nil, err
@@ -429,9 +427,8 @@ func qualifyMemberSlugsByProject(members []metaMember) []metaMember {
 // shares. The caller must have prepared the authz context; admission is not
 // the place to discover an unprepared one.
 //
-// connectPublic holds public members to the caller's mcp:connect as well. A
-// stored gateway sets it for a delegatedCaller, whose ceiling and agent and
-// owner policies bound every member it reaches, public or not.
+// connectPublic holds public members to mcp:connect too, for a
+// delegatedCaller at a stored gateway.
 func (s *Service) admitMetaMembers(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -452,14 +449,13 @@ func (s *Service) admitMetaMembers(
 			backend = metaMemberBackendHosted
 		}
 
-		// Visibility gates exposure and fails closed: public members are open
-		// unless connectPublic holds them to mcp:connect, private members
-		// require mcp:connect (as authorizeProxyBackendAccess) with denied
-		// members filtered so unauthorized reads as nonexistent, and any other
-		// value (malformed or future) is filtered the same way. This gates on
-		// the member server's own visibility only: a hosted member whose
-		// toolset is private still lists here (its endpoint is public), then
-		// reads as nonexistent on drill-down (loadMemberToolset).
+		// Visibility gates exposure and fails closed: public members are open,
+		// private members require mcp:connect (as authorizeProxyBackendAccess)
+		// with denied members filtered so unauthorized reads as nonexistent,
+		// and any other value (malformed or future) is filtered the same way.
+		// This gates on the member server's own visibility only: a hosted
+		// member whose toolset is private still lists here (its endpoint is
+		// public), then reads as nonexistent on drill-down (loadMemberToolset).
 		connect := metaMemberConnectCheck(candidate.serverID, candidate.toolsetID, candidate.projectID)
 		public := candidate.visibility == mcpservers.VisibilityPublic
 		switch {

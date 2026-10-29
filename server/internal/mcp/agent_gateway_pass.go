@@ -1,15 +1,7 @@
-// Agent and workload credentials at a stored gateway. A gateway is a member
-// set, not one MCP server, so a credential carries no single-server target
-// into it. The gate admits the credential, and every request then admits each
-// live member against the credential's ceiling, the agent's live policy, and
-// its owner's live policy. Unlike a person, such a caller needs mcp:connect on
-// a public member too, as the issuer gate requires of it at a public single
-// server.
-//
-// A member that signs in upstream is called with the credential the caller
-// would use at that member's own server: an agent key's attachment, a
-// principal credential's authorizer's connection, or a workload's agent
-// owner's own connection. A member the agent is not granted is never called.
+// Agent and workload credentials at a stored gateway. The gate admits the
+// credential without a single-server target, and every request admits each
+// member against the credential's ceiling and the agent's and owner's live
+// policies, public members included.
 
 package mcp
 
@@ -40,21 +32,10 @@ func agentGatewayAddressable(endpoint *ResolvedMcpEndpoint) bool {
 
 // encodeGatewayWorkloadSessionPolicy is the ceiling of a workload session
 // minted for a stored gateway: mcp:connect on every MCP server in the
-// gateway's project, the authority an issuer-wide session over that project
-// carries, and mcp:connect on the gateway itself. A stored gateway's members
-// all live in its project.
-//
-// The gateway's own grant adds no authority, since the project wildcard
-// already covers it. It names the gateway the session was minted for, as a
-// single-server ceiling names its server, so the byte-for-byte check at the
-// gate refuses the session at a gateway created later at the same URL, issuer
-// and project.
-//
-// It bounds nothing finer, for the reason an issuer-wide ceiling does not.
-// The session's audience confines it to the gateway, the gateway's live
-// membership decides which servers a request can name, and authorization
-// intersects this ceiling with the assigned agent's and owner's live policy
-// at each of them.
+// gateway's project, where all its members live, and on the gateway itself.
+// The gateway grant adds no authority; it binds the session to this gateway,
+// so the gate's byte-for-byte check refuses it at one recreated later at the
+// same URL, issuer and project.
 func encodeGatewayWorkloadSessionPolicy(gatewayID, gatewayProjectID uuid.UUID, version runtimepolicy.DelegatedPolicyVersion) ([]byte, error) {
 	if gatewayID == uuid.Nil || gatewayProjectID == uuid.Nil {
 		return nil, errors.New("gateway workload session policy requires a gateway and its project")
@@ -109,8 +90,8 @@ func workloadSessionAddressable(endpoint *ResolvedMcpEndpoint) bool {
 }
 
 // requireAgentCredentialAuthorization checks an agent key or principal
-// credential may enter endpoint. A stored gateway admits it without a
-// single-server check; each member is checked on every request instead.
+// credential may enter endpoint. A stored gateway checks each member per
+// request instead.
 func (s *Service) requireAgentCredentialAuthorization(ctx context.Context, endpoint *ResolvedMcpEndpoint) (context.Context, error) {
 	if agentGatewayAddressable(endpoint) {
 		return ctx, nil
@@ -118,12 +99,9 @@ func (s *Service) requireAgentCredentialAuthorization(ctx context.Context, endpo
 	return s.requireAgentSessionAuthorization(ctx, endpoint)
 }
 
-// delegatedCaller reports whether the request acts as an agent or a workload:
-// an agent key, a principal credential, or an agent or workload session. Its
-// authority is a delegated ceiling intersected with the agent's and its
-// owner's live policies, and a server's public visibility opens nothing past
-// that: the issuer gate requires such a caller's mcp:connect at a public
-// single server, and a stored gateway requires it on each public member.
+// delegatedCaller reports whether the request acts as an agent or a workload.
+// Public visibility opens nothing past such a caller's ceiling and agent and
+// owner policies, so it needs mcp:connect on public servers too.
 func delegatedCaller(ctx context.Context) bool {
 	if _, ok := contextvalues.PrincipalCredentialAuthorization(ctx); ok {
 		return true
@@ -132,10 +110,9 @@ func delegatedCaller(ctx context.Context) bool {
 	return ok && (actor.Type == urn.PrincipalTypeAgent || actor.Type == urn.PrincipalTypeWorkload)
 }
 
-// metaMemberConnectCheck is the mcp:connect check a gateway member is admitted
-// by. Grants on toolset-backed servers key on the toolset id, and grants on
-// proxy backends on the mcp_servers id; checking the wrong one silently hides
-// the member from every resource-scoped grant the dashboard writes.
+// metaMemberConnectCheck is a gateway member's mcp:connect check. Grants on
+// toolset-backed servers key on the toolset id and on proxy backends on the
+// mcp_servers id; checking the wrong one hides the member from every grant.
 func metaMemberConnectCheck(serverID uuid.UUID, toolsetID uuid.NullUUID, projectID uuid.UUID) authz.Check {
 	resourceID := serverID
 	if toolsetID.Valid {
@@ -144,24 +121,19 @@ func metaMemberConnectCheck(serverID uuid.UUID, toolsetID uuid.NullUUID, project
 	return authz.MCPCheck(authz.ScopeMCPConnect, resourceID.String(), projectID.String())
 }
 
-// errGatewayMemberUnreachable marks a workload grant for a stored gateway
-// refused because the workload reaches none of the gateway's members. The
-// token endpoint answers it with the same invalid_grant as an untrusted
-// identity, so the answer reveals no gateway, member, or grant, but the
-// refusal is logged under its own reason.
+// errGatewayMemberUnreachable refuses a gateway workload grant whose workload
+// reaches no member. It answers invalid_grant like an untrusted identity, to
+// reveal nothing, but is logged under its own reason.
 var errGatewayMemberUnreachable = errors.New("workload reaches no member of this gateway")
 
-// gatewayWorkloadReach is the members of a stored gateway a workload grant's
-// preflight found the workload reaches.
+// gatewayWorkloadReach is the members a workload grant's preflight admitted.
 type gatewayWorkloadReach struct {
-	// members is the mcp_servers id of each member the preflight admitted,
-	// public or private: a workload is held to mcp:connect on both.
+	// members holds each admitted member's mcp_servers id.
 	members map[uuid.UUID]struct{}
 }
 
-// resolveGatewayWorkloadReach admits a stored gateway's live members for an
-// admitted workload, as its requests will, and refuses a workload that
-// reaches none of them: a session for an empty gateway serves nothing.
+// resolveGatewayWorkloadReach admits a gateway's members for a workload as
+// its requests will, and refuses one that reaches none.
 func (s *Service) resolveGatewayWorkloadReach(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (context.Context, gatewayWorkloadReach, error) {
 	reach := gatewayWorkloadReach{members: map[uuid.UUID]struct{}{}}
 	ctx, members, err := s.resolveEndpointMemberSnapshot(withMandatoryAdmission(ctx), logger, mandatorySurfaceTokenIssuance, endpoint)
@@ -177,12 +149,9 @@ func (s *Service) resolveGatewayWorkloadReach(ctx context.Context, logger *slog.
 	return ctx, reach, nil
 }
 
-// freshMemberChecks re-reads the gateway's servable members through db, the
-// issuance transaction, and returns the connect check of each member the
-// preflight reached that still serves, so issuance never counts a member
-// removed, disabled, or rewired since the preflight read it, nor a hosted
-// member whose toolset no longer serves and so reads as nonexistent on
-// drill-down.
+// freshMemberChecks re-reads membership in the issuance transaction and
+// returns the connect check of each preflight member that still serves, so a
+// member removed, disabled, or whose toolset stopped serving is not counted.
 func (r gatewayWorkloadReach) freshMemberChecks(ctx context.Context, db toolsets_repo.DBTX, endpoint *ResolvedMcpEndpoint) ([]authz.Check, error) {
 	rows, err := metamcprepo.New(db).ListServableMetaMCPMembers(ctx, metamcprepo.ListServableMetaMCPMembersParams{
 		MetaMcpServerID: endpoint.MetaMcpServerID.UUID,
@@ -210,8 +179,7 @@ func (r gatewayWorkloadReach) freshMemberChecks(ctx context.Context, db toolsets
 	return checks, nil
 }
 
-// gatewayMemberReached reports whether freshly loaded authority allows any of
-// checks, the connect check of each member issuance still counts.
+// gatewayMemberReached reports whether any of checks is allowed.
 func gatewayMemberReached(ctx context.Context, engine *authz.Engine, checks []authz.Check) (bool, error) {
 	for _, check := range checks {
 		allowed, err := engine.Evaluate(ctx, check)

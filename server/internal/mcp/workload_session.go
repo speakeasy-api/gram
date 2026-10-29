@@ -90,8 +90,8 @@ func encodeIssuerWorkloadSessionPolicy(issuerProjectID uuid.UUID, version runtim
 }
 
 // loadWorkloadSessionCredential validates the stored ceiling of a session
-// minted for the endpoint's own resource, one MCP server or a stored gateway,
-// against the endpoint it is being presented to.
+// minted for the endpoint's own resource against the endpoint it is being
+// presented to.
 //
 // The stored policy is re-encoded and compared byte for byte with the policy
 // this endpoint would mint, so a row edited to name another resource cannot
@@ -244,14 +244,10 @@ func (s *Service) admitWorkloadSession(ctx context.Context, organizationID strin
 // else could accept it. A session minted for all of the issuer's servers is
 // only out of reach here, and stays valid at the others.
 //
-// A stored gateway has no single server to check. Either session enters it,
-// and each request admits every live member against the same three policies.
-// A gateway session whose agent has lost every member is therefore served an
-// empty member list rather than withdrawn with invalid_token, as a
-// single-server session is when its one server refuses it. A gateway's
-// members and grants change independently of the session, so a member granted
-// or added later serves the same session until it expires; an empty gateway
-// says nothing final about the token.
+// A stored gateway has no single server to check: each request admits its
+// members instead. A gateway session that reaches no member gets an empty
+// list rather than invalid_token, because members and grants can change while
+// the session lives; an empty gateway says nothing final about the token.
 func (s *Service) requireWorkloadSessionAuthorization(ctx context.Context, endpoint *ResolvedMcpEndpoint, reach workloadSessionReach) (context.Context, error) {
 	if agentGatewayAddressable(endpoint) {
 		return ctx, nil

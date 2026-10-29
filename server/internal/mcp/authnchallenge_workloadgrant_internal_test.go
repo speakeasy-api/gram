@@ -159,11 +159,8 @@ func TestRecheckWorkloadGrantInferenceUsesFreshPoliciesWithoutChallengeLogging(t
 	}
 }
 
-// A grant for a stored gateway rechecks the members issuance still counts
-// against the freshly loaded ceiling, agent, and owner policies: losing any
-// one of them on every member refuses the session, as having no member left
-// does, and one member still reached keeps it. A public member is rechecked
-// like a private one.
+// One member still reached keeps a gateway grant; losing the ceiling, agent,
+// or owner on every member refuses it, public members included.
 func TestRecheckWorkloadGrantGatewayUsesFreshPoliciesPerMember(t *testing.T) {
 	t.Parallel()
 	project := uuid.New()
@@ -185,8 +182,6 @@ func TestRecheckWorkloadGrantGatewayUsesFreshPoliciesPerMember(t *testing.T) {
 		metaMemberConnectCheck(other, uuid.NullUUID{}, project),
 		metaMemberConnectCheck(uuid.New(), uuid.NullUUID{UUID: reachable, Valid: true}, project),
 	}
-	// The preflight admitted only a public member, which the agent's grant on
-	// it let through.
 	publicMember := []authz.Check{metaMemberConnectCheck(reachable, uuid.NullUUID{}, project)}
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{UserID: "owner", ActiveOrganizationID: "test-org"}, urn.NewPrincipal(urn.PrincipalTypeUser, "owner"))
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
@@ -243,9 +238,6 @@ func TestRecheckWorkloadGrantGatewayUsesFreshPoliciesPerMember(t *testing.T) {
 	}
 }
 
-// A gateway grant refused for reaching no member is logged under its own
-// reason, apart from an agent that refused the workload; both are refusals,
-// answered with invalid_grant.
 func TestWorkloadGrantAdmissionRefusalNamesAnUnreachableGateway(t *testing.T) {
 	t.Parallel()
 

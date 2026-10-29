@@ -34,31 +34,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// workloadGatewayFixture is a stored gateway on the workload fixture's user
-// session issuer with two private members. The fixture's agent may connect to
-// one of them; its owner may connect to both.
+// workloadGatewayFixture is a stored gateway on the workload fixture's issuer
+// with two private members: the agent may connect to one, its owner to both.
 type workloadGatewayFixture struct {
 	workloadGrantFixture
 
-	// slug is the gateway's MCP slug.
-	slug string
-
-	// resource is the gateway's canonical URL on the MCP host.
+	slug     string
 	resource string
+	metaID   uuid.UUID
 
-	// metaID is the gateway's meta_mcp_servers id.
-	metaID uuid.UUID
-
-	// granted is the slug of the member the agent may connect to.
-	granted string
-
-	// grantedServerID is the mcp_servers id the agent's grant names.
+	// granted is the member the agent may connect to, by grantID.
+	granted         string
 	grantedServerID uuid.UUID
+	grantID         uuid.UUID
 
-	// grantID is the agent's mcp:connect grant on the granted member.
-	grantID uuid.UUID
-
-	// denied is the slug of the member the agent has no grant on.
+	// denied is the member the agent has no grant on.
 	denied string
 }
 
@@ -68,7 +58,6 @@ func newWorkloadGatewayFixture(t *testing.T) workloadGatewayFixture {
 	return newWorkloadGatewayFixtureFrom(t, newWorkloadGrantFixture(t))
 }
 
-// newWorkloadGatewayFixtureFrom builds the gateway on f's issuer and project.
 func newWorkloadGatewayFixtureFrom(t *testing.T, f workloadGrantFixture) workloadGatewayFixture {
 	t.Helper()
 
@@ -94,8 +83,7 @@ func newWorkloadGatewayFixtureFrom(t *testing.T, f workloadGrantFixture) workloa
 	}
 }
 
-// anotherGateway is a second stored gateway on the fixture's issuer and in its
-// project, with no members yet.
+// anotherGateway is a second, empty gateway on the same issuer and project.
 func (g workloadGatewayFixture) anotherGateway(t *testing.T) workloadGatewayFixture {
 	t.Helper()
 
@@ -107,8 +95,7 @@ func (g workloadGatewayFixture) anotherGateway(t *testing.T) workloadGatewayFixt
 	return other
 }
 
-// seedPublicMember attaches a public remote member to the gateway, on which
-// no grant names the agent, and returns its slug and mcp_servers id.
+// seedPublicMember attaches a public member the agent has no grant on.
 func (g workloadGatewayFixture) seedPublicMember(t *testing.T) (string, uuid.UUID) {
 	t.Helper()
 
@@ -118,15 +105,13 @@ func (g workloadGatewayFixture) seedPublicMember(t *testing.T) (string, uuid.UUI
 	return slug, mcpServerBySlug(t, ctx, g.ti, g.fx.target.ProjectID, slug)
 }
 
-// grantAgent grants the fixture's agent mcp:connect on resourceID.
 func (g workloadGatewayFixture) grantAgent(t *testing.T, resourceID uuid.UUID) uuid.UUID {
 	t.Helper()
 
 	return seedPrincipalMCPConnectGrant(t, g.fixtureContext(t), g.ti, g.fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, g.agentID.String()), resourceID)
 }
 
-// projectConnectGrant is mcp:connect on every MCP server in the fixture's
-// project, a ceiling that bounds nothing within it.
+// projectConnectGrant is a ceiling that bounds nothing in the project.
 func (g workloadGatewayFixture) projectConnectGrant() authz.Grant {
 	return authz.Grant{
 		PrincipalUrn: "",
@@ -140,8 +125,6 @@ func (g workloadGatewayFixture) projectConnectGrant() authz.Grant {
 	}
 }
 
-// agentKey mints an organization-wide API key for the fixture's agent whose
-// own ceiling is ceiling.
 func (g workloadGatewayFixture) agentKey(t *testing.T, ceiling ...authz.Grant) string {
 	t.Helper()
 
@@ -166,8 +149,8 @@ func (g workloadGatewayFixture) agentKey(t *testing.T, ceiling ...authz.Grant) s
 	return token
 }
 
-// principalCredential mints a principal credential for the fixture's agent in
-// its project, authorized by the agent's owner, who may read the project.
+// principalCredential mints a credential for the agent, authorized by its
+// owner, who needs project read to authorize one.
 func (g workloadGatewayFixture) principalCredential(t *testing.T) string {
 	t.Helper()
 
@@ -182,7 +165,6 @@ func (g workloadGatewayFixture) principalCredential(t *testing.T) string {
 	return token
 }
 
-// callTool calls one of the gateway's tools with token.
 func (g workloadGatewayFixture) callTool(t *testing.T, token, tool string, arguments map[string]any) map[string]json.RawMessage {
 	t.Helper()
 
@@ -195,8 +177,6 @@ func (g workloadGatewayFixture) callTool(t *testing.T, token, tool string, argum
 	return decodeRPCResponse(t, w)
 }
 
-// seedToolsetMember attaches a private member server fronting toolsetID and
-// returns its slug.
 func (g workloadGatewayFixture) seedToolsetMember(t *testing.T, toolsetID uuid.UUID) string {
 	t.Helper()
 
@@ -219,7 +199,6 @@ func (g workloadGatewayFixture) seedToolsetMember(t *testing.T, toolsetID uuid.U
 	return slug
 }
 
-// endpoint is the gateway as the MCP side resolves it.
 func (g workloadGatewayFixture) endpoint() *mcp.ResolvedMcpEndpoint {
 	return &mcp.ResolvedMcpEndpoint{
 		OrganizationID:      g.fx.orgID,
@@ -231,7 +210,6 @@ func (g workloadGatewayFixture) endpoint() *mcp.ResolvedMcpEndpoint {
 	}
 }
 
-// attachMember makes serverID a member of the gateway.
 func (g workloadGatewayFixture) attachMember(t *testing.T, serverID uuid.UUID) {
 	t.Helper()
 
@@ -244,8 +222,8 @@ func (g workloadGatewayFixture) attachMember(t *testing.T, serverID uuid.UUID) {
 	require.NoError(t, err)
 }
 
-// recreate deletes the gateway and creates another at its slug, on the same
-// issuer and in the same project, whose one member is the granted server.
+// recreate deletes the gateway and creates another at its slug, issuer and
+// project, serving the granted member.
 func (g workloadGatewayFixture) recreate(t *testing.T) workloadGatewayFixture {
 	t.Helper()
 
@@ -264,8 +242,8 @@ func (g workloadGatewayFixture) recreate(t *testing.T) workloadGatewayFixture {
 	return recreated
 }
 
-// requireInvalidToken asserts the gateway refuses token with invalid_token,
-// which tells a workload to exchange for a new session.
+// requireInvalidToken asserts invalid_token, which tells a workload to
+// exchange again.
 func (g workloadGatewayFixture) requireInvalidToken(t *testing.T, token string) {
 	t.Helper()
 
@@ -277,8 +255,7 @@ func (g workloadGatewayFixture) requireInvalidToken(t *testing.T, token string) 
 	require.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`)
 }
 
-// requireUnknownServer asserts describe_server answers token as if the member
-// did not exist.
+// requireUnknownServer asserts the member reads as nonexistent to token.
 func (g workloadGatewayFixture) requireUnknownServer(t *testing.T, token, slug string) {
 	t.Helper()
 
@@ -286,8 +263,7 @@ func (g workloadGatewayFixture) requireUnknownServer(t *testing.T, token, slug s
 	require.Contains(t, string(envelope["error"]), "unknown server")
 }
 
-// exchangeAtGateway posts the clientless workload grant, naming the gateway as
-// its resource, to the gateway's own token endpoint.
+// exchangeAtGateway posts a workload grant naming the gateway as its resource.
 func (g workloadGatewayFixture) exchangeAtGateway(t *testing.T) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -300,8 +276,6 @@ func (g workloadGatewayFixture) exchangeAtGateway(t *testing.T) *httptest.Respon
 	return postForm(t, g.ti, g.slug, "token", form)
 }
 
-// listServers calls the gateway's list_servers tool with token and returns
-// the slugs it lists.
 func (g workloadGatewayFixture) listServers(t *testing.T, token string) []string {
 	t.Helper()
 
@@ -325,9 +299,6 @@ func (g workloadGatewayFixture) listServers(t *testing.T, token string) []string
 	return slugs
 }
 
-// A workload naming a stored gateway as its resource receives a session bound
-// to the gateway, and the gateway lists exactly the members its agent and the
-// agent's owner may both connect to.
 func TestWorkloadGateway_ResourceGrantServesReachableMembers(t *testing.T) {
 	t.Parallel()
 
@@ -352,9 +323,6 @@ func TestWorkloadGateway_ResourceGrantServesReachableMembers(t *testing.T) {
 	require.Equal(t, []string{g.granted}, g.listServers(t, token))
 }
 
-// A headless device resolves a gateway URL to the gateway's own token
-// endpoint, naming the gateway as the resource, and the exchange it is told to
-// make succeeds.
 func TestWorkloadGateway_TokenTargetResolvesTheGateway(t *testing.T) {
 	t.Parallel()
 
@@ -376,9 +344,8 @@ func TestWorkloadGateway_TokenTargetResolvesTheGateway(t *testing.T) {
 	require.Equal(t, []string{g.granted}, g.listServers(t, decodeSharedTokenResponse(t, w).AccessToken))
 }
 
-// A gateway session's audience is the gateway: it reaches the fixture's own
-// server as a member through the gateway, and is refused with invalid_token
-// at that server's own endpoint.
+// The session reaches the fixture's server through the gateway, but not at
+// that server's own endpoint.
 func TestWorkloadGateway_ResourceGrantSessionIsBoundToTheGateway(t *testing.T) {
 	t.Parallel()
 
@@ -395,8 +362,6 @@ func TestWorkloadGateway_ResourceGrantSessionIsBoundToTheGateway(t *testing.T) {
 	require.Contains(t, refused.Header().Get("WWW-Authenticate"), `error="invalid_token"`, "a gateway session must not admit at a member's own server")
 }
 
-// A gateway session is refused at another gateway on the same issuer and in
-// the same project, even one serving the same member.
 func TestWorkloadGateway_SessionIsRefusedAtAnotherGateway(t *testing.T) {
 	t.Parallel()
 
@@ -412,10 +377,7 @@ func TestWorkloadGateway_SessionIsRefusedAtAnotherGateway(t *testing.T) {
 	other.requireInvalidToken(t, token)
 }
 
-// A workload whose agent reaches no member of the gateway is refused at the
-// token endpoint rather than handed a session that serves nothing. The answer
-// is the invalid_grant an untrusted identity gets, and the log names the
-// reason.
+// The refusal answers like an untrusted identity, but logs its own reason.
 func TestWorkloadGateway_ResourceGrantRefusedWhenNoMemberIsReachable(t *testing.T) {
 	t.Parallel()
 
@@ -431,7 +393,6 @@ func TestWorkloadGateway_ResourceGrantRefusedWhenNoMemberIsReachable(t *testing.
 	require.NotContains(t, logs.String(), "agent_admission_denied")
 }
 
-// deleteToolset deletes the toolset a hosted member fronts.
 func (g workloadGatewayFixture) deleteToolset(t *testing.T, toolsetID uuid.UUID) {
 	t.Helper()
 
@@ -442,10 +403,6 @@ func (g workloadGatewayFixture) deleteToolset(t *testing.T, toolsetID uuid.UUID)
 	require.NoError(t, err)
 }
 
-// Issuance decides on the membership its own transaction reads: a member the
-// preflight reached but that has since left the gateway is not counted, nor is
-// one the preflight did not reach, nor a hosted member whose toolset has since
-// stopped serving. A hosted member's check names its toolset.
 func TestWorkloadGateway_IssuanceRereadsMembership(t *testing.T) {
 	t.Parallel()
 
@@ -474,9 +431,6 @@ func TestWorkloadGateway_IssuanceRereadsMembership(t *testing.T) {
 	require.Equal(t, []string{g.grantedServerID.String()}, resources, "a hosted member whose toolset stopped serving is not counted")
 }
 
-// A hosted member the agent may connect to, but whose toolset no longer
-// serves, reads as nonexistent on drill-down, so it does not make a session
-// issuable on its own.
 func TestWorkloadGateway_UnservableHostedMemberDoesNotMakeASessionIssuable(t *testing.T) {
 	t.Parallel()
 
@@ -493,9 +447,8 @@ func TestWorkloadGateway_UnservableHostedMemberDoesNotMakeASessionIssuable(t *te
 	requireWorkloadGrantRefused(t, g.exchangeAtGateway(t))
 }
 
-// Each request re-admits the gateway's members against the agent's live
-// policy, so a grant revoked after issuance drops its member on the next
-// request while the session itself stays valid.
+// A revoked grant drops its member on the next request; the session stays
+// valid.
 func TestWorkloadGateway_ResourceGrantRechecksMembersOnEveryRequest(t *testing.T) {
 	t.Parallel()
 
@@ -512,9 +465,6 @@ func TestWorkloadGateway_ResourceGrantRechecksMembersOnEveryRequest(t *testing.T
 	require.Empty(t, g.listServers(t, token))
 }
 
-// The session a shared authorization server mints for all of an issuer's MCP
-// servers enters a stored gateway on that issuer and is served the members
-// its agent reaches, where it used to be refused as out of reach.
 func TestWorkloadGateway_IssuerWideSessionServesReachableMembers(t *testing.T) {
 	t.Parallel()
 
@@ -531,8 +481,6 @@ func TestWorkloadGateway_IssuerWideSessionServesReachableMembers(t *testing.T) {
 	require.NoError(t, err, "the same session still reaches the issuer's other servers")
 }
 
-// The owner's live policy caps the agent at every member: an agent granted a
-// member its owner may no longer connect to does not reach it.
 func TestWorkloadGateway_OwnerPolicyCapsMembers(t *testing.T) {
 	t.Parallel()
 
@@ -556,16 +504,12 @@ func TestWorkloadGateway_OwnerPolicyCapsMembers(t *testing.T) {
 	require.Equal(t, []string{g.granted}, g.listServers(t, token))
 }
 
-// An agent key enters a stored gateway on its project's issuer, and the
-// gateway lists the members its key ceiling, its agent, and its owner all
-// reach.
 func TestWorkloadGateway_AgentKeyServesReachableMembers(t *testing.T) {
 	t.Parallel()
 
 	g := newWorkloadGatewayFixture(t)
 	deniedServerID := mcpServerBySlug(t, g.fixtureContext(t), g.ti, g.fx.target.ProjectID, g.denied)
-	// The agent may connect to both members, but the key's own ceiling names
-	// only one.
+	// The agent may connect to both; the key's ceiling names one.
 	g.grantAgent(t, deniedServerID)
 	token := g.agentKey(t, authz.Grant{
 		PrincipalUrn: "",
@@ -581,9 +525,8 @@ func TestWorkloadGateway_AgentKeyServesReachableMembers(t *testing.T) {
 	require.Equal(t, []string{g.granted}, g.listServers(t, token))
 }
 
-// A public member is open to people, but a workload reaches it only through
-// its agent's mcp:connect, as at a public single server: without the grant it
-// is neither listed nor addressable, and with it the member is served.
+// As at a public single server, a workload needs its agent's mcp:connect on a
+// public member.
 func TestWorkloadGateway_PublicMemberNeedsTheAgentsGrant(t *testing.T) {
 	t.Parallel()
 
@@ -600,8 +543,6 @@ func TestWorkloadGateway_PublicMemberNeedsTheAgentsGrant(t *testing.T) {
 	require.ElementsMatch(t, []string{g.granted, public}, g.listServers(t, token))
 }
 
-// A gateway whose only member is public issues no session to a workload whose
-// agent may not connect to that member, and issues one once it may.
 func TestWorkloadGateway_PublicMemberAloneDoesNotMakeASessionIssuable(t *testing.T) {
 	t.Parallel()
 
@@ -616,8 +557,6 @@ func TestWorkloadGateway_PublicMemberAloneDoesNotMakeASessionIssuable(t *testing
 	require.Equal(t, []string{public}, g.listServers(t, decodeSharedTokenResponse(t, w).AccessToken))
 }
 
-// An agent key whose ceiling spans the project still reaches a public member
-// only through its agent's own mcp:connect.
 func TestWorkloadGateway_AgentKeyPublicMemberNeedsTheAgentsGrant(t *testing.T) {
 	t.Parallel()
 
@@ -632,8 +571,6 @@ func TestWorkloadGateway_AgentKeyPublicMemberNeedsTheAgentsGrant(t *testing.T) {
 	require.ElementsMatch(t, []string{g.granted, public}, g.listServers(t, token))
 }
 
-// A principal credential reaches a public member only through its agent's
-// own mcp:connect.
 func TestWorkloadGateway_PrincipalCredentialPublicMemberNeedsTheAgentsGrant(t *testing.T) {
 	t.Parallel()
 
@@ -648,9 +585,6 @@ func TestWorkloadGateway_PrincipalCredentialPublicMemberNeedsTheAgentsGrant(t *t
 	require.ElementsMatch(t, []string{g.granted, public}, g.listServers(t, token))
 }
 
-// A hosted member, fronting a public toolset, reaches a workload only through
-// its agent's mcp:connect on the toolset; with it, the member's tools are
-// described.
 func TestWorkloadGateway_HostedPublicMemberNeedsTheAgentsGrant(t *testing.T) {
 	t.Parallel()
 
@@ -671,8 +605,6 @@ func TestWorkloadGateway_HostedPublicMemberNeedsTheAgentsGrant(t *testing.T) {
 	require.Contains(t, string(result.StructuredContent), hosted.slug+"--alpha_tool")
 }
 
-// A person keeps reaching a public member with no grant on it, while private
-// members still need one.
 func TestWorkloadGateway_PersonReachesPublicMemberWithoutAGrant(t *testing.T) {
 	t.Parallel()
 
@@ -684,9 +616,6 @@ func TestWorkloadGateway_PersonReachesPublicMemberWithoutAGrant(t *testing.T) {
 	require.Equal(t, []string{public}, g.listServers(t, token))
 }
 
-// A gateway session names its gateway, not only its URL: once the gateway is
-// deleted and another takes its slug on the same issuer and project, the old
-// session is refused there, and a fresh exchange is served.
 func TestWorkloadGateway_SessionIsRefusedAtARecreatedGateway(t *testing.T) {
 	t.Parallel()
 
@@ -704,10 +633,6 @@ func TestWorkloadGateway_SessionIsRefusedAtARecreatedGateway(t *testing.T) {
 	require.Equal(t, []string{g.granted}, recreated.listServers(t, decodeSharedTokenResponse(t, w).AccessToken))
 }
 
-// An organization-wide agent key enters a stored gateway in another project of
-// its organization only within its own ceiling: a ceiling naming the
-// fixture's project reaches none of that gateway's members, and one spanning
-// the organization reaches the member its agent is granted.
 func TestWorkloadGateway_OrganizationWideAgentKeyAtAnotherProjectsGateway(t *testing.T) {
 	t.Parallel()
 
@@ -733,10 +658,8 @@ func TestWorkloadGateway_OrganizationWideAgentKeyAtAnotherProjectsGateway(t *tes
 	require.Equal(t, []string{member}, other.listServers(t, organizationWide))
 }
 
-// A workload calls a member that signs in upstream with its agent owner's own
-// connection, the credential it would use at that member's own server, and
-// never calls a member its agent is not granted, though the owner holds a
-// connection for that one too.
+// A workload calls an OAuth member with its agent owner's own connection, as
+// on direct servers, and never calls an ungranted one.
 func TestWorkloadGateway_OAuthMemberUsesTheOwnersConnection(t *testing.T) {
 	t.Parallel()
 
@@ -750,8 +673,7 @@ func TestWorkloadGateway_OAuthMemberUsesTheOwnersConnection(t *testing.T) {
 	g.grantAgent(t, seedMetaMemberWithUpstream(t, ctx, g.ti.conn, project, g.metaID, "Granted upstream", granted, 0, grantedUpstream.url))
 	seedMetaMemberWithUpstream(t, ctx, g.ti.conn, project, g.metaID, "Denied upstream", denied, 1, deniedUpstream.url)
 
-	// The owner's own connections to both upstreams, through clients of the
-	// gateway's issuer. A workload's owner credential needs project read.
+	// A workload's owner credential needs project read.
 	owner := urn.NewUserSubject(g.fx.userID)
 	seedPrincipalGrant(t, ctx, g.ti, g.fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, g.fx.userID), authz.ScopeProjectRead, project.String())
 	grantedClient := createConsentRemoteClient(t, ctx, g.ti.conn, project, g.fx.orgID, "owner-granted-"+suffix, "", []uuid.UUID{issuer})

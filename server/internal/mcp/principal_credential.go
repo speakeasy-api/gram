@@ -46,9 +46,8 @@ func (s *Service) authenticatePrincipalCredential(ctx context.Context, token str
 // an issuer-gated endpoint the way an agent API key is admitted: in the
 // endpoint's tenant, through credential or workload admission and the
 // endpoint's mcp:connect check, or each member's for a stored gateway. Unlike
-// an agent key, it does not re-evaluate
-// the agent authorization rollout: only the server mints principal
-// credentials.
+// an agent key, it does not re-evaluate the agent authorization rollout: only
+// the server mints principal credentials.
 func (s *Service) authenticateIssuerGatePrincipalCredential(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, error) {
 	authed, err := s.authenticatePrincipalCredential(ctx, token)
 	if err != nil {

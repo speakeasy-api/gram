@@ -372,8 +372,7 @@ func (grant *workloadGrant) assertionKeySource(ctx context.Context, tenancy work
 
 // workloadAssertionGrantAdvertised reports whether the endpoint's metadata
 // lists the grant: the deployment serves it, and the endpoint can carry the
-// policy a workload session is minted with, for one MCP server or a stored
-// gateway.
+// policy a workload session is minted with.
 //
 // Deliberately decided from the resolved endpoint alone. This runs on
 // `/.well-known` metadata, which every MCP client hits during discovery
@@ -507,8 +506,8 @@ type workloadGrantIssuance struct {
 	projectID *uuid.UUID
 
 	// endpoint is the MCP server or stored gateway a grant naming a resource
-	// is minted for; admission also checks the agent may connect to the
-	// server, or to at least one of the gateway's members. Nil for a session
+	// is minted for; admission also checks the agent may connect to it, or to
+	// a member of the gateway. Nil for a session
 	// minted for all of an issuer's MCP servers, each of which checks on use.
 	endpoint *ResolvedMcpEndpoint
 
@@ -734,10 +733,8 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	return minted, nil
 }
 
-// workloadGrantAdmissionRefusal classifies a verified workload grant that
-// admission did not let through: a stored gateway the workload reaches no
-// member of, an agent or owner that refused it, or a decision that could not
-// be reached and so is worth retrying.
+// workloadGrantAdmissionRefusal classifies a failed admission as a refusal or,
+// when no decision was reached, a retryable outage.
 func workloadGrantAdmissionRefusal(err error) error {
 	switch {
 	case errors.Is(err, errGatewayMemberUnreachable):
@@ -795,9 +792,8 @@ func retryAfterSeconds(d time.Duration) string {
 // writing challenge logs through the pool while the issuance transaction holds a
 // connection and issuer lock. The preflight checks record the normal challenge.
 //
-// A stored gateway rechecks gatewayChecks, the connect check of each member
-// its preflight admitted that the issuance transaction still reads as one,
-// rather than admitting its membership again on another pool connection.
+// A stored gateway rechecks gatewayChecks, its members re-read in the
+// transaction, rather than admitting them again on another pool connection.
 func (s *Service) recheckWorkloadGrantAuthorization(ctx context.Context, grant workloadGrantIssuance, gatewayChecks []authz.Check) error {
 	var checks []authz.Check
 	switch {

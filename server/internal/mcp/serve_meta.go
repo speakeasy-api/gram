@@ -108,10 +108,9 @@ type metaGateContext struct {
 	connectURL string
 }
 
-// publicMembersNeedConnect reports whether a public member still needs the
-// caller's mcp:connect: at a stored gateway, for a delegatedCaller. Derived
-// gateways keep public members open: the agent gateway serves its key the
-// organization's public servers, and the organization gateway admits people
+// publicMembersNeedConnect reports whether a public member needs the caller's
+// mcp:connect: for a delegatedCaller at a stored gateway. The agent gateway
+// serves its key public servers, and the organization gateway admits people
 // only.
 func (g *metaGateContext) publicMembersNeedConnect(ctx context.Context) bool {
 	return g.agentID == uuid.Nil && !g.organizationGateway && delegatedCaller(ctx)

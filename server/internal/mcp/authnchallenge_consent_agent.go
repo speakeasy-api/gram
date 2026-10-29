@@ -52,9 +52,7 @@ type consentHumanAuthorization struct {
 func agentAuthorizationTarget(endpoint *ResolvedMcpEndpoint) (*AgentAuthorizationTarget, bool) {
 	// Meta-MCP runtime authorization is evaluated against each member MCP
 	// resource, not the gateway ID. Keep agent selection disabled until the
-	// target can represent and revalidate that member set. Agent keys and
-	// workload sessions reach a stored gateway without a target, through
-	// agentGatewayAddressable.
+	// target can represent and revalidate that member set.
 	if endpoint.MetaMcpServerID.Valid {
 		return nil, false
 	}

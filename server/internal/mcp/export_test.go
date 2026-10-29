@@ -128,9 +128,8 @@ func (s *Service) RecordConnectionPopupGrant(ctx context.Context, grant remotese
 	return s.recordConnectionPopupGrant(ctx, grant)
 }
 
-// FreshGatewayMemberResources re-reads endpoint's members on db, as workload
-// issuance does in its transaction after its preflight reached the members in
-// reached, and returns the resource each remaining connect check names.
+// FreshGatewayMemberResources runs issuance's member re-read for a preflight
+// that reached reached, returning the resource of each remaining check.
 func FreshGatewayMemberResources(ctx context.Context, db *pgxpool.Pool, endpoint *ResolvedMcpEndpoint, reached ...uuid.UUID) ([]string, error) {
 	reach := gatewayWorkloadReach{members: make(map[uuid.UUID]struct{}, len(reached))}
 	for _, id := range reached {

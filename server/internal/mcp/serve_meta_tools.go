@@ -575,12 +575,9 @@ func (s *Service) loadMemberToolset(
 	return toolset, hosting, toolset.ProjectID, nil
 }
 
-// loadServableMemberToolset loads a hosted member's toolset through db and
-// reports whether the member serves it: the toolset exists in the member's
-// project, which may differ from the request's for an agent gateway, and a
-// member that is the toolset's canonical wrapper serves only while the
-// toolset is hosted, as direct wrapper dispatch requires. Independently
-// configured servers use their own visibility, checked at member admission.
+// loadServableMemberToolset loads a hosted member's toolset from the member's
+// own project and reports whether it serves. As in direct wrapper dispatch,
+// only the canonical wrapper gates on the toolset's hosting state.
 func loadServableMemberToolset(ctx context.Context, db toolsets_repo.DBTX, serverID, toolsetID, projectID uuid.UUID) (*toolsets_repo.Toolset, hostingstate.Hosting, bool, error) {
 	toolset, err := toolsets_repo.New(db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: toolsetID, ProjectID: projectID})
 	switch {
@@ -600,9 +597,9 @@ func loadServableMemberToolset(ctx context.Context, db toolsets_repo.DBTX, serve
 }
 
 // memberToolsetConnectAllowed applies a non-public toolset's own mcp:connect
-// gate, matching ServeToolsetResolved's connection check. connectPublic
-// applies it to a public toolset as well, for a delegated caller at a stored
-// gateway. Grants context was prepared when the member snapshot was resolved.
+// gate, matching ServeToolsetResolved's connection check, or a public one's
+// when connectPublic is set. Grants context was prepared when the member
+// snapshot was resolved.
 func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public, connectPublic bool) (bool, error) {
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())
 	visibility := mandatoryVisibility(public)

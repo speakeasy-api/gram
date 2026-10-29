@@ -63,8 +63,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 	if member.serverID == toolset.ID && !hosting.Enabled {
 		return false, false, nil
 	}
-	// Derived gateways keep public toolsets open, as admission keeps their
-	// public members open.
+	// Derived gateways keep public toolsets open.
 	allowed, err := s.memberToolsetConnectAllowed(ctx, shadow, shadowSurface, true, &toolset, hosting.Public, false)
 	if err != nil || !allowed {
 		return false, false, err

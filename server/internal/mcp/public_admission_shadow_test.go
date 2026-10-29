@@ -110,8 +110,6 @@ func TestShadowPrivateAndUnknownProxyAdmission(t *testing.T) {
 	}
 }
 
-// With connectPublic, a public toolset is reached only on the caller's
-// mcp:connect, as a private one is.
 func TestMemberToolsetConnectPublicChecksPublicToolsets(t *testing.T) {
 	t.Parallel()
 	h := newShadowHarness(t, false)

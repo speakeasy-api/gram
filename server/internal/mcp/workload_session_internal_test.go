@@ -60,8 +60,6 @@ func (f workloadSessionCeilingFixture) issuerCeiling(t *testing.T, projectID uui
 	return encoded
 }
 
-// gateway is a stored gateway on the fixture's issuer, in its project and
-// organization.
 func (f workloadSessionCeilingFixture) gateway() *ResolvedMcpEndpoint {
 	return &ResolvedMcpEndpoint{
 		OrganizationID:      f.endpoint.OrganizationID,
@@ -185,8 +183,6 @@ func TestLoadWorkloadSessionCredential_RejectsIssuerWideCeiling(t *testing.T) {
 	require.Error(t, err)
 }
 
-// A gateway session's ceiling is mcp:connect on every MCP server in the
-// gateway's project, plus mcp:connect on the gateway itself, which names it.
 func TestEncodeGatewayWorkloadSessionPolicy_NamesItsGateway(t *testing.T) {
 	t.Parallel()
 
@@ -222,9 +218,8 @@ func TestLoadWorkloadSessionCredential_GatewayAcceptsItsOwnCeiling(t *testing.T)
 	require.NoError(t, err)
 }
 
-// A gateway accepts only the ceiling minted for it. In particular it refuses
-// the ceiling of an earlier gateway at the same URL, issuer and project, so a
-// session outlives neither the gateway it was minted for nor a replacement.
+// "replaced gateway" is a gateway recreated at the same URL, issuer and
+// project.
 func TestLoadWorkloadSessionCredential_GatewayRejectsAnyOtherCeiling(t *testing.T) {
 	t.Parallel()
 
@@ -255,8 +250,6 @@ func TestLoadWorkloadSessionCredential_GatewayRejectsAnyOtherCeiling(t *testing.
 	}
 }
 
-// A gateway's ceiling authorizes nothing outside it: not at a single server,
-// and not on the audience naming all of the issuer's MCP servers.
 func TestLoadWorkloadSessionCredential_GatewayCeilingIsRefusedElsewhere(t *testing.T) {
 	t.Parallel()
 
