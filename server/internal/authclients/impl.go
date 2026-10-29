@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -51,6 +52,7 @@ type Service struct {
 	auth   *auth.Auth
 	authz  *authz.Engine
 	audit  *audit.Logger
+	enc    *encryption.Client
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -63,6 +65,7 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	enc *encryption.Client,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("authclients"))
 
@@ -73,6 +76,7 @@ func NewService(
 		auth:   auth.New(logger, db, sessions, authzEngine),
 		authz:  authzEngine,
 		audit:  auditLogger,
+		enc:    enc,
 	}
 }
 
@@ -302,7 +306,7 @@ func (s *Service) DetachAuthClientFromMcpServer(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeUnexpected, err, "detach auth client from mcp server").LogError(ctx, logger)
 	}
 
-	if err := s.audit.LogAuthClientDetachMcpServer(ctx, dbtx, audit.LogAuthClientDetachMcpServerEvent{
+	if err := s.audit.LogAuthClientDetachMcpServer(ctx, dbtx, audit.LogAuthClientMcpServerEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        detached.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

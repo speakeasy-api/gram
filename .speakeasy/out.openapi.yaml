@@ -15690,6 +15690,198 @@ paths:
       x-speakeasy-name-override: transferOut
       x-speakeasy-react-hook:
         disabled: true
+  /rpc/authClients.attachToMcpServer:
+    post:
+      description: 'Offer an existing auth client on another MCP server instead of creating a copy. The client stays one client: changing or rotating it changes upstream behavior on every server that offers it. Offering a client grants nobody permission to use it or access to the server. Takes effect only where typed auth client resolution is enforced. Requires org:admin.'
+      operationId: attachAuthClientToMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttachAuthClientToMcpServerRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: attachAuthClientToMcpServer authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: attachToMcpServer
+      x-speakeasy-react-hook:
+        name: AttachAuthClientToMcpServer
+  /rpc/authClients.create:
+    post:
+      description: 'Create an auth client and, optionally, offer it on MCP servers. A remote_session or service_account client authenticates through an existing OAuth registration whose credential owner matches its type; a static_credential or pass_through client authenticates with its own headers. Creating a client gives nobody permission to use it: set its audience to decide who may. Takes effect only where typed auth client resolution is enforced. Requires org:admin.'
+      operationId: createAuthClient
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAuthClientRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: createAuthClient authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: CreateAuthClient
   /rpc/authClients.detachFromMcpServer:
     post:
       description: Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.
@@ -16316,6 +16508,102 @@ paths:
       x-speakeasy-name-override: setAudience
       x-speakeasy-react-hook:
         name: SetAuthClientAudience
+  /rpc/authClients.setHeaders:
+    post:
+      description: Replace the headers an auth client sends upstream. Rotating a shared client's credential changes upstream behavior on every server that offers it. Token-generating clients produce their own Authorization header, which cannot be configured. Clients created from a server's existing settings follow those settings and are edited there. Takes effect only where typed auth client resolution is enforced. Requires org:admin.
+      operationId: setAuthClientHeaders
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAuthClientHeadersRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: setAuthClientHeaders authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: setHeaders
+      x-speakeasy-react-hook:
+        name: SetAuthClientHeaders
   /rpc/authClients.setMcpServerUpstreamAuthRequirement:
     post:
       description: Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.
@@ -22204,6 +22492,18 @@ paths:
               - no_email
               - unresolved_email
               - missing
+            type: string
+        - allowEmptyValue: true
+          description: Only agent_active devices in this policy state.
+          in: query
+          name: policy_state
+          schema:
+            description: Only agent_active devices in this policy state.
+            enum:
+              - attested
+              - outdated
+              - unreported
+              - halted
             type: string
         - allowEmptyValue: true
           description: Only devices assigned to these Speakeasy users. Combined with user_emails as an OR, because a device only carries a resolved user id when the MDM's reported email matched a member.
@@ -87724,6 +88024,20 @@ components:
           description: The toolset slug exposed to the assistant.
       required:
         - toolset_slug
+    AttachAuthClientToMcpServerRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The auth client id.
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: The MCP server id.
+          format: uuid
+      required:
+        - id
+        - mcp_server_id
     AttachBindingRequestBody:
       type: object
       properties:
@@ -88035,6 +88349,33 @@ components:
         - is_required
         - is_secret
         - has_stored_value
+    AuthClientHeaderInput:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What the header is for.
+        is_required:
+          type: boolean
+          description: Whether a caller must supply the header when it is copied from the request.
+          default: false
+        is_secret:
+          type: boolean
+          description: Whether the value is secret. Secret values are stored encrypted and never returned.
+          default: false
+        name:
+          type: string
+          description: The header name.
+          minLength: 1
+        value:
+          type: string
+          description: The value to send. Omit it on a header that already stores one, with is_secret unchanged, to keep the stored value.
+        value_from_request_header:
+          type: string
+          description: The caller's request header to copy the value from, for pass-through headers.
+      description: A header an auth client sends upstream. Exactly one of value and value_from_request_header is set, except that a header already storing a value may omit both to keep it, as long as is_secret is unchanged.
+      required:
+        - name
     AuthClientServer:
       type: object
       properties:
@@ -89972,6 +90313,43 @@ components:
         - model
         - instructions
         - toolsets
+    CreateAuthClientRequestBody:
+      type: object
+      properties:
+        client_type:
+          type: string
+          description: How the client authenticates upstream.
+          enum:
+            - remote_session
+            - service_account
+            - static_credential
+            - pass_through
+        headers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthClientHeaderInput'
+          description: The headers the client sends upstream. Required for static_credential and pass_through clients. Token-generating clients produce their own Authorization header, which cannot be configured.
+        mcp_server_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: MCP servers that should offer the client.
+        name:
+          type: string
+          description: The client's name.
+          minLength: 1
+        project_id:
+          type: string
+          description: Confine the client to one project. Omit to share it across the organization's projects.
+          format: uuid
+        remote_session_client_id:
+          type: string
+          description: The OAuth registration behind a remote_session or service_account client.
+          format: uuid
+      required:
+        - client_type
+        - name
     CreateAwsIamCredentialForm:
       type: object
       properties:
@@ -92793,11 +93171,11 @@ components:
           format: int64
         agent_active:
           type: integer
-          description: Devices with an agent heartbeat within the window. What that attests depends on the matching mode and, per device, on whether the match was by serial or by email — compare against agent_active_device_attested.
+          description: Devices with an agent heartbeat or state report within the window. What that attests depends on the matching mode and, per device, on whether the match was by serial or by email — compare against agent_active_device_attested.
           format: int64
         agent_active_device_attested:
           type: integer
-          description: How many of agent_active are backed by that machine's OWN heartbeat (serial match). Under user-level matching this is 0; under device-level matching a value below agent_active means some devices fell back to the assigned-user email, which is the weaker claim.
+          description: How many of agent_active are backed by that machine's OWN heartbeat or state report (serial match). Under user-level matching this is 0; under device-level matching a value below agent_active means some devices fell back to the assigned-user email, which is the weaker claim.
           format: int64
         agent_other_device:
           type: integer
@@ -92813,6 +93191,10 @@ components:
           enum:
             - device
             - user
+        enforcement_halted:
+          type: integer
+          description: agent_active devices whose latest state report says the kill switch halted enforcement, because the reporting agent's build was blocked when it reported.
+          format: int64
         missing:
           type: integer
           description: Devices absent from the latest completed MDM snapshot.
@@ -92828,6 +93210,18 @@ components:
         organization_id:
           type: string
           description: Organization the coverage describes.
+        policy_attested:
+          type: integer
+          description: agent_active devices whose latest report applies the policy last served to the reporting user.
+          format: int64
+        policy_outdated:
+          type: integer
+          description: agent_active devices that report a different policy, or none.
+          format: int64
+        policy_unreported:
+          type: integer
+          description: agent_active devices with no state report within the window, typically an agent that predates reporting.
+          format: int64
         total_devices:
           type: integer
           description: All synced devices, including missing ones.
@@ -92855,6 +93249,10 @@ components:
         - missing
         - total_devices
         - unmanaged_agent_users
+        - policy_attested
+        - policy_outdated
+        - policy_unreported
+        - enforcement_halted
     DeviceIntegrationProvider:
       type: object
       properties:
@@ -101585,8 +101983,10 @@ components:
       properties:
         agent_last_seen_at:
           type: string
-          description: 'The device-agent heartbeat that classified this device: the machine''s own under device-level matching, otherwise its assigned user''s. Omitted when no agent has ever synced.'
+          description: 'The latest sign of life that classified this device, a policy poll or a state report: the machine''s own under device-level matching, otherwise its assigned user''s. Omitted when no agent has ever synced.'
           format: date-time
+        agent_state:
+          $ref: '#/components/schemas/ManagedDeviceAgentState'
         coverage_bucket:
           type: string
           description: Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.
@@ -101627,6 +102027,14 @@ components:
         os_version:
           type: string
           description: Operating system version.
+        policy_state:
+          type: string
+          description: 'Whether the agent that answers for an agent_active device verifiably applies its policy; agent_state.attestation says whether that agent runs on this machine. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different policy, or none. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the reporting agent''s kill switch stopped enforcement on a blocked build. Omitted for every other bucket.'
+          enum:
+            - attested
+            - outdated
+            - unreported
+            - halted
         provider:
           type: string
           description: Provider the device was synced from.
@@ -101647,6 +102055,125 @@ components:
         - coverage_bucket
         - first_seen_at
         - last_seen_at
+    ManagedDeviceAgentState:
+      type: object
+      properties:
+        applied_at:
+          type: string
+          description: When the agent first applied that etag.
+          format: date-time
+        applied_etag:
+          type: string
+          description: Etag of the policy the agent last applied.
+        arch:
+          type: string
+          description: CPU architecture, e.g. arm64.
+        attestation:
+          type: string
+          description: device when this machine's own agent sent the report, matched by serial. user when the assigned user's agent sent it, which may run on another machine.
+          enum:
+            - device
+            - user
+        auto_update:
+          type: string
+          description: 'Resolved update mode: automatic, notify, or disabled.'
+        current_blocked:
+          type: boolean
+          description: True when the agent build is in blocked_versions.
+        drift_counting_since:
+          type: string
+          description: Start of the window tools[].drift_corrections counts over. Omitted when no tool measures drift.
+          format: date-time
+        enforcement_halted:
+          type: boolean
+          description: True when the kill switch has halted policy enforcement.
+        last_rollback:
+          $ref: '#/components/schemas/ManagedDeviceRollback'
+        os:
+          type: string
+          description: Operating system, e.g. darwin.
+        pinned_target:
+          type: string
+          description: Version the organization pinned the fleet to, when set.
+        reported_at:
+          type: string
+          description: When the control plane received the report.
+          format: date-time
+        speakeasy_ui_version:
+          type: string
+          description: Version of the menu bar app.
+        speakeasy_version:
+          type: string
+          description: Version of the speakeasy CLI.
+        speakeasyd_version:
+          type: string
+          description: Version of the speakeasyd daemon.
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagedDeviceTool'
+          description: Each managed tool's outcome from the agent's last reconcile.
+        update_channel:
+          type: string
+          description: Update channel the agent follows, e.g. stable.
+      description: What a device's agent last reported it enforces. Carries no error text or user-facing message.
+      required:
+        - reported_at
+        - attestation
+        - enforcement_halted
+        - current_blocked
+        - tools
+    ManagedDeviceRollback:
+      type: object
+      properties:
+        at:
+          type: string
+          description: When the rollback happened.
+          format: date-time
+        from:
+          type: string
+          description: Version the agent rolled back from.
+        to:
+          type: string
+          description: Version the agent rolled back to.
+      description: 'A self-rollback: the updated build failed to start, so the agent restored the previous one.'
+      required:
+        - at
+    ManagedDeviceTool:
+      type: object
+      properties:
+        action_required:
+          type: boolean
+          description: True when a problem the user can fix is blocking this tool.
+        drift_corrections:
+          type: integer
+          description: Times the agent restored what it owns in this tool since drift_counting_since. Omitted when not measured.
+          format: int64
+        error_kind:
+          type: string
+          description: 'Class of a reconcile error: permission_denied, not_found, invalid_config, or unknown.'
+        layer:
+          type: string
+          description: 'Enforcement layer: user, managed, off, or unknown.'
+        outcome:
+          type: string
+          description: 'Reconcile outcome: armed, pending, skipped (tool not installed), error, unmanaged, or unknown.'
+        pending_reason:
+          type: string
+          description: 'Why a pending tool is not enforcing yet: privileged_writer_not_ready, plugin_bundle_not_cloned, or unknown.'
+        restart_required:
+          type: boolean
+          description: True when the tool loads the agent's changes only after it restarts.
+        tool:
+          type: string
+          description: Stable tool id, e.g. claude_code.
+      description: One managed tool's enforcement state on a device.
+      required:
+        - tool
+        - layer
+        - outcome
+        - restart_required
+        - action_required
     MarkRiskResultsFalsePositiveRequestBody:
       type: object
       properties:
@@ -111127,6 +111654,21 @@ components:
         - id
         - expected_version
         - entries
+    SetAuthClientHeadersRequestBody:
+      type: object
+      properties:
+        headers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthClientHeaderInput'
+          description: Every header the client should send.
+        id:
+          type: string
+          description: The auth client id.
+          format: uuid
+      required:
+        - id
+        - headers
     SetAuthenticationHostRequestBody:
       type: object
       properties:

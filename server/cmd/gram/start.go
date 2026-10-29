@@ -1760,7 +1760,7 @@ func newStartCommand() *cli.Command {
 			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger, mcpCatalog)
 			deployments.Attach(mux, deploymentsService)
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
-			authclients.Attach(mux, authclients.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
+			authclients.Attach(mux, authclients.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient))
 			// Hoisted so the services that authenticate as a customer's GCP identity
 			// share one identity: they then agree on which impersonation targets are
 			// refused, and probe for Speakeasy's own service account once between them
@@ -1986,6 +1986,8 @@ func newStartCommand() *cli.Command {
 				LogsEnabled:               platformmcp.FeatureChecker(logsEnabled),
 				ShadowInventory:           accessService,
 				ShadowReview:              mcpApprovalService,
+				ServerIcons:               mcpServersService,
+				AssetStorage:              assetStorage,
 				SessionCapture:            platformmcp.FeatureChecker(sessionCaptureEnabled),
 				SessionPortability:        platformmcp.FeatureChecker(sessionPortabilityEnabled),
 				LocalFixture:              platformFixture,

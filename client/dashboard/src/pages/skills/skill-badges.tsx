@@ -38,3 +38,29 @@ export function SkillClassificationBadge({
     </Badge>
   );
 }
+
+/**
+ * Which version a distribution serves: a pinned version, or whatever the
+ * skill's current version is. The same badge sits on the skill page, the
+ * plugin page and the MCP server Skills tab.
+ */
+export function SkillDistributionVersionBadge({
+  pinnedVersionId,
+  className,
+}: {
+  pinnedVersionId: string | undefined;
+  className?: string;
+}): JSX.Element {
+  if (pinnedVersionId) {
+    return (
+      <Badge variant="neutral" className={className} title={pinnedVersionId}>
+        Pinned
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="information" className={className}>
+      Latest
+    </Badge>
+  );
+}

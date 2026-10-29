@@ -19,6 +19,9 @@ type Endpoints struct {
 	ListAuthClients                     goa.Endpoint
 	GetAuthClient                       goa.Endpoint
 	UpdateAuthClient                    goa.Endpoint
+	CreateAuthClient                    goa.Endpoint
+	AttachAuthClientToMcpServer         goa.Endpoint
+	SetAuthClientHeaders                goa.Endpoint
 	DetachAuthClientFromMcpServer       goa.Endpoint
 	GetMcpServerAuthentication          goa.Endpoint
 	SetMcpServerUpstreamAuthRequirement goa.Endpoint
@@ -34,6 +37,9 @@ func NewEndpoints(s Service) *Endpoints {
 		ListAuthClients:                     NewListAuthClientsEndpoint(s, a.APIKeyAuth),
 		GetAuthClient:                       NewGetAuthClientEndpoint(s, a.APIKeyAuth),
 		UpdateAuthClient:                    NewUpdateAuthClientEndpoint(s, a.APIKeyAuth),
+		CreateAuthClient:                    NewCreateAuthClientEndpoint(s, a.APIKeyAuth),
+		AttachAuthClientToMcpServer:         NewAttachAuthClientToMcpServerEndpoint(s, a.APIKeyAuth),
+		SetAuthClientHeaders:                NewSetAuthClientHeadersEndpoint(s, a.APIKeyAuth),
 		DetachAuthClientFromMcpServer:       NewDetachAuthClientFromMcpServerEndpoint(s, a.APIKeyAuth),
 		GetMcpServerAuthentication:          NewGetMcpServerAuthenticationEndpoint(s, a.APIKeyAuth),
 		SetMcpServerUpstreamAuthRequirement: NewSetMcpServerUpstreamAuthRequirementEndpoint(s, a.APIKeyAuth),
@@ -47,6 +53,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListAuthClients = m(e.ListAuthClients)
 	e.GetAuthClient = m(e.GetAuthClient)
 	e.UpdateAuthClient = m(e.UpdateAuthClient)
+	e.CreateAuthClient = m(e.CreateAuthClient)
+	e.AttachAuthClientToMcpServer = m(e.AttachAuthClientToMcpServer)
+	e.SetAuthClientHeaders = m(e.SetAuthClientHeaders)
 	e.DetachAuthClientFromMcpServer = m(e.DetachAuthClientFromMcpServer)
 	e.GetMcpServerAuthentication = m(e.GetMcpServerAuthentication)
 	e.SetMcpServerUpstreamAuthRequirement = m(e.SetMcpServerUpstreamAuthRequirement)
@@ -156,6 +165,111 @@ func NewUpdateAuthClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.UpdateAuthClient(ctx, p)
+	}
+}
+
+// NewCreateAuthClientEndpoint returns an endpoint function that calls the
+// method "createAuthClient" of service "authClients".
+func NewCreateAuthClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateAuthClientPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateAuthClient(ctx, p)
+	}
+}
+
+// NewAttachAuthClientToMcpServerEndpoint returns an endpoint function that
+// calls the method "attachAuthClientToMcpServer" of service "authClients".
+func NewAttachAuthClientToMcpServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*AttachAuthClientToMcpServerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.AttachAuthClientToMcpServer(ctx, p)
+	}
+}
+
+// NewSetAuthClientHeadersEndpoint returns an endpoint function that calls the
+// method "setAuthClientHeaders" of service "authClients".
+func NewSetAuthClientHeadersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetAuthClientHeadersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SetAuthClientHeaders(ctx, p)
 	}
 }
 

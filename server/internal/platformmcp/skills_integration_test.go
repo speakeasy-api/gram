@@ -173,7 +173,8 @@ func TestPlatformMCPSkillsToolsAuthorAndDistributeEndToEnd(t *testing.T) {
 	written, err := mcpskills.NewResolver(testenv.NewLogger(t), fixture.conn).RecordRead(ctx, mcpskills.Read{
 		Entry: mcpskills.Entry{
 			SkillID: uuid.MustParse(created.Skill.ID), ProjectID: fixture.project.ID, ProjectSlug: fixture.project.Slug,
-			VersionID: uuid.MustParse(revised.Version.ID), Name: "add-mcp", Content: "", RawSHA256: "", Frontmatter: nil,
+			VersionID: uuid.MustParse(revised.Version.ID),
+			Name:      "add-mcp", Content: "", RawSHA256: "", Frontmatter: nil,
 		},
 		UserID: "", SessionID: "mcp-session", SeenAt: readAt,
 	})

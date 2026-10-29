@@ -116,6 +116,7 @@ func (f *fixture) adminHeaderClient(server uuid.UUID) uuid.UUID {
 		OrganizationID: f.orgID,
 		McpServerID:    server,
 		AuthClientID:   id,
+		Source:         "admin",
 	}))
 	return id
 }
