@@ -34,6 +34,7 @@ func BuildMcpServerView(server repo.McpServer) *types.McpServer {
 		PrimaryEndpointID:     nil,
 		PrimaryEndpointURL:    nil,
 		HasEndpoint:           nil,
+		Permissions:           nil,
 		CreatedAt:             server.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:             server.UpdatedAt.Time.Format(time.RFC3339),
 	}

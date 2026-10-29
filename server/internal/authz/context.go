@@ -11,6 +11,10 @@ type contextKey string
 
 type admissionBoundaryKey struct{}
 
+// policyOrganizationKey records the organization whose grants were loaded or
+// admitted into the context.
+type policyOrganizationKey struct{}
+
 const (
 	grantsContextKey contextKey = "authz_grants"
 	// admittedPoliciesContextKey holds the policy sets of whichever admission
@@ -34,6 +38,10 @@ type grantAuthorization struct {
 	// legacyAuthCeiling marks a stored policy older than version 5, whose
 	// auth client ceiling admission derived from its server access.
 	legacyAuthCeiling bool
+	// organizationID is the organization every policy was admitted for. A
+	// target in any other organization is never authorized by these policies.
+	// Empty when the binding is unknown or contradictory.
+	organizationID string
 }
 
 // RepresentedUserPolicy is the trusted represented-user binding of an admission.
@@ -97,6 +105,7 @@ func admittedPoliciesToContext(ctx context.Context, represented RepresentedUserP
 		representedUser:     represented.UserID,
 		representedPolicies: nil,
 		legacyAuthCeiling:   legacyAuthCeiling,
+		organizationID:      "",
 	}
 	if represented.UserID != "" {
 		policies.representedPolicies = [][]Grant{append([]Grant{}, represented.Policy...)}
@@ -104,7 +113,36 @@ func admittedPoliciesToContext(ctx context.Context, represented RepresentedUserP
 	for _, set := range sets {
 		policies.policies = append(policies.policies, append([]Grant(nil), set...))
 	}
+	ctx = withPolicyOrganization(ctx)
 	return context.WithValue(ctx, admittedPoliciesContextKey, policies)
+}
+
+// withPolicyOrganization binds the context's policies to the organization the
+// request is authenticated in, at the moment they are loaded or admitted.
+func withPolicyOrganization(ctx context.Context) context.Context {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return context.WithValue(ctx, policyOrganizationKey{}, "")
+	}
+	return context.WithValue(ctx, policyOrganizationKey{}, authCtx.ActiveOrganizationID)
+}
+
+// policyOrganization resolves the organization the context's policies belong
+// to. Grants placed without a recorded binding belong to the authenticated
+// organization; a recorded binding that disagrees with it binds nothing.
+func policyOrganization(ctx context.Context) string {
+	active := ""
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		active = authCtx.ActiveOrganizationID
+	}
+	bound, recorded := ctx.Value(policyOrganizationKey{}).(string)
+	if !recorded {
+		return active
+	}
+	if bound != active {
+		return ""
+	}
+	return bound
 }
 
 func grantAuthorizationFromContext(ctx context.Context) (grantAuthorization, bool) {
@@ -119,26 +157,31 @@ func grantAuthorizationFromContext(ctx context.Context) (grantAuthorization, boo
 		representedPolicies := make([][]Grant, 0, len(current.representedPolicies)+len(boundary.representedPolicies))
 		representedPolicies = append(representedPolicies, current.representedPolicies...)
 		representedPolicies = append(representedPolicies, boundary.representedPolicies...)
-		return grantAuthorization{policies: policies, representedUser: current.representedUser, representedPolicies: representedPolicies, legacyAuthCeiling: current.legacyAuthCeiling || boundary.legacyAuthCeiling}, true
+		organizationID := current.organizationID
+		if boundary.organizationID != organizationID {
+			organizationID = ""
+		}
+		return grantAuthorization{policies: policies, representedUser: current.representedUser, representedPolicies: representedPolicies, legacyAuthCeiling: current.legacyAuthCeiling || boundary.legacyAuthCeiling, organizationID: organizationID}, true
 	}
 	return current, true
 }
 
 func currentGrantAuthorizationFromContext(ctx context.Context) (grantAuthorization, bool) {
 	if policies, ok := ctx.Value(admittedPoliciesContextKey).(grantAuthorization); ok {
+		policies.organizationID = policyOrganization(ctx)
 		return policies, true
 	}
 	if _, principalCredential := contextvalues.PrincipalCredentialAuthorization(ctx); principalCredential {
-		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false}, false
+		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, organizationID: ""}, false
 	}
 	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
-		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false}, false
+		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, organizationID: ""}, false
 	}
 	grants, ok := GrantsFromContext(ctx)
 	if !ok {
-		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false}, false
+		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, organizationID: ""}, false
 	}
-	return grantAuthorization{policies: [][]Grant{grants}, representedUser: loadedGrantsUser(ctx), representedPolicies: nil, legacyAuthCeiling: false}, true
+	return grantAuthorization{policies: [][]Grant{grants}, representedUser: loadedGrantsUser(ctx), representedPolicies: nil, legacyAuthCeiling: false, organizationID: policyOrganization(ctx)}, true
 }
 
 // loadedGrantsUser is the user whose own grants PrepareContext loaded. API
@@ -156,7 +199,7 @@ func loadedGrantsUser(ctx context.Context) string {
 }
 
 func loadedGrantAuthorization(grants []Grant) grantAuthorization {
-	return grantAuthorization{policies: [][]Grant{grants}, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false}
+	return grantAuthorization{policies: [][]Grant{grants}, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, organizationID: ""}
 }
 
 // bind applies the trusted represented-user binding to an auth-client check,

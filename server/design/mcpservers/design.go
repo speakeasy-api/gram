@@ -501,6 +501,7 @@ var McpServer = Type("McpServer", func() {
 	})
 	Attribute("primary_endpoint_url", String, "The public MCP URL of the primary endpoint. Absent when the server has no addressable endpoint.")
 	Attribute("has_endpoint", Boolean, "Whether any endpoint routes to this server, including one on a custom domain that is not live yet. Absent when it could not be read.")
+	Attribute("permissions", McpServerPermissions, "What the caller may do with this server. Present on get and update responses.")
 	Attribute("created_at", String, func() {
 		Description("When the MCP server was created")
 		Format(FormatDateTime)
@@ -511,6 +512,18 @@ var McpServer = Type("McpServer", func() {
 	})
 
 	Required("id", "project_id", "visibility", "network_access_mode", "created_at", "updated_at")
+})
+
+var McpServerPermissions = Type("McpServerPermissions", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("What the caller may do with one MCP server, from the same evaluation that enforces each action.")
+
+	Attribute("read", Boolean, "Whether the caller may view this server's configuration")
+	Attribute("edit", Boolean, "Whether the caller may change this server's configuration")
+	Attribute("connect", Boolean, "Whether the caller may use this server: connect to it and call its tools. Permission to edit a server does not include it.")
+
+	Required("read", "edit", "connect")
 })
 
 var McpServerToolsetSummary = Type("McpServerToolsetSummary", func() {

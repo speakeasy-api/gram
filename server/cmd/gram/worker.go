@@ -619,6 +619,8 @@ func newWorkerCommand() *cli.Command {
 					AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
 					AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 					DevMode:                          c.String("environment") == "local",
+					// No organization evaluates MCP servers through the relationship schema yet.
+					MCPServerSchemaActive: nil,
 				})
 
 			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)

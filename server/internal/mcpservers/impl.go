@@ -396,6 +396,32 @@ func grantResourceID(id uuid.UUID, toolsetID uuid.NullUUID) string {
 // non-locking read; UpdateMcpServer/DeleteMcpServer re-check against the
 // locked row, which is authoritative if the backing changes concurrently.
 func (s *Service) requireServerWriteUnlocked(ctx context.Context, serverID uuid.UUID, projectID uuid.UUID, logger *slog.Logger) (repo.McpServer, error) {
+	server, err := s.getServerUnlocked(ctx, serverID, projectID, logger)
+	if err != nil {
+		return repo.McpServer{}, err
+	}
+
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(server.ID, server.ToolsetID), projectID.String())); err != nil {
+		return repo.McpServer{}, err
+	}
+	return server, nil
+}
+
+// requireServerEditUnlocked is requireServerWriteUnlocked for the operations
+// that authorize through the MCP server permission schema.
+func (s *Service) requireServerEditUnlocked(ctx context.Context, organizationID string, serverID uuid.UUID, projectID uuid.UUID, logger *slog.Logger) (repo.McpServer, error) {
+	server, err := s.getServerUnlocked(ctx, serverID, projectID, logger)
+	if err != nil {
+		return repo.McpServer{}, err
+	}
+
+	if err := s.authz.RequireMCPServer(ctx, authz.MCPServerEdit, serverRef(organizationID, server)); err != nil {
+		return repo.McpServer{}, err //nolint:wrapcheck // authz errors carry their response code.
+	}
+	return server, nil
+}
+
+func (s *Service) getServerUnlocked(ctx context.Context, serverID uuid.UUID, projectID uuid.UUID, logger *slog.Logger) (repo.McpServer, error) {
 	server, err := repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
 		ID:        serverID,
 		ProjectID: projectID,
@@ -406,11 +432,28 @@ func (s *Service) requireServerWriteUnlocked(ctx context.Context, serverID uuid.
 		}
 		return repo.McpServer{}, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
-
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(server.ID, server.ToolsetID), projectID.String())); err != nil {
-		return repo.McpServer{}, err
-	}
 	return server, nil
+}
+
+// serverRef is the trusted identity of a server row loaded within the
+// caller's project and organization.
+func serverRef(organizationID string, server repo.McpServer) authz.MCPServerRef {
+	return authz.MCPServerRef{
+		ID:             grantResourceID(server.ID, server.ToolsetID),
+		ProjectID:      server.ProjectID.String(),
+		OrganizationID: organizationID,
+	}
+}
+
+// withPermissions reports what the caller may do with server on its view,
+// from the same evaluation the server's operations enforce.
+func (s *Service) withPermissions(ctx context.Context, organizationID string, server repo.McpServer, view *types.McpServer) (*types.McpServer, error) {
+	caps, err := s.authz.MCPServerCapabilities(ctx, serverRef(organizationID, server))
+	if err != nil {
+		return nil, err //nolint:wrapcheck // authz errors carry their response code.
+	}
+	view.Permissions = &types.McpServerPermissions{Read: caps.Read, Edit: caps.Edit, Connect: caps.Connect}
+	return view, nil
 }
 
 func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPayload) (*types.McpServer, error) {
@@ -467,8 +510,8 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, grantResourceID(server.ID, server.ToolsetID), authCtx.ProjectID.String())); err != nil {
-		return nil, err
+	if err := s.authz.RequireMCPServer(ctx, authz.MCPServerRead, serverRef(authCtx.ActiveOrganizationID, server)); err != nil {
+		return nil, err //nolint:wrapcheck // authz errors carry their response code.
 	}
 
 	view, endpointsResolved := s.buildMcpServerView(ctx, authCtx.ActiveOrganizationID, server)
@@ -476,7 +519,7 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 	if toolsetProvided && !endpointsResolved {
 		return nil, oops.E(oops.CodeUnexpected, nil, "resolve mcp server platform endpoint").LogError(ctx, s.logger, attr.SlogMcpServerID(server.ID.String()))
 	}
-	return view, nil
+	return s.withPermissions(ctx, authCtx.ActiveOrganizationID, server, view)
 }
 
 func (s *Service) ListToolFilters(ctx context.Context, payload *gen.ListToolFiltersPayload) (*types.ListToolFiltersResult, error) {
@@ -714,7 +757,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 
-	unlocked, err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger)
+	unlocked, err := s.requireServerEditUnlocked(ctx, authCtx.ActiveOrganizationID, serverID, *authCtx.ProjectID, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -771,8 +814,8 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 	// Authorization keys on the row as it exists, not the backing the payload
 	// may switch it to.
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(existing.ID, existing.ToolsetID), authCtx.ProjectID.String())); err != nil {
-		return nil, err
+	if err := s.authz.RequireMCPServer(ctx, authz.MCPServerEdit, serverRef(authCtx.ActiveOrganizationID, existing)); err != nil {
+		return nil, err //nolint:wrapcheck // authz errors carry their response code.
 	}
 
 	// Only gate on staff when the unproxied backend reference is actually
@@ -958,6 +1001,10 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, detached)
 	}
 	afterView, _ := s.buildMcpServerView(ctx, authCtx.ActiveOrganizationID, updated)
+	afterView, err = s.withPermissions(ctx, authCtx.ActiveOrganizationID, updated, afterView)
+	if err != nil {
+		return nil, err
+	}
 
 	// A live server's mode, name or visibility can change generated package
 	// bytes; let the existing publisher coalesce and fingerprint unchanged ones.

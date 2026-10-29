@@ -11,6 +11,7 @@ import (
 	"os"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -143,6 +144,9 @@ type testInstance struct {
 	// remoteProxyManager builds the service's remote and tunnel proxies; tests
 	// that assert tunnel activity metrics install a collector on it.
 	remoteProxyManager *remotemcp.ProxyManager
+	// mcpServerSchema switches this instance's organization to the MCP server
+	// relationship schema.
+	mcpServerSchema *atomic.Bool
 }
 
 // migratedService models an organization after the upstream OAuth migration:
@@ -630,12 +634,16 @@ func buildTestMCPService(
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
+	mcpServerSchema := &atomic.Bool{}
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{
 		AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 		AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
 		AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
 		AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 		DevMode:                          false,
+		MCPServerSchemaActive: func(context.Context, string) (bool, error) {
+			return mcpServerSchema.Load(), nil
+		},
 	})
 
 	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cacheAdapter), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
@@ -730,6 +738,7 @@ func buildTestMCPService(
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
 
 	return ctx, &testInstance{
+		mcpServerSchema:      mcpServerSchema,
 		principalCredentials: principalCredentials,
 		service:              &migratedService{Service: svc, conn: conn, manual: false},
 		conn:                 conn,

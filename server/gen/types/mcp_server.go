@@ -65,6 +65,8 @@ type McpServer struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool
+	// What the caller may do with this server. Present on get and update responses.
+	Permissions *McpServerPermissions
 	// When the MCP server was created
 	CreatedAt string
 	// When the MCP server was last updated

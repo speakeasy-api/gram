@@ -35,6 +35,10 @@ type EngineOpts struct {
 	AdmitWorkloadSession WorkloadSessionAdmitter
 	// AdmitWorkloadSessionInTx must be configured for atomic workload issuance.
 	AdmitWorkloadSessionInTx WorkloadSessionTxAdmitter
+	// MCPServerSchemaActive reports whether an organization evaluates MCP
+	// server permissions through the relationship schema. Omission keeps the
+	// legacy scope checks for every organization.
+	MCPServerSchemaActive MCPServerSchemaActivation
 }
 
 // ChallengeLoggingEnabled checks whether authz challenge logging to ClickHouse
@@ -51,6 +55,7 @@ type Engine struct {
 	challengeLoggingEnabled          ChallengeLoggingEnabled
 	isDev                            bool
 	membership                       MembershipFetcher
+	mcpServerSchemaActive            MCPServerSchemaActivation
 }
 
 func NewEngine(
@@ -65,12 +70,14 @@ func NewEngine(
 	var admitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
 	var admitWorkloadSession WorkloadSessionAdmitter
 	var admitWorkloadSessionInTx WorkloadSessionTxAdmitter
+	var mcpServerSchemaActive MCPServerSchemaActivation
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
 		admitPrincipalCredential = opts[0].AdmitPrincipalCredential
 		admitPrincipalCredentialWithDBTX = opts[0].AdmitPrincipalCredentialWithDBTX
 		admitWorkloadSession = opts[0].AdmitWorkloadSession
 		admitWorkloadSessionInTx = opts[0].AdmitWorkloadSessionInTx
+		mcpServerSchemaActive = opts[0].MCPServerSchemaActive
 	}
 
 	authzLogger := logger.With(attr.SlogComponent("authz"))
@@ -85,6 +92,7 @@ func NewEngine(
 		challengeLoggingEnabled:          challengeLogging,
 		isDev:                            devMode,
 		membership:                       membership,
+		mcpServerSchemaActive:            mcpServerSchemaActive,
 	}
 }
 
@@ -152,7 +160,7 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		return ctx, nil
 	}
 	if authCtx.ActiveOrganizationID == "" {
-		return GrantsToContext(ctx, nil), nil
+		return withPolicyOrganization(GrantsToContext(ctx, nil)), nil
 	}
 
 	// Sessions in the shared demo org (which has no membership rows) get the
@@ -160,11 +168,11 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	// so the set a demo session holds is always the one access.ListGrants
 	// reports.
 	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
-		return GrantsToContext(ctx, DemoScopeGrants()), nil
+		return withPolicyOrganization(GrantsToContext(ctx, DemoScopeGrants())), nil
 	}
 
 	if overrides, ok := e.GetScopeOverrides(ctx); ok {
-		return GrantsToContext(ctx, GrantsFromOverrides(overrides)), nil
+		return withPolicyOrganization(GrantsToContext(ctx, GrantsFromOverrides(overrides))), nil
 	}
 
 	// Admins impersonating a customer org have no WorkOS membership in that
@@ -172,7 +180,7 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	// every Require() call would 403. Grant all scopes — matching the
 	// carve-out in access.ListGrants.
 	if contextvalues.IsSupportSession(ctx) {
-		return GrantsToContext(ctx, allScopeGrants()), nil
+		return withPolicyOrganization(GrantsToContext(ctx, allScopeGrants())), nil
 	}
 
 	principals, err := ResolveUserPrincipals(ctx, e.db, authCtx.ActiveOrganizationID, authCtx.UserID)
@@ -181,7 +189,7 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 			return ctx, oops.E(oops.CodeUnauthorized, err, "invalid user principal")
 		}
 		if errors.Is(err, ErrPrincipalNotFound) {
-			return GrantsToContext(ctx, nil), nil
+			return withPolicyOrganization(GrantsToContext(ctx, nil)), nil
 		}
 		e.logger.ErrorContext(
 			ctx,
@@ -205,7 +213,7 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		return ctx, fmt.Errorf("load authz grants: %w", err)
 	}
 
-	return GrantsToContext(ctx, grants), nil
+	return withPolicyOrganization(GrantsToContext(ctx, grants)), nil
 }
 
 func (e *Engine) Require(ctx context.Context, checks ...Check) error {

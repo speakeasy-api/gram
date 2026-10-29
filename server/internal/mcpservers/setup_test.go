@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -66,6 +67,9 @@ type testInstance struct {
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 	dispositions   *mcpservers.ToolDispositionCache
+	// mcpServerSchema switches this instance's organization to the MCP server
+	// relationship schema.
+	mcpServerSchema *atomic.Bool
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -90,7 +94,10 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	dispositions := mcpservers.NewToolDispositionCache(logger, conn, cache.NewRedisCacheAdapter(redisClient))
 
-	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	mcpServerSchema := &atomic.Bool{}
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{
+		MCPServerSchemaActive: func(context.Context, string) (bool, error) { return mcpServerSchema.Load(), nil },
+	})
 
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
@@ -102,10 +109,11 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, nil, dispositions, false, assetsSvc, revoker, networkaccess.DenyAllChecker{})
 
 	return ctx, &testInstance{
-		service:        svc,
-		conn:           conn,
-		sessionManager: sessionManager,
-		dispositions:   dispositions,
+		service:         svc,
+		conn:            conn,
+		sessionManager:  sessionManager,
+		dispositions:    dispositions,
+		mcpServerSchema: mcpServerSchema,
 	}
 }
 

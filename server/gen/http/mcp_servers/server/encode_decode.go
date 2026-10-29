@@ -3023,6 +3023,22 @@ func marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(v 
 	return res
 }
 
+// marshalTypesMcpServerPermissionsToMcpServerPermissionsResponseBody builds a
+// value of type *McpServerPermissionsResponseBody from a value of type
+// *types.McpServerPermissions.
+func marshalTypesMcpServerPermissionsToMcpServerPermissionsResponseBody(v *types.McpServerPermissions) *McpServerPermissionsResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &McpServerPermissionsResponseBody{
+		Read:    v.Read,
+		Edit:    v.Edit,
+		Connect: v.Connect,
+	}
+
+	return res
+}
+
 // marshalTypesMcpServerToMcpServerResponseBody builds a value of type
 // *McpServerResponseBody from a value of type *types.McpServer.
 func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServerResponseBody {
@@ -3051,6 +3067,9 @@ func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServer
 	}
 	if v.Toolset != nil {
 		res.Toolset = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(v.Toolset)
+	}
+	if v.Permissions != nil {
+		res.Permissions = marshalTypesMcpServerPermissionsToMcpServerPermissionsResponseBody(v.Permissions)
 	}
 
 	return res

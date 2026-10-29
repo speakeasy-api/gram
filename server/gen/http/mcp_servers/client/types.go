@@ -173,6 +173,8 @@ type CreateMcpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// What the caller may do with this server. Present on get and update responses.
+	Permissions *McpServerPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -237,6 +239,8 @@ type GetMcpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// What the caller may do with this server. Present on get and update responses.
+	Permissions *McpServerPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -313,6 +317,8 @@ type UpdateMcpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// What the caller may do with this server. Present on get and update responses.
+	Permissions *McpServerPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -2894,6 +2900,18 @@ type McpServerToolsetSummaryResponseBody struct {
 	HostingMcpServerID *string `form:"hosting_mcp_server_id,omitempty" json:"hosting_mcp_server_id,omitempty" xml:"hosting_mcp_server_id,omitempty"`
 }
 
+// McpServerPermissionsResponseBody is used to define fields on response body
+// types.
+type McpServerPermissionsResponseBody struct {
+	// Whether the caller may view this server's configuration
+	Read *bool `form:"read,omitempty" json:"read,omitempty" xml:"read,omitempty"`
+	// Whether the caller may change this server's configuration
+	Edit *bool `form:"edit,omitempty" json:"edit,omitempty" xml:"edit,omitempty"`
+	// Whether the caller may use this server: connect to it and call its tools.
+	// Permission to edit a server does not include it.
+	Connect *bool `form:"connect,omitempty" json:"connect,omitempty" xml:"connect,omitempty"`
+}
+
 // McpServerResponseBody is used to define fields on response body types.
 type McpServerResponseBody struct {
 	// The ID of the MCP server
@@ -2951,6 +2969,8 @@ type McpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// What the caller may do with this server. Present on get and update responses.
+	Permissions *McpServerPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -3149,6 +3169,9 @@ func NewCreateMcpServerMcpServerOK(body *CreateMcpServerResponseBody) *types.Mcp
 	if body.Toolset != nil {
 		v.Toolset = unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(body.Toolset)
 	}
+	if body.Permissions != nil {
+		v.Permissions = unmarshalMcpServerPermissionsResponseBodyToTypesMcpServerPermissions(body.Permissions)
+	}
 
 	return v
 }
@@ -3346,6 +3369,9 @@ func NewGetMcpServerMcpServerOK(body *GetMcpServerResponseBody) *types.McpServer
 	}
 	if body.Toolset != nil {
 		v.Toolset = unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(body.Toolset)
+	}
+	if body.Permissions != nil {
+		v.Permissions = unmarshalMcpServerPermissionsResponseBodyToTypesMcpServerPermissions(body.Permissions)
 	}
 
 	return v
@@ -3906,6 +3932,9 @@ func NewUpdateMcpServerMcpServerOK(body *UpdateMcpServerResponseBody) *types.Mcp
 	}
 	if body.Toolset != nil {
 		v.Toolset = unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(body.Toolset)
+	}
+	if body.Permissions != nil {
+		v.Permissions = unmarshalMcpServerPermissionsResponseBodyToTypesMcpServerPermissions(body.Permissions)
 	}
 
 	return v
@@ -5399,6 +5428,11 @@ func ValidateCreateMcpServerResponseBody(body *CreateMcpServerResponseBody) (err
 	if body.PrimaryEndpointID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.primary_endpoint_id", *body.PrimaryEndpointID, goa.FormatUUID))
 	}
+	if body.Permissions != nil {
+		if err2 := ValidateMcpServerPermissionsResponseBody(body.Permissions); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -5478,6 +5512,11 @@ func ValidateGetMcpServerResponseBody(body *GetMcpServerResponseBody) (err error
 	}
 	if body.PrimaryEndpointID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.primary_endpoint_id", *body.PrimaryEndpointID, goa.FormatUUID))
+	}
+	if body.Permissions != nil {
+		if err2 := ValidateMcpServerPermissionsResponseBody(body.Permissions); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -5590,6 +5629,11 @@ func ValidateUpdateMcpServerResponseBody(body *UpdateMcpServerResponseBody) (err
 	}
 	if body.PrimaryEndpointID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.primary_endpoint_id", *body.PrimaryEndpointID, goa.FormatUUID))
+	}
+	if body.Permissions != nil {
+		if err2 := ValidateMcpServerPermissionsResponseBody(body.Permissions); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -8917,6 +8961,21 @@ func ValidateMcpServerToolsetSummaryResponseBody(body *McpServerToolsetSummaryRe
 	return
 }
 
+// ValidateMcpServerPermissionsResponseBody runs the validations defined on
+// McpServerPermissionsResponseBody
+func ValidateMcpServerPermissionsResponseBody(body *McpServerPermissionsResponseBody) (err error) {
+	if body.Read == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
+	}
+	if body.Edit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("edit", "body"))
+	}
+	if body.Connect == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("connect", "body"))
+	}
+	return
+}
+
 // ValidateMcpServerResponseBody runs the validations defined on
 // McpServerResponseBody
 func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
@@ -8987,6 +9046,11 @@ func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
 	}
 	if body.PrimaryEndpointID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.primary_endpoint_id", *body.PrimaryEndpointID, goa.FormatUUID))
+	}
+	if body.Permissions != nil {
+		if err2 := ValidateMcpServerPermissionsResponseBody(body.Permissions); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

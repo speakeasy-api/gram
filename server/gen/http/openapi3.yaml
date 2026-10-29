@@ -112739,6 +112739,8 @@ components:
                         - public_only
                         - dual
                         - private_only
+                permissions:
+                    $ref: '#/components/schemas/McpServerPermissions'
                 platform_endpoint_slug:
                     type: string
                     description: The slug of this server's primary platform endpoint, the oldest one. Absent when no platform endpoint exists; never a custom-domain slug.
@@ -112873,6 +112875,23 @@ components:
                 - public
                 - status
                 - clients
+        McpServerPermissions:
+            type: object
+            properties:
+                connect:
+                    type: boolean
+                    description: 'Whether the caller may use this server: connect to it and call its tools. Permission to edit a server does not include it.'
+                edit:
+                    type: boolean
+                    description: Whether the caller may change this server's configuration
+                read:
+                    type: boolean
+                    description: Whether the caller may view this server's configuration
+            description: What the caller may do with one MCP server, from the same evaluation that enforces each action.
+            required:
+                - read
+                - edit
+                - connect
         McpServerToolsetSummary:
             type: object
             properties:

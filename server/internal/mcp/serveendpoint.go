@@ -1052,7 +1052,7 @@ func (s *Service) authorizeProxyBackendAccess(
 ) (context.Context, error) {
 	// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), projectID.String())
-	authorized, err := s.requireProxyBackendAccess(ctx, logger, connect, mcpServer)
+	authorized, err := s.requireProxyBackendAccess(ctx, logger, organizationID, projectID, mcpServer)
 	shadowCtx := ctx
 	if authorized != nil {
 		shadowCtx = authorized
@@ -1067,7 +1067,8 @@ func (s *Service) authorizeProxyBackendAccess(
 func (s *Service) requireProxyBackendAccess(
 	ctx context.Context,
 	logger *slog.Logger,
-	connect authz.Check,
+	organizationID string,
+	projectID uuid.UUID,
 	mcpServer *mcpserversrepo.McpServer,
 ) (context.Context, error) {
 	switch mcpServer.Visibility {
@@ -1081,7 +1082,8 @@ func (s *Service) requireProxyBackendAccess(
 			}
 			return nil, oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
 		}
-		if err := s.authz.Require(ctx, connect); err != nil {
+		server := authz.MCPServerRef{ID: mcpServer.ID.String(), ProjectID: projectID.String(), OrganizationID: organizationID}
+		if err := s.authz.RequireMCPServer(ctx, authz.MCPServerConnect, server); err != nil {
 			serverName := ""
 			if mcpServer.Name.Valid {
 				serverName = mcpServer.Name.String

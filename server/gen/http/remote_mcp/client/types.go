@@ -3432,6 +3432,8 @@ type McpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// What the caller may do with this server. Present on get and update responses.
+	Permissions *McpServerPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -3470,6 +3472,18 @@ type McpServerToolsetSummaryResponseBody struct {
 	// server, whose ID is the toolset's, or when it has none, its oldest live
 	// server with a live endpoint. Absent when it has neither.
 	HostingMcpServerID *string `form:"hosting_mcp_server_id,omitempty" json:"hosting_mcp_server_id,omitempty" xml:"hosting_mcp_server_id,omitempty"`
+}
+
+// McpServerPermissionsResponseBody is used to define fields on response body
+// types.
+type McpServerPermissionsResponseBody struct {
+	// Whether the caller may view this server's configuration
+	Read *bool `form:"read,omitempty" json:"read,omitempty" xml:"read,omitempty"`
+	// Whether the caller may change this server's configuration
+	Edit *bool `form:"edit,omitempty" json:"edit,omitempty" xml:"edit,omitempty"`
+	// Whether the caller may use this server: connect to it and call its tools.
+	// Permission to edit a server does not include it.
+	Connect *bool `form:"connect,omitempty" json:"connect,omitempty" xml:"connect,omitempty"`
 }
 
 // ProtectedResourceMetadataResponseBody is used to define fields on response
@@ -10687,6 +10701,11 @@ func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
 	if body.PrimaryEndpointID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.primary_endpoint_id", *body.PrimaryEndpointID, goa.FormatUUID))
 	}
+	if body.Permissions != nil {
+		if err2 := ValidateMcpServerPermissionsResponseBody(body.Permissions); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -10728,6 +10747,21 @@ func ValidateMcpServerToolsetSummaryResponseBody(body *McpServerToolsetSummaryRe
 	}
 	if body.HostingMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.hosting_mcp_server_id", *body.HostingMcpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateMcpServerPermissionsResponseBody runs the validations defined on
+// McpServerPermissionsResponseBody
+func ValidateMcpServerPermissionsResponseBody(body *McpServerPermissionsResponseBody) (err error) {
+	if body.Read == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
+	}
+	if body.Edit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("edit", "body"))
+	}
+	if body.Connect == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("connect", "body"))
 	}
 	return
 }

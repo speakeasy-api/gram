@@ -173,6 +173,8 @@ type CreateMcpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// What the caller may do with this server. Present on get and update responses.
+	Permissions *McpServerPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -237,6 +239,8 @@ type GetMcpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// What the caller may do with this server. Present on get and update responses.
+	Permissions *McpServerPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -313,6 +317,8 @@ type UpdateMcpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// What the caller may do with this server. Present on get and update responses.
+	Permissions *McpServerPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -2894,6 +2900,18 @@ type McpServerToolsetSummaryResponseBody struct {
 	HostingMcpServerID *string `form:"hosting_mcp_server_id,omitempty" json:"hosting_mcp_server_id,omitempty" xml:"hosting_mcp_server_id,omitempty"`
 }
 
+// McpServerPermissionsResponseBody is used to define fields on response body
+// types.
+type McpServerPermissionsResponseBody struct {
+	// Whether the caller may view this server's configuration
+	Read bool `form:"read" json:"read" xml:"read"`
+	// Whether the caller may change this server's configuration
+	Edit bool `form:"edit" json:"edit" xml:"edit"`
+	// Whether the caller may use this server: connect to it and call its tools.
+	// Permission to edit a server does not include it.
+	Connect bool `form:"connect" json:"connect" xml:"connect"`
+}
+
 // McpServerResponseBody is used to define fields on response body types.
 type McpServerResponseBody struct {
 	// The ID of the MCP server
@@ -2951,6 +2969,8 @@ type McpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// What the caller may do with this server. Present on get and update responses.
+	Permissions *McpServerPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -3048,6 +3068,9 @@ func NewCreateMcpServerResponseBody(res *types.McpServer) *CreateMcpServerRespon
 	if res.Toolset != nil {
 		body.Toolset = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(res.Toolset)
 	}
+	if res.Permissions != nil {
+		body.Permissions = marshalTypesMcpServerPermissionsToMcpServerPermissionsResponseBody(res.Permissions)
+	}
 	return body
 }
 
@@ -3079,6 +3102,9 @@ func NewGetMcpServerResponseBody(res *types.McpServer) *GetMcpServerResponseBody
 	}
 	if res.Toolset != nil {
 		body.Toolset = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(res.Toolset)
+	}
+	if res.Permissions != nil {
+		body.Permissions = marshalTypesMcpServerPermissionsToMcpServerPermissionsResponseBody(res.Permissions)
 	}
 	return body
 }
@@ -3149,6 +3175,9 @@ func NewUpdateMcpServerResponseBody(res *types.McpServer) *UpdateMcpServerRespon
 	}
 	if res.Toolset != nil {
 		body.Toolset = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(res.Toolset)
+	}
+	if res.Permissions != nil {
+		body.Permissions = marshalTypesMcpServerPermissionsToMcpServerPermissionsResponseBody(res.Permissions)
 	}
 	return body
 }

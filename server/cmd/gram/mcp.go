@@ -271,6 +271,8 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 			AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
 			AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 			DevMode:                          serviceEnv == "local",
+			// No organization evaluates MCP servers through the relationship schema yet.
+			MCPServerSchemaActive: nil,
 		})
 
 	_, psbroker, stop, err := newPubSubClient(ctx, c, logger)

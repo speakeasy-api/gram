@@ -98,7 +98,7 @@ func (s *Service) updateHostedServer(ctx context.Context, logger *slog.Logger, o
 		return nil, err //nolint:wrapcheck // The writer returns oops errors whose codes reach the caller.
 	}
 	view, _ := s.buildMcpServerView(ctx, organizationID, updated)
-	return view, nil
+	return s.withPermissions(ctx, organizationID, updated, view)
 }
 
 // deleteHostedServer disables rather than tombstones: the wrapper id is the toolset id and cannot be reused.
