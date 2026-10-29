@@ -50,7 +50,7 @@ jobs:
         with:
           persist-credentials: false
       # Caches are ref-scoped; this workflow only tests, never publishes artifacts.
-      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0 # zizmor: ignore[cache-poisoning]
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v4.3.0 # zizmor: ignore[cache-poisoning]
         with:
           minimum_release_age: 1d
           install: true
