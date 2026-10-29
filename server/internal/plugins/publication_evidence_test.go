@@ -22,11 +22,7 @@ func TestPluginFreshness(t *testing.T) {
 		{Name: "Paused New", Slug: "paused-new", Description: "", Servers: nil, Skills: nil, AgentPluginsV1Issues: nil},
 	}
 	paused := map[string]bool{"paused-current": true, "paused-held": true, "paused-new": true}
-	plan := pausedPluginPlan{
-		Active:  infos[:2],
-		Held:    []heldPlugin{{Slug: "paused-held", Fingerprint: "held", Files: nil, Entry: sharedPluginEntry{Slug: "paused-held", Name: "", Description: "", ServerCount: 0, CodexAuthentication: "", AgentPluginsPackage: false}}},
-		Omitted: []string{"paused-new"},
-	}
+	held := []heldPlugin{{Slug: "paused-held", Fingerprint: "held", Files: nil, Entry: sharedPluginEntry{Slug: "paused-held", Name: "", Description: "", ServerCount: 0, CodexAuthentication: "", AgentPluginsPackage: false}}}
 	published := map[string]string{
 		"active":                "active",
 		"paused-current":        "paused-current",
@@ -68,7 +64,7 @@ func TestPluginFreshness(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, test.want, pluginFreshness(infos, paused, plan, test.automatic, test.published))
+			require.Equal(t, test.want, pluginFreshness(infos, paused, held, test.automatic, test.published))
 		})
 	}
 }

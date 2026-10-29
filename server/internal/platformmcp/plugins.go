@@ -413,8 +413,8 @@ type publicationEvidenceReader interface {
 // readPublicationEvidence projects one plugin's publication evidence, given
 // whether the plugin's auto sync is on. Callers must have checked that a reader
 // is composed.
-func (s *PluginsService) readPublicationEvidence(ctx context.Context, principal Principal, projectID uuid.UUID, pluginSlug string, autoSyncEnabled bool) *PluginPublicationEvidence {
-	evidence, _ := s.readPublicationEvidenceWithOthers(ctx, principal, projectID, pluginSlug, autoSyncEnabled, nil)
+func (s *PluginsService) readPublicationEvidence(ctx context.Context, principal Principal, projectID uuid.UUID, pluginSlug string) *PluginPublicationEvidence {
+	evidence, _ := s.readPublicationEvidenceWithOthers(ctx, principal, projectID, pluginSlug, nil)
 	return evidence
 }
 
@@ -422,7 +422,7 @@ func (s *PluginsService) readPublicationEvidence(ctx context.Context, principal 
 // reports, from the same resolution, whether every plugin in others is fresh.
 // Evidence that cannot be read is unavailable, and others then count as not
 // fresh.
-func (s *PluginsService) readPublicationEvidenceWithOthers(ctx context.Context, principal Principal, projectID uuid.UUID, pluginSlug string, autoSyncEnabled bool, others []string) (*PluginPublicationEvidence, bool) {
+func (s *PluginsService) readPublicationEvidenceWithOthers(ctx context.Context, principal Principal, projectID uuid.UUID, pluginSlug string, others []string) (*PluginPublicationEvidence, bool) {
 	slugs := append([]string{pluginSlug}, others...)
 	evidence, err := s.publicationEvidence.ResolvePublicationEvidence(ctx, principal.OrganizationID, projectID, slugs)
 	target := slices.IndexFunc(evidence, func(plugin plugindelivery.PublicationEvidence) bool { return plugin.PluginSlug == pluginSlug })
@@ -445,7 +445,7 @@ func (s *PluginsService) readPublicationEvidenceWithOthers(ctx context.Context, 
 		NotConfigured:      evidence[target].NotConfigured,
 		Fresh:              evidence[target].Fresh,
 		Packages:           packages,
-		AwaitingManualSync: !autoSyncEnabled && evidence[target].Fresh != nil && !*evidence[target].Fresh,
+		AwaitingManualSync: evidence[target].AwaitingManualSync,
 	}, othersFresh
 }
 
@@ -1059,7 +1059,7 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 	// the gate lives here too so no other caller of this read can expose them.
 	if s.publicationEvidence != nil {
 		if admin, adminErr := s.IsOrganizationAdmin(ctx, principal); adminErr == nil && admin {
-			output.PublicationEvidence = s.readPublicationEvidence(ctx, principal, project.ID, target.Slug, plugindelivery.PluginAutoSyncEnabled(row.AutoSyncEnabled))
+			output.PublicationEvidence = s.readPublicationEvidence(ctx, principal, project.ID, target.Slug)
 			// Read even when evidence is unavailable or not configured: a failed
 			// first publish leaves no marketplace yet, and its failure is the
 			// explanation an administrator needs.

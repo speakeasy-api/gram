@@ -3,6 +3,7 @@ package plugins_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"testing"
@@ -745,5 +746,22 @@ func TestAutoSync_HeldChangeLeavesOtherPluginsCurrent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, new(false), status.AutomaticSyncPending)
 	require.True(t, publishStatusBySlug(t, status)[f.active.Slug].UpToDate)
+	require.True(t, publishStatusBySlug(t, status)[f.paused.Slug].AwaitingManualSync)
+}
+
+// When the held plugin's published files can't be read, freshness degrades to
+// comparing its live state instead of failing the status read.
+func TestAutoSync_FreshnessSurvivesAnUnreadableRepo(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newAutoSyncFixture(t, "unreadable")
+	_, err := f.setAutoSync(ctx, f.paused, false)
+	require.NoError(t, err)
+	f.addServer(t, ctx, f.paused, "unreadable-paused-two", "Paused Two", 1)
+	f.mock.getRepoFilesErr = errors.New("rate limited")
+
+	status, err := f.ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.Equal(t, new(false), status.UpToDate)
 	require.True(t, publishStatusBySlug(t, status)[f.paused.Slug].AwaitingManualSync)
 }

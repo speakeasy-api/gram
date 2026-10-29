@@ -55,30 +55,34 @@ func (f marketplaceFreshness) UpToDate() bool {
 	return true
 }
 
+// AwaitingManualSync reports that slug's auto sync is off and its own package
+// has changes waiting, or was never published: only a manual sync publishes it.
+func (f marketplaceFreshness) AwaitingManualSync(slug string) bool {
+	return f.Paused[slug] && !f.Plugins[slug]
+}
+
 // resolveMarketplaceFreshness plans an automatic publish of infos, the
 // project's live plugins, the way publishProject would, and compares it with
 // what conn records as published. A paused plugin with changes waiting is
-// held, so its published files are read from the repo; they only change with
-// a publish, so their manifest entries are cached per published state.
+// held, so its manifest entry is read from the repo; it only changes with a
+// publish, so it is cached per published state.
 func (s *Service) resolveMarketplaceFreshness(
 	ctx context.Context,
-	organizationID, organizationSlug string,
+	organizationID, organizationSlug, projectSlug string,
 	projectID uuid.UUID,
 	infos []PluginInfo,
+	serverURL string,
 	conn repo.PluginGithubConnection,
-	cfg GenerateConfig,
 	observabilityEnabled bool,
 ) (marketplaceFreshness, error) {
+	cfg := s.generateConfig(ctx, organizationID, organizationSlug, projectSlug, projectID, serverURL, conn.PublishedHooksConfig)
 	published := decodeMCPFingerprints(conn.PublishedMcpFingerprints)
 	plan, pending, paused, err := s.classifyPausedPlugins(ctx, projectID, infos, published, cfg, observabilityEnabled)
 	if err != nil {
 		return marketplaceFreshness{}, err
 	}
 	if len(pending) > 0 {
-		plan, err = s.holdPendingPluginEntries(ctx, projectID, conn, infos, published, plan, pending)
-		if err != nil {
-			return marketplaceFreshness{}, err
-		}
+		plan = s.holdPendingPluginEntries(ctx, projectID, conn, infos, published, plan, pending)
 	}
 
 	// A carried hooks subtree keeps the directory names it was published
@@ -95,23 +99,22 @@ func (s *Service) resolveMarketplaceFreshness(
 	}
 
 	return marketplaceFreshness{
-		Plugins:                 pluginFreshness(infos, paused, plan, automatic, published),
+		Plugins:                 pluginFreshness(infos, paused, plan.Held, automatic, published),
 		Paused:                  paused,
 		AutomaticPublishPending: !maps.Equal(automatic, published) || !hooksCurrent,
 	}, nil
 }
 
-// pluginFreshness applies marketplaceFreshness.Plugins' rule: automatic is
-// what an automatic publish of plan would record, published what the last
-// publish did. A held or omitted plugin has changes waiting, whatever its
-// recorded fingerprint says.
-func pluginFreshness(infos []PluginInfo, paused map[string]bool, plan pausedPluginPlan, automatic, published map[string]string) map[string]bool {
-	waiting := make(map[string]bool, len(plan.Held)+len(plan.Omitted))
-	for _, held := range plan.Held {
-		waiting[held.Slug] = true
-	}
-	for _, slug := range plan.Omitted {
-		waiting[slug] = true
+// pluginFreshness decides each plugin's freshness from automatic, what an
+// automatic publish would record, and published, what the last publish did.
+// A plugin with auto sync on needs its own and the shared fingerprints to
+// match; a paused one only its own, and a held one has changes waiting
+// whatever its recorded fingerprint says. A plugin never published under its
+// slug has no recorded fingerprint, so it is never fresh.
+func pluginFreshness(infos []PluginInfo, paused map[string]bool, held []heldPlugin, automatic, published map[string]string) map[string]bool {
+	waiting := make(map[string]bool, len(held))
+	for _, h := range held {
+		waiting[h.Slug] = true
 	}
 	publishedShared, hasPublishedShared := published[mcpSharedFingerprintKey]
 	sharedCurrent := hasPublishedShared && automatic[mcpSharedFingerprintKey] == publishedShared
@@ -151,9 +154,14 @@ func (s *Service) hooksPublishCurrent(ctx context.Context, organizationID, organ
 // for a repo changed outside Speakeasy.
 const heldEntriesCacheTTL = 10 * time.Minute
 
-// holdPendingPluginEntries is holdPendingPlugins for a read: it keeps only
-// each held plugin's manifest entry, cached per published state, since the
-// dashboard polls freshness and the files change only with a publish.
+// heldEntriesFailureTTL bounds how long a failed read of held plugins' files
+// is reused, so the next read soon retries it.
+const heldEntriesFailureTTL = 30 * time.Second
+
+// holdPendingPluginEntries holds each pending plugin with the manifest entry
+// its published files give, keeping no files, as a freshness read needs. The
+// entries are cached per published state, since the dashboard polls
+// freshness and the files change only with a publish.
 func (s *Service) holdPendingPluginEntries(
 	ctx context.Context,
 	projectID uuid.UUID,
@@ -162,41 +170,56 @@ func (s *Service) holdPendingPluginEntries(
 	published map[string]string,
 	plan pausedPluginPlan,
 	pending map[string]PluginInfo,
-) (pausedPluginPlan, error) {
+) pausedPluginPlan {
 	key := heldEntriesCacheKey(projectID, conn, live, pending, published)
 	var entries map[string]*sharedPluginEntry
 	if s.cache != nil {
 		switch err := s.cache.Get(ctx, key, &entries); {
 		case err == nil:
-			return applyHeldEntries(plan, pending, published, entries), nil
+			return applyHeldEntries(plan, pending, published, entries)
 		case errors.Is(err, redisCache.ErrCacheMiss):
 		default:
 			s.logger.WarnContext(ctx, "read held plugin entries cache", attr.SlogError(err))
 		}
 	}
 
-	unshared := pausedPluginPlan{Active: slices.Clone(plan.Active), Held: nil, Omitted: plan.Omitted}
-	held, err := s.holdPendingPlugins(ctx, projectID, conn.RepoOwner, conn.RepoName, live, published, unshared, pending)
-	if err != nil {
-		return pausedPluginPlan{}, err
-	}
+	// A pending plugin that isn't held fell back to its live state.
 	entries = make(map[string]*sharedPluginEntry, len(pending))
 	for slug := range pending {
 		entries[slug] = nil
 	}
-	for _, h := range held.Held {
-		entries[h.Slug] = &h.Entry
+	ttl := heldEntriesCacheTTL
+	var held pausedPluginPlan
+	err := errors.New("github publishing is not configured")
+	if s.github != nil {
+		held, err = s.holdPendingPlugins(ctx, projectID, conn.RepoOwner, conn.RepoName, live, published, plan, pending, true)
+	}
+	if err != nil {
+		// Freshness degrades rather than fails: every pending plugin counts
+		// with its live state, as a publish does when it can't read their
+		// files, which can only make plugins read stale. Caching that briefly
+		// keeps a polled read from calling GitHub through an outage.
+		s.logger.WarnContext(ctx, "read held plugin entries; comparing their live state instead",
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogError(err),
+		)
+		ttl = heldEntriesFailureTTL
+		held = applyHeldEntries(plan, pending, published, entries)
+	} else {
+		for _, h := range held.Held {
+			entries[h.Slug] = &h.Entry
+		}
 	}
 	if s.cache != nil {
-		if err := s.cache.Set(ctx, key, &entries, heldEntriesCacheTTL); err != nil {
+		if err := s.cache.Set(ctx, key, &entries, ttl); err != nil {
 			s.logger.WarnContext(ctx, "write held plugin entries cache", attr.SlogError(err))
 		}
 	}
-	return applyHeldEntries(plan, pending, published, entries), nil
+	return held
 }
 
 // applyHeldEntries holds each pending plugin with a cached entry and returns
-// the rest, whose published files were unreadable, to the active plugins.
+// the rest, which fell back to their live state, to the active plugins.
 func applyHeldEntries(plan pausedPluginPlan, pending map[string]PluginInfo, published map[string]string, entries map[string]*sharedPluginEntry) pausedPluginPlan {
 	for _, slug := range slices.Sorted(maps.Keys(pending)) {
 		entry := entries[slug]

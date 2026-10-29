@@ -406,7 +406,7 @@ const (
 	fingerprintHooksKeySentinel = "gram_fingerprint_hooks_key"
 )
 
-// mcpSharedFingerprintKey is the reserved key under which MCPFingerprints stores
+// mcpSharedFingerprintKey is the reserved key under which publishMCPFingerprints stores
 // the hash of the shared marketplace/README files. Plugin slugs are kebab-case
 // and never collide with it. When per-plugin publishing lands, shared files will
 // be assembled per plugin and this reserved entry can be reworked away.
@@ -439,28 +439,7 @@ const (
 //go:embed platform_mcp_skills/*/SKILL.md
 var platformMCPSkillsFS embed.FS
 
-// MCPFingerprints returns per-plugin content fingerprints of the MCP (feature)
-// plugins that would be generated for the given plugins — a map of plugin slug ->
-// stable hash, plus a reserved mcpSharedFingerprintKey entry covering the shared
-// marketplace/README files. It deliberately excludes the observability (hooks)
-// subtree: that plugin rolls out on its own manual hooksGeneratorVersion signal,
-// so MCP-content and hooks changes move independently.
-//
-// includeObservability must mirror the project's observability setting: the
-// shared manifests list the observability entry only when it is on, so a
-// disabled project's fingerprints must be computed without it.
-//
-// Fingerprints are stored per plugin (rather than as one aggregate) so a future
-// per-plugin publish flow can decide independently which plugins have unpublished
-// changes without a schema migration; today the rollout treats the MCP component
-// as changed when any entry differs. Per-publish fields (manifest version and
-// injected API keys) are normalized out so the same MCP configuration and
-// mcpGeneratorVersion always produce the same fingerprints.
-func MCPFingerprints(plugins []PluginInfo, cfg GenerateConfig, includeObservability bool) (map[string]string, error) {
-	return publishMCPFingerprints(plugins, nil, cfg, includeObservability)
-}
-
-// PluginMCPFingerprint returns one plugin's entry of MCPFingerprints without
+// PluginMCPFingerprint returns one plugin's entry of publishMCPFingerprints without
 // generating the rest of the project: the fingerprint a publish would record
 // for this plugin's MCP files under cfg.
 func PluginMCPFingerprint(p PluginInfo, cfg GenerateConfig, includeObservability bool) (string, error) {

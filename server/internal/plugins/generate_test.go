@@ -3396,14 +3396,14 @@ func TestMCPFingerprintsIsStableAcrossCalls(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai", ProjectSlug: "acme"}
 
-	first, err := MCPFingerprints(fingerprintTestPlugins(), cfg, true)
+	first, err := publishMCPFingerprints(fingerprintTestPlugins(), nil, cfg, true)
 	require.NoError(t, err)
 	// One entry per plugin plus the reserved shared entry.
 	require.Contains(t, first, "engineering-tools")
 	require.Contains(t, first, mcpSharedFingerprintKey)
 	require.True(t, strings.HasPrefix(first["engineering-tools"], "sha256:"))
 
-	second, err := MCPFingerprints(fingerprintTestPlugins(), cfg, true)
+	second, err := publishMCPFingerprints(fingerprintTestPlugins(), nil, cfg, true)
 	require.NoError(t, err)
 
 	require.Equal(t, first, second, "same plugins + config must produce the same fingerprints")
@@ -3414,7 +3414,7 @@ func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {
 	plugins := fingerprintTestPlugins()
 	plugins[0].Skills = []PluginSkillInfo{{Name: "release-notes", Content: "v1"}}
 
-	base, err := MCPFingerprints(plugins, GenerateConfig{
+	base, err := publishMCPFingerprints(plugins, nil, GenerateConfig{
 		OrgName:     "Acme Corp",
 		ServerURL:   "https://app.getgram.ai",
 		ProjectSlug: "acme",
@@ -3423,7 +3423,7 @@ func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {
 
 	// Version and the injected API keys vary on every publish; the fingerprints
 	// normalize them so they must not change the result.
-	withNoise, err := MCPFingerprints(plugins, GenerateConfig{
+	withNoise, err := publishMCPFingerprints(plugins, nil, GenerateConfig{
 		OrgName:     "Acme Corp",
 		ServerURL:   "https://app.getgram.ai",
 		ProjectSlug: "acme",
@@ -3447,7 +3447,7 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 		{Name: "Plugin B", Slug: "plugin-b", Description: "B", Servers: []PluginServerInfo{{DisplayName: "b1", MCPURL: "https://app.getgram.ai/mcp/b1"}}},
 	}
 
-	base, err := MCPFingerprints(plugins, cfg, true)
+	base, err := publishMCPFingerprints(plugins, nil, cfg, true)
 	require.NoError(t, err)
 
 	// Add a server to plugin A only.
@@ -3458,7 +3458,7 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 		}},
 		{Name: "Plugin B", Slug: "plugin-b", Description: "B", Servers: []PluginServerInfo{{DisplayName: "b1", MCPURL: "https://app.getgram.ai/mcp/b1"}}},
 	}
-	changedFP, err := MCPFingerprints(changed, cfg, true)
+	changedFP, err := publishMCPFingerprints(changed, nil, cfg, true)
 	require.NoError(t, err)
 
 	require.NotEqual(t, base["plugin-a"], changedFP["plugin-a"], "changed plugin's fingerprint must differ")
@@ -3478,9 +3478,9 @@ func TestPublishChangeSignalsFollowServerURL(t *testing.T) {
 	newCfg := oldCfg
 	newCfg.ServerURL = "https://ai.speakeasy.com"
 
-	oldFP, err := MCPFingerprints(pluginsFor(oldCfg.ServerURL), oldCfg, true)
+	oldFP, err := publishMCPFingerprints(pluginsFor(oldCfg.ServerURL), nil, oldCfg, true)
 	require.NoError(t, err)
-	newFP, err := MCPFingerprints(pluginsFor(newCfg.ServerURL), newCfg, true)
+	newFP, err := publishMCPFingerprints(pluginsFor(newCfg.ServerURL), nil, newCfg, true)
 	require.NoError(t, err)
 	require.NotEqual(t, oldFP["plugin-a"], newFP["plugin-a"], "MCP plugin must republish onto the new host")
 
@@ -4294,11 +4294,11 @@ func TestMCPFingerprintsChangeWithDistributedSkills(t *testing.T) {
 		return []PluginInfo{a, b}
 	}
 
-	base, err := MCPFingerprints(makePlugins(""), cfg, true)
+	base, err := publishMCPFingerprints(makePlugins(""), nil, cfg, true)
 	require.NoError(t, err)
-	withSkill, err := MCPFingerprints(makePlugins("v1"), cfg, true)
+	withSkill, err := publishMCPFingerprints(makePlugins("v1"), nil, cfg, true)
 	require.NoError(t, err)
-	withNewVersion, err := MCPFingerprints(makePlugins("v2"), cfg, true)
+	withNewVersion, err := publishMCPFingerprints(makePlugins("v2"), nil, cfg, true)
 	require.NoError(t, err)
 
 	require.NotEqual(t, base["plugin-a"], withSkill["plugin-a"], "distributing a skill must change the plugin's fingerprint")

@@ -73,13 +73,21 @@ func (g *stubAutoSyncGuard) checksInTransaction() []uuid.UUID {
 }
 
 // slugPublicationEvidence answers for exactly the slugs asked about, from a
-// fixed freshness per slug.
-type slugPublicationEvidence map[string]*bool
+// fixed freshness per slug. A stale slug in paused awaits a manual sync, as the
+// plugins service reports a plugin whose auto sync is off.
+type slugPublicationEvidence struct {
+	fresh  map[string]*bool
+	paused map[string]bool
+}
 
 func (e slugPublicationEvidence) ResolvePublicationEvidence(_ context.Context, _ string, _ uuid.UUID, slugs []string) ([]plugindelivery.PublicationEvidence, error) {
 	out := make([]plugindelivery.PublicationEvidence, 0, len(slugs))
 	for _, slug := range slugs {
-		out = append(out, plugindelivery.PublicationEvidence{PluginSlug: slug, NotConfigured: false, Fresh: e[slug], Packages: nil})
+		fresh := e.fresh[slug]
+		out = append(out, plugindelivery.PublicationEvidence{
+			PluginSlug: slug, NotConfigured: false, Fresh: fresh, Packages: nil,
+			AwaitingManualSync: e.paused[slug] && fresh != nil && !*fresh,
+		})
 	}
 	return out, nil
 }
@@ -102,7 +110,8 @@ func TestPluginReadsReportAutoSyncAndChangesAwaitingAManualSync(t *testing.T) {
 	seedPausedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Paused Stale", "paused-stale")
 	seedPausedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Paused Current", "paused-current")
 	service := testPluginTargets(conn).WithPublicationEvidence(slugPublicationEvidence{
-		"active": new(false), "paused-stale": new(false), "paused-current": new(true),
+		fresh:  map[string]*bool{"active": new(false), "paused-stale": new(false), "paused-current": new(true)},
+		paused: map[string]bool{"paused-stale": true, "paused-current": true},
 	})
 	ctx = withOrganizationGrant(ctx, authz.ScopeOrgAdmin, principal.OrganizationID)
 
@@ -424,7 +433,7 @@ func TestRepublishPluginSyncsChangesWaitingOnPausedPlugins(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Current", "current")
 	seedPausedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Waiting", "waiting")
-	evidence := slugPublicationEvidence{"current": new(true), "waiting": new(false)}
+	evidence := slugPublicationEvidence{fresh: map[string]*bool{"current": new(true), "waiting": new(false)}, paused: map[string]bool{"waiting": true}}
 	signaler := &recordingPluginPublishSignaler{}
 	service := testPluginTargets(conn).WithPublicationEvidence(evidence).
 		WithRepublish(plugindelivery.PublicationRequests{Enabled: false}, signaler, testOperationBudget())
@@ -441,7 +450,7 @@ func TestRepublishPluginSyncsChangesWaitingOnPausedPlugins(t *testing.T) {
 	require.True(t, waiting.PublicationEvidence.AwaitingManualSync, "the evidence read after the request reports the plugin as it stands")
 
 	// Once the paused plugin is current too, there is nothing to sync.
-	evidence["waiting"] = new(true)
+	evidence.fresh["waiting"] = new(true)
 	current, err := service.RepublishPlugin(ctx, principal, RepublishPluginInput{ProjectID: project.ID.String(), Plugin: "current", Confirmed: true, IdempotencyKey: "all-current"})
 	require.NoError(t, err)
 	require.Equal(t, PluginRepublishAlreadyCurrent, current.Outcome)

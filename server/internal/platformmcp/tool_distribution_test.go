@@ -78,14 +78,17 @@ func TestDistributionOutcomeMessageWaitsForAManualSyncWhenAutoSyncIsOff(t *testi
 	t.Parallel()
 
 	for _, state := range []string{publicationStateCurrent, publicationStatePending, publicationStateRepairRequired} {
-		added := distributionOutcomeMessage(outcome("Docs", "Support", state, true, true), false)
-		require.Contains(t, added, "that plugin's auto sync is off, so the people it is shared with get it only after its project is synced by hand", state)
-		require.Contains(t, added, "republish_plugin")
-		require.NotContains(t, added, "will get it")
+		t.Run(state, func(t *testing.T) {
+			t.Parallel()
+			added := distributionOutcomeMessage(outcome("Docs", "Support", state, true, true), false)
+			require.Contains(t, added, "that plugin's auto sync is off, so the people it is shared with get it only after its project is synced by hand")
+			require.Contains(t, added, "republish_plugin")
+			require.NotContains(t, added, "will get it")
 
-		removed := distributionOutcomeMessage(outcome("Docs", "Support", state, false, true), true)
-		require.Contains(t, removed, "keep getting it until its project is synced by hand", state)
-		require.NotContains(t, removed, "will stop getting it")
+			removed := distributionOutcomeMessage(outcome("Docs", "Support", state, false, true), true)
+			require.Contains(t, removed, "keep getting it until its project is synced by hand")
+			require.NotContains(t, removed, "will stop getting it")
+		})
 	}
 
 	// An attachment an administrator made by hand still stays, whatever the

@@ -109,7 +109,7 @@ func (s *Service) planPausedPlugins(
 	if err != nil || len(pending) == 0 {
 		return plan, err
 	}
-	return s.holdPendingPlugins(ctx, projectID, repoOwner, repoName, live, published, plan, pending)
+	return s.holdPendingPlugins(ctx, projectID, repoOwner, repoName, live, published, plan, pending, false)
 }
 
 // classifyPausedPlugins is the part of planPausedPlugins that needs no repo
@@ -163,7 +163,8 @@ func (s *Service) classifyPausedPlugins(
 // holdPendingPlugins finishes planPausedPlugins: it reads each pending
 // plugin's published files from the repo and holds it, or falls back to its
 // live state when its files are unreadable or it shares a directory with
-// another plugin.
+// another plugin. entriesOnly reads just the files its manifest entry comes
+// from, for a caller that never pushes the held files.
 func (s *Service) holdPendingPlugins(
 	ctx context.Context,
 	projectID uuid.UUID,
@@ -172,6 +173,7 @@ func (s *Service) holdPendingPlugins(
 	published map[string]string,
 	plan pausedPluginPlan,
 	pending map[string]PluginInfo,
+	entriesOnly bool,
 ) (pausedPluginPlan, error) {
 	if s.github == nil {
 		return pausedPluginPlan{}, oops.E(oops.CodeUnavailable, nil, "github publishing is not configured").LogError(ctx, s.logger)
@@ -180,7 +182,7 @@ func (s *Service) holdPendingPlugins(
 	existing, err := s.github.Client.GetRepoFiles(ctx, s.github.InstallationID, repoOwner, repoName, "main", func(filePath string) bool {
 		owner, ok := owners.ownerOf(filePath)
 		_, held := pending[owner]
-		return ok && held
+		return ok && held && (!entriesOnly || slices.Contains(heldEntryPaths(owner), filePath))
 	})
 	switch {
 	case errors.Is(err, ghclient.ErrRepoNotFound):
@@ -260,6 +262,19 @@ func (o pluginPrefixOwners) ownerOf(filePath string) (string, bool) {
 		return "", false
 	}
 	return o[best], true
+}
+
+// heldEntryPaths are the published files heldPluginEntry reads or requires.
+func heldEntryPaths(slug string) []string {
+	return []string{
+		path.Join(slug, ".claude-plugin/plugin.json"),
+		path.Join(slug, ".mcp.json"),
+		path.Join(cursorPluginRoot, slug+"-cursor", ".cursor-plugin/plugin.json"),
+		path.Join(cursorPluginRoot, slug+"-cursor", "mcp.json"),
+		path.Join(slug+"-codex", ".codex-plugin/plugin.json"),
+		path.Join(slug+"-codex", ".mcp.json"),
+		path.Join(agentPluginRoot, slug, "plugin.json"),
+	}
 }
 
 // heldPluginEntry rebuilds a plugin's marketplace manifest entry from the files
@@ -357,10 +372,18 @@ func sharedPublishEntries(active []PluginInfo, held []heldPlugin, cfg GenerateCo
 	return entries
 }
 
-// publishMCPFingerprints is MCPFingerprints for a publish that holds some
-// plugins at their published state: active plugins are fingerprinted from
-// their live state, held plugins keep their stored fingerprint, and the shared
-// entry hashes the manifests this publish would push.
+// publishMCPFingerprints returns the content fingerprints a publish records
+// for its MCP (feature) plugins: a map of plugin slug to stable hash, plus a
+// reserved mcpSharedFingerprintKey entry covering the shared marketplace and
+// README files this publish would push. Active plugins are fingerprinted from
+// their live state; held plugins keep their stored fingerprint. It excludes the
+// observability (hooks) subtree, which rolls out on its own
+// hooksGeneratorVersion signal.
+//
+// includeObservability must mirror the project's observability setting: the
+// shared manifests list the observability entry only when it is on. Per-publish
+// fields (manifest version and injected API keys) are normalized out, so the
+// same MCP configuration and mcpGeneratorVersion always fingerprint the same.
 func publishMCPFingerprints(active []PluginInfo, held []heldPlugin, cfg GenerateConfig, includeObservability bool) (map[string]string, error) {
 	cfg = fingerprintConfig(cfg, includeObservability)
 

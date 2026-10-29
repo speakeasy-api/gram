@@ -1812,7 +1812,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				lastPublishedAt := formatTime(conn.UpdatedAt)
 				result.LastPublishedAt = &lastPublishedAt
 			}
-			if freshness := s.publishFreshness(ctx, ac, conn); freshness != nil {
+			if freshness := s.publishFreshness(ctx, ac, conn, observabilityEnabled); freshness != nil {
 				result.UpToDate = new(freshness.UpToDate())
 				result.AutomaticSyncPending = new(freshness.AutomaticPublishPending)
 				result.Plugins = publishStatusPlugins(*freshness)
@@ -1988,10 +1988,10 @@ func (s *Service) liveManifestVersion(ctx context.Context, ac *contextvalues.Aut
 }
 
 // publishFreshness compares the project's current plugin state with what was
-// last published, project-wide and per plugin (see marketplaceFreshness). Nil
-// means unknown: the connection predates fingerprints, or a transient compute
-// error degraded the status read rather than failing it.
-func (s *Service) publishFreshness(ctx context.Context, ac *contextvalues.AuthContext, conn repo.PluginGithubConnection) *marketplaceFreshness {
+// last published, project-wide and per plugin. Nil means unknown: the
+// connection predates fingerprints, or a transient compute error degraded the
+// status read rather than failing it.
+func (s *Service) publishFreshness(ctx context.Context, ac *contextvalues.AuthContext, conn repo.PluginGithubConnection, observabilityEnabled bool) *marketplaceFreshness {
 	// Connections published before the hooks/MCP split carry no stored MCP
 	// fingerprints, so there's nothing to compare against.
 	if len(conn.PublishedMcpFingerprints) == 0 {
@@ -2016,16 +2016,10 @@ func (s *Service) publishFreshness(ctx context.Context, ac *contextvalues.AuthCo
 		return nil
 	}
 
-	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID, serverURL, conn.PublishedHooksConfig)
-	observabilityEnabled, err := s.projectObservabilityEnabled(ctx, *ac.ProjectID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "publish freshness: read observability plugin setting", attr.SlogError(err))
-		return nil
-	}
 	// The eligibility inputs for the hooks component mirror the dashboard
 	// publish path (PublishPlugins), which passes the same auth-context org id
 	// and slug.
-	freshness, err := s.resolveMarketplaceFreshness(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID, pluginInfos, conn, cfg, observabilityEnabled)
+	freshness, err := s.resolveMarketplaceFreshness(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID, pluginInfos, serverURL, conn, observabilityEnabled)
 	if err != nil {
 		s.logger.WarnContext(ctx, "publish freshness: compare with the published marketplace", attr.SlogError(err))
 		return nil
@@ -2038,8 +2032,7 @@ func (s *Service) publishFreshness(ctx context.Context, ac *contextvalues.AuthCo
 func publishStatusPlugins(freshness marketplaceFreshness) []*gen.PluginPublishStatus {
 	out := make([]*gen.PluginPublishStatus, 0, len(freshness.Plugins))
 	for _, slug := range slices.Sorted(maps.Keys(freshness.Plugins)) {
-		fresh := freshness.Plugins[slug]
-		out = append(out, &gen.PluginPublishStatus{Slug: slug, UpToDate: fresh, AwaitingManualSync: freshness.Paused[slug] && !fresh})
+		out = append(out, &gen.PluginPublishStatus{Slug: slug, UpToDate: freshness.Plugins[slug], AwaitingManualSync: freshness.AwaitingManualSync(slug)})
 	}
 	return out
 }

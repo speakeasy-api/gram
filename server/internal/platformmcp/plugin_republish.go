@@ -12,7 +12,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
@@ -216,7 +215,7 @@ func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principa
 			// auto sync is off, so the republish is not skipped while one of
 			// them is stale, even when the named plugin is current.
 			otherPaused := slices.DeleteFunc(slices.Clone(paused), func(slug string) bool { return slug == target.Slug })
-			evidence, pausedFresh := s.readPublicationEvidenceWithOthers(ctx, principal, project.ID, target.Slug, !slices.Contains(paused, target.Slug), otherPaused)
+			evidence, pausedFresh := s.readPublicationEvidenceWithOthers(ctx, principal, project.ID, target.Slug, otherPaused)
 			if evidence.NotConfigured {
 				return pluginRepublishReceipt{}, s.pluginRepublishNotConfigured(ctx, principal, project)
 			}
@@ -265,17 +264,11 @@ func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principa
 			}
 		}
 	}
-	// An unreadable setting reads as on, so the evidence never claims changes
-	// are waiting for a sync it could not confirm is needed.
-	paused, err := pluginsrepo.New(s.db).ListAutoSyncPausedPluginSlugs(ctx, project.ID)
-	if err != nil && s.metadataLogger != nil {
-		s.metadataLogger.WarnContext(ctx, "list plugins with auto sync off after republish", attr.SlogError(err))
-	}
 	return RepublishPluginOutput{
 		ProjectID:           project.ID.String(),
 		Plugin:              stored.Plugin,
 		Outcome:             stored.Outcome,
-		PublicationEvidence: s.readPublicationEvidence(ctx, principal, project.ID, stored.Plugin.Slug, !slices.Contains(paused, stored.Plugin.Slug)),
+		PublicationEvidence: s.readPublicationEvidence(ctx, principal, project.ID, stored.Plugin.Slug),
 		Note:                note,
 		Receipt:             riskMutationToolReceipt(receipt),
 	}, nil
