@@ -27,7 +27,7 @@ func TestProvisionPlatformMCPWorkspace(t *testing.T) {
 	ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
 	armedAt := time.Now().UTC()
-	orgID, orgName, err := instance.service.ProvisionPlatformMCPWorkspace(ctx, userInfo.UserID, "  Acme   Workspace ")
+	orgID, orgName, err := instance.service.ProvisionPlatformMCPWorkspace(ctx, userInfo.UserID, "  Acme   Workspace ", "Claude Code")
 	require.NoError(t, err)
 	require.Equal(t, "Acme Workspace", orgName)
 	require.Equal(t, []string{orgID}, instance.trialNotifier.trialStarted)
@@ -64,7 +64,7 @@ func TestProvisionPlatformMCPWorkspace(t *testing.T) {
 	require.True(t, member)
 
 	// The user now has an organization, so a second workspace is refused.
-	_, _, err = instance.service.ProvisionPlatformMCPWorkspace(ctx, userInfo.UserID, "Second Workspace")
+	_, _, err = instance.service.ProvisionPlatformMCPWorkspace(ctx, userInfo.UserID, "Second Workspace", "Claude Code")
 	require.ErrorIs(t, err, auth.ErrUserHasOrganization)
 }
 
@@ -75,7 +75,7 @@ func TestProvisionPlatformMCPWorkspaceRejectsInvalidName(t *testing.T) {
 	userInfo.Organizations = nil
 	ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
-	_, _, err := instance.service.ProvisionPlatformMCPWorkspace(ctx, userInfo.UserID, "!")
+	_, _, err := instance.service.ProvisionPlatformMCPWorkspace(ctx, userInfo.UserID, "!", "Claude Code")
 	require.Error(t, err)
 
 	organizations, err := orgRepo.New(instance.conn).ListOrganizationsForUser(ctx, conv.ToPGText(userInfo.UserID))
@@ -104,7 +104,7 @@ func TestProvisionPlatformMCPWorkspaceRefusesUserWithPendingInvitation(t *testin
 	})
 	require.NoError(t, err)
 
-	_, _, err = instance.service.ProvisionPlatformMCPWorkspace(ctx, userInfo.UserID, "Acme Workspace")
+	_, _, err = instance.service.ProvisionPlatformMCPWorkspace(ctx, userInfo.UserID, "Acme Workspace", "Claude Code")
 	require.ErrorIs(t, err, auth.ErrUserHasPendingInvitation)
 
 	organizations, err := orgRepo.New(instance.conn).ListOrganizationsForUser(ctx, conv.ToPGText(userInfo.UserID))
@@ -124,7 +124,7 @@ func TestProvisionPlatformMCPWorkspaceConcurrentSubmitsCreateOneOrganization(t *
 	var wg sync.WaitGroup
 	for i := range submits {
 		wg.Go(func() {
-			_, _, errs[i] = instance.service.ProvisionPlatformMCPWorkspace(ctx, userInfo.UserID, "Acme Workspace")
+			_, _, errs[i] = instance.service.ProvisionPlatformMCPWorkspace(ctx, userInfo.UserID, "Acme Workspace", "Claude Code")
 		})
 	}
 	wg.Wait()
