@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -8,7 +9,9 @@ import (
 	"net/url"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -27,6 +30,10 @@ type ChallengeBrowserBinding struct {
 }
 
 func validateChallengeBrowser(r *http.Request, state AuthnChallengeState, callback bool) error {
+	if err := validateWorkloadReconnectBinding(state); err != nil {
+		return err
+	}
+
 	if state.Browser == nil {
 		if state.Federation != nil {
 			return errors.New("missing federated browser binding")
@@ -75,17 +82,17 @@ func (s *Service) prepareFederatedBrowserHandoff(w http.ResponseWriter, r *http.
 
 func (s *Service) completeFederatedBrowserHandoff(w http.ResponseWriter, r *http.Request, state AuthnChallengeState) error {
 	if state.Federation.StartPhase != "origin" {
-		return oops.E(oops.CodeUnauthorized, nil, "invalid login handoff")
+		return oops.E(oops.CodeBadRequest, nil, "invalid login handoff")
 	}
 	consumed, err := s.authnChallengeCache.GetAndDelete(r.Context(), "authnChallenge:"+state.ID)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "login handoff expired")
+		return oops.E(oops.CodeBadRequest, err, "login handoff expired")
 	}
 	if err := validateChallengeBrowser(r, consumed, false); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "invalid login browser")
+		return oops.E(oops.CodeBadRequest, err, "invalid login browser")
 	}
 	if consumed.Federation == nil || consumed.Federation.StartPhase != "origin" || consumed.Browser.CallbackHash == "" {
-		return oops.E(oops.CodeUnauthorized, nil, "invalid login handoff")
+		return oops.E(oops.CodeBadRequest, nil, "invalid login handoff")
 	}
 	target, err := federatedCallbackURL(consumed.Federation.CallbackURL)
 	if err != nil {
@@ -109,22 +116,37 @@ func (s *Service) completeFederatedBrowserHandoff(w http.ResponseWriter, r *http
 func (s *Service) validateRemoteLoginBrowser(r *http.Request) error {
 	remote, err := s.remoteLoginCache.Get(r.Context(), "remoteLogin:"+r.URL.Query().Get("state"))
 	if err != nil {
-		return fmt.Errorf("load remote login browser state: %w", err)
+		return fmt.Errorf("validate remote login browser: %w", s.remoteLoginStateError(r.Context(), err))
 	}
 	if remote.FinalRedirectURI != "" {
 		return nil
 	}
 	parent, err := s.authnChallengeCache.Get(r.Context(), "authnChallenge:"+remote.ParentChallengeID)
 	if err != nil {
-		return fmt.Errorf("load parent browser state: %w", err)
+		return fmt.Errorf("load parent login state: %w", s.remoteLoginStateError(r.Context(), err))
 	}
 	if parent.Subject == nil || remote.Subject == nil || parent.Subject.String() != remote.Subject.String() || parent.UserSessionIssuerID != remote.UserSessionIssuerID {
-		return errors.New("remote login parent mismatch")
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "remote login parent mismatch"), oauthui.ReasonSessionChanged))
+	}
+	if err := validateWorkloadReconnectBinding(parent); err != nil {
+		return err
 	}
 	// A login on another callback host carries its own browser binding, set
 	// there by the bind stop of the remote login browser hop.
 	if remote.BrowserHash != "" {
 		return s.validateRemoteLoginHopBrowser(r, parent, remote)
 	}
-	return validateChallengeBrowser(r, parent, true)
+	err = validateChallengeBrowser(r, parent, true)
+	if err != nil {
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "invalid remote login browser binding"), oauthui.ReasonSessionChanged))
+	}
+	return nil
+}
+
+// remoteLoginStateError distinguishes spent links from transient storage failures.
+func (s *Service) remoteLoginStateError(ctx context.Context, err error) error {
+	if errors.Is(err, redisCache.ErrCacheMiss) {
+		return fmt.Errorf("load remote login state: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "remote login link expired or was already used"), oauthui.ReasonExpired))
+	}
+	return fmt.Errorf("load remote login state: %w", oops.WithBrowserReason(oops.E(oops.CodeUnavailable, err, "remote login state is temporarily unavailable").LogError(ctx, s.logger), oauthui.ReasonUnavailable))
 }

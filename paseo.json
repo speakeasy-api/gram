@@ -1,0 +1,6 @@
+{
+  "worktree": {
+    "setup": ["mise trust", "wt hook -y pre-start"],
+    "teardown": "wt hook -y pre-remove"
+  }
+}

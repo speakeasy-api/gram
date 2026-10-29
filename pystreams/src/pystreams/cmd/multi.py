@@ -37,10 +37,10 @@ from pystreams.deps.loop_lag import monitor_event_loop_lag
 from pystreams.deps.scanner import build_presidio_scanner
 from pystreams.health import HealthState, serve_control
 from pystreams.ping.handler import PingHandler
-from pystreams.risk.enforce_handler import PresidioEnforceHandler
 from pystreams.risk.fingerprint import parse_pepper_keyring
 from pystreams.risk.handler import PresidioHandler
 from pystreams.risk.metering import METER_PUBLISH_TIMEOUT_SECONDS
+from pystreams.risk.presidio_enforce_handler import PresidioEnforceHandler
 from pystreams.risk.replywriter import ReplyWriter
 
 from . import (

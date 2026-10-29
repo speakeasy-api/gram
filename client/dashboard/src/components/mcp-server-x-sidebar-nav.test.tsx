@@ -58,6 +58,16 @@ describe("McpServerCardStatus", () => {
     expect(screen.getByRole("button", { name: "Private" })).toBeDefined();
     expect(screen.queryByRole("switch")).toBeNull();
   });
+
+  it("renders nothing for unproxied MCP", () => {
+    const { container } = render(
+      <McpServerCardStatus
+        server={server({ unproxiedMcpServerId: "unproxied-source-1" })}
+      />,
+    );
+
+    expect(container.childElementCount).toBe(0);
+  });
 });
 
 describe("RemoteIdentitySummary", () => {
@@ -73,7 +83,7 @@ describe("RemoteIdentitySummary", () => {
           unavailable={props.unavailable ?? false}
           loading={props.loading ?? false}
           settingsHref={
-            props.settingsHref ?? "/mcp/x/example/settings#authentication"
+            props.settingsHref ?? "/mcp/example/settings#authentication"
           }
         />
       </MemoryRouter>,
@@ -82,7 +92,7 @@ describe("RemoteIdentitySummary", () => {
 
   it.each([
     ["user", "User"],
-    ["agent", "Service Account"],
+    ["agent", "Shared credential"],
     ["none", "Manual"],
   ] as const)("makes the %s pill the way into settings", (mode, label) => {
     renderSummary({ mode });
@@ -90,7 +100,7 @@ describe("RemoteIdentitySummary", () => {
     // The pill reports the setting and opens it; there is no separate link.
     const pill = screen.getByRole("link", { name: new RegExp(label) });
     expect(pill.getAttribute("href")).toBe(
-      "/mcp/x/example/settings#authentication",
+      "/mcp/example/settings#authentication",
     );
     expect(screen.queryByRole("link", { name: "Setup" })).toBeNull();
   });

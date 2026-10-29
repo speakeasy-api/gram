@@ -13,12 +13,15 @@ import { adminCreateOnboardingUseCase } from "../funcs/adminCreateOnboardingUseC
 import { adminCreateOrganization } from "../funcs/adminCreateOrganization.js";
 import { adminCreateRegistryEntry } from "../funcs/adminCreateRegistryEntry.js";
 import { adminCreateSignupOffer } from "../funcs/adminCreateSignupOffer.js";
+import { adminCurateRegistryPromotionCandidate } from "../funcs/adminCurateRegistryPromotionCandidate.js";
 import { adminDeleteGlobalIssuer } from "../funcs/adminDeleteGlobalIssuer.js";
 import { adminDeleteOnboardingPlaybook } from "../funcs/adminDeleteOnboardingPlaybook.js";
 import { adminDeleteOnboardingUseCase } from "../funcs/adminDeleteOnboardingUseCase.js";
 import { adminDescribeMcpServerHealth } from "../funcs/adminDescribeMcpServerHealth.js";
 import { adminDisableOrganization } from "../funcs/adminDisableOrganization.js";
+import { adminDisableUpstreamAuthEnforcement } from "../funcs/adminDisableUpstreamAuthEnforcement.js";
 import { adminEnableOrganization } from "../funcs/adminEnableOrganization.js";
+import { adminEnableUpstreamAuthEnforcement } from "../funcs/adminEnableUpstreamAuthEnforcement.js";
 import { adminExtendTrial } from "../funcs/adminExtendTrial.js";
 import { adminFetchGlobalIssuerMetadata } from "../funcs/adminFetchGlobalIssuerMetadata.js";
 import { adminGetGlobalIssuer } from "../funcs/adminGetGlobalIssuer.js";
@@ -40,6 +43,7 @@ import { adminGetPaygBillingSummary } from "../funcs/adminGetPaygBillingSummary.
 import { adminGetProject } from "../funcs/adminGetProject.js";
 import { adminGetRegistryEntry } from "../funcs/adminGetRegistryEntry.js";
 import { adminGetRegistryOktaCandidates } from "../funcs/adminGetRegistryOktaCandidates.js";
+import { adminGetRegistryPromotionCandidate } from "../funcs/adminGetRegistryPromotionCandidate.js";
 import { adminGetSession } from "../funcs/adminGetSession.js";
 import { adminGetSpendBreakdown } from "../funcs/adminGetSpendBreakdown.js";
 import { adminGetStripeCustomer } from "../funcs/adminGetStripeCustomer.js";
@@ -62,6 +66,7 @@ import { adminListOrganizations } from "../funcs/adminListOrganizations.js";
 import { adminListProjectMcpServers } from "../funcs/adminListProjectMcpServers.js";
 import { adminListRegistryEntries } from "../funcs/adminListRegistryEntries.js";
 import { adminListRegistryOktaUnmapped } from "../funcs/adminListRegistryOktaUnmapped.js";
+import { adminListRegistryPromotionCandidates } from "../funcs/adminListRegistryPromotionCandidates.js";
 import { adminListSignupOffers } from "../funcs/adminListSignupOffers.js";
 import { adminListUpstreamOAuthMigrationOrganizations } from "../funcs/adminListUpstreamOAuthMigrationOrganizations.js";
 import { adminListUserOrganizations } from "../funcs/adminListUserOrganizations.js";
@@ -71,13 +76,16 @@ import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseT
 import { adminMigrateExternalMcpServers } from "../funcs/adminMigrateExternalMcpServers.js";
 import { adminMigrateToGlobalIssuer } from "../funcs/adminMigrateToGlobalIssuer.js";
 import { adminPreviewExternalMcpMigration } from "../funcs/adminPreviewExternalMcpMigration.js";
+import { adminPromoteRegistryCandidate } from "../funcs/adminPromoteRegistryCandidate.js";
 import { adminRearmTrial } from "../funcs/adminRearmTrial.js";
 import { adminRefreshGlobalIssuerMetadata } from "../funcs/adminRefreshGlobalIssuerMetadata.js";
 import { adminRepairInferenceKey } from "../funcs/adminRepairInferenceKey.js";
 import { adminResumeStripeSubscription } from "../funcs/adminResumeStripeSubscription.js";
+import { adminRetryRegistryPromotionDocs } from "../funcs/adminRetryRegistryPromotionDocs.js";
 import { adminRunUpstreamOAuthMigration } from "../funcs/adminRunUpstreamOAuthMigration.js";
 import { adminSaveRegistryEntry } from "../funcs/adminSaveRegistryEntry.js";
 import { adminServeImage } from "../funcs/adminServeImage.js";
+import { adminSetAdoptionDashboardUrl } from "../funcs/adminSetAdoptionDashboardUrl.js";
 import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
@@ -130,6 +138,8 @@ import { AdminRegistryEntry } from "../models/components/adminregistryentry.js";
 import { AdminRegistryOktaCandidates } from "../models/components/adminregistryoktacandidates.js";
 import { AdminRegistryOktaUnmapped } from "../models/components/adminregistryoktaunmapped.js";
 import { AdminRegistryPage } from "../models/components/adminregistrypage.js";
+import { AdminRegistryPromotionCandidate } from "../models/components/adminregistrypromotioncandidate.js";
+import { AdminRegistryPromotionCandidates } from "../models/components/adminregistrypromotioncandidates.js";
 import { AdminSession } from "../models/components/adminsession.js";
 import { AdminSignupOffer } from "../models/components/adminsignupoffer.js";
 import { AdminSpendBreakdownResponse } from "../models/components/adminspendbreakdownresponse.js";
@@ -150,12 +160,16 @@ import { CreateOrganizationRequestBody } from "../models/components/createorgani
 import { CreateRegistryEntryRequestBody } from "../models/components/createregistryentryrequestbody.js";
 import { CreateRemoteSessionIssuerForm } from "../models/components/createremotesessionissuerform.js";
 import { CreateSignupOfferRequestBody } from "../models/components/createsignupofferrequestbody.js";
+import { CurateRegistryPromotionCandidateRequestBody } from "../models/components/curateregistrypromotioncandidaterequestbody.js";
 import { DeleteOnboardingPlaybookRequestBody } from "../models/components/deleteonboardingplaybookrequestbody.js";
 import { DeleteOnboardingUseCaseRequestBody } from "../models/components/deleteonboardingusecaserequestbody.js";
 import { DisableOrganizationRequestBody } from "../models/components/disableorganizationrequestbody.js";
+import { DisableUpstreamAuthEnforcementRequestBody } from "../models/components/disableupstreamauthenforcementrequestbody.js";
 import { EnableOrganizationRequestBody } from "../models/components/enableorganizationrequestbody.js";
+import { EnableUpstreamAuthEnforcementRequestBody } from "../models/components/enableupstreamauthenforcementrequestbody.js";
 import { ExtendTrialRequestBody } from "../models/components/extendtrialrequestbody.js";
 import { FetchIssuerMetadataRequestBody } from "../models/components/fetchissuermetadatarequestbody.js";
+import { GetRegistryPromotionCandidateRequestBody } from "../models/components/getregistrypromotioncandidaterequestbody.js";
 import { GlobalRemoteSessionIssuer } from "../models/components/globalremotesessionissuer.js";
 import { IssuerMigratePreflight } from "../models/components/issuermigratepreflight.js";
 import { ListSignupOffersResponseBody } from "../models/components/listsignupoffersresponsebody.js";
@@ -166,6 +180,7 @@ import { MigrateRemoteSessionIssuerRequestBody } from "../models/components/migr
 import { MigrateRemoteSessionIssuerResult } from "../models/components/migrateremotesessionissuerresult.js";
 import { PreviewExternalMcpMigrationRequestBody } from "../models/components/previewexternalmcpmigrationrequestbody.js";
 import { ProductFeatures } from "../models/components/productfeatures.js";
+import { PromoteRegistryCandidateRequestBody } from "../models/components/promoteregistrycandidaterequestbody.js";
 import { RearmTrialRequestBody } from "../models/components/rearmtrialrequestbody.js";
 import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
 import { RemoteSessionIssuerDraft } from "../models/components/remotesessionissuerdraft.js";
@@ -173,9 +188,11 @@ import { RemoteSessionIssuerDuplicatePreflight } from "../models/components/remo
 import { RemoteSessionIssuerRefresh } from "../models/components/remotesessionissuerrefresh.js";
 import { RepairInferenceKeyRequestBody } from "../models/components/repairinferencekeyrequestbody.js";
 import { ResumeStripeSubscriptionRequestBody } from "../models/components/resumestripesubscriptionrequestbody.js";
+import { RetryRegistryPromotionDocsRequestBody } from "../models/components/retryregistrypromotiondocsrequestbody.js";
 import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
 import { RunUpstreamOAuthMigrationRequestBody } from "../models/components/runupstreamoauthmigrationrequestbody.js";
 import { SaveRegistryEntryRequestBody } from "../models/components/saveregistryentryrequestbody.js";
+import { SetAdoptionDashboardURLRequestBody } from "../models/components/setadoptiondashboardurlrequestbody.js";
 import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
 import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
@@ -241,6 +258,7 @@ import {
 } from "../models/operations/adminlistorganizations.js";
 import { AdminListProjectMcpServersRequest } from "../models/operations/adminlistprojectmcpservers.js";
 import { AdminListRegistryEntriesRequest } from "../models/operations/adminlistregistryentries.js";
+import { AdminListRegistryPromotionCandidatesRequest } from "../models/operations/adminlistregistrypromotioncandidates.js";
 import { AdminListUserOrganizationsRequest } from "../models/operations/adminlistuserorganizations.js";
 import { AdminListUsersRequest } from "../models/operations/adminlistusers.js";
 import {
@@ -906,6 +924,23 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * setAdoptionDashboardUrl admin
+   *
+   * @remarks
+   * Sets or clears the link to an organization's adoption dashboard shown on the admin overview. An empty or absent URL clears it.
+   */
+  async setAdoptionDashboardUrl(
+    request: SetAdoptionDashboardURLRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganization> {
+    return unwrapAsync(adminSetAdoptionDashboardUrl(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * setInferenceKeyMonthlyLimit admin
    *
    * @remarks
@@ -1210,6 +1245,23 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * curateRegistryPromotionCandidate admin
+   *
+   * @remarks
+   * Reject, archive, or restore one exact unpublished catalogue candidate. Hidden candidates cannot be promoted until restored and refreshed.
+   */
+  async curateRegistryPromotionCandidate(
+    request: CurateRegistryPromotionCandidateRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminRegistryPromotionCandidate> {
+    return unwrapAsync(adminCurateRegistryPromotionCandidate(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * getRegistryEntry admin
    *
    * @remarks
@@ -1271,6 +1323,74 @@ export class Admin extends ClientSDK {
   ): Promise<AdminRegistryOktaUnmapped> {
     return unwrapAsync(adminListRegistryOktaUnmapped(
       this,
+      options,
+    ));
+  }
+
+  /**
+   * promoteRegistryCandidate admin
+   *
+   * @remarks
+   * Publish an explicitly reviewed public catalogue entry and queue setup documentation. Customer credentials are never copied.
+   */
+  async promoteRegistryCandidate(
+    request: PromoteRegistryCandidateRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminRegistryPromotionCandidate> {
+    return unwrapAsync(adminPromoteRegistryCandidate(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getRegistryPromotionCandidate admin
+   *
+   * @remarks
+   * Refresh health evidence for one exact remote MCP deployment before staff review.
+   */
+  async getRegistryPromotionCandidate(
+    request: GetRegistryPromotionCandidateRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminRegistryPromotionCandidate> {
+    return unwrapAsync(adminGetRegistryPromotionCandidate(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listRegistryPromotionCandidates admin
+   *
+   * @remarks
+   * List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.
+   */
+  async listRegistryPromotionCandidates(
+    request?: AdminListRegistryPromotionCandidatesRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<AdminRegistryPromotionCandidates> {
+    return unwrapAsync(adminListRegistryPromotionCandidates(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * retryRegistryPromotionDocs admin
+   *
+   * @remarks
+   * Retry a failed setup-guide request for one exact reviewed promotion without republishing the catalogue entry.
+   */
+  async retryRegistryPromotionDocs(
+    request: RetryRegistryPromotionDocsRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminRegistryPromotionCandidate> {
+    return unwrapAsync(adminRetryRegistryPromotionDocs(
+      this,
+      request,
       options,
     ));
   }
@@ -1694,6 +1814,40 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOrganization> {
     return unwrapAsync(adminStartTrial(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * disableUpstreamAuthEnforcement admin
+   *
+   * @remarks
+   * Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.
+   */
+  async disableUpstreamAuthEnforcement(
+    request: DisableUpstreamAuthEnforcementRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminUpstreamOAuthMigrationStatus> {
+    return unwrapAsync(adminDisableUpstreamAuthEnforcement(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * enableUpstreamAuthEnforcement admin
+   *
+   * @remarks
+   * Enables upstream auth enforcement for one organization: its direct proxied servers and assistant turns are served by the typed auth client resolver, and using the chosen auth client requires mcp:auth. Refused unless the organization is migrated, its auth clients are recorded, its default auth permissions are granted, every credential choice that can name an auth client does, and its assistant profiles are recorded. Choices left ambiguous and profile gaps are not blocking: those credentials are asked to reconnect and those turns are refused with the reason. Shadow parity and the cross-organization denial notice are confirmed by the caller, since they are read from telemetry and communication outside the database. Enabled enforcement does not depend on the auth-client-resolver flags.
+   */
+  async enableUpstreamAuthEnforcement(
+    request: EnableUpstreamAuthEnforcementRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminUpstreamOAuthMigrationStatus> {
+    return unwrapAsync(adminEnableUpstreamAuthEnforcement(
       this,
       request,
       options,

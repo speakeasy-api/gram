@@ -8,9 +8,6 @@ const state = vi.hoisted(() => ({
   project: { id: "project_a", slug: "first" },
 }));
 vi.mock("@/contexts/Auth", () => ({ useProject: () => state.project }));
-vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetry: () => ({ isFeatureEnabled: () => true }),
-}));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({ mcp: { add: { href: () => "/mcp/add" } } }),
 }));

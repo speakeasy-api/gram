@@ -338,15 +338,12 @@ function getNextSort<T extends object>(
   const direction = getSortDirection(column, sort);
   const id = getColumnSortId(column);
 
-  if (direction === "asc") {
-    return { id, direction: "desc" };
-  }
-
-  if (direction === "desc") {
-    return null;
-  }
-
-  return { id, direction: "asc" };
+  // Two states, not three. The column being sorted toggles asc and desc; it
+  // never cycles back to unsorted, because "sorted by nothing" is not an
+  // order a reader asks for — it only reads as the control having lost its
+  // place. The unsorted icon still belongs on every OTHER column, which is
+  // where it means something: click to sort by this instead.
+  return { id, direction: direction === "asc" ? "desc" : "asc" };
 }
 
 function getSortButtonLabel<T extends object>(
@@ -358,10 +355,6 @@ function getSortButtonLabel<T extends object>(
 
   if (direction === "asc") {
     return `Sort by ${label} descending`;
-  }
-
-  if (direction === "desc") {
-    return `Clear sort for ${label}`;
   }
 
   return `Sort by ${label} ascending`;
@@ -762,14 +755,16 @@ function RowExpandable<T extends object>({
         renderRow={renderRow}
       />
       {/* This grid stuff is a cute way to make the height animate smoothly when expanding/collapsing */}
-      <div
+      <tr
         className={cn(
           "[grid-column:1/-1] grid overflow-hidden transition-[grid-template-rows] duration-300",
           isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
         )}
       >
-        <div className="min-h-0 overflow-auto">{content}</div>
-      </div>
+        <td colSpan={columns.length} className="min-h-0 overflow-auto p-0">
+          {content}
+        </td>
+      </tr>
     </>
   );
 }

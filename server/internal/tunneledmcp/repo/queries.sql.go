@@ -201,6 +201,37 @@ func (q *Queries) GetTunneledMcpServerLimitByOrganizationID(ctx context.Context,
 	return tunneled_mcp_server_limit, err
 }
 
+const listMetricSourceOwners = `-- name: ListMetricSourceOwners :many
+SELECT id, project_id FROM tunneled_mcp_servers
+WHERE id = ANY($1::uuid[]) AND deleted IS FALSE
+`
+
+type ListMetricSourceOwnersRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Authoritative ownership enrichment for internal aggregate ingestion.
+func (q *Queries) ListMetricSourceOwners(ctx context.Context, ids []uuid.UUID) ([]ListMetricSourceOwnersRow, error) {
+	rows, err := q.db.Query(ctx, listMetricSourceOwners, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMetricSourceOwnersRow
+	for rows.Next() {
+		var i ListMetricSourceOwnersRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listServersByProjectID = `-- name: ListServersByProjectID :many
 SELECT id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, public_request_rate_per_second, public_request_burst, last_seen_at, created_at, updated_at, deleted_at, deleted
 FROM tunneled_mcp_servers

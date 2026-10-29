@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -68,7 +67,7 @@ func TestHandleRegister_PrivateKeyJWT(t *testing.T) {
 	// one.
 	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, row)
 	tw := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(row, code, verifier))
-	requireInvalidClient(t, tw)
+	requireInvalidClient(t, tw, http.StatusBadRequest)
 
 	code, verifier = seedAuthorizationCode(t, ctx, ti, toolset, row)
 	tw = postForm(t, ti, toolset.McpSlug.String, "token", withAssertion(codeGrantForm(row, code, verifier), signer.assertion(t, row.ClientID, advertisedIssuer)))
@@ -188,7 +187,7 @@ func TestOAuthCIMD_PrivateKeyJWTInlineKeys(t *testing.T) {
 
 	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, row)
 	tw := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(row, code, verifier))
-	requireInvalidClient(t, tw)
+	requireInvalidClient(t, tw, http.StatusBadRequest)
 
 	code, verifier = seedAuthorizationCode(t, ctx, ti, toolset, row)
 	tw = postForm(t, ti, toolset.McpSlug.String, "token", withAssertion(codeGrantForm(row, code, verifier), signer.assertion(t, row.ClientID, advertisedIssuer)))
@@ -272,7 +271,7 @@ func TestOAuthCIMD_AuthMethodDowngradeRefused(t *testing.T) {
 	})
 	lapseCIMDCache(t, ctx, ti, row)
 	w = doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
-	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 
 	after, err := queries.GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{UserSessionIssuerID: toolset.UserSessionIssuerID.UUID, ClientID: ds.clientID})
 	require.NoError(t, err)
@@ -334,8 +333,11 @@ func TestHandleGetAuthorizationServer_AdvertisesPrivateKeyJWT(t *testing.T) {
 	var meta struct {
 		Methods []string `json:"token_endpoint_auth_methods_supported"`
 		Algs    []string `json:"token_endpoint_auth_signing_alg_values_supported"`
+		Grants  []string `json:"grant_types_supported"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &meta))
+	// Client authentication remains supported without the removed runtime token issuer.
+	require.NotContains(t, meta.Grants, "client_credentials")
 	require.Contains(t, meta.Methods, "private_key_jwt")
 	require.Contains(t, meta.Algs, "RS256")
 	require.Contains(t, meta.Algs, "ES256")
@@ -411,12 +413,7 @@ func TestHandleGetAuthorizationServer_AdvertisesIDJAGWithTrustedIssuer(t *testin
 		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: remoteIssuer.ID, Valid: true},
 	})
 	require.NoError(t, err)
-	toolset, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, *authCtx.ProjectID, toolset, issuer.ID)
 
 	meta := loadAuthorizationServerGrantMetadata(t, ctx, ti, toolset.McpSlug.String)
 	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)

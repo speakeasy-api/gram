@@ -175,6 +175,13 @@ type Chat struct {
 	// The ID of the agent the assistant acts as, when the assistant has a
 	// dedicated agent identity
 	AssistantAgentID *string
+	// The ID of the agent that produced this session, recorded from the
+	// authenticated actor at capture. Set for sessions an agent drove directly,
+	// such as a channel session, which has no assistant record.
+	AgentID *string
+	// The current name of the agent that produced this session. Absent when the
+	// agent has since been deleted, in which case agent_id is still reported.
+	AgentName *string
 	// The number of messages in the chat
 	NumMessages int
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -304,6 +311,13 @@ type ChatOverview struct {
 	// The ID of the agent the assistant acts as, when the assistant has a
 	// dedicated agent identity
 	AssistantAgentID *string
+	// The ID of the agent that produced this session, recorded from the
+	// authenticated actor at capture. Set for sessions an agent drove directly,
+	// such as a channel session, which has no assistant record.
+	AgentID *string
+	// The current name of the agent that produced this session. Absent when the
+	// agent has since been deleted, in which case agent_id is still reported.
+	AgentName *string
 	// The number of messages in the chat
 	NumMessages int
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -555,6 +569,9 @@ type ListChatsPayload struct {
 	Source *string
 	// Filter to chats produced by this assistant
 	AssistantID *string
+	// Filter to chats produced by this agent (the agent principal recorded on the
+	// session at capture)
+	AgentID *string
 	// When set with assistant_id, list only that assistant's threads whose
 	// source_kind matches this value (e.g. 'setup' for onboarding threads). Empty
 	// for no filter.

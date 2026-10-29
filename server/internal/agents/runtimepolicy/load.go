@@ -132,8 +132,9 @@ func normalizeAgentPolicyGrant(row accessrepo.GetPrincipalGrantsRow) (authz.Gran
 	scope := authz.Scope(row.Scope)
 	// MCP exclusions restrict live parent policy; they never become delegated
 	// allow grants. Keep them so broad direct or role allows can be revoked
-	// on one server without disabling the agent on every other server.
-	isMCPRestriction := scope == authz.ScopeMCPBlockedConnect || scope == authz.ScopeMCPBlockedRead || scope == authz.ScopeMCPBlockedWrite
+	// on one server, or for one auth client on every server using it, without
+	// disabling the agent everywhere.
+	isMCPRestriction := scope == authz.ScopeMCPBlockedConnect || scope == authz.ScopeMCPBlockedRead || scope == authz.ScopeMCPBlockedWrite || scope == authz.ScopeMCPBlockedAuth
 	if !isMCPRestriction && ValidateRuntimeScope(CurrentRuntimeScopeRegistryVersion, scope) != nil {
 		return invalid, false
 	}
@@ -145,5 +146,6 @@ func normalizeAgentPolicyGrant(row accessrepo.GetPrincipalGrantsRow) (authz.Gran
 		PrincipalUrn: row.PrincipalUrn.String(),
 		Scope:        scope,
 		Selector:     selector,
+		Inferred:     row.Inferred,
 	}, true
 }

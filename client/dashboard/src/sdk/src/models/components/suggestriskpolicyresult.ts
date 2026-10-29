@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -25,7 +26,7 @@ export const SuggestRiskPolicyResultAction = {
 /**
  * Suggested enforcement action.
  */
-export type SuggestRiskPolicyResultAction = ClosedEnum<
+export type SuggestRiskPolicyResultAction = OpenEnum<
   typeof SuggestRiskPolicyResultAction
 >;
 
@@ -39,7 +40,7 @@ export const SuggestRiskPolicyResultPolicyType = {
 /**
  * Policy type of the draft.
  */
-export type SuggestRiskPolicyResultPolicyType = ClosedEnum<
+export type SuggestRiskPolicyResultPolicyType = OpenEnum<
   typeof SuggestRiskPolicyResultPolicyType
 >;
 
@@ -98,14 +99,16 @@ export type SuggestRiskPolicyResult = {
 };
 
 /** @internal */
-export const SuggestRiskPolicyResultAction$inboundSchema: z.ZodMiniEnum<
-  typeof SuggestRiskPolicyResultAction
-> = z.enum(SuggestRiskPolicyResultAction);
+export const SuggestRiskPolicyResultAction$inboundSchema: z.ZodMiniType<
+  SuggestRiskPolicyResultAction,
+  unknown
+> = openEnums.inboundSchema(SuggestRiskPolicyResultAction);
 
 /** @internal */
-export const SuggestRiskPolicyResultPolicyType$inboundSchema: z.ZodMiniEnum<
-  typeof SuggestRiskPolicyResultPolicyType
-> = z.enum(SuggestRiskPolicyResultPolicyType);
+export const SuggestRiskPolicyResultPolicyType$inboundSchema: z.ZodMiniType<
+  SuggestRiskPolicyResultPolicyType,
+  unknown
+> = openEnums.inboundSchema(SuggestRiskPolicyResultPolicyType);
 
 /** @internal */
 export const SuggestRiskPolicyResult$inboundSchema: z.ZodMiniType<

@@ -8,7 +8,9 @@ package migration
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/google/uuid"
@@ -16,6 +18,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 )
 
 // Action is what staff can do with a candidate.
@@ -34,6 +38,12 @@ const (
 type Candidate struct {
 	// Row is the candidate as stored.
 	Row repo.ListCandidatesRow
+
+	// Alias is the toolset's legacy /mcp/<slug> address, if it has one.
+	Alias legacyalias.Alias
+
+	// AliasIsEndpoint reports whether the alias is also one of its server's endpoints, or it has no alias.
+	AliasIsEndpoint bool
 
 	// Action is what running the candidate does.
 	Action Action
@@ -66,16 +76,14 @@ type Candidate struct {
 
 const (
 	blockerNoOrganization     = "its organization has no metadata record, so it is handled separately"
-	deleteNotLive             = "MCP is off and it has no server row, so nothing serves it"
+	deleteNotLive             = "it has no enabled hosted MCP server or server row, so nothing serves it"
 	deleteMigrated            = "already migrated; its server now proxies a remote MCP server and keeps working"
 	deleteNotOnDeployment     = "its external MCP attachment is no longer on the project's active deployment"
 	deleteManyUpstreams       = "proxies more than one external MCP attachment, URL or transport"
 	blockerTransport          = "uses a transport remote MCP servers do not support"
 	blockerVariations         = "uses tool variations, which the switch would drop"
 	blockerPrompts            = "has prompts, which the switch would drop"
-	blockerAssistants         = "is attached to an assistant through its toolset"
 	blockerSlackApps          = "is attached to a Slack app through its toolset"
-	blockerToolsetPlugin      = "is in a plugin through its toolset rather than its server"
 	blockerGateway            = "is a member of a gateway"
 	blockerNoServer           = "has no server row; only the legacy toolset address serves it"
 	blockerManyServers        = "has more than one server row"
@@ -85,7 +93,7 @@ const (
 	blockerSelfOwnedClient    = "its sign-in provider has a client that holds its own credentials"
 	blockerEMABindings        = "its sign-in provider has enterprise-managed authorization bindings"
 	warningExternalOAuth      = "uses an external OAuth server, which is not carried over; sign-in through it is dropped"
-	warningOAuthProxy         = "has an OAuth proxy or its stored tokens, which are dropped; sign-in through the proxy stops"
+	warningStoredUserOAuth    = "has stored user OAuth tokens, which are dropped"
 	warningOtherTools         = "serves tools or resources beyond the external MCP attachment, which are dropped"
 	blockerManyResources      = "its signed-in sessions record more than one upstream resource"
 	blockerSharedNonRemote    = "another server signs in through the same provider and is not a remote MCP server"
@@ -100,9 +108,29 @@ func (m *Migrator) ListCandidates(ctx context.Context) ([]Candidate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list external MCP candidates: %w", err)
 	}
+	byProject := make(map[uuid.UUID][]uuid.UUID)
+	for _, row := range rows {
+		byProject[row.ProjectID] = append(byProject[row.ProjectID], row.ToolsetID)
+	}
+	aliases := make(map[uuid.UUID]legacyalias.Alias, len(rows))
+	for projectID, ids := range byProject {
+		listed, err := legacyalias.List(ctx, m.db, projectID, ids)
+		if err != nil {
+			return nil, fmt.Errorf("load candidate aliases: %w", err)
+		}
+		maps.Copy(aliases, listed)
+	}
 	candidates := make([]Candidate, 0, len(rows))
 	for _, row := range rows {
-		candidates = append(candidates, assess(row))
+		address, ok := aliases[row.ToolsetID]
+		if !ok {
+			address = legacyalias.None()
+		}
+		alias, err := candidateAliasFor(ctx, m.db, row, address)
+		if err != nil {
+			return nil, err
+		}
+		candidates = append(candidates, assess(row, alias))
 	}
 	if m.toolCalls != nil {
 		counts, err := m.toolCalls.CountToolCalls(ctx, candidates)
@@ -118,9 +146,44 @@ func (m *Migrator) ListCandidates(ctx context.Context) ([]Candidate, error) {
 	return candidates, nil
 }
 
-// assess derives a candidate's upstream URLs and blockers from its row.
-func assess(row repo.ListCandidatesRow) Candidate {
-	candidate := Candidate{Row: row, Action: ActionMigrate, DeleteReasons: nil, RemoteURL: "", ReplacementURL: "", Blockers: nil, Warnings: nil, ToolCalls: nil}
+// candidateAlias is a candidate toolset's legacy alias and whether its server has an endpoint at that address.
+type candidateAlias struct {
+	address    legacyalias.Alias
+	isEndpoint bool
+}
+
+// loadCandidateAlias reads a candidate's legacy alias. The legacy route stops answering once the toolset's server
+// is switched, so the alias must also be an endpoint of that server.
+func loadCandidateAlias(ctx context.Context, db mcpendpointsrepo.DBTX, row repo.ListCandidatesRow) (candidateAlias, error) {
+	address, err := legacyalias.Get(ctx, db, row.ProjectID, row.ToolsetID)
+	if err != nil {
+		return candidateAlias{address: address, isEndpoint: false}, fmt.Errorf("load candidate alias: %w", err)
+	}
+	return candidateAliasFor(ctx, db, row, address)
+}
+
+// candidateAliasFor checks whether a candidate's alias is one of its server's endpoints.
+func candidateAliasFor(ctx context.Context, db mcpendpointsrepo.DBTX, row repo.ListCandidatesRow, address legacyalias.Alias) (candidateAlias, error) {
+	if !address.Slug.Valid || address.Slug.String == "" {
+		return candidateAlias{address: address, isEndpoint: true}, nil
+	}
+	if row.WrapperID == uuid.Nil {
+		return candidateAlias{address: address, isEndpoint: false}, nil
+	}
+	endpoint, err := mcpendpointsrepo.New(db).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{Slug: address.Slug.String, CustomDomainID: address.CustomDomainID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return candidateAlias{address: address, isEndpoint: false}, nil
+	case err != nil:
+		return candidateAlias{address: address, isEndpoint: false}, fmt.Errorf("load legacy alias endpoint: %w", err)
+	}
+	isEndpoint := endpoint.McpServerID == uuid.NullUUID{UUID: row.WrapperID, Valid: true} && endpoint.ProjectID == row.ProjectID
+	return candidateAlias{address: address, isEndpoint: isEndpoint}, nil
+}
+
+// assess derives a candidate's upstream URLs and blockers from its row and legacy alias.
+func assess(row repo.ListCandidatesRow, alias candidateAlias) Candidate {
+	candidate := Candidate{Row: row, Alias: alias.address, AliasIsEndpoint: alias.isEndpoint, Action: ActionMigrate, DeleteReasons: nil, RemoteURL: "", ReplacementURL: "", Blockers: nil, Warnings: nil, ToolCalls: nil}
 	block := func(reason string) { candidate.Blockers = append(candidate.Blockers, reason) }
 	warn := func(reason string) { candidate.Warnings = append(candidate.Warnings, reason) }
 
@@ -140,14 +203,14 @@ func assess(row repo.ListCandidatesRow) Candidate {
 	if !row.HasOrganizationMetadata {
 		block(blockerNoOrganization)
 	}
-	// Sign-in through an external OAuth server or an OAuth proxy does not carry
-	// over. The switched server keeps its user session issuer, if any, and
+	// Sign-in through an external OAuth server and stored user OAuth tokens do
+	// not carry over. The switched server keeps its user session issuer, if any, and
 	// reaches the upstream without upstream credentials.
 	if row.ExternalOauthServerID.Valid {
 		warn(warningExternalOAuth)
 	}
-	if row.OauthProxyServerID.Valid || row.HasUserOauthTokens {
-		warn(warningOAuthProxy)
+	if row.HasUserOauthTokens {
+		warn(warningStoredUserOAuth)
 	}
 	if row.ServesOtherTools {
 		warn(warningOtherTools)
@@ -161,14 +224,8 @@ func assess(row repo.ListCandidatesRow) Candidate {
 	if row.HasPrompts {
 		block(blockerPrompts)
 	}
-	if row.HasAssistants {
-		block(blockerAssistants)
-	}
 	if row.HasSlackApps {
 		block(blockerSlackApps)
-	}
-	if row.HasToolsetPluginEntries {
-		block(blockerToolsetPlugin)
 	}
 	if row.InGateway {
 		block(blockerGateway)
@@ -180,8 +237,8 @@ func assess(row repo.ListCandidatesRow) Candidate {
 		block(blockerManyServers)
 	case row.EndpointCount != 1:
 		block(blockerEndpoints)
-	case !row.McpSlugIsEndpoint:
-		block(fmt.Sprintf("its legacy address /mcp/%s is not one of its endpoints and would stop working", row.McpSlug.String))
+	case !alias.isEndpoint:
+		block(fmt.Sprintf("its legacy address /mcp/%s is not one of its endpoints and would stop working", alias.address.Slug.String))
 	}
 	if row.ServerUserSessionIssuerID.Valid && row.ServerUserSessionIssuerID != row.UserSessionIssuerID {
 		block(blockerServerIssuer)
@@ -272,7 +329,11 @@ func loadCandidate(ctx context.Context, tx pgx.Tx, toolsetID uuid.UUID) (*Candid
 	if len(rows) != 1 {
 		return nil, nil
 	}
-	candidate := assess(rows[0])
+	alias, err := loadCandidateAlias(ctx, tx, rows[0])
+	if err != nil {
+		return nil, err
+	}
+	candidate := assess(rows[0], alias)
 	return &candidate, nil
 }
 

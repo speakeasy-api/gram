@@ -44,8 +44,7 @@ func ListDeviceMCPServers(ctx context.Context, logger *slog.Logger, db repo.DBTX
 		return nil, nil
 	}
 
-	queries := repo.New(db)
-	remoteRows, err := queries.ListPluginsWithMcpServersForProject(ctx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
+	remoteRows, err := listPluginMCPServers(ctx, db, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
 		return nil, fmt.Errorf("list remote plugin servers: %w", err)
 	}
@@ -65,8 +64,6 @@ func ListDeviceMCPServers(ctx context.Context, logger *slog.Logger, db repo.DBTX
 			err = requireHTTPS(mcpURL)
 		}
 		switch {
-		case r.WrapperCount > 1:
-			skip(r.PluginSlug, errors.New("ambiguous toolset MCP serving wrapper"))
 		case err != nil:
 			skip(r.PluginSlug, err)
 		case !unproxied:

@@ -421,8 +421,12 @@ linters:
     exhaustive:
       check:
         - switch
-        - map
+        - mapliteral
       default-signifies-exhaustive: true
+      # Protobuf wire field numbers are an open, schema-defined integer space.
+      ignore-types:
+        - '^google\.golang\.org/protobuf/encoding/protowire\.Number$'
+        - '^google\.golang\.org/protobuf/reflect/protoreflect\.FieldNumber$'
     errcheck:
       exclude-functions:
         - "github.com/speakeasy-api/gram/server/internal/o11y.LogDefer"
@@ -480,6 +484,10 @@ linters:
       require-specific: true
       require-explanation: true
     wrapcheck:
+      # Generated API packages own their error contracts.
+      ignore-package-globs:
+        - "github.com/speakeasy-api/gram/server/gen"
+        - "github.com/speakeasy-api/gram/server/gen/*"
       ignore-sigs:
         - "errors.New("
         - "errors.Join("
@@ -502,9 +510,19 @@ linters:
         - "github.com/speakeasy-api/gram/server/internal/oops.C("
         - "github.com/speakeasy-api/gram/server/internal/oops.E("
         - "github.com/speakeasy-api/gram/server/internal/oops.Permanent("
-        - "github.com/speakeasy-api/gram/server/internal/managedrows.RequireUnmanaged("
-        - "github.com/speakeasy-api/gram/server/internal/managedrows.RequireDeletable("
-        - "github.com/speakeasy-api/gram/server/internal/managedrows.Error("
+        # These helpers preserve or construct an already contextualized typed error.
+        - "(*github.com/speakeasy-api/gram/server/internal/oops.ShareableError).LogError("
+        - "(*github.com/speakeasy-api/gram/server/internal/oops.ShareableError).LogWarn("
+        - "(*github.com/speakeasy-api/gram/server/internal/oops.ShareableError).LogInfo("
+        - "github.com/speakeasy-api/gram/server/internal/oops.NewOAuthError("
+        - "github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers.NewAuthError("
+        - "github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting.GatewayFailureRejection("
+        - "github.com/speakeasy-api/gram/server/internal/remotemcp/proxy.NewKillswitchInfrastructureRejection("
+        - "github.com/speakeasy-api/gram/server/internal/remotemcp/proxy.NewKillswitchMatchRejection("
+        - "k8s.io/apimachinery/pkg/api/errors.NewConflict("
+        - "github.com/speakeasy-api/gram/server/internal/idpmanagedresources.RequireUnmanaged("
+        - "github.com/speakeasy-api/gram/server/internal/idpmanagedresources.RequireDeletable("
+        - "github.com/speakeasy-api/gram/server/internal/idpmanagedresources.Error("
         - "github.com/speakeasy-api/gram/server/internal/httpcache.WriteCacheableJSON("
         - "github.com/speakeasy-api/gram/server/internal/platformtools/core.DecodeInput("
         - "github.com/speakeasy-api/gram/server/internal/platformtools/core.EncodeResult("

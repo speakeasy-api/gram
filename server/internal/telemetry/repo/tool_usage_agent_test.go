@@ -31,7 +31,7 @@ func TestToolUsageAgentAttributionSQL(t *testing.T) {
 				require.NotContains(t, query, "telemetry_logs")
 			} else {
 				require.Contains(t, query, toolUsageAgentIDExpr+" AS agent_id")
-				require.Contains(t, query, "telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent'")
+				require.Contains(t, query, "telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery', 'hook') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id)")
 			}
 			agentExpr := prefix + "agent_id"
 			if !tt.grouped {
@@ -52,4 +52,12 @@ func TestToolUsageAgentSummaryExpressionMatchesRaw(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(schema), "max("+toolUsageAgentIDExpr+") AS agent_id")
 	require.Contains(t, string(schema), "agent_id SimpleAggregateFunction(max, String)")
+}
+
+func TestToolUsageAuthorizerSummaryExpressionMatchesRaw(t *testing.T) {
+	t.Parallel()
+	schema, err := os.ReadFile("../../../clickhouse/schema.sql")
+	require.NoError(t, err)
+	require.Contains(t, string(schema), "max("+toolUsageAuthorizerUserIDExpr+") AS authorizer_user_id")
+	require.Contains(t, string(schema), "authorizer_user_id SimpleAggregateFunction(max, String)")
 }
