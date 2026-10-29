@@ -127,7 +127,7 @@ export function ExchangeValues({
               : servers.length > 0
                 ? "This agent's servers are only served over plaintext HTTP, so their URLs are withheld: the access token would cross the network unencrypted. Serve them over HTTPS and reload."
                 : serversLeftOut > 0
-                  ? "None of this agent's servers accept a token from a shared user session issuer yet. The user session issuer section on this step names what each one needs."
+                  ? "No token endpoint here works for this agent's servers yet. The user session issuer section on this step names what each one needs."
                   : "This agent can't reach any MCP servers yet. Go back to MCP Selection and choose at least one."
           }
         />
