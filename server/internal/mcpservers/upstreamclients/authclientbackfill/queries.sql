@@ -2773,7 +2773,7 @@ INSERT INTO user_sessions (project_id, organization_id, user_session_issuer_id, 
 VALUES (@project_id, @organization_id, @user_session_issuer_id, @subject_urn, @jti, sqlc.narg('refresh_token_hash'), clock_timestamp() + interval '1 day', clock_timestamp() + interval '1 hour', @credential_id);
 
 -- name: GetSelectionFixture :one
-SELECT remote_session_client_id, auth_client_id, no_auth
+SELECT remote_session_client_id, auth_client_id, no_auth, source
 FROM upstream_client_selections
 WHERE credential_id = @credential_id AND mcp_server_id = @mcp_server_id AND deleted IS FALSE;
 
