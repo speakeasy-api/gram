@@ -977,21 +977,31 @@ export function CredentialsWizard({
       return targetId;
     },
     onConnected: setAgentID,
-    // The rule this agent already holds: its own rule is not a duplicate of
-    // itself, and the create step has nothing left to write.
-    connectedSubject: admitted?.subject,
-    // Editing never writes a rule: the agent already holds one, and the
-    // steps after this are the platform's own settings to read.
-    settled: editing,
+    // The rule this agent already holds. Editing its values replaces it.
+    replacing: editing ? admitted : undefined,
+    // Editing without permission to manage workload identities shows the
+    // rule without letting it be changed.
+    readOnly: editing && !canFederate,
     // What the rule already says, so editing shows it rather than an empty
     // field that would write a second rule.
     initialValues:
-      admitted !== undefined && admittedEntry !== undefined
-        ? {
-            ...valuesFromIssuer(admittedEntry, admitted.issuer),
-            ...valuesFromSubject(admittedEntry, admitted.subject),
-          }
-        : undefined,
+      admitted === undefined
+        ? undefined
+        : admittedEntry !== undefined
+          ? {
+              ...valuesFromIssuer(admittedEntry, admitted.issuer),
+              ...valuesFromSubject(admittedEntry, admitted.subject),
+            }
+          : // A custom issuer: the issuer picked from the trusted list, and
+            // the subject as typed, without the `*` the match kind adds.
+            {
+              issuer_id: admitted.workloadIssuerId,
+              subject:
+                admitted.matchKind === "wildcard"
+                  ? admitted.subject.replace(/\*$/, "")
+                  : admitted.subject,
+              match_kind: admitted.matchKind,
+            },
     onValueChange: (key) =>
       setHighlight(
         key === "org_id"
@@ -1538,8 +1548,9 @@ export function CredentialsWizard({
           primary={
             workloadStep.phase === "create" ? (
               // Already connected under this very rule: there is nothing to
-              // write, so the step is a page to read and move past.
-              workload.connected || editing ? (
+              // write, so the step is a page to read and move past. Someone
+              // who cannot manage workload identities only reads it.
+              workload.connected || (editing && !canFederate) ? (
                 <Button onClick={() => setStep(step + 1)}>Continue</Button>
               ) : (
                 <Button
@@ -1553,8 +1564,12 @@ export function CredentialsWizard({
                   }}
                 >
                   {workload.connecting
-                    ? "Connecting…"
-                    : `Connect ${platform?.displayName ?? "platform"}`}
+                    ? editing
+                      ? "Saving…"
+                      : "Connecting…"
+                    : editing
+                      ? "Save changes"
+                      : `Connect ${platform?.displayName ?? "platform"}`}
                 </Button>
               )
             ) : last ? (
