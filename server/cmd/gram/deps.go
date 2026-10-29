@@ -684,7 +684,7 @@ func newStripeClient(
 		(apiKeyParts[0] == "sk" || apiKeyParts[0] == "rk") &&
 		(apiKeyParts[1] == "test" || apiKeyParts[1] == "live") &&
 		!strings.HasPrefix(publishableKey, "pk_"+apiKeyParts[1]+"_") {
-		return nil, errors.New("Stripe API and publishable key modes must match")
+		return nil, errors.New("mismatched Stripe API and publishable key modes")
 	}
 	if !stripeclient.IsConfigured(apiKey) {
 		if c.String("environment") == "local" {
