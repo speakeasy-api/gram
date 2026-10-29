@@ -981,8 +981,8 @@ func (w platformMCPWorkspaces) SuggestedWorkspaceName(ctx context.Context, userI
 	return name, nil
 }
 
-func (w platformMCPWorkspaces) ProvisionWorkspace(ctx context.Context, userID, name string) (platformmcp.OrganizationOption, error) {
-	id, stored, err := w.auth.ProvisionPlatformMCPWorkspace(ctx, userID, name)
+func (w platformMCPWorkspaces) ProvisionWorkspace(ctx context.Context, userID, name, clientName string) (platformmcp.OrganizationOption, error) {
+	id, stored, err := w.auth.ProvisionPlatformMCPWorkspace(ctx, userID, name, clientName)
 	if err != nil {
 		return platformmcp.OrganizationOption{}, fmt.Errorf("provision workspace: %w", err)
 	}
