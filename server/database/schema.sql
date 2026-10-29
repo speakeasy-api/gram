@@ -16417,3 +16417,39 @@ COMMENT ON COLUMN registry_promotion_candidates.curation_updated_by IS '@access:
 COMMENT ON COLUMN registry_promotion_candidates.curation_retry_key IS '@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.curation_retry_revision IS '@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.curation_retry_action IS '@access: confidential';
+
+-- Staff-global migration state has no project owner, like admin_mcp_write_proposals.
+-- Snapshots contain only organization IDs, counters and bounded reason codes.
+CREATE TABLE IF NOT EXISTS admin_mcp_auth_defaults_backfill_runs (
+  id uuid NOT NULL PRIMARY KEY,
+  staff_subject TEXT NOT NULL,
+  status TEXT NOT NULL,
+  version bigint NOT NULL DEFAULT 1,
+  expires_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE TABLE IF NOT EXISTS admin_mcp_auth_defaults_backfill_targets (
+  run_id uuid NOT NULL REFERENCES admin_mcp_auth_defaults_backfill_runs(id),
+  organization_id TEXT NOT NULL REFERENCES organization_metadata(id),
+  fingerprint TEXT NOT NULL,
+  outcome JSONB NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (run_id, organization_id)
+);
+CREATE INDEX IF NOT EXISTS admin_mcp_auth_defaults_backfill_targets_organization_idx
+ON admin_mcp_auth_defaults_backfill_targets (organization_id);
+COMMENT ON COLUMN admin_mcp_auth_defaults_backfill_runs.id IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_auth_defaults_backfill_runs.staff_subject IS '@access: confidential-pii';
+COMMENT ON COLUMN admin_mcp_auth_defaults_backfill_runs.status IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_auth_defaults_backfill_runs.version IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_auth_defaults_backfill_runs.expires_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_auth_defaults_backfill_runs.created_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_auth_defaults_backfill_runs.updated_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_auth_defaults_backfill_targets.run_id IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_auth_defaults_backfill_targets.organization_id IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_auth_defaults_backfill_targets.fingerprint IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_auth_defaults_backfill_targets.outcome IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_auth_defaults_backfill_targets.created_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_auth_defaults_backfill_targets.updated_at IS '@access: confidential';
