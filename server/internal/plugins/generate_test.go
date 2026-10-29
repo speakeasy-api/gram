@@ -3509,7 +3509,8 @@ func TestGeneratePlatformMCPPackageEmitsPrivateAccessWorkflow(t *testing.T) {
 	require.Contains(t, workflow, "`failure_category: repository_conflict` cannot be fixed by republishing")
 	require.Contains(t, workflow, "treat it as pending until `last_publish.requested_at` is later than the republish or the publication evidence reports `fresh: true`")
 	require.Contains(t, workflow, "`not_configured: true`, no publish has ever been recorded")
-	require.Contains(t, workflow, "`awaiting_manual_sync: true`, the plugin's auto sync is off, so no update is on its way")
+	require.Contains(t, workflow, "`awaiting_manual_sync: true`, the plugin's auto sync is off and its own package has changes waiting")
+	require.Contains(t, workflow, "it does not override `last_publish`: while `last_publish` is `queued`, `running`, or `retrying`, a sync may already be on its way")
 	require.NotContains(t, workflow, "speakeasy-skill-feedback")
 }
 
