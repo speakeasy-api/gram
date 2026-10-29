@@ -960,8 +960,9 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 }
 
 // refuseOrgWideAttachment refuses a project-scoped attach or detach of an
-// organization-level client on an organization-level user session issuer: that
-// binding is shared by every project's servers on the issuer.
+// organization-level client on an organization-level user session issuer by a
+// caller without organization admin: that binding is shared by every project's
+// servers on the issuer.
 func (s *Service) refuseOrgWideAttachment(ctx context.Context, logger *slog.Logger, q *repo.Queries, authCtx contextvalues.AuthContext, userIssuerID, clientID uuid.UUID, attaching bool) error {
 	// Scope and lock the issuer before checking the binding, even for a no-op.
 	// Attach also holds the owner advisory lock; the row lock serializes both
@@ -999,7 +1000,11 @@ func (s *Service) refuseOrgWideAttachment(ctx context.Context, logger *slog.Logg
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
 	}
-	if err := refuseOrgWideBinding(!issuer.ProjectID.Valid, client.RemoteSessionClient.ProjectID); err != nil {
+	orgAdmin, err := s.actorIsOrganizationAdmin(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check organization admin access").LogError(ctx, logger)
+	}
+	if err := refuseOrgWideBinding(!issuer.ProjectID.Valid, orgAdmin, client.RemoteSessionClient.ProjectID); err != nil {
 		return identityOopsError(err, "attach remote session client").LogError(ctx, logger)
 	}
 	return nil

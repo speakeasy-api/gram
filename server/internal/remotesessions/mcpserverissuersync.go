@@ -56,12 +56,43 @@ func ResyncMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserversrep
 // BestEffortResyncMCPServerRemoteSessionIssuers is the post-commit form: the
 // mutation it follows has already committed, so a failure is logged rather
 // than returned and the stale value it leaves is recoverable.
+//
+// It resyncs projectID, then every other project with a server on one of the
+// organization-level issuers among userIssuerIDs: an organization admin can
+// change those bindings from one project, and every project's servers share
+// them.
 func BestEffortResyncMCPServerRemoteSessionIssuers(ctx context.Context, logger *slog.Logger, db mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) {
 	// Detached from request cancellation like RevokeAllDetached: already committed.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerResyncTimeout)
-	defer cancel()
+	ctx = context.WithoutCancel(ctx)
 
+	bestEffortResyncProject(ctx, logger, db, organizationID, projectID, userIssuerIDs)
+	if len(userIssuerIDs) == 0 {
+		return
+	}
+	listCtx, cancel := context.WithTimeout(ctx, issuerResyncTimeout)
+	sharing, err := mcpserversrepo.New(db).ListProjectsSharingOrganizationUserSessionIssuers(listCtx, mcpserversrepo.ListProjectsSharingOrganizationUserSessionIssuersParams{
+		UserSessionIssuerIds: userIssuerIDs,
+		OrganizationID:       organizationID,
+	})
+	cancel()
+	if err != nil {
+		logger.ErrorContext(ctx, "list projects sharing organization user session issuers", attr.SlogError(err))
+		return
+	}
+	for _, sharingProjectID := range sharing {
+		if sharingProjectID == projectID {
+			continue
+		}
+		bestEffortResyncProject(ctx, logger, db, organizationID, sharingProjectID, userIssuerIDs)
+	}
+}
+
+// bestEffortResyncProject gives each project its own deadline, so one slow
+// project cannot starve the ones after it.
+func bestEffortResyncProject(ctx context.Context, logger *slog.Logger, db mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) {
+	ctx, cancel := context.WithTimeout(ctx, issuerResyncTimeout)
+	defer cancel()
 	if err := ResyncMCPServerRemoteSessionIssuers(ctx, db, organizationID, projectID, userIssuerIDs); err != nil {
-		logger.ErrorContext(ctx, "resync mcp server remote session issuers", attr.SlogError(err))
+		logger.ErrorContext(ctx, "resync mcp server remote session issuers", attr.SlogError(err), attr.SlogProjectID(projectID.String()))
 	}
 }
