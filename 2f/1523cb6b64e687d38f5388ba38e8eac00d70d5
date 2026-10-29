@@ -1,0 +1,18 @@
+client/admin/nginx.conf
+  h_2620cc60cfd1e9 1-8,16-17
+client/dashboard/nginx.conf
+  h_2620cc60cfd1e9 1-8,16-17
+client/test_nginx_logging.py
+  h_2620cc60cfd1e9 1-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2f1523cb6b64e687d38f5388ba38e8eac00d70d5",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
