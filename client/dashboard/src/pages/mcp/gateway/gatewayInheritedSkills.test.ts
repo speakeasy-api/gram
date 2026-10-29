@@ -1,6 +1,6 @@
 import type { SkillLink } from "@gram/client/models/components/skilllink.js";
 import { describe, expect, it } from "vitest";
-import { inheritedSkills } from "./GatewayInheritedSkillsSection";
+import { inheritedSkills } from "./gatewayInheritedSkills";
 
 function serverLink(
   skillId: string,

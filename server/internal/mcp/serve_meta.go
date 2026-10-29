@@ -798,6 +798,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		// tools/call path reads it (upstream dials pin their own version).
 		protocolVersion: request.resolution,
 		connectURL:      connectURL,
+		skillsOverMCP:   nil,
 	}
 	if gatePolicy != nil {
 		gate.catalogRef = gatePolicy.Catalog
