@@ -533,7 +533,9 @@ describe("Agent API keys", () => {
       { sessionHeaderGramSession: "" },
     );
   });
-  it("blocks header navigation during submission and the deferred post-issue refetch", async () => {
+  it("blocks header navigation during credential discovery, submission and the deferred post-issue refetch", async () => {
+    mocks.selectedKind = "Remote";
+    let finishChoices!: (value: { choices: [] }) => void;
     let finishCreate!: (value: typeof key & { key: string }) => void;
     let finishRefetch!: (value: { keys: (typeof key)[] }) => void;
     mocks.create.mockImplementationOnce(
@@ -551,7 +553,19 @@ describe("Agent API keys", () => {
         }),
     );
     fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    mocks.listChoices.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishChoices = resolve;
+        }),
+    );
     submitKey();
+    await waitFor(() => expect(finishChoices).toBeTypeOf("function"));
+    expect(
+      screen.getByRole("button", { name: "Back to agent" }),
+    ).toHaveProperty("disabled", true);
+    expect(mocks.create).not.toHaveBeenCalled();
+    finishChoices({ choices: [] });
     await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
     expect(
       screen.getByRole("button", { name: "Back to agent" }),

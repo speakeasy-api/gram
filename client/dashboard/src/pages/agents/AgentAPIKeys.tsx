@@ -230,7 +230,8 @@ function AgentAPIKeysContent({
   const create = useCreateAPIKeyMutation({ gcTime: 0, retry: false });
   // Resetting mutation state after issuance must not unlock header navigation
   // while the post-issue inventory refresh is still in flight.
-  const navigationBusy = create.isPending || (issued && keys.isFetching);
+  const navigationBusy =
+    checkingChoices || create.isPending || (issued && keys.isFetching);
   useEffect(() => {
     onBusy?.(navigationBusy);
   }, [navigationBusy, onBusy]);
@@ -338,6 +339,7 @@ function AgentAPIKeysContent({
   const issue = (review = false) => {
     if (
       !canIssue ||
+      checkingChoices ||
       create.isPending ||
       issued ||
       !accountsReady ||
@@ -482,7 +484,6 @@ function AgentAPIKeysContent({
     setCheckingChoices(true);
     void keyCredentialChoices(sdk, servers).then(
       (authClientChoices) => {
-        setCheckingChoices(false);
         create.mutate(
           {
             security,
@@ -528,6 +529,7 @@ function AgentAPIKeysContent({
               );
               create.reset();
             },
+            onSettled: () => setCheckingChoices(false),
           },
         );
       },
