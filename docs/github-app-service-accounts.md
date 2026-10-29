@@ -12,6 +12,8 @@ A customer-owned GitHub App can supply a shared upstream identity for a remote M
 6. Grant the intended callers permission to use this auth client (`mcp:auth`) through the existing credential access controls. Configuring an app does not grant use of it.
 7. Reconnect and test a read-only tool against an installed repository.
 
+New dashboard setup offers GitHub App authentication only for HTTPS MCP URLs hosted at `api.githubcopilot.com`, `github.com`, or `api.github.com`. Names and descriptions do not affect eligibility. Existing GitHub App configurations remain editable and rotatable on other hosts, including enterprise and custom proxy hosts. The API continues to support those hosts.
+
 The MCP server must accept GitHub installation access tokens. Credential verification proves the app/installation exchange, not that every upstream tool supports the token or its permissions.
 
 ## Enterprise and network access

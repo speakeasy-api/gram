@@ -1,4 +1,5 @@
 import { Spinner } from "@/components/ui/Spinner";
+import { isGitHubMcpUrl } from "@/lib/remote-identity/model/githubApp";
 import { GitHubAppFields } from "@/lib/remote-identity/components/GitHubAppFields";
 import { useGitHubAppDraft } from "@/lib/remote-identity/drafts/useGitHubAppDraft";
 import { RequireScope } from "@/components/require-scope";
@@ -880,23 +881,25 @@ export function RemoteMcpIdentitySectionBody({
               <ServiceAccountPanel
                 format={saFormat}
                 githubAppFields={
-                  <div className="space-y-3">
-                    <GitHubAppFields
-                      value={githubDraft.value}
-                      onChange={githubDraft.setDraft}
-                      disabled={
-                        identityReadOnly ||
-                        !canManageGitHub ||
-                        githubDraft.saving
-                      }
-                    />
-                    {!canManageGitHub ? (
-                      <Text small muted>
-                        Organization administrator access is required to
-                        configure a GitHub App.
-                      </Text>
-                    ) : null}
-                  </div>
+                  githubDraft.bound || isGitHubMcpUrl(sourceQuery.data?.url) ? (
+                    <div className="space-y-3">
+                      <GitHubAppFields
+                        value={githubDraft.value}
+                        onChange={githubDraft.setDraft}
+                        disabled={
+                          identityReadOnly ||
+                          !canManageGitHub ||
+                          githubDraft.saving
+                        }
+                      />
+                      {!canManageGitHub ? (
+                        <Text small muted>
+                          Organization administrator access is required to
+                          configure a GitHub App.
+                        </Text>
+                      ) : null}
+                    </div>
+                  ) : undefined
                 }
                 onFormatChange={setFormatPick}
                 agentDraft={agentDraft}

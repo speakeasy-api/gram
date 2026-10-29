@@ -46,6 +46,7 @@ function renderChoice(
       authenticationRequired={props.authenticationRequired ?? false}
       canCreateIdentity={props.canCreateIdentity ?? true}
       rbacLoading={props.rbacLoading ?? false}
+      {...props}
     />,
   );
 }
@@ -56,6 +57,33 @@ afterEach(() => {
 });
 
 describe("CreationIdentityChoice", () => {
+  it.each([
+    ["https://api.githubcopilot.com/mcp", true],
+    ["https://mcp.linear.app/mcp", false],
+    ["https://workspace.google.com/mcp", false],
+    ["https://github.com.example.net/mcp", false],
+    ["https://git.example.com/mcp", false],
+  ])("offers GitHub App for %s: %s", (url, visible) => {
+    renderChoice({
+      value: "agent",
+      upstreamUrls: [url],
+      canConfigureGitHub: true,
+      onGitHubAppChange: vi.fn(() => {}),
+    });
+    expect(screen.queryByText("GitHub App") !== null).toBe(visible);
+  });
+  it("hides GitHub App for mixed catalog endpoints", () => {
+    renderChoice({
+      value: "agent",
+      upstreamUrls: [
+        "https://api.githubcopilot.com/mcp",
+        "https://mcp.linear.app/mcp",
+      ],
+      canConfigureGitHub: true,
+      onGitHubAppChange: vi.fn(() => {}),
+    });
+    expect(screen.queryByText("GitHub App")).toBeNull();
+  });
   it("explains the modes inline rather than in a dialog", () => {
     renderChoice();
 

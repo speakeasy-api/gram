@@ -38,3 +38,20 @@ export function gitHubAppReady(draft: GitHubAppDraft): boolean {
     /-----BEGIN (RSA )?PRIVATE KEY-----/.test(draft.privateKey)
   );
 }
+
+export function isGitHubMcpUrl(raw: string | undefined): boolean {
+  if (!raw) return false;
+  try {
+    const url = new URL(raw);
+    return (
+      url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      ["api.githubcopilot.com", "github.com", "api.github.com"].includes(
+        url.hostname,
+      )
+    );
+  } catch {
+    return false;
+  }
+}

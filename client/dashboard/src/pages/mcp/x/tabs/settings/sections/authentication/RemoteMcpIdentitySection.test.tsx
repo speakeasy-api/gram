@@ -3817,6 +3817,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       },
     ]);
     renderIdentity();
+    expect(screen.getByRole("radio", { name: /^GitHub App/ })).toBeDefined();
     fireEvent.click(
       within(
         screen.getByRole("radiogroup", { name: "Service account" }),
