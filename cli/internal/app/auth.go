@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/urfave/cli/v2"
 
@@ -238,6 +241,11 @@ func mintKey(
 	redeemer keyRedeemer,
 	openBrowser auth.BrowserOpener,
 ) (*cliauth.RedeemResult, error) {
+	// Ctrl+C cancels the wait instead of exiting outright, so the deferred
+	// cleanup still removes the redirect file holding the sign-in URL.
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	pkce, err := auth.NewPKCE()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate login proof key: %w", err)

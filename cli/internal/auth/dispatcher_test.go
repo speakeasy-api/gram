@@ -67,6 +67,7 @@ func TestDispatch_NoBrowserStillSucceeds(t *testing.T) {
 
 	cleanup, err := d.Dispatch(t.Context(), "https://app.example.test", "http://127.0.0.1:5555/callback?state="+testState, "<CHALLENGE>")
 	require.NoError(t, err)
+	require.NotEmpty(t, opened, "the opener must receive the redirect file")
 	cleanup()
 
 	_, err = os.Stat(opened)
