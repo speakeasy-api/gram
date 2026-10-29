@@ -359,6 +359,7 @@ func TestSyncRemoteSource_PreservesExplicitAuthClients(t *testing.T) {
 		OrganizationID: authCtx.ActiveOrganizationID,
 		McpServerID:    uuid.MustParse(created.McpServer.ID),
 		AuthClientID:   explicitID,
+		Source:         "admin",
 	}))
 
 	// Deleting the header retires everything the source derives; the
