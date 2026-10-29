@@ -1207,6 +1207,10 @@ CREATE TABLE IF NOT EXISTS plugins (
   description TEXT,
   is_default boolean DEFAULT false,
   auto_created boolean NOT NULL DEFAULT false,
+  -- When FALSE, changes to this plugin wait for an admin to sync the
+  -- marketplace by hand. NULL or TRUE means changes publish automatically
+  -- (the historical default).
+  auto_sync_enabled boolean,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1225,6 +1229,7 @@ COMMENT ON COLUMN plugins.name IS '@access: confidential';
 COMMENT ON COLUMN plugins.slug IS '@access: confidential';
 COMMENT ON COLUMN plugins.description IS '@access: opaque-restricted';
 COMMENT ON COLUMN plugins.auto_created IS '@access: confidential';
+COMMENT ON COLUMN plugins.auto_sync_enabled IS '@access: confidential';
 COMMENT ON COLUMN plugins.created_at IS '@access: confidential';
 COMMENT ON COLUMN plugins.updated_at IS '@access: confidential';
 COMMENT ON COLUMN plugins.deleted_at IS '@access: confidential';

@@ -1,5 +1,5 @@
-import type { AuthClient } from "@gram/client/models/components/authclient.js";
 import { enumPresentation } from "@/lib/enum";
+import type { AuthClient } from "@gram/client/models/components/authclient.js";
 
 /**
  * How Speakeasy reaches an upstream on a caller's behalf, in the words an
