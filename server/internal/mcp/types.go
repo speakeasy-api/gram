@@ -120,5 +120,6 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		protocolVersion:          mcpversions.Resolve("", mcpversions.SupportedHostedToolset()),
 		identityCoverageRecorded: false,
 		toolSelection:            nil,
+		skillsOverMCP:            nil,
 	}
 }

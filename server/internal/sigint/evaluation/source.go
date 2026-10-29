@@ -3,6 +3,7 @@ package evaluation
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -89,6 +90,21 @@ func (r *Repository) Load(ctx context.Context, org string, project uuid.UUID, ki
 		}
 		sensors[len(sensors)-1].Signals = append(sensors[len(sensors)-1].Signals, classifier.NewOption(classifier.OptionKey(row.SignalID.UUID.String()), description))
 		sensors[len(sensors)-1].SignalSlugs[classifier.OptionKey(row.SignalID.UUID.String())] = row.SignalSlug.String
+	}
+	snapshots := make([]DefinitionSnapshot, 0, len(sensors))
+	for _, sensor := range sensors {
+		if snapshot, ready := Snapshot(sensor); ready {
+			snapshots = append(snapshots, snapshot)
+		}
+	}
+	if len(snapshots) > 0 {
+		data, err := json.Marshal(snapshots)
+		if err != nil {
+			return nil, fmt.Errorf("encode evaluation definitions: %w", err)
+		}
+		if err := repo.New(r.db).SaveDefinitionSnapshots(ctx, repo.SaveDefinitionSnapshotsParams{ProjectID: project, OrganizationID: org, Snapshots: data}); err != nil {
+			return nil, fmt.Errorf("preserve evaluation definitions: %w", err)
+		}
 	}
 	return sensors, nil
 }

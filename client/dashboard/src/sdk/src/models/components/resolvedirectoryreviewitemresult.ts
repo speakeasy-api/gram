@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -28,7 +29,7 @@ export const ResolveDirectoryReviewItemResultState = {
 /**
  * The item's state after the decision.
  */
-export type ResolveDirectoryReviewItemResultState = ClosedEnum<
+export type ResolveDirectoryReviewItemResultState = OpenEnum<
   typeof ResolveDirectoryReviewItemResultState
 >;
 
@@ -52,9 +53,10 @@ export type ResolveDirectoryReviewItemResult = {
 };
 
 /** @internal */
-export const ResolveDirectoryReviewItemResultState$inboundSchema: z.ZodMiniEnum<
-  typeof ResolveDirectoryReviewItemResultState
-> = z.enum(ResolveDirectoryReviewItemResultState);
+export const ResolveDirectoryReviewItemResultState$inboundSchema: z.ZodMiniType<
+  ResolveDirectoryReviewItemResultState,
+  unknown
+> = openEnums.inboundSchema(ResolveDirectoryReviewItemResultState);
 
 /** @internal */
 export const ResolveDirectoryReviewItemResult$inboundSchema: z.ZodMiniType<

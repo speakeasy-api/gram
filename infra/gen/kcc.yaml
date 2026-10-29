@@ -100,6 +100,10 @@ pubsub:
           string message_created_at = 9;
           IngestionContext ingestion = 10;
           repeated string attachment_ids = 11;
+          int32 generation = 12;
+          int64 sequence = 13;
+          string capture_kind = 14;
+          string original_message_id = 15;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -979,6 +983,49 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-custom-rules-enforcement
+    name: gram-risk-v1-custom-rules-enforcement
+    spec:
+      definition: |
+        edition = "2024";
+        message CustomRulesEnforcement {
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          reserved 8;
+          reserved reply_urn;
+          string content = 9;
+          string content_part_id = 10;
+          string chat_id = 11;
+          string parent_chat_message_id = 12;
+          string origin_risk_policy_id = 13;
+          int64 origin_risk_policy_version = 14;
+          string message_link_reason = 15;
+          string execution_path = 16;
+          string tool_call_id = 17;
+          string tool_name = 18;
+          string hook_source = 19;
+          string user_id = 20;
+          string message_type = 21;
+          string policy_link_reason = 22;
+          string external_conversation_id = 23;
+          bool content_truncated = 24;
+          string body = 25;
+          repeated ToolCall tool_calls = 26;
+          repeated string custom_rule_ids = 27;
+          message ToolCall {
+            string id = 1;
+            string name = 2;
+            string arguments = 3;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-finding
     name: gram-risk-v1-finding
     spec:
@@ -1322,6 +1369,48 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-injection-enforcement
+    name: gram-risk-v1-prompt-injection-enforcement
+    spec:
+      definition: |
+        edition = "2024";
+        message PromptInjectionEnforcement {
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          reserved 8;
+          reserved reply_urn;
+          string content = 9;
+          string content_part_id = 10;
+          string chat_id = 11;
+          string parent_chat_message_id = 12;
+          string origin_risk_policy_id = 13;
+          int64 origin_risk_policy_version = 14;
+          string message_link_reason = 15;
+          string execution_path = 16;
+          string tool_call_id = 17;
+          string tool_name = 18;
+          string hook_source = 19;
+          string user_id = 20;
+          string message_type = 21;
+          string policy_link_reason = 22;
+          string external_conversation_id = 23;
+          bool content_truncated = 24;
+          string body = 25;
+          repeated ToolCall tool_calls = 26;
+          message ToolCall {
+            string id = 1;
+            string name = 2;
+            string arguments = 3;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-prompt-policy-analysis
     name: gram-risk-v1-prompt-policy-analysis
     spec:
@@ -1358,6 +1447,50 @@ pubsub:
           message ToolCall {
             string name = 1;
             string arguments = 2;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-policy-enforcement
+    name: gram-risk-v1-prompt-policy-enforcement
+    spec:
+      definition: |
+        edition = "2024";
+        message PromptPolicyEnforcement {
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          reserved 8;
+          reserved reply_urn;
+          string content = 9;
+          string content_part_id = 10;
+          string chat_id = 11;
+          string parent_chat_message_id = 12;
+          string origin_risk_policy_id = 13;
+          int64 origin_risk_policy_version = 14;
+          string message_link_reason = 15;
+          string execution_path = 16;
+          string tool_call_id = 17;
+          string tool_name = 18;
+          string hook_source = 19;
+          string user_id = 20;
+          string message_type = 21;
+          string policy_link_reason = 22;
+          string external_conversation_id = 23;
+          bool content_truncated = 24;
+          string body = 25;
+          repeated ToolCall tool_calls = 26;
+          string prompt = 27;
+          bytes model_config = 28;
+          message ToolCall {
+            string id = 1;
+            string name = 2;
+            string arguments = 3;
           }
         }
       type: PROTOCOL_BUFFER
@@ -1451,6 +1584,10 @@ pubsub:
             }
             string conversation_id = 1;
             Role role = 2;
+            int32 generation = 3;
+            int64 sequence = 4;
+            string capture_kind = 5;
+            string original_message_id = 6;
           }
           message ToolCall {
             string tool_name = 1;
@@ -1533,6 +1670,10 @@ pubsub:
             }
             string conversation_id = 1;
             Role role = 2;
+            int32 generation = 3;
+            int64 sequence = 4;
+            string capture_kind = 5;
+            string original_message_id = 6;
           }
           message ToolCall {
             string tool_name = 1;
@@ -1637,6 +1778,37 @@ pubsub:
           string hook_hostname = 5;
           string account_type = 6;
           string billing_mode = 7;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-tunnel-v1-metrics-snapshot
+    name: gram-tunnel-v1-metrics-snapshot
+    spec:
+      definition: |
+        syntax = "proto3";
+        message MetricsSnapshot {
+          string source_id = 1;
+          string producer_id = 2;
+          int64 bucket_unix = 3;
+          uint64 revision = 4;
+          string kind = 5;
+          string server_id = 6;
+          string method = 7;
+          string client_family = 8;
+          uint64 attempts = 9;
+          uint64 successes = 10;
+          uint64 errors = 11;
+          uint64 canceled = 12;
+          uint64 incomplete = 13;
+          repeated uint64 latency_bins = 14;
+          uint32 connections = 15;
+          uint32 consumers = 16;
+          uint32 substreams = 17;
+          reserved 18, 19;
+          reserved "diagnostics_available", "targets_unreachable";
+          uint64 connections_opened = 20;
+          uint64 rejected = 21;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -1937,6 +2109,20 @@ pubsub:
         name: gram-risk-v1-custom-rules-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-custom-rules-enforcer
+      topic_proto_message: gram-risk-v1-custom-rules-enforcement
+    name: gram-risk-v1-custom-rules-enforcer
+    spec:
+      ackDeadlineSeconds: 10
+      messageRetentionDuration: 600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-custom-rules-enforcement
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-finding-ch-writer
       topic_proto_message: gram-risk-v1-finding
     name: gram-risk-v1-finding-ch-writer
@@ -2063,6 +2249,20 @@ pubsub:
         name: gram-risk-v1-prompt-injection-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-injection-enforcer
+      topic_proto_message: gram-risk-v1-prompt-injection-enforcement
+    name: gram-risk-v1-prompt-injection-enforcer
+    spec:
+      ackDeadlineSeconds: 90
+      messageRetentionDuration: 600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-prompt-injection-enforcement
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-prompt-policy-analyzer
       topic_proto_message: gram-risk-v1-prompt-policy-analysis
     name: gram-risk-v1-prompt-policy-analyzer
@@ -2075,6 +2275,20 @@ pubsub:
         minimumBackoff: 10s
       topicRef:
         name: gram-risk-v1-prompt-policy-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-policy-enforcer
+      topic_proto_message: gram-risk-v1-prompt-policy-enforcement
+    name: gram-risk-v1-prompt-policy-enforcer
+    spec:
+      ackDeadlineSeconds: 30
+      messageRetentionDuration: 600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-prompt-policy-enforcement
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-tool-call-analyzer
@@ -2201,6 +2415,24 @@ pubsub:
         minimumBackoff: 10s
       topicRef:
         name: gram-telemetry-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-tunnel-v1-metrics-ch-writer
+      topic_proto_message: gram-tunnel-v1-metrics-snapshot
+    name: gram-tunnel-v1-metrics-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-tunnel-v1-metrics-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-tunnel-v1-metrics-snapshot
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-webhooks-v1-svix-relay
@@ -2366,6 +2598,16 @@ pubsub:
           name: gram-risk-v1-custom-rules-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-custom-rules-enforcement
+    name: gram-risk-v1-custom-rules-enforcement
+    spec:
+      messageRetentionDuration: 600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-custom-rules-enforcement
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-finding
     name: gram-risk-v1-finding
     spec:
@@ -2446,6 +2688,16 @@ pubsub:
           name: gram-risk-v1-prompt-injection-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-injection-enforcement
+    name: gram-risk-v1-prompt-injection-enforcement
+    spec:
+      messageRetentionDuration: 600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-prompt-injection-enforcement
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-prompt-policy-analysis
     name: gram-risk-v1-prompt-policy-analysis
     spec:
@@ -2454,6 +2706,16 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-risk-v1-prompt-policy-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-policy-enforcement
+    name: gram-risk-v1-prompt-policy-enforcement
+    spec:
+      messageRetentionDuration: 600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-prompt-policy-enforcement
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-tool-call-analysis
@@ -2514,6 +2776,23 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-telemetry-v1-session-observed
+  - labels:
+      dlq_for: gram-tunnel-v1-metrics-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-tunnel-v1-metrics-ch-writer
+    name: gram-tunnel-v1-metrics-ch-writer-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-tunnel-v1-metrics-snapshot
+    name: gram-tunnel-v1-metrics-snapshot
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-tunnel-v1-metrics-snapshot
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-webhooks-v1-event

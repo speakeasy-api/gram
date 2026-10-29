@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"unicode/utf8"
 
 	auth "github.com/speakeasy-api/gram/server/gen/auth"
@@ -18,10 +19,18 @@ import (
 
 // BuildCallbackPayload builds the payload for the auth callback endpoint from
 // CLI flags.
-func BuildCallbackPayload(authCallbackCode string, authCallbackState string) (*auth.CallbackPayload, error) {
-	var code string
+func BuildCallbackPayload(authCallbackCode string, authCallbackError string, authCallbackState string) (*auth.CallbackPayload, error) {
+	var code *string
 	{
-		code = authCallbackCode
+		if authCallbackCode != "" {
+			code = &authCallbackCode
+		}
+	}
+	var error_ *string
+	{
+		if authCallbackError != "" {
+			error_ = &authCallbackError
+		}
 	}
 	var state *string
 	{
@@ -31,6 +40,7 @@ func BuildCallbackPayload(authCallbackCode string, authCallbackState string) (*a
 	}
 	v := &auth.CallbackPayload{}
 	v.Code = code
+	v.Error = error_
 	v.State = state
 
 	return v, nil
@@ -247,7 +257,8 @@ func BuildTransferOutPayload(authTransferOutTargetHost string, authTransferOutNo
 
 // BuildTransferInPayload builds the payload for the auth transferIn endpoint
 // from CLI flags.
-func BuildTransferInPayload(authTransferInSourceHost string, authTransferInCode string, authTransferInRedirect string) (*auth.TransferInPayload, error) {
+func BuildTransferInPayload(authTransferInSourceHost string, authTransferInCode string, authTransferInRedirect string, authTransferInReplaceSession string) (*auth.TransferInPayload, error) {
+	var err error
 	var sourceHost *string
 	{
 		if authTransferInSourceHost != "" {
@@ -266,10 +277,22 @@ func BuildTransferInPayload(authTransferInSourceHost string, authTransferInCode 
 			redirect = &authTransferInRedirect
 		}
 	}
+	var replaceSession *bool
+	{
+		if authTransferInReplaceSession != "" {
+			var val bool
+			val, err = strconv.ParseBool(authTransferInReplaceSession)
+			replaceSession = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for replaceSession, must be BOOL")
+			}
+		}
+	}
 	v := &auth.TransferInPayload{}
 	v.SourceHost = sourceHost
 	v.Code = code
 	v.Redirect = redirect
+	v.ReplaceSession = replaceSession
 
 	return v, nil
 }

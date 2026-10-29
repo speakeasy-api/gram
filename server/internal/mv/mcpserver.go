@@ -7,6 +7,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 )
 
 // BuildMcpServerView converts a repo mcp_servers row into the API response
@@ -18,6 +19,7 @@ func BuildMcpServerView(server repo.McpServer) *types.McpServer {
 		Name:                  conv.FromPGText[string](server.Name),
 		Slug:                  conv.FromPGText[string](server.Slug),
 		PlatformEndpointSlug:  nil,
+		LegacyPlatformSlug:    nil,
 		EnvironmentID:         conv.FromNullableUUID(server.EnvironmentID),
 		UserSessionIssuerID:   conv.FromNullableUUID(server.UserSessionIssuerID),
 		RemoteMcpServerID:     conv.FromNullableUUID(server.RemoteMcpServerID),
@@ -25,6 +27,7 @@ func BuildMcpServerView(server repo.McpServer) *types.McpServer {
 		ToolsetID:             conv.FromNullableUUID(server.ToolsetID),
 		UnproxiedMcpServerID:  conv.FromNullableUUID(server.UnproxiedMcpServerID),
 		ToolVariationsGroupID: conv.FromNullableUUID(server.ToolVariationsGroupID),
+		BuiltinBackend:        conv.FromPGText[string](server.BuiltinBackend),
 		Visibility:            types.McpServerVisibility(server.Visibility),
 		NetworkAccessMode:     types.NetworkAccessMode(networkaccess.EffectiveForView(server.NetworkAccessMode)),
 		Toolset:               nil,
@@ -57,11 +60,12 @@ func BuildMcpServerToolsetSummaryView(row repo.ListToolsetSummariesByIDsRow) *ty
 		Slug:                  row.Slug,
 		Name:                  row.Name,
 		Description:           conv.FromPGText[string](row.Description),
-		ToolCount:             int(row.ToolCount),
+		ToolCount:             int(row.ToolCount) + platformtools.CountTools(row.PlatformToolUrns),
 		ToolSelectionMode:     row.ToolSelectionMode,
 		ExternalMcpSlugs:      slugs,
 		ExternalMcpProxyOnly:  row.ExternalMcpProxyOnly,
 		ExternalOauthServerID: conv.FromNullableUUID(row.ExternalOauthServerID),
 		RegistrySpecifier:     conv.PtrEmpty(row.RegistrySpecifier),
+		HostingMcpServerID:    nil,
 	}
 }

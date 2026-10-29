@@ -101,6 +101,7 @@ const connection: SlackDirectoryConnection = {
   generation: "00000000-0000-4000-8000-000000000002",
   status: "connected",
   grantedScopes: [],
+  missingScopes: [],
   updatedAt: new Date("2026-01-01T00:00:00Z"),
   memberCount: 2,
   syncStatus: "idle",
@@ -442,5 +443,15 @@ it("passes the mapping-status toolbar filter to the paginated query", () => {
   );
   expect(mocks.query).toHaveBeenCalledWith(
     expect.objectContaining({ mappingStatus: "needs_review" }),
+  );
+});
+
+it("ignores an unsupported mapping filter from the URL", () => {
+  show(
+    <SlackDirectory connections={[connection]} />,
+    "&slack_mapping=future_status",
+  );
+  expect(mocks.query).toHaveBeenCalledWith(
+    expect.objectContaining({ mappingStatus: undefined }),
   );
 });

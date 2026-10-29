@@ -82,16 +82,16 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 	}
 	outcome.Action = candidate.Action
 	if candidate.Action == ActionDelete {
-		outcome.McpSlug = toolset.McpSlug.String
-		err := m.deleteInTx(ctx, tx, actor, toolset, &outcome)
+		outcome.McpSlug = candidate.Alias.Slug.String
+		err := m.deleteInTx(ctx, tx, actor, toolset, candidate.Alias.Slug, &outcome)
 		return outcome, err
 	}
-	outcome.McpSlug = toolset.McpSlug.String
+	outcome.McpSlug = candidate.Alias.Slug.String
 	outcome.Warnings = append(outcome.Warnings, candidate.Warnings...)
 
 	// Lock order matches hostedmcp: custom domains, then the server's
 	// endpoints, then the server row, which the switch locks as it updates it.
-	if _, err := hostedmcp.LockDomains(ctx, tx, organizationID, toolset.CustomDomainID); err != nil {
+	if _, err := hostedmcp.LockDomains(ctx, tx, organizationID, candidate.Alias.CustomDomainID); err != nil {
 		return outcome, fmt.Errorf("lock custom domain: %w", err)
 	}
 	serverID, err := queries.GetToolsetServerID(ctx, repo.GetToolsetServerIDParams{ToolsetID: conv.ToNullUUID(toolset.ID), ProjectID: projectID})
@@ -105,6 +105,10 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 		return outcome, fmt.Errorf("lock server endpoints: %w", err)
 	}
 	outcome.McpServerID = serverID
+	server, err := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID})
+	if err != nil {
+		return outcome, fmt.Errorf("read toolset server: %w", err)
+	}
 
 	url := candidate.ReplacementURL
 	if _, err := proxy.ValidateRemoteMCPURL(ctx, m.policy, url); err != nil {
@@ -139,10 +143,6 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 		return outcome, err
 	}
 
-	if _, err := queries.RekeyToolsetMetadata(ctx, repo.RekeyToolsetMetadataParams{McpServerID: conv.ToNullUUID(serverID), ProjectID: projectID, ToolsetID: conv.ToNullUUID(toolset.ID)}); err != nil {
-		return outcome, fmt.Errorf("rekey server metadata: %w", err)
-	}
-
 	if hasUpstreamClient(candidate) {
 		filled, err := queries.FillRemoteSessionResources(ctx, repo.FillRemoteSessionResourcesParams{
 			Resource: conv.ToPGText(remote.Url), UserSessionIssuerID: candidate.Row.UserSessionIssuerID.UUID, ProjectID: projectID, OrganizationID: organizationID,
@@ -154,15 +154,6 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 			outcome.Actions = append(outcome.Actions, fmt.Sprintf("Record the upstream URL on %d signed-in sessions", filled))
 		}
 	}
-
-	disabled, err := queries.DisableToolset(ctx, repo.DisableToolsetParams{ID: toolset.ID, ProjectID: projectID})
-	if err != nil {
-		return outcome, fmt.Errorf("disable toolset: %w", err)
-	}
-	if disabled != 1 {
-		return outcome, errNotCandidate
-	}
-	outcome.Actions = append(outcome.Actions, "Disable the old toolset")
 
 	entries, err := queries.CountServerPluginEntries(ctx, repo.CountServerPluginEntriesParams{ProjectID: projectID, McpServerID: conv.ToNullUUID(serverID)})
 	if err != nil {
@@ -178,7 +169,7 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 		OrganizationID: organizationID, ProjectID: projectID,
 		Actor: principal, ActorDisplayName: actor.Email, ActorSlug: nil,
 		ToolsetURN: urn.NewToolset(toolset.ID), ToolsetName: toolset.Name, ToolsetSlug: toolset.Slug,
-		McpSlug: toolset.McpSlug.String, McpServerURN: urn.NewMcpServer(serverID), RemoteMcpServerURN: urn.NewRemoteMcpServer(remote.ID),
+		McpSlug: server.Slug.String, McpServerURN: urn.NewMcpServer(serverID), RemoteMcpServerURN: urn.NewRemoteMcpServer(remote.ID),
 		PreviousRemoteURL: candidate.RemoteURL, RemoteURL: remote.Url,
 	}); err != nil {
 		return outcome, fmt.Errorf("audit migration: %w", err)

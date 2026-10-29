@@ -30,8 +30,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/adminmcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -39,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -49,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"github.com/speakeasy-api/gram/server/internal/usage"
@@ -335,6 +339,7 @@ func newAdminCommand() *cli.Command {
 	flags = append(flags, platformHostsCLIFlag())
 	flags = append(flags, orgDefaultHostFlags()...)
 	flags = append(flags, pluginPublicationEmitFlag())
+	flags = append(flags, posthogFlags()...)
 
 	return &cli.Command{
 		Name:  "admin",
@@ -488,6 +493,8 @@ func newAdminCommand() *cli.Command {
 			adminWorkOSClient := newAdminWorkOSOrganizationCreator(ctx, logger, guardianPolicy, c)
 			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c)
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
+			authz.SetUpstreamSelectorWriteGate(newAdminUpstreamSelectorWriteGate(ctx, c, logger, posthogClient))
 			mcpServerURL := siteURL
 			if raw := c.String("server-url"); raw != "" {
 				mcpServerURL, err = url.Parse(raw)
@@ -525,6 +532,7 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
 			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chDB), telemetry.NewMCPServerHealth(db, chDB), siteURL, registryService)
+			adminService.SetCatalogPromotionService(catalogpromotion.New(db, registryService, productFeatures, telemetry.NewMCPServerHealth(db, chDB), nil, guardianPolicy))
 			adminService.SetMCPServerURL(mcpServerURL)
 			adminService.SetHookClients(telemetry.NewHookClients(chDB))
 			adminService.SetDeviceAgentVersions(deviceagentversions.NewStore(redisClient))
@@ -597,6 +605,7 @@ func newAdminCommand() *cli.Command {
 					return fmt.Errorf("configure staff Admin MCP write tools: %w", err)
 				}
 				mux.Handle(http.MethodPost, adminmcp.Path, staffRuntime.Handler().ServeHTTP)
+				mux.Handle(http.MethodGet, adminmcp.Path+"/tools", staffRuntime.ToolDirectoryHandler(staffOAuth.Authorization, logger).ServeHTTP)
 			}
 
 			srv := &http.Server{
@@ -713,4 +722,11 @@ func newAdminIssuerEncryption(key string) (*encryption.Client, error) {
 		return nil, fmt.Errorf("create remote session encryption client: %w", err)
 	}
 	return client, nil
+}
+
+// newAdminUpstreamSelectorWriteGate builds the upstream_client selector write
+// gate from the same feature flag provider the server and worker use. Without
+// it, admin writes that name upstream_client always fail closed.
+func newAdminUpstreamSelectorWriteGate(ctx context.Context, c *cli.Context, logger *slog.Logger, posthogClient feature.Provider) authz.UpstreamSelectorWriteGate {
+	return feature.UpstreamSelectorWrites(newFeatureFlags(ctx, c, logger, posthogClient))
 }

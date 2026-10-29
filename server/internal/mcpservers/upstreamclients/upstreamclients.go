@@ -69,6 +69,11 @@ func Reconcile(ctx context.Context, dbtx repo.DBTX, organizationID string, proje
 // COALESCE(credential_id, id).
 const CredentialKindUserSession = "user_session"
 
+// CredentialKindExecutionProfileVersion identifies one version of an
+// assistant's execution-selection profile, which the turn credentials it binds
+// read their choices through.
+const CredentialKindExecutionProfileVersion = "execution_profile_version"
+
 // How an upstream client selection was made.
 const (
 	// SelectionSourceIssuance is a choice recorded when the credential was
@@ -78,4 +83,8 @@ const (
 	// SelectionSourceBackfill is a choice recorded for an existing credential
 	// by the offline backfill.
 	SelectionSourceBackfill = "backfill"
+
+	// SelectionSourceNewMember is a choice recorded for a gateway member
+	// added after the credential was issued, the first time it was used.
+	SelectionSourceNewMember = "new_member"
 )

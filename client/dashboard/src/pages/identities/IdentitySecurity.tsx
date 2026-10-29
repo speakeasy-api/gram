@@ -9,6 +9,7 @@ import {
   IdentityPanelRow,
 } from "./IdentityPanel";
 import { identityHandoffs } from "./identityHandoffs";
+import { IdentityFindingsPanel } from "./IdentityFindings";
 import {
   type FindingsFilter,
   identityFindingsHref,
@@ -100,6 +101,7 @@ export default function IdentitySecurity(): JSX.Element {
   return (
     <IdentitySection
       title="Security"
+      timeRange
       meta={sectionMeta(
         canReadRisk
           ? [
@@ -284,6 +286,14 @@ export default function IdentitySecurity(): JSX.Element {
                 </IdentityPanelEmpty>
               </IdentityPanel>
             )}
+          </div>
+        )}
+
+        {/* Every finding, last: the category and rule charts above narrow
+            this list rather than opening a page of their own. */}
+        {canReadRisk && (
+          <div className="md:col-span-2">
+            <IdentityFindingsPanel identity={identity} />
           </div>
         )}
       </div>

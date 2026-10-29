@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
   Popover,
   PopoverContent,
+  PopoverAnchor,
   PopoverTrigger,
 } from "@/components/ui/Popover";
 import {
@@ -13,6 +14,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "@/components/ui/Command";
+import { Check } from "lucide-react";
+import {
+  chipLabel,
+  allLabelFor,
+  type FilterDimension,
+  type FilterOption,
+} from "./filter-schema";
 import { cn } from "@/lib/utils";
 import { Operator } from "@gram/client/models/components/logfilter";
 import { OP_LABELS, type ActiveLogFilter } from "@/pages/logs/log-filter-types";
@@ -103,6 +119,81 @@ export function FilterChip({
         </button>
       )}
     </span>
+  );
+}
+
+/** Standard filter-chip treatment with a direct, searchable selection popover. */
+export function SelectFilterChip({
+  dim,
+  value,
+  options,
+  color,
+  onChange,
+}: {
+  dim: FilterDimension;
+  value: string | null;
+  options: FilterOption[];
+  color?: string;
+  onChange: (value: string | null) => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const anchor = useRef<HTMLSpanElement>(null);
+  const label = chipLabel(dim, value, options);
+  const select = (value: string | null) => {
+    onChange(value);
+    setOpen(false);
+  };
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverAnchor asChild>
+        <span ref={anchor}>
+          <FilterChip
+            label={label}
+            ariaLabel={`${dim.label} filter: ${label}`}
+            color={color}
+            active={!!value}
+            onClick={() => setOpen(!open)}
+            onRemove={value ? () => onChange(null) : undefined}
+          />
+        </span>
+      </PopoverAnchor>
+      <PopoverContent
+        align="start"
+        className="p-0"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          anchor.current?.querySelector("button")?.focus();
+        }}
+      >
+        <Command>
+          <CommandInput placeholder={`Search ${dim.label.toLowerCase()}…`} />
+          <CommandList>
+            <CommandEmpty>No options match.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="__all__"
+                keywords={[allLabelFor(dim)]}
+                onSelect={() => select(null)}
+              >
+                {!value && <Check className="size-4" />}
+                {allLabelFor(dim)}
+              </CommandItem>
+              {options.map((option) => (
+                <CommandItem
+                  key={option.value}
+                  value={option.value}
+                  keywords={[option.label]}
+                  onSelect={() => select(option.value)}
+                >
+                  {value === option.value && <Check className="size-4" />}
+                  {option.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 

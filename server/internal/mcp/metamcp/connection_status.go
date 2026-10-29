@@ -19,7 +19,22 @@ const ToolConnectionStatus = "connection_status"
 // io.modelcontextprotocol/ui extension. It carries a hash of the page because
 // hosts cache a resource by URI: an edited page under the same URI is never
 // fetched again.
-var ConnectionStatusResourceURI = "ui://gateway/connection-status/" + contentHash(ConnectionStatusHTML)
+var ConnectionStatusResourceURI = ConnectionStatusResourcePrefix + contentHash(ConnectionStatusHTML)
+
+// ConnectionStatusResourcePrefix matches every version of the view; reads of
+// an earlier hash get the current page so cached tool lists keep rendering.
+const ConnectionStatusResourcePrefix = "ui://gateway/connection-status/"
+
+// IsConnectionStatusResourceURI accepts the current view URI or any earlier
+// hashed version of it.
+func IsConnectionStatusResourceURI(uri string) bool {
+	hash, ok := strings.CutPrefix(uri, ConnectionStatusResourcePrefix)
+	if !ok || len(hash) != len(contentHash("")) {
+		return false
+	}
+	_, err := hex.DecodeString(hash)
+	return err == nil && strings.ToLower(hash) == hash
+}
 
 func contentHash(s string) string {
 	sum := sha256.Sum256([]byte(s))
@@ -34,6 +49,10 @@ var ConnectionStatusHTML string
 
 // Member sign-in states surfaced by connection_status.
 const (
+	// SignInVerifiedAtConsent records successful discovery without a live probe.
+	SignInVerifiedAtConsent = "verified_at_consent"
+	// SignInNeedsConsent reports a configuration change requiring new approval.
+	SignInNeedsConsent = "needs_consent"
 	// SignInConnected: the caller holds a credential that routes to the member.
 	SignInConnected = "connected"
 	// SignInNotConnected: the member is bound to a sign-in provider and the
@@ -43,6 +62,8 @@ const (
 	SignInNotRequired = "not_required"
 	// SignInError: a credential exists but cannot be used; Detail says why.
 	SignInError = "error"
+	// SignInHidden: the caller hid the member, so its tools are not served.
+	SignInHidden = "hidden"
 )
 
 // ConnectionStatusServer is one member entry in a connection_status result.
@@ -71,20 +92,44 @@ var connectionStatusSchema = []byte(`{
 // model. It carries the same list and the same connect link as the view.
 func (r ConnectionStatusResult) Text() string {
 	var b strings.Builder
-	connected := 0
+	connected, verified, total := 0, 0, 0
+	consented, needsConsent := false, false
 	for _, s := range r.Servers {
+		if s.Status != SignInHidden {
+			total++
+		}
+		if s.Status == SignInVerifiedAtConsent {
+			verified++
+			consented = true
+		}
+		if s.Status == SignInNeedsConsent {
+			consented = true
+		}
 		if s.Status == SignInConnected || s.Status == SignInNotRequired {
 			connected++
 		}
 	}
-	fmt.Fprintf(&b, "%d of %d servers ready.\n\n", connected, len(r.Servers))
-	needsConnect := false
+	noun := "servers"
+	if total == 1 {
+		noun = "server"
+	}
+	if consented {
+		fmt.Fprintf(&b, "%d of %d %s verified at consent; current sign-in status has not been checked.\n\n", verified, total, noun)
+	} else {
+		fmt.Fprintf(&b, "%d of %d %s ready.\n\n", connected, total, noun)
+	}
+	needsConnect, hidden := false, false
 	for _, s := range r.Servers {
 		label := s.Name
 		if label == "" {
 			label = s.Slug
 		}
 		switch s.Status {
+		case SignInVerifiedAtConsent:
+			fmt.Fprintf(&b, "- %s: verified at consent (%s)\n", label, s.Detail)
+		case SignInNeedsConsent:
+			needsConsent = true
+			fmt.Fprintf(&b, "- %s: new consent required (%s)\n", label, s.Detail)
 		case SignInConnected:
 			fmt.Fprintf(&b, "- %s: signed in\n", label)
 		case SignInNotRequired:
@@ -92,10 +137,19 @@ func (r ConnectionStatusResult) Text() string {
 		case SignInNotConnected:
 			needsConnect = true
 			fmt.Fprintf(&b, "- %s: not signed in\n", label)
+		case SignInHidden:
+			hidden = true
+			fmt.Fprintf(&b, "- %s: hidden by the user\n", label)
 		default:
 			needsConnect = true
 			fmt.Fprintf(&b, "- %s: needs attention (%s)\n", label, s.Detail)
 		}
+	}
+	if needsConsent {
+		b.WriteString("\nStart authorization again in your AI client to review access.\n")
+	}
+	if hidden && r.ConnectURL != "" {
+		fmt.Fprintf(&b, "\nTo use a hidden server, show it again at %s.\n", r.ConnectURL)
 	}
 	if needsConnect {
 		if r.ConnectURL != "" {

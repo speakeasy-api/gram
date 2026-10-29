@@ -36,7 +36,7 @@ func renderedHeadersChanged(backend *resolvedMetadataBackend, before, after *typ
 	if (len(beforeHeaders) > 0) != (len(afterHeaders) > 0) {
 		return true
 	}
-	publicToolset := (backend.toolset != nil && backend.toolset.McpIsPublic) ||
+	publicToolset := (backend.toolset != nil && backend.hosting.Public) ||
 		(backend.mcpServer != nil && isCanonicalWrapper(backend.mcpServer) && backend.mcpServer.Visibility == mcpservers.VisibilityPublic)
 	return publicToolset && !maps.Equal(beforeHeaders, afterHeaders)
 }

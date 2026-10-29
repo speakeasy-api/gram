@@ -31,6 +31,7 @@ import {
   CoverageBucket,
   ListManagedDevicesRequest,
   ListManagedDevicesSecurity,
+  PolicyState,
 } from "../models/operations/listmanageddevices.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -203,6 +204,7 @@ export function setManagedDevicesData(
     parameters: {
       provider?: string | undefined;
       coverageBucket?: CoverageBucket | undefined;
+      policyState?: PolicyState | undefined;
       userIds?: Array<string> | undefined;
       userEmails?: Array<string> | undefined;
       cursor?: string | undefined;
@@ -224,6 +226,7 @@ export function invalidateManagedDevices(
     [parameters: {
       provider?: string | undefined;
       coverageBucket?: CoverageBucket | undefined;
+      policyState?: PolicyState | undefined;
       userIds?: Array<string> | undefined;
       userEmails?: Array<string> | undefined;
       cursor?: string | undefined;

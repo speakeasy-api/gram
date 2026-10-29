@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -73,7 +74,11 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 	if err := r.ParseForm(); err != nil {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "failed to parse form")
 	}
-	if grantType := r.PostForm.Get(oauthwire.ParamGrantType); grantType != oauthwire.GrantTypeJWTBearer {
+	grantType := r.PostForm.Get(oauthwire.ParamGrantType)
+	if grantType == "" {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "grant_type is required")
+	}
+	if grantType != oauthwire.GrantTypeJWTBearer {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "grant_type must be "+oauthwire.GrantTypeJWTBearer)
 	}
 	creds := extractClientCredentials(r)
@@ -89,7 +94,10 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 	}
 	serverURL := s.serverURL.String()
 
-	presented := presentedWorkload{issuerURL: "", subject: "", issuerID: uuid.Nil}
+	presented := presentedWorkload{
+		issuerURL: "", subject: "", issuerID: uuid.Nil, jwksURI: "",
+		assertionPolicyChecked: false, allowAssertionReuse: false,
+	}
 	token, err := assertioncore.ParseSigned(assertion, workloadAssertionMaxBytes)
 	if err != nil {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant(string(workload.ReasonMalformed), err))
@@ -169,10 +177,33 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
 	}
 
+	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: ""})
+	if err != nil {
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	if err := lockWorkloadAssertionPolicy(ctx, tx, organizationID, nil, presented); err != nil {
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
+	}
+	if _, err := s.admitWorkloadGrantInTx(authorizationCtx, tx, organizationID, subject, workloadSessionCredential{DelegatedGrants: ceiling, DelegatedGrantsVersion: version}); err != nil {
+		if isCredentialDenial(err) {
+			return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("agent_admission_denied", err))
+		}
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
+	}
+
+	// The token binds the verified workload, never its currently assigned agent.
+	// Assignment is re-admitted on each use; replacing this principal with the
+	// agent from authorizationCtx would freeze authority and violate Mint's
+	// workload-only subject contract.
 	accessToken, _, err := s.deviceAgentTokens.Mint(organizationID, principal, time.Now())
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "mint device-agent token").LogError(ctx, logger)
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
+	}
+
 	body, err := json.Marshal(deviceAgentTokenResponse{
 		AccessToken: accessToken,
 		TokenType:   oauthwire.TokenTypeBearer,

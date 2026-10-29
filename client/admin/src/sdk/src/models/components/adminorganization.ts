@@ -34,6 +34,10 @@ export type AdminOrganization = {
    */
   accountType: string;
   /**
+   * Staff-entered link to the organization's adoption dashboard. Absent when none has been set.
+   */
+  adoptionDashboardUrl?: string | undefined;
+  /**
    * The creation date of the organization.
    */
   createdAt: Date;
@@ -126,6 +130,7 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     account_type: z.string(),
+    adoption_dashboard_url: z.optional(z.string()),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -164,6 +169,7 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "account_type": "accountType",
+      "adoption_dashboard_url": "adoptionDashboardUrl",
       "created_at": "createdAt",
       "creation_source": "creationSource",
       "disabled_at": "disabledAt",

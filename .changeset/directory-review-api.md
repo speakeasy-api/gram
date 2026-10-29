@@ -1,5 +1,0 @@
----
-"server": minor
----
-
-Raise directory changes that need an admin decision and add `listDirectoryReviewItems` and `resolveDirectoryReviewItem` to decide them. Once review starts for an organization (on the first hourly reconciliation), a directory group first seen after that with no role, a new value of an attribute key that already has mappings, and a mapped group or attribute value that has gone from the directory are each raised as a review item, at most once per occurrence. Directory events raise and settle items in the same transaction as the change; the hourly sweep catches the rest and never writes mappings. Approving a new source maps it to the chosen roles, creating new roles as bulk setup does; approving a missing source removes its mappings. Dismissing leaves a new source unmapped or keeps a missing source's mappings, and an attribute key can be opted out of new-value decisions. Mapping a source directly settles its pending items. Every decision is recorded in the audit log.

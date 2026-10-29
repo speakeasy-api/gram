@@ -10,7 +10,7 @@ import (
 )
 
 type AttachPlatformMCPIdentityProviderToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the reviewed MCP registration"`
+	ProjectSlug    string `json:"project_slug,omitempty" jsonschema:"optional project slug that owns the MCP registration; defaults to the organization's default project for external callers; a project assistant always uses its own project"`
 	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
 	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms that this MCP server may be connected to the sign-in provider it advertises; never include credentials, client secrets, OAuth codes, or tokens"`
 }
@@ -30,32 +30,41 @@ type identityProviderAttachmentErrorResult struct {
 	Message string `json:"message"`
 }
 
+// Attaching an identity provider discovers the provider's metadata and
+// registers a client with it, so it reaches hosts outside Speakeasy.
+func identityProviderAttachmentAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(false, false, true)
+}
+
 func registerUnavailableIdentityProviderTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "attach_platform_mcp_identity_provider",
 		Title:       "Connect an MCP Server's OAuth Provider",
 		Description: "Connect one MCP server to the OAuth provider it advertises. This is not switched on for your organization yet.",
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("identity_provider_attachment"))
+		Annotations: identityProviderAttachmentAnnotations(),
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableTool("identity_provider_attachment"))
 }
 
 func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "attach_platform_mcp_identity_provider",
 		Title:       "Connect an MCP Server's OAuth Provider",
-		Description: "Connect one MCP server to the OAuth provider it advertises, so people can sign in to it. Ask for explicit user confirmation before calling this tool. It works out the provider's metadata from the stored MCP source and obtains an OAuth client automatically: through dynamic client registration when the provider offers it, otherwise through a client ID metadata document when the provider supports one. Constraints: non-secret provider URLs may be returned, but it never accepts or returns credentials, OAuth codes, tokens, client secrets, passwords, or API keys. After success, immediately present authorization_url as a clickable link and tell the user to open it and use Connect or Authorize.",
+		Description: "Connect one MCP server to the OAuth provider it advertises, so people can sign in to it. Without a project named, it acts on the organization's default project; project_slug in the result says which project was used. Ask for explicit user confirmation before calling this tool. It works out the provider's metadata from the stored MCP source and obtains an OAuth client automatically: through dynamic client registration when the provider offers it, otherwise through a client ID metadata document when the provider supports one. Constraints: non-secret provider URLs may be returned, but it never accepts or returns credentials, OAuth codes, tokens, client secrets, passwords, or API keys. After success, immediately present authorization_url as a clickable link and tell the user to open it and use Connect or Authorize.",
+		Annotations: identityProviderAttachmentAnnotations(),
+		Meta:        cardToolMeta(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
 		// Connection-less: the registration is resolved by user and project,
 		// the operation is serialised per user, and the authorization step the
 		// result hands back is a dashboard URL the user opens under their own
 		// session. Nothing here needs the caller's OAuth connection.
-		Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit,
+		Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable,
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input AttachPlatformMCPIdentityProviderToolInput) (*mcp.CallToolResult, AttachPlatformMCPIdentityProviderToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, AttachPlatformMCPIdentityProviderToolOutput{}, err
 		}
-		if input.ProjectSlug == "" || input.RegistrationID == "" {
+		if input.RegistrationID == "" {
 			return nil, AttachPlatformMCPIdentityProviderToolOutput{}, ErrOnboardingInvalid
 		}
 		if !input.Confirmed {
@@ -65,6 +74,14 @@ func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationSer
 			}
 			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, AttachPlatformMCPIdentityProviderToolOutput{}, nil
 		}
+		input.ProjectSlug, err = projectSlugOrDefault(ctx, registrations.store, principal.OrganizationID, input.ProjectSlug)
+		if err != nil {
+			if errors.Is(err, ErrDefaultProjectNotFound) {
+				result, _ := operationBudgetToolResult(err)
+				return result, AttachPlatformMCPIdentityProviderToolOutput{}, nil
+			}
+			return identityProviderAttachmentUnavailableResult()
+		}
 
 		attachment, err := registrations.AttachDefaultIdentityProvider(ctx, principal, input.ProjectSlug, input.RegistrationID)
 		if err != nil {
@@ -73,11 +90,11 @@ func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationSer
 			}
 			return identityProviderAttachmentUnavailableResult()
 		}
-		authorizationURL, err := registrations.DashboardAuthorizationURL(ctx, principal, input.ProjectSlug, input.RegistrationID)
+		authorization, err := registrations.DashboardAuthorization(ctx, principal, input.ProjectSlug, input.RegistrationID)
 		if err != nil {
 			return identityProviderAttachmentAuthorizationUnavailableResult()
 		}
-		return nil, identityProviderAttachmentOutput(input.ProjectSlug, input.RegistrationID, attachment, authorizationURL), nil
+		return cardResult(signInCard(authorization.ServerName, authorization.Logo, authorization.URL)), identityProviderAttachmentOutput(input.ProjectSlug, input.RegistrationID, attachment, authorization.URL), nil
 	})
 }
 

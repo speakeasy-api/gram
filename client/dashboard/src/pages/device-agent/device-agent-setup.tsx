@@ -34,11 +34,27 @@ import {
 const RELEASES_BASE =
   "https://storage.googleapis.com/speakeasy-device-agent-releases-prod";
 const MANIFEST_URL = `${RELEASES_BASE}/releases.json`;
+// The server's stable links to the current signed macOS pkg and Windows msi
+// (a 302 to the versioned file in the release bucket). They sit under /rpc,
+// which the Ingress routes to the server.
+const STABLE_PKG_PATH = "/rpc/install/device-agent-macos.pkg";
+const STABLE_MSI_PATH = "/rpc/install/device-agent-windows.msi";
+
+// stableInstallerURL returns this server's stable link for path, or null when
+// the server URL isn't HTTPS. Install snippets run with admin rights, so they
+// never download over plaintext; callers fall back to the release bucket.
+function stableInstallerURL(path: string): string | null {
+  const serverURL = getServerURL();
+  if (!serverURL.startsWith("https:")) return null;
+  // A configured server URL may end in "/", and path starts with one.
+  return `${serverURL.replace(/\/+$/, "")}${path}`;
+}
 
 // Public docs: what the device agent is, and the MDM rollout guide.
 const DOCS_DEVICE_AGENT =
   "https://www.speakeasy.com/docs/ai-control-plane/reference/device-agent";
 const DOCS_MDM = `${DOCS_DEVICE_AGENT}/mdm-installations`;
+const DOCS_LINUX = `${DOCS_MDM}/linux`;
 
 // Shared inline-link styling for the anchors/Links on this page.
 const LINK_CLASS = "underline underline-offset-2 hover:text-foreground";
@@ -151,10 +167,16 @@ BASE=${RELEASES_BASE}/v$VERSION
 curl -fSL -o speakeasyd "$BASE/speakeasyd_\${VERSION}_linux_amd64" && \\
 curl -fSL -o speakeasy  "$BASE/speakeasy_\${VERSION}_linux_amd64"`;
 }
-// macInstall downloads and installs the pkg. Like linuxDownload, with a
-// resolved version the snippet uses no shell variables, so it also runs in
-// fish.
-function macInstall(version: string | null) {
+// macInstall downloads and installs the pkg. The stable link needs no version,
+// so the snippet never goes stale. Without it (a non-HTTPS server URL) it
+// builds the versioned bucket URL. Like linuxDownload, the stable link and a
+// resolved version give a snippet with no shell variables, which also runs in
+// fish; only the self-resolving fallback needs bash.
+function macInstall(version: string | null, stablePkgURL: string | null) {
+  if (stablePkgURL) {
+    return `curl -fSL -o speakeasy-agent.pkg ${stablePkgURL} && \\
+sudo installer -pkg speakeasy-agent.pkg -target /`;
+  }
   version = inlinableVersion(version);
   if (version) {
     return `curl -fSL -o speakeasy-agent.pkg ${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.pkg && \\
@@ -201,6 +223,7 @@ type ScriptOsSpec = BaseOsSpec & {
   serviceNote?: React.ReactNode;
   serviceRegister: string;
   verify: string;
+  verifyNote?: React.ReactNode;
   // Manifest platform keys to surface as direct-download links for this OS.
   downloadKeys: string[];
   // The OS ships a root-helper install package (.deb/.rpm on Linux) that gets
@@ -244,12 +267,37 @@ mkdir -p ${LINUX_AGENT_DIR}
 mv speakeasyd speakeasy ${LINUX_AGENT_DIR}/`,
     serviceNote: (
       <>
-        Installs <code>speakeasyd</code> as a systemd service.
+        Run these as the person who uses the machine, without <code>sudo</code>:
+        the service is per user. The first two lines turn on self-update, unless
+        IT&apos;s <code>managed.json</code> says otherwise. The{" "}
+        <code>add-wants</code> line starts the service at every login; on a
+        machine nobody logs in to, also run{" "}
+        <code>sudo loginctl enable-linger $USER</code>.
       </>
     ),
-    serviceRegister: `${LINUX_AGENT_DIR}/speakeasyd -service install
+    // The unit `-service install` writes is wanted by multi-user.target, which
+    // a user's systemd manager never reaches, so without add-wants the daemon
+    // never starts again after a reboot or logout.
+    serviceRegister: `mkdir -p ~/.config/speakeasy
+[ -e ~/.config/speakeasy/local.json ] || echo '{"auto_update": "automatic"}' > ~/.config/speakeasy/local.json
+${LINUX_AGENT_DIR}/speakeasyd -service install
+systemctl --user add-wants default.target com.speakeasy.daemon.service
 ${LINUX_AGENT_DIR}/speakeasyd -service start`,
     verify: `${LINUX_AGENT_DIR}/speakeasy status`,
+    verifyNote: (
+      <>
+        Want a tray icon? The optional <code>speakeasy-ui</code> app (x64 only)
+        goes in the same folder, and nothing starts it for you. The{" "}
+        <ExternalLink
+          href={DOCS_LINUX}
+          target="_blank"
+          iconSuffixName="external-link"
+        >
+          Linux guide
+        </ExternalLink>{" "}
+        has the steps.
+      </>
+    ),
     downloadKeys: ["linux/amd64", "linux/arm64"],
     hasHelperPackage: true,
   },
@@ -768,11 +816,25 @@ function ConfigurationProfileNote() {
   );
 }
 
+// managedAutoUpdate picks the update mode the example managed.json ships with.
+// The macOS pkg and the per-user Linux install update themselves, so they get
+// "automatic". Windows self-update is not yet validated on real hardware
+// (DNO-1122), so Windows fleets keep "notify" and re-push the msi. Without an
+// OS (onboarding covers every platform) the example uses "automatic" and the
+// help text calls out Windows.
+function managedAutoUpdate(os?: OsKey): "automatic" | "notify" {
+  return os === "windows" ? "notify" : "automatic";
+}
+
 // ManagedProfileExample is the managed.json template plus the inline
 // mint action for its org_token. Shared by the setup sheet's identity
-// step and onboarding's MDM rollout breakdown, so the file an admin copies is
-// identical wherever they meet it.
-export function ManagedProfileExample(): React.JSX.Element {
+// step, which passes its OS, and onboarding's MDM rollout breakdown, which
+// covers every platform.
+export function ManagedProfileExample({
+  os,
+}: {
+  os?: OsKey;
+}): React.JSX.Element {
   const { name: orgName, slug: orgSlug } = useOrganization();
   const apiKeysHref = useOrgRoutes().apiKeys.href();
 
@@ -789,7 +851,7 @@ export function ManagedProfileExample(): React.JSX.Element {
         org_token: orgToken,
         org_slug: orgSlug || "acme-corp",
         org_name: orgName || "Acme Corporation",
-        auto_update: "notify",
+        auto_update: managedAutoUpdate(os),
       },
       null,
       2,
@@ -850,6 +912,12 @@ export function ManagedProfileExample(): React.JSX.Element {
         </strong>{" "}
         in the example to mint the <code>org_token</code>.
       </Text>
+      {os === undefined && (
+        <Text small muted className="mt-2">
+          On Windows, set <code>auto_update</code> to <code>"notify"</code> for
+          now and re-push the msi for new versions.
+        </Text>
+      )}
 
       <div className="mt-4 flex flex-col gap-3">
         {generatedToken && (
@@ -913,9 +981,10 @@ function FleetIdentity({ os }: { os: OsKey }) {
         <SubHeading>File location</SubHeading>
         <Text small muted className="mb-3">
           Deploy the file to the fixed system path for each OS. Create the
-          directory <code>0755</code> and the file <code>0640</code> (or
-          equivalent ACLs on Windows). The file must be{" "}
-          <strong>readable by the user the agent runs as</strong> — the agent
+          directory <code>0755</code> and the file <code>0644</code>, or{" "}
+          <code>0640</code> with the user&apos;s group (equivalent ACLs on
+          Windows); <code>0600</code> silently breaks enrollment. The file must
+          be <strong>readable by the user the agent runs as</strong> — the agent
           runs as the logged-in user, not root. The agent only reads this file;
           it never writes it.
         </Text>
@@ -932,7 +1001,7 @@ function FleetIdentity({ os }: { os: OsKey }) {
 
       <div>
         <SubHeading>Example managed.json</SubHeading>
-        <ManagedProfileExample />
+        <ManagedProfileExample os={os} />
       </div>
 
       <div>
@@ -945,7 +1014,8 @@ function FleetIdentity({ os }: { os: OsKey }) {
           don't commit it or paste it into chat. If the agent isn't picking up
           the file, confirm the path with the agent CLI&apos;s{" "}
           <code>config path</code> command (run by its install path), check that
-          it's readable by the logged-in user, and validate the JSON.
+          it's readable by the logged-in user, and validate the JSON. The agent
+          reads the file when it starts, so restart it after every change.
         </Text>
       </div>
     </div>
@@ -966,25 +1036,32 @@ const MANAGED_CONFIG_PATHS = [
   },
 ];
 
-// MacInstallerDownload / WinInstallerDownload are the direct installer
-// buttons, shared by the setup sheet's install step and onboarding's inline
-// box. While the manifest loads they say so; only a failed lookup shows how to
-// build the URL by hand.
-function MacInstallerDownload() {
+// InstallerDownload is the direct installer button (the macOS pkg or the
+// Windows msi), shared by the setup sheet's install step and onboarding's
+// inline box. While the manifest loads it says so; a failed lookup offers the
+// server's stable link, or how to build the URL by hand when there is none.
+function InstallerDownload({
+  ext,
+  stablePath,
+}: {
+  ext: "pkg" | "msi";
+  stablePath: string;
+}) {
   const { data, isLoading } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
+  const stableURL = stableInstallerURL(stablePath);
 
   if (version) {
-    // The pkg ships from the same bucket/version layout as the raw binaries
-    // (device-agent's release-pkg-macos job), but isn't itself listed in
-    // releases.json — it's the manual/MDM on-ramp, not something the
-    // auto-update client discovers — so its URL is built directly rather
-    // than read off the manifest the way ManualDownload reads the binaries.
+    // The installers ship from the same bucket/version layout as the raw
+    // binaries but aren't listed in releases.json: they're the manual/MDM
+    // on-ramp, not something the auto-update client discovers. So the URL is
+    // built directly rather than read off the manifest the way ManualDownload
+    // reads the binaries.
     return (
       <BinaryDownloadButton
-        href={`${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.pkg`}
+        href={`${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.${ext}`}
         role="Installer"
-        name="speakeasy-agent.pkg"
+        name={`speakeasy-agent.${ext}`}
         version={version}
       />
     );
@@ -996,54 +1073,26 @@ function MacInstallerDownload() {
       </Text>
     );
   }
-  return (
-    <ReleaseLookupError>
-      <code>speakeasy-agent_&lt;version&gt;.pkg</code>
-    </ReleaseLookupError>
-  );
-}
-
-function WinInstallerDownload() {
-  const { data, isLoading } = useAgentReleases();
-  const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
-  // Never offer a plaintext download: if the server URL is somehow non-HTTPS,
-  // fall back to the manifest rather than the stable link.
-  const serverURL = getServerURL();
-  const stableMsiUrl = serverURL.startsWith("https:")
-    ? `${serverURL}/v1/install/device-agent-windows.msi`
-    : null;
-
-  if (version) {
-    return (
-      <BinaryDownloadButton
-        href={`${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.msi`}
-        role="Installer"
-        name="speakeasy-agent.msi"
-        version={version}
-      />
-    );
-  }
-  if (isLoading) {
-    return (
-      <Text small muted>
-        Loading the latest release…
-      </Text>
-    );
-  }
-  if (!stableMsiUrl) {
+  if (!stableURL) {
     return (
       <ReleaseLookupError>
-        <code>speakeasy-agent_&lt;version&gt;.msi</code>
+        <code>speakeasy-agent_&lt;version&gt;.{ext}</code>
       </ReleaseLookupError>
     );
   }
+  return <StableInstallerFallback href={stableURL} />;
+}
+
+// StableInstallerFallback replaces a download button whose version lookup
+// failed: the server's stable link still resolves the current version itself.
+function StableInstallerFallback({ href }: { href: string }) {
   return (
     <Alert variant="error">
       <AlertTitle>Couldn't look up the latest version</AlertTitle>
       <AlertDescription>
         Use the{" "}
         <a
-          href={stableMsiUrl}
+          href={href}
           target="_blank"
           rel="noopener noreferrer"
           className={LINK_CLASS}
@@ -1063,13 +1112,15 @@ function WinInstallerDownload() {
 function MacInstallStep() {
   const { data } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
+  const stablePkgURL = stableInstallerURL(STABLE_PKG_PATH);
+  const needsBash = !stablePkgURL && !inlinableVersion(version);
 
   return (
     <div className="flex flex-col gap-6">
       <AgentIntro />
       <div className="flex flex-col gap-3">
         <SubLabel>Deploy the pkg with your MDM</SubLabel>
-        <MacInstallerDownload />
+        <InstallerDownload ext="pkg" stablePath={STABLE_PKG_PATH} />
         <Text small muted>
           Upload <code>speakeasy-agent.pkg</code> to Jamf, Iru (formerly
           Kandji), Intune or another MDM as a{" "}
@@ -1106,13 +1157,15 @@ function MacInstallStep() {
             For a personal or proof-of-concept install, open the pkg above, or
             run:
           </Text>
-          {!inlinableVersion(version) && (
+          {needsBash && (
             <StepNote>
               Uses bash syntax: in fish or another shell, run <code>bash</code>{" "}
               first.
             </StepNote>
           )}
-          <CodeBlock language="bash">{macInstall(version)}</CodeBlock>
+          <CodeBlock language="bash">
+            {macInstall(version, stablePkgURL)}
+          </CodeBlock>
           <Text small muted>
             macOS then shows a{" "}
             <strong className="font-medium">Background Items Added</strong>{" "}
@@ -1223,7 +1276,7 @@ launchctl print "gui/$(id -u)/com.speakeasy.daemon"
 // install from the signed .msi, which lays down the daemon, CLI, and UI under
 // C:\Program Files\Speakeasy\ and registers the machine-wide LocalSystem
 // service itself — no separate service-registration step. The primary snippet
-// uses this Speakeasy server's stable /v1/install URL, which 302-redirects to the
+// uses this Speakeasy server's stable install URL, which 302-redirects to the
 // current version's signed msi, so the copy never goes stale. Like the macOS
 // pkg, the msi is deliberately not listed in releases.json (it's the
 // manual/MDM on-ramp), so the direct-download URL is built from the resolved
@@ -1231,13 +1284,9 @@ launchctl print "gui/$(id -u)/com.speakeasy.daemon"
 function WinInstallStep() {
   const { data } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
-  // The snippet lands in an elevated shell, so never emit a plaintext
-  // download: if the server URL is somehow non-HTTPS, skip the stable link
-  // and build the snippet against the (always-HTTPS) release bucket instead.
-  const serverURL = getServerURL();
-  const stableMsiUrl = serverURL.startsWith("https:")
-    ? `${serverURL}/v1/install/device-agent-windows.msi`
-    : null;
+  // Without a stable link (a non-HTTPS server URL) the snippet builds the
+  // versioned URL against the always-HTTPS release bucket instead.
+  const stableMsiUrl = stableInstallerURL(STABLE_MSI_PATH);
   const downloadScript = stableMsiUrl
     ? `Invoke-WebRequest "${stableMsiUrl}" -OutFile speakeasy-agent.msi
 msiexec /i speakeasy-agent.msi`
@@ -1250,7 +1299,7 @@ msiexec /i speakeasy-agent.msi`;
       <AgentIntro />
       <div className="flex flex-col gap-3">
         <SubLabel>Deploy the msi with your MDM</SubLabel>
-        <WinInstallerDownload />
+        <InstallerDownload ext="msi" stablePath={STABLE_MSI_PATH} />
         <Text small muted>
           Upload the msi to Intune or another MDM as a{" "}
           <strong className="font-medium">Win32 / line-of-business app</strong>{" "}
@@ -1323,23 +1372,9 @@ function IdentityStep({ os }: { os: OsKey }) {
         for an org; personal enrollment is handy for testing.
       </Text>
       <Tabs defaultValue="fleet" className="gap-6">
-        <TabsList className="grid h-auto w-full grid-cols-2 items-stretch gap-3 divide-x-0 border-0 bg-transparent p-0">
-          <SetupTab
-            value="fleet"
-            icon="building-2"
-            title="Fleet (MDM)"
-            desc="IT sets identity centrally via managed.json."
-          />
-          <SetupTab
-            value="personal"
-            icon="user"
-            title="Personal / PoC"
-            desc={
-              os === "linux"
-                ? "Sign in once with the agent CLI."
-                : "Sign in once in the agent app."
-            }
-          />
+        <TabsList className="w-full">
+          <TabsTrigger value="fleet">Fleet (MDM)</TabsTrigger>
+          <TabsTrigger value="personal">Personal / PoC</TabsTrigger>
         </TabsList>
         <TabsContent value="fleet" className="pt-2">
           <FleetIdentity os={os} />
@@ -1349,32 +1384,6 @@ function IdentityStep({ os }: { os: OsKey }) {
         </TabsContent>
       </Tabs>
     </div>
-  );
-}
-
-// SetupTab renders a bordered card that doubles as a tab trigger.
-function SetupTab({
-  value,
-  icon,
-  title,
-  desc,
-}: {
-  value: string;
-  icon: React.ComponentProps<typeof Icon>["name"];
-  title: string;
-  desc: React.ReactNode;
-}) {
-  return (
-    <TabsTrigger
-      value={value}
-      className="border-border data-[state=active]:border-primary/40 h-auto flex-col items-start justify-start gap-1 border p-4 text-left whitespace-normal"
-    >
-      <div className="flex items-center gap-2">
-        <Icon name={icon} className="h-4 w-4" />
-        <span className="font-medium">{title}</span>
-      </div>
-      <span className="text-muted-foreground text-sm font-normal">{desc}</span>
-    </TabsTrigger>
   );
 }
 
@@ -1452,7 +1461,12 @@ function buildSteps(platform: PlatformKey): SetupStep[] {
   });
   steps.push({
     title: "Verify it's running",
-    body: <CodeBlock language={cfg.lang}>{cfg.verify}</CodeBlock>,
+    body: (
+      <div className="flex flex-col gap-2">
+        <CodeBlock language={cfg.lang}>{cfg.verify}</CodeBlock>
+        {cfg.verifyNote && <StepNote>{cfg.verifyNote}</StepNote>}
+      </div>
+    ),
   });
   if (cfg.hasHelperPackage) {
     steps.push({
@@ -1680,7 +1694,7 @@ function OrgValues() {
       </dl>
 
       {generatedToken && (
-        <Alert variant="warning" alignTop className="mt-3">
+        <Alert variant="warning" className="mt-3">
           <AlertTitle>
             {autoCopied
               ? "org_token copied to your clipboard"
@@ -1698,7 +1712,7 @@ function OrgValues() {
       )}
 
       {isError && (
-        <Alert variant="error" alignTop className="mt-3">
+        <Alert variant="error" className="mt-3">
           <AlertTitle>Couldn't generate a token</AlertTitle>
           <AlertDescription>
             Something went wrong creating the agent token. Try again, or create
@@ -1853,8 +1867,12 @@ export function DeviceAgentInstallStep({
         <SubLabel>
           {os === "linux" ? "Download the binaries" : "Download the installer"}
         </SubLabel>
-        {os === "macos" && <MacInstallerDownload />}
-        {os === "windows" && <WinInstallerDownload />}
+        {os === "macos" && (
+          <InstallerDownload ext="pkg" stablePath={STABLE_PKG_PATH} />
+        )}
+        {os === "windows" && (
+          <InstallerDownload ext="msi" stablePath={STABLE_MSI_PATH} />
+        )}
         {os === "linux" && (
           <>
             <ManualDownload os="linux" />
