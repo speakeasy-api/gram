@@ -1,3 +1,4 @@
+import { Alert } from "@/components/ui/Alert";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { WorkloadIssuerSelector } from "./WorkloadIssuerSelector";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
@@ -202,10 +203,29 @@ export function useWorkloadSetup({
   };
   const platformName = entry?.displayName ?? "this platform";
 
+  // A catalog platform is trusted and allowed at the organization tier, so
+  // only an organization-tier issuer counts as already trusting it. A
+  // project's own row for the same URL would skip the registration the
+  // organization-tier admission needs, and the admission would then find no
+  // issuer at its tier.
+  const tierIssuers = customFlow
+    ? issuers
+    : issuers.filter((issuer) => issuer.projectId === "");
   const isTrusted =
     connection !== null &&
     (connection.issuer === trustedIssuer ||
-      connectedIssuer(connection.issuer, issuers) !== undefined);
+      connectedIssuer(connection.issuer, tierIssuers) !== undefined);
+  // A project that trusts the same issuer on its own takes precedence in that
+  // project: its MCP servers match a token against the project's rules, not
+  // the organization-tier one this flow saves, so a job reaches them as a
+  // different identity or not at all.
+  const shadowingIssuer =
+    customFlow || connection === null
+      ? undefined
+      : issuers.find(
+          (issuer) =>
+            issuer.projectId !== "" && issuer.issuer === connection.issuer,
+        );
   // The rule this flow has already written, or the one the agent being
   // edited already holds. Read from the prop rather than from state seeded
   // with it: the admission arrives a render or two after the first one, and
@@ -359,6 +379,19 @@ export function useWorkloadSetup({
       ) : (
         <div className="space-y-4">
           {step.body(context)}
+          {step.phase === "create" && shadowingIssuer !== undefined && (
+            <Alert variant="warning">
+              <div className="text-sm">
+                This project also trusts <strong>{shadowingIssuer.name}</strong>{" "}
+                on its own, at the same issuer URL. Its MCP servers check a job
+                against that issuer's rules instead of the one saved here, so
+                the job reaches them as another identity, or not at all.
+                Withdraw that issuer from the Federated access section of an
+                agent that uses it, so the rule saved here applies in this
+                project too.
+              </div>
+            </Alert>
+          )}
           {step.phase === "create" && !isTrusted && !settled && (
             <AssertionReuseField
               checked={connection !== null && reuseIssuer === connection.issuer}

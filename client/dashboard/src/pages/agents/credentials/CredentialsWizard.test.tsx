@@ -40,6 +40,9 @@ const mocks = vi.hoisted(() => ({
   sessionClients: vi.fn(),
   bindings: vi.fn(),
   attach: vi.fn(),
+  issuers: vi.fn(),
+  plugins: vi.fn(),
+  getPlugin: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/members.js", () => ({
@@ -88,6 +91,7 @@ vi.mock("@/contexts/Sdk", () => ({
       checkPolicyGrants: mocks.checkPolicyGrants,
     },
     keys: { create: mocks.createKey, list: mocks.listKeys },
+    plugins: { getPlugin: mocks.getPlugin },
     // A person's own connections, read once per project before the agent
     // exists and as the agent's candidates once it does.
     remoteSessions: {
@@ -149,7 +153,9 @@ vi.mock("@/hooks/useRBAC", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
-  useWorkloadIdentities: () => ({ data: { issuers: [], admissions: [] } }),
+  useWorkloadIdentities: () => ({
+    data: { issuers: mocks.issuers(), admissions: [] },
+  }),
   invalidateAllWorkloadIdentities: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/workloadTokenEndpoints.js", () => ({
@@ -180,6 +186,14 @@ vi.mock("@gram/client/react-query/agentsCreatePolicyGrant.js", () => ({
 vi.mock("@gram/client/react-query/agentsDeletePolicyGrant.js", () => ({
   useAgentsDeletePolicyGrantMutation: () => ({
     mutateAsync: mocks.deleteGrant,
+  }),
+}));
+// The GitHub Actions setup lists the plugins the job will receive.
+vi.mock("@gram/client/react-query/plugins.js", () => ({
+  usePlugins: () => ({
+    data: { plugins: mocks.plugins() },
+    isPending: false,
+    isError: false,
   }),
 }));
 // Only read to keep a prefilled name from colliding with one in use.
@@ -337,6 +351,9 @@ beforeEach(() => {
   mocks.sessionClients.mockResolvedValue([]);
   mocks.bindings.mockResolvedValue([]);
   mocks.attach.mockResolvedValue({});
+  mocks.issuers.mockReturnValue([]);
+  mocks.plugins.mockReturnValue([]);
+  mocks.getPlugin.mockReset();
   mocks.createAgent.mockResolvedValue({ id: "agent_new", name: "Release Bot" });
   mocks.listDelegableGrants.mockResolvedValue([grant]);
   mocks.checkPolicyGrants.mockImplementation(answerChecks());
@@ -2326,5 +2343,230 @@ describe("Servers that sign in as a person", () => {
       "The agent was created, but it could not use your connection. attachment refused",
     );
     expect(mocks.createKey).not.toHaveBeenCalled();
+  });
+});
+
+const githubActions = {
+  key: "github-actions",
+  displayName: "GitHub Actions",
+  description: "Jobs in one repository.",
+  icon: "",
+  enabled: true,
+  issuer: {
+    value: "https://token.actions.githubusercontent.com",
+    visibility: "read-only",
+  },
+  jwksUri: {
+    value: "https://token.actions.githubusercontent.com/.well-known/jwks",
+    visibility: "hidden",
+  },
+  variables: [
+    ["owner", "Owner", "[A-Za-z0-9][A-Za-z0-9-]{0,38}(?:@[0-9]+)?"],
+    ["repo", "Repository", "[A-Za-z0-9._-]{1,100}(?:@[0-9]+)?"],
+  ].map(([key, label, pattern]) => ({
+    key,
+    tier: "rule",
+    label,
+    help: "",
+    placeholder: "",
+    pattern,
+    patternMessage: "",
+  })),
+  subject: { template: "repo:{owner}/{repo}:", wildcard: true },
+};
+
+describe("Connecting a GitHub repository", () => {
+  /** Chooses GitHub Actions for a new agent and fills in the repository. */
+  async function reachRepositoryStep() {
+    mocks.platforms.mockReturnValue([githubActions]);
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(
+      await screen.findByRole("radio", { name: /GitHub Actions/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Your repository" });
+    fireEvent.change(screen.getByLabelText("Owner"), {
+      target: { value: "acme" },
+    });
+    fireEvent.change(screen.getByLabelText("Repository"), {
+      target: { value: "payments-api" },
+    });
+  }
+
+  it("trusts GitHub for the organization and gives the agent what the device agent needs", async () => {
+    await reachRepositoryStep();
+    expect(screen.getByText("repo:acme/payments-api:*")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    // The device-agent endpoint reads organization-tier rules only, so
+    // neither write names a project.
+    expect(mocks.registerIssuer.mock.calls[0]?.[0]?.request).toEqual({
+      registerWorkloadIssuerForm: expect.objectContaining({
+        issuer: "https://token.actions.githubusercontent.com",
+        jwksUri: "https://token.actions.githubusercontent.com/.well-known/jwks",
+      }),
+    });
+    expect(mocks.admitSubject.mock.calls[0]?.[0]?.request).toEqual({
+      admitWorkloadSubjectForm: {
+        issuer: "https://token.actions.githubusercontent.com",
+        subject: "repo:acme/payments-api:*",
+        matchKind: "wildcard",
+        agentId: "agent_new",
+        tags: [],
+      },
+    });
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants,
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          effect: "allow",
+          scope: "org:device_agent_sync",
+          selector: { resourceKind: "org", resourceId: "*" },
+        },
+        {
+          effect: "allow",
+          scope: "org:hooks_ingest",
+          selector: {
+            resourceKind: "org",
+            resourceId: "*",
+            projectId: "project_one",
+          },
+        },
+      ]),
+    );
+    await screen.findByRole("heading", { name: "What the job gets" });
+  });
+
+  it("registers its own issuer when only a project trusts GitHub, and says that project's servers read the project's", async () => {
+    mocks.issuers.mockReturnValue([
+      {
+        id: "issuer_project",
+        organizationId: "org_example",
+        projectId: "project_one",
+        name: "Project GitHub",
+        issuer: "https://token.actions.githubusercontent.com",
+        jwksUri: "https://token.actions.githubusercontent.com/.well-known/jwks",
+      },
+    ]);
+    await reachRepositoryStep();
+    expect(screen.getByText(/This project also trusts/)).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    expect(mocks.registerIssuer).toHaveBeenCalledTimes(1);
+  });
+
+  it("creates nothing when the device agent's permissions cannot be given", async () => {
+    mocks.checkPolicyGrants.mockImplementation(
+      (request: {
+        checkAgentPolicyGrantsForm: { policyGrants: { scope: string }[] };
+      }) =>
+        Promise.resolve({
+          results: request.checkAgentPolicyGrantsForm.policyGrants.map(
+            (grant) =>
+              grant.scope === "org:hooks_ingest"
+                ? { allowed: false, limitedBy: "caller" }
+                : { allowed: true },
+          ),
+        }),
+    );
+    await reachRepositoryStep();
+    const connect = screen.getByRole("button", {
+      name: "Connect GitHub Actions",
+    });
+    await waitFor(() => expect(mocks.checkPolicyGrants).toHaveBeenCalled());
+    fireEvent.click(connect);
+    expect(
+      await screen.findByText(/You do not hold org:hooks_ingest/),
+    ).toBeTruthy();
+    expect(mocks.createAgent).not.toHaveBeenCalled();
+    expect(mocks.admitSubject).not.toHaveBeenCalled();
+  });
+
+  it("lists the plugins the job receives and the servers it cannot use", async () => {
+    const everyone = {
+      id: "plugin_ci",
+      name: "CI tools",
+      assignmentCount: 1,
+      agentPluginsV1Compatible: true,
+      autoCreated: false,
+      createdAt: new Date(0),
+    };
+    mocks.plugins.mockReturnValue([
+      everyone,
+      {
+        ...everyone,
+        id: "plugin_none",
+        name: "Unassigned",
+        assignmentCount: 0,
+      },
+    ]);
+    mocks.getPlugin.mockResolvedValue({
+      ...everyone,
+      assignments: [
+        {
+          id: "a",
+          principalUrn: "*",
+          installMode: "required",
+          createdAt: new Date(0),
+        },
+      ],
+      servers: [
+        {
+          id: "s1",
+          displayName: "GitHub",
+          toolsetId: "toolset_one",
+          policy: "required",
+          sortOrder: 0,
+          createdAt: new Date(0),
+        },
+        {
+          id: "s2",
+          displayName: "Billing",
+          toolsetId: "toolset_billing",
+          policy: "required",
+          sortOrder: 1,
+          createdAt: new Date(0),
+        },
+      ],
+    });
+    await reachRepositoryStep();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await screen.findByRole("heading", { name: "What the job gets" });
+    expect(await screen.findByText("CI tools")).toBeTruthy();
+    expect(mocks.getPlugin).toHaveBeenCalledTimes(1);
+    expect(
+      await screen.findByText(/Release Bot cannot use Billing/),
+    ).toBeTruthy();
+  });
+
+  it("fills the workflow with the organization and the hook events project", async () => {
+    mocks.plugins.mockReturnValue([]);
+    await reachRepositoryStep();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await screen.findByRole("heading", { name: "What the job gets" });
+    expect(screen.getByText(/No plugin in this project reaches/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const workflow = await screen.findByLabelText(
+      ".github/workflows/speakeasy.yml",
+    );
+    expect(workflow.textContent).toContain("organization-id: org_example");
+    expect(workflow.textContent).toContain("project: project-one");
   });
 });

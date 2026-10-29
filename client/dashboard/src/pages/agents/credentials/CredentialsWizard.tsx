@@ -15,6 +15,7 @@ import {
   useRef,
   useState,
   type JSX,
+  type ReactNode,
 } from "react";
 import { useSearchParams } from "react-router";
 import {
@@ -39,6 +40,8 @@ import { StepVerify, type VerifyState } from "./StepVerify";
 import { CredentialPicker } from "./CredentialPicker";
 import { StepWorkload } from "./StepWorkload";
 import { useWorkloadSetup } from "./useWorkloadSetup";
+import { platformSetup } from "./platformSetups";
+import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
 import {
   CONNECT_SCOPE,
@@ -592,6 +595,65 @@ export function CredentialsWizard({
 
   const gatewayURL = agentID ? agentGatewayURL(agentID) : "";
   const platform = catalog.entries.find((entry) => entry.key === platformKey);
+  // What the platform's runtime needs beyond the servers, such as a device
+  // agent's polling and hook events. Empty for an API key and for platforms
+  // that only call MCP.
+  const platformGrants = useMemo<AgentPolicyGrantForm[]>(
+    () =>
+      credential === "workload" && platform !== undefined && project.id
+        ? (platformSetup(platform)?.agentGrants?.(project.id) ?? [])
+        : [],
+    [credential, platform, project.id],
+  );
+  // Checked up front by the rule agents.create applies, so a grant the caller
+  // or the owner could not give is named before anything is written.
+  const platformGrantCheck = useQuery({
+    queryKey: [
+      "agent-platform-grant-check",
+      organization.id,
+      user.id,
+      agent?.id ?? null,
+      platformGrants,
+    ],
+    queryFn: async ({ signal }) =>
+      (
+        await sdk.agents.checkPolicyGrants(
+          {
+            checkAgentPolicyGrantsForm: {
+              ...(agent?.id ? { agentId: agent.id } : {}),
+              policyGrants: platformGrants,
+            },
+          },
+          undefined,
+          { signal },
+        )
+      ).results,
+    enabled: platformGrants.length > 0 && !editing,
+    retry: false,
+    throwOnError: false,
+  });
+  const platformGrantRefusal = ((): string | null => {
+    if (platformGrants.length === 0 || editing) return null;
+    const answers = platformGrantCheck.data;
+    if (answers === undefined) {
+      return platformGrantCheck.isError
+        ? "Could not check that this agent can be given the permissions its platform needs. Try again."
+        : null;
+    }
+    const refused = platformGrants.flatMap((grant, index) =>
+      answers[index]?.allowed === true
+        ? []
+        : [{ scope: grant.scope, limitedBy: answers[index]?.limitedBy }],
+    );
+    if (refused.length === 0) return null;
+    const scopes = [...new Set(refused.map((grant) => grant.scope))].join(
+      " and ",
+    );
+    const byOwner = refused.some((grant) => grant.limitedBy === "owner");
+    return byOwner
+      ? `This agent's owner does not hold ${scopes}, so the agent cannot be given it. Ask an organization administrator to give the owner that permission, or to run this setup.`
+      : `You do not hold ${scopes}, so you cannot give it to this agent. Ask an organization administrator to run this setup.`;
+  })();
 
   // The verify step reads the key itself: a key with an access time is a
   // runtime that reached the gateway and was admitted.
@@ -689,7 +751,7 @@ export function CredentialsWizard({
       createAgentForm: {
         name: name.trim(),
         projectId: projectID,
-        policyGrants: agentPolicyGrantsFromDraft(draft),
+        policyGrants: [...agentPolicyGrantsFromDraft(draft), ...platformGrants],
       },
     });
     setAgentID(created.id);
@@ -703,6 +765,32 @@ export function CredentialsWizard({
       queryKey: ["managed-agents", organization.id],
     });
     return created.id;
+  };
+
+  /**
+   * Gives an agent that already exists the platform grants it lacks. One it
+   * holds already, or a broader one for the same scope, is left alone, so a
+   * second run adds nothing.
+   */
+  const addPlatformGrants = async (agentId: string): Promise<void> => {
+    if (platformGrants.length === 0) return;
+    const held = await sdk.agents.listPolicyGrants({ agentId });
+    for (const grant of platformGrants) {
+      const covered = held.some(
+        (existing) =>
+          existing.effect === "allow" &&
+          existing.scope === grant.scope &&
+          existing.selector.resourceKind === grant.selector.resourceKind &&
+          existing.selector.resourceId === "*" &&
+          (existing.selector.projectId === undefined ||
+            existing.selector.projectId === grant.selector.projectId),
+      );
+      if (covered) continue;
+      await createGrant.mutateAsync({
+        request: { createAgentPolicyGrantForm: { agentId, ...grant } },
+      });
+    }
+    void invalidateAgentPolicy(queryClient, organization.id, user.id, agentId);
   };
 
   /**
@@ -928,11 +1016,21 @@ export function CredentialsWizard({
     agentName: name.trim(),
     servers: connectionReach().flatMap((server) =>
       server.mcpUrl
-        ? [{ id: server.id, name: server.name, mcpUrl: server.mcpUrl }]
+        ? [
+            {
+              id: server.id,
+              resourceId: server.resourceId,
+              name: server.name,
+              mcpUrl: server.mcpUrl,
+            },
+          ]
         : [],
     ),
     ensureAgent: async () => {
+      if (platformGrantRefusal !== null) throw new Error(platformGrantRefusal);
       const targetId = await ensureAgent();
+      // A new agent was created with them; one that exists gets what it lacks.
+      if (agent !== undefined) await addPlatformGrants(agent.id);
       await attachSelectedConnections(targetId, connectionReach());
       return targetId;
     },
@@ -956,15 +1054,17 @@ export function CredentialsWizard({
       setHighlight(
         key === "org_id"
           ? "Anthropic organization"
-          : ["project", "location", "cluster"].includes(key)
-            ? "Cluster"
-            : ["namespace", "service_account"].includes(key)
-              ? "Service account"
-              : key === "name"
-                ? "Platform"
-                : key === "issuer"
-                  ? "Issuer"
-                  : null,
+          : key === "owner" || key === "repo"
+            ? "Repository"
+            : ["project", "location", "cluster"].includes(key)
+              ? "Cluster"
+              : ["namespace", "service_account"].includes(key)
+                ? "Service account"
+                : key === "name"
+                  ? "Platform"
+                  : key === "issuer"
+                    ? "Issuer"
+                    : null,
       ),
   });
   // A platform's own setup steps are steps of this wizard, not a wizard of
@@ -1130,7 +1230,17 @@ export function CredentialsWizard({
         },
         {
           label: "Grants",
-          value: <code className="text-xs">mcp:connect</code>,
+          value: (
+            <span className="text-xs">
+              {["mcp:connect", ...new Set(platformGrants.map((g) => g.scope))]
+                .map((scope) => <code key={scope}>{scope}</code>)
+                .reduce<ReactNode[]>(
+                  (all, item, index) =>
+                    index === 0 ? [item] : [...all, ", ", item],
+                  [],
+                )}
+            </span>
+          ),
         },
         {
           label: "Credential",
@@ -1158,6 +1268,22 @@ export function CredentialsWizard({
                 value: (
                   <code className="text-xs">
                     {workload.values["org_id"]?.trim()}
+                  </code>
+                ),
+              },
+            ]
+          : []),
+        ...(credential === "workload" &&
+        platformKey === "github-actions" &&
+        (workload.values["owner"] ?? "").trim() !== "" &&
+        (workload.values["repo"] ?? "").trim() !== ""
+          ? [
+              {
+                label: "Repository",
+                value: (
+                  <code className="text-xs break-all">
+                    {workload.values["owner"]?.trim()}/
+                    {workload.values["repo"]?.trim()}
                   </code>
                 ),
               },

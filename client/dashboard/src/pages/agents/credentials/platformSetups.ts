@@ -1,4 +1,5 @@
 import { claudeTagSetupInstructions } from "./ClaudeTagSetupInstructions";
+import { githubActionsSetupInstructions } from "./GitHubActionsSetupInstructions";
 import { gkeSetupInstructions } from "./GkeSetupInstructions";
 import type { PlatformSetup } from "./setupInstructions";
 import { isSupportedCatalogEntry, type CatalogEntry } from "./workloadCatalog";
@@ -17,6 +18,7 @@ import { isSupportedCatalogEntry, type CatalogEntry } from "./workloadCatalog";
 const PLATFORM_SETUPS = new Map<string, (entry: CatalogEntry) => PlatformSetup>(
   [
     ["claude-tag", claudeTagSetupInstructions],
+    ["github-actions", githubActionsSetupInstructions],
     ["gke", gkeSetupInstructions],
   ],
 );

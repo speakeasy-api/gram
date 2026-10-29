@@ -1,3 +1,4 @@
+import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import type { ReactNode } from "react";
 import type { ComputedValueKey } from "./workloadCatalog";
 
@@ -39,8 +40,16 @@ export type SetupContext = {
   ruleConflict: string | null;
 };
 
-/** One MCP server the agent being set up may call. */
-export type SetupServer = { id: string; name: string; mcpUrl: string };
+/**
+ * One MCP server the agent being set up may call. `resourceId` is the id its
+ * grants and plugin entries name it by.
+ */
+export type SetupServer = {
+  id: string;
+  resourceId: string;
+  name: string;
+  mcpUrl: string;
+};
 
 export type SetupStep = {
   id: string;
@@ -69,4 +78,11 @@ export type PlatformSetup = {
   steps: SetupStep[];
   /** The rows to write, or null while the values are incomplete. */
   connection: (values: Record<string, string>) => Connection | null;
+  /**
+   * Grants the agent needs beyond the servers it was given, for a platform
+   * whose runtime calls more than MCP: the device agent polls for plugins and
+   * sends hook events. Written onto the agent when it is created, and added to
+   * an existing agent that lacks them, in the project the setup runs in.
+   */
+  agentGrants?: (projectId: string) => AgentPolicyGrantForm[];
 };
