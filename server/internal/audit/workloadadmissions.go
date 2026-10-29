@@ -21,38 +21,6 @@ const (
 	ActionWorkloadAdmissionWithdraw Action = "workload-admission:withdraw"
 )
 
-// LegacyKitRuntimeActorID is the system principal Kit runtime admission
-// entries recorded before they were attributed to the assistant's agent. Older
-// rows still carry it, so readers that recognize runtime admissions match it.
-const LegacyKitRuntimeActorID = "kit-runtime"
-
-// SecurityAdmittedSubjects reports which of the given admissions were admitted
-// as security entries, as a Kit runtime admits its own workload, according to
-// the audit trail. Withdrawals of those admissions cascaded from withdrawing
-// their issuer are security entries too.
-func SecurityAdmittedSubjects(ctx context.Context, dbtx repo.DBTX, organizationID string, admissionIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
-	if len(admissionIDs) == 0 {
-		return map[uuid.UUID]bool{}, nil
-	}
-	ids := make([]string, 0, len(admissionIDs))
-	for _, id := range admissionIDs {
-		ids = append(ids, id.String())
-	}
-	rows, err := repo.New(dbtx).ListSecurityAdmittedSubjects(ctx, repo.ListSecurityAdmittedSubjectsParams{OrganizationID: organizationID, SubjectIds: ids})
-	if err != nil {
-		return nil, fmt.Errorf("list security admitted subjects: %w", err)
-	}
-	admitted := make(map[uuid.UUID]bool, len(rows))
-	for _, row := range rows {
-		id, err := uuid.Parse(row)
-		if err != nil {
-			return nil, fmt.Errorf("parse security admitted subject: %w", err)
-		}
-		admitted[id] = true
-	}
-	return admitted, nil
-}
-
 // WorkloadAdmissionSnapshot is the audited state of one admitted subject.
 //
 // MatchKind and Subject together are the breadth of the grant: a wildcard rule
@@ -93,12 +61,6 @@ type LogWorkloadAdmissionAdmitEvent struct {
 	AdmissionDisplayName string
 
 	AdmissionSnapshotAfter *WorkloadAdmissionSnapshot
-
-	// Category is CategorySecurity when Speakeasy admits or withdraws a
-	// workload on its own, as a runtime does for itself on every start and
-	// teardown, and CategoryConfiguration when a person changes the policy.
-	// Empty means CategoryConfiguration.
-	Category Category
 }
 
 func (l *Logger) LogWorkloadAdmissionAdmit(ctx context.Context, dbtx repo.DBTX, event LogWorkloadAdmissionAdmitEvent) error {
@@ -128,8 +90,6 @@ func (l *Logger) LogWorkloadAdmissionAdmit(ctx context.Context, dbtx repo.DBTX, 
 		Metadata:       nil,
 		BeforeSnapshot: nil,
 		AfterSnapshot:  after,
-
-		Category: string(event.Category),
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.WorkloadAdmissionV1})
@@ -199,12 +159,6 @@ type LogWorkloadAdmissionWithdrawEvent struct {
 	AdmissionDisplayName string
 
 	AdmissionSnapshotBefore *WorkloadAdmissionSnapshot
-
-	// Category is CategorySecurity when Speakeasy admits or withdraws a
-	// workload on its own, as a runtime does for itself on every start and
-	// teardown, and CategoryConfiguration when a person changes the policy.
-	// Empty means CategoryConfiguration.
-	Category Category
 }
 
 func (l *Logger) LogWorkloadAdmissionWithdraw(ctx context.Context, dbtx repo.DBTX, event LogWorkloadAdmissionWithdrawEvent) error {
@@ -234,8 +188,6 @@ func (l *Logger) LogWorkloadAdmissionWithdraw(ctx context.Context, dbtx repo.DBT
 		Metadata:       nil,
 		BeforeSnapshot: before,
 		AfterSnapshot:  nil,
-
-		Category: string(event.Category),
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.WorkloadAdmissionV1})

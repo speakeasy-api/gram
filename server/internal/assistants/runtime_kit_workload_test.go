@@ -179,13 +179,17 @@ func TestKitWorkloadDBSharedIssuerAndExactRevoke(t *testing.T) {
 }
 
 // A runtime admitting and withdrawing its own workload on every start and
-// teardown is machine access, so those entries are security entries.
+// teardown is machine access, so those entries go to the security log.
 // Registering the cluster issuer happens once per project and is a
-// configuration change, attributed to the assistant's agent rather than to an
-// anonymous system component.
-func TestKitWorkloadDBAuditCategoryAndAttribution(t *testing.T) {
+// configuration change. Both are attributed to the assistant's agent rather
+// than to an anonymous system component.
+func TestKitWorkloadDBAuditLogAndAttribution(t *testing.T) {
 	t.Parallel()
 	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
+	configurationAdmits, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
+	require.NoError(t, err)
+	configurationWithdrawals, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
 
 	binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
 	require.NoError(t, err)
@@ -194,22 +198,26 @@ func TestKitWorkloadDBAuditCategoryAndAttribution(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(urn.PrincipalTypeAgent), issuerCreate.ActorType)
 	require.Equal(t, identity.AgentID.String(), issuerCreate.ActorID)
-	require.Equal(t, audit.CategoryConfiguration, issuerCreate.Category)
 
-	admit, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
+	admit, err := audittest.LatestSecurityAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
 	require.NoError(t, err)
 	require.Equal(t, binding.Subject, admit.SubjectDisplay)
-	require.Equal(t, audit.CategorySecurity, admit.Category)
 	require.Equal(t, string(urn.PrincipalTypeAgent), admit.ActorType)
 	require.Equal(t, identity.AgentID.String(), admit.ActorID)
 
 	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, binding)))
-	withdraw, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	withdraw, err := audittest.LatestSecurityAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
 	require.NoError(t, err)
 	require.Equal(t, binding.Subject, withdraw.SubjectDisplay)
-	require.Equal(t, audit.CategorySecurity, withdraw.Category)
 	require.Equal(t, string(urn.PrincipalTypeAgent), withdraw.ActorType)
 	require.Equal(t, identity.AgentID.String(), withdraw.ActorID)
+
+	admits, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
+	require.NoError(t, err)
+	require.Equal(t, configurationAdmits, admits, "the runtime's admit stays out of the configuration log")
+	withdrawals, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Equal(t, configurationWithdrawals, withdrawals, "the runtime's withdrawal stays out of the configuration log")
 }
 
 func TestKitWorkloadDBLocalSubjectCannotBeReused(t *testing.T) {

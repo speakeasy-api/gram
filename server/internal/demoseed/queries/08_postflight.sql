@@ -379,6 +379,8 @@ SELECT count(*) FROM (
   SELECT 1 FROM session_quarantines WHERE organization_id = @org_id::text AND project_id <> @project_id::uuid
   UNION ALL
   SELECT 1 FROM audit_logs WHERE organization_id = @org_id::text AND project_id <> @project_id::uuid
+  UNION ALL
+  SELECT 1 FROM security_audit_logs WHERE organization_id = @org_id::text AND project_id <> @project_id::uuid
 ) x;
 
 -- The gateway is only a gateway if its members survived the reseed, and an
@@ -569,5 +571,5 @@ SELECT count(*) FROM risk_policy_approvals
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
 
 -- name: PostflightCountSecurityAuditLogs :one
-SELECT count(*) FROM audit_logs
-WHERE organization_id = @org_id::text AND category = 'security';
+SELECT count(*) FROM security_audit_logs
+WHERE organization_id = @org_id::text;

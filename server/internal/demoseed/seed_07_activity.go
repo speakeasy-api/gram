@@ -60,6 +60,9 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 	if err := s.q.ActivityDeleteAuditLogs(ctx, org); err != nil {
 		return fmt.Errorf("delete demo audit logs: %w", err)
 	}
+	if err := s.q.ActivityDeleteSecurityAuditLogs(ctx, org); err != nil {
+		return fmt.Errorf("delete demo security audit logs: %w", err)
+	}
 	for i := 12; i >= 1; i-- {
 		u := demoUsers[i%6]
 		subject := "Acme Support Tools"

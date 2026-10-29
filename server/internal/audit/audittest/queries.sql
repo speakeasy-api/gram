@@ -15,8 +15,7 @@ SELECT
   before_snapshot,
   after_snapshot,
   acting_surface,
-  acting_client_id,
-  category
+  acting_client_id
 FROM audit_logs
 WHERE action = @action
 ORDER BY seq DESC
@@ -39,8 +38,7 @@ SELECT
   before_snapshot,
   after_snapshot,
   acting_surface,
-  acting_client_id,
-  category
+  acting_client_id
 FROM audit_logs
 WHERE action = @action AND subject_id = @subject_id
 ORDER BY seq DESC
@@ -54,11 +52,6 @@ FROM audit_logs;
 SELECT COUNT(*)
 FROM audit_logs
 WHERE action = @action;
-
--- name: CountAuditLogsByCategory :one
-SELECT COUNT(*)
-FROM audit_logs
-WHERE category = @category;
 
 -- name: GetLatestOutboxPayloadByOrg :one
 -- Returns the marshaled webhook envelope of the most-recently enqueued outbox
@@ -78,5 +71,40 @@ LIMIT 1;
 -- clock_timestamp() — but a test asserting on a time range needs the rows to
 -- sit at known, distinct points rather than microseconds apart.
 UPDATE audit_logs
+SET created_at = @created_at
+WHERE id = @id;
+
+-- name: GetLatestSecurityAuditLogByAction :one
+-- Same columns as GetLatestAuditLogByAction, so the rows convert.
+SELECT
+  action,
+  organization_id,
+  project_id,
+  actor_id,
+  actor_type,
+  actor_display_name,
+  actor_slug,
+  subject_id,
+  subject_type,
+  subject_display_name,
+  subject_slug,
+  metadata,
+  before_snapshot,
+  after_snapshot,
+  acting_surface,
+  acting_client_id
+FROM security_audit_logs
+WHERE action = @action
+ORDER BY seq DESC
+LIMIT 1;
+
+-- name: CountSecurityAuditLogsByAction :one
+SELECT COUNT(*)
+FROM security_audit_logs
+WHERE action = @action;
+
+-- name: BackdateSecurityAuditLog :exec
+-- Test-only: BackdateAuditLog for security_audit_logs.
+UPDATE security_audit_logs
 SET created_at = @created_at
 WHERE id = @id;

@@ -95,25 +95,22 @@ const (
 
 type Action string
 
-// Category says what kind of event an audit entry records.
+// Category says which log an entry belongs to.
 //
 // Configuration entries are changes to the platform's configuration made by an
-// organization's members or by the Speakeasy team; the audit log page shows
-// these. Security entries record machine access and other security-relevant
-// activity that is not a configuration decision, such as a runtime admitting
-// its own workload identity on every start. Every category is stored,
-// delivered as webhooks and visible to staff.
+// organization's members or by the Speakeasy team. This package records them
+// in audit_logs, and the audit log page shows them by default. Security entries
+// record machine access and other security-relevant activity that is not a
+// configuration decision, such as a runtime admitting its own workload identity
+// on every start. The securityevent package records them in
+// security_audit_logs. Both are delivered as webhooks, carrying their category,
+// and both are visible to staff.
 type Category string
 
 const (
 	CategoryConfiguration Category = "configuration"
 	CategorySecurity      Category = "security"
 )
-
-// Categories lists every category, for readers that show all of them.
-func Categories() []string {
-	return []string{string(CategoryConfiguration), string(CategorySecurity)}
-}
 
 func marshalAuditPayload(value any) ([]byte, error) {
 	if value == nil {

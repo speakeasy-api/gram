@@ -14,11 +14,10 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/admin"
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
-// maxAuditCursorBytes bounds the existing sequence cursor before decoding it.
+// maxAuditCursorBytes bounds the activity cursor before decoding it.
 const maxAuditCursorBytes = 128
 
 // maxAuditOutputBytes caps the serialized payload object, not the MCP wire envelope.
@@ -42,7 +41,7 @@ type ListAuditLogEntriesInput struct {
 	// OrganizationID is a canonical ID, never a slug.
 	OrganizationID string `json:"organization_id" jsonschema:"Exact organization ID returned by find_organizations, not a slug"`
 
-	// Cursor continues the existing sequence-ordered staff feed.
+	// Cursor continues the staff activity feed.
 	Cursor string `json:"cursor,omitempty" jsonschema:"Opaque next cursor returned by a previous audit page"`
 
 	// ProjectID selects a canonical project UUID within the exact organization.
@@ -219,7 +218,7 @@ func parseAuditLogFilter(input ListAuditLogEntriesInput) (admin.OrganizationActi
 		return filter, errors.New("provide an unpadded audit cursor returned by a previous page")
 	}
 	if input.Cursor != "" {
-		if _, err := audit.DecodeCursor(input.Cursor); err != nil {
+		if err := admin.ValidateActivityCursor(input.Cursor); err != nil {
 			return filter, errors.New("provide a valid audit cursor returned by a previous page")
 		}
 	}

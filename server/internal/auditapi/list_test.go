@@ -13,6 +13,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/auditlogs"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
+	securityrepo "github.com/speakeasy-api/gram/server/internal/audit/securityevent/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -942,7 +943,7 @@ func testAuthContext(t *testing.T, ctx context.Context) *contextvalues.AuthConte
 func insertAuditLog(t *testing.T, ctx context.Context, ti *testInstance, seed auditLogSeed) uuid.UUID {
 	t.Helper()
 
-	row, err := repo.New(ti.conn).InsertAuditLog(ctx, repo.InsertAuditLogParams{
+	params := repo.InsertAuditLogParams{
 		OrganizationID:     seed.organizationID,
 		ProjectID:          seed.projectID,
 		ActorID:            seed.actorID,
@@ -959,8 +960,14 @@ func insertAuditLog(t *testing.T, ctx context.Context, ti *testInstance, seed au
 		BeforeSnapshot:     seed.beforeSnapshot,
 		AfterSnapshot:      seed.afterSnapshot,
 		Metadata:           seed.metadata,
-		Category:           string(seed.category),
-	})
+	}
+	// Security entries live in their own table with the same columns.
+	if seed.category == audit.CategorySecurity {
+		row, err := securityrepo.New(ti.conn).InsertSecurityAuditLog(ctx, securityrepo.InsertSecurityAuditLogParams(params))
+		require.NoError(t, err)
+		return row.ID
+	}
+	row, err := repo.New(ti.conn).InsertAuditLog(ctx, params)
 	require.NoError(t, err)
 
 	return row.ID

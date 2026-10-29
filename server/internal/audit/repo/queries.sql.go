@@ -12,31 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const countConfigurationKitRuntimeWorkloadAdmissions = `-- name: CountConfigurationKitRuntimeWorkloadAdmissions :one
-SELECT COUNT(*)::bigint
-FROM audit_logs a
-WHERE a.subject_type = 'workload_admission'
-  AND a.action IN ('workload-admission:admit', 'workload-admission:withdraw')
-  AND a.category = 'configuration'
-  AND EXISTS (
-    SELECT 1
-    FROM audit_logs admit
-    WHERE admit.organization_id = a.organization_id
-      AND admit.subject_type = 'workload_admission'
-      AND admit.subject_id = a.subject_id
-      AND admit.action = 'workload-admission:admit'
-      AND (admit.category = 'security' OR (admit.actor_type = 'system' AND admit.actor_id = 'kit-runtime'))
-  )
-`
-
-// Counts the entries MarkKitRuntimeWorkloadAdmissionsSecurity would change.
-func (q *Queries) CountConfigurationKitRuntimeWorkloadAdmissions(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countConfigurationKitRuntimeWorkloadAdmissions)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const getLatestOpenRouterSpendCapAuditOperation = `-- name: GetLatestOpenRouterSpendCapAuditOperation :one
 SELECT
   COALESCE(latest.operation_id, '')::text AS operation_id,
@@ -115,8 +90,7 @@ INSERT INTO audit_logs (
   after_snapshot,
   metadata,
   acting_surface,
-  acting_client_id,
-  category
+  acting_client_id
 ) VALUES (
   $1,
   $2,
@@ -133,10 +107,7 @@ INSERT INTO audit_logs (
   $13,
   $14,
   $15,
-  $16,
-  -- Blank means the column default, so a writer that never sets a category
-  -- records a configuration entry.
-  COALESCE(NULLIF($17::text, ''), 'configuration')
+  $16
 )
 RETURNING id, organization_id
 `
@@ -158,7 +129,6 @@ type InsertAuditLogParams struct {
 	Metadata           []byte
 	ActingSurface      pgtype.Text
 	ActingClientID     pgtype.Text
-	Category           string
 }
 
 type InsertAuditLogRow struct {
@@ -184,7 +154,6 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 		arg.Metadata,
 		arg.ActingSurface,
 		arg.ActingClientID,
-		arg.Category,
 	)
 	var i InsertAuditLogRow
 	err := row.Scan(&i.ID, &i.OrganizationID)
@@ -199,10 +168,9 @@ SELECT
 FROM audit_logs
 WHERE organization_id = $1
   AND subject_type <> 'assistant'
-  AND category = $2
   AND (
-    $3::uuid IS NULL
-    OR project_id = $3::uuid
+    $2::uuid IS NULL
+    OR project_id = $2::uuid
   )
 GROUP BY action
 ORDER BY count DESC, action ASC
@@ -210,7 +178,6 @@ ORDER BY count DESC, action ASC
 
 type ListAuditActionFacetsParams struct {
 	OrganizationID string
-	Category       string
 	ProjectID      uuid.NullUUID
 }
 
@@ -221,10 +188,9 @@ type ListAuditActionFacetsRow struct {
 }
 
 // Assistant activity events are excluded: facets power the platform audit
-// feed, which hides them (see ListAuditLogs). Facets cover one category, the
-// one the feed beside them is showing.
+// feed, which hides them (see ListAuditLogs).
 func (q *Queries) ListAuditActionFacets(ctx context.Context, arg ListAuditActionFacetsParams) ([]ListAuditActionFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listAuditActionFacets, arg.OrganizationID, arg.Category, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listAuditActionFacets, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -249,10 +215,9 @@ WITH filtered_logs AS (
   FROM audit_logs
   WHERE organization_id = $1
     AND subject_type <> 'assistant'
-    AND category = $2
     AND (
-      $3::uuid IS NULL
-      OR project_id = $3::uuid
+      $2::uuid IS NULL
+      OR project_id = $2::uuid
     )
 ), actor_counts AS (
   SELECT
@@ -298,7 +263,6 @@ ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC
 
 type ListAuditActorFacetsParams struct {
 	OrganizationID string
-	Category       string
 	ProjectID      uuid.NullUUID
 }
 
@@ -311,13 +275,12 @@ type ListAuditActorFacetsRow struct {
 }
 
 // Assistant activity events are excluded: facets power the platform audit
-// feed, which hides them (see ListAuditLogs). Facets cover one category, the
-// one the feed beside them is showing.
+// feed, which hides them (see ListAuditLogs).
 // Scoped through this organization's memberships for the same reason
 // ListAuditLogs is: the directory spans every tenant, and a facet label is
 // read by whoever can read the feed.
 func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFacetsParams) ([]ListAuditActorFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listAuditActorFacets, arg.OrganizationID, arg.Category, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listAuditActorFacets, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -375,38 +338,32 @@ WHERE a.organization_id = $1
     )
     OR a.subject_type = $6::text
   )
-  -- An empty or absent list is every category. The customer audit log always
-  -- names the category it shows.
   AND (
-    coalesce(cardinality($8::text[]), 0) = 0
-    OR a.category = ANY($8::text[])
-  )
-  AND (
-    $9::text IS NULL
-    OR a.subject_id = $9::text
+    $8::text IS NULL
+    OR a.subject_id = $8::text
   )
   -- An empty or absent list is no filter, so a caller composing filters can
   -- always send the parameter.
   AND (
-    coalesce(cardinality($10::text[]), 0) = 0
-    OR a.subject_id = ANY($10::text[])
+    coalesce(cardinality($9::text[]), 0) = 0
+    OR a.subject_id = ANY($9::text[])
   )
   -- A row written before attribution existed has no surface. Coalescing here
   -- means filtering for 'unknown' finds those rows too, instead of returning
   -- nothing and implying the organization has no unattributed history.
   AND (
-    $11::text IS NULL
-    OR COALESCE(a.acting_surface, 'unknown') = $11::text
+    $10::text IS NULL
+    OR COALESCE(a.acting_surface, 'unknown') = $10::text
   )
   -- Half-open window, so consecutive ranges neither double-count a row nor
   -- drop one that lands exactly on a boundary.
   AND (
-    $12::timestamptz IS NULL
-    OR a.created_at >= $12::timestamptz
+    $11::timestamptz IS NULL
+    OR a.created_at >= $11::timestamptz
   )
   AND (
-    $13::timestamptz IS NULL
-    OR a.created_at < $13::timestamptz
+    $12::timestamptz IS NULL
+    OR a.created_at < $12::timestamptz
   )
 ORDER BY a.seq DESC
 LIMIT 51
@@ -420,7 +377,6 @@ type ListAuditLogsParams struct {
 	Action                 pgtype.Text
 	SubjectType            pgtype.Text
 	IncludeAssistantEvents bool
-	Categories             []string
 	SubjectID              pgtype.Text
 	SubjectIds             []string
 	ActingSurface          pgtype.Text
@@ -454,10 +410,7 @@ type ListAuditLogsRow struct {
 
 // When no subject_type filter is given, assistant activity events (one per
 // assistant tool call) are excluded so they don't drown out the platform
-// audit feed. Only entries in the requested categories are returned, whatever
-// the other filters: the customer audit log asks for one category at a time and
-// the private admin caller for every category. The private admin caller also
-// includes assistant events.
+// audit feed. The private admin caller can explicitly include all events.
 // The actor name is resolved at read time rather than trusted from the row.
 // Every writer stores the acting user's EMAIL in actor_display_name, so the
 // stored value renders the feed as a column of addresses; joining the
@@ -481,7 +434,6 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 		arg.Action,
 		arg.SubjectType,
 		arg.IncludeAssistantEvents,
-		arg.Categories,
 		arg.SubjectID,
 		arg.SubjectIds,
 		arg.ActingSurface,
@@ -536,10 +488,9 @@ SELECT
 FROM audit_logs
 WHERE organization_id = $1
   AND subject_type <> 'assistant'
-  AND category = $2
   AND (
-    $3::uuid IS NULL
-    OR project_id = $3::uuid
+    $2::uuid IS NULL
+    OR project_id = $2::uuid
   )
 GROUP BY COALESCE(acting_surface, 'unknown')
 ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC
@@ -547,7 +498,6 @@ ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC
 
 type ListAuditSurfaceFacetsParams struct {
 	OrganizationID string
-	Category       string
 	ProjectID      uuid.NullUUID
 }
 
@@ -558,8 +508,7 @@ type ListAuditSurfaceFacetsRow struct {
 }
 
 // Assistant activity events are excluded: facets power the platform audit
-// feed, which hides them (see ListAuditLogs). Facets cover one category, the
-// one the feed beside them is showing.
+// feed, which hides them (see ListAuditLogs).
 // Rows predating attribution have no surface and are counted as 'unknown',
 // so the facet totals reconcile with the unfiltered feed rather than silently
 // omitting an organization's older history.
@@ -567,7 +516,7 @@ type ListAuditSurfaceFacetsRow struct {
 // nulls from before attribution and rows the application wrote as 'unknown',
 // and grouping on the raw column would return two facets with the same label.
 func (q *Queries) ListAuditSurfaceFacets(ctx context.Context, arg ListAuditSurfaceFacetsParams) ([]ListAuditSurfaceFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listAuditSurfaceFacets, arg.OrganizationID, arg.Category, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listAuditSurfaceFacets, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -584,86 +533,6 @@ func (q *Queries) ListAuditSurfaceFacets(ctx context.Context, arg ListAuditSurfa
 		return nil, err
 	}
 	return items, nil
-}
-
-const listSecurityAdmittedSubjects = `-- name: ListSecurityAdmittedSubjects :many
-SELECT DISTINCT subject_id
-FROM audit_logs
-WHERE organization_id = $1
-  AND subject_type = 'workload_admission'
-  AND action = 'workload-admission:admit'
-  AND (category = 'security' OR (actor_type = 'system' AND actor_id = 'kit-runtime'))
-  AND subject_id = ANY($2::text[])
-`
-
-type ListSecurityAdmittedSubjectsParams struct {
-	OrganizationID string
-	SubjectIds     []string
-}
-
-// Returns which of the given workload admissions were admitted as a security
-// entry rather than a configuration change, as a Kit runtime admits its own
-// workload. The audit trail is the signal because no customer can write it: an
-// admission's tags and name are customer-editable. Entries written before
-// categories existed are recognized by the system:kit-runtime actor they
-// recorded.
-func (q *Queries) ListSecurityAdmittedSubjects(ctx context.Context, arg ListSecurityAdmittedSubjectsParams) ([]string, error) {
-	rows, err := q.db.Query(ctx, listSecurityAdmittedSubjects, arg.OrganizationID, arg.SubjectIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var subject_id string
-		if err := rows.Scan(&subject_id); err != nil {
-			return nil, err
-		}
-		items = append(items, subject_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const markKitRuntimeWorkloadAdmissionsSecurity = `-- name: MarkKitRuntimeWorkloadAdmissionsSecurity :execrows
-WITH batch AS (
-  SELECT a.id
-  FROM audit_logs a
-  WHERE a.subject_type = 'workload_admission'
-    AND a.action IN ('workload-admission:admit', 'workload-admission:withdraw')
-    AND a.category = 'configuration'
-    AND EXISTS (
-      SELECT 1
-      FROM audit_logs admit
-      WHERE admit.organization_id = a.organization_id
-        AND admit.subject_type = 'workload_admission'
-        AND admit.subject_id = a.subject_id
-        AND admit.action = 'workload-admission:admit'
-        AND (admit.category = 'security' OR (admit.actor_type = 'system' AND admit.actor_id = 'kit-runtime'))
-    )
-  LIMIT $1
-)
-UPDATE audit_logs
-SET category = 'security'
-FROM batch
-WHERE audit_logs.id = batch.id
-`
-
-// Moves admit and withdraw entries for admissions the Kit runtime admitted for
-// itself into the security category, including withdrawals a person caused by
-// withdrawing the issuer. Each Kit runtime admits and withdraws its own
-// workload identity on every start and teardown: machine access, not a
-// configuration decision. Updates at most batch_size rows; callers repeat
-// until no rows change. Without an index on category, each batch scans the
-// table.
-func (q *Queries) MarkKitRuntimeWorkloadAdmissionsSecurity(ctx context.Context, batchSize int32) (int64, error) {
-	result, err := q.db.Exec(ctx, markKitRuntimeWorkloadAdmissionsSecurity, batchSize)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const updateAuditLogCreatedAtForTesting = `-- name: UpdateAuditLogCreatedAtForTesting :exec

@@ -54,16 +54,6 @@ func (l *Logger) log(ctx context.Context, dbtx repo.DBTX, entry auditEntry) erro
 	// blank are different answers to "which client acted".
 	entry.Params.ActingClientID = conv.ToPGTextEmpty(identity.ClientID)
 
-	// Most writers never set a category, so an entry records a configuration
-	// change unless its Log function says otherwise.
-	switch Category(entry.Params.Category) {
-	case "":
-		entry.Params.Category = string(CategoryConfiguration)
-	case CategoryConfiguration, CategorySecurity:
-	default:
-		return fmt.Errorf("log %s: unknown audit category %q", entry.Params.Action, entry.Params.Category)
-	}
-
 	row, err := repo.New(dbtx).InsertAuditLog(ctx, entry.Params)
 	if err != nil {
 		return fmt.Errorf("log %s: %w", entry.Params.Action, err)

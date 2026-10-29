@@ -5,6 +5,9 @@
 -- name: ActivityDeleteAuditLogs :exec
 DELETE FROM audit_logs WHERE organization_id = @organization_id;
 
+-- name: ActivityDeleteSecurityAuditLogs :exec
+DELETE FROM security_audit_logs WHERE organization_id = @organization_id;
+
 -- name: ActivityInsertProjectAuditLog :exec
 INSERT INTO audit_logs (id, organization_id, project_id, actor_id, actor_type,
                         actor_display_name, action, subject_id, subject_type,
@@ -108,15 +111,15 @@ VALUES (@id, @organization_id,
         now() - interval '35 minutes');
 
 -- Security entries: an agent's runtime admitting and withdrawing its own
--- workload identity on each start and teardown. They show under Security
--- activity on the audit log page rather than among configuration changes.
+-- workload identity on each start and teardown. They live in the security log
+-- and show under Security activity on the audit log page.
 -- name: ActivityInsertSecurityAuditLog :exec
-INSERT INTO audit_logs (id, organization_id, project_id, actor_id, actor_type,
-                        action, subject_id, subject_type, subject_display_name,
-                        acting_surface, category, created_at)
+INSERT INTO security_audit_logs (id, organization_id, project_id, actor_id, actor_type,
+                                 action, subject_id, subject_type, subject_display_name,
+                                 acting_surface, created_at)
 VALUES (@id, @organization_id, @project_id::uuid, @actor_id, 'agent',
         @action, @subject_id, 'workload_admission', @subject_display_name::text,
-        'system', 'security', now() - @age::interval);
+        'system', now() - @age::interval);
 
 -- Killswitch mutation rows carry a bounded after snapshot plus their replay
 -- operation.

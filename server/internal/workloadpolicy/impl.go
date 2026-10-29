@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/securityevent"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -794,13 +795,14 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 	}
 
 	// Admissions a Kit runtime created for itself are created and withdrawn on
-	// every runtime start and teardown, so their cascaded entries are security
-	// entries. The issuer withdrawal below is a configuration change either way.
+	// every runtime start and teardown, so their cascaded withdrawals belong in
+	// the security log with the rest of their history. The issuer withdrawal
+	// below is a configuration change either way.
 	admissionIDs := make([]uuid.UUID, 0, len(admissions))
 	for _, admission := range admissions {
 		admissionIDs = append(admissionIDs, admission.ID)
 	}
-	runtimeAdmitted, err := audit.SecurityAdmittedSubjects(ctx, dbtx, t.organizationID, admissionIDs)
+	runtimeAdmitted, err := securityevent.RuntimeAdmittedSubjects(ctx, dbtx, t.organizationID, admissionIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error classifying cascaded workload withdrawals").LogError(ctx, s.logger)
 	}
@@ -809,18 +811,12 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 	// issuer would not let the log answer when a given subject stopped being
 	// admitted.
 	for _, admission := range admissions {
-		category := audit.CategoryConfiguration
-		if runtimeAdmitted[admission.ID] {
-			category = audit.CategorySecurity
-		}
-
 		assignedAgent := ""
 		if agentID, ok := agentBySubject[admission.MatchKind+"\x00"+admission.Subject]; ok {
 			assignedAgent = agentID.String()
 		}
 
-		if err := s.audit.LogWorkloadAdmissionWithdraw(ctx, dbtx, audit.LogWorkloadAdmissionWithdrawEvent{
-			Category:                category,
+		withdrawal := audit.LogWorkloadAdmissionWithdrawEvent{
 			OrganizationID:          t.organizationID,
 			ProjectID:               admission.ProjectID,
 			Actor:                   t.actor,
@@ -829,7 +825,13 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 			AdmissionURN:            urn.NewWorkloadAdmission(admission.ID),
 			AdmissionDisplayName:    admission.Subject,
 			AdmissionSnapshotBefore: AdmissionSnapshot(admission, existing, assignedAgent),
-		}); err != nil {
+		}
+		if runtimeAdmitted[admission.ID] {
+			err = securityevent.LogWorkloadAdmissionWithdraw(ctx, dbtx, withdrawal)
+		} else {
+			err = s.audit.LogWorkloadAdmissionWithdraw(ctx, dbtx, withdrawal)
+		}
+		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error recording cascaded workload withdrawal").LogError(ctx, s.logger)
 		}
 	}
@@ -1051,7 +1053,6 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 	}
 
 	if err := s.audit.LogWorkloadAdmissionAdmit(ctx, dbtx, audit.LogWorkloadAdmissionAdmitEvent{
-		Category:               audit.CategoryConfiguration,
 		OrganizationID:         t.organizationID,
 		ProjectID:              projectID,
 		Actor:                  t.actor,
@@ -1398,7 +1399,6 @@ func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubj
 	}
 
 	if err := s.audit.LogWorkloadAdmissionWithdraw(ctx, dbtx, audit.LogWorkloadAdmissionWithdrawEvent{
-		Category:                audit.CategoryConfiguration,
 		OrganizationID:          t.organizationID,
 		ProjectID:               withdrawn.ProjectID,
 		Actor:                   t.actor,

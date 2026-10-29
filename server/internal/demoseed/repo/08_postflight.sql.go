@@ -253,6 +253,8 @@ SELECT count(*) FROM (
   SELECT 1 FROM session_quarantines WHERE organization_id = $1::text AND project_id <> $2::uuid
   UNION ALL
   SELECT 1 FROM audit_logs WHERE organization_id = $1::text AND project_id <> $2::uuid
+  UNION ALL
+  SELECT 1 FROM security_audit_logs WHERE organization_id = $1::text AND project_id <> $2::uuid
 ) x
 `
 
@@ -950,8 +952,8 @@ func (q *Queries) PostflightCountRemovedGatewayMembers(ctx context.Context, proj
 }
 
 const postflightCountSecurityAuditLogs = `-- name: PostflightCountSecurityAuditLogs :one
-SELECT count(*) FROM audit_logs
-WHERE organization_id = $1::text AND category = 'security'
+SELECT count(*) FROM security_audit_logs
+WHERE organization_id = $1::text
 `
 
 func (q *Queries) PostflightCountSecurityAuditLogs(ctx context.Context, orgID string) (int64, error) {

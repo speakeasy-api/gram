@@ -51,6 +51,15 @@ func (q *Queries) ActivityDeleteAuditLogs(ctx context.Context, organizationID st
 	return err
 }
 
+const activityDeleteSecurityAuditLogs = `-- name: ActivityDeleteSecurityAuditLogs :exec
+DELETE FROM security_audit_logs WHERE organization_id = $1
+`
+
+func (q *Queries) ActivityDeleteSecurityAuditLogs(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, activityDeleteSecurityAuditLogs, organizationID)
+	return err
+}
+
 const activityDeleteSpendRuleEvents = `-- name: ActivityDeleteSpendRuleEvents :exec
 DELETE FROM spend_rule_events WHERE organization_id = $1
 `
@@ -402,12 +411,12 @@ func (q *Queries) ActivityInsertQuarantineAuditLog(ctx context.Context, arg Acti
 }
 
 const activityInsertSecurityAuditLog = `-- name: ActivityInsertSecurityAuditLog :exec
-INSERT INTO audit_logs (id, organization_id, project_id, actor_id, actor_type,
-                        action, subject_id, subject_type, subject_display_name,
-                        acting_surface, category, created_at)
+INSERT INTO security_audit_logs (id, organization_id, project_id, actor_id, actor_type,
+                                 action, subject_id, subject_type, subject_display_name,
+                                 acting_surface, created_at)
 VALUES ($1, $2, $3::uuid, $4, 'agent',
         $5, $6, 'workload_admission', $7::text,
-        'system', 'security', now() - $8::interval)
+        'system', now() - $8::interval)
 `
 
 type ActivityInsertSecurityAuditLogParams struct {
@@ -422,8 +431,8 @@ type ActivityInsertSecurityAuditLogParams struct {
 }
 
 // Security entries: an agent's runtime admitting and withdrawing its own
-// workload identity on each start and teardown. They show under Security
-// activity on the audit log page rather than among configuration changes.
+// workload identity on each start and teardown. They live in the security log
+// and show under Security activity on the audit log page.
 func (q *Queries) ActivityInsertSecurityAuditLog(ctx context.Context, arg ActivityInsertSecurityAuditLogParams) error {
 	_, err := q.db.Exec(ctx, activityInsertSecurityAuditLog,
 		arg.ID,

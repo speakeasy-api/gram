@@ -26,15 +26,15 @@ Audit logging is how Speakeasy records _who did what to which resource_. Every m
 
 **Atomicity.** Audit entries are written inside the same database transaction as the mutation they describe, so the state and the record of the state commit together or not at all.
 
-**Category.** What kind of event an entry records, stored in `audit_logs.category`. Categories describe the event, not who may see it: every category is stored, delivered as webhooks (the payload carries `category`), returned by the staff admin activity view, and readable by customers. The audit log page shows `configuration` entries by default and `security` entries on request. Before adding an event, decide which it is:
+**Configuration log and security log.** Entries go to one of two tables, and the caller decides which by the package it calls. Both are stored, delivered as webhooks (the payload's `category` says which log), returned by the staff admin activity view, and readable by customers. The audit log page shows the configuration log by default and the security log on request. Before adding an event, decide which it is:
 
-- `configuration` (the default): a person or the Speakeasy team changed the platform's configuration — created, updated or deleted a resource, granted or revoked access, admitted or withdrew a workload, registered a credential or trust relationship.
-- `security`: machine access or other security-relevant activity that is not a configuration decision — for example a runtime admitting and withdrawing its own workload identity on every start and teardown. Its frequency follows runtime churn or traffic rather than decisions, and no person chose it. Customers still need it when auditing what their users and automated processes did, which is why it is kept and delivered rather than dropped.
+- **Configuration** (`audit` package, `audit_logs`): a person or the Speakeasy team changed the platform's configuration — created, updated or deleted a resource, granted or revoked access, admitted or withdrew a workload, registered a credential or trust relationship.
+- **Security** (`audit/securityevent` package, `security_audit_logs`): machine access or other security-relevant activity that is not a configuration decision — for example a runtime admitting and withdrawing its own workload identity on every start and teardown. Its frequency follows runtime churn or traffic rather than decisions, and no person chose it, which is why it has its own table. Customers still need it when auditing what their users and automated processes did, so it is kept and delivered rather than dropped.
 - An event written by a system actor must still name what acted. Prefer attributing it to the agent or person it acts for; a bare system principal with no display name renders as "Speakeasy" in the dashboard.
 
-The same action can fall in either category depending on who caused it: a person admitting a workload is a configuration change, while the Kit runtime admitting its own workload is a security entry. Once customers have seen an action on the audit log page, moving it off is a visible change, so choose before shipping rather than after. Add a category only with a schema change to the `audit_logs_category_check` constraint.
+The same action can belong in either log depending on who caused it: a person admitting a workload is a configuration change (`audit.Logger.LogWorkloadAdmissionAdmit`), while the Kit runtime admitting its own workload is a security event (`securityevent.LogWorkloadAdmissionAdmit`). Both take the same event struct. Once customers have seen an action in the configuration log, moving it is a visible change, so choose before shipping rather than after.
 
-**Outbox event.** By default, every audit entry also publishes a typed webhook event to the outbox (same transaction). The event type is subject-specific — e.g. `audit_log.deployment_event_v1` for deployment actions, `audit_log.project_event_v1` for project actions — allowing webhook subscribers to filter by subject domain rather than receiving all audit activity under the single legacy `audit_log.created` type. The `_v1` suffix signals the version; new event definitions must use this suffix. All subject event vars are declared in `server/internal/outbox/events/audit_log.go`. Operator backfills construct their logger with `audit.NewLogger(audit.WithoutOutbox())`, which records audit rows but publishes no webhook events, so bulk system writes do not flood customer webhooks. Every category is published the same way; the payload's `category` field lets subscribers separate configuration changes from security entries.
+**Outbox event.** By default, every audit entry also publishes a typed webhook event to the outbox (same transaction). The event type is subject-specific — e.g. `audit_log.deployment_event_v1` for deployment actions, `audit_log.project_event_v1` for project actions — allowing webhook subscribers to filter by subject domain rather than receiving all audit activity under the single legacy `audit_log.created` type. The `_v1` suffix signals the version; new event definitions must use this suffix. All subject event vars are declared in `server/internal/outbox/events/audit_log.go`. Operator backfills construct their logger with `audit.NewLogger(audit.WithoutOutbox())`, which records audit rows but publishes no webhook events, so bulk system writes do not flood customer webhooks. Security events publish the same event types with `category: "security"`, so subscribers separate the two logs by that field.
 
 ## Server
 
@@ -71,6 +71,7 @@ Audit logging lives in `server/internal/audit/` with its management-API surface 
 | `server/internal/audit/outbox.go`                                    | `appendToOutbox` — translates the inserted audit row into an `AuditLogCreatedPayload` and publishes to the outbox under the subject-specific event def.                                                                |
 | `server/internal/auditapi/impl.go`                                   | Implementation of the `/rpc/auditlogs.*` Goa service (reads). Lives in its own package to keep the `audit` writer surface free of `auth/sessions` and `mv` so any service can call `audit.Log*` without import cycles. |
 | `server/internal/audit/queries.sql`                                  | SQLc queries for the audit log table. Regenerates `server/internal/audit/repo/` via `mise run gen:sqlc-server`.                                                                                                        |
+| `server/internal/audit/securityevent/`                               | Security log writers and readers over `security_audit_logs`, with their own `queries.sql` (regenerates `securityevent/repo/`).                                                                                         |
 | `server/internal/auditapi/{setup_test,list_test,listfacets_test}.go` | Tests for the `auditlogs` management API.                                                                                                                                                                              |
 | `server/internal/outbox/events/audit_log.go`                         | Per-subject `*outbox.EventDef` vars (e.g. `events.Deployment`, `events.Project`). Add a new var here when introducing a new audited subject.                                                                           |
 
@@ -94,7 +95,7 @@ Audit entries are surfaced to Speakeasy users through a small, fixed set of endp
 - `GET /rpc/auditlogs.list` — paginated list; supports cursor, `project_slug`, `actor_id`, `action` and `category` filters. Returns one category, `configuration` by default, whatever the other filters. Each entry carries its `category`.
 - `GET /rpc/auditlogs.listFacets` — returns the set of actors and actions that actually appear, for UI facet pickers. Computed from the requested `category`, `configuration` by default.
 
-The staff admin activity view (`internal/admin`, `ListAuditLogs` with `Categories: audit.Categories()`) returns every category. `auditlogs.list` and `auditlogs.listFacets` take a `category` (default `configuration`), and the dashboard's audit log switches between them. `ListAuditLogs` takes the categories to return; an empty list means every category, so the customer handler always names one.
+`auditlogs.list` and `auditlogs.listFacets` read `audit_logs` for `configuration` and `security_audit_logs` for `security`, and the dashboard's audit log switches between them. The staff admin activity view (`internal/admin`) merges both logs newest first; each table pages by its own `seq`, so its cursor carries a position in each. `securityevent.List` and the facet readers take and return the `audit/repo` types: the `securityevent` queries mirror the `audit` ones column for column, so the conversions compile only while the two stay in step.
 
 **Generated client surfaces** — regenerated by `mise run gen:goa-server` then `mise run gen:sdk`:
 
@@ -114,15 +115,15 @@ When a handler mutates a resource whose subject already has `Action*`/`Log*` def
 5. Treat audit-log failures as `oops.CodeUnexpected`. Audit logging is not optional — if it fails, fail the request.
 6. Add a test that asserts the event was recorded (see "How to assert audit events in tests" below).
 
-### How to record an event in the security category
+### How to record a security event
 
-Use this when a system component audits machine access it performs on its own and repeatedly — see **Category** for how to tell.
+Use this when a system component records machine access it performs on its own and repeatedly — see **Configuration log and security log** for how to tell.
 
-1. Add a `Category Category` field to the subject's `Log<Verb>Event` struct, documented with when callers set it.
-2. In the `Log<Verb>` function, set `Category: string(event.Category)` on the `repo.InsertAuditLogParams` literal. `Log*` functions for events without the field leave it out of the literal; `(*Logger).log` and the insert query default a blank value to `configuration`, and `log` rejects any value that is not a known category.
-3. Once an event struct has the field, every caller of that event sets it: `audit.CategorySecurity` at the system call site and `audit.CategoryConfiguration` at the human ones (`exhaustruct` enforces this).
-4. Test it with `audittest.LatestAuditLogByAction(...).Category`, and decode the outbox payload (`GetLatestOutboxPayloadByOrg`) to check its `category`.
-5. Rows written before the change keep `configuration`. Reclassify them with an application-data backfill under `server/cmd/tools/migrations/` (see `AUDIT_KIT_RUNTIME_CATEGORY_BACKFILL.md`), never in a migration file.
+1. In `server/internal/audit/securityevent/`, add a `Log<Subject><Verb>` function taking the `audit` package's `Log<Subject><Verb>Event` struct, so the human and system call sites share one event shape. Build `repo.InsertSecurityAuditLogParams` and pass it to `record` with the subject's outbox event def.
+2. Call it from the system call site; human call sites keep calling `audit.Logger`.
+3. When a person's action cascades to entries the system created (for example withdrawing an issuer withdraws a runtime's own admissions), route each cascaded entry to the log its subject's history is in. `securityevent.RuntimeAdmittedSubjects` is the precedent: it reads the audit trail, never customer-editable fields such as tags.
+4. Test it with `audittest.LatestSecurityAuditLogByAction` / `SecurityAuditLogCountByAction`, check the configuration log did not grow, and decode the outbox payload (`GetLatestOutboxPayloadByOrg`) to check its `category`.
+5. Rows written to `audit_logs` before the change stay there. Move them with an application-data backfill under `server/cmd/tools/migrations/` (see `AUDIT_KIT_RUNTIME_SECURITY_BACKFILL.md`), never in a migration file.
 
 ### How to audit a cascading delete of child resources
 
@@ -191,7 +192,7 @@ This file documents conventions that evolve over time. Adding a new action, subj
 - Changing how facets are computed — today they derive from row data with no registration; if that changes, the "no registration step" claim stops being true.
 - Adding a new audit-relevant mise task that belongs on the cheat sheet.
 - Introducing a new top-level concept (a new principal type for actors, a new kind of subject scoping beyond org/project, etc.).
-- Adding a category, changing what a category means, or changing which readers show which categories.
+- Moving an action between the configuration and security logs, adding another log, or changing which readers show which log.
 
 ## Cross-references
 

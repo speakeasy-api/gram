@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -37,7 +36,7 @@ func TestListAuditLogs_IncludeAssistantEvents(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	base := repo.ListAuditLogsParams{OrganizationID: orgID, CursorSeq: pgtype.Int8{}, Categories: audit.Categories()}
+	base := repo.ListAuditLogsParams{OrganizationID: orgID, CursorSeq: pgtype.Int8{}}
 	base.IncludeAssistantEvents = false
 	rows, err := queries.ListAuditLogs(ctx, base)
 	require.NoError(t, err)
@@ -92,7 +91,6 @@ func TestListAuditLogs_Window(t *testing.T) {
 		rows, err := queries.ListAuditLogs(ctx, repo.ListAuditLogsParams{
 			OrganizationID: orgID,
 			CursorSeq:      pgtype.Int8{},
-			Categories:     audit.Categories(),
 			CreatedFrom:    conv.PtrToPGTimestamptz(from),
 			CreatedTo:      conv.PtrToPGTimestamptz(to),
 		})
@@ -164,7 +162,7 @@ func TestListAuditLogs_ActorNameIsTenantScoped(t *testing.T) {
 	}
 
 	rows, err := queries.ListAuditLogs(ctx, repo.ListAuditLogsParams{
-		OrganizationID: readingOrg, CursorSeq: pgtype.Int8{}, Categories: audit.Categories(),
+		OrganizationID: readingOrg, CursorSeq: pgtype.Int8{},
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, len(actors), "the scoping join must not drop or duplicate rows")

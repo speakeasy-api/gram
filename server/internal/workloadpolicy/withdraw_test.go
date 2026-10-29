@@ -4,11 +4,13 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/audit/securityevent"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -112,11 +114,11 @@ func TestWithdrawIssuer_CascadesToItsAdmittedSubjects(t *testing.T) {
 }
 
 // Withdrawing the issuer is a configuration change. The cascaded entry for an
-// admission the Kit runtime admitted for itself is a security entry, like the
-// runtime's own admit and withdraw entries. The signal is the audit trail, not
-// the admission's tags: a customer can tag an admission "kit-runtime", and that
-// must not move its withdrawal out of the configuration audit log.
-func TestWithdrawIssuer_CascadedRuntimeAdmissionsAreSecurityEntries(t *testing.T) {
+// admission the Kit runtime admitted for itself goes to the security log, with
+// the runtime's own admit and withdraw entries. The signal is the audit trail,
+// not the admission's tags: a customer can tag an admission "kit-runtime", and
+// that must not move its withdrawal out of the configuration audit log.
+func TestWithdrawIssuer_CascadedRuntimeAdmissionsGoToTheSecurityLog(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
@@ -135,9 +137,9 @@ func TestWithdrawIssuer_CascadedRuntimeAdmissionsAreSecurityEntries(t *testing.T
 	require.Len(t, ids, 2)
 
 	// The fleet rule stands in for a runtime-created admission: the Kit runtime
-	// records its own admit entry, as a security entry attributed to the
+	// records its own admit entry in the security log, attributed to the
 	// assistant's agent, when it creates one.
-	err = audit.NewLogger().LogWorkloadAdmissionAdmit(ctx, ti.conn, audit.LogWorkloadAdmissionAdmitEvent{
+	err = securityevent.LogWorkloadAdmissionAdmit(ctx, ti.conn, audit.LogWorkloadAdmissionAdmitEvent{
 		OrganizationID:         ti.orgID,
 		ProjectID:              uuid.NullUUID{},
 		Actor:                  urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()),
@@ -146,7 +148,6 @@ func TestWithdrawIssuer_CascadedRuntimeAdmissionsAreSecurityEntries(t *testing.T
 		AdmissionURN:           urn.NewWorkloadAdmission(uuid.MustParse(ids[fleetRule])),
 		AdmissionDisplayName:   fleetRule,
 		AdmissionSnapshotAfter: nil,
-		Category:               audit.CategorySecurity,
 	})
 	require.NoError(t, err)
 
@@ -158,17 +159,18 @@ func TestWithdrawIssuer_CascadedRuntimeAdmissionsAreSecurityEntries(t *testing.T
 	})
 	require.NoError(t, err)
 
-	runtime, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw, ids[fleetRule])
+	runtime, err := audittest.LatestSecurityAuditLogByAction(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw)
 	require.NoError(t, err)
-	require.Equal(t, audit.CategorySecurity, runtime.Category)
+	require.Equal(t, ids[fleetRule], runtime.SubjectID)
+	require.Equal(t, string(urn.PrincipalTypeUser), runtime.ActorType, "the person who withdrew the issuer is still the actor")
+	_, err = audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw, ids[fleetRule])
+	require.ErrorIs(t, err, pgx.ErrNoRows, "the runtime admission's withdrawal is not in the configuration log")
 
-	tagged, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw, ids[channelOne])
-	require.NoError(t, err)
-	require.Equal(t, audit.CategoryConfiguration, tagged.Category, "a customer-set tag must not reclassify a withdrawal")
+	_, err = audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw, ids[channelOne])
+	require.NoError(t, err, "a customer-set tag must not move a withdrawal out of the configuration log")
 
-	issuer, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionWorkloadIssuerDelete)
-	require.NoError(t, err)
-	require.Equal(t, audit.CategoryConfiguration, issuer.Category)
+	_, err = audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionWorkloadIssuerDelete)
+	require.NoError(t, err, "the issuer withdrawal is a configuration change")
 }
 
 func TestWithdrawIssuer_RefusesAnIssuerOutsideTheCallersTenancy(t *testing.T) {
