@@ -1,5 +1,5 @@
-import { useBillingState } from "./use-billing-state";
 import { CancelPaygDialog } from "@/components/billing/cancel-payg-dialog";
+import { usePaygCheckoutAccess } from "@/components/billing/payg-checkout-access";
 import {
   canCancelPaygPlan,
   canResumePaygPlan,
@@ -10,45 +10,142 @@ import {
 } from "@/components/billing/payg-plan-state";
 import { PaygPortalButton } from "@/components/billing/payg-portal-button";
 import { ResumePaygButton } from "@/components/billing/resume-payg-button";
+import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
+import { useStripeSubscription } from "@/components/billing/use-stripe-subscription";
+import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
+import { useSession } from "@/contexts/Auth";
+import { useProductTier } from "@/hooks/useProductTier";
+import { isNotFoundError } from "@/lib/route-errors";
 import type { ReactNode } from "react";
-import { Heading } from "../ui/Heading";
 
-/** Manages an attached subscription; the billing route owns setup redirects. */
+/**
+ * Offers checkout during an active trial or when Free/Base or PAYG has no subscription.
+ * Starting checkout leaves the trial unchanged until Stripe confirms completion.
+ * Unsubscribed PAYG organizations retain a way to finish billing setup.
+ * Attached subscriptions expose their live state and management controls.
+ */
 export function PaygPlanSection(): JSX.Element | null {
-  const billing = useBillingState();
-  if (billing.status === "unavailable" || billing.status === "needs-setup")
-    return null;
+  const productTier = useProductTier();
+  const { eligible, trialLifecycle } = usePaygCheckoutAccess("active-trial");
+
+  if (trialLifecycle === "active") {
+    // The eligibility gate (flag, admin scope) decides whether there is
+    // anything to offer; a section whose only content is an action the viewer
+    // cannot take would just be announcing a dead end.
+    if (!eligible) return null;
+    return <AddPaymentMethodSection activeTrial />;
+  }
+
+  if (productTier === "base") return <BasePaymentSection />;
+
+  if (productTier !== "payg") return null;
+
   return (
-    <PaymentSection>
-      <PaygPlanBody billing={billing} />
+    <PaymentSection description="Your pay-as-you-go subscription, payment method, and invoices.">
+      <PaygPlanBody />
     </PaymentSection>
   );
 }
 
-function PaymentSection({ children }: { children: ReactNode }): JSX.Element {
+// Copy variants are code-owned; an offer only selects presentation, never access.
+function AddPaymentMethodSection({
+  activeTrial = false,
+}: {
+  activeTrial?: boolean;
+}): JSX.Element {
+  const { acceptedSignupOfferFlow } = useSession();
+  const generic = activeTrial
+    ? "Add a payment method to start pay as you go when your trial ends."
+    : "Add a payment method to start pay as you go.";
   return (
-    <section className="space-y-6">
-      <div className="border-b border-border pb-2">
-        <Heading variant="h3">Payment</Heading>
-      </div>
-      {children}
-    </section>
+    <PaymentSection description={generic}>
+      <Stack gap={4}>
+        {acceptedSignupOfferFlow === "tailscale_partner_gateway" && (
+          <Alert variant="info">
+            Your accepted Tailscale partner promotion will be applied at
+            checkout.
+          </Alert>
+        )}
+        <StartPaygCheckoutCTA
+          label="Add payment method"
+          eligibility={activeTrial ? "active-trial" : "unsubscribed-base"}
+        />
+      </Stack>
+    </PaymentSection>
+  );
+}
+
+function BasePaymentSection(): JSX.Element | null {
+  const { eligible } = usePaygCheckoutAccess("unsubscribed-base");
+  return eligible ? <UnsubscribedBasePaymentSection /> : null;
+}
+
+function UnsubscribedBasePaymentSection(): JSX.Element | null {
+  const { data, error, isError, isFetching } = useStripeSubscription();
+  // Only confirmed absence offers checkout. Redirects and lookup failures are
+  // not proof of activation or of an absent subscription.
+  if (isFetching || data || !isError || !isNotFoundError(error)) return null;
+  return <AddPaymentMethodSection />;
+}
+
+function PaymentSection({
+  description,
+  children,
+}: {
+  description: string;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <Page.Section>
+      {/* Secondary section: suppress the area eyebrow. */}
+      <Page.Section.Title area="">Payment</Page.Section.Title>
+      <Page.Section.Description>{description}</Page.Section.Description>
+      <Page.Section.Body>{children}</Page.Section.Body>
+    </Page.Section>
   );
 }
 
 // Keep the existing PAYG subscription management and checkout recovery path.
-function PaygPlanBody({
-  billing,
-}: {
-  billing: ReturnType<typeof useBillingState>;
-}): JSX.Element {
-  const { data, isError, isFetching, refetch } = billing.subscription;
+function PaygPlanBody(): JSX.Element {
+  const { data, error, isError, isFetching, refetch } = useStripeSubscription();
+  const { eligible: canStartCheckout } =
+    usePaygCheckoutAccess("unsubscribed-payg");
+
+  // A confirmed absence outranks cached subscription state. It can mean checkout
+  // was abandoned after the local trial converted, so eligible admins can offer
+  // billing setup again. Everyone else gets the confirmed state without an
+  // impossible setup instruction.
+  if (isNotFoundError(error)) {
+    if (!canStartCheckout) {
+      return (
+        <Stack gap={3}>
+          <Text className="font-medium">No active billing subscription</Text>
+          <Text muted small>
+            No self-serve subscription details are available to display.
+          </Text>
+        </Stack>
+      );
+    }
+
+    return (
+      <Stack gap={3}>
+        <Text className="font-medium">Finish setting up billing</Text>
+        <Text muted small>
+          Complete checkout to activate your pay-as-you-go subscription.
+        </Text>
+        <StartPaygCheckoutCTA
+          label="Add payment method"
+          eligibility="unsubscribed-payg"
+        />
+      </Stack>
+    );
+  }
 
   // A refetch that fails leaves the last successful subscription in the cache,
   // so the query reports data and an error together. The state and its actions
@@ -108,8 +205,8 @@ function PaygPlanDetails({
   const copy = planCopy(state, subscription);
 
   return (
-    <Stack gap={6}>
-      <Stack gap={2}>
+    <Stack gap={4}>
+      <Stack gap={1}>
         <Text className="font-medium">{copy.headline}</Text>
         <Text muted small>
           {copy.detail}

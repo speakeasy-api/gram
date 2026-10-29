@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { usePaygCheckoutAccess } from "@/components/billing/payg-checkout-access";
+import { useStartPaygCheckout } from "@/components/billing/use-start-payg-checkout";
+import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
-import { SessionContext, useSessionData } from "@/contexts/Auth";
+import { useSessionData } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useTrialNow } from "@/hooks/useTrialNow";
@@ -14,30 +15,21 @@ import { BookingCalendarModal } from "./components/booking-calendar/BookingCalen
 import { useBookingCalendarModal } from "./components/booking-calendar/useBookingCalendarModal";
 import { getGateCopy } from "./upgrade-gate-copy";
 import { Card } from "@/components/ui/Card";
-import { Navigate, useNavigate } from "react-router";
+import { Navigate } from "react-router";
 
 const SALES_EMAIL = "sales@speakeasy.com";
 
 type TrialEndedChoice = "payg" | "sales";
 
-export default function TrialEnded(): JSX.Element | null {
+export default function TrialEnded(): JSX.Element {
   const { session } = useSessionData();
   const trialNow = useTrialNow(session?.trial);
-
-  if (session?.whitelisted) {
-    const slug = session.organization?.slug;
-    return <Navigate to={slug ? `/${slug}/billing` : "/"} replace />;
-  }
 
   if (getTrialLifecycleFromDates(session?.trial, trialNow) !== "expired") {
     return <Navigate to="/" replace />;
   }
 
-  return session ? (
-    <SessionContext.Provider value={session}>
-      <ExpiredTrialEnded />
-    </SessionContext.Provider>
-  ) : null;
+  return <ExpiredTrialEnded />;
 }
 
 function ExpiredTrialEnded(): JSX.Element {
@@ -45,8 +37,9 @@ function ExpiredTrialEnded(): JSX.Element {
   const telemetry = useTelemetry();
   const { session } = useSessionData();
   const { openBookingCalendar, modalProps } = useBookingCalendarModal();
-  const navigate = useNavigate();
-  const { eligible } = usePaygCheckoutAccess("gated");
+  const paygCheckout = useStartPaygCheckout(
+    session?.activeOrganizationId ?? "",
+  );
   const [choice, setChoice] = useState<TrialEndedChoice | null>(null);
   const now = new Date();
   const lifecycle = getTrialLifecycleFromDates(session?.trial, now);
@@ -77,6 +70,10 @@ function ExpiredTrialEnded(): JSX.Element {
     session?.user.email,
     telemetry,
   ]);
+
+  useEffect(() => {
+    if (paygCheckout.error) setChoice(null);
+  }, [paygCheckout.error]);
 
   const handleLogout = () => logoutToLogin(client);
 
@@ -150,13 +147,8 @@ function ExpiredTrialEnded(): JSX.Element {
                     aria-hidden="true"
                   />
                 }
-                disabled={!eligible || !session?.organization?.slug}
-                onSelect={() => {
-                  if (eligible && session?.organization?.slug)
-                    void navigate(
-                      `/${session.organization.slug}/billing/setup`,
-                    );
-                }}
+                disabled={paygCheckout.isPending}
+                onSelect={paygCheckout.startCheckout}
               >
                 Add a card to unlock your workspace and continue on pay as you
                 go.
@@ -176,6 +168,13 @@ function ExpiredTrialEnded(): JSX.Element {
                 Talk with our team about plans, pricing, and next steps.
               </RadioCard>
             </RadioCardGroup>
+            {paygCheckout.error ? (
+              <ErrorAlert
+                error={paygCheckout.error}
+                title="Checkout failed"
+                className="mt-2"
+              />
+            ) : null}
           </div>
         </Card.Content>
         <Card.Footer>
@@ -192,7 +191,6 @@ function ExpiredTrialEnded(): JSX.Element {
           </div>
         </Card.Footer>
       </Card>
-
       <BookingCalendarModal {...modalProps} />
     </AuthShell>
   );

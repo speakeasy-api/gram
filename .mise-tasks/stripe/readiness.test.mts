@@ -40,7 +40,6 @@ test("readiness needs no organization, CSV or database and distinguishes deliver
   );
   const settings = {
     STRIPE_API_KEY: "sk_test_synthetic",
-    STRIPE_PUBLISHABLE_KEY: "pk_test_synthetic",
     STRIPE_WEBHOOK_SECRET: "whsec_synthetic",
     STRIPE_PRICE_ID_TUM: "price_synthetic",
     STRIPE_PRICE_ID_MCP_EGRESS: "price_mcp_egress",
@@ -49,16 +48,13 @@ test("readiness needs no organization, CSV or database and distinguishes deliver
     STRIPE_PORTAL_CONFIGURATION_ID: "bpc_synthetic",
     STRIPE_METER_EVENT_NAME: "tum",
   };
-  const saveSettings = (values: Record<string, string | undefined>) =>
-    writeFileSync(
-      join(root, "mise.local.toml"),
-      "[env]\n" +
-        Object.entries(values)
-          .filter(([, value]) => value !== undefined)
-          .map(([key, value]) => `${key} = ${JSON.stringify(value)}`)
-          .join("\n"),
-    );
-  saveSettings(settings);
+  writeFileSync(
+    join(root, "mise.local.toml"),
+    "[env]\n" +
+      Object.entries(settings)
+        .map(([key, value]) => `${key} = ${JSON.stringify(value)}`)
+        .join("\n"),
+  );
   const env = {
     GRAM_ENVIRONMENT: "local",
     GRAM_SERVER_URL: "http://localhost:8080",
@@ -82,41 +78,19 @@ test("readiness needs no organization, CSV or database and distinguishes deliver
   assert.equal(ready.configurationReady, true);
   assert.equal(ready.deliveryVerified, false);
   assert.equal(ready.serverConfigurationVerified, false);
-  for (const value of [
-    settings.STRIPE_API_KEY,
-    settings.STRIPE_PUBLISHABLE_KEY,
-    settings.STRIPE_WEBHOOK_SECRET,
-  ])
+  for (const value of [settings.STRIPE_API_KEY, settings.STRIPE_WEBHOOK_SECRET])
     assert.ok(!JSON.stringify(ready).includes(value));
   writeStripeState(stripeStatePath(root), { ...state, phase: "delivered" });
   assert.equal((await getSetupReadiness(root, env)).deliveryVerified, true);
-  for (const override of [
-    { STRIPE_API_KEY: "sk_test_stale" },
-    { STRIPE_PUBLISHABLE_KEY: "pk_test_stale" },
-  ]) {
-    const stale = await getSetupReadiness(root, { ...env, ...override });
-    assert.equal(stale.configurationReady, false);
-    assert.equal(
-      stale.checks.find((check) => check.code === "environment")?.ok,
-      false,
-    );
-  }
-  for (const value of [
-    undefined,
-    "",
-    "unset",
-    "pk_live_synthetic",
-    "invalid",
-  ]) {
-    saveSettings({ ...settings, STRIPE_PUBLISHABLE_KEY: value });
-    const incomplete = await getSetupReadiness(root, env);
-    assert.equal(incomplete.configurationReady, false);
-    assert.equal(
-      incomplete.checks.find((check) => check.code === "credentials")?.ok,
-      false,
-    );
-  }
-  saveSettings(settings);
+  const stale = await getSetupReadiness(root, {
+    ...env,
+    STRIPE_API_KEY: "sk_test_stale",
+  });
+  assert.equal(stale.configurationReady, false);
+  assert.equal(
+    stale.checks.find((check) => check.code === "environment")?.ok,
+    false,
+  );
   const calls = requests.mock.callCount();
   const remote = await getSetupReadiness(root, {
     ...env,

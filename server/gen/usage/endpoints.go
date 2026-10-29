@@ -28,7 +28,6 @@ type Endpoints struct {
 	GetUsageTiers             goa.Endpoint
 	CreateCustomerSession     goa.Endpoint
 	CreateCheckout            goa.Endpoint
-	GetStripeCheckoutStatus   goa.Endpoint
 	CreateStripeCheckout      goa.Endpoint
 	GetStripeSubscription     goa.Endpoint
 	GetPaygBillingSummary     goa.Endpoint
@@ -55,7 +54,6 @@ func NewEndpoints(s Service) *Endpoints {
 		GetUsageTiers:             NewGetUsageTiersEndpoint(s),
 		CreateCustomerSession:     NewCreateCustomerSessionEndpoint(s, a.APIKeyAuth),
 		CreateCheckout:            NewCreateCheckoutEndpoint(s, a.APIKeyAuth),
-		GetStripeCheckoutStatus:   NewGetStripeCheckoutStatusEndpoint(s, a.APIKeyAuth),
 		CreateStripeCheckout:      NewCreateStripeCheckoutEndpoint(s, a.APIKeyAuth),
 		GetStripeSubscription:     NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 		GetPaygBillingSummary:     NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
@@ -80,7 +78,6 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetUsageTiers = m(e.GetUsageTiers)
 	e.CreateCustomerSession = m(e.CreateCustomerSession)
 	e.CreateCheckout = m(e.CreateCheckout)
-	e.GetStripeCheckoutStatus = m(e.GetStripeCheckoutStatus)
 	e.CreateStripeCheckout = m(e.CreateStripeCheckout)
 	e.GetStripeSubscription = m(e.GetStripeSubscription)
 	e.GetPaygBillingSummary = m(e.GetPaygBillingSummary)
@@ -348,29 +345,6 @@ func NewCreateCheckoutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			return nil, err
 		}
 		return s.CreateCheckout(ctx, p)
-	}
-}
-
-// NewGetStripeCheckoutStatusEndpoint returns an endpoint function that calls
-// the method "getStripeCheckoutStatus" of service "usage".
-func NewGetStripeCheckoutStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GetStripeCheckoutStatusPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.GetStripeCheckoutStatus(ctx, p)
 	}
 }
 

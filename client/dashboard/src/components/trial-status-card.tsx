@@ -1,7 +1,3 @@
-import {
-  useBillingState,
-  usePaygCheckoutAccess,
-} from "@/components/billing/use-billing-state";
 import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
 import { BookingCalendarLink } from "@/pages/demo/components/booking-calendar/BookingCalendarLink";
 import { Icon } from "@/components/ui/Icon";
@@ -41,7 +37,6 @@ function getTrialProgressColorClass(
 
 export function TrialStatusCard(): React.ReactNode {
   const { trial } = useSession();
-  const { eligible: checkoutEligible } = usePaygCheckoutAccess("active-trial");
   const now = useTrialNow(trial);
   const status = getTrialStatusFromDates(trial, now);
   const lifecycle = getTrialLifecycleFromDates(trial, now);
@@ -107,7 +102,7 @@ export function TrialStatusCard(): React.ReactNode {
         </div>
         {/* Self-serve upgrade for admins still in the trial; sales stays the
             fallback for everyone else and for expired trials. */}
-        {checkoutEligible && <TrialCheckoutCTA />}
+        <StartPaygCheckoutCTA size="sm" label="Add payment method" />
         <BookingCalendarLink className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           {salesLinkLabel}
           <Icon name="arrow-right" className="size-3" aria-hidden="true" />
@@ -115,11 +110,4 @@ export function TrialStatusCard(): React.ReactNode {
       </div>
     </div>
   );
-}
-
-function TrialCheckoutCTA(): React.ReactNode {
-  const billingState = useBillingState();
-  return billingState.status === "needs-setup" ? (
-    <StartPaygCheckoutCTA size="sm" label="Add payment method" />
-  ) : null;
 }

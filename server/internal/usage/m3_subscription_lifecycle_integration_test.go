@@ -50,10 +50,6 @@ func (*m3StripeWebhookClient) CreateCheckoutSession(context.Context, stripeclien
 	return nil, errors.New("not implemented")
 }
 
-func (*m3StripeWebhookClient) PublishableKey() string {
-	return ""
-}
-
 func (c *m3StripeWebhookClient) GetCheckoutSession(context.Context, string) (*stripeclient.CheckoutSessionState, error) {
 	state := c.checkout
 	return &state, nil
@@ -154,7 +150,6 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 			Partner:                nil,
 			ID:                     stripe.event.ObjectID,
 			Status:                 "complete",
-			PaymentStatus:          "paid",
 			CustomerID:             m3CustomerID,
 			SubscriptionID:         subscriptionID,
 			SubscriptionCustomerID: m3CustomerID,

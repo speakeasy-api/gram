@@ -11,7 +11,6 @@ import { GramCore } from "../core.js";
 import { usageCreateStripeCheckout } from "../funcs/usageCreateStripeCheckout.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { StripeEmbeddedCheckout } from "../models/components/stripeembeddedcheckout.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -37,7 +36,7 @@ export type CreateStripeCheckoutMutationVariables = {
   options?: RequestOptions;
 };
 
-export type CreateStripeCheckoutMutationData = StripeEmbeddedCheckout;
+export type CreateStripeCheckoutMutationData = string;
 
 export type CreateStripeCheckoutMutationError =
   | ServiceError
@@ -54,7 +53,7 @@ export type CreateStripeCheckoutMutationError =
  * createStripeCheckout usage
  *
  * @remarks
- * Create an embedded Stripe Checkout session for starting PAYG billing
+ * Create a Stripe Checkout link for starting PAYG billing
  */
 export function useCreateStripeCheckoutMutation(
   options?: MutationHookOptions<
