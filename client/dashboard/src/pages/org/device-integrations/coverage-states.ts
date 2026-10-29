@@ -110,7 +110,7 @@ export const POLICY_STATES: Record<PolicyState, CoverageDisplay> = {
     variant: "warning",
     icon: TriangleAlert,
     detail:
-      "The agent is running, but it last reported an older policy than the one Speakeasy sent. A tool that cannot apply the new one is usually what holds it back.",
+      "The agent is running, but it has not reported applying the policy Speakeasy last sent it. A tool that cannot apply the new one is usually what holds it back.",
   },
   unreported: {
     label: "No policy report",
@@ -187,7 +187,11 @@ const TOOL_LABELS: Record<string, string> = {
 };
 
 export function toolLabel(tool: string): string {
-  const label = TOOL_LABELS[tool];
+  // Own keys only: an id like "constructor" must fall through, not render
+  // an inherited function.
+  const label = Object.hasOwn(TOOL_LABELS, tool)
+    ? TOOL_LABELS[tool]
+    : undefined;
   if (label) return label;
   const words = tool.replaceAll("_", " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
@@ -200,5 +204,5 @@ const OS_LABELS: Record<string, string> = {
 };
 
 export function osLabel(os: string): string {
-  return OS_LABELS[os] ?? os;
+  return (Object.hasOwn(OS_LABELS, os) ? OS_LABELS[os] : undefined) ?? os;
 }

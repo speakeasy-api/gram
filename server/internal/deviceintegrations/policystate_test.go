@@ -200,6 +200,8 @@ func TestPolicyStateDeviceLevel(t *testing.T) {
 	rows := listDevices(t, ctx, store, orgID, true, now, "")
 	require.Equal(t, "attested", rows["laptop"].PolicyState)
 	require.Equal(t, "unreported", rows["desktop"].PolicyState)
+	require.Equal(t, "device", deviceView(ctx, testenv.NewLogger(t), rows["laptop"]).AgentState.Attestation,
+		"the laptop's own agent sent the report")
 }
 
 // TestPolicyStateDeviceLevelReportAloneIsLiveness covers a blocked build
@@ -286,6 +288,7 @@ func TestListManagedDevicesPolicyStateFilterAndAgentState(t *testing.T) {
 	require.Equal(t, "outdated", *view.PolicyState)
 	require.NotNil(t, view.AgentState)
 	require.Equal(t, "e1", *view.AgentState.AppliedEtag)
+	require.Equal(t, "user", view.AgentState.Attestation, "user-level matching cannot tie a report to this machine")
 	require.Len(t, view.AgentState.Tools, 1)
 	tool := view.AgentState.Tools[0]
 	require.Equal(t, "claude_code", tool.Tool)
