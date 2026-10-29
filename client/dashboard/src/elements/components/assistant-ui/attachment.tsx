@@ -154,9 +154,9 @@ const AttachmentPreview: FC<AttachmentPreviewProps> = ({ src }) => {
   );
 };
 
-const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
-  const src = useAttachmentSrc();
-
+const AttachmentPreviewDialog: FC<
+  PropsWithChildren<{ src: string | undefined }>
+> = ({ children, src }) => {
   if (!src) return children;
 
   return (
@@ -233,9 +233,8 @@ const useOpenAttachment = () => {
   return { open };
 };
 
-const AttachmentThumb: FC = () => {
+const AttachmentThumb: FC<{ src: string | undefined }> = ({ src }) => {
   const isImage = useAuiState(({ attachment }) => attachment.type === "image");
-  const src = useAttachmentSrc();
 
   return (
     <Avatar className="aui-attachment-tile-avatar h-full w-full rounded-none">
@@ -261,6 +260,10 @@ const AttachmentUI: FC = () => {
   const isComposer = aui.attachment.source === "composer";
 
   const isImage = useAuiState(({ attachment }) => attachment.type === "image");
+  const src = useAttachmentSrc();
+  // An image without a preview (an SVG, or a raster image whose preview
+  // failed) has no dialog to open, so its tile opens the attachment instead.
+  const opensDirectly = !isImage || !src;
   const { open: openAttachment } = useOpenAttachment();
   const typeLabel = useAuiState(({ attachment }) => {
     const type = attachment.type;
@@ -285,7 +288,7 @@ const AttachmentUI: FC = () => {
             "aui-attachment-root-composer only:[&>#attachment-tile]:size-24",
         )}
       >
-        <AttachmentPreviewDialog>
+        <AttachmentPreviewDialog src={src}>
           <TooltipTrigger asChild>
             <div
               className={cn(
@@ -301,10 +304,10 @@ const AttachmentUI: FC = () => {
               role="button"
               id="attachment-tile"
               aria-label={`${typeLabel} attachment`}
-              tabIndex={isImage ? undefined : 0}
-              onClick={isImage ? undefined : () => void openAttachment()}
+              tabIndex={opensDirectly ? 0 : undefined}
+              onClick={opensDirectly ? () => void openAttachment() : undefined}
               onKeyDown={
-                isImage
+                !opensDirectly
                   ? undefined
                   : (event) => {
                       if (event.key !== "Enter" && event.key !== " ") return;
@@ -314,7 +317,7 @@ const AttachmentUI: FC = () => {
               }
             >
               {isImage ? (
-                <AttachmentThumb />
+                <AttachmentThumb src={src} />
               ) : (
                 <>
                   <div className="aui-attachment-tile-file-icon flex h-14 items-center justify-center">
