@@ -10128,6 +10128,29 @@ ON mcp_auth_clients (id, attachment_scope);
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_organization_key
 ON mcp_auth_clients (id, organization_id);
 
+-- Customer-owned app credentials; generated installation tokens are never stored here.
+CREATE TABLE IF NOT EXISTS mcp_auth_client_github_apps (
+  auth_client_id uuid PRIMARY KEY,
+  organization_id text NOT NULL,
+  instance_url text NOT NULL CHECK (instance_url <> ''),
+  app_id bigint NOT NULL CHECK (app_id > 0),
+  installation_id bigint NOT NULL CHECK (installation_id > 0),
+  private_key_encrypted text NOT NULL CHECK (private_key_encrypted <> ''),
+  -- An explicit MCP origin prevents reuse against an unrelated destination.
+  upstream_origin text NOT NULL CHECK (upstream_origin <> ''),
+  credential_version uuid NOT NULL DEFAULT generate_uuidv7(),
+  CONSTRAINT mcp_auth_client_github_apps_client_fkey FOREIGN KEY (auth_client_id, organization_id)
+    REFERENCES mcp_auth_clients (id, organization_id) ON DELETE CASCADE
+);
+COMMENT ON COLUMN mcp_auth_client_github_apps.auth_client_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_github_apps.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_github_apps.instance_url IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_github_apps.app_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_github_apps.installation_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_github_apps.private_key_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN mcp_auth_client_github_apps.upstream_origin IS '@access: confidential';
+COMMENT ON COLUMN mcp_auth_client_github_apps.credential_version IS '@access: confidential';
+
 -- FK target for mcp_auth_client_emas, pinning its type, registration and
 -- organization.
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_clients_type_registration_key
