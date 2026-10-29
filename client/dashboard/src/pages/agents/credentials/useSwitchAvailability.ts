@@ -1,4 +1,3 @@
-import { collectPageItems } from "@/components/sessions/collectPageItems";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useQuery } from "@tanstack/react-query";
@@ -11,16 +10,19 @@ export type SwitchAvailability =
   | "ready"
   /** People connect their own accounts through the server's current sign-in. */
   | "people_connect"
+  /** Whether people connect their own accounts could not be checked. */
+  | "check_failed"
   /** The reader cannot change the server. */
   | "no_permission";
 
 /**
  * Whether a server can be moved to a shared issuer from the agent wizard.
  *
- * Moving a server is only offered when nothing it serves upstream depends on
- * its current issuer: sign-in clients (people connecting their own accounts)
- * are bound to that issuer, so moving the server would strand their
- * connections. A server on a shared credential has none.
+ * Moving a server is only offered when nobody's upstream sign-in depends on
+ * its current issuer. A sign-in client that people connect their own accounts
+ * through is bound to that issuer, so moving the server would strand their
+ * connections. Clients holding the server's own credential are not counted:
+ * they belong to the server, not to the people using it.
  */
 export function useSwitchAvailability(server: SetupServer): SwitchAvailability {
   const sdk = useSdkClient();
@@ -34,26 +36,30 @@ export function useSwitchAvailability(server: SetupServer): SwitchAvailability {
     gramProject: server.projectSlug,
     userSessionIssuerId: server.issuerId,
   };
-  const clients = useQuery({
-    queryKey: [
-      "@gram/client",
-      "remoteSessionClients",
-      "list",
-      request,
-      "switch-sign-in",
-    ],
-    queryFn: ({ signal }) =>
-      collectPageItems(
-        sdk.remoteSessionClients.list(request, undefined, { signal }),
-      ),
+  const peopleConnect = useQuery({
+    // Kept apart from the client list caches, which hold pages of clients.
+    queryKey: ["agents", "switch-sign-in", "people-connect", request],
+    queryFn: async ({ signal }) => {
+      const pages = await sdk.remoteSessionClients.list(request, undefined, {
+        signal,
+      });
+      for await (const page of pages) {
+        if (
+          page.result.items.some(
+            (client) => client.credentialOwner === "subject",
+          )
+        ) {
+          return true;
+        }
+      }
+      return false;
+    },
     enabled: canWrite && !!server.issuerId && !!server.projectSlug,
     retry: false,
   });
   if (!canWrite) return "no_permission";
-  if (!server.issuerId || !server.projectSlug) return "people_connect";
-  if (clients.isPending) return "checking";
-  // A failed check is treated like a server people connect to: the reader is
-  // sent to its settings rather than offered a change that might strand them.
-  if (clients.isError || clients.data.length > 0) return "people_connect";
-  return "ready";
+  if (!server.issuerId || !server.projectSlug) return "check_failed";
+  if (peopleConnect.isPending) return "checking";
+  if (peopleConnect.isError) return "check_failed";
+  return peopleConnect.data ? "people_connect" : "ready";
 }

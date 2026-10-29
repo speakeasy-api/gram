@@ -26,7 +26,8 @@ vi.mock("@/routes", () => ({
 }));
 const switchMocks = vi.hoisted(() => ({
   canWrite: true,
-  clients: [] as { id: string }[],
+  clients: [] as { id: string; credentialOwner: string }[],
+  invalidateServers: vi.fn(async () => undefined),
   link: vi.fn(async () => ({})),
 }));
 vi.mock("@/contexts/Sdk", () => ({
@@ -55,11 +56,15 @@ vi.mock("@gram/client/react-query/userSessionIssuerAttachImpact.js", () => ({
   }),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("@gram/client/react-query/listMcpServersForOrg.js", () => ({
+  invalidateAllListMcpServersForOrg: switchMocks.invalidateServers,
+}));
 afterEach(() => {
   cleanup();
   switchMocks.canWrite = true;
   switchMocks.clients = [];
   switchMocks.link.mockClear();
+  switchMocks.invalidateServers.mockClear();
 });
 
 function withProviders(children: ReactNode) {
@@ -203,10 +208,12 @@ it("switches a server on a shared credential to the shared issuer after confirmi
       "default",
     ),
   );
+  // The wizard re-reads its servers from this list, which clears the row.
+  await waitFor(() => expect(switchMocks.invalidateServers).toHaveBeenCalled());
 });
 
 it("sends a server people connect their own accounts to to its settings instead", async () => {
-  switchMocks.clients = [{ id: "client" }];
+  switchMocks.clients = [{ id: "client", credentialOwner: "subject" }];
   render(
     withProviders(
       <ComputedStatus
@@ -242,4 +249,22 @@ it("asks someone who can edit the server when the reader cannot", () => {
   expect(
     screen.queryByRole("button", { name: "Switch to acme-workforce" }),
   ).toBeNull();
+});
+
+it("still offers the switch when only the server's own credential is on its sign-in", async () => {
+  switchMocks.clients = [{ id: "service", credentialOwner: "self" }];
+  render(
+    withProviders(
+      <ComputedStatus
+        setupValues={setupValues({ uncoveredServers: [notShared] })}
+      />,
+    ),
+  );
+  await waitFor(() =>
+    expect(
+      screen
+        .getByRole("button", { name: "Switch to acme-workforce" })
+        .hasAttribute("disabled"),
+    ).toBe(false),
+  );
 });

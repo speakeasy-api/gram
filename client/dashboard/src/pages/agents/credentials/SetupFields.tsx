@@ -271,6 +271,14 @@ function NotSharedRow({
           action={<ServerSignInSettingsLink server={server} />}
         />
       );
+    case "check_failed":
+      return (
+        <LeftOutRow
+          name={server.name}
+          reason={`${NOT_SHARED} Speakeasy couldn't check whether people connect their own accounts through its current sign-in, so move it to ${target.label} from its sign-in settings.`}
+          action={<ServerSignInSettingsLink server={server} />}
+        />
+      );
     case "no_permission":
       return (
         <LeftOutRow

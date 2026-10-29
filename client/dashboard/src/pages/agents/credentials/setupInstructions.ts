@@ -32,8 +32,9 @@ export type SetupContext = {
   /** Values only the server can supply: token endpoint, issuer URL, host. */
   computed: Partial<Record<ComputedValueKey, string>>;
   /**
-   * The servers the agent may call that accept a token from the selected
-   * issuer, with the URL a runtime calls each at.
+   * The servers the agent may call that a token from the selected issuer can
+   * reach, with the URL a runtime calls each at: those signing in through that
+   * issuer, plus those that sign no one in, where no issuer applies.
    */
   servers: SetupServer[];
   /** How many of the agent's servers refuse the selected issuer's token. */

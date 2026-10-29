@@ -57,6 +57,7 @@ it("keeps projects that share a name apart", () => {
 
 const endpointQuery = vi.hoisted(() => ({
   pending: false,
+  error: false,
   items:
     [] as import("@gram/client/models/components/workloadtokenendpoint.js").WorkloadTokenEndpoint[],
 }));
@@ -64,7 +65,7 @@ vi.mock("@gram/client/react-query/workloadTokenEndpoints.js", () => ({
   useWorkloadTokenEndpoints: () => ({
     data: endpointQuery.pending ? undefined : { items: endpointQuery.items },
     isPending: endpointQuery.pending,
-    isError: false,
+    isError: endpointQuery.error,
     refetch: async () => ({ data: { items: endpointQuery.items } }),
   }),
 }));
@@ -272,4 +273,20 @@ it("never offers to move a server to another project's issuer", () => {
     useSetupValues(undefined, [lonely]),
   );
   expect(none.current.uncoveredServers[0]?.switchTo).toBeUndefined();
+});
+
+it("keeps filtering by the last issuers loaded when a refetch fails", () => {
+  endpointQuery.items = [endpoint("org", "organization"), endpoint("p", "p")];
+  endpointQuery.error = true;
+  try {
+    const { result } = renderHook(() =>
+      useSetupValues(undefined, [server("gh", "p")]),
+    );
+    expect(result.current.selectedEndpointId).toBe("p");
+    expect(
+      result.current.endpointGroups.flatMap((g) => g.options.map((o) => o.id)),
+    ).toEqual(["p"]);
+  } finally {
+    endpointQuery.error = false;
+  }
 });

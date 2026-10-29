@@ -16,7 +16,7 @@ export interface TokenEndpointGroup {
  * through another shared issuer, which the reader can select instead, or
  * through one that serves no shared authorization server at all.
  */
-export type UncoveredReason = "another_issuer" | "not_shared";
+type UncoveredReason = "another_issuer" | "not_shared";
 
 export interface UncoveredServer {
   server: SetupServer;
@@ -117,11 +117,11 @@ export function useSetupValues(
       endpoint.projectId === "" ||
       endpoint.projectId === targetProjectId,
   );
-  // Until the issuers load, no server can be said to be left out.
+  // Until the issuers load, no server can be said to be left out. Once they
+  // have, a failed refetch keeps filtering by the issuers last loaded, so an
+  // unrelated issuer is never offered.
   const signingIn =
-    query.isPending || query.isError
-      ? []
-      : servers.filter((server) => server.issuerId);
+    query.data === undefined ? [] : servers.filter((server) => server.issuerId);
   const servedBy = (endpoint: WorkloadTokenEndpoint): number =>
     signingIn.filter(
       (server) => server.issuerId === endpoint.userSessionIssuerId,
