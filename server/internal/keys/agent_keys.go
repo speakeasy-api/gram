@@ -80,7 +80,7 @@ func (s *Service) createAgentKey(ctx context.Context, payload *gen.CreateKeyPayl
 	if err != nil {
 		return nil, err
 	}
-	if err := recordAgentKeyAuthClientChoices(ctx, tx, human.Auth.ActiveOrganizationID, created.ID, payload.AuthClientChoices); err != nil {
+	if err := recordAgentKeyAuthClientChoices(ctx, tx, human, created.ID, payload.AuthClientChoices); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {

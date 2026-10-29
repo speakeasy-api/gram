@@ -9,9 +9,9 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
+	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -22,24 +22,14 @@ import (
 // the server offers enabled, or no upstream authentication on a server that
 // needs none. The choice grants nothing: every request still checks that the
 // agent may use the credential and reach the server.
-func recordAgentKeyAuthClientChoices(ctx context.Context, tx pgx.Tx, organizationID string, keyID uuid.UUID, choices []*gen.AgentKeyAuthClientChoice) error {
+func recordAgentKeyAuthClientChoices(ctx context.Context, tx pgx.Tx, human agentmanagement.HumanContext, keyID uuid.UUID, choices []*gen.AgentKeyAuthClientChoice) error {
 	if len(choices) == 0 {
 		return nil
 	}
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID != organizationID {
-		return oops.C(oops.CodeUnauthorized)
-	}
-	// Match issuance's live creator authority, not cached session roles or
-	// the agent's policy. Recording a choice grants the agent no access.
-	principals, err := authz.ResolveUserPrincipals(ctx, tx, organizationID, authCtx.UserID)
-	if err != nil {
-		return fmt.Errorf("resolve credential choice creator: %w", err)
-	}
-	grants, err := authz.LoadGrants(ctx, tx, organizationID, principals)
-	if err != nil {
-		return fmt.Errorf("load credential choice creator policy: %w", err)
-	}
+	// Issuance already loaded the creator's live grants in this transaction.
+	// Recording a choice grants the agent no access.
+	organizationID := human.Auth.ActiveOrganizationID
+	grants := human.LiveGrants()
 	queries := upstreamclientsrepo.New(tx)
 	seen := make(map[uuid.UUID]bool, len(choices))
 	for _, choice := range choices {

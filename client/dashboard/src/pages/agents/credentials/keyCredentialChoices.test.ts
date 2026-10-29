@@ -44,9 +44,14 @@ describe("keyCredentialChoices", () => {
     );
   });
 
-  it("requires a pick for multiple credentials when authentication is required", async () => {
-    await expect(
-      keyCredentialChoices(sdkWith(["client_a", "client_b"], true), [server]),
-    ).rejects.toThrow("Choose which credential");
-  });
+  it.each([undefined, "removed_client"])(
+    "requires a current pick when authentication is required (%s)",
+    async (authClientId) => {
+      await expect(
+        keyCredentialChoices(sdkWith(["client_a", "client_b"], true), [
+          { ...server, authClientId },
+        ]),
+      ).rejects.toThrow("Choose which credential");
+    },
+  );
 });
