@@ -149,6 +149,26 @@ func claudeMarketplaceEntries(t *testing.T, files map[string][]byte) map[string]
 	return out
 }
 
+// codexMarketplaceAuthentication maps each Codex marketplace entry to its
+// authentication policy.
+func codexMarketplaceAuthentication(t *testing.T, files map[string][]byte) map[string]string {
+	t.Helper()
+	var manifest struct {
+		Plugins []struct {
+			Name   string `json:"name"`
+			Policy struct {
+				Authentication string `json:"authentication"`
+			} `json:"policy"`
+		} `json:"plugins"`
+	}
+	require.NoError(t, json.Unmarshal(files[".agents/plugins/marketplace.json"], &manifest))
+	out := make(map[string]string, len(manifest.Plugins))
+	for _, entry := range manifest.Plugins {
+		out[entry.Name] = entry.Policy.Authentication
+	}
+	return out
+}
+
 func requireFailedPrecondition(t *testing.T, err error, message string) {
 	t.Helper()
 	var oopsErr *oops.ShareableError
@@ -381,6 +401,46 @@ func TestAutoSync_UnreadablePublishedFilesFallBackToLiveState(t *testing.T) {
 			require.Contains(t, string(pushed[f.paused.Slug+"/.mcp.json"]), "Paused Two", "an unreadable held plugin publishes its live state")
 			require.NotEmpty(t, pushed[missing], "the live state restores the missing file")
 			require.Contains(t, claudeMarketplaceEntries(t, pushed), f.paused.Slug)
+		})
+	}
+}
+
+// A held plugin's Codex marketplace entry keeps asking for authentication on
+// install when its published Codex package collects a credential, whichever
+// field carries it.
+func TestAutoSync_HeldPluginKeepsCodexInstallAuthentication(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		codexMCP string
+	}{
+		{name: "api key from the environment", codexMCP: `{"mcpServers":{"Paused One":{"url":"https://example.com/mcp","bearer_token_env_var":"SPEAKEASY_AI_API_KEY"}}}`},
+		{name: "env headers", codexMCP: `{"mcpServers":{"Paused One":{"url":"https://example.com/mcp","env_http_headers":{"X-Vendor-Key":"VENDOR_KEY"}}}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, f := newAutoSyncFixture(t, "codexauth")
+			_, err := f.setAutoSync(ctx, f.paused, false)
+			require.NoError(t, err)
+			f.addServer(t, ctx, f.paused, "codexauth-paused-two", "Paused Two", 1)
+			f.addServer(t, ctx, f.active, "codexauth-active-two", "Active Two", 1)
+
+			// Publishes bake the consumer key into the Codex package, so stand
+			// in a published package that collects a credential instead.
+			codexMCPPath := f.paused.Slug + "-codex/.mcp.json"
+			repo := maps.Clone(f.mock.lastPushedFiles)
+			repo[codexMCPPath] = []byte(tc.codexMCP)
+			f.mock.repoFiles = repo
+
+			result := f.automaticPublish(t, ctx)
+			require.False(t, result.Skipped)
+			pushed := f.mock.lastPushedFiles
+			require.Equal(t, tc.codexMCP, string(pushed[codexMCPPath]), "the held Codex package must be copied verbatim")
+			authentication := codexMarketplaceAuthentication(t, pushed)
+			require.Equal(t, "ON_INSTALL", authentication[f.paused.Slug+"-codex"])
+			require.Equal(t, "ON_USE", authentication[f.active.Slug+"-codex"], "a package with the key baked in installs without prompting")
 		})
 	}
 }

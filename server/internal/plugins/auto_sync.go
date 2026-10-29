@@ -247,20 +247,19 @@ func heldPluginEntry(slug string, files map[string][]byte) (sharedPluginEntry, e
 		}
 	}
 
-	// codexAuthPolicy asks for ON_INSTALL only when a public server needs
-	// environment-backed headers, which is exactly when the published Codex
-	// package carries env_http_headers.
-	var codexMCP struct {
-		MCPServers map[string]struct {
-			EnvHTTPHeaders map[string]string `json:"env_http_headers"`
-		} `json:"mcpServers"`
-	}
+	// codexAuthPolicy asks for ON_INSTALL when the Codex package collects a
+	// credential, which shows as env_http_headers (a public server's env vars)
+	// or bearer_token_env_var (a private server with no API key baked in). It
+	// doesn't skip OAuth servers, whose entries carry neither field, so a held
+	// plugin whose only such server is a public OAuth one with env vars lists
+	// as ON_USE.
+	var codexMCP codexMCPConfig
 	if err := decodeHeldFile(files, path.Join(slug+"-codex", ".mcp.json"), &codexMCP); err != nil {
 		return sharedPluginEntry{}, err
 	}
 	codexAuthentication := "ON_USE"
 	for _, server := range codexMCP.MCPServers {
-		if len(server.EnvHTTPHeaders) > 0 {
+		if server.BearerTokenEnvVar != "" || len(server.EnvHTTPHeaders) > 0 {
 			codexAuthentication = "ON_INSTALL"
 			break
 		}
