@@ -9,6 +9,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
 func listPlatformsPayload() *gen.ListPlatformsPayload {
@@ -86,7 +87,7 @@ func TestCatalogPlatform_RegistersAndAdmitsThroughTheAPI(t *testing.T) {
 		ProjectSlugInput: nil,
 		Issuer:           claudeTag.Issuer.Value,
 		Subject:          rule,
-		MatchKind:        "wildcard",
+		MatchKind:        string(workloadidentity.MatchKindWildcard),
 		Name:             nil,
 		Tags:             []string{"slack"},
 		AgentID:          newAgent(t, ctx, ti, "Claude Tag agent").String(),
@@ -97,7 +98,7 @@ func TestCatalogPlatform_RegistersAndAdmitsThroughTheAPI(t *testing.T) {
 	require.Len(t, policy.Admissions, 1)
 	admission := policy.Admissions[0]
 	require.Equal(t, "wimse://identity.anthropic.com/org/org-123/agent/*", admission.Subject)
-	require.Equal(t, "wildcard", admission.MatchKind)
+	require.Equal(t, string(workloadidentity.MatchKindWildcard), admission.MatchKind)
 	require.True(t, admission.WildcardActive)
 	require.Equal(t, "Claude Tag agent", admission.AgentName)
 	require.Equal(t, []string{"slack"}, admission.Tags)
@@ -144,7 +145,7 @@ func TestCatalogGitHubActions_WritesOrganizationTierRows(t *testing.T) {
 		ProjectSlugInput: nil,
 		Issuer:           github.Issuer.Value,
 		Subject:          rule,
-		MatchKind:        "wildcard",
+		MatchKind:        string(workloadidentity.MatchKindWildcard),
 		Name:             nil,
 		Tags:             nil,
 		AgentID:          newAgent(t, ctx, ti, "Release bot").String(),
@@ -158,7 +159,7 @@ func TestCatalogGitHubActions_WritesOrganizationTierRows(t *testing.T) {
 	admission := policy.Admissions[0]
 	require.Empty(t, admission.ProjectID, "the rule must be organization-tier")
 	require.Equal(t, "repo:acme/payments-api:*", admission.Subject)
-	require.Equal(t, "wildcard", admission.MatchKind)
+	require.Equal(t, string(workloadidentity.MatchKindWildcard), admission.MatchKind)
 	require.True(t, admission.WildcardActive)
 	require.Equal(t, "Release bot", admission.AgentName)
 }

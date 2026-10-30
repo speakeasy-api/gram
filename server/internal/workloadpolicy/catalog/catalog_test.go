@@ -41,19 +41,26 @@ func TestEmbeddedPlatformsAreValid(t *testing.T) {
 	require.NotEmpty(t, platforms)
 }
 
-func TestEmbeddedClaudeTagPinsOneOrganization(t *testing.T) {
-	t.Parallel()
+// embeddedPlatform is the embedded catalog's entry for key; the test fails
+// when there is none.
+func embeddedPlatform(t *testing.T, key string) *catalog.Platform {
+	t.Helper()
 
 	platforms, err := catalog.Embedded().Platforms(t.Context())
 	require.NoError(t, err)
-
-	var claudeTag *catalog.Platform
 	for i := range platforms {
-		if platforms[i].Key == "claude-tag" {
-			claudeTag = &platforms[i]
+		if platforms[i].Key == key {
+			return &platforms[i]
 		}
 	}
-	require.NotNil(t, claudeTag)
+	require.FailNow(t, "no embedded platform", key)
+	return nil
+}
+
+func TestEmbeddedClaudeTagPinsOneOrganization(t *testing.T) {
+	t.Parallel()
+
+	claudeTag := embeddedPlatform(t, "claude-tag")
 	require.Equal(t, "https://identity.anthropic.com/agents", claudeTag.Issuer.Value)
 	require.Equal(t, catalog.VisibilityHidden, claudeTag.Issuer.Visibility)
 	require.Equal(t, "wimse://identity.anthropic.com/org/{org_id}/agent/", claudeTag.Subject.Template)
@@ -63,16 +70,7 @@ func TestEmbeddedClaudeTagPinsOneOrganization(t *testing.T) {
 func TestEmbeddedGKEPinsOneClusterAndServiceAccount(t *testing.T) {
 	t.Parallel()
 
-	platforms, err := catalog.Embedded().Platforms(t.Context())
-	require.NoError(t, err)
-
-	var gke *catalog.Platform
-	for i := range platforms {
-		if platforms[i].Key == "gke" {
-			gke = &platforms[i]
-		}
-	}
-	require.NotNil(t, gke)
+	gke := embeddedPlatform(t, "gke")
 	cluster := "https://container.googleapis.com/v1/projects/{project}/locations/{location}/clusters/{cluster}"
 	require.Equal(t, cluster, gke.Issuer.Value)
 	require.Equal(t, cluster+"/jwks", gke.JWKSURI.Value)
@@ -92,16 +90,7 @@ func TestEmbeddedGKEPinsOneClusterAndServiceAccount(t *testing.T) {
 func TestEmbeddedGitHubActionsPinsOneRepository(t *testing.T) {
 	t.Parallel()
 
-	platforms, err := catalog.Embedded().Platforms(t.Context())
-	require.NoError(t, err)
-
-	var github *catalog.Platform
-	for i := range platforms {
-		if platforms[i].Key == "github-actions" {
-			github = &platforms[i]
-		}
-	}
-	require.NotNil(t, github)
+	github := embeddedPlatform(t, "github-actions")
 	require.True(t, github.Enabled)
 	require.Equal(t, "https://token.actions.githubusercontent.com", github.Issuer.Value)
 	require.Equal(t, "https://token.actions.githubusercontent.com/.well-known/jwks", github.JWKSURI.Value)

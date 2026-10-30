@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
 // newGitHubActionsGrantFixture writes what the GitHub Actions guided setup
@@ -81,13 +82,13 @@ func newGitHubActionsGrantFixture(t *testing.T, owner, repo string) deviceAgentG
 		ProjectID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		WorkloadIssuerID: issuerID,
 		Subject:          rule,
-		MatchKind:        "wildcard",
+		MatchKind:        string(workloadidentity.MatchKindWildcard),
 	}))
 	require.NoError(t, fixtures.CreateWorkloadAgentAssignmentFixture(ctx, testrepo.CreateWorkloadAgentAssignmentFixtureParams{
 		OrganizationID:   fx.orgID,
 		WorkloadIssuerID: issuerID,
 		Subject:          rule,
-		MatchKind:        "wildcard",
+		MatchKind:        string(workloadidentity.MatchKindWildcard),
 		AgentID:          agent.ID,
 	}))
 
@@ -136,11 +137,12 @@ func seedProjectHooksIngestGrant(t *testing.T, ti *testInstance, organizationID 
 func deviceAgentAccessToken(t *testing.T, body []byte) string {
 	t.Helper()
 
-	var resp map[string]any
+	var resp struct {
+		AccessToken string `json:"access_token"`
+	}
 	require.NoError(t, json.Unmarshal(body, &resp))
-	token, ok := resp["access_token"].(string)
-	require.True(t, ok)
-	return token
+	require.NotEmpty(t, resp.AccessToken)
+	return resp.AccessToken
 }
 
 // One rule, one agent: a pull request job exchanges its token at the
@@ -207,8 +209,12 @@ func TestGitHubActionsRule_AdmitsEveryJobOfTheRepository(t *testing.T) {
 
 	f := newGitHubActionsGrantFixture(t, "acme", "payments-api")
 	for _, job := range []string{"ref:refs/heads/main", "ref:refs/heads/feature/x", "ref:refs/tags/v1.2.3", "environment:production", "pull_request"} {
-		f.subject = "repo:acme/payments-api:" + job
-		f.requireWorkloadSession(t, f.exchange(t, f.assertion(t, f.advertisedIssuer), f.resource), f.advertisedIssuer)
+		t.Run(job, func(t *testing.T) {
+			t.Parallel()
+			f := f
+			f.subject = "repo:acme/payments-api:" + job
+			f.requireWorkloadSession(t, f.exchange(t, f.assertion(t, f.advertisedIssuer), f.resource), f.advertisedIssuer)
+		})
 	}
 }
 
@@ -227,8 +233,12 @@ func TestGitHubActionsRule_RefusesOtherRepositories(t *testing.T) {
 		"repo:Acme/payments-api:pull_request",
 		"repo:acme@123/payments-api@456:pull_request",
 	} {
-		f.subject = subject
-		requireWorkloadGrantRefused(t, f.exchange(t, f.assertion(t, f.advertisedIssuer), f.resource))
+		t.Run(subject, func(t *testing.T) {
+			t.Parallel()
+			f := f
+			f.subject = subject
+			requireWorkloadGrantRefused(t, f.exchange(t, f.assertion(t, f.advertisedIssuer), f.resource))
+		})
 	}
 }
 
@@ -247,8 +257,12 @@ func TestGitHubActionsRule_ImmutableSubjectsPinTheIDs(t *testing.T) {
 		"repo:acme@999/payments-api@456:ref:refs/heads/main",
 		"repo:acme/payments-api:ref:refs/heads/main",
 	} {
-		f.subject = subject
-		requireWorkloadGrantRefused(t, f.exchange(t, f.assertion(t, f.advertisedIssuer), f.resource))
+		t.Run(subject, func(t *testing.T) {
+			t.Parallel()
+			f := f
+			f.subject = subject
+			requireWorkloadGrantRefused(t, f.exchange(t, f.assertion(t, f.advertisedIssuer), f.resource))
+		})
 	}
 }
 
