@@ -147,20 +147,22 @@ func TestCatalogUnsupportedIdentity(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name        string
+		id          uuid.UUID
 		url         string
 		sourceType  string
 		authProfile string
 	}{
-		{name: "missing metadata", url: "https://registry.example.test"},
-		{name: "unknown source type", sourceType: "unsupported_v1", authProfile: "none"},
-		{name: "unknown auth profile", sourceType: "native_v1", authProfile: "unsupported_auth"},
-		{name: "native profile wrong namespace", sourceType: "native_v1", authProfile: "none"},
+		{name: "missing metadata", id: NativeCatalogRegistryID, url: "https://registry.example.test"},
+		{name: "unknown source type", id: NativeCatalogRegistryID, sourceType: "unsupported_v1", authProfile: "none"},
+		{name: "unknown auth profile", id: NativeCatalogRegistryID, sourceType: "native_v1", authProfile: "unsupported_auth"},
+		{name: "missing auth profile", id: NativeCatalogRegistryID, sourceType: "native_v1"},
+		{name: "native profile wrong namespace", id: uuid.New(), sourceType: "native_v1", authProfile: "none"},
 	} {
 		for _, state := range []string{"enabled", "disabled", "uncertified"} {
 			t.Run(tc.name+"/"+state, func(t *testing.T) {
 				t.Parallel()
 				row := repo.ListMCPRegistriesRow{
-					ID: uuid.New(), Url: tc.url,
+					ID: tc.id, Url: tc.url,
 					SourceType:         pgtype.Text{String: tc.sourceType, Valid: tc.sourceType != ""},
 					AuthProfile:        pgtype.Text{String: tc.authProfile, Valid: tc.authProfile != ""},
 					Enabled:            pgtype.Bool{Bool: state != "disabled", Valid: true},
