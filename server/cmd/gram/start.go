@@ -1959,6 +1959,7 @@ func newStartCommand() *cli.Command {
 				ProjectCore:               projects.NewCore(logger.With(attr.SlogComponent("projects")), auditLogger, temporalEnv, pluginsGitHub != nil),
 				Skills:                    skillsService,
 				GatewaySessions:           userSessionsService,
+				GatewayProxy:              mcpService,
 				SkillInsights:             telemetryrepo.New(chDB),
 				RiskPolicyApprovals:       mcpApprovalService,
 				RiskPolicySignaler:        riskSignaler,
