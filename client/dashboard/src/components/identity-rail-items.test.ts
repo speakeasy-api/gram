@@ -30,7 +30,7 @@ function routes(): ReturnType<typeof useRoutes> {
 }
 
 const keys = (kind?: string) =>
-  identityRailItems(routes(), "agent%3A1", "?window=7d", false, kind).map(
+  identityRailItems(routes(), "agent%3A1", "?window=7d", kind).map(
     (item) => item.key,
   );
 
@@ -63,9 +63,10 @@ describe("identityRailItems", () => {
 
   it("names an agent's tabs after what an agent holds", () => {
     const titles = Object.fromEntries(
-      identityRailItems(routes(), "agent%3A1", "", false, "agent").map(
-        (item) => [item.key, item.title],
-      ),
+      identityRailItems(routes(), "agent%3A1", "", "agent").map((item) => [
+        item.key,
+        item.title,
+      ]),
     );
     expect(titles["permissions"]).toBe("Permissions");
     expect(titles["sessions"]).toBe("Sessions");
@@ -81,7 +82,6 @@ describe("identityRailItems", () => {
       routes(),
       "agent%3A1",
       "?window=7d",
-      false,
       "agent",
     )) {
       expect(item.href.endsWith("?window=7d")).toBe(true);

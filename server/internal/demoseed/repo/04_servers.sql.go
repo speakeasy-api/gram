@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const serversInsertAgentConnectGrant = `-- name: ServersInsertAgentConnectGrant :exec
@@ -128,7 +129,7 @@ INSERT INTO remote_sessions
 VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
+        'DEMO-NOT-VALID-CIPHERTEXT', now() + $5::interval, false,
         ARRAY['releases:read'], 'Fictional release account',
         now() - interval '3 days', now() - interval '40 minutes')
 `
@@ -138,6 +139,7 @@ type ServersInsertAttachmentSessionParams struct {
 	UserID                string
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
+	ExpiresIn             pgtype.Interval
 }
 
 func (q *Queries) ServersInsertAttachmentSession(ctx context.Context, arg ServersInsertAttachmentSessionParams) error {
@@ -146,6 +148,7 @@ func (q *Queries) ServersInsertAttachmentSession(ctx context.Context, arg Server
 		arg.UserID,
 		arg.UserSessionIssuerID,
 		arg.RemoteSessionClientID,
+		arg.ExpiresIn,
 	)
 	return err
 }
@@ -834,9 +837,10 @@ func (q *Queries) ServersInsertHeadlessClient(ctx context.Context, arg ServersIn
 const serversInsertHostedToolsetEndpoints = `-- name: ServersInsertHostedToolsetEndpoints :exec
 INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, custom_domain_id, slug)
 SELECT overlay(overlay(md5($1::text || t.slug) placing '5' from 13) placing '8' from 17)::uuid,
-       t.project_id, t.id, t.custom_domain_id, t.mcp_slug
-FROM toolsets t
-WHERE t.project_id = $2::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL
+       s.project_id, s.id, NULL, s.slug
+FROM mcp_servers s
+JOIN toolsets t ON t.id = s.id AND t.project_id = s.project_id AND t.deleted IS FALSE
+WHERE s.project_id = $2::uuid AND s.toolset_id = s.id AND s.deleted IS FALSE
 `
 
 type ServersInsertHostedToolsetEndpointsParams struct {
@@ -853,23 +857,46 @@ func (q *Queries) ServersInsertHostedToolsetEndpoints(ctx context.Context, arg S
 
 const serversInsertHostedToolsetMCPServers = `-- name: ServersInsertHostedToolsetMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
-                         user_session_issuer_id, tool_variations_group_id,
-                         visibility)
-SELECT t.id, t.project_id, t.name, t.mcp_slug, t.id, t.user_session_issuer_id,
-       t.tool_variations_group_id,
-       CASE WHEN NOT t.mcp_enabled THEN 'disabled'
-            WHEN t.mcp_is_public THEN 'public'
-            ELSE 'private' END
-FROM toolsets t
-WHERE t.project_id = $1::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL
+                         user_session_issuer_id, visibility)
+SELECT t.id, t.project_id, t.name, v.slug, t.id, v.user_session_issuer_id, v.visibility
+FROM (VALUES
+  ($1::uuid, $2::text, NULL::uuid, 'private'),
+  ($3::uuid, $4::text, NULL::uuid, 'private'),
+  ($5::uuid, $6::text, $7::uuid, 'private'),
+  ($8::uuid, $9::text, NULL::uuid, 'public')
+) AS v(toolset_id, slug, user_session_issuer_id, visibility)
+JOIN toolsets t ON t.id = v.toolset_id AND t.project_id = $10::uuid AND t.deleted IS FALSE
 `
 
-// Every toolset with an MCP slug owns a canonical hosted wrapper (id = the
-// toolset id) and one endpoint at its address, mirroring its hosting
-// columns. The fresh-id servers above stay separate servers over the same
-// toolsets.
-func (q *Queries) ServersInsertHostedToolsetMCPServers(ctx context.Context, projectID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, serversInsertHostedToolsetMCPServers, projectID)
+type ServersInsertHostedToolsetMCPServersParams struct {
+	Toolset1         uuid.UUID
+	SupportMcpSlug   string
+	Toolset2         uuid.UUID
+	OpsMcpSlug       string
+	Toolset3         uuid.UUID
+	PartnerMcpSlug   string
+	PartnerIssuerID  uuid.UUID
+	Toolset4         uuid.UUID
+	DiscoveryMcpSlug string
+	ProjectID        uuid.UUID
+}
+
+// Each hosted toolset owns a canonical wrapper (id = the toolset id) that
+// holds its hosting state, and one platform endpoint at the wrapper's slug.
+// The fresh-id servers above stay separate servers over the same toolsets.
+func (q *Queries) ServersInsertHostedToolsetMCPServers(ctx context.Context, arg ServersInsertHostedToolsetMCPServersParams) error {
+	_, err := q.db.Exec(ctx, serversInsertHostedToolsetMCPServers,
+		arg.Toolset1,
+		arg.SupportMcpSlug,
+		arg.Toolset2,
+		arg.OpsMcpSlug,
+		arg.Toolset3,
+		arg.PartnerMcpSlug,
+		arg.PartnerIssuerID,
+		arg.Toolset4,
+		arg.DiscoveryMcpSlug,
+		arg.ProjectID,
+	)
 	return err
 }
 
@@ -1366,6 +1393,66 @@ func (q *Queries) ServersInsertMetaMCPServerMembers(ctx context.Context, arg Ser
 		arg.LinearServerID,
 		arg.SlackMemberID,
 		arg.SlackServerID,
+	)
+	return err
+}
+
+const serversInsertOrganizationGatewayClient = `-- name: ServersInsertOrganizationGatewayClient :exec
+INSERT INTO user_session_clients
+ (id, project_id, organization_id, user_session_issuer_id, client_id, client_name,
+ redirect_uris, client_id_issued_at, token_endpoint_auth_method)
+VALUES ($1::uuid, NULL, $2::text, $3::uuid,
+ ($1::uuid)::text, 'Example desktop client', ARRAY['http://127.0.0.1:41296/callback'], now(), 'none')
+`
+
+type ServersInsertOrganizationGatewayClientParams struct {
+	ID       uuid.UUID
+	OrgID    string
+	IssuerID uuid.UUID
+}
+
+func (q *Queries) ServersInsertOrganizationGatewayClient(ctx context.Context, arg ServersInsertOrganizationGatewayClientParams) error {
+	_, err := q.db.Exec(ctx, serversInsertOrganizationGatewayClient, arg.ID, arg.OrgID, arg.IssuerID)
+	return err
+}
+
+const serversInsertOrganizationGatewaySession = `-- name: ServersInsertOrganizationGatewaySession :exec
+INSERT INTO user_sessions
+ (id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn,
+ jti, refresh_token_hash, refresh_expires_at, expires_at, last_used_at, created_at)
+VALUES ($1::uuid, $2::text, $3::uuid, $4::uuid, 'user:' || $5::text,
+ $6::text, $7::text,
+ now() + ($8::text)::interval,
+ now() - interval '1 hour', now() - ($9::text)::interval, now() - ($10::text)::interval)
+`
+
+type ServersInsertOrganizationGatewaySessionParams struct {
+	ID               uuid.UUID
+	OrgID            string
+	IssuerID         uuid.UUID
+	ClientID         uuid.UUID
+	UserID           string
+	Jti              string
+	RefreshTokenHash string
+	RefreshExpiresIn string
+	LastUsedAgo      string
+	CreatedAgo       string
+}
+
+// Inert authorizations remain visible while the gateway is disabled.
+// Access tokens expired one hour ago; refresh authorization has its own deadline.
+func (q *Queries) ServersInsertOrganizationGatewaySession(ctx context.Context, arg ServersInsertOrganizationGatewaySessionParams) error {
+	_, err := q.db.Exec(ctx, serversInsertOrganizationGatewaySession,
+		arg.ID,
+		arg.OrgID,
+		arg.IssuerID,
+		arg.ClientID,
+		arg.UserID,
+		arg.Jti,
+		arg.RefreshTokenHash,
+		arg.RefreshExpiresIn,
+		arg.LastUsedAgo,
+		arg.CreatedAgo,
 	)
 	return err
 }
@@ -1872,7 +1959,7 @@ type ServersInsertUserSessionIssuersParams struct {
 // (mcp_servers_issuer_required_check); the gateway gets its own so clients
 // authenticate to it rather than to a member.
 // session_duration must be a Microseconds-only interval: the user-session
-// mint rejects Months/Days components (see usersessions/minthandler.go).
+// mint rejects Months components (see conv.PGIntervalToDuration).
 // The workforce issuer serves one shared authorization server for its MCP
 // servers at /oauth/usi/{id}. It is left unpinned: this seed runs against
 // every deployment, and an unpinned issuer URL follows the deployment's own

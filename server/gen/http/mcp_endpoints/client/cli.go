@@ -258,7 +258,7 @@ func BuildUpdateMcpEndpointPayload(mcpEndpointsUpdateMcpEndpointBody string, mcp
 
 // BuildCheckMcpEndpointSlugAvailabilityPayload builds the payload for the
 // mcpEndpoints checkMcpEndpointSlugAvailability endpoint from CLI flags.
-func BuildCheckMcpEndpointSlugAvailabilityPayload(mcpEndpointsCheckMcpEndpointSlugAvailabilitySlug string, mcpEndpointsCheckMcpEndpointSlugAvailabilityCustomDomainID string, mcpEndpointsCheckMcpEndpointSlugAvailabilitySessionToken string, mcpEndpointsCheckMcpEndpointSlugAvailabilityApikeyToken string, mcpEndpointsCheckMcpEndpointSlugAvailabilityProjectSlugInput string) (*mcpendpoints.CheckMcpEndpointSlugAvailabilityPayload, error) {
+func BuildCheckMcpEndpointSlugAvailabilityPayload(mcpEndpointsCheckMcpEndpointSlugAvailabilitySlug string, mcpEndpointsCheckMcpEndpointSlugAvailabilityCustomDomainID string, mcpEndpointsCheckMcpEndpointSlugAvailabilityMcpServerID string, mcpEndpointsCheckMcpEndpointSlugAvailabilitySessionToken string, mcpEndpointsCheckMcpEndpointSlugAvailabilityApikeyToken string, mcpEndpointsCheckMcpEndpointSlugAvailabilityProjectSlugInput string) (*mcpendpoints.CheckMcpEndpointSlugAvailabilityPayload, error) {
 	var err error
 	var slug string
 	{
@@ -276,6 +276,16 @@ func BuildCheckMcpEndpointSlugAvailabilityPayload(mcpEndpointsCheckMcpEndpointSl
 		if mcpEndpointsCheckMcpEndpointSlugAvailabilityCustomDomainID != "" {
 			customDomainID = &mcpEndpointsCheckMcpEndpointSlugAvailabilityCustomDomainID
 			err = goa.MergeErrors(err, goa.ValidateFormat("custom_domain_id", *customDomainID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var mcpServerID *string
+	{
+		if mcpEndpointsCheckMcpEndpointSlugAvailabilityMcpServerID != "" {
+			mcpServerID = &mcpEndpointsCheckMcpEndpointSlugAvailabilityMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -302,6 +312,7 @@ func BuildCheckMcpEndpointSlugAvailabilityPayload(mcpEndpointsCheckMcpEndpointSl
 	v := &mcpendpoints.CheckMcpEndpointSlugAvailabilityPayload{}
 	v.Slug = types.McpEndpointSlug(slug)
 	v.CustomDomainID = customDomainID
+	v.McpServerID = mcpServerID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

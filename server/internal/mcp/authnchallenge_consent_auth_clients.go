@@ -397,7 +397,7 @@ func (s *Service) directConsentAuthChoice(ctx context.Context, endpoint *Resolve
 // longer usable, or a missing one where a choice is required, is
 // errConsentConfigurationChanged. It returns nil where the page offers no
 // typed choice.
-func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, posted string, upstreamPicks map[uuid.UUID]uuid.UUID) (map[uuid.UUID]uuid.UUID, error) {
+func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, posted string, upstreamPicks map[uuid.UUID]uuid.UUID, cards []remoteSessionCard) (map[uuid.UUID]uuid.UUID, error) {
 	picked := uuid.Nil
 	if posted != "" {
 		parsed, err := uuid.Parse(posted)
@@ -405,10 +405,6 @@ func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *Res
 			return nil, errConsentConfigurationChanged
 		}
 		picked = parsed
-	}
-	cards, err := s.buildRemoteSessionCards(ctx, endpoint, challengeState, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
-	if err != nil {
-		return nil, fmt.Errorf("build remote session cards: %w", err)
 	}
 	auth, err := s.directConsentAuthChoice(ctx, endpoint, challengeState, cards, picked)
 	if err != nil || auth == nil {

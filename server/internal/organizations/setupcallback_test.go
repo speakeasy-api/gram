@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -57,6 +58,10 @@ func TestSetupCallbackUsesVisibleConfiguredTask(t *testing.T) {
 			}
 			require.Equal(t, http.StatusTemporaryRedirect, rec.Code)
 			require.Equal(t, want, rec.Header().Get("Location"))
+			revisit := httptest.NewRecorder()
+			mux.ServeHTTP(revisit, httptest.NewRequestWithContext(ctx, http.MethodGet, "/v1/setup/callback?"+tc.query, nil))
+			require.Equal(t, http.StatusTemporaryRedirect, revisit.Code)
+			require.Equal(t, want, revisit.Header().Get("Location"), "valid setup revisits remain usable")
 		})
 	}
 }
@@ -94,7 +99,11 @@ func TestSetupCallbackDomainVerification(t *testing.T) {
 			if tc.stored {
 				require.NoError(t, repo.SetVerifiedDomains(ctx, orgrepo.SetVerifiedDomainsParams{ID: org.ID, VerifiedDomains: []string{"example.com"}}))
 			} else {
-				ti.orgs.On("GetOrganizationDomainPolicy", mock.Anything, org.WorkosID.String).Return(&workos.OrganizationDomainPolicy{Domains: []workos.OrganizationDomain{{Domain: "example.com", State: tc.state}}}, tc.lookupErr).Once()
+				calls := 1
+				if tc.lookupErr != nil || (tc.state != workos.OrganizationDomainStateVerified && tc.state != workos.OrganizationDomainStateLegacyVerified) {
+					calls = 2
+				}
+				ti.orgs.On("GetOrganizationDomainPolicy", mock.Anything, org.WorkosID.String).Return(&workos.OrganizationDomainPolicy{Domains: []workos.OrganizationDomain{{Domain: "example.com", State: tc.state}}}, tc.lookupErr).Times(calls)
 			}
 			mux := goahttp.NewMuxer()
 			organizations.Attach(mux, ti.service)
@@ -106,6 +115,10 @@ func TestSetupCallbackDomainVerification(t *testing.T) {
 			}
 			require.Equal(t, http.StatusTemporaryRedirect, rec.Code)
 			require.Equal(t, want, rec.Header().Get("Location"))
+			revisit := httptest.NewRecorder()
+			mux.ServeHTTP(revisit, httptest.NewRequestWithContext(ctx, http.MethodGet, "/v1/setup/callback?intent=domain_verification&task=identity-provider", nil))
+			require.Equal(t, http.StatusTemporaryRedirect, revisit.Code)
+			require.Equal(t, want, revisit.Header().Get("Location"), "valid domain setup revisits remain usable")
 			org, err = repo.GetOrganizationMetadata(ctx, org.ID)
 			require.NoError(t, err)
 			if tc.stored || tc.state == workos.OrganizationDomainStateVerified || tc.state == workos.OrganizationDomainStateLegacyVerified {
@@ -124,15 +137,16 @@ func TestSetupCallbackRejectsInvalidOrigin(t *testing.T) {
 	mux := goahttp.NewMuxer()
 	organizations.Attach(mux, ti.service)
 	for _, query := range []string{
-		"intent=sso&task=directory-sync", "intent=dsync&task=connect-idp",
+		"", "intent=sso&task=directory-sync", "intent=dsync&task=connect-idp",
 		"intent=sso&task=connect-idp", "intent=dsync&task=directory-sync",
 		"intent=domain_verification&task=domain-verification",
 		"intent=dsync&task=anthropic-observability", "intent=sso&task=unknown",
 		"intent=sso&task=https://example.test", "intent=unknown&task=connect-idp",
 	} {
 		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/setup/callback?"+query, nil))
-		require.Equal(t, http.StatusBadRequest, rec.Code, query)
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/setup/callback?"+query+"&return_to=https://untrusted.example", nil))
+		require.NotEmpty(t, oauthtest.RequireAuthorizationErrorRecovery(t, rec, http.StatusBadRequest, "http://localhost:5173/@self/setup").Code)
+		require.Contains(t, rec.Body.String(), "Organization setup")
 		require.Empty(t, rec.Header().Get("Location"), query)
 	}
 }
@@ -169,7 +183,9 @@ func TestSetupCallbackRequiresActiveOrganizationAdmin(t *testing.T) {
 					mux.ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/v1/setup/callback?intent="+intent+origin, nil))
 					require.Equal(t, http.StatusForbidden, rec.Code)
 					require.Empty(t, rec.Header().Get("Location"))
-					require.Equal(t, "forbidden\n", rec.Body.String())
+					require.NotEmpty(t, oauthtest.RequireAuthorizationErrorRecovery(t, rec, http.StatusForbidden, "http://localhost:5173/@self/setup").Code)
+					require.Contains(t, rec.Body.String(), "Organization setup")
+					require.Contains(t, rec.Body.String(), "Speakeasy dashboard")
 					require.Empty(t, ti.orgs.Calls, "denied callbacks must not call WorkOS")
 					afterOrg, err := repo.GetOrganizationMetadata(ctx, org.ID)
 					require.NoError(t, err)

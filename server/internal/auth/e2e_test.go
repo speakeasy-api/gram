@@ -230,7 +230,7 @@ func (e *e2eInstance) callbackFromLogin(ctx context.Context, t *testing.T, login
 	t.Helper()
 	state := nonceStateFromLocation(t, login.Location)
 	result, err := e.service.Callback(ctx, &gen.CallbackPayload{
-		Code:  "mock_code",
+		Code:  new("mock_code"),
 		State: &state,
 	})
 	require.NoError(t, err)
@@ -760,7 +760,7 @@ func TestE2E_Callback_NewUserNoWorkOSOrgs_AssistantsDisposition(t *testing.T) {
 
 	ctx, stateParam := inst.stateWithNonce(ctx, t, "/?disposition=assistants")
 
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &stateParam})
+	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &stateParam})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotContains(t, result.Location, "signin_error=")

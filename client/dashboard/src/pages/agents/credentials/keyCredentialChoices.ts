@@ -11,10 +11,11 @@ export interface KeyCredentialPick {
 
 /**
  * The credential choices a key is issued with, read against what each remote
- * or tunneled server offers now. A server offering several shared credentials
- * needs the key to name the one it uses; the server would otherwise keep
+ * or tunneled server offers now. A server requiring authentication and offering
+ * several shared credentials needs the key to name the one it uses; otherwise it keeps
  * serving it the way it did before credentials could be chosen. Throws an
- * error naming the servers still to choose.
+ * error naming the servers still to choose. An explicitly optional upstream
+ * records no authentication when no offered credential is selected.
  */
 export async function keyCredentialChoices(
   sdk: Gram,
@@ -29,6 +30,7 @@ export async function keyCredentialChoices(
           .then((result) => ({
             pick,
             ids: result.choices.map((choice) => choice.id),
+            requiresUpstreamAuth: result.requiresUpstreamAuth,
           }))
           .catch(() => {
             throw new Error(
@@ -39,7 +41,8 @@ export async function keyCredentialChoices(
   );
   // A pick the server no longer offers counts as no pick.
   const unchosen = offered.filter(
-    ({ pick, ids }) =>
+    ({ pick, ids, requiresUpstreamAuth }) =>
+      requiresUpstreamAuth !== false &&
       ids.length > 1 &&
       (!pick.authClientId || !ids.includes(pick.authClientId)),
   );
@@ -48,9 +51,11 @@ export async function keyCredentialChoices(
       `Choose which credential the key uses on ${unchosen.map(({ pick }) => pick.name).join(", ")}.`,
     );
   }
-  return offered.flatMap(({ pick, ids }) =>
+  return offered.flatMap(({ pick, ids, requiresUpstreamAuth }) =>
     pick.authClientId && ids.includes(pick.authClientId)
       ? [{ mcpServerId: pick.id, authClientId: pick.authClientId }]
-      : [],
+      : requiresUpstreamAuth === false
+        ? [{ mcpServerId: pick.id }]
+        : [],
   );
 }

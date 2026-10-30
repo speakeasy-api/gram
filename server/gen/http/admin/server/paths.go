@@ -177,6 +177,11 @@ func SetStripeCustomerAdminPath() string {
 	return "/admin/organization.setStripeCustomer"
 }
 
+// SetAdoptionDashboardURLAdminPath returns the URL path to the admin service setAdoptionDashboardUrl HTTP endpoint.
+func SetAdoptionDashboardURLAdminPath() string {
+	return "/admin/organization.setAdoptionDashboardUrl"
+}
+
 // GetStripeSubscriptionAdminPath returns the URL path to the admin service getStripeSubscription HTTP endpoint.
 func GetStripeSubscriptionAdminPath() string {
 	return "/admin/organization.stripeSubscription"
@@ -515,4 +520,9 @@ func EnableUpstreamAuthEnforcementAdminPath() string {
 // DisableUpstreamAuthEnforcementAdminPath returns the URL path to the admin service disableUpstreamAuthEnforcement HTTP endpoint.
 func DisableUpstreamAuthEnforcementAdminPath() string {
 	return "/admin/upstreamOAuthMigration.disableEnforcement"
+}
+
+// BackfillMcpAuthGrantsAdminPath returns the URL path to the admin service backfillMcpAuthGrants HTTP endpoint.
+func BackfillMcpAuthGrantsAdminPath() string {
+	return "/admin/mcpAuthGrants.backfill"
 }

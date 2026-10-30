@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	oauthregistration "github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
@@ -271,6 +272,10 @@ func (s *CatalogIdentityProviderAttachmentService) associateExistingAttachment(c
 		return fmt.Errorf("begin identity-provider association: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, principal.OrganizationID, []uuid.UUID{project.ID}); err != nil {
+		return fmt.Errorf("lock identity-provider association scope: %w", err)
+	}
+
 	locked, err := mcpserversrepo.New(tx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
 		ID:        registration.McpServerID.UUID,
 		ProjectID: project.ID,
@@ -305,6 +310,14 @@ func (s *CatalogIdentityProviderAttachmentService) associateExistingAttachment(c
 	}
 	if associated == 0 {
 		return ErrRegistrationInvalid
+	}
+	// The association needs its typed auth client and server link, and this
+	// server may put the client on a second source, so the credential headers
+	// it copied from the first are no longer its to send. The complete writer
+	// scope was acquired before the server/issuer locks and association write;
+	// acquiring it at this synchronization step would invert that order.
+	if err := authclientbackfill.SyncServerAssociations(ctx, tx, principal.OrganizationID, registration.McpServerID.UUID); err != nil {
+		return fmt.Errorf("sync mcp server auth clients: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit identity-provider association: %w", err)

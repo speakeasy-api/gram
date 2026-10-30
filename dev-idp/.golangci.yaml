@@ -54,6 +54,9 @@ linters:
         - "errors.Join("
         - "fmt.Errorf("
         - "(net/http.RoundTripper).RoundTrip"
+        # These helpers already wrap and annotate the underlying error.
+        - "github.com/speakeasy-api/gram/dev-idp/internal/oops.E("
+        - "(*github.com/speakeasy-api/gram/dev-idp/internal/oops.ShareableError).Log("
     gosec:
       excludes:
         # Temporarily ignore this lint rule because it needs to be a separate
@@ -103,7 +106,7 @@ linters:
     exhaustive:
       check:
         - switch
-        - map
+        - mapliteral
       default-signifies-exhaustive: true
     errcheck:
       exclude-functions:

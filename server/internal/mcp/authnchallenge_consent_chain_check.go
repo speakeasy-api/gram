@@ -44,7 +44,7 @@ type consentChainCheckResult struct {
 // consentSessionRouting loads the subject's connection state and the routing
 // that decides which grants still route. Statuses are empty before the subject
 // is stamped, so every card then reads not connected.
-func (s *Service) consentSessionRouting(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clients []remotesessions.Client) (map[uuid.UUID]remotesessions.RemoteSessionState, consentRouting, error) {
+func (s *Service) consentSessionRouting(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clients []remotesessions.Client, typed map[uuid.UUID]uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, consentRouting, error) {
 	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
 		return nil, routing, nil
@@ -52,10 +52,6 @@ func (s *Service) consentSessionRouting(ctx context.Context, endpoint *ResolvedM
 	statuses, err := s.endpointRemoteSessionStatuses(ctx, *challengeState.Subject, endpoint)
 	if err != nil {
 		return nil, routing, fmt.Errorf("remote session statuses: %w", err)
-	}
-	typed, err := s.typedConsentRegistrations(ctx, endpoint, challengeState)
-	if err != nil {
-		return nil, routing, err
 	}
 	statuses, err = s.withTypedRegistrationStatuses(ctx, endpoint.OrganizationID, *challengeState.Subject, statuses, typed)
 	if err != nil {
@@ -92,7 +88,7 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid client_id").LogError(ctx, logger)
 	}
-	bound, err := s.listEndpointClients(ctx, endpoint, challengeState)
+	bound, typed, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
 	}
@@ -101,7 +97,7 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	if client == nil {
 		return oops.E(oops.CodeBadRequest, nil, "unknown remote session client for this MCP server").LogError(ctx, logger)
 	}
-	statuses, routing, err := s.consentSessionRouting(ctx, endpoint, challengeState, clients)
+	statuses, routing, err := s.consentSessionRouting(ctx, endpoint, challengeState, clients, typed)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resolve consent routing").LogError(ctx, logger)
 	}

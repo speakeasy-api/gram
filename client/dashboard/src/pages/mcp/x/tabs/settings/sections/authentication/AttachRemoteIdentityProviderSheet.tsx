@@ -1154,6 +1154,12 @@ function SelectExistingClientFields({
             {clients.map((candidate) => (
               <SelectItem key={candidate.id} value={candidate.id}>
                 {remoteSessionClientDisplayName(candidate)}
+                {/* Names aren't unique, so keep the ID that tells two apart. */}
+                {candidate.displayName && (
+                  <span className="text-muted-foreground ml-2 font-mono text-xs">
+                    {candidate.clientId}
+                  </span>
+                )}
               </SelectItem>
             ))}
           </SelectContent>

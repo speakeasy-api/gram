@@ -153,6 +153,43 @@ func TestWebhookHandleDefersEventIDFallback(t *testing.T) {
 	require.Empty(t, r.Event.CorrelationID)
 }
 
+func TestWebhookHandshakeIsTerminal(t *testing.T) {
+	t.Parallel()
+
+	ingestCalled := false
+	vendor := WebhookVendor{
+		Slug:      "test-vendor",
+		EventType: reflect.TypeFor[struct{}](),
+		SecretEnv: "TEST_SECRET",
+		Signature: HMACScheme{
+			NewHash:  func(key []byte) hash.Hash { return hmac.New(sha256.New, key) },
+			Header:   "X-Sig",
+			Encoding: "hex",
+		},
+		Handshake: func(body []byte, _ http.Header) *WebhookResponse {
+			if string(body) != "handshake" {
+				return nil
+			}
+			return &WebhookResponse{Status: http.StatusOK, ContentType: "text/plain", Body: []byte("challenge")}
+		},
+		Ingest: func(_ []byte, _ http.Header) (*WebhookIngest, error) {
+			ingestCalled = true
+			return &WebhookIngest{Event: map[string]any{"ok": true}}, nil
+		},
+	}
+	def := NewWebhookDefinition(vendor, nil, nil, func(map[string]any) (Config, error) { return nil, nil })
+
+	require.NoError(t, def.AuthenticateWebhook(t.Context(), []byte("handshake"), http.Header{}, map[string]string{}, nil))
+	require.Error(t, def.AuthenticateWebhook(t.Context(), []byte("event"), http.Header{}, map[string]string{"TEST_SECRET": "shh"}, nil))
+
+	r, err := def.HandleWebhook([]byte("handshake"), http.Header{}, nil)
+	require.NoError(t, err)
+	require.False(t, ingestCalled)
+	require.Nil(t, r.Event)
+	require.NotNil(t, r.Response)
+	require.Equal(t, []byte("challenge"), r.Response.Body)
+}
+
 func TestScopeWebhookEventID(t *testing.T) {
 	t.Parallel()
 

@@ -4,8 +4,8 @@
 // dispatch on mcp_servers.user_session_issuer_id — issuer-gated servers get
 // the new metadata shape keyed on the endpoint the request arrived at.
 // Servers without an mcp_endpoints row fall back to the legacy
-// toolsets.mcp_slug lookup, where toolsets.user_session_issuer_id gates the
-// shape and legacy toolsets fall through to wellknown.Resolve*.
+// toolsets.mcp_slug lookup, where the canonical server's issuer gates the
+// shape and toolsets without one fall through to wellknown.Resolve*.
 
 package mcp
 
@@ -149,17 +149,17 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
 	}
-	toolset, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
+	toolset, hosting, alias, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
-	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackWellKnownProtectedResource, mcpSlug, toolset, wrapperID)
+	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackWellKnownProtectedResource, mcpSlug, toolset, alias, wrapperID)
 
-	if toolset.UserSessionIssuerID.Valid {
-		endpoint := newResolvedMcpEndpointFromToolset(toolset, mcproute.MCP)
+	if hosting.UserSessionIssuerID.Valid {
+		endpoint := newResolvedMcpEndpointFromToolset(toolset, hosting, alias, mcproute.MCP)
 		if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
 			return err
 		}
@@ -204,17 +204,17 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
 	}
-	toolset, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
+	toolset, hosting, alias, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
-	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackWellKnownAuthorizationServer, mcpSlug, toolset, wrapperID)
+	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackWellKnownAuthorizationServer, mcpSlug, toolset, alias, wrapperID)
 
-	if toolset.UserSessionIssuerID.Valid {
-		endpoint := newResolvedMcpEndpointFromToolset(toolset, mcproute.MCP)
+	if hosting.UserSessionIssuerID.Valid {
+		endpoint := newResolvedMcpEndpointFromToolset(toolset, hosting, alias, mcproute.MCP)
 		if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
 			return err
 		}

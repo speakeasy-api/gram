@@ -445,8 +445,8 @@ func newReport(apply bool) Report {
 	report := Report{
 		Mode:                     "dry_run",
 		Associations:             0,
-		Outcomes:                 map[Outcome]int{},
-		ByKind:                   map[Kind]*KindCounts{},
+		Outcomes:                 make(map[Outcome]int),
+		ByKind:                   make(map[Kind]*KindCounts),
 		PendingClients:           0,
 		PendingLinks:             0,
 		PendingHeaders:           0,
@@ -461,12 +461,12 @@ func newReport(apply bool) Report {
 		PendingMarkedServers:     0,
 		ServersMarked:            0,
 		PendingGrants:            0,
-		PendingGrantsByKind:      map[GrantKind]int{},
+		PendingGrantsByKind:      make(map[GrantKind]int),
 		GrantsWritten:            0,
 		APIKeysGranted:           []string{},
 		APIKeysWaiting:           false,
 		SharedClientsWaiting:     false,
-		Selections:               map[CredentialClass]*SelectionCounts{},
+		Selections:               make(map[CredentialClass]*SelectionCounts),
 		SelectionGaps:            []SelectionGap{},
 		PendingSelectionMappings: 0,
 		SelectionsMapped:         0,
@@ -717,7 +717,7 @@ func runPhases(ctx context.Context, db TxStarter, opts Options, startedAt pgtype
 	report := newReport(opts.Apply)
 	size := int32(pageSize) // #nosec G115 -- bounded by defaultPageSize or an operator flag
 	want := newExpected()
-	failed := map[Kind]bool{}
+	failed := make(map[Kind]bool)
 	// Set by the EMA phase when it succeeds.
 	var ema *emaPlan
 	phases := []phase{
@@ -858,9 +858,10 @@ func runOAuth(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, pageSize
 	cursor := uuid.Nil
 	for {
 		rows, err := q.ListAuthClientBackfillCandidates(ctx, ListAuthClientBackfillCandidatesParams{
-			Cursor:         cursor,
-			OrganizationID: opts.OrganizationID,
-			PageSize:       pageSize,
+			Cursor:           cursor,
+			OrganizationID:   opts.OrganizationID,
+			OnlyMcpServerIds: nil,
+			PageSize:         pageSize,
 		})
 		if err != nil {
 			return fmt.Errorf("list auth client backfill candidates after %s: %w", cursor, err)
