@@ -100,6 +100,7 @@ var (
 	SkillEfficacySettingsV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.skill_efficacy_settings_event_v1", "Emitted when skill efficacy sampling settings are changed")
 	SkillV1                                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.skill_event_v1", "Emitted when changes to skills are made")
 	SpendRuleV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.spend_rule_event_v1", "Emitted when changes to spend rules are made")
+	TeamMemoryV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.team_memory_event_v1", "Emitted when a project's team memory is read or a memo is saved to it")
 	TemplateV1                             = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.template_event_v1", "Emitted when changes to prompt templates are made")
 	ToolsetV1                              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.toolset_event_v1", "Emitted when changes to toolsets used by MCP servers are made")
 	TunneledMcpServerV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.tunneled_mcp_server_event_v1", "Emitted when changes to tunneled MCP servers are made")

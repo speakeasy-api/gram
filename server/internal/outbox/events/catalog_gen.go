@@ -94,6 +94,7 @@ var All = []outbox.EventRegistration{
 	SlackDirectoryConnectionV1,
 	SlackIdentityMappingV1,
 	SpendRuleV1,
+	TeamMemoryV1,
 	TemplateV1,
 	ToolsetV1,
 	TriggerInstanceV1,

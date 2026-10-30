@@ -1106,6 +1106,16 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/platformmcp/memory_queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "memoryrepo"
+        out: "../internal/platformmcp/memoryrepo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/killswitches/queries.sql
     engine: postgresql
     gen:

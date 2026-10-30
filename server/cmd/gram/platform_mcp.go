@@ -552,6 +552,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, chatfindings.New(config.DB, config.ChatRiskFindings), budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
+		WithTeamMemory(platformmcp.NewTeamMemoryService(config.DB, config.Authz, config.AuditLogger, config.FeatureFlags, organizationSlugs, budgets.SensitiveSessionRecall, platformmcp.NewChatSearchRedactor())).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
@@ -1299,6 +1300,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, chatfindings.New(config.DB, config.ChatRiskFindings), budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
+		WithTeamMemory(platformmcp.NewTeamMemoryService(config.DB, config.Authz, config.AuditLogger, config.FeatureFlags, organizationSlugs, budgets.SensitiveSessionRecall, platformmcp.NewChatSearchRedactor())).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).

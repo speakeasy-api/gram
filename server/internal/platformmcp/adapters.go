@@ -367,6 +367,7 @@ type PostgresReader struct {
 	riskFindingList           riskFindingListLister
 	chatMetadata              *ChatMetadataService
 	chatSearch                *ChatSearchService
+	teamMemory                *TeamMemoryService
 	organizationGateway       *OrganizationGatewayService
 	gatewaySessions           GatewaySessionManagement
 	dataExports               *DataExportReadService
@@ -410,6 +411,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		riskFindingList:           nil,
 		chatMetadata:              nil,
 		chatSearch:                nil,
+		teamMemory:                nil,
 		organizationGateway:       nil,
 		gatewaySessions:           nil,
 		dataExports:               nil,
@@ -645,6 +647,14 @@ func (r *PostgresReader) WithChatMetadata(service *ChatMetadataService) *Postgre
 func (r *PostgresReader) WithChatSearch(service *ChatSearchService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.chatSearch = service
+	}
+	return r
+}
+
+// WithTeamMemory attaches the project team memory tools.
+func (r *PostgresReader) WithTeamMemory(service *TeamMemoryService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.teamMemory = service
 	}
 	return r
 }
