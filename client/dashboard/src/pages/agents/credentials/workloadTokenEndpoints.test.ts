@@ -150,11 +150,12 @@ it("preselects the issuer the agent's servers sign in through, not the organizat
     useSetupValues(undefined, [server("gh", "github")]),
   );
   expect(result.current.selectedEndpointId).toBe("github");
+  // Every shared issuer stays on offer, since a server can be assigned to it.
   expect(
     result.current.endpointGroups.flatMap((group) =>
       group.options.map((option) => option.id),
     ),
-  ).toEqual(["github"]);
+  ).toEqual(["org", "github", "unrelated"]);
   expect(result.current.values?.token_endpoint).toBe(
     "https://gram.example.com/oauth/usi/github/token",
   );
@@ -200,22 +201,35 @@ it("moves coverage with the selected issuer", () => {
   expect(result.current.uncoveredServers[0]?.server.id).toBe("a");
 });
 
-it("explains when none of the agent's servers has a shared issuer instead of offering an unrelated one", () => {
+it("preselects the only shared issuer and offers to assign it when no server uses one yet", () => {
   endpointQuery.items = [endpoint("org", "organization")];
   const { result } = renderHook(() =>
     useSetupValues(undefined, [server("gh", "private")]),
   );
-  expect(result.current.values).toBeUndefined();
-  expect(result.current.endpointGroups).toEqual([]);
-  expect(result.current.unavailableReason).toMatch(
-    /None of the servers below uses an MCP authentication provider that can give tokens to agents/,
-  );
+  expect(result.current.selectedEndpointId).toBe("org");
+  expect(result.current.unavailableReason).toBeNull();
   expect(result.current.uncoveredServers).toEqual([
     {
       server: server("gh", "private"),
       reason: "not_shared",
       switchTo: { id: "org", label: "organization" },
     },
+  ]);
+});
+
+it("explains when there is no shared issuer at all", () => {
+  endpointQuery.items = [];
+  const { result } = renderHook(() =>
+    useSetupValues(undefined, [server("gh", "private")]),
+  );
+  expect(result.current.values).toBeUndefined();
+  expect(result.current.endpointGroups).toEqual([]);
+  expect(result.current.loadState).toBe("ready");
+  expect(result.current.unavailableReason).toMatch(
+    /No MCP authentication provider can give tokens to agents yet/,
+  );
+  expect(result.current.uncoveredServers).toEqual([
+    { server: server("gh", "private"), reason: "not_shared" },
   ]);
 });
 
@@ -283,9 +297,7 @@ it("keeps filtering by the last issuers loaded when a refetch fails", () => {
       useSetupValues(undefined, [server("gh", "p")]),
     );
     expect(result.current.selectedEndpointId).toBe("p");
-    expect(
-      result.current.endpointGroups.flatMap((g) => g.options.map((o) => o.id)),
-    ).toEqual(["p"]);
+    expect(result.current.uncoveredServers).toEqual([]);
   } finally {
     endpointQuery.error = false;
   }

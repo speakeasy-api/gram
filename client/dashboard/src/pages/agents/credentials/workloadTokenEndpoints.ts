@@ -35,6 +35,8 @@ export interface SetupValues {
   values?: Partial<Record<ComputedValueKey, string>>;
   /** Why the values cannot be shown, or null when they are. */
   unavailableReason: string | null;
+  /** Whether the issuers have loaded, so "none" can be told from "not yet". */
+  loadState: "loading" | "error" | "ready";
   /** The issuers the operator can point the platform at. */
   endpointGroups: TokenEndpointGroup[];
   /** The selected issuer's id, or "" when there is none to select. */
@@ -110,9 +112,9 @@ export function groupTokenEndpoints(
  * project. Only issuers in shared mode serve one, at /oauth/usi/{id}.
  *
  * A token from a shared issuer is accepted only by the MCP servers that sign
- * in through that issuer. So when the agent's servers are known, only their
- * issuers are offered, the one serving most of them is preselected, and the
- * servers the selection leaves out are reported with why.
+ * in through that issuer. So when the agent's servers are known, the issuer
+ * serving most of them is preselected, and the servers the selection leaves
+ * out are reported with why and how to fix it.
  *
  * These come from the server's own derivation, the one its authorization
  * server metadata publishes, and are never assembled here: a second derivation
@@ -142,10 +144,9 @@ export function useSetupValues(
     signingIn.filter(
       (server) => server.issuerId === endpoint.userSessionIssuerId,
     ).length;
-  const endpoints =
-    signingIn.length === 0
-      ? inScope
-      : inScope.filter((endpoint) => servedBy(endpoint) > 0);
+  // Every shared issuer is offered, since a server can be assigned to any of
+  // them; the one already serving most of the agent's servers is preselected.
+  const endpoints = inScope;
   const selected =
     endpoints.find((e) => e.userSessionIssuerId === chosenId) ??
     endpoints.reduce<WorkloadTokenEndpoint | undefined>(
@@ -207,6 +208,7 @@ export function useSetupValues(
     coveredServers,
     uncoveredServers,
     signInOf,
+    loadState: query.isPending ? "loading" : query.isError ? "error" : "ready",
     values:
       selected === undefined
         ? undefined
@@ -253,7 +255,7 @@ function unavailableReason(
   if (isPending) return "Loading token endpoints…";
   if (isError) return "Speakeasy couldn't load its token endpoints. Try again.";
   if (count === 0 && serversSignIn) {
-    return "None of the servers below uses an MCP authentication provider that can give tokens to agents, so there is no token endpoint a workload can use for them.";
+    return "No MCP authentication provider can give tokens to agents yet, so there is no token endpoint a workload can use for the servers below.";
   }
   if (count === 0 && targetProjectId !== undefined) {
     return "No shared Speakeasy authorization server is available for this project or organization.";

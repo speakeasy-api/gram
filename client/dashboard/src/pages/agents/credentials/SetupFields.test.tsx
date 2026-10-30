@@ -108,6 +108,7 @@ function setupValues(overrides: Partial<SetupValues>): SetupValues {
     coveredServers: [],
     uncoveredServers: [],
     signInOf: () => ({ status: "no_sign_in" }),
+    loadState: "ready",
     ...overrides,
   };
 }

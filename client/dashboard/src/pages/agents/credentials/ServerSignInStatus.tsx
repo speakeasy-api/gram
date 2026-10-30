@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
+import { CreateMcpAuthenticationProvider } from "./CreateMcpAuthenticationProvider";
 import type { JSX } from "react";
 import type { SetupServer } from "./setupInstructions";
 import { ServerSignInSettingsLink, SignInSelect } from "./SetupFields";
@@ -18,6 +19,28 @@ export function SignInPicker({
 }: {
   setupValues: SetupValues;
 }): JSX.Element {
+  if (setupValues.loadState === "loading") {
+    return (
+      <Text muted small>
+        Loading MCP authentication providers…
+      </Text>
+    );
+  }
+  if (setupValues.loadState === "error") {
+    return (
+      <Text muted small>
+        Speakeasy couldn&apos;t load its MCP authentication providers. Refresh
+        to try again.
+      </Text>
+    );
+  }
+  if (setupValues.endpointGroups.length === 0) {
+    return (
+      <CreateMcpAuthenticationProvider
+        onCreated={setupValues.refreshAndSelect}
+      />
+    );
+  }
   return (
     <Stack gap={1}>
       <SignInSelect setupValues={setupValues} id="mcp-selection-sign-in" />
