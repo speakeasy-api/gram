@@ -46,6 +46,7 @@ const mocks = vi.hoisted(() => ({
   attach: vi.fn(),
   plugins: vi.fn(),
   getPlugin: vi.fn(),
+  listPolicyGrants: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/mcpServerAuthClientChoices.js", () => ({
@@ -99,6 +100,7 @@ vi.mock("@/contexts/Sdk", () => ({
     agents: {
       create: mocks.createAgent,
       listDelegableGrants: mocks.listDelegableGrants,
+      listPolicyGrants: mocks.listPolicyGrants,
       checkPolicyGrants: mocks.checkPolicyGrants,
     },
     keys: { create: mocks.createKey, list: mocks.listKeys },
@@ -379,6 +381,7 @@ beforeEach(() => {
   mocks.attach.mockResolvedValue({});
   mocks.plugins.mockReturnValue([]);
   mocks.getPlugin.mockReset();
+  mocks.listPolicyGrants.mockResolvedValue([]);
   mocks.createAgent.mockResolvedValue({ id: "agent_new", name: "Release Bot" });
   mocks.listDelegableGrants.mockResolvedValue([grant]);
   mocks.checkPolicyGrants.mockImplementation(answerChecks());
@@ -2849,6 +2852,108 @@ describe("Connecting a GitHub repository", () => {
     });
   }
 
+  /** Sets up GitHub Actions for an agent that already exists. */
+  async function reachRepositoryStepForExistingAgent() {
+    mocks.platforms.mockReturnValue([githubActions]);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <CredentialsWizard
+            agent={
+              {
+                id: "agent_one",
+                name: "Release Bot",
+                lifecycle: "active",
+                projectId: "project_one",
+                ownerUserId: "user_owner",
+                permissions: { write: true, authorize: true },
+              } as never
+            }
+            initialPlatformKey="github-actions"
+            onDone={() => {}}
+            verifyPollMs={20}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Your repository" });
+    fireEvent.change(screen.getByLabelText("Owner"), {
+      target: { value: "acme" },
+    });
+    fireEvent.change(screen.getByLabelText("Repository"), {
+      target: { value: "payments-api" },
+    });
+  }
+
+  it("checks every grant an existing agent lacks before writing any of them", async () => {
+    // The agent already polls; it lacks only the hooks grant.
+    mocks.listPolicyGrants.mockResolvedValue([
+      {
+        id: "grant_sync",
+        effect: "allow",
+        scope: "org:device_agent_sync",
+        selector: { resourceKind: "org", resourceId: "*" },
+      },
+    ]);
+    await reachRepositoryStepForExistingAgent();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await waitFor(() => expect(mocks.createGrant).toHaveBeenCalledTimes(1));
+    const lastCheck = mocks.checkPolicyGrants.mock.calls.at(-1)?.[0];
+    expect(lastCheck?.checkAgentPolicyGrantsForm).toEqual({
+      agentId: "agent_one",
+      policyGrants: [
+        {
+          effect: "allow",
+          scope: "org:hooks_ingest",
+          selector: {
+            resourceKind: "org",
+            resourceId: "org_example",
+            projectId: "project_one",
+          },
+        },
+      ],
+    });
+    expect(
+      mocks.createGrant.mock.calls[0]?.[0]?.request?.createAgentPolicyGrantForm
+        ?.scope,
+    ).toBe("org:hooks_ingest");
+  });
+
+  it("writes no grant to an existing agent when one of them would be refused", async () => {
+    mocks.checkPolicyGrants.mockImplementation(
+      (request: {
+        checkAgentPolicyGrantsForm: { policyGrants: { scope: string }[] };
+      }) =>
+        Promise.resolve({
+          results: request.checkAgentPolicyGrantsForm.policyGrants.map(
+            (grant) =>
+              grant.scope === "org:hooks_ingest"
+                ? { allowed: false, limitedBy: "owner" }
+                : { allowed: true },
+          ),
+        }),
+    );
+    await reachRepositoryStepForExistingAgent();
+    await waitFor(() => expect(mocks.checkPolicyGrants).toHaveBeenCalled());
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    expect(
+      await screen.findByText(/owner does not hold org:hooks_ingest/),
+    ).toBeTruthy();
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+    expect(mocks.admitSubject).not.toHaveBeenCalled();
+  });
+
   it("trusts GitHub for the organization and gives the agent what the device agent needs", async () => {
     await reachRepositoryStep();
     expect(screen.getByText("repo:acme/payments-api:*")).toBeTruthy();
@@ -2917,6 +3022,11 @@ describe("Connecting a GitHub repository", () => {
     ]);
     await reachRepositoryStep();
     expect(screen.getByText(/This project also trusts/)).toBeTruthy();
+    // The remedy is withdrawing the project's own issuer, not an agent's
+    // access, which would leave the issuer shadowing the rule.
+    expect(
+      screen.getByText(/withdrawIssuer\?id=\s*issuer_project/),
+    ).toBeTruthy();
     fireEvent.click(
       screen.getByRole("button", { name: "Connect GitHub Actions" }),
     );
@@ -3017,7 +3127,9 @@ describe("Connecting a GitHub repository", () => {
       screen.getByRole("button", { name: "Connect GitHub Actions" }),
     );
     await screen.findByRole("heading", { name: "What the job gets" });
-    expect(screen.getByText(/No plugin in this project reaches/)).toBeTruthy();
+    expect(
+      screen.getByText(/No plugin in this project is assigned to Everyone/),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     const workflow = await screen.findByLabelText(
       ".github/workflows/speakeasy.yml",

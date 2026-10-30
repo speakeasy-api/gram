@@ -458,9 +458,16 @@ export function useWorkloadSetup({
                   <strong>{shadowingIssuer.name}</strong> on its own, at the
                   same issuer URL. Its MCP servers check a job against that
                   issuer&apos;s rules instead of the one saved here, so the job
-                  reaches them as another identity, or not at all. Withdraw that
-                  issuer from the Federated access section of an agent that uses
-                  it, so the rule saved here applies in this project too.
+                  reaches them as another identity, or not at all. Removing an
+                  agent&apos;s access does not fix this: the project&apos;s
+                  issuer itself has to be withdrawn, which also withdraws every
+                  rule admitted under it. The dashboard has no control for that
+                  yet. An organization administrator can call{" "}
+                  <code>
+                    DELETE /rpc/workloadIdentities.withdrawIssuer?id=
+                    {shadowingIssuer.id}
+                  </code>{" "}
+                  with <code>Gram-Project: {project.slug}</code>.
                 </div>
               </Alert>
             )}

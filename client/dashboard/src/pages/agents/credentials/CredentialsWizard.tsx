@@ -144,6 +144,28 @@ function freeName(base: string, taken: Set<string>): string {
   return numbered(suffix);
 }
 
+/**
+ * Why some of these grants cannot be written, from checkPolicyGrants' answers
+ * in the same order, or null when every one can.
+ */
+function grantRefusal(
+  grants: AgentPolicyGrantForm[],
+  answers: AgentPolicyGrantCheck[],
+): string | null {
+  const refused = grants.flatMap((grant, index) =>
+    answers[index]?.allowed === true
+      ? []
+      : [{ scope: grant.scope, limitedBy: answers[index]?.limitedBy }],
+  );
+  if (refused.length === 0) return null;
+  const scopes = [...new Set(refused.map((grant) => grant.scope))].join(
+    " and ",
+  );
+  return refused.some((grant) => grant.limitedBy === "owner")
+    ? `This agent's owner does not hold ${scopes}, so the agent cannot be given it. Ask an organization administrator to give the owner that permission, or to run this setup.`
+    : `You do not hold ${scopes}, so you cannot give it to this agent. Ask an organization administrator to run this setup.`;
+}
+
 /** Grants with each one kept once, in their first order. */
 function uniqueGrants(grants: AgentPolicyGrantForm[]): AgentPolicyGrantForm[] {
   return [
@@ -680,19 +702,7 @@ export function CredentialsWizard({
         ? "Could not check that this agent can be given the permissions its platform needs. Try again."
         : null;
     }
-    const refused = platformGrants.flatMap((grant, index) =>
-      answers[index]?.allowed === true
-        ? []
-        : [{ scope: grant.scope, limitedBy: answers[index]?.limitedBy }],
-    );
-    if (refused.length === 0) return null;
-    const scopes = [...new Set(refused.map((grant) => grant.scope))].join(
-      " and ",
-    );
-    const byOwner = refused.some((grant) => grant.limitedBy === "owner");
-    return byOwner
-      ? `This agent's owner does not hold ${scopes}, so the agent cannot be given it. Ask an organization administrator to give the owner that permission, or to run this setup.`
-      : `You do not hold ${scopes}, so you cannot give it to this agent. Ask an organization administrator to run this setup.`;
+    return grantRefusal(platformGrants, answers);
   })();
 
   // The verify step reads the key itself: a key with an access time is a
@@ -832,18 +842,28 @@ export function CredentialsWizard({
   const addPlatformGrants = async (agentId: string): Promise<void> => {
     if (platformGrants.length === 0) return;
     const held = await sdk.agents.listPolicyGrants({ agentId });
-    for (const grant of platformGrants) {
-      const covered = held.some(
-        (existing) =>
-          existing.effect === "allow" &&
-          existing.scope === grant.scope &&
-          existing.selector.resourceKind === grant.selector.resourceKind &&
-          (existing.selector.resourceId === "*" ||
-            existing.selector.resourceId === organization.id) &&
-          (existing.selector.projectId === undefined ||
-            existing.selector.projectId === grant.selector.projectId),
-      );
-      if (covered) continue;
+    const missing = platformGrants.filter(
+      (grant) =>
+        !held.some(
+          (existing) =>
+            existing.effect === "allow" &&
+            existing.scope === grant.scope &&
+            existing.selector.resourceKind === grant.selector.resourceKind &&
+            (existing.selector.resourceId === "*" ||
+              existing.selector.resourceId === organization.id) &&
+            (existing.selector.projectId === undefined ||
+              existing.selector.projectId === grant.selector.projectId),
+        ),
+    );
+    if (missing.length === 0) return;
+    // Each grant is its own write, so every one is checked before the first
+    // is made: a refusal part-way through would leave the agent half set up.
+    const { results } = await sdk.agents.checkPolicyGrants({
+      checkAgentPolicyGrantsForm: { agentId, policyGrants: missing },
+    });
+    const refusal = grantRefusal(missing, results);
+    if (refusal !== null) throw new Error(refusal);
+    for (const grant of missing) {
       await createGrant.mutateAsync({
         request: {
           createAgentPolicyGrantForm: {
