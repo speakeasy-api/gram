@@ -1320,6 +1320,21 @@ func unmarshalAPIKeyPolicySelectorRequestBodyToKeysAPIKeyPolicySelector(v *APIKe
 	return res
 }
 
+// unmarshalAgentKeyAuthClientChoiceRequestBodyToKeysAgentKeyAuthClientChoice
+// builds a value of type *keys.AgentKeyAuthClientChoice from a value of type
+// *AgentKeyAuthClientChoiceRequestBody.
+func unmarshalAgentKeyAuthClientChoiceRequestBodyToKeysAgentKeyAuthClientChoice(v *AgentKeyAuthClientChoiceRequestBody) *keys.AgentKeyAuthClientChoice {
+	if v == nil {
+		return nil
+	}
+	res := &keys.AgentKeyAuthClientChoice{
+		McpServerID:  *v.McpServerID,
+		AuthClientID: v.AuthClientID,
+	}
+
+	return res
+}
+
 // marshalKeysAgentDelegatedPolicyToAgentDelegatedPolicyResponseBody builds a
 // value of type *AgentDelegatedPolicyResponseBody from a value of type
 // *keys.AgentDelegatedPolicy.

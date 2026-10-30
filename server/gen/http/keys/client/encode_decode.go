@@ -1474,6 +1474,21 @@ func marshalKeysAPIKeyPolicySelectorToAPIKeyPolicySelectorRequestBody(v *keys.AP
 	return res
 }
 
+// marshalKeysAgentKeyAuthClientChoiceToAgentKeyAuthClientChoiceRequestBody
+// builds a value of type *AgentKeyAuthClientChoiceRequestBody from a value of
+// type *keys.AgentKeyAuthClientChoice.
+func marshalKeysAgentKeyAuthClientChoiceToAgentKeyAuthClientChoiceRequestBody(v *keys.AgentKeyAuthClientChoice) *AgentKeyAuthClientChoiceRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &AgentKeyAuthClientChoiceRequestBody{
+		McpServerID:  v.McpServerID,
+		AuthClientID: v.AuthClientID,
+	}
+
+	return res
+}
+
 // marshalAgentPolicyGrantFormRequestBodyToKeysAgentPolicyGrantForm builds a
 // value of type *keys.AgentPolicyGrantForm from a value of type
 // *AgentPolicyGrantFormRequestBody.
@@ -1538,6 +1553,21 @@ func marshalAPIKeyPolicySelectorRequestBodyToKeysAPIKeyPolicySelector(v *APIKeyP
 		ResourceID:   v.ResourceID,
 		ProjectID:    v.ProjectID,
 		ClientType:   v.ClientType,
+	}
+
+	return res
+}
+
+// marshalAgentKeyAuthClientChoiceRequestBodyToKeysAgentKeyAuthClientChoice
+// builds a value of type *keys.AgentKeyAuthClientChoice from a value of type
+// *AgentKeyAuthClientChoiceRequestBody.
+func marshalAgentKeyAuthClientChoiceRequestBodyToKeysAgentKeyAuthClientChoice(v *AgentKeyAuthClientChoiceRequestBody) *keys.AgentKeyAuthClientChoice {
+	if v == nil {
+		return nil
+	}
+	res := &keys.AgentKeyAuthClientChoice{
+		McpServerID:  v.McpServerID,
+		AuthClientID: v.AuthClientID,
 	}
 
 	return res

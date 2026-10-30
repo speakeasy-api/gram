@@ -225,6 +225,12 @@ func (s *Service) routeMetaMember(
 		}
 		routed, terr := routeMetaMemberToken(tokens, member, strings.TrimRight(remoteServer.Url, "/"))
 		upstreamToken := routed.Token
+		// A resolved agent credential that does not route to this member is
+		// not permission to dial it anonymously. Header/no-auth members have
+		// no token map and retain their existing path.
+		if terr == nil && gate.agentID != uuid.Nil && upstreamToken == "" && len(tokens) != 0 && !member.upstreamNoAuth {
+			return memberDial{}, "remote", agentMemberCredentialError(member)
+		}
 		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil && !member.upstreamNoAuth && (member.authClient == nil || member.authClient.outcome == authClientLegacy) {
 			upstreamToken, terr = gate.chainUpstream(ctx, member, remoteServer.Url)
 		}
@@ -253,6 +259,12 @@ func (s *Service) routeMetaMember(
 	case member.tunneledServerID.Valid:
 		routed, terr := routeMetaMemberToken(tokens, member, strings.TrimRight(member.tunneledResourceIdentifier, "/"))
 		upstreamToken := routed.Token
+		// A resolved agent credential that does not route to this member is
+		// not permission to dial it anonymously. Header/no-auth members have
+		// no token map and retain their existing path.
+		if terr == nil && gate.agentID != uuid.Nil && upstreamToken == "" && len(tokens) != 0 && !member.upstreamNoAuth {
+			return memberDial{}, "tunneled", agentMemberCredentialError(member)
+		}
 		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil && !member.upstreamNoAuth && (member.authClient == nil || member.authClient.outcome == authClientLegacy) {
 			upstreamToken, terr = gate.chainUpstream(ctx, member, member.tunneledResourceIdentifier)
 		}

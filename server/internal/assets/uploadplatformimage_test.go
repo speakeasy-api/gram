@@ -2,16 +2,19 @@ package assets_test
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"io"
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	testidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	admingen "github.com/speakeasy-api/gram/server/gen/admin_assets"
 	"github.com/speakeasy-api/gram/server/gen/assets"
+	orggen "github.com/speakeasy-api/gram/server/gen/organization_assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -195,10 +198,92 @@ func TestService_UploadPlatformImage_UnsupportedContentType(t *testing.T) {
 	_, err := ti.service.UploadPlatformImage(adminCtx, &admingen.UploadPlatformImageForm{
 		SessionToken:  nil,
 		ContentType:   "application/zip",
-		ContentLength: 100,
+		ContentLength: int64(len("fake zip content")),
 	}, io.NopCloser(strings.NewReader("fake zip content")))
 
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnsupportedMedia, oopsErr.Code)
+}
+
+func TestService_UploadPlatformImage_InvalidSVGAndLengths(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAssetsService(t)
+	svg := `<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0 L1 1"/></svg>`
+	for _, tc := range []struct {
+		name, body, mime string
+		size             int64
+	}{
+		{"empty", "", "image/svg+xml", 0},
+		{"short", svg, "image/svg+xml", int64(len(svg) - 1)},
+		{"long", svg, "image/svg+xml", int64(len(svg) + 1)},
+		{"oversize", strings.Repeat("x", 4*1024*1024+1), "image/svg+xml", 4*1024*1024 + 1},
+		{"forged", "not SVG", "image/svg+xml", 7},
+		{"hostile raster MIME", `<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>`, "image/png", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAssetsService(t)
+			if tc.size == 0 && tc.body != "" {
+				tc.size = int64(len(tc.body))
+			}
+			result, err := ti.service.UploadPlatformImage(withAdmin(t, ctx), &admingen.UploadPlatformImageForm{ContentType: tc.mime, ContentLength: tc.size}, io.NopCloser(strings.NewReader(tc.body)))
+			require.Error(t, err)
+			require.Nil(t, result)
+		})
+	}
+	_, err := ti.service.UploadImage(ctx, &assets.UploadImageForm{ContentType: "image/svg+xml", ContentLength: int64(len(svg))}, io.NopCloser(strings.NewReader(svg)))
+	var unsupported *oops.ShareableError
+	require.ErrorAs(t, err, &unsupported)
+	require.Equal(t, oops.CodeUnsupportedMedia, unsupported.Code)
+	_, err = ti.service.UploadOrganizationImage(ctx, &orggen.UploadOrganizationImageForm{ContentType: "image/svg+xml", ContentLength: int64(len(svg))}, io.NopCloser(strings.NewReader(svg)))
+	require.ErrorAs(t, err, &unsupported)
+	require.Equal(t, oops.CodeUnsupportedMedia, unsupported.Code)
+}
+
+func TestService_UploadPlatformImage_RejectsEncodedXMLBeforeStorage(t *testing.T) {
+	t.Parallel()
+	hostile := `<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>`
+	for _, tc := range []struct {
+		name, bom string
+		width     int
+		order     binary.AppendByteOrder
+	}{
+		{"utf8 BOM", "\xef\xbb\xbf", 1, binary.LittleEndian},
+		{"utf16 LE BOM", "\xff\xfe", 2, binary.LittleEndian},
+		{"utf16 BE BOM", "\xfe\xff", 2, binary.BigEndian},
+		{"utf32 LE BOM", "\xff\xfe\x00\x00", 4, binary.LittleEndian},
+		{"utf32 BE BOM", "\x00\x00\xfe\xff", 4, binary.BigEndian},
+		{"utf16 LE signature", "", 2, binary.LittleEndian},
+		{"utf16 BE signature", "", 2, binary.BigEndian},
+		{"utf32 LE signature", "", 4, binary.LittleEndian},
+		{"utf32 BE signature", "", 4, binary.BigEndian},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAssetsService(t)
+			for _, leading := range []string{"", " \t\r\n"} {
+				data := []byte(tc.bom)
+				for _, c := range []byte(leading + hostile) {
+					switch tc.width {
+					case 1:
+						data = append(data, c)
+					case 2:
+						data = tc.order.AppendUint16(data, uint16(c))
+					case 4:
+						data = tc.order.AppendUint32(data, uint32(c))
+					}
+				}
+				body := string(data)
+				result, err := ti.service.UploadPlatformImage(withAdmin(t, ctx), &admingen.UploadPlatformImageForm{ContentType: "image/png", ContentLength: int64(len(body))}, io.NopCloser(strings.NewReader(body)))
+				require.Error(t, err)
+				require.Nil(t, result)
+				var unsupported *oops.ShareableError
+				require.ErrorAs(t, err, &unsupported)
+				require.Equal(t, oops.CodeUnsupportedMedia, unsupported.Code)
+				_, err = ti.repo.GetPlatformAssetBySHA256(ctx, mustSHA256(body))
+				require.ErrorIs(t, err, pgx.ErrNoRows, "encoded XML must not reach storage")
+			}
+		})
+	}
 }

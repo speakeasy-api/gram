@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import {
@@ -12,6 +12,16 @@ import type { InventoryServer } from "./useServerInventory";
 const now = Date.parse("2026-10-23T12:00:00Z");
 const later = new Date(now + 86_400_000 * 7);
 const earlier = new Date(now - 60_000);
+
+// Expiry checks read the clock, so pin it to the fixtures' day; otherwise
+// `later` falls into the past a week after these dates were written.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(now);
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function client(id: string, credentialOwner = "subject") {
   return { id, credentialOwner } as RemoteSessionClient;

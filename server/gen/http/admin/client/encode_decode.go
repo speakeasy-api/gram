@@ -12192,7 +12192,7 @@ func DecodeUploadPlatformImageResponse(decoder func(*http.Response) goahttp.Deco
 			if err != nil {
 				return nil, goahttp.ErrValidationError("admin", "uploadPlatformImage", err)
 			}
-			res := NewUploadPlatformImageUploadImageResultOK(&body)
+			res := NewUploadPlatformImageAdminUploadImageResultOK(&body)
 			return res, nil
 		case http.StatusServiceUnavailable:
 			var (
@@ -12441,6 +12441,8 @@ func DecodeServeImageResponse(decoder func(*http.Response) goahttp.Decoder, rest
 				lastModified              string
 				accessControlAllowOrigin  *string
 				crossOriginResourcePolicy string
+				contentSecurityPolicy     *string
+				xContentTypeOptions       *string
 				err                       error
 			)
 			contentTypeRaw := resp.Header.Get("Content-Type")
@@ -12473,10 +12475,18 @@ func DecodeServeImageResponse(decoder func(*http.Response) goahttp.Decoder, rest
 				err = goa.MergeErrors(err, goa.MissingFieldError("cross_origin_resource_policy", "header"))
 			}
 			crossOriginResourcePolicy = crossOriginResourcePolicyRaw
+			contentSecurityPolicyRaw := resp.Header.Get("Content-Security-Policy")
+			if contentSecurityPolicyRaw != "" {
+				contentSecurityPolicy = &contentSecurityPolicyRaw
+			}
+			xContentTypeOptionsRaw := resp.Header.Get("X-Content-Type-Options")
+			if xContentTypeOptionsRaw != "" {
+				xContentTypeOptions = &xContentTypeOptionsRaw
+			}
 			if err != nil {
 				return nil, goahttp.ErrValidationError("admin", "serveImage", err)
 			}
-			res := NewServeImageResultOK(contentType, contentLength, lastModified, accessControlAllowOrigin, crossOriginResourcePolicy)
+			res := NewServeImageResultOK(contentType, contentLength, lastModified, accessControlAllowOrigin, crossOriginResourcePolicy, contentSecurityPolicy, xContentTypeOptions)
 			return res, nil
 		case http.StatusServiceUnavailable:
 			var (
@@ -24739,6 +24749,237 @@ func DecodeDisableUpstreamAuthEnforcementResponse(decoder func(*http.Response) g
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("admin", "disableUpstreamAuthEnforcement", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildBackfillMcpAuthGrantsRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "backfillMcpAuthGrants"
+// endpoint
+func (c *Client) BuildBackfillMcpAuthGrantsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: BackfillMcpAuthGrantsAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "backfillMcpAuthGrants", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeBackfillMcpAuthGrantsRequest returns an encoder for requests sent to
+// the admin backfillMcpAuthGrants server.
+func EncodeBackfillMcpAuthGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.BackfillMcpAuthGrantsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "backfillMcpAuthGrants", "*admin.BackfillMcpAuthGrantsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		return nil
+	}
+}
+
+// DecodeBackfillMcpAuthGrantsResponse returns a decoder for responses returned
+// by the admin backfillMcpAuthGrants endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeBackfillMcpAuthGrantsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeBackfillMcpAuthGrantsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body BackfillMcpAuthGrantsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpAuthGrants", err)
+			}
+			err = ValidateBackfillMcpAuthGrantsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpAuthGrants", err)
+			}
+			res := NewBackfillMcpAuthGrantsAdminBackfillMCPAuthGrantsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body BackfillMcpAuthGrantsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpAuthGrants", err)
+			}
+			err = ValidateBackfillMcpAuthGrantsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpAuthGrants", err)
+			}
+			return nil, NewBackfillMcpAuthGrantsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body BackfillMcpAuthGrantsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpAuthGrants", err)
+			}
+			err = ValidateBackfillMcpAuthGrantsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpAuthGrants", err)
+			}
+			return nil, NewBackfillMcpAuthGrantsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body BackfillMcpAuthGrantsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpAuthGrants", err)
+			}
+			err = ValidateBackfillMcpAuthGrantsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpAuthGrants", err)
+			}
+			return nil, NewBackfillMcpAuthGrantsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body BackfillMcpAuthGrantsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpAuthGrants", err)
+			}
+			err = ValidateBackfillMcpAuthGrantsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpAuthGrants", err)
+			}
+			return nil, NewBackfillMcpAuthGrantsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body BackfillMcpAuthGrantsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpAuthGrants", err)
+			}
+			err = ValidateBackfillMcpAuthGrantsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpAuthGrants", err)
+			}
+			return nil, NewBackfillMcpAuthGrantsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body BackfillMcpAuthGrantsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpAuthGrants", err)
+			}
+			err = ValidateBackfillMcpAuthGrantsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpAuthGrants", err)
+			}
+			return nil, NewBackfillMcpAuthGrantsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body BackfillMcpAuthGrantsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpAuthGrants", err)
+			}
+			err = ValidateBackfillMcpAuthGrantsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpAuthGrants", err)
+			}
+			return nil, NewBackfillMcpAuthGrantsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body BackfillMcpAuthGrantsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "backfillMcpAuthGrants", err)
+				}
+				err = ValidateBackfillMcpAuthGrantsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "backfillMcpAuthGrants", err)
+				}
+				return nil, NewBackfillMcpAuthGrantsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body BackfillMcpAuthGrantsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "backfillMcpAuthGrants", err)
+				}
+				err = ValidateBackfillMcpAuthGrantsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "backfillMcpAuthGrants", err)
+				}
+				return nil, NewBackfillMcpAuthGrantsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "backfillMcpAuthGrants", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body BackfillMcpAuthGrantsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillMcpAuthGrants", err)
+			}
+			err = ValidateBackfillMcpAuthGrantsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillMcpAuthGrants", err)
+			}
+			return nil, NewBackfillMcpAuthGrantsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "backfillMcpAuthGrants", resp.StatusCode, string(body))
 		}
 	}
 }
