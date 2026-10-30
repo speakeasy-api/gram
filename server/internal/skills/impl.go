@@ -755,6 +755,11 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 	if err != nil {
 		return nil, err
 	}
+	if contentChanged && !createdSkill {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit create skill transaction").LogError(ctx, logger)
 	}
@@ -851,6 +856,11 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 	result, contentChanged, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, false, false, derivedFromVersionID)
 	if err != nil {
 		return nil, err
+	}
+	if contentChanged {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit add skill version transaction").LogError(ctx, logger)
@@ -949,6 +959,11 @@ func (s *Service) RestoreVersion(ctx context.Context, payload *gen.RestoreVersio
 			SkillSnapshotAfter:  buildSkillAuditSnapshot(skill, stateAfter.LatestVersionID, stateAfter.VersionCount),
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "log skill version restore").LogError(ctx, logger)
+		}
+	}
+	if restoring {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
 		}
 	}
 	if err := dbtx.Commit(ctx); err != nil {
@@ -1059,6 +1074,11 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 		SkillSnapshotAfter:  buildSkillAuditSnapshot(updated, state.LatestVersionID, state.VersionCount),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log skill update").LogError(ctx, logger)
+	}
+	if updated.Name != skill.Name {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit update skill transaction").LogError(ctx, logger)
@@ -1763,6 +1783,11 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "log skill distribution update").LogError(ctx, logger)
 		}
+		if target.channel == "plugin" {
+			if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+			}
+		}
 		if err := dbtx.Commit(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "commit skill distribution update transaction").LogError(ctx, logger)
 		}
@@ -1799,6 +1824,11 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		DistributionSnapshotAfter: buildSkillDistributionAuditSnapshot(distribution, resolvedVersionID),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log skill distribution create").LogError(ctx, logger)
+	}
+	if target.channel == "plugin" {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit distribute skill transaction").LogError(ctx, logger)
@@ -1884,6 +1914,11 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 		DistributionSnapshotAfter:  buildSkillDistributionAuditSnapshot(revoked, existing.ResolvedVersionID),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log skill undistribution").LogError(ctx, logger)
+	}
+	if target.channel == "plugin" {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit undistribute skill transaction").LogError(ctx, logger)
@@ -2277,6 +2312,11 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) erro
 		SkillSnapshotAfter:  afterSnapshot,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log skill archive").LogError(ctx, logger)
+	}
+	if revokedPluginDistribution {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit archive skill transaction").LogError(ctx, logger)

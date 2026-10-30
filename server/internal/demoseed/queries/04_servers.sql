@@ -160,8 +160,8 @@ WHERE p.organization_id = @org_id::text AND p.project_id = @project_id::uuid
 -- Engineer reaches GitHub through both its role plugin and this one. Other
 -- servers/roles keep their single-match and no-match examples.
 -- name: ServersInsertEngineeringEssentialsPlugin :one
-INSERT INTO plugins (organization_id, project_id, name, slug)
-VALUES (@org_id::text, @project_id::uuid, 'Engineering Essentials', 'engineering-essentials')
+INSERT INTO plugins (organization_id, project_id, name, slug, auto_sync_enabled)
+VALUES (@org_id::text, @project_id::uuid, 'Engineering Essentials', 'engineering-essentials', false)
 RETURNING id;
 
 -- name: ServersInsertEngineeringEssentialsAssignment :exec

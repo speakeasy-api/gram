@@ -289,10 +289,11 @@ func restoreLocalPluginRepositories(
 			}
 
 			if _, err := pluginPublisher.PublishProject(ctx, plugins.PublishProjectInput{
-				ProjectID:       candidate.ProjectID,
-				CreatedByUserID: "",
-				CommitMessage:   "Restore local plugin marketplace",
-				SkipIfUnchanged: false,
+				ProjectID:            candidate.ProjectID,
+				CreatedByUserID:      "",
+				CommitMessage:        "Restore local plugin marketplace",
+				SkipIfUnchanged:      false,
+				IncludePausedPlugins: false,
 			}); err != nil {
 				logger.WarnContext(ctx, "restore local plugin repository",
 					attr.SlogProjectID(candidate.ProjectID.String()),
@@ -1701,7 +1702,7 @@ func newStartCommand() *cli.Command {
 			// an enqueued run could only fail. They are declared as the interface
 			// types on purpose — a typed nil pointer here would read as non-nil
 			// through the interface and defeat the services' own nil guards.
-			var pluginsPublishSignaler plugins.PluginPublishSignaler
+			var pluginsPublishSignaler plugins.PluginSyncSignaler
 			var skillsPublishSignaler skills.PluginPublishSignaler
 			if pluginsGitHub != nil && temporalEnv != nil {
 				publishSignaler := &background.TemporalPluginPublisher{TemporalEnv: temporalEnv}
@@ -1792,10 +1793,7 @@ func newStartCommand() *cli.Command {
 			if temporalEnv != nil {
 				networkIngressClient.Client = temporalEnv.Client()
 			}
-			var ingressPublicationRequester networkingress.PublicationRequester
-			if publicationEmit {
-				ingressPublicationRequester = plugins.PublicationRequests{Enabled: true}
-			}
+			ingressPublicationRequester := plugins.PublicationRequests{Enabled: publicationEmit}
 			networkIngressService := networkingress.NewServiceWithPublication(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, networkingress.NewOutboxRequester(networkIngressQueue), ingressPublicationRequester, networkIngressClient)
 			networkingress.Attach(mux, networkIngressService, networkIngressEnabled)
 			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker, networkIngressAdmission).

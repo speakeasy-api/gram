@@ -51248,6 +51248,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
         "415":
           content:
             application/json:
@@ -92191,6 +92197,9 @@ components:
     CreatePluginForm:
       type: object
       properties:
+        auto_sync_enabled:
+          type: boolean
+          description: Whether changes to this plugin publish to the marketplace automatically. Defaults to true. When false, the plugin stays out of the marketplace until someone syncs it by hand.
         description:
           type: string
           description: Optional description.
@@ -106513,6 +106522,9 @@ components:
         auto_created:
           type: boolean
           description: Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.
+        auto_sync_enabled:
+          type: boolean
+          description: Whether changes to this plugin publish to the marketplace automatically. When false, they wait until someone syncs the marketplace by hand.
         created_at:
           type: string
           format: date-time
@@ -106553,6 +106565,7 @@ components:
         - name
         - slug
         - auto_created
+        - auto_sync_enabled
         - agent_plugins_v1_compatible
         - created_at
         - updated_at
@@ -106606,6 +106619,22 @@ components:
         - kind
         - display_name
         - principal_urn
+    PluginPublishStatus:
+      type: object
+      properties:
+        awaiting_manual_sync:
+          type: boolean
+          description: Whether the plugin's auto sync is off and it has changes, or has never been published, so only a manual sync publishes it.
+        slug:
+          type: string
+          description: The plugin's slug.
+        up_to_date:
+          type: boolean
+          description: 'Whether the plugin''s published package is current. With auto sync on: an automatic publish would push nothing new for it, its package and the marketplace manifests alike. With auto sync off: its package matches what it was last published with.'
+      required:
+        - slug
+        - up_to_date
+        - awaiting_manual_sync
     PluginServer:
       type: object
       properties:
@@ -107606,6 +107635,9 @@ components:
     PublishStatusResult:
       type: object
       properties:
+        automatic_sync_pending:
+          type: boolean
+          description: Whether an automatic publish would change the published marketplace. False while the only pending changes belong to plugins whose auto sync is off, which publish only on a manual sync. Absent when up_to_date is absent.
         claude_observability_plugin:
           type: string
           description: Slug of the generated Claude Code observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.
@@ -107634,6 +107666,11 @@ components:
         marketplace_url:
           type: string
           description: Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.
+        plugins:
+          type: array
+          items:
+            $ref: '#/components/schemas/PluginPublishStatus'
+          description: Each live plugin's own freshness. Absent when up_to_date is absent.
         repo_name:
           type: string
           description: GitHub repo name, if connected.
@@ -107645,7 +107682,7 @@ components:
           description: Full GitHub repository URL, if connected.
         up_to_date:
           type: boolean
-          description: Whether the project's current plugin state matches what was last published to GitHub. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).
+          description: Whether the project's current plugin state matches what was last published to GitHub, including changes of plugins whose auto sync is off that wait for a manual sync. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).
       required:
         - configured
         - connected
@@ -119756,6 +119793,9 @@ components:
     UpdatePluginForm:
       type: object
       properties:
+        auto_sync_enabled:
+          type: boolean
+          description: Whether changes to this plugin publish to the marketplace automatically. Omit to keep the current setting. Turning it off is refused while the plugin has changes that haven't been synced, and the slug can't change while it is off.
         description:
           type: string
           description: Updated description.

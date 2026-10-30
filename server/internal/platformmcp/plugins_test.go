@@ -27,15 +27,16 @@ func TestListPluginsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	output := ListPluginsOutput{
 		ProjectID: "00000000-0000-0000-0000-000000000001",
 		Plugins: []Plugin{{
-			ID:          "00000000-0000-0000-0000-0000000000a1",
-			Name:        "Marketing",
-			Slug:        "marketing",
-			Description: "Tools the marketing team installs",
-			IsDefault:   false,
-			ServerCount: 3,
-			SkillCount:  1,
-			Assignments: &PluginAssignmentSummary{AllMembers: false, Roles: 2, Users: 4},
-			Publication: PluginPublicationPublished,
+			ID:              "00000000-0000-0000-0000-0000000000a1",
+			Name:            "Marketing",
+			Slug:            "marketing",
+			Description:     "Tools the marketing team installs",
+			IsDefault:       false,
+			ServerCount:     3,
+			SkillCount:      1,
+			Assignments:     &PluginAssignmentSummary{AllMembers: false, Roles: 2, Users: 4},
+			Publication:     PluginPublicationPublished,
+			AutoSyncEnabled: new(false),
 		}},
 		NextCursor: "opaque",
 	}
@@ -45,7 +46,7 @@ func TestListPluginsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		"plugins", "id", "name", "slug", "description", "is_default", "auto_created",
 		"server_count", "skill_count",
 		"assignments", "all_members", "roles", "users",
-		"publication",
+		"publication", "auto_sync_enabled",
 		"next_cursor",
 	}, decodeKeys(t, output))
 }
@@ -136,6 +137,7 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 			SkillCount:            1,
 			Assignments:           &PluginAssignmentSummary{AllMembers: true},
 			Publication:           PluginPublicationUnpublished,
+			AutoSyncEnabled:       new(true),
 			DistributionAdmission: &DistributionAdmission{State: DistributionAdmissionCovered, MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-04T12:00:00Z", Complete: true},
 		},
 		Servers: []PluginServer{{
@@ -159,6 +161,9 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		AssignmentsTruncated:      &assignmentsTruncated,
 		ReferencesExpireAt:        "2026-09-04T12:10:00Z",
 		Truncated:                 false,
+		PublicationEvidence: &PluginPublicationEvidence{
+			Fresh: new(false), Packages: []PluginPublicationPackage{{ServerName: "Billing", MCPURL: "https://mcp.example.test/billing"}}, AwaitingManualSync: true,
+		},
 	}
 
 	require.ElementsMatch(t, []string{
@@ -166,13 +171,14 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		"plugin", "id", "name", "slug", "is_default", "auto_created",
 		"server_count", "skill_count",
 		"assignments", "all_members", "roles", "users",
-		"publication", "distribution_admission", "state", "missing_audience_counts", "everyone", "roles", "groups", "attributes", "users", "checked_at", "complete",
+		"publication", "auto_sync_enabled", "distribution_admission", "state", "missing_audience_counts", "everyone", "roles", "groups", "attributes", "users", "checked_at", "complete",
 		"servers", "display_name", "backend", "mcp_slug", "policy", "enabled",
 		"skills", "name", "follows_latest",
 		"assignment_version",
 		"assignments", "kind", "display_name", "reference",
 		"assignment_details_complete", "assignments_truncated", "references_expire_at",
 		"truncated",
+		"publication_evidence", "not_configured", "unavailable", "fresh", "packages", "server_name", "mcp_url", "awaiting_manual_sync",
 	}, decodeKeys(t, output))
 }
 

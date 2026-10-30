@@ -3041,6 +3041,7 @@ SELECT
     p.slug,
     p.description,
     p.auto_created,
+    p.auto_sync_enabled,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -3353,6 +3354,7 @@ SELECT
     p.slug,
     p.description,
     p.auto_created,
+    p.auto_sync_enabled,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (

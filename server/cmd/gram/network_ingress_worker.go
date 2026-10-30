@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
-	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
@@ -197,10 +196,7 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			if k8sClient.Clientset == nil || k8sClient.DynamicClient == nil {
 				return errors.New("private ingress reconciler requires in-cluster Kubernetes clients")
 			}
-			var publicationRequester networkingress.PublicationRequester
-			if c.Bool(pluginPublicationEmitFlagName) {
-				publicationRequester = plugins.PublicationRequests{Enabled: true}
-			}
+			publicationRequester := plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)}
 			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, config, publicationRequester)
 			if err != nil {
 				return err

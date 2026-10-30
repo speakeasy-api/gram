@@ -530,7 +530,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "update automatic plugin distribution").LogError(ctx, logger)
 		}
-		carried, err := toolsetCarriedByPlugin(ctx, dbtx, authCtx, updatedToolset.ID)
+		carried, err := s.toolsetCarriedByPlugin(ctx, dbtx, authCtx, updatedToolset.ID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "check toolset plugin membership").LogError(ctx, logger)
 		}
@@ -638,7 +638,7 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	}
 	carried := false
 	if hosting.Enabled {
-		carried, err = toolsetCarriedByPlugin(ctx, dbtx, authCtx, toDelete.ID)
+		carried, err = s.toolsetCarriedByPlugin(ctx, dbtx, authCtx, toDelete.ID)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "check toolset plugin membership").LogError(ctx, logger)
 		}
