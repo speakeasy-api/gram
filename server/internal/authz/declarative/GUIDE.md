@@ -321,7 +321,7 @@ role:D  mcp:connect  {resource_kind: mcp, resource_id: A, tool: tool_a}
 | connect A for `tool_a` | `tool: tool_a` | allowed |
 | connect A for `tool_b` | `tool: tool_b` | denied |
 
-This is the same mechanism as scenario 4, and has the same limit: the connection check is wired, and the tool check isn't. The row anchors at the server, so it's a first-class shape with no legacy label.
+(Server A is `S1` in the test.) This is the same mechanism as scenario 4, and has the same limit: the connection check is wired, and the tool check isn't. The row anchors at the server, so it's a first-class shape with no legacy label.
 
 ### Not settled by this step
 
