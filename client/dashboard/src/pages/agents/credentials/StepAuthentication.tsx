@@ -39,14 +39,16 @@ export function StepAuthentication({
   const [openRows, setOpenRows] = useState<string[] | null>(null);
   // Editing shows the agent's assigned connection, unless it no longer works
   // and the editor has a usable one: saving assigns that in its place,
-  // exactly as creating does.
+  // exactly as creating does. Until the editor's own connection is known,
+  // its checking or error state stands rather than a premature verdict.
   const displayedConnections = new Map(connections.byServer);
   for (const [serverId, assigned] of connections.assignedByServer ?? []) {
-    const replacement =
+    const own = connections.byServer.get(serverId)?.status;
+    const keepOwn =
       assigned.status !== "ready" &&
       assigned.status !== "not-required" &&
-      connections.byServer.get(serverId)?.status === "ready";
-    if (!replacement) displayedConnections.set(serverId, assigned);
+      (own === "ready" || own === "checking" || own === "error");
+    if (!keepOwn) displayedConnections.set(serverId, assigned);
   }
   const missing = servers.filter(
     (server) =>

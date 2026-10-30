@@ -62,6 +62,26 @@ describe("authentication assignment warnings", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getAllByText("Your connection").length).toBeGreaterThan(0);
   });
+  it("waits for the editor's own connection before judging an ended assignment", () => {
+    render(
+      <StepAuthentication
+        servers={[server]}
+        allServers
+        onRemove={vi.fn<(id: string) => void>()}
+        connections={{
+          byServer: new Map([[server.id, { status: "checking" }]]),
+          assignedByServer: new Map([
+            [server.id, { status: "ended", sessions: [expired] }],
+          ]),
+          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        }}
+      />,
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getAllByText("Checking connection…").length).toBeGreaterThan(
+      0,
+    );
+  });
   it("keeps a valid delegated assignment clear of candidate warnings", () => {
     render(
       <StepAuthentication
