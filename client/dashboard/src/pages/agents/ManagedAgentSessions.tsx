@@ -75,22 +75,34 @@ export function ManagedAgentSessions({
         })),
     [keys.data],
   );
-  const rows = [...keyRows, ...sessions.sessions];
+  // Memoized: the table's expiry timer re-subscribes whenever its rows change.
+  const allSessions = sessions.sessions;
+  const rows = useMemo(() => {
+    const merged = [...keyRows, ...allSessions];
+    return limit === undefined ? merged : merged.slice(0, limit);
+  }, [keyRows, allSessions, limit]);
+  // Keys and sessions are read apart, so rows from either one are enough to
+  // show. Loading and failure only take over the table when there is nothing
+  // to show, and then a failure in either read is reported, not mistaken for
+  // "no connections".
+  const sessionsFailed = sessions.isError && !sessions.isFetchNextPageError;
+  const isLoading = rows.length === 0 && (sessions.isLoading || keys.isLoading);
+  const isError =
+    rows.length === 0 && !isLoading && (sessionsFailed || keys.isError);
 
   return (
     <AgentSessionsSection
       key={`${organization.id}-${agent.id}`}
       variant={variant}
-      sessions={limit === undefined ? rows : rows.slice(0, limit)}
-      // Keys and sessions are read apart, so either one is enough to show:
-      // a refused key list must not hide the sessions, or the other way round.
-      isLoading={sessions.isLoading || (keys.isLoading && rows.length === 0)}
-      isError={
-        sessions.isError && !sessions.isFetchNextPageError && rows.length === 0
-      }
+      sessions={rows}
+      isLoading={isLoading}
+      isError={isError}
       canRead={canManage}
       canRevoke={canManage}
-      onRetry={sessions.refetch}
+      onRetry={() => {
+        sessions.refetch();
+        void keys.refetch();
+      }}
       credentialsHref={credentialsHref}
       authorizerName={(userId) =>
         members.data?.members.find((member) => member.id === userId)?.name

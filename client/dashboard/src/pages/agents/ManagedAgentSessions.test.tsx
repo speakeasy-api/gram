@@ -16,12 +16,27 @@ const mocks = vi.hoisted(() => ({
   listSessions: vi.fn(),
   revokeSession: vi.fn(),
   keys: [] as Array<Record<string, unknown>>,
+  keysFailed: false,
+  refetchKeys: vi.fn(),
+  useListAPIKeys: vi.fn(),
 }));
+// Records its arguments and honors `enabled`, so the suite can tell an
+// unauthorized or unscoped key read from a real one.
 vi.mock("@gram/client/react-query/listAPIKeys", () => ({
-  useListAPIKeys: () => ({
-    data: { keys: mocks.keys },
-    isLoading: false,
-  }),
+  useListAPIKeys: (
+    request: { agentId?: string },
+    security: unknown,
+    options: { enabled?: boolean },
+  ) => {
+    mocks.useListAPIKeys(request, security, options);
+    const enabled = options.enabled !== false;
+    return {
+      data: enabled && !mocks.keysFailed ? { keys: mocks.keys } : undefined,
+      isLoading: false,
+      isError: enabled && mocks.keysFailed,
+      refetch: mocks.refetchKeys,
+    };
+  },
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: mocks.organizationId }),
@@ -65,6 +80,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.organizationId = "org_example";
   mocks.keys = [];
+  mocks.keysFailed = false;
   mocks.listSessions.mockResolvedValue({ result: { items: [session] } });
   mocks.revokeSession.mockResolvedValue(undefined);
 });
@@ -104,7 +120,36 @@ describe("Agent-scoped session integration", () => {
       permissions: { ...agent.permissions, authorize: false },
     });
     expect(mocks.listSessions).not.toHaveBeenCalled();
+    expect(mocks.useListAPIKeys).toHaveBeenCalledWith(
+      { agentId: "agent_example" },
+      expect.anything(),
+      expect.objectContaining({ enabled: false }),
+    );
     expect(screen.getByText(/do not have permission to view/)).toBeTruthy();
+  });
+  it("reads only this agent's keys, once it may", async () => {
+    setup();
+    await screen.findByText("Example client");
+    expect(mocks.useListAPIKeys).toHaveBeenCalledWith(
+      { agentId: "agent_example" },
+      expect.anything(),
+      expect.objectContaining({ enabled: true }),
+    );
+  });
+  it("reports a failed key list instead of an empty state, and retries both reads", async () => {
+    mocks.keysFailed = true;
+    mocks.listSessions.mockResolvedValue({ result: { items: [] } });
+    setup();
+    expect(
+      await screen.findByText("Unable to load agent sessions."),
+    ).toBeTruthy();
+    expect(screen.queryByText("No sessions yet")).toBeNull();
+    const before = mocks.listSessions.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(mocks.refetchKeys).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(mocks.listSessions.mock.calls.length).toBeGreaterThan(before),
+    );
   });
   it("fetches only the selected agent's sessions with server-provided authorize permission", async () => {
     setup();
