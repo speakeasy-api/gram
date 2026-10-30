@@ -344,11 +344,11 @@ func TestPersonBackedTurnsUseTheirPersonsOwnConnection(t *testing.T) {
 	workloadSubject := urn.NewWorkloadSubject(workloadIssuer, workloadExternal)
 	require.Equal(t, workloadSubject, mcp.ConnectionSubject(mint(workload, ""), workloadSubject), "a turn acting for nobody resolves no person's connection")
 
-	// An agent API key names its validated authorizer as the owner of the
-	// personal connection it uses; the agent's own mcp:auth then decides
+	// An agent API key is served by its exact attachment, else by its
+	// validated authorizer's own connection, under the agent's own mcp:auth
 	// (TestAgentKeyAuthClientUsesItsAuthorizersConnection).
 	agentKey := contextvalues.WithPrincipalAPIKeyAuthorization(ctx, ac, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), contextvalues.PrincipalCredential{AuthorizerUserID: owner, DelegatedGrants: []byte("[]"), DelegatedGrantsVersion: 1, DerivesPolicyAtAdmission: false})
-	require.Equal(t, urn.NewUserSubject(owner), mcp.ConnectionSubject(agentKey, agentSubject), "an agent key names its authorizer as the connection owner")
+	require.Equal(t, agentSubject, mcp.ConnectionSubject(agentKey, agentSubject), "an agent key keeps its subject; its attachment, else its authorizer, owns the connection")
 	agentSession := contextvalues.WithPrincipalCredentialAuthorization(ctx, ac, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), contextvalues.PrincipalCredential{AuthorizerUserID: owner, DelegatedGrants: []byte("[]"), DelegatedGrantsVersion: 1, DerivesPolicyAtAdmission: false})
 	require.Equal(t, agentSubject, mcp.ConnectionSubject(agentSession, agentSubject), "an agent session keeps its exact attachment")
 }

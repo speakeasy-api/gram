@@ -129,6 +129,11 @@ type authClientResolution struct {
 	// permit was decided for. Its token must come from that row, so a binding
 	// that moves to another user's connection after the check serves nothing.
 	attachedSession uuid.UUID
+
+	// authorizerOwner is the validated authorizer whose own connection an
+	// unattached agent key's permit was decided for; its tokens come from
+	// that user's connection.
+	authorizerOwner string
 }
 
 // headersOnly reports a resolved client whose material is its headers alone,
@@ -232,7 +237,7 @@ func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitR
 // gapResolution is a choice that cannot be used, for reason.
 func gapResolution(reason string) authClientResolution {
 	none := upstreamChoice{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
-	return authClientResolution{outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil, noAuthAllowed: false, attachedSession: uuid.Nil}
+	return authClientResolution{outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil, noAuthAllowed: false, attachedSession: uuid.Nil, authorizerOwner: ""}
 }
 
 // decideAuthClient resolves a recorded choice without side effects.
@@ -472,6 +477,9 @@ func (s *Service) checkAuthClientPermission(ctx context.Context, permit authClie
 		}
 		permit.ConnectionOwner = connection.owner
 		res.attachedSession = connection.attachedSession
+		if connection.authorizer {
+			res.authorizerOwner = connection.owner
+		}
 		permitted, err := permitter.Permitted(ctx, permit)
 		if err != nil {
 			return res, fmt.Errorf("check auth client permission: %w", err)

@@ -209,8 +209,7 @@ func TestResolveAuthClientAccessTokens_PrincipalCredentialServesTheAuthorizersCo
 }
 
 // A principal-backed agent key that the typed auth client check let use its
-// authorizer's connection reads exactly that user's consent, directly and
-// through a gateway member alike, and never another user's.
+// authorizer's connection reads exactly that user's consent.
 func TestResolveAuthClientAccessTokens_PrincipalAPIKeyServesTheAuthorizersConsent(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAuthClientTokenFixture(t, "ac-agent-key")
@@ -230,7 +229,7 @@ func TestResolveAuthClientAccessTokens_PrincipalAPIKeyServesTheAuthorizersConsen
 	require.False(t, reconnect)
 
 	_, err = f.mgr.ResolveAuthClientAccessTokens(keyCtx, f.request(urn.NewAgentSubject(uuid.MustParse(agent.ID)), f.clientID))
-	require.Error(t, err, "the agent's own subject keeps the attachment path, which has none")
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "the agent's own subject keeps the attachment path, which has none")
 }
 
 func TestResolveAuthClientAccessTokens_GlobalRegistrationStaysInItsOrganization(t *testing.T) {

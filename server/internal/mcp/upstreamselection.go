@@ -105,8 +105,7 @@ func (u *upstreamSelector) credentialKindOrDefault() string {
 // resolves that user's own connection, never its agent's or the agent
 // owner's; admission binds the same user as the represented user, so the
 // auth client check matches the connection's owner against them. Every other
-// caller resolves its own; an agent session reaches a personal connection
-// only through the exact connection attached to the agent.
+// caller resolves its own.
 func connectionSubject(ctx context.Context, subject urn.SessionSubject) urn.SessionSubject {
 	if authenticated, ok := principalcredential.FromContext(ctx); ok {
 		if authenticated.Credential.AuthorizerUserID == "" {
@@ -114,15 +113,9 @@ func connectionSubject(ctx context.Context, subject urn.SessionSubject) urn.Sess
 		}
 		return urn.NewUserSubject(authenticated.Credential.AuthorizerUserID)
 	}
-	// A principal-backed API key names its validated authorizer as the owner
-	// of the personal connection it uses. The mandatory mcp:auth check still
-	// decides with the agent's own grants and ceilings, never the
-	// authorizer's permissions, against that owner.
-	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
-		if credential, ok := contextvalues.PrincipalCredentialAuthorization(ctx); ok && credential.AuthorizerUserID != "" {
-			return urn.NewUserSubject(credential.AuthorizerUserID)
-		}
-	}
+	// An agent API key keeps its agent subject: its exact attachment serves
+	// first, and only without one does its authorizer's own connection
+	// (authClientConnection, tokenSubject).
 	return subject
 }
 
@@ -416,7 +409,7 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 			ProjectID:           endpoint.ProjectID,
 			OrganizationID:      endpoint.OrganizationID,
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
-			Subject:             connectionSubject(ctx, authentication.subject),
+			Subject:             tokenSubject(ctx, authentication.subject, authentication.authClient),
 			RegistrationID:      authentication.chosenClient.UUID,
 			SkipUnusable:        skipUnusable,
 		})
@@ -543,7 +536,7 @@ func (s *Service) resolveChosenMemberTokens(ctx context.Context, endpoint *Resol
 			ProjectID:           member.projectID,
 			OrganizationID:      endpoint.OrganizationID,
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
-			Subject:             connectionSubject(ctx, subject),
+			Subject:             tokenSubject(ctx, subject, member.authClient),
 			RegistrationID:      member.chosenClientID.UUID,
 			SkipUnusable:        true,
 		})

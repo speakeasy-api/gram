@@ -513,12 +513,14 @@ func TestAgentKeyAuthClientUsesItsAuthorizersConnection(t *testing.T) {
 		authorizer []authz.Grant
 		block      bool
 		outcome    authClientOutcome
+		attached   bool
 	}{
-		{"the agent's mcp:auth serves its authorizer's connection", []authz.Grant{personal}, []authz.Grant{personal}, false, authClientResolved},
-		{"without the agent's mcp:auth it refuses", connectOnly, []authz.Grant{personal}, false, authClientNoAccess},
-		{"a grant for another owner refuses", []authz.Grant{forOwner("user_other")}, []authz.Grant{personal}, false, authClientNoAccess},
-		{"the authorizer's own policy must allow", []authz.Grant{personal}, connectOnly, false, authClientNoAccess},
-		{"an owner block refuses", []authz.Grant{personal}, []authz.Grant{personal}, true, authClientNoAccess},
+		{"the agent's mcp:auth serves its authorizer's connection without an attachment", []authz.Grant{personal}, []authz.Grant{personal}, false, authClientResolved, false},
+		{"without the agent's mcp:auth it refuses", connectOnly, []authz.Grant{personal}, false, authClientNoAccess, false},
+		{"a grant for another owner refuses", []authz.Grant{forOwner("user_other")}, []authz.Grant{personal}, false, authClientNoAccess, false},
+		{"the authorizer's own policy must allow", []authz.Grant{personal}, connectOnly, false, authClientNoAccess, false},
+		{"an owner block refuses", []authz.Grant{personal}, []authz.Grant{personal}, true, authClientNoAccess, false},
+		{"an explicit attachment keeps its pinned connection", []authz.Grant{personal}, []authz.Grant{personal}, false, authClientResolved, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -544,17 +546,27 @@ func TestAgentKeyAuthClientUsesItsAuthorizersConnection(t *testing.T) {
 				},
 			})
 			f.service.authClientPermitter = mandatoryPermitter{engine: f.service.authz}
-			lookup := &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: uuid.New(), OwnerUserID: "user_lender"}, attached: true, err: nil, asked: nil}
+			session := uuid.New()
+			lookup := &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: session, OwnerUserID: "user_owner"}, attached: tc.attached, err: nil, asked: nil}
 			f.service.attachedConnections = lookup
 			agentID := uuid.New()
+			agent := urn.NewAgentSubject(agentID)
 
 			ctx := admittedAgentContext(t, f.orgID, agentID)
-			subject := connectionSubject(ctx, urn.NewAgentSubject(agentID))
-			require.Equal(t, urn.NewUserSubject("user_owner"), subject, "the key's authorizer owns the connection it uses")
-			res, err := f.service.resolveAuthClientForServing(ctx, selector, f.serverID, f.projectID, subject)
+			require.Equal(t, agent, connectionSubject(ctx, agent), "the key keeps its agent subject")
+			res, err := f.service.resolveAuthClientForServing(ctx, selector, f.serverID, f.projectID, agent)
 			require.NoError(t, err)
 			require.Equal(t, tc.outcome, res.outcome)
-			require.Empty(t, lookup.asked, "no attachment stands in for the authorizer's own connection")
+			require.Len(t, lookup.asked, 1, "an explicit attachment is looked up first")
+			if tc.attached {
+				require.Equal(t, session, res.attachedSession, "the attachment keeps binding its exact connection")
+				require.Empty(t, res.authorizerOwner)
+				require.Equal(t, agent, tokenSubject(ctx, agent, &res), "tokens come through the attachment")
+			} else {
+				require.Equal(t, uuid.Nil, res.attachedSession)
+				require.Equal(t, "user_owner", res.authorizerOwner, "without an attachment the authorizer owns the connection checked")
+				require.Equal(t, urn.NewUserSubject("user_owner"), tokenSubject(ctx, agent, &res), "tokens come from the authorizer's own connection")
+			}
 			want := "deny"
 			if tc.outcome == authClientResolved {
 				want = "allow"

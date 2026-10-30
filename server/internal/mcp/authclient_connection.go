@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -25,6 +26,9 @@ type authClientConnectionOwner struct {
 	// attachedSession is the exact remote session an attachment serves, set
 	// only for an attached agent.
 	attachedSession uuid.UUID
+	// authorizer marks an unattached principal-backed agent key served by its
+	// validated authorizer's own connection.
+	authorizer bool
 }
 
 // authClientConnection resolves the stored owner of the personal connection
@@ -43,7 +47,13 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 		return none, nil
 	}
 	if permit.Subject.Kind == urn.SessionSubjectKindUser {
-		return authClientConnectionOwner{owner: permit.Subject.ID, attachedSession: uuid.Nil}, nil
+		return authClientConnectionOwner{owner: permit.Subject.ID, attachedSession: uuid.Nil, authorizer: false}, nil
+	}
+	// An agent key with no attachment for this registration is served by its
+	// validated authorizer's own connection; the mcp:auth check names that
+	// user as the owner and still decides with the agent's own grants.
+	if authorizer, ok := agentKeyAuthorizer(ctx, permit.Subject); ok {
+		none = authClientConnectionOwner{owner: authorizer, attachedSession: uuid.Nil, authorizer: true}
 	}
 	lookup := s.attachedConnectionLookup()
 	if lookup == nil || !permit.RegistrationID.Valid || permit.Subject.IsZero() {
@@ -70,7 +80,36 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 		// the checked connection, so it is never an owner.
 		return none, errors.New("resolve attached connection owner: attachment names no connection")
 	}
-	return authClientConnectionOwner{owner: conn.OwnerUserID, attachedSession: conn.RemoteSessionID}, nil
+	return authClientConnectionOwner{owner: conn.OwnerUserID, attachedSession: conn.RemoteSessionID, authorizer: false}, nil
+}
+
+// agentKeyAuthorizer is the validated authorizer of a principal-backed agent
+// API key whose agent is subject. Agent sessions, signed principal
+// credentials, legacy keys and workloads have none.
+func agentKeyAuthorizer(ctx context.Context, subject urn.SessionSubject) (string, bool) {
+	mode, ok := contextvalues.APIKeyAuthorization(ctx)
+	if !ok || mode != contextvalues.APIKeyAuthorizationModePrincipal || subject.Kind != urn.SessionSubjectKindAgent {
+		return "", false
+	}
+	actor, ok := contextvalues.AuthenticatedActor(ctx)
+	if !ok || actor.Type != urn.PrincipalTypeAgent || actor.ID != subject.ID {
+		return "", false
+	}
+	credential, ok := contextvalues.PrincipalCredentialAuthorization(ctx)
+	if !ok || credential.AuthorizerUserID == "" {
+		return "", false
+	}
+	return credential.AuthorizerUserID, true
+}
+
+// tokenSubject is whose connection serves tokens for subject: the authorizer
+// an unattached agent key's permit was decided for, otherwise the connection
+// subject.
+func tokenSubject(ctx context.Context, subject urn.SessionSubject, res *authClientResolution) urn.SessionSubject {
+	if res != nil && res.authorizerOwner != "" {
+		return urn.NewUserSubject(res.authorizerOwner)
+	}
+	return connectionSubject(ctx, subject)
 }
 
 // upstreamTokenSource resolves a caller's upstream tokens for serving.
