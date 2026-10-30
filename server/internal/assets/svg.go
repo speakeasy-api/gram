@@ -425,7 +425,7 @@ func validSVGPath(s string, budget *int) bool {
 				return false
 			}
 			v, err := strconv.ParseFloat(n, 64)
-			if err != nil || math.IsInf(v, 0) || math.IsNaN(v) || (arc && i < 2 && v < 0) {
+			if err != nil || math.IsInf(v, 0) || math.IsNaN(v) {
 				return false
 			}
 			*budget--
