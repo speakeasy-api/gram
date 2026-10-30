@@ -388,6 +388,18 @@ func TestPlatformMCPChoosesAHeadlessCallersCredential(t *testing.T) {
 	require.ErrorAs(t, err, &mutationErr)
 	require.Equal(t, "invalid_request", mutationErr.Code)
 
+	noCaller := unconfigured
+	noCaller.UserSessionClientID = ""
+	_, err = service.ChooseHeadlessCallerCredential(ctx, principal, noCaller)
+	require.ErrorAs(t, err, &mutationErr, "a removal must name exactly one caller")
+	require.Equal(t, "invalid_request", mutationErr.Code)
+
+	twoCallers := unconfigured
+	twoCallers.WorkloadIssuerID, twoCallers.WorkloadSubject = uuid.NewString(), "job"
+	_, err = service.ChooseHeadlessCallerCredential(ctx, principal, twoCallers)
+	require.ErrorAs(t, err, &mutationErr, "a removal naming two callers is refused")
+	require.Equal(t, "invalid_request", mutationErr.Code)
+
 	remove := input
 	remove.AuthClientID, remove.Remove = "", true
 	got, err = service.ChooseHeadlessCallerCredential(ctx, principal, remove)
