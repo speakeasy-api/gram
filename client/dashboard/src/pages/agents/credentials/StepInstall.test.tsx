@@ -28,7 +28,9 @@ it("adds the gateway to OpenClaw by hand with the key from the environment", () 
     />,
   );
 
-  fireEvent.click(screen.getByRole("button", { name: "Copy OpenClaw" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Copy OpenClaw 2026.10.6 or later" }),
+  );
 
   const copied = writeText.mock.calls[0]?.[0] ?? "";
   // One plain command, named like the one-line setup's entry. The header is

@@ -300,7 +300,9 @@ export function StepInstall({
                     "  --transport streamable-http --no-probe \\",
                     `  --header 'Authorization=Bearer \${${KEY_ENV}}'`,
                   ].join("\n")}
-                  label="OpenClaw"
+                  // The oldest release verified to take --no-probe and
+                  // resolve the ${VAR} reference at connect time.
+                  label="OpenClaw 2026.10.6 or later"
                   language="shell"
                 />
                 <CodeBlock
