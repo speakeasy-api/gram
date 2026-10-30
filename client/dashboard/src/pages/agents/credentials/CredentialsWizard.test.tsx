@@ -3166,7 +3166,7 @@ describe("Connecting a GitHub repository", () => {
     );
     await screen.findByRole("heading", { name: "What the job gets" });
     expect(
-      screen.getByText(/No plugin in this project is assigned to Everyone/),
+      screen.getByText(/No plugin in this project is installed for Everyone/),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     const workflow = await screen.findByLabelText(

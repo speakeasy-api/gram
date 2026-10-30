@@ -78,7 +78,7 @@ export function PluginsStep({
         job&apos;s hook events.
       </p>
       <p className="text-muted-foreground">
-        Below are the plugins assigned to <strong>Everyone</strong> in this
+        Below are the plugins installed for <strong>Everyone</strong> in this
         project. The list is partial: the job also gets plugins assigned to
         roles {agent} holds, and those from other projects.
       </p>
@@ -135,6 +135,7 @@ function DeliveredPlugins({
   if (pending) {
     return (
       <div
+        role="status"
         className="border-border space-y-2 border px-3 py-2.5"
         aria-label="Reading this project's plugins"
       >
@@ -157,10 +158,11 @@ function DeliveredPlugins({
     return (
       <Alert variant="warning">
         <div className="text-sm">
-          No plugin in this project is assigned to Everyone, so unless {agent}{" "}
-          holds a role with plugins, the job gets no MCP servers. On the{" "}
-          {pluginsPage}, assign a plugin to <strong>Everyone</strong>, or to a
-          role and give the agent that role.
+          No plugin in this project is installed for Everyone, so unless {agent}{" "}
+          holds a role with plugins, the job gets no MCP servers. A plugin that
+          is only Available to Everyone is not installed on a job. On the{" "}
+          {pluginsPage}, assign a plugin to <strong>Everyone</strong> as
+          Required or On by default, or to a role and give the agent that role.
         </div>
       </Alert>
     );
