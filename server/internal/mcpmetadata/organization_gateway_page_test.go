@@ -72,10 +72,10 @@ func TestServeOrganizationGatewayPage_MemberSeesSetupGuidance(t *testing.T) {
 	require.Contains(t, body, "claude mcp add --transport http --scope user &#39;"+authCtx.OrganizationSlug+"&#39;")
 	require.Contains(t, body, "codex mcp login")
 	require.Contains(t, body, "cursor://anysphere.cursor-deeplink/mcp/install")
-	require.NotContains(t, body, "is not turned on")
+	require.NotContains(t, body, "isn't available")
 }
 
-func TestServeOrganizationGatewayPage_TurnedOffTellsMemberToAskAnAdmin(t *testing.T) {
+func TestServeOrganizationGatewayPage_UnavailableTellsMemberToAskAnAdmin(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPMetadataService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -85,7 +85,7 @@ func TestServeOrganizationGatewayPage_TurnedOffTellsMemberToAskAnAdmin(t *testin
 
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 	body := rr.Body.String()
-	require.Contains(t, body, "is not turned on")
+	require.Contains(t, body, "isn't available")
 	require.NotContains(t, body, "/mcp/gateway/"+authCtx.OrganizationSlug, "an unavailable gateway offers no URL")
 }
 

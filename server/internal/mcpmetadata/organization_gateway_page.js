@@ -2,6 +2,8 @@
 // never navigate.
 {
   const status = document.querySelector("[data-copy-status]");
+  // Every button announces through one status region, so one timer clears it.
+  let clearStatus;
   for (const button of document.querySelectorAll("[data-copy]")) {
     const copyIcon = button.querySelector("[data-copy-icon]");
     const copiedIcon = button.querySelector("[data-copied-icon]");
@@ -22,6 +24,9 @@
       reset = setTimeout(() => {
         copyIcon.hidden = false;
         copiedIcon.hidden = true;
+      }, 1000);
+      clearTimeout(clearStatus);
+      clearStatus = setTimeout(() => {
         status.textContent = "";
       }, 1000);
     });

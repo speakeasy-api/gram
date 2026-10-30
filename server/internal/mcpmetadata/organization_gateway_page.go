@@ -129,8 +129,10 @@ func (s *Service) ServeOrganizationGatewayPage(w http.ResponseWriter, r *http.Re
 		OrganizationName: organization.Name,
 		Available:        unavailable == orggateway.UnavailabilityNone,
 		URL:              "",
-		DashboardURL:     s.siteURL.String(),
-		Clients:          nil,
+		// Session cookies are host-only, so stay on the platform host the
+		// member arrived on.
+		DashboardURL: requestorigin.PlatformHostBaseURL(ctx, s.serverURL.String(), s.siteURL.String()),
+		Clients:      nil,
 	}
 	if data.Available {
 		base, err := url.Parse(requestorigin.BaseURL(ctx, s.serverURL.String()))
