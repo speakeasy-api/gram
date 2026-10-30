@@ -369,7 +369,8 @@ WHERE mcp_server_id = @mcp_server_id AND auth_client_id = @auth_client_id AND or
 UPDATE mcp_auth_clients SET enabled = FALSE WHERE id = @id AND organization_id = @organization_id;
 
 -- name: SetRequiresUpstreamAuthFixture :exec
-UPDATE mcp_servers SET requires_upstream_auth = @requires_upstream_auth WHERE id = @id;
+UPDATE mcp_servers SET requires_upstream_auth = @requires_upstream_auth
+WHERE id = @id AND project_id = @project_id;
 
 -- name: SeedTriggerBindingFixture :exec
 -- Binds a trigger to an assistant's existing agent binding.

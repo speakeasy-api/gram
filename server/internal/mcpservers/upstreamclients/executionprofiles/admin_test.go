@@ -192,7 +192,7 @@ func TestDescribeReportsANoAuthChoiceOnceTheServerNeedsAuthentication(t *testing
 	f.bind(ContextUserless)
 	_, err := f.setChoice(ContextUserless, server, ChoiceInput{NoAuth: true})
 	require.NoError(t, err)
-	require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(t.Context(), SetRequiresUpstreamAuthFixtureParams{ID: server, RequiresUpstreamAuth: pgtype.Bool{Bool: true, Valid: true}}))
+	require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(t.Context(), SetRequiresUpstreamAuthFixtureParams{ID: server, ProjectID: f.projectID, RequiresUpstreamAuth: pgtype.Bool{Bool: true, Valid: true}}))
 	f.authClient(server, typeStaticCredential, uuid.Nil)
 
 	view, err := Describe(t.Context(), f.pool, f.target(ContextUserless))
