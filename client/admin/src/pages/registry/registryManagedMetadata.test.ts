@@ -61,7 +61,24 @@ it("rejects ambiguous duplicate _meta objects so merging cannot hide managed slo
 });
 
 it("rejects a non-object _meta instead of replacing editable content", () => {
+  expect(() =>
+    mergeManagedMetadata(
+      '{"_meta":null}',
+      splitManagedMetadata(record).managed,
+    ),
+  ).toThrow("Use an object");
   expect(managedMetadataIssues('{"_meta":null}')[0]?.message).toContain(
     "Use an object",
   );
+});
+
+it.each([
+  '{"_meta":{},"_meta":{"com.speakeasy.ai/icons":{}}}',
+  '{"_meta":{"com.speakeasy.ai/icons":{},"com.speakeasy.ai/icons":null}}',
+  '{"_meta":{"com.speakeasy.ai/registry":{},"com.speakeasy.ai/registry":null}}',
+])("keeps ambiguous input repairable and blocks saving: %s", (input) => {
+  const split = splitManagedMetadata(input);
+  expect(split.text).toBe(input);
+  expect(split.managed).toBe("{}");
+  expect(() => mergeManagedMetadata(split.text, split.managed)).toThrow();
 });

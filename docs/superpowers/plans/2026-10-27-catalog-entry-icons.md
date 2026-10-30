@@ -100,21 +100,23 @@ encoder := xml.NewEncoder(&output)
 
 Read tokens until EOF. Validate each token against the closed policy below before passing it to `encoder.EncodeToken`; reject with nil output on any violation. Normalize namespace declarations before emission so output round-trips without duplicate `xmlns` attributes. Require exactly one completed root and flush the encoder only after successful EOF validation. Check encoded size before returning output. Closed policy:
 
-| Item                    | Accepted values                                                                                                                                                                |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Elements                | `svg` (root only), `g`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`, `polygon`, `title`, `desc`                                                                    |
-| Root namespace          | Exactly `http://www.w3.org/2000/svg`; emit one canonical root declaration                                                                                                      |
-| Geometry attributes     | Element-appropriate `d`, `points`, `x`, `y`, `x1`, `y1`, `x2`, `y2`, `cx`, `cy`, `r`, `rx`, `ry`, `width`, `height`, `viewBox`                                                 |
-| Presentation attributes | `fill`, `stroke`, `stroke-width`, `fill-rule`, `clip-rule`, `opacity`, `fill-opacity`, `stroke-opacity`, `stroke-linecap`, `stroke-linejoin`, `stroke-miterlimit`, `transform` |
-| Paint                   | `none`, `currentColor`, `black`, `white`, `transparent`, or hexadecimal 3/4/6/8-digit color; reject all URL/functions/variables                                                |
-| Numeric geometry        | Finite numbers; optional `px` only for lengths; positive root dimensions/radii where applicable; nonnegative sizes/stroke widths; opacity in [0,1]                             |
-| `viewBox`               | Four finite numbers; positive third/fourth values                                                                                                                              |
-| Paths/points            | SVG path command characters and finite numeric token syntax only; points are numeric pairs; no alphabetic values beyond path commands/exponents                                |
-| Transform               | Parse a list of `matrix`, `translate`, `scale`, `rotate`, `skewX`, `skewY`, with their SVG argument counts and finite numeric values; reject anything else                     |
-| Text content            | Only `title`/`desc` text and inter-element whitespace; encoder escapes text                                                                                                    |
-| Enumerated attributes   | Explicit SVG enums for linecap/linejoin/fill-rule/clip-rule; never arbitrary strings                                                                                           |
+| Item                    | Accepted values                                                                                                                                                                                                         |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Elements                | `svg` (root only), `g`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`, `polygon`, `title`, `desc`, plus the narrow `defs`/`clipPath` subset below                                                             |
+| Root namespace          | Exactly `http://www.w3.org/2000/svg`; emit one canonical root declaration                                                                                                                                               |
+| Geometry attributes     | Element-appropriate `d`, `points`, `x`, `y`, `x1`, `y1`, `x2`, `y2`, `cx`, `cy`, `r`, `rx`, `ry`, `width`, `height`, `viewBox`                                                                                          |
+| Presentation attributes | `fill`, `stroke`, `stroke-width`, `fill-rule`, `clip-rule`, `opacity`, `fill-opacity`, `stroke-opacity`, `stroke-linecap`, `stroke-linejoin`, `stroke-miterlimit`, `transform`, plus restricted local `clip-path` below |
+| Paint                   | `none`, `currentColor`, `black`, `white`, `transparent`, or hexadecimal 3/4/6/8-digit color; reject all URL/functions/variables                                                                                         |
+| Numeric geometry        | Finite numbers; optional `px` only for lengths; positive root dimensions/radii where applicable; nonnegative sizes/stroke widths; opacity in [0,1]                                                                      |
+| `viewBox`               | Four finite numbers; positive third/fourth values                                                                                                                                                                       |
+| Paths/points            | SVG path command characters and finite numeric token syntax only; points are numeric pairs; no alphabetic values beyond path commands/exponents                                                                         |
+| Transform               | Parse a list of `matrix`, `translate`, `scale`, `rotate`, `skewX`, `skewY`, with their SVG argument counts and finite numeric values; reject anything else                                                              |
+| Text content            | Only `title`/`desc` text and inter-element whitespace; encoder escapes text                                                                                                                                             |
+| Enumerated attributes   | Explicit SVG enums for linecap/linejoin/fill-rule/clip-rule; never arbitrary strings                                                                                                                                    |
 
-Reject `style`, `class`, `id`, `href`, any event attribute, namespaced attributes, `foreignObject`, `script`, `use`, `image`, `a`, animation, text/fonts, filters and gradients. No regex substitution of markup. Reject unsupported files with "Upload a static SVG using paths and basic shapes; styles, links, and embedded content are not supported."
+Local clipping only: `defs` is an attribute-free child of the root `svg`, containing only `clipPath`. Each `clipPath` requires a unique validated `id` as its only attribute and contains only direct static shapes (no nested groups or clipping). Only `g` and static shapes may use `clip-path="url(#id)"`; references must resolve to a declared clip path. External references, recursive clipping, and `clipPathUnits` are rejected.
+
+Reject `style`, `class`, `id` outside `clipPath`, `href`, any event attribute, namespaced attributes, `foreignObject`, `script`, `use`, `image`, `a`, animation, text/fonts, filters and gradients. No regex substitution of markup. Reject unsupported files with "Upload a static SVG using paths and basic shapes; styles, links, and embedded content are not supported."
 
 - [ ] Add malformed XML, foreign namespace tricks, duplicate attributes, entity/DOCTYPE, processing instruction, CSS URL, script/event, javascript/data URLs, embedded HTML, external references, oversized/deep/token-heavy input cases. Check no output on errors, stable output, valid namespace, and preservation of accepted shape attributes. Add fuzz test `FuzzSanitizeSVG` for parse/re-serialize idempotence and no panic.
 - [ ] Run the focused tests and `mise run test:server ./internal/assets -run '^$' -fuzz FuzzSanitizeSVG -fuzztime 10s`. Inspect valid flat-path assets in a browser during Task 6; do not claim visual fidelity for rejected features.
@@ -282,7 +284,7 @@ type PrepareSetRegistryIconsInput struct {
 func (s *Service) SetCatalogIconsTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, token string, icons CatalogIcons) (Entry, error)
 ```
 
-The `Service` above is `mcpregistry.Service`. The tool sets the full two-slot curated set, not arbitrary JSON; `{}` removes curated icons. Missing slots are removed, explicitly described in the schema/approval preview. Upload remains a direct staff write through the existing single-use mechanism; associating an asset requires the existing proposal approval and execution flow.
+The `Service` above is `mcpregistry.Service`. The tool sets the full two-slot curated set, not arbitrary JSON; `{}` removes curated icons. Missing slots are removed, explicitly described in the schema/approval preview. Upload remains a direct staff write through the existing single-use mechanism and bypasses browser approval. Accepted bytes are immediately publicly served and remain stored without an association, including when a draft is canceled, an icon is removed, or the response is rejected. Only association through `prepare_set_registry_icons` requires the existing proposal approval and execution flow. The UI discloses persistence; this work does not add transactional upload cleanup.
 
 - [ ] Write tool tests for unverified/nonstaff refusal, exact UUID target, missing revision/retry key, invalid/private asset, identical retries, stale revision at execution, approval required, and unrelated metadata preservation.
 - [ ] Run `mise run test:server ./internal/adminmcp -run 'Test.*(RegistryIcons|ImageUpload|RegistryEntry)' -count=1`; new tool assertions fail before registration.
@@ -382,3 +384,8 @@ Actual Admin browser checks passed against the fictional local catalog entry:
 - The local public proxy returned HTTP 200, `image/svg+xml`, restrictive SVG CSP including `sandbox`, and `X-Content-Type-Options: nosniff`.
 
 Browser CLI commands subsequently stalled; direct SVG document navigation was not confirmed. Deployed/proxied production behavior remains untested. Local services were left running for inspection. No application source changes were needed for this follow-up.
+
+### Admin review follow-up
+
+- Registry storage casts records to PostgreSQL JSONB (`server/internal/mcpregistry/queries.sql`), so persisted records cannot retain duplicate object keys. The UI splitter nevertheless leaves ambiguous duplicate `_meta` or managed namespace inputs untouched and repairable; existing diagnostics block Save rather than throwing during render or silently choosing a value.
+- Admin MCP parity: upload remains the existing explicitly direct/public/persistent operation; icon association retains proposal approval. This follow-up changes UI disclosure, preview transport checks and defensive parsing only, so no tool contract change is needed.

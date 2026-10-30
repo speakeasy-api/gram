@@ -103,6 +103,10 @@ export function RegistryIcons({
       aria-label="Speakeasy-curated icons"
       className="space-y-3 rounded-md border p-3"
     >
+      <p className="text-muted-foreground text-xs">
+        Uploads are public immediately and remain stored even if you cancel,
+        remove the icon, or the upload response is rejected.
+      </p>
       <div>
         <h3 className="text-sm font-medium">Icons</h3>
         <p className="text-muted-foreground text-xs">
@@ -240,7 +244,9 @@ export function RegistryIcons({
 function safePreview(src: string): string | undefined {
   try {
     const url = new URL(src);
-    return (url.protocol === "https:" || url.protocol === "http:") &&
+    return (url.protocol === "https:" ||
+      (url.protocol === "http:" &&
+        ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) &&
       !url.username &&
       !url.password &&
       url.pathname === "/rpc/assets.serveImage" &&

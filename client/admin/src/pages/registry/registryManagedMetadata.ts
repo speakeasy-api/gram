@@ -63,6 +63,23 @@ export function splitManagedMetadata(text: string): {
   text: string;
   managed: string;
 } {
+  // Stored records are canonical JSONB. If ambiguous JSON ever reaches this
+  // boundary, leave it repairable: existing validation blocks Save, not render.
+  const metas =
+    parseTree(text)?.children?.filter(
+      (property) => property.children?.[0]?.value === "_meta",
+    ) ?? [];
+  if (metas.length > 1) return { text, managed: "{}" };
+  const keys =
+    metas[0]?.children?.[1]?.children?.map(
+      (property) => property.children?.[0]?.value,
+    ) ?? [];
+  if (
+    namespaces.some(
+      (key) => keys.filter((candidate) => candidate === key).length > 1,
+    )
+  )
+    return { text, managed: "{}" };
   const managed = copyManagedMetadata("{}", text);
   for (const key of namespaces) {
     const root = parseTree(text);

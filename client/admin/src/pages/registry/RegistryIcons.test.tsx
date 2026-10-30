@@ -155,12 +155,16 @@ it("disables writes for invalid JSON or parent busy state", () => {
       .disabled,
   ).toBe(true);
 });
-it("never previews raw SVG data or blob URLs from JSON", () => {
+it.each([
+  'data:image/svg+xml,<svg onload="alert(1)"/>',
+  "blob:http://localhost/untrusted",
+  "http://public.example.test/rpc/assets.serveImage?id=insecure",
+])("never previews unsafe URL %s from JSON", (src) => {
   render(
     <Harness
       initial={setCatalogIcon("{}", "default", {
         ...primary,
-        src: 'data:image/svg+xml,<svg onload="alert(1)"/>',
+        src,
       })}
     />,
   );
@@ -202,3 +206,50 @@ it("opens hidden file pickers from the styled upload and replace buttons", () =>
     click.mockRestore();
   }
 });
+
+it.each([
+  ["logo.png", "image/png"],
+  ["logo.svg", "image/png"],
+])("rejects non-SVG file %s (%s) before upload", (name, type) => {
+  render(<Harness />);
+  fireEvent.change(screen.getByLabelText("Replace primary logo file"), {
+    target: { files: [new File(["bytes"], name, { type })] },
+  });
+  expect(screen.getByRole("alert").textContent).toBe("Choose an SVG file.");
+  expect(upload).not.toHaveBeenCalled();
+  expect((screen.getByLabelText("draft") as HTMLTextAreaElement).value).toBe(
+    draft,
+  );
+});
+it("rejects non-SVG upload responses without changing the draft", async () => {
+  upload.mockResolvedValue({
+    url: primary.src,
+    asset: { id: "primary", contentType: "image/png" },
+  });
+  render(<Harness />);
+  select("Replace primary logo");
+  await screen.findByText("The uploaded asset must be an SVG.");
+  expect((screen.getByLabelText("draft") as HTMLTextAreaElement).value).toBe(
+    draft,
+  );
+});
+it("discloses persistent public uploads before choosing a file", () => {
+  render(<Harness />);
+  expect(
+    screen.getByText(/Uploads are public immediately/).textContent,
+  ).toContain("cancel");
+});
+it.each(["localhost", "127.0.0.1", "[::1]"])(
+  "allows loopback HTTP previews on %s",
+  (host) => {
+    render(
+      <Harness
+        initial={setCatalogIcon("{}", "default", {
+          ...primary,
+          src: `http://${host}/rpc/assets.serveImage?id=local`,
+        })}
+      />,
+    );
+    expect(screen.getByAltText("Light preview")).toBeTruthy();
+  },
+);
