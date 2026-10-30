@@ -238,6 +238,9 @@ it("discloses persistent public uploads before choosing a file", () => {
   expect(
     screen.getByText(/Uploads are public immediately/).textContent,
   ).toContain("cancel");
+  expect(
+    screen.getByText(/Uploads are public immediately/).textContent,
+  ).toContain("remain stored");
 });
 it.each(["localhost", "127.0.0.1", "[::1]"])(
   "allows loopback HTTP previews on %s",
