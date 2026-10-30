@@ -16522,12 +16522,15 @@ CREATE TABLE IF NOT EXISTS memory_memos (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
   CONSTRAINT memory_memos_pkey PRIMARY KEY (id),
-  -- Composite keys pin every reference to the memo's own tenant: the project
-  -- to its organization, the source chat to the memo's project and the agent
-  -- author to its organization.
+  -- The composite key pins the project to the memo's organization. The chat
+  -- and agent references are single-column so a hard delete can clear them:
+  -- on a composite key ON DELETE SET NULL would also null project_id or
+  -- organization_id (NOT NULL), and Atlas does not model Postgres 15's
+  -- `SET NULL (column list)` form. Writers resolve chat_id and
+  -- author_agent_id within the memo's project and organization.
   CONSTRAINT memory_memos_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT memory_memos_chat_project_fkey FOREIGN KEY (chat_id, project_id) REFERENCES chats (id, project_id) ON DELETE SET NULL (chat_id),
-  CONSTRAINT memory_memos_author_agent_tenant_fkey FOREIGN KEY (organization_id, author_agent_id) REFERENCES agents (organization_id, id) ON DELETE SET NULL (author_agent_id),
+  CONSTRAINT memory_memos_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE SET NULL,
+  CONSTRAINT memory_memos_author_agent_id_fkey FOREIGN KEY (author_agent_id) REFERENCES agents (id) ON DELETE SET NULL,
   CONSTRAINT memory_memos_author_check CHECK (num_nonnulls(author_user_id, author_agent_id) <= 1),
   CONSTRAINT memory_memos_content_check CHECK (content <> '' AND char_length(content) <= 4000)
 );
