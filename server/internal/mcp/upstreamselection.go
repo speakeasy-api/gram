@@ -709,6 +709,11 @@ func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember,
 		return
 	case authClientGap:
 		member.upstreamUnavailable = memberCredentialError{&metaMemberError{message: "This server's authentication needs setup or a new sign-in."}}
+		s.logger.WarnContext(ctx, "gateway member has no usable connection choice",
+			attr.SlogOAuthFailureReason(res.reason),
+			attr.SlogMcpServerID(member.serverID.String()),
+			attr.SlogAuthClientID(res.clientID.String()),
+		)
 		return
 	case authClientResolved, authClientNoAuth, authClientLegacy:
 	}

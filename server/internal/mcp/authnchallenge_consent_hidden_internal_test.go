@@ -76,9 +76,9 @@ func TestGatewayConsentView_ApplyOutcomesSkipsHidden(t *testing.T) {
 	view, members := hiddenTestView()
 	view.markHidden(map[uuid.UUID]bool{members["github"].serverID: true})
 	view.applyOutcomes([]consentMemberOutcome{
-		{Slug: "docs", Name: "Docs", Status: gatewayServerNoSignIn, Label: ""},
-		{Slug: "github", Name: "GitHub", Status: gatewayServerConnected, Label: ""},
-		{Slug: "linear", Name: "Linear", Status: gatewayServerConnected, Label: ""},
+		{Slug: "docs", Name: "Docs", Status: gatewayServerNoSignIn, Label: "", ReconnectLabel: ""},
+		{Slug: "github", Name: "GitHub", Status: gatewayServerConnected, Label: "", ReconnectLabel: ""},
+		{Slug: "linear", Name: "Linear", Status: gatewayServerConnected, Label: "", ReconnectLabel: ""},
 	})
 
 	require.Equal(t, 2, view.ReadyCount)
@@ -160,14 +160,14 @@ func TestGatewayConsentView_AnyReadyCountsHiddenServers(t *testing.T) {
 	require.True(t, view.AnyReady(), "hiding every ready server must not block approval")
 
 	view.applyOutcomes([]consentMemberOutcome{
-		{Slug: "docs", Name: "Docs", Status: gatewayServerNoSignIn, Label: ""},
-		{Slug: "github", Name: "GitHub", Status: gatewayServerConnected, Label: ""},
-		{Slug: "linear", Name: "Linear", Status: gatewayServerNotConnected, Label: ""},
+		{Slug: "docs", Name: "Docs", Status: gatewayServerNoSignIn, Label: "", ReconnectLabel: ""},
+		{Slug: "github", Name: "GitHub", Status: gatewayServerConnected, Label: "", ReconnectLabel: ""},
+		{Slug: "linear", Name: "Linear", Status: gatewayServerNotConnected, Label: "", ReconnectLabel: ""},
 	})
 	require.Equal(t, 0, view.ReadyCount)
 	require.True(t, view.AnyReady())
 
-	view.applyOutcomes([]consentMemberOutcome{{Slug: "linear", Name: "Linear", Status: gatewayServerNotConnected, Label: ""}})
+	view.applyOutcomes([]consentMemberOutcome{{Slug: "linear", Name: "Linear", Status: gatewayServerNotConnected, Label: "", ReconnectLabel: ""}})
 	require.False(t, view.AnyReady())
 }
 

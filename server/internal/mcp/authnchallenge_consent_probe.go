@@ -22,8 +22,9 @@ const probeReserve = 2 * time.Second
 // same SDK client and proxy used by dispatch, inside ValidationTimeout less
 // the close floor and the verdict's write window. A 401 or 403 after the SDK's optional
 // discovery leg is a rejection, a tool list is valid, and anything else is
-// unknown. Closing the session is the SDK's DELETE.
-func (s *Service) probeUpstream(ctx context.Context, logger *slog.Logger, build memberProxyBuilder, name string) (remotesessions.ValidationOutcome, string) {
+// unknown. Closing the session is the SDK's DELETE. The status is the
+// member's HTTP answer to a failed leg, 0 when there was none.
+func (s *Service) probeUpstream(ctx context.Context, logger *slog.Logger, build memberProxyBuilder, name string) (remotesessions.ValidationOutcome, string, int) {
 	timeout := s.metaRuntime.ValidationTimeout
 	if parentDeadline, ok := ctx.Deadline(); ok {
 		timeout = min(timeout, time.Until(parentDeadline))
@@ -35,16 +36,25 @@ func (s *Service) probeUpstream(ctx context.Context, logger *slog.Logger, build 
 
 	session, rt, err := s.connectMetaMember(probeCtx, logger, build, reserve/2)
 	if err != nil {
-		return classifyProbe(probeCtx, rt, err, name)
+		verdict, reason := classifyProbe(probeCtx, rt, err, name)
+		return verdict, reason, probeStatus(rt)
 	}
 	_, err = session.ListTools(probeCtx, nil)
 	if cerr := session.Close(); cerr != nil {
 		logger.DebugContext(ctx, "close probe session", attr.SlogError(cerr))
 	}
 	if err != nil {
-		return classifyProbe(probeCtx, rt, err, name)
+		verdict, reason := classifyProbe(probeCtx, rt, err, name)
+		return verdict, reason, probeStatus(rt)
 	}
-	return remotesessions.ValidationOutcomeValid, ""
+	return remotesessions.ValidationOutcomeValid, "", 0
+}
+
+func probeStatus(rt *memberRoundTripper) int {
+	if status, rejected := rt.rejection(); rejected {
+		return status
+	}
+	return rt.status()
 }
 
 // classifyProbe maps a failed leg to a verdict and a fixed-phrase reason; nothing upstream sent is quoted.

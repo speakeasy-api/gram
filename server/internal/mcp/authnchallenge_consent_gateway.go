@@ -79,6 +79,8 @@ type gatewayServer struct {
 	Hidden bool
 	// cardIDs are the services the server signs in through.
 	cardIDs []string
+	// reconnectLabel replaces the generic reconnect label with its cause, empty when unknown.
+	reconnectLabel string
 
 	// Auth is the server's upstream credential choice, where typed auth
 	// client resolution is enforced.
@@ -112,6 +114,9 @@ func (g gatewayServer) StatusLabel() string {
 	case gatewayServerChainPending:
 		return "Managed by your identity provider"
 	case gatewayServerReconnect:
+		if g.reconnectLabel != "" {
+			return g.reconnectLabel
+		}
 		return "Needs reconnecting"
 	case gatewayServerNotConnected:
 		return "Not connected"
@@ -297,15 +302,21 @@ func (s *Service) gatewayConsent(
 func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewayConsentView {
 	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, CanHide: false, members: members, cards: cards, auth: nil}
 	for _, member := range members {
-		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, Auth: nil}
+		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, reconnectLabel: "", Auth: nil}
 		for _, card := range cards {
 			if cardServesMember(card, member) {
 				server.cardIDs = append(server.cardIDs, card.ClientID)
 				server.Status = strongerStatus(server.Status, cardStatus(card))
+				if server.reconnectLabel == "" && cardStatus(card) == gatewayServerReconnect {
+					server.reconnectLabel = cardReconnectLabel(card)
+				}
 			}
 		}
 		if memberNeedsSignIn(member) && len(server.cardIDs) == 0 {
 			server.Status = gatewayServerNotSetUp
+		}
+		if server.Status != gatewayServerReconnect {
+			server.reconnectLabel = ""
 		}
 		if len(server.cardIDs) == 1 && (server.Status == gatewayServerNotConnected || server.Status == gatewayServerReconnect) {
 			server.ConnectClientID = server.cardIDs[0]
@@ -322,9 +333,13 @@ func (v *gatewayConsentView) applyOutcomes(outcomes []consentMemberOutcome) {
 	for i := range v.Servers {
 		server := &v.Servers[i]
 		server.Status = gatewayServerUnavailable
+		server.reconnectLabel = ""
 		for _, outcome := range outcomes {
 			if outcome.Slug == server.Slug {
 				server.Status = outcome.Status
+				if outcome.Status == gatewayServerReconnect {
+					server.reconnectLabel = outcome.ReconnectLabel
+				}
 				break
 			}
 		}
@@ -372,6 +387,26 @@ func cardStatus(card remoteSessionCard) gatewayServerStatus {
 	default:
 		return gatewayServerNotConnected
 	}
+}
+
+// gatewayServerNoConnectionChosen labels a server whose connection choice cannot be used, which a provider sign-in alone does not fix.
+const gatewayServerNoConnectionChosen = "Couldn't choose a connection for this server"
+
+// cardReconnectLabel is a card's reconnect status with its cause, in the card's own words.
+func cardReconnectLabel(card remoteSessionCard) string {
+	reason := ""
+	switch {
+	case card.Rejected || card.Inactive:
+		reason = card.ValidationReason
+	case card.Expired:
+		reason = "Sign-in expired"
+	case card.Unroutable:
+		reason = "Connected elsewhere"
+	}
+	if reason == "" {
+		return ""
+	}
+	return reason + " · reconnect"
 }
 
 // strongerStatus combines a server's services: one usable service makes the

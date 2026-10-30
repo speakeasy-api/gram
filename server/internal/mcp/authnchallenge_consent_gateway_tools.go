@@ -34,6 +34,8 @@ type consentMemberOutcome struct {
 	Status gatewayServerStatus `json:"status"`
 	// Label is shared by the server list and the tool picker.
 	Label string `json:"label"`
+	// ReconnectLabel is a reconnecting server's label with its cause, empty when unknown.
+	ReconnectLabel string `json:"reconnect_label,omitempty"`
 }
 
 // captureGatewayConsentInventory captures one complete attempt before rendering
@@ -235,8 +237,10 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	}
 	configured := view
 	configuredStatus := make(map[string]gatewayServerStatus, len(members))
+	configuredLabel := make(map[string]string, len(members))
 	for _, server := range configured.Servers {
 		configuredStatus[server.Slug] = server.Status
+		configuredLabel[server.Slug] = server.reconnectLabel
 	}
 	outcomes := make([]consentMemberOutcome, 0, len(members))
 	failures := make(map[string]error, len(unavailableMembers))
@@ -245,6 +249,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	}
 	for _, member := range members {
 		status := gatewayServerUnavailable
+		reconnectLabel := configuredLabel[member.slug]
 		if captured[member.slug] != nil {
 			status = gatewayServerConnected
 			if configuredStatus[member.slug] == gatewayServerNoSignIn {
@@ -269,11 +274,17 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 				default:
 					status = gatewayServerUnavailable
 				}
+				if status == gatewayServerReconnect && member.authClient != nil && member.authClient.outcome == authClientGap {
+					reconnectLabel = gatewayServerNoConnectionChosen
+				}
 			} else if denied, ok := errors.AsType[*oops.ShareableError](failure); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {
 				status = gatewayServerNoAccess
 			}
 		}
-		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, Name: conv.Default(member.name, member.slug), Status: status, Label: (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", ServerID: "", Hidden: false, cardIDs: nil, Auth: nil}).StatusLabel()})
+		if status != gatewayServerReconnect {
+			reconnectLabel = ""
+		}
+		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, Name: conv.Default(member.name, member.slug), Status: status, Label: (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", ServerID: "", Hidden: false, cardIDs: nil, reconnectLabel: reconnectLabel, Auth: nil}).StatusLabel(), ReconnectLabel: reconnectLabel})
 	}
 	tools := make([]consentInventoryTool, 0, len(inventory))
 	toolMembers := map[string]connectionCatalogMember{}

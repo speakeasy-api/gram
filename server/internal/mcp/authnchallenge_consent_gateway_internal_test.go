@@ -409,3 +409,66 @@ func TestConsentTemplateGatewayAuthPickerAndVisibility(t *testing.T) {
 	require.Contains(t, page, `value="hide_server"`)
 	require.Contains(t, page, `name="server_id" value="`+member.serverID.String()+`"`)
 }
+
+// A reconnecting server says why in the list, in the card's words; with no
+// known cause, or once the server works, it keeps the generic label.
+func TestGatewayServersView_ReconnectLabelNamesTheCause(t *testing.T) {
+	t.Parallel()
+
+	project := uuid.New()
+	issuer := uuid.New()
+	members := []metaMember{gatewayTestMember("db", "Database", issuer, project)}
+	newCard := func() remoteSessionCard {
+		return gatewayTestCard("db-client", issuer, uuid.NullUUID{UUID: project, Valid: true})
+	}
+
+	cases := []struct {
+		name  string
+		set   func(*remoteSessionCard)
+		label string
+	}{
+		{"rejected", func(c *remoteSessionCard) {
+			c.Connected, c.Rejected, c.ValidationReason = true, true, "Rejected by Database"
+		}, "Rejected by Database · reconnect"},
+		{"inactive", func(c *remoteSessionCard) {
+			c.Connected, c.Inactive, c.ValidationReason = true, true, "Inactive at Example"
+		}, "Inactive at Example · reconnect"},
+		{"expired", func(c *remoteSessionCard) { c.Expired = true }, "Sign-in expired · reconnect"},
+		{"unroutable", func(c *remoteSessionCard) { c.Unroutable = true }, "Connected elsewhere · reconnect"},
+		{"no known cause", func(c *remoteSessionCard) { c.Connected, c.IdentityReconnect = true, true }, "Needs reconnecting"},
+		{"connected", func(c *remoteSessionCard) { c.Connected = true }, "Connected"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			card := newCard()
+			tc.set(&card)
+			require.Equal(t, tc.label, gatewayServersView(members, []remoteSessionCard{card}).Servers[0].StatusLabel())
+		})
+	}
+
+	// A usable sibling service wins, and the stale one's cause is not shown.
+	stale := newCard()
+	stale.Expired = true
+	live := gatewayTestCard("org-client", issuer, uuid.NullUUID{})
+	live.Connected = true
+	server := gatewayServersView(members, []remoteSessionCard{stale, live}).Servers[0]
+	require.Equal(t, "Connected", server.StatusLabel())
+	server.Status = gatewayServerReconnect
+	require.Equal(t, "Needs reconnecting", server.StatusLabel())
+}
+
+// The server list renders the cause rather than the bare reconnect label.
+func TestConsentTemplate_GatewayListShowsReconnectCause(t *testing.T) {
+	t.Parallel()
+
+	project := uuid.New()
+	issuer := uuid.New()
+	card := gatewayTestCard("db-client", issuer, uuid.NullUUID{})
+	card.Connected, card.Rejected, card.ValidationReason = true, true, "Rejected by Database"
+	view := gatewayServersView([]metaMember{gatewayTestMember("db", "Database", issuer, project)}, []remoteSessionCard{card})
+
+	page := renderGatewayConsent(t, gatewayTemplateData(view, nil))
+	require.Contains(t, page, "Rejected by Database · reconnect")
+	require.NotContains(t, page, "Needs reconnecting")
+}
