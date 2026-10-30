@@ -246,21 +246,37 @@ func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext
 		if client.CredentialOwner == remotesessions.CredentialOwnerSelf {
 			clientType = authClientTypeServiceAccount
 		}
-		pinned, err := s.authorizeAgentMemberClient(ctx, gate, member, server.UserSessionIssuerID.UUID, uuid.NullUUID{UUID: client.ID, Valid: true}, clientType)
+		resolved, err := s.agentMemberClientTokens(ctx, gate, member, server.UserSessionIssuerID.UUID, client.ID, clientType)
 		if err != nil {
 			return nil, err
-		}
-		resolved, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID), client.ID, false)
-		if err != nil {
-			return nil, agentMemberCredentialError(member)
-		}
-		resolved, err = pinAttachedSession(resolved, pinned, false)
-		if err != nil {
-			return nil, agentMemberCredentialError(member)
 		}
 		maps.Copy(tokens, resolved)
 	}
 	return tokens, nil
+}
+
+// agentMemberClientTokens authorizes one legacy agent member client and reads
+// its credential from the connection the permit was decided for: the exact
+// attachment, pinned, or for an unattached agent key its validated
+// authorizer's own connection.
+func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateContext, member metaMember, issuer, clientID uuid.UUID, clientType string) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	connection, err := s.authorizeAgentMemberClient(ctx, gate, member, issuer, uuid.NullUUID{UUID: clientID, Valid: true}, clientType)
+	if err != nil {
+		return nil, err
+	}
+	subject := urn.NewAgentSubject(gate.agentID)
+	if connection.authorizer {
+		subject = urn.NewUserSubject(connection.owner)
+	}
+	resolved, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, member.projectID, gate.organizationID, issuer, subject, clientID, false)
+	if err != nil {
+		return nil, agentMemberCredentialError(member)
+	}
+	resolved, err = pinAttachedSession(resolved, connection.attachedSession, false)
+	if err != nil {
+		return nil, agentMemberCredentialError(member)
+	}
+	return resolved, nil
 }
 
 func agentMemberCredentialError(member metaMember) error {
@@ -271,30 +287,31 @@ func agentMemberCredentialError(member metaMember) error {
 // source before acquiring a legacy agent credential. It does not create a choice
 // or grant. Off/shadow keep their connect-equivalent policy; enforced uses the
 // same owner-sensitive permit as selected members.
-func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGateContext, member metaMember, issuer uuid.UUID, registration uuid.NullUUID, clientType string) (uuid.UUID, error) {
+func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGateContext, member metaMember, issuer uuid.UUID, registration uuid.NullUUID, clientType string) (authClientConnectionOwner, error) {
+	var none authClientConnectionOwner
 	rows, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
 		Proposed: true, ProposedAuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ProposedRegistrationID: registration, CredentialKind: upstreamclients.CredentialKindUserSession,
 		CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{member.serverID}, OrganizationID: gate.organizationID,
 	})
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("load agent member auth client: %w", err)
+		return none, fmt.Errorf("load agent member auth client: %w", err)
 	}
 	if len(rows) != 1 {
-		return uuid.Nil, agentMemberCredentialError(member)
+		return none, agentMemberCredentialError(member)
 	}
 	res := decideAuthClient(rows[0])
 	mode, err := s.authClientMode(ctx, gate.organizationID)
 	if err != nil {
-		return uuid.Nil, err
+		return none, err
 	}
 	// Before typed enforcement, configured legacy credential headers remain
 	// served by the proxy even when no catalog client has been provisioned.
 	// This does not waive the enforced catalog/permit barrier.
 	if mode != feature.AuthClientResolverEnforced && !registration.Valid && (rows[0].CredentialHeadersUncovered || (rows[0].ServerHasHeaderClients && !rows[0].ServerHasOauthClients && !rows[0].HeadersStale)) {
-		return uuid.Nil, nil
+		return none, nil
 	}
 	if (res.outcome == authClientGap && (mode == feature.AuthClientResolverEnforced || !registration.Valid)) || (res.outcome == authClientLegacy && res.clientID == uuid.Nil && mode == feature.AuthClientResolverEnforced) {
-		return uuid.Nil, agentMemberCredentialError(member)
+		return none, agentMemberCredentialError(member)
 	}
 	permit := authClientPermitRequest{
 		OrganizationID: gate.organizationID, ProjectID: member.projectID, ServerID: member.serverID,
@@ -307,24 +324,31 @@ func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGate
 	}
 	connection, err := s.authClientConnection(ctx, permit)
 	if err != nil {
-		return uuid.Nil, err
+		return none, err
 	}
-	if permit.ClientType == authClientTypeRemoteSession && connection.attachedSession == uuid.Nil {
-		return uuid.Nil, agentMemberCredentialError(member)
+	// A personal client is served by the exact attachment, or for an
+	// unattached agent key by its validated authorizer's own connection. That
+	// fallback needs the mandatory mcp:auth check on a catalog client, which
+	// names the authorizer as the owner: before enforcement no such check runs.
+	if connection.authorizer && (mode != feature.AuthClientResolverEnforced || res.clientID == uuid.Nil) {
+		connection = none
+	}
+	if permit.ClientType == authClientTypeRemoteSession && connection.attachedSession == uuid.Nil && !connection.authorizer {
+		return none, agentMemberCredentialError(member)
 	}
 	permit.ConnectionOwner = connection.owner
 	if res.clientID != uuid.Nil {
 		permitter, err := s.authClientPermitFor(ctx, gate.organizationID)
 		if err != nil {
-			return uuid.Nil, err
+			return none, err
 		}
 		allowed, err := permitter.Permitted(ctx, permit)
 		if err != nil {
-			return uuid.Nil, fmt.Errorf("authorize agent member client: %w", err)
+			return none, fmt.Errorf("authorize agent member client: %w", err)
 		}
 		if !allowed {
-			return uuid.Nil, agentMemberCredentialError(member)
+			return none, agentMemberCredentialError(member)
 		}
 	}
-	return connection.attachedSession, nil
+	return connection, nil
 }

@@ -795,6 +795,8 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 	var authorizer *string
 	if credential, ok := principalcredential.FromContext(ctx); ok && lookup == lookupAuthClient {
 		authorizer = &credential.Credential.AuthorizerUserID
+	} else if keyAuthorizer, ok := principalAPIKeyAuthorizer(ctx, subject); ok && lookup == lookupAuthClient {
+		authorizer = &keyAuthorizer
 	}
 	var principalID uuid.UUID
 	var attached bool
