@@ -29,11 +29,17 @@ type idJAGExchange struct {
 // issuer, that every line about the exchange is written with.
 func (s *Service) startIDJAGExchange(endpoint *ResolvedMcpEndpoint, logger *slog.Logger) (*idJAGExchange, *slog.Logger) {
 	issuerID := endpoint.UserSessionIssuerID.String()
-	logger = logger.With(attr.SlogUserSessionIssuerID(issuerID))
+	logger = idJAGExchangeLogger(endpoint, logger)
+	return &idJAGExchange{metrics: s.metrics, logger: logger, issuerID: issuerID, outcome: mcpmetrics.IDJAGExchangeError, reason: mcpmetrics.IDJAGRejectionNone}, logger
+}
+
+// idJAGExchangeLogger adds the issuer and, for gateway-default exchanges, the resource source.
+func idJAGExchangeLogger(endpoint *ResolvedMcpEndpoint, logger *slog.Logger) *slog.Logger {
+	logger = logger.With(attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()))
 	if endpoint.sharedResource != nil && endpoint.sharedResource.organizationGatewayDefault {
 		logger = logger.With(attr.SlogOAuthIDJAGResourceSource(idJAGResourceSourceOrganizationGateway))
 	}
-	return &idJAGExchange{metrics: s.metrics, logger: logger, issuerID: issuerID, outcome: mcpmetrics.IDJAGExchangeError, reason: mcpmetrics.IDJAGRejectionNone}, logger
+	return logger
 }
 
 // reject marks the exchange rejected and returns the attributes its
@@ -99,7 +105,7 @@ func (s *Service) failTokenClient(ctx context.Context, logger *slog.Logger, endp
 		return
 	}
 	issuerID := endpoint.UserSessionIssuerID.String()
-	logger.With(attr.SlogUserSessionIssuerID(issuerID)).InfoContext(ctx, "oauth ID-JAG token request failed", attr.SlogOAuthIDJAGOutcome(string(mcpmetrics.IDJAGExchangeError)), attr.SlogOAuthIDJAGRejectionReason(reason), attr.SlogError(err))
+	idJAGExchangeLogger(endpoint, logger).InfoContext(ctx, "oauth ID-JAG token request failed", attr.SlogOAuthIDJAGOutcome(string(mcpmetrics.IDJAGExchangeError)), attr.SlogOAuthIDJAGRejectionReason(reason), attr.SlogError(err))
 	s.metrics.RecordIDJAGExchange(ctx, issuerID, mcpmetrics.IDJAGExchangeError, reason)
 }
 
