@@ -63,6 +63,9 @@ const (
 
 	// ActionMcpServerScopePinUpdate records a change to the scope pin on a remote-backed server's protected resource.
 	ActionMcpServerScopePinUpdate Action = "mcp-server:update-scope-pin"
+
+	// ActionMcpServerUpstreamAuthRequirementUpdate records whether a server declared that its upstream needs authentication.
+	ActionMcpServerUpstreamAuthRequirementUpdate Action = "mcp-server:update-upstream-auth-requirement"
 )
 
 type LogMcpServerCreateEvent struct {
