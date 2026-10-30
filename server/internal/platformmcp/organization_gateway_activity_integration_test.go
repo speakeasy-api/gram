@@ -143,6 +143,8 @@ func TestOrganizationGatewayActivityRefusesUnsupportedWindowAsInvalid(t *testing
 		result, ok := organizationGatewayActivityToolResult(err)
 		require.True(t, ok, "window %q", window)
 		require.True(t, result.IsError)
-		require.Contains(t, result.Content[0].(*mcp.TextContent).Text, `"invalid_request"`)
+		text, ok := result.Content[0].(*mcp.TextContent)
+		require.True(t, ok)
+		require.Contains(t, text.Text, `"invalid_request"`)
 	}
 }
