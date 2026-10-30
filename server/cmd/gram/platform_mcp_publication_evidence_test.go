@@ -9,6 +9,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
@@ -16,6 +17,7 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 func TestPlatformMCPPublicationEvidenceRefusesPublisherAsReader(t *testing.T) {
@@ -51,7 +53,7 @@ func TestPlatformMCPGetPluginUsesAuthorizedPublicationEvidence(t *testing.T) {
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{{PrincipalUrn: "role:admin", Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, organizationID)}})
 	logger := testenv.NewLogger(t)
-	engine := authz.NewEngine(logger, pool, nil, nil)
+	engine := authz.NewEngine(logger, pool, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	management := plugins.NewService(logger, testenv.NewTracerProvider(t), pool, &sessions.Manager{}, nil, engine, nil, nil, "test", "https://api.example.test", nil, nil)
 	publisher := plugins.NewPublisher(logger, pool, nil, nil, "test", "https://api.example.test", nil)
 	limiter := allowingPlatformMCPBudget{}
