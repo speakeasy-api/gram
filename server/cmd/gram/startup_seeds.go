@@ -58,7 +58,7 @@ func newAppSeedCommand() *cli.Command {
 		Name:  "app-seed",
 		Usage: "Apply the reference data that workers keep applied when they start (idempotent)",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "site-url", EnvVars: []string{"GRAM_SITE_URL"}},
+			&cli.StringFlag{Name: "site-url", EnvVars: []string{"GRAM_SITE_URL"}, Required: true},
 			&cli.StringFlag{
 				Name:     "database-url",
 				Usage:    "Database URL",
@@ -71,6 +71,10 @@ func newAppSeedCommand() *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
+			assetBaseURL, err := parseSiteURL(c.String("site-url"))
+			if err != nil {
+				return fmt.Errorf("parse asset base URL: %w", err)
+			}
 			ctx := c.Context
 			logger := PullLogger(ctx)
 
@@ -82,10 +86,6 @@ func newAppSeedCommand() *cli.Command {
 			}
 			defer db.Close()
 
-			assetBaseURL, err := url.Parse(c.String("site-url"))
-			if err != nil {
-				return fmt.Errorf("parse asset base URL: %w", err)
-			}
 			seeds, err := selectStartupSeeds(startupSeeds(logger, db, assetBaseURL), c.StringSlice("name"))
 			if err != nil {
 				return err

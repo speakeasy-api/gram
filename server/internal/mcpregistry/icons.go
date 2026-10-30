@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -81,11 +83,31 @@ func WithCatalogIcons(data json.RawMessage, icons CatalogIcons) (json.RawMessage
 	return result, nil
 }
 
+// ParseAssetBaseURL validates the public asset origin shared by startup and catalog writes.
+// HTTP is permitted only for loopback development origins.
+func ParseAssetBaseURL(raw string) (*url.URL, error) {
+	base, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse asset base URL: %w", err)
+	}
+	if base.Hostname() == "" || base.User != nil || base.RawQuery != "" || base.ForceQuery || strings.Contains(raw, "#") {
+		return nil, fmt.Errorf("asset base URL must have a host and no userinfo, query, or fragment")
+	}
+	host := strings.ToLower(base.Hostname())
+	loopback := host == "localhost" || net.ParseIP(host).IsLoopback()
+	if base.Scheme != "https" && (base.Scheme != "http" || !loopback) {
+		return nil, fmt.Errorf("asset base URL requires HTTPS except on loopback")
+	}
+	base.Host = strings.ToLower(base.Host)
+	return base, nil
+}
+
 // WithAssetBaseURL copies startup configuration; do not call per request.
 func (s *Service) WithAssetBaseURL(base *url.URL) *Service {
 	s.assetBaseURL = nil
 	if base != nil {
 		copied := *base
+		copied.Host = strings.ToLower(copied.Host)
 		s.assetBaseURL = &copied
 	}
 	return s
@@ -104,6 +126,14 @@ func (s *Service) canonicalIcons(ctx context.Context, q *repo.Queries, data json
 	icons, err := ParseCatalogIcons(data)
 	if err != nil {
 		return nil, err
+	}
+	if icons.Default != nil || icons.Dark != nil {
+		if s.assetBaseURL == nil {
+			return nil, fmt.Errorf("missing catalog asset base URL")
+		}
+		if _, err := ParseAssetBaseURL(s.assetBaseURL.String()); err != nil {
+			return nil, fmt.Errorf("invalid catalog asset configuration: %w", err)
+		}
 	}
 	for _, slot := range []struct {
 		name string
@@ -130,8 +160,11 @@ func (s *Service) canonicalIcons(ctx context.Context, q *repo.Queries, data json
 
 func (s *Service) catalogIconAssetID(src string) (uuid.UUID, error) {
 	base := s.assetBaseURL
-	if base == nil || base.Host == "" || (base.Scheme != "https" && base.Scheme != "http") || base.User != nil {
-		return uuid.Nil, fmt.Errorf("missing valid asset base URL")
+	if base == nil {
+		return uuid.Nil, fmt.Errorf("missing catalog asset base URL")
+	}
+	if _, err := ParseAssetBaseURL(base.String()); err != nil {
+		return uuid.Nil, err
 	}
 	u, err := url.Parse(src)
 	if err != nil {

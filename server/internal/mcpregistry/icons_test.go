@@ -76,6 +76,8 @@ func TestCatalogIconsAssociation(t *testing.T) {
 	s.WithAssetBaseURL(nil)
 	_, err = s.Save(ctx, e.ID, Token(saved), raw)
 	require.Error(t, err)
+	var invalid *InvalidError
+	require.NotErrorAs(t, err, &invalid, "configuration errors are not user validation errors")
 	cleared, err := s.Save(ctx, e.ID, Token(saved), json.RawMessage(basicRecord))
 	require.NoError(t, err)
 	require.NotContains(t, string(cleared.Data), IconsNamespace)

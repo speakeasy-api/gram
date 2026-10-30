@@ -65,9 +65,9 @@ Use the existing editor's save conventions. Failed validation or saving must lea
 
 Reuse the existing platform image storage and public serving infrastructure rather than introducing a separate bucket or CDN by default. Existing reference points are `server/internal/assets/adminhandlers.go` and the issuer logo upload UI in `client/admin/src/pages/remote-session-issuers/IssuerEditor.tsx`.
 
-The current platform image allowlist excludes SVG; safe SVG support is required, not merely an Admin file-input change.
+The platform image path already validates static SVGs. Reuse that validation and serving path, and verify its safety guarantees rather than introducing a second SVG implementation.
 
-Flow: authorized staff selects a slot and file; the backend validates and sanitizes the SVG; the accepted asset is stored; its public URL and icon metadata are associated with the exact catalog entry and slot; catalog responses expose the curated namespace. A failed metadata association may leave an unreferenced asset, but must not alter the saved icon. Reuse existing asset lifecycle behavior; no new garbage-collection subsystem is part of this slice.
+Flow: authorized staff selects a slot and file; the backend validates and sanitizes the SVG; the accepted asset is stored; its public URL and icon metadata are associated with the exact catalog entry and slot; catalog responses expose the curated namespace. A failed metadata association may leave an unreferenced asset, but must not alter the saved icon. Uploads are publicly accessible and persisted immediately, before Save changes. Abandoning a draft or failing the metadata save does not roll back or delete the uploaded asset; unreferenced uploads remain under the existing asset retention behavior. No automatic cleanup or new garbage-collection subsystem is part of this slice.
 
 Use distinct content-addressed or versioned URLs for changed assets so replacements do not require cache invalidation. Do not delete shared asset bytes when removing a slot. Public reads must not require staff credentials; writes must require platform-wide staff authorization. Validate asset associations so arbitrary private or tenant-owned assets cannot be published through this feature.
 

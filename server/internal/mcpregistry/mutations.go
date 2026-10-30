@@ -181,6 +181,9 @@ func (s *Service) mutateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, token s
 		if issues := s.validator.ValidateStored(old.Data); len(issues) > 0 {
 			return Entry{}, &InvalidError{Issues: issues}
 		}
+		if _, err := s.canonicalIcons(ctx, q, old.Data); err != nil {
+			return Entry{}, err
+		}
 		if err := checkOktaMappingConflicts(ctx, q, id, old.Data); err != nil {
 			return Entry{}, err
 		}
@@ -388,12 +391,23 @@ func (s *Service) CheckCatalogIconsTx(ctx context.Context, tx pgx.Tx, id uuid.UU
 	if _, err := s.canonicalIcons(ctx, repo.New(tx), data); err != nil {
 		return Entry{}, err
 	}
+	data, err = canonicalMetadata(data, old.PublishedAt, old.PublishedAt)
+	if err != nil {
+		return Entry{}, err
+	}
+	size, err := repo.New(tx).SerializedRegistryRecordBytes(ctx, data)
+	if err != nil {
+		return Entry{}, fmt.Errorf("measure catalog icon replacement: %w", err)
+	}
+	if size > StoredRecordByteLimit {
+		return Entry{}, storedSizeError()
+	}
 	return old, nil
 }
 
 // SetCatalogIconsTx participates in the caller's transaction, including its receipt.
 func (s *Service) SetCatalogIconsTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, token string, icons CatalogIcons) (Entry, error) {
-	old, err := s.CheckCatalogIconsTx(ctx, tx, id, token, icons)
+	old, err := entry(repo.New(tx).LockEntry(ctx, id))
 	if err != nil {
 		return Entry{}, err
 	}

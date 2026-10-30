@@ -83,9 +83,11 @@ type LocalFixturesOptions struct {
 //     a default environment, both with well-known ids so mise.toml can
 //     hardcode them;
 //   - the global MCP registry row, which is not tenant-scoped and so cannot
-//     live in the seed proper.
+//     live in the seed proper;
+//   - a global catalog logo entry and public platform asset when SiteURL is set.
 //
-// Every write is idempotent, and every one is scoped to LocalSpec's org.
+// Writes are idempotent. Tenant writes are scoped to LocalSpec's org; the
+// registry entries, platform assets, and system roles are global.
 // Call it only after Run has completed with LocalSpec: the seed deletes and
 // recreates the org's memberships, so adopting you has to come after it.
 func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, blob assets.BlobStore, cache *redis.Client, opts LocalFixturesOptions) error {
@@ -183,17 +185,20 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		return fmt.Errorf("commit local fixtures: %w", err)
 	}
 
-	if opts.SiteURL != nil {
-		if err := seedLocalCatalogIcon(ctx, logger, db, blob, opts.SiteURL); err != nil {
-			return fmt.Errorf("seed local catalog icon: %w", err)
-		}
-	}
 	logger.InfoContext(ctx, "local fixtures applied")
 
 	warnOnStaleOverrides(ctx, logger, opts.ObservedEnv, apiKey)
 	bustLocalCaches(ctx, logger, cache, spec.OrgID, dev.ID)
 
-	return connectLocalSlack(ctx, logger, db, spec.OrgID, dev, opts.Slack)
+	if err := connectLocalSlack(ctx, logger, db, spec.OrgID, dev, opts.Slack); err != nil {
+		return err
+	}
+	if opts.SiteURL != nil {
+		if err := seedLocalCatalogIcon(ctx, logger, db, blob, opts.SiteURL); err != nil {
+			return fmt.Errorf("seed local catalog icon: %w", err)
+		}
+	}
+	return nil
 }
 
 // warnOnStaleOverrides catches the one way this seed can leave a developer

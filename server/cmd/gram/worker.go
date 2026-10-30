@@ -279,9 +279,10 @@ func newWorkerCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:    "site-url",
-			Usage:   "The URL of the dashboard site, used to link from notification emails",
-			EnvVars: []string{"GRAM_SITE_URL"},
+			Name:     "site-url",
+			Required: true,
+			Usage:    "The URL of the dashboard site, used to link from notification emails",
+			EnvVars:  []string{"GRAM_SITE_URL"},
 		},
 		&cli.StringFlag{
 			Name:     "pylon-verification-secret",
@@ -369,6 +370,10 @@ func newWorkerCommand() *cli.Command {
 		Usage: "Start the temporal worker",
 		Flags: flags,
 		Action: func(c *cli.Context) error {
+			siteURL, err := parseSiteURL(c.String("site-url"))
+			if err != nil {
+				return fmt.Errorf("worker site-url: %w", err)
+			}
 			customDomainARecords, err := customDomainARecordsFromCLI(c)
 			if err != nil {
 				return err

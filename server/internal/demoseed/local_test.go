@@ -133,9 +133,14 @@ func TestLocalFixturesReseed(t *testing.T) {
 		icons, err := mcpregistry.ParseCatalogIcons(entry.Data)
 		require.NoError(t, err)
 		require.NotNil(t, icons.Default)
-		require.Equal(t, icons.Default, icons.Dark)
 		require.Contains(t, icons.Default.Src, siteURL.String()+"/rpc/assets.serveImage?id=")
 		if firstID == uuid.Nil {
+			require.Equal(t, icons.Default, icons.Dark)
+			icons.Dark = nil
+			updated, err := mcpregistry.WithCatalogIcons(entry.Data, icons)
+			require.NoError(t, err)
+			_, err = registry.Save(ctx, entry.ID, mcpregistry.Token(entry), updated)
+			require.NoError(t, err)
 			firstID, firstIcons = entry.ID, icons
 		} else {
 			require.Equal(t, firstID, entry.ID)
