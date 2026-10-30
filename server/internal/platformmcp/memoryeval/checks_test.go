@@ -22,7 +22,7 @@ func questionByID(t *testing.T, c *memoryeval.Corpus, id string) memoryeval.Ques
 	return memoryeval.Question{}
 }
 
-func TestLeaksFindsExactSecretValues(t *testing.T) {
+func TestLeaksFindsSecretValuesIgnoringCase(t *testing.T) {
 	t.Parallel()
 	c := memoryeval.Build(corpusNow)
 	secret := c.Secrets[0]
@@ -32,6 +32,7 @@ func TestLeaksFindsExactSecretValues(t *testing.T) {
 	require.Len(t, leaked, 1)
 	require.Equal(t, secret.Name, leaked[0].Name)
 	require.Empty(t, c.Leaks("key=[REDACTED]"))
+	require.Len(t, c.Leaks(strings.ToUpper(secret.Value)), 1, "case changes do not hide a leak")
 }
 
 func TestIsolationViolationsFindsCanariesIgnoringCase(t *testing.T) {
@@ -55,6 +56,14 @@ func TestChatCitationValid(t *testing.T) {
 	require.False(t, c.ChatCitationValid(q, original.ID), "the superseded decision does not support the current answer")
 	require.False(t, c.ChatCitationValid(q, private.ID), "private sessions are never valid citations")
 	require.False(t, c.ChatCitationValid(q, uuid.New()), "unknown chats are never valid citations")
+
+	// The superseded decision names the new library while rejecting it, so
+	// only the question's sources count.
+	dates := questionByID(t, c, "q25")
+	superseded, ok := c.Chat("decision-date-library")
+	require.True(t, ok)
+	require.True(t, dates.Supports(superseded.Text()))
+	require.False(t, c.ChatCitationValid(dates, superseded.ID))
 }
 
 func TestSupportsNeedsAWholeEvidenceGroup(t *testing.T) {

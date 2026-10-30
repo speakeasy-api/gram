@@ -79,8 +79,9 @@ func derive(seed, alphabet string, n int) string {
 }
 
 // luhnCard returns a 16-digit Visa-style number with a valid check digit,
-// formatted in groups of four. It avoids the well-known test cards that
-// masking deliberately ignores.
+// formatted in groups of four. The fixed seed yields a number that is not one
+// of the well-known test cards masking deliberately ignores; re-check the
+// value if the seed changes.
 func luhnCard(seed string) string {
 	body := "4" + derive(seed, digits, 14)
 	sum := 0

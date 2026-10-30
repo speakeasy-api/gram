@@ -192,8 +192,9 @@ func Build(now time.Time) *Corpus {
 	return &Corpus{Now: now, Users: slices.Clone(users), Chats: chats, Secrets: secrets, Questions: questions()}
 }
 
-// build resolves timestamps and secret placeholders. ordinal spreads chats
-// that share a day across working hours when no hour is set.
+// build resolves timestamps and secret placeholders. The hour comes from the
+// key hash, and ordinal staggers chats by minute within that hour. A chat
+// that would end after now is moved back so it ends at now.
 func (s chatSpec) build(now time.Time, ordinal int, secrets []Secret) Chat {
 	const (
 		// firstHour and workingHours place chats between 09:00 and 17:59 UTC.
@@ -206,6 +207,9 @@ func (s chatSpec) build(now time.Time, ordinal int, secrets []Secret) Chat {
 	}
 	day := now.Truncate(24*time.Hour).AddDate(0, 0, -s.daysAgo)
 	start := day.Add(time.Duration(hour)*time.Hour + time.Duration(ordinal%60)*time.Minute)
+	if span := time.Duration(len(s.turns)-1) * messageGap; start.Add(span).After(now) {
+		start = now.Add(-span)
+	}
 
 	messages := make([]Message, len(s.turns))
 	for i, turn := range s.turns {

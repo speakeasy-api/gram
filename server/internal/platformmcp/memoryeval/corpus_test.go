@@ -52,7 +52,8 @@ func TestCorpusShape(t *testing.T) {
 		require.GreaterOrEqual(t, len(chat.Messages), 2, chat.Key)
 		require.NotContains(t, chat.Text(), "{{", chat.Key)
 		require.True(t, chat.StartedAt().After(corpusNow.AddDate(0, 0, -61)), chat.Key)
-		require.True(t, chat.StartedAt().Before(corpusNow.Add(24*time.Hour)), chat.Key)
+		last := chat.Messages[len(chat.Messages)-1].At
+		require.False(t, last.After(corpusNow), "%s ends in the future", chat.Key)
 		if chat.Project == memoryeval.ProjectMain {
 			owners[chat.Owner]++
 		}
