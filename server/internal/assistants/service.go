@@ -3398,7 +3398,7 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 	var canonicalUserMessageID uuid.UUID
 	var sourceInstructions string
 	if runtime.RuntimeVersion == 3 {
-		sourceInstructions, err = composeInstructions("", thread, nil)
+		sourceInstructions, err = composeInstructions("", thread, nil, s.connectionLinkPrefix())
 		if err != nil {
 			return nil, err
 		}
