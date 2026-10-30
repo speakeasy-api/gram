@@ -133,6 +133,9 @@ type Metrics struct {
 	// client resolver against the upstream client choice, by whether they
 	// agreed and each side's outcome.
 	authClientParityCounter metric.Int64Counter
+	// authClientGapCounter counts gateway members left without a usable
+	// upstream auth client choice, by outcome and reason.
+	authClientGapCounter metric.Int64Counter
 	// mandatoryAuthzShadowCounter counts shadowed mandatory checks.
 	mandatoryAuthzShadowCounter metric.Int64Counter
 
@@ -334,6 +337,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create auth client parity counter", attr.SlogError(err))
 	}
 
+	authClientGapCounter, err := meter.Int64Counter(
+		"mcp.auth_client.gap",
+		metric.WithDescription("Gateway members left without a usable upstream auth client choice, by outcome and reason"),
+		metric.WithUnit("{member}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create auth client gap counter", attr.SlogError(err))
+	}
+
 	mandatoryAuthzShadowCounter, err := meter.Int64Counter(
 		"mcp.authz.mandatory_shadow",
 		metric.WithDescription("Shadowed mandatory server and auth client checks beside today's decision, by organization, surface, caller, both outcomes, policy source and deny reason"),
@@ -359,6 +371,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		metaMemberDispatchCounter:            metaMemberDispatchCounter,
 		mcpRequestRejectedCounter:            mcpRequestRejectedCounter,
 		authClientParityCounter:              authClientParityCounter,
+		authClientGapCounter:                 authClientGapCounter,
 		mandatoryAuthzShadowCounter:          mandatoryAuthzShadowCounter,
 		mcpProtocolVersionRejectedCounter:    mcpProtocolVersionRejectedCounter,
 		mcpSkillReadCounter:                  mcpSkillReadCounter,
@@ -544,6 +557,18 @@ func (m *Metrics) RecordAuthClientParity(ctx context.Context, agreed bool, outco
 		attr.AuthClientParityAgreed(agreed),
 		attr.AuthClientOutcome(outcome),
 		attr.AuthClientLegacyOutcome(legacyOutcome),
+		attr.AuthClientReason(reason),
+	))
+}
+
+// RecordAuthClientGap counts one gateway member left without a usable
+// upstream auth client choice. Outcomes and reasons are closed sets.
+func (m *Metrics) RecordAuthClientGap(ctx context.Context, outcome, reason string) {
+	if m == nil || m.authClientGapCounter == nil {
+		return
+	}
+	m.authClientGapCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.AuthClientOutcome(outcome),
 		attr.AuthClientReason(reason),
 	))
 }

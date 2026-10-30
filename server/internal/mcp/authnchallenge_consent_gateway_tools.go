@@ -34,8 +34,10 @@ type consentMemberOutcome struct {
 	Status gatewayServerStatus `json:"status"`
 	// Label is shared by the server list and the tool picker.
 	Label string `json:"label"`
-	// ReconnectLabel is a reconnecting server's label with its cause, empty when unknown.
-	ReconnectLabel string `json:"reconnect_label,omitempty"`
+	// ReconnectLabel is the live page's cause for a reconnect status; never persisted.
+	ReconnectLabel string `json:"-"`
+	// NoReconnect hides the in-place reconnect, which cannot fix this cause; never persisted.
+	NoReconnect bool `json:"-"`
 }
 
 // captureGatewayConsentInventory captures one complete attempt before rendering
@@ -197,7 +199,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		}
 		if memberAuth != nil {
 			res, resolveErr := s.resolveMemberAuthChoice(ctx, endpoint, *member, memberAuth[member.serverID], subject)
-			s.applyMemberAuthClient(ctx, member, res, resolveErr)
+			s.applyMemberAuthClient(ctx, logger, subject, member, res, resolveErr)
 			// As at runtime, a resolved client was checked against the member,
 			// which authorizes its registration without a sign-in link.
 			member.typedAuthClient = member.upstreamUnavailable == nil && res.outcome == authClientResolved && member.chosenClientID.Valid
@@ -205,7 +207,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		}
 		clientID, chosen := picks[member.serverID]
 		res, resolveErr := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.serverID, member.projectID, uuid.NullUUID{UUID: clientID, Valid: chosen}, subject)
-		s.applyMemberAuthClient(ctx, member, res, resolveErr)
+		s.applyMemberAuthClient(ctx, logger, subject, member, res, resolveErr)
 	}
 	gate.memberChoices = &memberChoices{selector: nil, enforced: false, subject: subject, profile: false, metaServerID: endpoint.MetaMcpServerID, onlyChosen: false, chosen: nil, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 		if member.typedAuthClient {
@@ -250,6 +252,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	for _, member := range members {
 		status := gatewayServerUnavailable
 		reconnectLabel := configuredLabel[member.slug]
+		noReconnect := false
 		if captured[member.slug] != nil {
 			status = gatewayServerConnected
 			if configuredStatus[member.slug] == gatewayServerNoSignIn {
@@ -274,17 +277,17 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 				default:
 					status = gatewayServerUnavailable
 				}
-				if status == gatewayServerReconnect && member.authClient != nil && member.authClient.outcome == authClientGap {
-					reconnectLabel = gatewayServerNoConnectionChosen
+				if configuredStatus[member.slug] == gatewayServerConnected && member.authClient != nil && member.authClient.outcome == authClientGap {
+					reconnectLabel, noReconnect = gapReconnectLabel(member.authClient.reason, view.auth[member.serverID], connectedCardsServing(view.cards, member))
 				}
 			} else if denied, ok := errors.AsType[*oops.ShareableError](failure); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {
 				status = gatewayServerNoAccess
 			}
 		}
 		if status != gatewayServerReconnect {
-			reconnectLabel = ""
+			reconnectLabel, noReconnect = "", false
 		}
-		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, Name: conv.Default(member.name, member.slug), Status: status, Label: (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", ServerID: "", Hidden: false, cardIDs: nil, reconnectLabel: reconnectLabel, Auth: nil}).StatusLabel(), ReconnectLabel: reconnectLabel})
+		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, Name: conv.Default(member.name, member.slug), Status: status, Label: (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", ServerID: "", Hidden: false, cardIDs: nil, reconnectLabel: "", Auth: nil}).StatusLabel(), ReconnectLabel: reconnectLabel, NoReconnect: noReconnect})
 	}
 	tools := make([]consentInventoryTool, 0, len(inventory))
 	toolMembers := map[string]connectionCatalogMember{}
@@ -317,4 +320,29 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		})
 	}
 	return tools, toolMembers, outcomes, nil
+}
+
+// gapReconnectLabel names what fixes a connected server whose connection choice cannot be used, and whether reconnecting cannot.
+func gapReconnectLabel(reason string, auth *consentServerAuth, connectedCards int) (string, bool) {
+	switch {
+	case auth.ShowPicker():
+		return "Choose which connection to use below", true
+	case reason == authClientReasonClientDisabled, reason == authClientReasonClientDeleted, reason == authClientReasonUnassociated:
+		return "Ask an admin to finish setting up this server", true
+	case connectedCards > 1:
+		return "Two connections can sign in to this server — ask an admin to keep one", true
+	default:
+		return "", false
+	}
+}
+
+// connectedCardsServing counts the connected services that sign in to member.
+func connectedCardsServing(cards []remoteSessionCard, member metaMember) int {
+	count := 0
+	for _, card := range cards {
+		if cardServesMember(card, member) && cardStatus(card) == gatewayServerConnected {
+			count++
+		}
+	}
+	return count
 }

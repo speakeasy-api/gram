@@ -14,11 +14,14 @@
 package remotesessions_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -117,6 +120,24 @@ func TestRemoteLoginCallback_NoExpiresIn_WithRefresh_DoesNotForceRefresh(t *test
 	require.NoError(t, err)
 	require.Equal(t, initialAccess, resolved)
 	require.Equal(t, int64(0), refreshCount.Load(), "unknown access expiry must not force a refresh")
+}
+
+// An authorization lifetime that has already ended is stored as reported and
+// logged, so the reconnect loop it causes is visible.
+func TestRemoteLoginCallback_EndedAuthorizationLifetimeIsLogged(t *testing.T) {
+	t.Parallel()
+
+	var buf lockedLogBuffer
+	_, env := newSyntheticExpiryEnv(t, "ended-authorization", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"access","refresh_token":"refresh","token_type":"Bearer","expires_in":3600,"authorization_expires_in":0}`))
+	}, withLogger(slog.New(slog.NewJSONHandler(&buf, nil))))
+
+	require.False(t, env.session.AuthorizationExpiresAt.Time.After(time.Now()), "the reported lifetime is stored unchanged")
+	logs := buf.String()
+	require.Contains(t, logs, `"msg":"authorization lifetime already ended"`)
+	require.Contains(t, logs, `"level":"WARN"`)
+	require.Contains(t, logs, `"gram.oauth.failure_reason":"authorization_already_expired"`)
 }
 
 func TestRemoteLoginCallback_StandardRefreshExpirationFields(t *testing.T) {
@@ -280,6 +301,8 @@ type syntheticLoginOptions struct {
 	protectedResource *protectedResourceSeed
 	// prober wires a fresh protected resource prober into the manager.
 	prober bool
+	// logger, when set, replaces the fixture's logger so a test can read it.
+	logger *slog.Logger
 }
 
 // protectedResourceSeed is a remote_protected_resources row as a login finds it.
@@ -308,6 +331,10 @@ func withProtectedResource(seed protectedResourceSeed) syntheticLoginOption {
 
 func withProber() syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.prober = true }
+}
+
+func withLogger(logger *slog.Logger) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.logger = logger }
 }
 
 func withTunnels(tunnels *tunnelrouting.HTTPClient) syntheticLoginOption {
@@ -458,6 +485,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 
 	enc := testenv.NewEncryptionClient(t)
 	logger := testenv.NewLogger(t)
+	if options.logger != nil {
+		logger = options.logger
+	}
 	tracerProvider := testenv.NewTracerProvider(t)
 	issuerURL, jwksURI := "https://idp.example.com", ""
 	// Every httptest TLS server presents the package's test certificate, so the issuer discovery server is trusted too.
@@ -695,4 +725,26 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	cbW, callbackErr := env.callback(t, cbQuery.Encode())
 
 	return ctx, env, cbW, callbackErr
+}
+
+// lockedLogBuffer collects log lines the fixture's components write concurrently.
+type lockedLogBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedLogBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	n, err := b.buf.Write(p)
+	if err != nil {
+		return n, fmt.Errorf("write log buffer: %w", err)
+	}
+	return n, nil
+}
+
+func (b *lockedLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }

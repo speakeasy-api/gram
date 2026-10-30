@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -429,13 +430,14 @@ func TestGatewayServersView_ReconnectLabelNamesTheCause(t *testing.T) {
 	}{
 		{"rejected", func(c *remoteSessionCard) {
 			c.Connected, c.Rejected, c.ValidationReason = true, true, "Rejected by Database"
-		}, "Rejected by Database · reconnect"},
+		}, "Rejected by Database — reconnect to continue"},
 		{"inactive", func(c *remoteSessionCard) {
 			c.Connected, c.Inactive, c.ValidationReason = true, true, "Inactive at Example"
-		}, "Inactive at Example · reconnect"},
-		{"expired", func(c *remoteSessionCard) { c.Expired = true }, "Sign-in expired · reconnect"},
-		{"unroutable", func(c *remoteSessionCard) { c.Unroutable = true }, "Connected elsewhere · reconnect"},
-		{"no known cause", func(c *remoteSessionCard) { c.Connected, c.IdentityReconnect = true, true }, "Needs reconnecting"},
+		}, "Inactive at Example — reconnect to continue"},
+		{"expired", func(c *remoteSessionCard) { c.Expired = true }, "Expired — reconnect to continue"},
+		{"unroutable", func(c *remoteSessionCard) { c.Unroutable = true }, "Connected elsewhere — reconnect to continue"},
+		{"identity", func(c *remoteSessionCard) { c.Connected, c.IdentityReconnect = true, true }, "Reconnect to add account details"},
+		{"no known cause", func(c *remoteSessionCard) { c.Connected, c.Rejected = true, true }, "Needs reconnecting"},
 		{"connected", func(c *remoteSessionCard) { c.Connected = true }, "Connected"},
 	}
 	for _, tc := range cases {
@@ -458,6 +460,62 @@ func TestGatewayServersView_ReconnectLabelNamesTheCause(t *testing.T) {
 	require.Equal(t, "Needs reconnecting", server.StatusLabel())
 }
 
+// Discovery keeps a card's cause, takes a cause only it can see, and an
+// outcome from an older server that carries none renders the generic label.
+func TestGatewayConsentView_ApplyOutcomesReconnectCause(t *testing.T) {
+	t.Parallel()
+
+	project := uuid.New()
+	issuer := uuid.New()
+	members := []metaMember{gatewayTestMember("db", "Database", issuer, project)}
+	card := gatewayTestCard("db-client", issuer, uuid.NullUUID{})
+	card.Connected = true
+
+	view := gatewayServersView(members, []remoteSessionCard{card})
+	view.applyOutcomes([]consentMemberOutcome{{Slug: "db", Name: "Database", Status: gatewayServerReconnect, Label: "", ReconnectLabel: "", NoReconnect: false}})
+	require.Equal(t, "Needs reconnecting", view.Servers[0].StatusLabel())
+	require.Equal(t, "db-client", view.Servers[0].ConnectClientID)
+
+	view = gatewayServersView(members, []remoteSessionCard{card})
+	view.applyOutcomes([]consentMemberOutcome{{Slug: "db", Name: "Database", Status: gatewayServerReconnect, Label: "", ReconnectLabel: "Ask an admin to finish setting up this server", NoReconnect: true}})
+	require.Equal(t, "Ask an admin to finish setting up this server", view.Servers[0].StatusLabel())
+	require.Empty(t, view.Servers[0].ConnectClientID, "a reconnect cannot fix it, so none is offered")
+
+	raw, err := json.Marshal(consentMemberOutcome{Slug: "db", Name: "Database", Status: gatewayServerReconnect, Label: "Needs reconnecting", ReconnectLabel: "cause", NoReconnect: true})
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), "cause", "the cause is never persisted")
+}
+
+// A gap that a provider sign-in cannot fix names what does.
+func TestGapReconnectLabel(t *testing.T) {
+	t.Parallel()
+
+	picker := &consentServerAuth{Status: consentAuthChoose, Options: []consentAuthClientOption{{}, {}}}
+	cases := []struct {
+		name        string
+		reason      string
+		auth        *consentServerAuth
+		connected   int
+		label       string
+		noReconnect bool
+	}{
+		{"a picker is shown", authClientReasonNoAuthStale, picker, 2, "Choose which connection to use below", true},
+		{"a disabled client", authClientReasonClientDisabled, nil, 1, "Ask an admin to finish setting up this server", true},
+		{"a deleted client", authClientReasonClientDeleted, nil, 1, "Ask an admin to finish setting up this server", true},
+		{"an unassociated client", authClientReasonUnassociated, nil, 1, "Ask an admin to finish setting up this server", true},
+		{"two connections and no picker", authClientReasonNoAuthStale, nil, 2, "Two connections can sign in to this server — ask an admin to keep one", true},
+		{"anything else keeps the generic label", authClientReasonNoAuthStale, nil, 1, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			label, noReconnect := gapReconnectLabel(tc.reason, tc.auth, tc.connected)
+			require.Equal(t, tc.label, label)
+			require.Equal(t, tc.noReconnect, noReconnect)
+		})
+	}
+}
+
 // The server list renders the cause rather than the bare reconnect label.
 func TestConsentTemplate_GatewayListShowsReconnectCause(t *testing.T) {
 	t.Parallel()
@@ -469,6 +527,6 @@ func TestConsentTemplate_GatewayListShowsReconnectCause(t *testing.T) {
 	view := gatewayServersView([]metaMember{gatewayTestMember("db", "Database", issuer, project)}, []remoteSessionCard{card})
 
 	page := renderGatewayConsent(t, gatewayTemplateData(view, nil))
-	require.Contains(t, page, "Rejected by Database · reconnect")
+	require.Contains(t, page, "Rejected by Database — reconnect to continue")
 	require.NotContains(t, page, "Needs reconnecting")
 }

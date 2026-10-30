@@ -22,8 +22,7 @@ const probeReserve = 2 * time.Second
 // same SDK client and proxy used by dispatch, inside ValidationTimeout less
 // the close floor and the verdict's write window. A 401 or 403 after the SDK's optional
 // discovery leg is a rejection, a tool list is valid, and anything else is
-// unknown. Closing the session is the SDK's DELETE. The status is the
-// member's HTTP answer to a failed leg, 0 when there was none.
+// unknown. Closing the session is the SDK's DELETE.
 func (s *Service) probeUpstream(ctx context.Context, logger *slog.Logger, build memberProxyBuilder, name string) (remotesessions.ValidationOutcome, string, int) {
 	timeout := s.metaRuntime.ValidationTimeout
 	if parentDeadline, ok := ctx.Deadline(); ok {
@@ -36,42 +35,33 @@ func (s *Service) probeUpstream(ctx context.Context, logger *slog.Logger, build 
 
 	session, rt, err := s.connectMetaMember(probeCtx, logger, build, reserve/2)
 	if err != nil {
-		verdict, reason := classifyProbe(probeCtx, rt, err, name)
-		return verdict, reason, probeStatus(rt)
+		return classifyProbe(probeCtx, rt, err, name)
 	}
 	_, err = session.ListTools(probeCtx, nil)
 	if cerr := session.Close(); cerr != nil {
 		logger.DebugContext(ctx, "close probe session", attr.SlogError(cerr))
 	}
 	if err != nil {
-		verdict, reason := classifyProbe(probeCtx, rt, err, name)
-		return verdict, reason, probeStatus(rt)
+		return classifyProbe(probeCtx, rt, err, name)
 	}
 	return remotesessions.ValidationOutcomeValid, "", 0
 }
 
-func probeStatus(rt *memberRoundTripper) int {
+// classifyProbe maps a failed leg to a verdict, a fixed-phrase reason and the member's HTTP status; nothing upstream sent is quoted.
+func classifyProbe(ctx context.Context, rt *memberRoundTripper, err error, name string) (remotesessions.ValidationOutcome, string, int) {
 	if status, rejected := rt.rejection(); rejected {
-		return status
-	}
-	return rt.status()
-}
-
-// classifyProbe maps a failed leg to a verdict and a fixed-phrase reason; nothing upstream sent is quoted.
-func classifyProbe(ctx context.Context, rt *memberRoundTripper, err error, name string) (remotesessions.ValidationOutcome, string) {
-	if _, rejected := rt.rejection(); rejected {
-		return remotesessions.ValidationOutcomeRejectedByMember, "Rejected by " + name
+		return remotesessions.ValidationOutcomeRejectedByMember, "Rejected by " + name, status
 	}
 	switch status := rt.status(); {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded):
-		return remotesessions.ValidationOutcomeUnknown, name + " did not answer in time"
+		return remotesessions.ValidationOutcomeUnknown, name + " did not answer in time", status
 	case errors.Is(err, errMemberResponseTooLarge):
-		return remotesessions.ValidationOutcomeUnknown, "Unexpected answer from " + name
+		return remotesessions.ValidationOutcomeUnknown, "Unexpected answer from " + name, status
 	case status == 0:
-		return remotesessions.ValidationOutcomeUnknown, "Could not reach " + name
+		return remotesessions.ValidationOutcomeUnknown, "Could not reach " + name, status
 	case !upstreamStatusOK(status):
-		return remotesessions.ValidationOutcomeUnknown, fmt.Sprintf("%s answered with status %d", name, status)
+		return remotesessions.ValidationOutcomeUnknown, fmt.Sprintf("%s answered with status %d", name, status), status
 	default:
-		return remotesessions.ValidationOutcomeUnknown, "Unexpected answer from " + name
+		return remotesessions.ValidationOutcomeUnknown, "Unexpected answer from " + name, status
 	}
 }

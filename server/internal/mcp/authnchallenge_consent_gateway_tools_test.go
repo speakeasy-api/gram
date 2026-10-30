@@ -16,6 +16,7 @@ import (
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -345,7 +347,39 @@ func TestGatewayConsentUnchosenConnectionSaysWhy(t *testing.T) {
 	outcomes := gatewayOutcomesFromPage(page)
 	require.Len(t, outcomes, 1)
 	require.Equal(t, "reconnect", outcomes[0].Status)
-	require.Equal(t, "Couldn't choose a connection for this server", outcomes[0].Label)
+	require.Equal(t, "Two connections can sign in to this server — ask an admin to keep one", outcomes[0].Label)
 	require.NotContains(t, page, "Needs reconnecting")
 	require.Zero(t, upstream.requests.Load())
+}
+
+// One service whose sign-in expired keeps the card's cause on the row: a
+// reconnect is what fixes it.
+func TestGatewayConsentExpiredConnectionSaysExpired(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "expired-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+	upstream := newCatalogUpstream(t, 1)
+	serverID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
+	registration := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "expired-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
+	_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: serverID, RemoteSessionClientID: registration})
+	require.NoError(t, err)
+	encrypted, err := ti.enc.Encrypt([]byte("expired-token"))
+	require.NoError(t, err)
+	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		SubjectUrn: urn.NewUserSubject(mockidp.MockUserID), UserSessionIssuerID: issuer.ID, RemoteSessionClientID: registration,
+		AccessTokenEncrypted: encrypted, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true},
+		Scopes: []string{}, Resource: pgtype.Text{String: upstream.url, Valid: true},
+	})
+	require.NoError(t, err)
+	ti.service.manual = true
+	stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
+	page := consentGetPageWithContext(t, ctx, ti, slug, stateID)
+	outcomes := gatewayOutcomesFromPage(page)
+	require.Len(t, outcomes, 1)
+	require.Equal(t, "reconnect", outcomes[0].Status)
+	require.Equal(t, "Expired — reconnect to continue", outcomes[0].Label)
+	require.Contains(t, page, `<input type="hidden" name="client_id" value="`+registration.String()+`" />`, "a reconnect fixes it, so the row offers one")
 }

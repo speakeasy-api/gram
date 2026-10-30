@@ -1321,7 +1321,7 @@ func TestAuthClientConsentUsesSharedResolver(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, authClientNoAccess, denied.outcome)
 		member := metaMember{serverID: f.serverID}
-		f.service.applyMemberAuthClient(t.Context(), &member, denied, nil)
+		f.service.applyMemberAuthClient(t.Context(), testenv.NewLogger(t), urn.SessionSubject{}, &member, denied, nil)
 		var forbidden *oops.ShareableError
 		require.ErrorAs(t, member.upstreamUnavailable, &forbidden)
 		require.Equal(t, oops.CodeForbidden, forbidden.Code)

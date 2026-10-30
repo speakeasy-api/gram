@@ -334,11 +334,13 @@ func (v *gatewayConsentView) applyOutcomes(outcomes []consentMemberOutcome) {
 		server := &v.Servers[i]
 		server.Status = gatewayServerUnavailable
 		server.reconnectLabel = ""
+		noReconnect := false
 		for _, outcome := range outcomes {
 			if outcome.Slug == server.Slug {
 				server.Status = outcome.Status
 				if outcome.Status == gatewayServerReconnect {
 					server.reconnectLabel = outcome.ReconnectLabel
+					noReconnect = outcome.NoReconnect
 				}
 				break
 			}
@@ -350,7 +352,7 @@ func (v *gatewayConsentView) applyOutcomes(outcomes []consentMemberOutcome) {
 			}
 		}
 		server.ConnectClientID = ""
-		if len(server.cardIDs) == 1 && (server.Status == gatewayServerReconnect || server.Status == gatewayServerNotConnected) {
+		if len(server.cardIDs) == 1 && !noReconnect && (server.Status == gatewayServerReconnect || server.Status == gatewayServerNotConnected) {
 			server.ConnectClientID = server.cardIDs[0]
 		}
 	}
@@ -389,24 +391,20 @@ func cardStatus(card remoteSessionCard) gatewayServerStatus {
 	}
 }
 
-// gatewayServerNoConnectionChosen labels a server whose connection choice cannot be used, which a provider sign-in alone does not fix.
-const gatewayServerNoConnectionChosen = "Couldn't choose a connection for this server"
-
-// cardReconnectLabel is a card's reconnect status with its cause, in the card's own words.
+// cardReconnectLabel is a card's reconnect status in the card's own words, empty when it has none.
 func cardReconnectLabel(card remoteSessionCard) string {
-	reason := ""
 	switch {
-	case card.Rejected || card.Inactive:
-		reason = card.ValidationReason
+	case (card.Rejected || card.Inactive) && card.ValidationReason != "":
+		return card.ValidationReason + " — reconnect to continue"
 	case card.Expired:
-		reason = "Sign-in expired"
+		return "Expired — reconnect to continue"
 	case card.Unroutable:
-		reason = "Connected elsewhere"
-	}
-	if reason == "" {
+		return "Connected elsewhere — reconnect to continue"
+	case card.IdentityReconnect:
+		return "Reconnect to add account details"
+	default:
 		return ""
 	}
-	return reason + " · reconnect"
 }
 
 // strongerStatus combines a server's services: one usable service makes the

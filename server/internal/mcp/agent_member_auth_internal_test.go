@@ -94,7 +94,7 @@ func TestAgentMemberSelectedHeaderAndNoAuth(t *testing.T) {
 			if clientType != "" {
 				resolution = authClientResolution{outcome: authClientResolved, clientType: clientType}
 			}
-			s.applyMemberAuthClient(t.Context(), &member, resolution, nil)
+			s.applyMemberAuthClient(t.Context(), testenv.NewLogger(t), urn.SessionSubject{}, &member, resolution, nil)
 			require.True(t, member.upstreamNoAuth)
 			require.False(t, member.chosenClientID.Valid)
 			choices := &memberChoices{byServer: map[uuid.UUID]*memberTokens{}, resolve: func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {

@@ -686,14 +686,14 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 				res.choice, memberErr = choices.forServer(member.serverID)
 			}
 		}
-		c.selector.service.applyMemberAuthClient(ctx, member, res, memberErr)
+		c.selector.service.applyMemberAuthClient(ctx, logger, c.subject, member, res, memberErr)
 		// Under enforcement a resolved OAuth-backed client was checked against
 		// the member, which authorizes its registration without a sign-in link.
 		member.typedAuthClient = c.enforced && member.upstreamUnavailable == nil && res.outcome == authClientResolved && member.chosenClientID.Valid
 	}
 }
 
-func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember, res authClientResolution, err error) {
+func (s *Service) applyMemberAuthClient(ctx context.Context, logger *slog.Logger, subject urn.SessionSubject, member *metaMember, res authClientResolution, err error) {
 	member.authClient = &res
 	if errors.Is(err, errUpstreamSelectionMissing) || errors.Is(err, errUpstreamSelectionUnusable) {
 		member.upstreamUnavailable = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", member.slug)}
@@ -709,17 +709,47 @@ func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember,
 		return
 	case authClientGap:
 		member.upstreamUnavailable = memberCredentialError{&metaMemberError{message: "This server's authentication needs setup or a new sign-in."}}
-		s.logger.WarnContext(ctx, "gateway member has no usable connection choice",
-			attr.SlogOAuthFailureReason(res.reason),
-			attr.SlogMcpServerID(member.serverID.String()),
-			attr.SlogAuthClientID(res.clientID.String()),
-		)
+		if res.reason == authClientReasonNoAuthStale {
+			// The stored choice predates the server's sign-in; only a new authorization records one.
+			member.upstreamUnavailable = memberCredentialError{&metaMemberError{message: "This server's sign-in changed since you connected. Sign in to this gateway again from your AI client to choose its connection."}}
+		}
+		s.noteAuthClientGap(ctx, logger, subject, *member, res)
 		return
 	case authClientResolved, authClientNoAuth, authClientLegacy:
 	}
 	member.chosenClientID = res.choice.clientID
 	member.remoteSessionIssuerID = res.choice.remoteSessionIssuerID
 	member.upstreamNoAuth = res.outcome == authClientNoAuth || res.headersOnly() || (res.outcome == authClientLegacy && res.choice.noAuth())
+}
+
+// authClientGapWarnReasons are the gaps that mean something broke, rather than a choice not yet made.
+var authClientGapWarnReasons = map[string]bool{
+	authClientReasonNoAuthStale:     true,
+	authClientReasonNoAuthForbidden: true,
+	authClientReasonClientGone:      true,
+	authClientReasonClientDeleted:   true,
+	authClientReasonClientDisabled:  true,
+	authClientReasonRegistration:    true,
+	authClientReasonDetached:        true,
+	authClientReasonHeadersStale:    true,
+}
+
+// noteAuthClientGap counts every gap and warns once per subject, server and reason per window.
+func (s *Service) noteAuthClientGap(ctx context.Context, logger *slog.Logger, subject urn.SessionSubject, member metaMember, res authClientResolution) {
+	s.metrics.RecordAuthClientGap(ctx, string(res.outcome), res.reason)
+	attrs := []any{attr.SlogAuthClientReason(res.reason), attr.SlogMcpServerID(member.serverID.String())}
+	if res.clientID != uuid.Nil {
+		attrs = append(attrs, attr.SlogAuthClientID(res.clientID.String()))
+	}
+	const message = "gateway member has no usable connection choice"
+	if !authClientGapWarnReasons[res.reason] {
+		logger.DebugContext(ctx, message, attrs...)
+		return
+	}
+	if !s.authClientGapLog.first(subject.String() + "|" + member.serverID.String() + "|" + res.reason) {
+		return
+	}
+	logger.WarnContext(ctx, message, attrs...)
 }
 
 // serves reports whether member routes through the credential's choices

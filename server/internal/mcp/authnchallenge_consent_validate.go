@@ -96,7 +96,7 @@ func (s *Service) probeRemoteSession(
 	trigger remotesessionmetrics.ValidationTrigger,
 ) error {
 	subject := *challengeState.Subject
-	logger = logger.With(attr.SlogRemoteSessionClientID(client.ID.String()))
+	logger = logger.With(attr.SlogRemoteSessionClientID(client.ID.String()), attr.SlogOAuthValidationTrigger(string(trigger)))
 
 	tokenProjectIDs, err := s.clientTokenProjectIDs(ctx, endpoint, client)
 	if err != nil {
@@ -119,8 +119,7 @@ func (s *Service) probeRemoteSession(
 		}
 	}
 	if !usable {
-		logConnectVerificationFailure(ctx, logger, trigger, client, "new_grant_not_usable")
-		return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "Connect this service before verifying it.").LogWarn(ctx, logger)
+		return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "Connect this service before verifying it.").LogWarn(ctx, logger, connectFailureAttrs(trigger, client, "new_grant_not_usable")...)
 	}
 	if expectedGrant != nil && expectedGrant.RemoteSessionID != uuid.Nil &&
 		(entry.RemoteSessionID != expectedGrant.RemoteSessionID || !entry.RemoteSessionResolvedFromUpdatedAt.Equal(expectedGrant.RemoteSessionUpdatedAt)) {
@@ -132,8 +131,8 @@ func (s *Service) probeRemoteSession(
 	probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, challengeState, client, tokens)
 	switch {
 	case errors.Is(err, errRemoteSessionUnroutable):
-		logConnectVerificationFailure(ctx, logger, trigger, client, "new_grant_routes_to_no_server", attr.SlogOAuthResource(entry.Resource))
-		return oops.E(oops.CodeBadRequest, err, "This connection is not used by any server behind this endpoint, so it cannot be verified.").LogWarn(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "This connection is not used by any server behind this endpoint, so it cannot be verified.").LogWarn(ctx, logger,
+			append(connectFailureAttrs(trigger, client, "new_grant_routes_to_no_server"), attr.SlogRemoteSessionID(entry.RemoteSessionID.String()), attr.SlogOAuthResource(entry.Resource))...)
 	case err != nil:
 		if _, ok := errors.AsType[*oops.ShareableError](err); ok {
 			return err
@@ -178,11 +177,15 @@ func (s *Service) probeRemoteSession(
 	ownResource := s.newResourceDisplayOwner(endpoint, challengeState).ownsOrFallsBack(ctx, logger, client)
 	issuerDisplay, _ := issuerCardBranding(client, ownResource, s.serverURL)
 	verdict, reason = combineUpstreamVerdict(verdict, reason, upstream, issuerDisplay)
-	logger = logger.With(attr.SlogRemoteSessionID(entry.RemoteSessionID.String()), attr.SlogOutcome(string(verdict)), attr.SlogOAuthValidationTrigger(string(trigger)))
+	logger = logger.With(attr.SlogRemoteSessionID(entry.RemoteSessionID.String()), attr.SlogOutcome(string(verdict)))
 	s.validationMetrics.Record(ctx, client.IssuerURL, trigger, string(verdict))
 	switch verdict {
 	case remotesessions.ValidationOutcomeRejectedByMember:
-		logConnectVerificationFailure(ctx, logger, trigger, client, "member_rejected_new_grant", attr.SlogReason(reason), attr.SlogHTTPResponseStatusCode(upstreamStatus))
+		attrs := []slog.Attr{attr.SlogReason(reason)}
+		if upstreamStatus != 0 {
+			attrs = append(attrs, attr.SlogHTTPResponseStatusCode(upstreamStatus))
+		}
+		logConnectVerificationFailure(ctx, logger, trigger, client, "member_rejected_new_grant", attrs...)
 	case remotesessions.ValidationOutcomeInactive:
 		logConnectVerificationFailure(ctx, logger, trigger, client, "issuer_reports_new_grant_inactive", attr.SlogReason(reason))
 	case remotesessions.ValidationOutcomeValid, remotesessions.ValidationOutcomeUnknown:
@@ -204,16 +207,25 @@ func (s *Service) probeRemoteSession(
 	return nil
 }
 
-// logConnectVerificationFailure reports a grant that fails its check right after sign-in, which leaves the user in a reconnect loop.
+// logConnectVerificationFailure warns when a new connection fails its check right after sign-in.
 func logConnectVerificationFailure(ctx context.Context, logger *slog.Logger, trigger remotesessionmetrics.ValidationTrigger, client remotesessions.Client, failureReason string, attrs ...slog.Attr) {
-	if trigger != remotesessionmetrics.ValidationTriggerConnect {
+	all := connectFailureAttrs(trigger, client, failureReason)
+	if all == nil {
 		return
 	}
-	args := []any{attr.SlogOAuthFailureReason(failureReason), attr.SlogOAuthIssuer(client.IssuerURL)}
-	for _, a := range attrs {
+	args := make([]any, 0, len(all)+len(attrs))
+	for _, a := range append(all, attrs...) {
 		args = append(args, a)
 	}
-	logger.ErrorContext(ctx, "new connection failed its check right after sign-in", args...)
+	logger.WarnContext(ctx, "new connection failed its check right after sign-in", args...)
+}
+
+// connectFailureAttrs names why a connect-triggered check failed; nil for other triggers.
+func connectFailureAttrs(trigger remotesessionmetrics.ValidationTrigger, client remotesessions.Client, failureReason string) []slog.Attr {
+	if trigger != remotesessionmetrics.ValidationTriggerConnect {
+		return nil
+	}
+	return []slog.Attr{attr.SlogOAuthFailureReason(failureReason), attr.SlogOAuthIssuer(client.IssuerURL)}
 }
 
 // resolveValidationTarget finds the upstream this endpoint would hand the credential to, judged as the consent subject.

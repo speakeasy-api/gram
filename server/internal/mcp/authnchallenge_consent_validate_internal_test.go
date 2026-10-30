@@ -50,7 +50,12 @@ func TestClassifyProbe(t *testing.T) {
 			ctx = expired
 		}
 		rt := &memberRoundTripper{memberAttempt: &memberAttempt{build: nil, mu: sync.Mutex{}, rejected: tc.rejected, lastStatus: tc.lastStatus, lastErr: nil, refused: false, sentCall: false}, deadline: time.Time{}, closeFloor: 0, sessionMu: sync.Mutex{}, initialSessionID: "", deleteAttempted: false}
-		outcome, reason := classifyProbe(ctx, rt, tc.err, "linear")
+		outcome, reason, status := classifyProbe(ctx, rt, tc.err, "linear")
+		if tc.rejected != 0 {
+			require.Equal(t, tc.rejected, status, tc.name)
+		} else {
+			require.Equal(t, tc.lastStatus, status, tc.name)
+		}
 		require.Equal(t, tc.outcome, outcome, tc.name)
 		require.Equal(t, tc.reason, reason, tc.name)
 		require.NotContains(t, reason, "<body>", tc.name)

@@ -1757,7 +1757,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	authorizationLifetime, authorizationLifetimeReported := tok.AuthorizationLifetimeSeconds()
 	authorizationExpires := expirationDeadline(now, authorizationLifetime, authorizationLifetimeReported)
 	if authorizationExpires != nil && !authorizationExpires.After(now) {
-		logger.WarnContext(ctx, "the identity provider reported an authorization lifetime that has already ended; the new connection will need reconnecting",
+		logger.WarnContext(ctx, "authorization lifetime already ended",
 			attr.SlogOAuthFailureReason("authorization_already_expired"),
 			attr.SlogRemoteSessionClientID(client.ID.String()),
 		)
