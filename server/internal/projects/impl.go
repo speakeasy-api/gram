@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/authz/catalog"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
@@ -44,10 +43,7 @@ type Service struct {
 	sessions *sessions.Manager
 	auth     *auth.Auth
 	authz    *authz.Engine
-	// authzClient answers project:read and project:write through the
-	// permission catalog; other checks still use the engine directly.
-	authzClient *catalog.Client
-	audit       *audit.Logger
+	audit    *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -65,16 +61,15 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("projects"))
 
 	return &Service{
-		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/projects"),
-		logger:      logger,
-		db:          db,
-		repo:        repo.New(db),
-		core:        NewCore(logger, auditLogger, temporalEnv, pluginsGitHubEnabled),
-		sessions:    sessions,
-		auth:        auth.New(logger, db, sessions, authzEngine),
-		authz:       authzEngine,
-		authzClient: catalog.NewEngineClient(authzEngine),
-		audit:       auditLogger,
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/projects"),
+		logger:   logger,
+		db:       db,
+		repo:     repo.New(db),
+		core:     NewCore(logger, auditLogger, temporalEnv, pluginsGitHubEnabled),
+		sessions: sessions,
+		auth:     auth.New(logger, db, sessions, authzEngine),
+		authz:    authzEngine,
+		audit:    auditLogger,
 	}
 }
 
@@ -110,7 +105,7 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting project by slug").LogError(ctx, s.logger, attr.SlogProjectSlug(slug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
-	if _, err := s.authzClient.Require(ctx, catalog.ProjectRead(catalog.ProjectTarget(proj.OrganizationID, proj.ID.String()))); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: proj.ID.String(), Dimensions: nil}); err != nil {
 		var shareableErr *oops.ShareableError
 		if errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden {
 			return nil, oops.C(oops.CodeNotFound)
@@ -206,7 +201,7 @@ func (s *Service) UpdateProject(ctx context.Context, payload *gen.UpdateProjectP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if _, err := s.authzClient.Require(ctx, catalog.ProjectWrite(catalog.ProjectTarget(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()))); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
