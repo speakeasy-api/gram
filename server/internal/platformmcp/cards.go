@@ -1,8 +1,10 @@
 package platformmcp
 
 import (
+	"cmp"
 	"context"
 	_ "embed"
+	"fmt"
 	"html/template"
 	"strings"
 	"unicode"
@@ -45,7 +47,7 @@ var cardTemplate = template.Must(template.New("card").Parse(`<article class="car
 	`<div class="text">` +
 	`<p class="eyebrow eyebrow-{{.Eyebrow.Tone}}">{{.Eyebrow.Label}}</p>` +
 	`<h1>{{.Title}}</h1>` +
-	`{{with .Field}}<p class="line">{{.Label}} <code>{{.Value}}</code></p>{{else}}{{with .Description}}<p class="line">{{.}}</p>{{end}}{{end}}` +
+	`{{with .Field}}<p class="line">{{.Label}} <code>{{.Value}}</code></p>{{end}}{{with .Description}}<p class="line">{{.}}</p>{{end}}` +
 	`<div class="foot">{{with .Tags}}<ul class="tags">{{range .}}<li>{{.}}</li>{{end}}</ul>{{end}}` +
 	`{{with .Action}}<a class="button" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}} <span aria-hidden="true">&rarr;</span></a>{{end}}</div>` +
 	`</div>` +
@@ -73,8 +75,8 @@ type resultCard struct {
 	// Initials fill the tile when there is no logo, as on a sign-in card.
 	// Without either the tile shows the MCP server icon.
 	Initials string
-	// Field is a label and a monospaced value under the title. When it is
-	// absent, Description is shown there instead.
+	// Field is a label and a monospaced value under the title. Description,
+	// when set, is shown on the line below it.
 	Field       *cardField
 	Description string
 	// Tags are short uppercase facts about the resource.
@@ -158,7 +160,7 @@ func registerCardResource(reg *Registrar) {
 		URI:         cardResourceURI,
 		Name:        "platform-card",
 		Title:       "Speakeasy result card",
-		Description: "Inline card for MCP servers added to a project and for sign-in steps.",
+		Description: "Inline card for MCP servers added to a project, for sign-in steps, and for who a session is connected as.",
 		MIMEType:    cardMIMEType,
 		// No csp: the card loads nothing from the network, so the host's
 		// restrictive default applies.
@@ -246,6 +248,37 @@ func signInCard(serverName string, logo template.URL, authorizationURL string) r
 		card.Description = "Let this MCP server use " + serverName + " on your behalf."
 	}
 	return card
+}
+
+// maxWhoamiCardRoles keeps the tag row to one line; the result lists them all.
+const maxWhoamiCardRoles = 3
+
+// whoamiCard shows who a session is connected as: the user, their email, the
+// active organization and their roles in it.
+func whoamiCard(output WhoamiOutput) resultCard {
+	name := cmp.Or(output.User.DisplayName, output.User.Email)
+	email := output.User.Email
+	if email == name {
+		email = ""
+	}
+	tags := make([]string, 0, maxWhoamiCardRoles+1)
+	for _, role := range output.Roles {
+		if len(tags) == maxWhoamiCardRoles {
+			tags = append(tags, fmt.Sprintf("+%d", len(output.Roles)-maxWhoamiCardRoles))
+			break
+		}
+		tags = append(tags, role.Name)
+	}
+	return resultCard{
+		Eyebrow:     cardStatus{Label: "Connected as", Tone: cardToneNeutral},
+		Title:       name,
+		Logo:        "",
+		Initials:    cardInitials(name),
+		Field:       &cardField{Label: "Organization", Value: output.Organization.Name},
+		Description: email,
+		Tags:        tags,
+		Action:      nil,
+	}
 }
 
 func cardTitle(serverName string) string {
