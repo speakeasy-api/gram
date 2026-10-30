@@ -208,185 +208,454 @@ enforcement cannot drift apart.
 
 ## Step 2. Five role scenarios for MCP servers
 
-Every outcome below is asserted by a test in `scenarios_test.go`. Grants are
-written as the selector stored in `principal_grants`; `S*` means "any server".
+Each scenario follows the same template: **Grants**, **Request**, **Rule
+setup**, **Walkthrough**, **Cases**. File references are `file:line` on this
+branch, under `server/internal/`. Every outcome in the Cases tables is
+asserted in `authz/catalog/scenarios_test.go`.
 
-| # | Scenario | Can option B express it? |
+All scenarios use the same synthetic setup:
+
+- Organization `org-1`, project `proj-a`, private remote MCP servers `srv-a`
+  and `srv-c` in `proj-a`.
+- User `u-1`, a member of `org-1`. When a request arrives, the engine resolves
+  the user to principals `user:u-1`, `user:all` and one
+  `role:organization:<role>` per assigned role (`authz/engine.go:178`), then
+  loads every `principal_grants` row for those principals
+  (`authz/engine.go:196`, `authz/load.go:14`).
+
+| # | Scenario | Status |
 | --- | --- | --- |
-| 1 | Role A can connect to every server in project A | **Yes**, and it works. B flags it as a legacy broad grant, because slice 1 defined `mcp:connect` per server. |
-| 2 | Role A can manage one server in project A, which also lets it view it | **Yes**, implemented. |
-| 3 | Role B blocks server C; a user in roles A and B connects to everything except C | **Yes**, implemented. |
-| 4 | Role C can connect to every server but only call read-only tools | **Partly.** The engine enforces it today, but the catalogue does not model tools, and a tool with no annotations gets through. |
-| 5 | Role D can connect to server A and call only tool A | **Yes, in the engine.** The catalogue does not model tools. |
+| 1 | Role A connects to every server in project A | Implemented through the catalogue. Allowed, but labelled a legacy broad grant. |
+| 2 | Role A manages one server, which also grants view | Implemented through the catalogue. |
+| 3 | Role B blocks server C; a user in roles A and B connects to all but C | Implemented through the catalogue. |
+| 4 | Role C connects to every server, read-only tools only | Enforced by the engine, outside the catalogue. Has a gap for tools without annotations. |
+| 5 | Role D connects to server A and uses only tool A | Enforced by the engine, outside the catalogue. |
 
-Scenarios 1 to 3 are about the connection, which goes through the catalogue.
-Scenarios 4 and 5 restrict individual tool calls. Those checks happen in the
-tool interceptors (`remotemcp/tools_call_authz_interceptor.go:95`, plus the
-tools/list filter), which call the engine directly with the tool name and its
-disposition. The catalogue is not involved in them yet.
+---
 
-### Scenario 1. Connect to every server in project A
+### Scenario 1. Role A can connect to every server in project A
 
-**Implemented, with a label.**
+**Status:** implemented through the catalogue. Allowed, but labelled
+`legacy_broad_grant`.
 
-Stored grant:
+#### Grants
 
-```
-role A   mcp:connect   {resource_id: "*", project_id: "A"}
-```
+`principal_grants` rows that `u-1` resolves to:
 
-Definition used: `mcp:connect` (`permissions.go`): `AllowedAnchors: {mcp}`,
-`RequiredAncestors: {project, org}`.
+| principal_urn | scope | selectors | effect |
+| --- | --- | --- | --- |
+| `role:organization:role-a` | `mcp:connect` | `{"resource_kind": "mcp", "resource_id": "*", "project_id": "proj-a"}` | NULL (allow) |
 
-| Request | Answer |
-| --- | --- |
-| connect to server A in project A | allowed, basis `legacy_broad_grant` |
-| connect to server C in project A | allowed, basis `legacy_broad_grant` |
-| connect to server A in project 2 | denied: the grant's `project_id` does not match the server's project |
+#### Request
 
-How it is decided: the connect check carries the server's verified project
-(from its row), so the `project_id` on the grant must match. The wildcard
-`resource_id` covers every server in that project.
-
-Why the label: in slice 1 the `mcp:connect` definition allows a grant to name
-one server only (`AllowedAnchors: {mcp}`), on the reading that "use" should be
-granted per server. A project-wide connect grant still allows, but every allow
-is marked `legacy_broad_grant` and logged, so it can be found and migrated. If
-"every server in a project" should be a normal grant, the change is one line,
-and the label disappears (**sketched**):
+The private endpoint proxy, before contacting the upstream server
+(`mcp/serveendpoint.go:1056`, `:1077`, `:1092`):
 
 ```go
-AllowedAnchors: []string{authz.ResourceKindMCP, authz.ResourceKindProject},
+target := catalog.MCPServerTarget(organizationID, projectID.String(), mcpServer.ID.String())
+requests, err := catalog.MCPServerUse(target, catalog.MCPServerVisibility(mcpServer.Visibility))
+decision, err := catalog.NewEngineClient(s.authz).Require(ctx, requests...)
 ```
 
-### Scenario 2. Manage one server, which also grants view
+#### Rule setup
 
-**Implemented.**
-
-Stored grant:
-
-```
-role A   mcp:write   {resource_id: "S1", project_id: "A"}
-```
-
-Definitions used: `mcp:write`, and `mcp:read` with `ImpliedBy: {mcp:write}`.
-
-| Request | Answer |
-| --- | --- |
-| manage (write) S1 | allowed |
-| view (read) S1 | allowed: `mcp:read` lists `mcp:write` in `ImpliedBy` |
-| connect to S1 | **denied**: `mcp:connect` has an empty `ImpliedBy`, so managing never grants use |
-| view or manage S2 | denied: the grant names S1 only |
-
-The "this also grants view" rule is the one line `ImpliedBy:
-[]authz.Scope{authz.ScopeMCPWrite}` on the `mcp:read` definition. If managing
-should also grant use, `mcp:connect` would list `mcp:write` there. Slice 1
-removed that on purpose.
-
-### Scenario 3. Block one server for a user in two roles
-
-**Implemented.**
-
-Stored grants:
-
-```
-role A   mcp:connect           {resource_id: "*", project_id: "A"}
-role B   mcp:blocked_connect   {resource_id: "C"}
-```
-
-A user who holds both roles gets the union of their grants.
-
-| Request | Answer |
-| --- | --- |
-| connect to server A | allowed (role A) |
-| connect to server C | **denied, reason `blocked`** |
-| call any tool on server A | allowed |
-| call any tool on server C | denied: the block also matches tool-call checks on C |
-| same user also holds a direct `mcp:connect {resource_id: "C"}` | still denied |
-
-How it is decided: `mcp:connect` has `ExcludedBy: mcp:blocked_connect` and
-`BlockWins: true`. The engine subtracts any matching block from the allows,
-and with `BlockWins` no allow outranks it, not even a grant made directly to
-the user. Blocks match strictly: every key on the block must be present on the
-check, so a block on C cannot leak onto other servers.
-
-### Scenario 4. Connect to every server but only call read-only tools
-
-**Partly supported. Enforced by the engine today, not modelled by the catalogue.**
-
-Stored grant:
-
-```
-role C   mcp:connect   {resource_id: "*", disposition: "read_only"}
-```
-
-| Request | Answer |
-| --- | --- |
-| connect to any server | allowed, basis `legacy_broad_grant` (wildcard connect, see scenario 1) |
-| call a tool annotated read-only | allowed |
-| call a tool annotated destructive or idempotent | denied |
-| **call a tool with no annotations** | **allowed: a gap** |
-
-How it is decided: for each tool call, the interceptor works out the tool's
-**disposition** from the annotations the MCP server declares
-(`dispositionFromAnnotations`, `mcp/rpc_tools_list.go:328`): `read_only`,
-`destructive`, `idempotent` or `open_world`, taking the first hint that is set.
-It sends that in the check, and the grant's `disposition` must match.
-
-The gaps:
-
-- **Unannotated tools pass.** A tool with no annotations has no disposition,
-  so the check leaves that key out. Allow grants match loosely: a key on the
-  grant that the check leaves out is skipped (`Selector.Matches`,
-  `authz/selector.go:67`). So the read-only grant also allows the unannotated
-  tool. The engine already closes this hole for one case, a direct grant
-  outranking a block (`authz/precedence.go:138`), but not for plain allows.
-  The test asserts the current behaviour so the gap is visible.
-- **The server declares its own annotations.** "Read-only" means what the
-  upstream server says about its tool. Speakeasy cannot verify it.
-- **The connection itself is not restricted**, which is intended: the user
-  can connect and list tools, and only the calls are filtered.
-
-How B could model it (**sketched**, not built): give `Definition` a list of
-the tool-call keys it understands, and add a tool-call builder that the
-interceptors would use instead of `authz.MCPToolCallCheck`.
+The definition (`authz/catalog/permissions.go:58`):
 
 ```go
-// permissions.go
-ToolDimensions: []string{authz.SelectorKeyTool, authz.SelectorKeyDisposition},
+{
+	Name:              authz.ScopeMCPConnect,
+	Resource:          authz.ResourceKindMCP,
+	AllowedAnchors:    []string{authz.ResourceKindMCP}, // a grant should name one server
+	RequiredAncestors: mcpServerAncestors,              // {project, org}
+	ImpliedBy:         nil,
+	ExcludedBy:        authz.ScopeMCPBlockedConnect,
+	BlockWins:         true,
+},
+```
 
-// mcpserver.go
+What using a server requires (`authz/catalog/mcpserver.go:55`):
+
+```go
+case MCPServerPrivate:
+	return []Request{{Permission: authz.ScopeMCPConnect, Target: target}}, nil
+```
+
+The engine's matching table, kept equal to `ImpliedBy` by
+`TestDefinitionsMatchEngine` (`authz/scopes.go:288`):
+
+```go
+ScopeMCPConnect: nil, // nothing else satisfies connect
+```
+
+#### Walkthrough
+
+`u-1` connects to `srv-a`.
+
+1. `mcp/serveendpoint.go:1013` calls `authorizeProxyBackendAccess` with
+   `org-1`, taken from the server's project row (`:944`), and `proj-a`.
+2. `:1056` builds the target: server `srv-a`, ancestors project `proj-a` and
+   organization `org-1`.
+3. `:1077` calls `MCPServerUse`. The server is private, so it returns one
+   request: `mcp:connect` on the target.
+4. `:1084` calls `PrepareContext` (`authz/engine.go:112`). It resolves `u-1`
+   to `user:u-1`, `user:all` and `role:organization:role-a`, and loads the row
+   above.
+5. `:1092` calls `Client.Require` (`authz/catalog/client.go:137`), which calls
+   `prepare` (`:162`):
+   - `mcp:connect` has a definition. ✓
+   - The target is one concrete `mcp` resource, not `*`. ✓
+   - Its organization `org-1` is the caller's active organization (`:180`). ✓
+   - The required ancestors, project and org, are present and in `org-1`
+     (`:185`, `requiredAncestor` at `:201`). ✓
+   - It builds the check `{scope: mcp:connect, resource_id: srv-a, project_id: proj-a}`
+     (`:193`).
+6. The backend calls `Engine.Require` (`authz/catalog/backend.go:34`, then
+   `authz/engine.go:211`). That reaches `evaluateGrantCheck`
+   (`authz/grants.go:402`):
+   - `check.expand()` (`authz/access.go:92`) gives the scopes that satisfy
+     the check: `root` and `mcp:connect`.
+   - `matchingGrant` (`grants.go:437`) compares each row's selector with the
+     check (`authz/selector.go:71`): `resource_kind` mcp = mcp, `resource_id`
+     `*` matches anything, and `project_id` proj-a = proj-a. **Match.**
+   - The exclusion (`authz/checks.go:136`) looks for an `mcp:blocked_connect`
+     row matching strictly. There is none. **Allowed.**
+7. `decide` (`authz/catalog/client.go:229`) checks where the grant is anchored
+   (`anchoredWithin`, `permissions.go:87`). `resource_id` is `*` and
+   `project_id` is set, so it is a project-wide grant. `AllowedAnchors` is
+   `{mcp}`, so the condition "the grant names one server" is **not met**, and
+   the basis is `legacy_broad_grant` (`client.go:244`).
+8. `mcp/serveendpoint.go:1100` logs the legacy basis, and the request
+   continues to the upstream server.
+
+If project-wide connect should be a normal grant, the change is
+`AllowedAnchors: {mcp, project}` (**sketched**). The label then disappears;
+nothing else changes.
+
+#### Cases
+
+| Request | Outcome | Why |
+| --- | --- | --- |
+| connect `srv-a` in `proj-a` | allowed, `legacy_broad_grant` | `*` with `project_id` matches; project anchor not in `AllowedAnchors` |
+| connect `srv-c` in `proj-a` | allowed, `legacy_broad_grant` | same row |
+| connect `srv-a` in `proj-2` | denied, `no_grant` | `project_id` proj-a ≠ proj-2 at step 6 |
+
+---
+
+### Scenario 2. Role A can manage one server, which also grants view
+
+**Status:** implemented through the catalogue, for the remote server's scope
+settings. Other management endpoints in `remotemcp/impl.go` (for example
+`:130`, `:173`) still call the engine directly, checking `mcp:write` against
+the project rather than the server, so a grant on one server does not reach
+them.
+
+#### Grants
+
+| principal_urn | scope | selectors | effect |
+| --- | --- | --- | --- |
+| `role:organization:role-a` | `mcp:write` | `{"resource_kind": "mcp", "resource_id": "srv-a", "project_id": "proj-a"}` | NULL (allow) |
+
+#### Request
+
+View the server's scope settings (`remotemcp/serverscopes.go:41`, enforced at
+`:199`):
+
+```go
+s.authorizeServerScopes(ctx, payload.McpServerID, func(target catalog.Target) []catalog.Request {
+	return []catalog.Request{catalog.MCPServerRead(target)}
+})
+// inside: s.authzClient.Require(ctx, requests(serverTarget(authCtx, mcpServerID))...)
+```
+
+Manage, which here means changing the scope pin (`remotemcp/serverscopes.go:63`,
+and again at `:235` for every server sharing the same upstream URL):
+
+```go
+s.authorizeServerScopes(ctx, payload.McpServerID, func(target catalog.Target) []catalog.Request {
+	return catalog.MCPScopePin(target, nil) // mcp:write on the server
+})
+```
+
+#### Rule setup
+
+`authz/catalog/permissions.go:40` and `:49`:
+
+```go
+{
+	Name:           authz.ScopeMCPRead,
+	ImpliedBy:      []authz.Scope{authz.ScopeMCPWrite}, // managing lets you view
+	AllowedAnchors: []string{authz.ResourceKindMCP, authz.ResourceKindProject, authz.ResourceKindOrg},
+	// ...
+},
+{
+	Name:      authz.ScopeMCPWrite,
+	ImpliedBy: nil,
+	// ...
+},
+```
+
+The engine's table (`authz/scopes.go:284`), kept equal by the agreement test:
+
+```go
+ScopeMCPRead:    {ScopeMCPWrite},
+ScopeMCPConnect: nil, // managing does not let you connect
+```
+
+#### Walkthrough
+
+`u-1` views `srv-a`'s scope settings.
+
+1. `GetServerScopes` (`remotemcp/serverscopes.go:40`) calls
+   `authorizeServerScopes` (`:189`). That builds the target from the session's
+   organization and project (`serverTarget`, `:205`) and asks for
+   `MCPServerRead`.
+2. `prepare` (`authz/catalog/client.go:162`) passes, as in scenario 1, and
+   builds `{scope: mcp:read, resource_id: srv-a, project_id: proj-a}`.
+3. `check.expand()` (`authz/access.go:92`) gives `root`, `mcp:read` and
+   **`mcp:write`**, because of `authz/scopes.go:284`.
+4. `matchingGrant` finds the `mcp:write` row: the scope is in the expanded
+   list, `resource_id` srv-a = srv-a, `project_id` proj-a = proj-a.
+   **Match.**
+5. No `mcp:blocked_read` row. **Allowed.**
+6. `decide`: the grant names one server, which is in `AllowedAnchors`, so the
+   basis is none.
+
+`u-1` connects to `srv-a`: the steps are the same as scenario 1, but at step
+6 `expand()` gives only `root` and `mcp:connect`. The `mcp:write` row's scope
+is not in that list, so **no grant matches**, the outcome is `no_grant`, and
+`mcp/serveendpoint.go:1098` returns 403 with a request-access link.
+
+#### Cases
+
+| Request | Outcome | Why |
+| --- | --- | --- |
+| view `srv-a` | allowed | `mcp:read` expands to `mcp:write` |
+| manage (pin) `srv-a` | allowed | direct scope match |
+| connect `srv-a` | denied, `no_grant` | `mcp:connect` expands to nothing but itself |
+| view or manage `srv-c` | denied, `no_grant` | `resource_id` srv-a ≠ srv-c |
+
+---
+
+### Scenario 3. Role B blocks server C; a user in both roles connects to all but C
+
+**Status:** implemented through the catalogue.
+
+#### Grants
+
+`u-1` holds roles A and B, so both rows load:
+
+| principal_urn | scope | selectors | effect |
+| --- | --- | --- | --- |
+| `role:organization:role-a` | `mcp:connect` | `{"resource_kind": "mcp", "resource_id": "*", "project_id": "proj-a"}` | NULL (allow) |
+| `role:organization:role-b` | `mcp:blocked_connect` | `{"resource_kind": "mcp", "resource_id": "srv-c"}` | NULL |
+
+A block is stored as its own scope (`mcp:blocked_connect`), not through the
+`effect` column. The engine does not read `effect`: the grant query (`access/queries.sql:13`) does not select it.
+
+#### Request
+
+The same call as scenario 1 (`mcp/serveendpoint.go:1077`, `:1092`).
+
+#### Rule setup
+
+The definition names the block and makes it win (`authz/catalog/permissions.go:58`):
+
+```go
+ExcludedBy: authz.ScopeMCPBlockedConnect,
+BlockWins:  true,
+```
+
+The engine's side, kept equal by the agreement test:
+
+```go
+// authz/scopes.go:342: which block withdraws which permission
+ScopeMCPConnect: ScopeMCPBlockedConnect,
+
+// authz/precedence.go:51: blocks no allow can outrank
+var blockWinsScopes = []Scope{ScopeMCPRead, ScopeMCPWrite, ScopeMCPConnect}
+```
+
+A block matches strictly (`authz/checks.go:147`): every key on the block row
+must be present in the check and equal.
+
+#### Walkthrough
+
+`u-1` connects to `srv-c`.
+
+1. Steps 1 to 5 of scenario 1. The check is
+   `{scope: mcp:connect, resource_id: srv-c, project_id: proj-a}`.
+2. `evaluateGrantCheck` (`authz/grants.go:402`): `matchingGrant` finds role
+   A's row (`*` in `proj-a`). An allow exists.
+3. `expressionForCheck` (`authz/checks.go:136`) builds "allow minus block",
+   evaluated in `evaluateGrantCheckDifference` (`authz/expressions.go:278`).
+   Role B's row is matched strictly against the check: `resource_kind` mcp =
+   mcp and `resource_id` srv-c = srv-c, and the block has no other keys.
+   **The block matches.**
+4. `directOverride` (`authz/precedence.go:109`) asks whether a direct user
+   grant may outrank the block: `ExclusionYieldsToDirectGrants(mcp:connect)`
+   (`:93`) is false, because `mcp:connect` is in `blockWinsScopes`. **The block
+   stands.**
+5. The result is `Blocked`. `decide` returns `ReasonBlocked`, `Require`
+   returns 403, and the upstream is never contacted.
+
+For `srv-a`, step 3 compares `resource_id` srv-c with srv-a, the block does
+not match, and the request is allowed. Tool calls on `srv-c` are denied the
+same way: their check also carries `resource_id: srv-c`, which the block
+matches.
+
+#### Cases
+
+| Request | Outcome | Why |
+| --- | --- | --- |
+| connect `srv-a` | allowed | role A's row; the block names srv-c |
+| connect `srv-c` | denied, `blocked` | the block matches; `BlockWins` |
+| call a tool on `srv-a` | allowed | |
+| call a tool on `srv-c` | denied | the block matches the tool-call check too |
+| `u-1` also holds a direct `mcp:connect {resource_id: srv-c}` | still denied | `BlockWins`: no direct-grant override for MCP |
+
+---
+
+### Scenario 4. Role C can connect to every server but only call read-only tools
+
+**Status:** enforced by the engine, outside the catalogue. Has a gap.
+
+#### Grants
+
+| principal_urn | scope | selectors | effect |
+| --- | --- | --- | --- |
+| `role:organization:role-c` | `mcp:connect` | `{"resource_kind": "mcp", "resource_id": "*", "disposition": "read_only"}` | NULL (allow) |
+
+#### Request
+
+Connecting is the same call as scenario 1. Each tool call is checked by an
+interceptor the proxy attaches (`remotemcp/proxymanager.go:366`), which calls
+the engine directly, not the catalogue (`remotemcp/tools_call_authz_interceptor.go:90`, `:95`):
+
+```go
+dispositions, err := i.resolver.Dispositions(ctx, i.mcpServerID, i.projectID)
+err = i.authz.Require(ctx, authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
+	Tool:        call.Params.Name,
+	Disposition: dispositions[call.Params.Name],
+	ProjectID:   i.projectID,
+}))
+```
+
+`tools/list` uses the same check to hide tools
+(`remotemcp/tools_list_mcp_connect_filter_interceptor.go:111`).
+
+#### Rule setup
+
+There is no catalogue entry for tools. The rule lives in the engine:
+
+```go
+// authz/selector.go:186: keys an mcp grant may carry
+ResourceKindMCP: {SelectorKeyTool: true, SelectorKeyDisposition: true, SelectorKeyProjectID: true},
+
+// authz/checks.go:12: a tool call is an mcp:connect check with extra keys;
+// empty values are left out
+if dims.Disposition != "" {
+	dimensions[SelectorKeyDisposition] = dims.Disposition
+}
+
+// conv/tools.go:394: a tool's disposition is its first set hint
+case a.ReadOnlyHint != nil && *a.ReadOnlyHint:    return "read_only"
+case a.DestructiveHint != nil && *a.DestructiveHint: return "destructive"
+// ... idempotent, open_world, otherwise ""
+```
+
+The hints come from the server's stored tool annotations, which a project's
+tool variations can override (`mcpservers/queries.sql:414`, cached in
+`mcpservers/tooldisposition/cache.go:77`).
+
+#### Walkthrough
+
+`u-1` connects to `srv-a`, then calls `delete_page` (annotated destructive),
+then `notes` (no annotations).
+
+1. **Connect:** scenario 1's path. The connect check has no `disposition` key.
+   In `Selector.matches` (`authz/selector.go:71`), a grant key the check lacks
+   is skipped (`:74`), so the row matches. Allowed, labelled
+   `legacy_broad_grant` because `resource_id` is `*`.
+2. **`delete_page`:** the interceptor (`tools_call_authz_interceptor.go:76`)
+   resolves dispositions; `delete_page` is `destructive`. It builds
+   `{scope: mcp:connect, resource_id: srv-a, tool: delete_page, disposition: destructive, project_id: proj-a}`
+   and calls `Engine.Require` (`authz/engine.go:211`). In `matchingGrant`,
+   `disposition` read_only ≠ destructive, so **no match**. The call is refused
+   with `ToolPermissionDenied`.
+3. **`notes`:** no annotations, so `DispositionFromAnnotations` returns `""`
+   and `MCPToolCallCheck` leaves `disposition` out of the check
+   (`authz/checks.go:17`). The grant's `disposition` key is skipped
+   (`selector.go:74`). **Match: allowed. This is the gap.**
+
+The engine already applies strict matching to tool calls in one place, when a
+direct grant tries to outrank a block (`authz/precedence.go:138`), but not to
+ordinary allows.
+
+**Sketched (not built):** bring tool calls into the catalogue. Add a
+tool-call builder, used by both interceptors in place of
+`authz.MCPToolCallCheck`, and let `prepare` refuse a tool with no disposition
+as `missing_fact` whenever a disposition is required:
+
+```go
+// authz/catalog/mcpserver.go
 func MCPToolCall(target Target, tool, disposition string) Request
 ```
 
-With that in place, `prepare` could treat an unknown disposition as
-`missing_fact` (unresolved, never allows) whenever a grant constrains
-disposition. That would close the gap in one place instead of in every
-interceptor.
+#### Cases
 
-### Scenario 5. Connect to server A and call only tool A
+| Request | Outcome | Why |
+| --- | --- | --- |
+| connect to any server | allowed, `legacy_broad_grant` | the connect check has no disposition, so that key is skipped |
+| call a `read_only` tool | allowed | read_only = read_only |
+| call a `destructive` or `idempotent` tool | denied | disposition mismatch |
+| call a tool with no annotations | **allowed (gap)** | empty disposition is left out of the check |
 
-**Supported by the engine today, not modelled by the catalogue.**
+---
 
-Stored grant:
+### Scenario 5. Role D can connect to server A and only use tool A
 
-```
-role D   mcp:connect   {resource_id: "A", tool: "tool_a"}
-```
+**Status:** enforced by the engine, outside the catalogue.
 
-| Request | Answer |
-| --- | --- |
-| connect to server A | allowed (basis none: it names one server) |
-| connect to server C | denied |
-| call `tool_a` on server A | allowed |
-| call `tool_b` on server A | denied; tools/list also hides it |
-| call `tool_a` on server C | denied |
+#### Grants
 
-How it is decided: the connection check has no tool, so the grant's `tool`
-key is skipped and the connection is allowed. Each tool call carries the tool
-name, which must equal `tool_a`. Tool names are matched exactly; there are no
+| principal_urn | scope | selectors | effect |
+| --- | --- | --- | --- |
+| `role:organization:role-d` | `mcp:connect` | `{"resource_kind": "mcp", "resource_id": "srv-a", "tool": "tool_a"}` | NULL (allow) |
+
+#### Request
+
+Connect: same as scenario 1. Tool calls and `tools/list`: same interceptor
+calls as scenario 4.
+
+#### Rule setup
+
+The same engine rules as scenario 4: `tool` is an allowed key on `mcp` grants
+(`authz/selector.go:186`), and `MCPToolCallCheck` puts the tool name in the
+check (`authz/checks.go:14`). Tool names are compared exactly; there are no
 patterns.
 
-Same caveat as scenario 4: the catalogue does not know about tools, so the
-tool restriction relies on the interceptors building the right engine check.
-The sketch under scenario 4 would bring it into the catalogue.
+#### Walkthrough
+
+`u-1` connects to `srv-a` and calls `tool_b`.
+
+1. **Connect:** the check `{mcp:connect, resource_id: srv-a, project_id: proj-a}`
+   has no `tool` key, so the grant's `tool` key is skipped
+   (`authz/selector.go:74`) and `resource_id` matches. Allowed. `decide` finds
+   a grant that names one server, so the basis is none.
+2. **`tools/list`:** the filter interceptor checks each tool and keeps only
+   matches (`tools_list_mcp_connect_filter_interceptor.go:125`). `u-1` sees
+   only `tool_a`.
+3. **`tool_b`:** the check carries `tool: tool_b`. `tool` tool_a ≠ tool_b, so
+   no grant matches, and the call is refused.
+
+As in scenario 4, the catalogue does not take part in the tool decision.
+
+#### Cases
+
+| Request | Outcome | Why |
+| --- | --- | --- |
+| connect `srv-a` | allowed | tool key skipped on a connection check |
+| connect `srv-c` | denied | `resource_id` mismatch |
+| call `tool_a` on `srv-a` | allowed | |
+| call `tool_b` on `srv-a` | denied; hidden from `tools/list` | `tool` mismatch |
+| call `tool_a` on `srv-c` | denied | `resource_id` mismatch |
