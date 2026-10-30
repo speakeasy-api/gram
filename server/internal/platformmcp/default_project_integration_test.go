@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
@@ -264,6 +265,48 @@ func TestInstallInstructionsUseTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 	named, err := invokeTool[GetMyInstallInstructionsOutput](t, actorCtx(defaultPrincipal), reg, "get_my_install_instructions", map[string]any{"project_id": defaultProject.ID.String(), "mcp_id": mcpID.String(), "client_family": string(OnboardingClientClaudeCode)})
 	require.NoError(t, err)
 	require.Equal(t, named, omitted)
+
+	// A caller without find_mcp names the server by the registration that
+	// added it and gets the same guidance.
+	queries := platformrepo.New(conn)
+	registration, err := queries.CreatePlatformMCPCatalogRegistration(ctx, platformrepo.CreatePlatformMCPCatalogRegistrationParams{
+		OrganizationID:       defaultPrincipal.OrganizationID,
+		ProjectID:            defaultProject.ID,
+		SourceKind:           "catalog",
+		CatalogProvider:      "test-provider",
+		CatalogReference:     "test/install",
+		Status:               "pending",
+		ConnectionID:         uuid.NullUUID{},
+		ConnectionGeneration: uuid.NullUUID{},
+		UserID:               pgtype.Text{},
+		ActingSurface:        pgtype.Text{},
+	})
+	require.NoError(t, err)
+	_, err = queries.UpdatePlatformMCPCatalogRegistrationComponents(ctx, platformrepo.UpdatePlatformMCPCatalogRegistrationComponentsParams{
+		Status:                 "pending",
+		RemoteMcpServerID:      uuid.NullUUID{},
+		RemoteMcpServerOwned:   false,
+		UserSessionIssuerID:    uuid.NullUUID{},
+		UserSessionIssuerOwned: false,
+		McpServerID:            uuid.NullUUID{UUID: mcpID, Valid: true},
+		McpServerOwned:         false,
+		McpEndpointID:          uuid.NullUUID{},
+		McpEndpointOwned:       false,
+		ID:                     registration.ID,
+		OrganizationID:         defaultPrincipal.OrganizationID,
+		ProjectID:              defaultProject.ID,
+	})
+	require.NoError(t, err)
+	registrationID := registration.ID
+	byRegistration, err := invokeTool[GetMyInstallInstructionsOutput](t, actorCtx(defaultPrincipal), reg, "get_my_install_instructions", map[string]any{"registration_id": registrationID.String(), "client_family": string(OnboardingClientClaudeCode)})
+	require.NoError(t, err)
+	require.Equal(t, omitted, byRegistration)
+
+	_, err = invokeTool[GetMyInstallInstructionsOutput](t, actorCtx(defaultPrincipal), reg, "get_my_install_instructions", map[string]any{"registration_id": uuid.NewString(), "client_family": string(OnboardingClientClaudeCode)})
+	require.Error(t, err, "an unknown registration names no server")
+
+	_, err = invokeTool[GetMyInstallInstructionsOutput](t, actorCtx(defaultPrincipal), reg, "get_my_install_instructions", map[string]any{"mcp_id": mcpID.String(), "registration_id": registrationID.String(), "client_family": string(OnboardingClientClaudeCode)})
+	require.Error(t, err, "exactly one target")
 
 	_, err = invokeTool[GetMyInstallInstructionsOutput](t, actorCtx(namedPrincipal), reg, "get_my_install_instructions", map[string]any{"mcp_id": mcpID.String(), "client_family": string(OnboardingClientClaudeCode)})
 	require.Equal(t, "default_project_not_found", refusalCode(t, err))
