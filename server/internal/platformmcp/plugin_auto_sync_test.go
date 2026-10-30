@@ -348,6 +348,31 @@ func TestSetPluginAutoSyncUsesThePluginsServiceCheck(t *testing.T) {
 	require.Equal(t, new(false), got.Plugin.AutoSyncEnabled)
 }
 
+// Package directory conflicts are refused before pausing, through the same
+// plugins service guard used by the dashboard and the documented tool code.
+func TestSetPluginAutoSyncRefusesPackageDirectoryCollisions(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_auto_sync_collision")
+	engine := authz.NewEngine(testenv.NewLogger(t), fixture.conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
+	management := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), nil, "test", "https://example.test", nil, nil)
+	fixture.service.WithAutoSyncGuard(management)
+	plugin := seedPlugin(t, ctx, fixture.conn, fixture.principal.OrganizationID, fixture.project.ID, "Tools", "tools")
+	seedPlugin(t, ctx, fixture.conn, fixture.principal.OrganizationID, fixture.project.ID, "Conflicting Tools", "tools-codex")
+
+	payload := invokePluginMetadataRefusal(t, fixture.descriptor(t, operationSetPluginAutoSync), map[string]any{
+		"project_id": fixture.project.ID.String(), "plugin": plugin.ID.String(), "auto_sync_enabled": false,
+		"idempotency_key": "off-collision", "confirmed": true,
+	}, ContextWithPrincipal(ctx, fixture.principal))
+	var refusal pluginMetadataRefusal
+	require.NoError(t, json.Unmarshal([]byte(payload), &refusal))
+	require.Equal(t, "invalid_request", refusal.Code)
+	require.Contains(t, refusal.Message, "tools-codex")
+	got, err := fixture.service.GetPlugin(ctx, fixture.principal, GetPluginInput{ProjectID: fixture.project.ID.String(), Plugin: plugin.ID.String()})
+	require.NoError(t, err)
+	require.Equal(t, new(true), got.Plugin.AutoSyncEnabled)
+	requireNoOperationReceipt(t, ctx, fixture.conn, fixture.principal, fixture.project, operationSetPluginAutoSync, "off-collision")
+}
+
 // The listed input schemas carry auto sync: optional on create_plugin, where
 // leaving it out keeps it on, and required on set_plugin_auto_sync.
 func TestPluginAutoSyncInputSchemas(t *testing.T) {

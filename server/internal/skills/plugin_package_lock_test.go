@@ -16,7 +16,8 @@ import (
 // check ends, even when no marketplace or publisher is configured.
 func TestSkillVersionCommitWaitsForPluginPauseCheck(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestService(t)
+	ctx, ti := newTestServiceWithPublisher(t, nil)
+	require.Nil(t, ti.publisher)
 	created := createSkill(t, ctx, ti, "pause-race", "First version.")
 	plugin := createPlugin(t, ctx, ti, ti.projectID, "pause-race")
 	_, err := ti.service.Distribute(ctx, &gen.DistributePayload{ID: created.Skill.ID, PluginID: new(plugin.ID.String())})

@@ -16,6 +16,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -714,6 +715,7 @@ func TestDistributionServiceClearsManualSyncWaitWhenPausedPluginIsCurrent(t *tes
 	require.False(t, current.AwaitingManualSync, "unavailable evidence cannot establish that a manual sync is required")
 	require.Equal(t, publicationStatePending, current.PublicationState)
 	require.Contains(t, distributionOutcomeMessage(current, false), "has not finished updating yet")
+	ctx = withOrganizationGrant(ctx, authz.ScopeOrgAdmin, principal.OrganizationID)
 	plugin, err := inventory.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: "held"})
 	require.NoError(t, err)
 	require.NotNil(t, plugin.PublicationEvidence)
