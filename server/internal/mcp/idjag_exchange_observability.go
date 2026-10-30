@@ -53,9 +53,27 @@ func (e *idJAGExchange) reject(reason mcpmetrics.IDJAGRejectionReason, err error
 	return attrs
 }
 
-// rejectAssertion is reject for a validator refusal.
+// idJAGInfrastructureReason reports a validator refusal caused by a
+// Speakeasy or identity provider failure rather than the assertion.
+func idJAGInfrastructureReason(reason idjag.Reason) bool {
+	switch reason {
+	case idjag.ReasonTrustUnavailable, idjag.ReasonKeyUnresolvable, idjag.ReasonSubjectUnavailable, idjag.ReasonReplayStoreUnavailable, idjag.ReasonVerifierMisconfigured:
+		return true
+	default:
+		return false
+	}
+}
+
+// rejectAssertion is reject for a validator refusal. An infrastructure
+// reason keeps its reason label but records outcome=error.
 func (e *idJAGExchange) rejectAssertion(err error) []slog.Attr {
-	return e.reject(mcpmetrics.IDJAGRejectionFromValidator(idjag.ReasonOf(err)), err)
+	reason := idjag.ReasonOf(err)
+	attrs := e.reject(mcpmetrics.IDJAGRejectionFromValidator(reason), err)
+	if idJAGInfrastructureReason(reason) {
+		e.outcome = mcpmetrics.IDJAGExchangeError
+		attrs[0] = attr.SlogOAuthIDJAGOutcome(string(mcpmetrics.IDJAGExchangeError))
+	}
+	return attrs
 }
 
 // acceptedAttrs are the attributes the accepted exchange's log line carries.
@@ -68,7 +86,7 @@ func (e *idJAGExchange) accept() {
 }
 
 func (e *idJAGExchange) record(ctx context.Context) {
-	if e.outcome == mcpmetrics.IDJAGExchangeError {
+	if e.outcome == mcpmetrics.IDJAGExchangeError && e.reason == mcpmetrics.IDJAGRejectionNone {
 		e.logger.InfoContext(ctx, "oauth ID-JAG token request failed", attr.SlogOAuthIDJAGOutcome(string(mcpmetrics.IDJAGExchangeError)))
 	}
 	e.metrics.RecordIDJAGExchange(ctx, e.issuerID, e.outcome, e.reason)

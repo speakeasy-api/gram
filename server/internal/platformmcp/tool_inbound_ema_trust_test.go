@@ -222,6 +222,7 @@ func TestInboundEMATrustToolContracts(t *testing.T) {
 	}
 	require.True(t, descriptorByName(t, reg, getInboundEMATrustToolName).Annotations.ReadOnlyHint)
 	require.True(t, *descriptorByName(t, reg, untrustInboundEMAProviderToolName).Annotations.DestructiveHint)
+	require.True(t, *descriptorByName(t, reg, trustInboundEMAProviderToolName).Annotations.DestructiveHint)
 }
 
 func TestInboundEMATrustGetReportsAudienceDirectoryAndProvider(t *testing.T) {
@@ -481,6 +482,17 @@ func TestInboundEMATrustPreviewWarnsWhenIssuerIsNotShared(t *testing.T) {
 	require.Contains(t, output.Warnings[0], "shared authorization server")
 }
 
+func TestInboundEMATrustConfirmedResultWarnsWhenIssuerIsNotShared(t *testing.T) {
+	t.Parallel()
+	f := newInboundEMAFixture(t, 1)
+	f.users.issuers[f.issuerID].AuthorizationServerMode = "endpoint"
+	output, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, ExpectedIdentityProviderIssuerURL: inboundEMATestIDP, Confirmed: true})
+	require.NoError(t, err)
+	require.True(t, output.Applied)
+	require.Len(t, output.Warnings, 1)
+	require.Contains(t, output.Warnings[0], "shared authorization server")
+}
+
 func TestInboundEMATrustSaysCreatedProviderWasKeptWhenTrustIsRefused(t *testing.T) {
 	t.Parallel()
 	f := newInboundEMAFixture(t, 1)
@@ -681,8 +693,7 @@ func TestInboundEMATrustIssuerStateReportsUnreadableCustomClientURLs(t *testing.
 	issuer.ID = "not-a-uuid"
 	issuer.ClientIDMetadataAdmissionMode = "presets"
 
-	state, err := f.service.issuerState(t.Context(), f.principal.OrganizationID, &issuer, organizationGatewayIssuer{})
-	require.NoError(t, err)
+	state := f.service.issuerState(t.Context(), f.principal.OrganizationID, &issuer, organizationGatewayIssuer{})
 	require.True(t, state.CustomClientURLsUnavailable)
 	require.Empty(t, state.CustomClientURLs)
 	require.Equal(t, []string{"custom_client_urls"}, state.unavailableParts())
@@ -786,16 +797,51 @@ func TestInboundEMATrustReadFailuresBeforeTheChangeStillFail(t *testing.T) {
 	providerID := uuid.NewString()
 	f.remote.records[providerID] = &types.RemoteSessionIssuer{ID: providerID, Issuer: inboundEMATestIDP, JwksURI: new(inboundEMATestIDP + "/keys")}
 	f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID = new(providerID)
-	f.remote.getErr = readErr
-	_, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP})
-	require.ErrorIs(t, err, readErr)
-
-	f.remote.getErr = nil
 	f.service.gateway = func(context.Context, string) (organizationGatewayIssuer, error) {
 		return organizationGatewayIssuer{}, readErr
 	}
+	_, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP})
+	require.ErrorIs(t, err, readErr)
+
 	_, err = f.service.Untrust(t.Context(), f.principal, UntrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, ExpectedTrustedRemoteSessionIssuerID: providerID, Confirmed: true})
 	require.ErrorIs(t, err, readErr)
 	require.Empty(t, f.users.updates)
 	require.Equal(t, providerID, conv.PtrValOr(f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID, ""))
+}
+
+func TestInboundEMATrustGetMarksUnreadableProviderUnavailable(t *testing.T) {
+	t.Parallel()
+	f := newInboundEMAFixture(t, 1)
+	f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID = new(uuid.NewString())
+	f.remote.getErr = errors.New("read failed")
+
+	output, err := f.service.Get(t.Context(), f.principal)
+	require.NoError(t, err)
+	require.Len(t, output.Issuers, 1)
+	require.True(t, output.Issuers[0].TrustedIdentityProviderUnavailable)
+	require.Nil(t, output.Issuers[0].TrustedIdentityProvider)
+	require.Contains(t, output.NextStep, untrustInboundEMAProviderToolName)
+}
+
+func TestInboundEMAUntrustRemovesTrustWhenProviderIsUnreadable(t *testing.T) {
+	t.Parallel()
+	f := newInboundEMAFixture(t, 1)
+	providerID := uuid.NewString()
+	f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID = new(providerID)
+	f.remote.getErr = errors.New("read failed")
+
+	preview, err := f.service.Untrust(t.Context(), f.principal, UntrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID})
+	require.NoError(t, err)
+	require.False(t, preview.Applied)
+	require.True(t, preview.Changed)
+	require.True(t, preview.Issuer.TrustedIdentityProviderUnavailable)
+	require.Equal(t, providerID, preview.ExpectedTrustedRemoteSessionIssuerID)
+	require.Empty(t, f.users.updates)
+
+	output, err := f.service.Untrust(t.Context(), f.principal, UntrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, ExpectedTrustedRemoteSessionIssuerID: preview.ExpectedTrustedRemoteSessionIssuerID, Confirmed: true})
+	require.NoError(t, err)
+	require.True(t, output.Applied)
+	require.True(t, output.Changed)
+	require.Len(t, f.users.updates, 1)
+	require.Nil(t, f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID, "the removal was saved")
 }
