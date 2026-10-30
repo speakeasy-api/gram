@@ -17,6 +17,18 @@ export const CodeChallengeMethod = {
  */
 export type CodeChallengeMethod = ClosedEnum<typeof CodeChallengeMethod>;
 
+/**
+ * The kind of key redeem mints. agent_user (the default) is the device agent's per-user project-scoped key. producer is the organization-wide key the Speakeasy CLI uses, and requires org:admin, the same as creating one in the dashboard.
+ */
+export const KeyScope = {
+  AgentUser: "agent_user",
+  Producer: "producer",
+} as const;
+/**
+ * The kind of key redeem mints. agent_user (the default) is the device agent's per-user project-scoped key. producer is the organization-wide key the Speakeasy CLI uses, and requires org:admin, the same as creating one in the dashboard.
+ */
+export type KeyScope = ClosedEnum<typeof KeyScope>;
+
 export type AuthorizeRequestBody = {
   /**
    * PKCE code challenge: base64url(sha256(code_verifier)).
@@ -27,7 +39,11 @@ export type AuthorizeRequestBody = {
    */
   codeChallengeMethod: CodeChallengeMethod;
   /**
-   * Optional project slug to scope the minted key to. Defaults to the org's default (first) project when omitted.
+   * The kind of key redeem mints. agent_user (the default) is the device agent's per-user project-scoped key. producer is the organization-wide key the Speakeasy CLI uses, and requires org:admin, the same as creating one in the dashboard.
+   */
+  keyScope?: KeyScope | undefined;
+  /**
+   * Optional project slug. For agent_user keys it is the project the key is scoped to; for producer keys it is only reported back to the CLI as its default project. Defaults to the org's default (first) project when omitted.
    */
   projectSlug?: string | undefined;
 };
@@ -38,9 +54,15 @@ export const CodeChallengeMethod$outboundSchema: z.ZodMiniEnum<
 > = z.enum(CodeChallengeMethod);
 
 /** @internal */
+export const KeyScope$outboundSchema: z.ZodMiniEnum<typeof KeyScope> = z.enum(
+  KeyScope,
+);
+
+/** @internal */
 export type AuthorizeRequestBody$Outbound = {
   code_challenge: string;
   code_challenge_method: string;
+  key_scope: string;
   project_slug?: string | undefined;
 };
 
@@ -52,12 +74,14 @@ export const AuthorizeRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     codeChallenge: z.string(),
     codeChallengeMethod: CodeChallengeMethod$outboundSchema,
+    keyScope: z._default(KeyScope$outboundSchema, "agent_user"),
     projectSlug: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       codeChallenge: "code_challenge",
       codeChallengeMethod: "code_challenge_method",
+      keyScope: "key_scope",
       projectSlug: "project_slug",
     });
   }),

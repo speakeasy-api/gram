@@ -1,4 +1,7 @@
-import { CodeChallengeMethod } from "@gram/client/models/components/authorizerequestbody.js";
+import {
+  CodeChallengeMethod,
+  KeyScope,
+} from "@gram/client/models/components/authorizerequestbody.js";
 import { useCliAuthAuthorizeMutation } from "@gram/client/react-query/cliAuthAuthorize";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useSwitchScopesMutation } from "@gram/client/react-query/switchScopes";
@@ -19,6 +22,11 @@ interface CliCallbackProps {
    */
   codeChallenge?: string | null;
   codeChallengeMethod?: string | null;
+  /**
+   * The key a PKCE code redeems for. "producer" is the Speakeasy CLI's
+   * org-wide key; otherwise the code mints the device agent's per-user key.
+   */
+  pkceKeyScope?: "producer" | null;
   /**
    * How the credentials travel to the local callback. "post" submits them as
    * an auto-submitted form body (Apple-style form_post) so the API key never
@@ -46,6 +54,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     organizationId,
     codeChallenge,
     codeChallengeMethod,
+    pkceKeyScope,
     callbackMethod,
   } = props;
   const { session, status } = useSessionData();
@@ -129,6 +138,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
         session.session,
         codeChallenge,
         codeChallengeMethod,
+        pkceKeyScope,
         selectedProjectSlug,
       )
         .then((code) => transmitCode(localCallbackUrl, code))
@@ -177,6 +187,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     isPkceFlow,
     codeChallenge,
     codeChallengeMethod,
+    pkceKeyScope,
   ]);
 
   if (error) {
@@ -340,6 +351,7 @@ async function authorizePkceCode(
   sessionId: string,
   codeChallenge: string | null | undefined,
   codeChallengeMethod: string | null | undefined,
+  keyScope: "producer" | null | undefined,
   projectSlug: string | null,
 ): Promise<string> {
   if (!codeChallenge) throw new Error("Missing code_challenge parameter");
@@ -353,6 +365,7 @@ async function authorizePkceCode(
       authorizeRequestBody: {
         codeChallenge,
         codeChallengeMethod: CodeChallengeMethod.S256,
+        keyScope: keyScope === "producer" ? KeyScope.Producer : undefined,
         projectSlug: projectSlug ?? undefined,
       },
     },

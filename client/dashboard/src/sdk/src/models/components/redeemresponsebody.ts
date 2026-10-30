@@ -10,7 +10,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type RedeemResponseBody = {
   /**
-   * The raw gram_ API key, carrying the [agent,hooks] scopes. Returned exactly once.
+   * The raw gram_ API key, carrying the scope requested at authorize. Returned exactly once.
    */
   accessToken: string;
   /**

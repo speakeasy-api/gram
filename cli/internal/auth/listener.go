@@ -2,9 +2,14 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
+	"sync/atomic"
 	"time"
 )
 
@@ -12,24 +17,51 @@ const (
 	minPort         = 1024
 	maxPort         = 65535
 	callbackTimeout = 5 * time.Minute
+
+	// stateBytes is the entropy of the per-login state token. 32 bytes
+	// (256 bits) makes guessing the token of an active login infeasible.
+	stateBytes = 32
+
+	// stateParam is the callback query parameter that carries the state token.
+	// The dashboard preserves the callback URL's own query string when it
+	// appends the code, so the token round-trips unchanged.
+	stateParam = "state"
 )
 
 // CallbackResult contains the data returned from the auth callback.
 type CallbackResult struct {
-	APIKey  string
-	Project string
+	// Code is the one-time code the dashboard minted for this login's PKCE
+	// challenge. It is worthless without the login's verifier.
+	Code string
 }
 
-// Listener manages an HTTP server that waits for OAuth callback.
+// Listener manages an HTTP server that waits for the dashboard to return a
+// one-time code. Each listener is bound to one login attempt by a random state
+// token carried in its callback URL: a callback without the exact token is
+// rejected, so a stray or forged request cannot end the user's real login. The
+// code itself is bound to the login's PKCE challenge, so a code minted for
+// another account cannot be redeemed in its place.
 type Listener struct {
 	server   *http.Server
 	listener net.Listener
 	result   chan CallbackResult
 	errChan  chan error
+
+	// state is the token a callback must present to complete this attempt.
+	state string
+
+	// consumed is set by the first accepted callback; later callbacks are
+	// rejected even when they carry the correct state.
+	consumed atomic.Bool
 }
 
 // NewListener creates a new callback listener on an available port.
 func NewListener() (*Listener, error) {
+	state, err := newState()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate login state: %w", err)
+	}
+
 	ln, err := findAvailablePort()
 	if err != nil {
 		return nil, fmt.Errorf("failed to find available port: %w", err)
@@ -40,6 +72,8 @@ func NewListener() (*Listener, error) {
 		listener: ln,
 		result:   make(chan CallbackResult, 1),
 		errChan:  make(chan error, 1),
+		state:    state,
+		consumed: atomic.Bool{},
 	}
 
 	mux := http.NewServeMux()
@@ -54,13 +88,16 @@ func NewListener() (*Listener, error) {
 	return l, nil
 }
 
-// URL returns the callback URL for this listener.
+// URL returns the callback URL for this listener, including the state token
+// that binds a callback to this login attempt.
 func (l *Listener) URL() string {
 	addr, ok := l.listener.Addr().(*net.TCPAddr)
 	if !ok {
 		return ""
 	}
-	return fmt.Sprintf("http://127.0.0.1:%d/callback", addr.Port)
+	q := url.Values{}
+	q.Set(stateParam, l.state)
+	return fmt.Sprintf("http://127.0.0.1:%d/callback?%s", addr.Port, q.Encode())
 }
 
 // Start begins listening for callbacks.
@@ -72,7 +109,7 @@ func (l *Listener) Start() {
 	}()
 }
 
-// Wait blocks until an API key is received or timeout occurs.
+// Wait blocks until a code is received or timeout occurs.
 func (l *Listener) Wait(ctx context.Context) (*CallbackResult, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, callbackTimeout)
 	defer cancel()
@@ -236,22 +273,40 @@ const authSuccessHTML = `<!doctype html>
 </html>
 `
 
+// handleCallback accepts the first callback that carries this attempt's state
+// and a code. Rejected requests leave the attempt open, so a stray or forged
+// request cannot cancel the user's real login.
 func (l *Listener) handleCallback(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.URL.Query().Get("api_key")
-	if apiKey == "" {
-		http.Error(w, "missing api_key parameter", http.StatusBadRequest)
+	query := r.URL.Query()
+
+	if subtle.ConstantTimeCompare([]byte(query.Get(stateParam)), []byte(l.state)) != 1 {
+		http.Error(w, "invalid state parameter", http.StatusBadRequest)
 		return
 	}
 
-	project := r.URL.Query().Get("project")
-
-	l.result <- CallbackResult{
-		APIKey:  apiKey,
-		Project: project,
+	code := query.Get("code")
+	if code == "" {
+		http.Error(w, "missing code parameter", http.StatusBadRequest)
+		return
 	}
+
+	if !l.consumed.CompareAndSwap(false, true) {
+		http.Error(w, "login already completed", http.StatusConflict)
+		return
+	}
+
+	l.result <- CallbackResult{Code: code}
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 	_, _ = fmt.Fprint(w, authSuccessHTML)
+}
+
+func newState() (string, error) {
+	b := make([]byte, stateBytes)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("read random bytes: %w", err)
+	}
+	return hex.EncodeToString(b), nil
 }
 
 func findAvailablePort() (net.Listener, error) {
