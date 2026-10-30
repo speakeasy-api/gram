@@ -28,10 +28,10 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  CoverageBucket,
   ListManagedDevicesRequest,
   ListManagedDevicesSecurity,
-  PolicyState,
+  QueryParamCoverageBucket,
+  QueryParamPolicyState,
 } from "../models/operations/listmanageddevices.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -203,8 +203,8 @@ export function setManagedDevicesData(
   queryKeyBase: [
     parameters: {
       provider?: string | undefined;
-      coverageBucket?: CoverageBucket | undefined;
-      policyState?: PolicyState | undefined;
+      coverageBucket?: QueryParamCoverageBucket | undefined;
+      policyState?: QueryParamPolicyState | undefined;
       userIds?: Array<string> | undefined;
       userEmails?: Array<string> | undefined;
       cursor?: string | undefined;
@@ -225,8 +225,8 @@ export function invalidateManagedDevices(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       provider?: string | undefined;
-      coverageBucket?: CoverageBucket | undefined;
-      policyState?: PolicyState | undefined;
+      coverageBucket?: QueryParamCoverageBucket | undefined;
+      policyState?: QueryParamPolicyState | undefined;
       userIds?: Array<string> | undefined;
       userEmails?: Array<string> | undefined;
       cursor?: string | undefined;
