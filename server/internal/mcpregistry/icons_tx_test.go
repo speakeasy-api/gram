@@ -2,16 +2,18 @@ package mcpregistry
 
 import (
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
 
 func TestSetCatalogIconsTxRollbackAndRevision(t *testing.T) {
+	t.Parallel()
+
 	ctx, s, db := newTestService(t)
 	original, err := s.Create(ctx, json.RawMessage(basicRecord))
 	require.NoError(t, err)
-	tx, err := db.Begin(ctx)
-	require.NoError(t, err)
+	tx := testenv.BeginTx(t, ctx, db)
 	updated, err := s.SetCatalogIconsTx(ctx, tx, original.ID, Token(original), CatalogIcons{})
 	require.NoError(t, err)
 	require.NotEqual(t, Token(original), Token(updated))

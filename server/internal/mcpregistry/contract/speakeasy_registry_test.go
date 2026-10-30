@@ -35,6 +35,8 @@ func TestOverlayPreservesRootAllOf(t *testing.T) {
 }
 
 func TestSpeakeasyCatalogIconsPlacement(t *testing.T) {
+	t.Parallel()
+
 	s, err := Compile(Schema)
 	require.NoError(t, err)
 	for _, raw := range []string{

@@ -70,7 +70,7 @@ var ErrInvalidCursor = errors.New("invalid registry cursor")
 var ErrInvalidListOptions = errors.New("invalid registry list options")
 
 func New(db *pgxpool.Pool, v *Validator) *Service {
-	return &Service{db: db, validator: v, auth: nil, authz: nil, logger: nil}
+	return &Service{db: db, validator: v, auth: nil, authz: nil, logger: nil, assetBaseURL: nil}
 }
 
 func (s *Service) Ready(ctx context.Context) error {

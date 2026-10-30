@@ -29,11 +29,11 @@ func ParseCatalogIcons(data json.RawMessage) (CatalogIcons, error) {
 	}
 	var icons CatalogIcons
 	if err := json.Unmarshal(data, &root); err != nil {
-		return icons, err
+		return icons, fmt.Errorf("decode catalog record: %w", err)
 	}
 	if raw, ok := root.Meta[IconsNamespace]; ok {
 		if err := json.Unmarshal(raw, &icons); err != nil {
-			return icons, err
+			return icons, fmt.Errorf("decode catalog icons: %w", err)
 		}
 	}
 	return icons, nil
@@ -43,14 +43,14 @@ func ParseCatalogIcons(data json.RawMessage) (CatalogIcons, error) {
 func WithCatalogIcons(data json.RawMessage, icons CatalogIcons) (json.RawMessage, error) {
 	var root, meta map[string]json.RawMessage
 	if err := json.Unmarshal(data, &root); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode catalog record: %w", err)
 	}
 	if root == nil {
 		return nil, fmt.Errorf("registry record must be an object")
 	}
 	if raw, ok := root["_meta"]; ok {
 		if err := json.Unmarshal(raw, &meta); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("decode catalog metadata: %w", err)
 		}
 	}
 	if icons.Default == nil && icons.Dark == nil {
@@ -61,7 +61,7 @@ func WithCatalogIcons(data json.RawMessage, icons CatalogIcons) (json.RawMessage
 		}
 		raw, err := json.Marshal(icons)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("encode catalog icons: %w", err)
 		}
 		meta[IconsNamespace] = raw
 	}
@@ -70,11 +70,15 @@ func WithCatalogIcons(data json.RawMessage, icons CatalogIcons) (json.RawMessage
 	} else {
 		raw, err := json.Marshal(meta)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("encode catalog metadata: %w", err)
 		}
 		root["_meta"] = raw
 	}
-	return json.Marshal(root)
+	result, err := json.Marshal(root)
+	if err != nil {
+		return nil, fmt.Errorf("encode catalog record: %w", err)
+	}
+	return result, nil
 }
 
 // WithAssetBaseURL copies startup configuration; do not call per request.
@@ -92,7 +96,7 @@ func (s *Service) canonicalIcons(ctx context.Context, q *repo.Queries, data json
 		Meta map[string]json.RawMessage `json:"_meta"`
 	}
 	if err := json.Unmarshal(data, &envelope); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode catalog envelope: %w", err)
 	}
 	if _, ok := envelope.Meta[IconsNamespace]; !ok {
 		return data, nil
@@ -131,7 +135,7 @@ func (s *Service) catalogIconAssetID(src string) (uuid.UUID, error) {
 	}
 	u, err := url.Parse(src)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, fmt.Errorf("parse catalog icon URL: %w", err)
 	}
 	query, err := url.ParseQuery(u.RawQuery)
 	if err != nil || u.User != nil || u.Fragment != "" || len(query) != 1 || len(query["id"]) != 1 {

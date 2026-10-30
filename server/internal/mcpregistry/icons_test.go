@@ -12,6 +12,8 @@ import (
 )
 
 func TestCatalogIconsRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	raw := json.RawMessage(`{"server":{"icons":[{"src":"https://upstream.example/icon.png"}]},"_meta":{"example.test/data":{"n":9007199254740993}}}`)
 	icon := &CatalogIcon{Src: "https://assets.example/rpc/assets.serveImage?id=00000000-0000-4000-8000-000000000001", MimeType: "image/svg+xml", Sizes: []string{"any"}}
 	for _, icons := range []CatalogIcons{{Default: icon}, {Default: icon, Dark: icon}, {Dark: icon}, {}} {
@@ -28,6 +30,8 @@ func TestCatalogIconsRoundTrip(t *testing.T) {
 }
 
 func TestCatalogIconsAssociation(t *testing.T) {
+	t.Parallel()
+
 	ctx, s, db := newTestService(t)
 	base, _ := url.Parse("https://assets.example")
 	s.WithAssetBaseURL(base)
@@ -78,6 +82,8 @@ func TestCatalogIconsAssociation(t *testing.T) {
 }
 
 func TestCatalogIconsSchema(t *testing.T) {
+	t.Parallel()
+
 	v, err := LoadValidator()
 	require.NoError(t, err)
 	for _, value := range []string{`{"default":null}`, `{"light":{}}`, `{"default":{"src":"https://assets.example/icon","mimeType":"image/png","sizes":["any"]}}`, `{"default":{"src":"https://assets.example/icon","mimeType":"image/svg+xml","sizes":["any"],"theme":"dark"}}`} {
@@ -87,6 +93,8 @@ func TestCatalogIconsSchema(t *testing.T) {
 }
 
 func TestCatalogIconsPersistedLifecycleDiscoveryParity(t *testing.T) {
+	t.Parallel()
+
 	ctx, s, db := newTestService(t)
 	base, err := url.Parse("https://assets.example")
 	require.NoError(t, err)

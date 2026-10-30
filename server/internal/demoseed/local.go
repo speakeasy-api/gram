@@ -487,30 +487,33 @@ const localCatalogName = "example.test/local-catalog-logo"
 func seedLocalCatalogIcon(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, blob assets.BlobStore, siteURL *url.URL) error {
 	validator, err := mcpregistry.LoadValidator()
 	if err != nil {
-		return err
+		return fmt.Errorf("load catalog validator: %w", err)
 	}
 	registry := mcpregistry.New(db, validator).WithAssetBaseURL(siteURL)
 	// Preserve staff edits on reseed, including removal of either icon slot.
 	if _, err := registry.GetByName(ctx, localCatalogName); err == nil {
 		return nil
 	} else if !errors.Is(err, mcpregistry.ErrNotFound) {
-		return err
+		return fmt.Errorf("look up local catalog icon: %w", err)
 	}
 	tp := otel.GetTracerProvider()
 	images := assets.NewPlatformService(logger, tp, guardian.NewDefaultPolicy(tp), db, blob)
 	uploaded, err := images.StorePlatformImage(ctx, logger, "local-fixture@example.test", bytes.NewReader(localCatalogLogo), int64(len(localCatalogLogo)), "image/svg+xml")
 	if err != nil {
-		return err
+		return fmt.Errorf("store local catalog icon: %w", err)
 	}
 	id, err := uuid.Parse(uploaded.Asset.ID)
 	if err != nil {
-		return err
+		return fmt.Errorf("parse local catalog asset ID: %w", err)
 	}
 	icon := &mcpregistry.CatalogIcon{Src: assets.ServeImageURL(siteURL, id), MimeType: "image/svg+xml", Sizes: []string{"any"}}
 	raw, err := mcpregistry.WithCatalogIcons(json.RawMessage(`{"server":{"name":"example.test/local-catalog-logo","description":"Fictional local catalog logo fixture","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.test/mcp"}]}}`), mcpregistry.CatalogIcons{Default: icon, Dark: icon})
 	if err != nil {
-		return err
+		return fmt.Errorf("encode local catalog icons: %w", err)
 	}
 	_, err = registry.Create(ctx, raw)
-	return err
+	if err != nil {
+		return fmt.Errorf("create local catalog entry: %w", err)
+	}
+	return nil
 }

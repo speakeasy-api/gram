@@ -128,8 +128,9 @@ func TestStandaloneImageRoutes_SVGPublicURLAndHeaders(t *testing.T) {
 		t.Parallel()
 		require.Equal(t, "https://public.example.test/rpc/assets.serveImage?id="+uploaded.Asset.ID, uploaded.URL)
 	})
+	svc.registry.WithAssetBaseURL(svc.dashboardURL)
 	t.Run("public URL persists in catalog metadata", func(t *testing.T) {
-		svc.registry.WithAssetBaseURL(svc.dashboardURL)
+		t.Parallel()
 		raw := fmt.Sprintf(`{"server":{"name":"example.test/icon","description":"Demo","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.test/mcp"}]},"_meta":{"com.speakeasy.ai/icons":{"default":{"src":%q,"mimeType":"image/svg+xml","sizes":["any"]}}}}`, uploaded.URL)
 		body, err := json.Marshal(map[string]string{"data_json": raw})
 		require.NoError(t, err)
