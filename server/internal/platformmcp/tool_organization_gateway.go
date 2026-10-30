@@ -137,6 +137,36 @@ func (s *OrganizationGatewayService) get(ctx context.Context, principal Principa
 	}
 }
 
+// organizationGatewayIssuer is the issuer a served organization gateway signs
+// users in through, and its URL; both are empty when no gateway is served.
+type organizationGatewayIssuer struct {
+	// IssuerID is the gateway's user session issuer.
+	IssuerID string
+
+	// URL is the gateway's MCP URL.
+	URL string
+}
+
+// servingIssuer reads the organization gateway's issuer and URL.
+func (s *OrganizationGatewayService) servingIssuer(ctx context.Context, organizationID string) (organizationGatewayIssuer, error) {
+	organization, err := repo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return organizationGatewayIssuer{}, nil
+	case err != nil:
+		return organizationGatewayIssuer{}, fmt.Errorf("load organization: %w", err)
+	}
+	issuerID, unavailable, err := orggateway.Availability(ctx, s.db, organization)
+	if err != nil {
+		return organizationGatewayIssuer{}, fmt.Errorf("resolve organization gateway: %w", err)
+	}
+	if unavailable != orggateway.UnavailabilityNone {
+		return organizationGatewayIssuer{}, nil
+	}
+	baseURL, _ := organizationBaseURLs(ctx, s.orgHosts, organization.DefaultHost, s.serverURL, nil)
+	return organizationGatewayIssuer{IssuerID: issuerID.String(), URL: orggateway.URL(baseURL, organization.Slug)}, nil
+}
+
 func unavailableOrganizationGateway(reason orggateway.Unavailability, nextAction string) GetMyOrganizationGatewayOutput {
 	return GetMyOrganizationGatewayOutput{Available: false, URL: "", UnavailableReason: string(reason), NextAction: nextAction}
 }

@@ -358,7 +358,11 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 			return err
 		}
 		if rejection != sharedResourceAccepted {
-			s.recordSharedResourceRejection(ctx, logger, issuer.authorizationServer.issuerID, mcpmetrics.OAuthFlowStageToken, rejection, resources)
+			if grantType == oauthwire.GrantTypeJWTBearer && rejection == sharedResourceMissing {
+				s.recordSharedIDJAGResourceMissing(ctx, logger, issuer.authorizationServer.issuerID, resources)
+			} else {
+				s.recordSharedResourceRejection(ctx, logger, issuer.authorizationServer.issuerID, mcpmetrics.OAuthFlowStageToken, rejection, resources)
+			}
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, sharedResourceDescription(rejection))
 		}
 	default:

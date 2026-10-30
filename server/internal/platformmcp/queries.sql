@@ -4130,6 +4130,15 @@ SELECT n.id, n.seq, n.created_at, n.role, n.generation,
        ), '[]')::jsonb AS participants
 FROM neighbors n ORDER BY n.seq;
 
+-- name: TryAcquireInboundEMAProviderLock :one
+-- Serialize finding or creating an organization's identity provider record
+-- for one issuer URL, so concurrent trusts never create two. Non-blocking: a
+-- waiter would hold a pooled connection the holder's nested calls need.
+SELECT pg_try_advisory_lock(hashtextextended('inbound-ema-provider:' || @organization_id::text || ':' || @issuer::text, 0));
+
+-- name: ReleaseInboundEMAProviderLock :one
+SELECT pg_advisory_unlock(hashtextextended('inbound-ema-provider:' || @organization_id::text || ':' || @issuer::text, 0)) AS unlocked;
+
 -- name: ListHeadlessCallerClients :many
 -- The live OAuth clients that sign in through one sign-in, in the
 -- organization: its own, or one of a live project's.

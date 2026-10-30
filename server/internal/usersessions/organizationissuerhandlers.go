@@ -370,6 +370,17 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *orggen.ListMcpSer
 
 // UpdateIssuer patches an organization-owned issuer.
 func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuerPayload) (*types.UserSessionIssuer, error) {
+	return s.updateIssuer(ctx, payload, nil)
+}
+
+// UpdateIssuerIfTrusting is UpdateIssuer that applies only while the issuer
+// still trusts expectedTrustedRemoteSessionIssuerID ("" for none), checked
+// under the issuer's lock; otherwise it fails with a conflict.
+func (s *Service) UpdateIssuerIfTrusting(ctx context.Context, payload *orggen.UpdateIssuerPayload, expectedTrustedRemoteSessionIssuerID string) (*types.UserSessionIssuer, error) {
+	return s.updateIssuer(ctx, payload, &expectedTrustedRemoteSessionIssuerID)
+}
+
+func (s *Service) updateIssuer(ctx context.Context, payload *orggen.UpdateIssuerPayload, expectedTrustedIssuerID *string) (*types.UserSessionIssuer, error) {
 	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
 		return nil, err
@@ -431,6 +442,15 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuer
 			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization user session issuer").LogError(ctx, logger)
+	}
+	if expectedTrustedIssuerID != nil {
+		currentTrusted := ""
+		if existing.TrustedRemoteSessionIssuerID.Valid {
+			currentTrusted = existing.TrustedRemoteSessionIssuerID.UUID.String()
+		}
+		if currentTrusted != *expectedTrustedIssuerID {
+			return nil, oops.E(oops.CodeConflict, nil, "this issuer's trusted identity provider changed since it was read").LogWarn(ctx, logger)
+		}
 	}
 	beforeView := UserSessionIssuerView(existing)
 
