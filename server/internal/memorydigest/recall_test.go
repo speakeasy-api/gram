@@ -51,11 +51,11 @@ func TestBudgetDropsOldestFirst(t *testing.T) {
 			ID:      uuid.New(),
 			Heading: "h",
 			At:      date(2026, 10, 1).AddDate(0, 0, i),
-			Text:    strings.Repeat("x", 396), // 99 tokens, plus 1 for the heading
+			Text:    strings.Repeat("x", 396), // about 113 tokens once rendered with its citation
 		})
 	}
 
-	kept, dropped := memorydigest.Budget(entries, 350)
+	kept, dropped := memorydigest.Budget(entries, 400)
 	require.Equal(t, 7, dropped)
 	require.Equal(t, entries[7:], kept)
 
@@ -99,4 +99,20 @@ func TestRender(t *testing.T) {
 		"## October 2026 (month digest) [digest:00000000-0000-0000-0000-000000000001]\nPicked queue X.\n\n"+
 		"## Chat 2026-11-10 [chat:00000000-0000-0000-0000-000000000002]\nShipped retries.", out)
 	require.Empty(t, memorydigest.Render(nil, 0))
+}
+
+func TestBudgetBoundsRenderedBlock(t *testing.T) {
+	t.Parallel()
+
+	var entries []memorydigest.Entry
+	for i := range 50 {
+		entries = append(entries, memorydigest.Entry{
+			Kind: memorydigest.SourceDigest, ID: uuid.New(), Heading: "week of 2026-10-05 (week digest)",
+			At: date(2026, 1, 5).AddDate(0, 0, 7*i), Text: strings.Repeat("z", 300),
+		})
+	}
+	for _, budget := range []int{100, 500, 1_000, 8_000} {
+		kept, dropped := memorydigest.Budget(entries, budget)
+		require.LessOrEqual(t, memorydigest.EstimateTokens(memorydigest.Render(kept, dropped)), budget, "budget %d", budget)
+	}
 }
