@@ -135,6 +135,7 @@ type Activities struct {
 	promoteStagedTelemetry           *activities.PromoteStagedTelemetry
 	listStagedTelemetryProjects      *activities.ListStagedTelemetryProjects
 	generateChatTitle                *activities.GenerateChatTitle
+	summarizeIdleChats               *activities.SummarizeIdleChats
 	processDeployment                *activities.ProcessDeployment
 	provisionFunctionsAccess         *activities.ProvisionFunctionsAccess
 	deployFunctionRunners            *activities.DeployFunctionRunners
@@ -416,6 +417,7 @@ func NewActivities(
 		promoteStagedTelemetry:           activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:      activities.NewListStagedTelemetryProjects(logger, chConn),
 		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient),
+		summarizeIdleChats:               activities.NewSummarizeIdleChats(logger, db, features, chatClient),
 		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpCatalog),
 		provisionFunctionsAccess:         activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
@@ -811,6 +813,10 @@ func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyApps
 
 func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.GenerateChatTitleArgs) error {
 	return a.generateChatTitle.Do(ctx, input)
+}
+
+func (a *Activities) SummarizeIdleChats(ctx context.Context, input activities.SummarizeIdleChatsArgs) (*activities.SummarizeIdleChatsResult, error) {
+	return a.summarizeIdleChats.Do(ctx, input)
 }
 
 func (a *Activities) SyncIdentityMap(ctx context.Context) (*activities.SyncIdentityMapResult, error) {

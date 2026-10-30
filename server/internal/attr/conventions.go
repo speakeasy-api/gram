@@ -958,6 +958,11 @@ const (
 	IdentityFoldTruncatedKey             = attribute.Key("gram.identity_fold.truncated")
 	IdentityFoldTokenDeltaKey            = attribute.Key("gram.identity_fold.token_delta")
 	IdentityMapEntryCountKey             = attribute.Key("gram.identity_map.entry_count")
+	MemorySummaryOrganizationCountKey    = attribute.Key("gram.memory_summary.organization_count")
+	MemorySummaryWrittenCountKey         = attribute.Key("gram.memory_summary.written_count")
+	MemorySummaryEmptyCountKey           = attribute.Key("gram.memory_summary.empty_count")
+	MemorySummaryFailedCountKey          = attribute.Key("gram.memory_summary.failed_count")
+	MemorySummaryCappedCountKey          = attribute.Key("gram.memory_summary.capped_count")
 	TenantDimensionOrganizationCountKey  = attribute.Key("gram.tenant_dimensions.organization_count")
 	TenantDimensionProjectCountKey       = attribute.Key("gram.tenant_dimensions.project_count")
 	TenantDimensionOrphanProjectCountKey = attribute.Key("gram.tenant_dimensions.orphan_project_count")
@@ -1575,6 +1580,22 @@ func SlogIdentityFoldTokenDelta(v int64) slog.Attr {
 
 func IdentityMapEntryCount(v int) attribute.KeyValue { return IdentityMapEntryCountKey.Int(v) }
 func SlogIdentityMapEntryCount(v int) slog.Attr      { return slog.Int(string(IdentityMapEntryCountKey), v) }
+
+func SlogMemorySummaryOrganizationCount(v int) slog.Attr {
+	return slog.Int(string(MemorySummaryOrganizationCountKey), v)
+}
+func SlogMemorySummaryWrittenCount(v int) slog.Attr {
+	return slog.Int(string(MemorySummaryWrittenCountKey), v)
+}
+func SlogMemorySummaryEmptyCount(v int) slog.Attr {
+	return slog.Int(string(MemorySummaryEmptyCountKey), v)
+}
+func SlogMemorySummaryFailedCount(v int) slog.Attr {
+	return slog.Int(string(MemorySummaryFailedCountKey), v)
+}
+func SlogMemorySummaryCappedCount(v int) slog.Attr {
+	return slog.Int(string(MemorySummaryCappedCountKey), v)
+}
 
 func TenantDimensionOrganizationCount(v int) attribute.KeyValue {
 	return TenantDimensionOrganizationCountKey.Int(v)
