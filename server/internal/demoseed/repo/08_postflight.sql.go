@@ -253,6 +253,8 @@ SELECT count(*) FROM (
   SELECT 1 FROM session_quarantines WHERE organization_id = $1::text AND project_id <> $2::uuid
   UNION ALL
   SELECT 1 FROM audit_logs WHERE organization_id = $1::text AND project_id <> $2::uuid
+  UNION ALL
+  SELECT 1 FROM security_audit_logs WHERE organization_id = $1::text AND project_id <> $2::uuid
 ) x
 `
 
@@ -944,6 +946,18 @@ WHERE m.project_id = $1::uuid AND m.deleted IS TRUE
 
 func (q *Queries) PostflightCountRemovedGatewayMembers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountRemovedGatewayMembers, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountSecurityAuditLogs = `-- name: PostflightCountSecurityAuditLogs :one
+SELECT count(*) FROM security_audit_logs
+WHERE organization_id = $1::text
+`
+
+func (q *Queries) PostflightCountSecurityAuditLogs(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountSecurityAuditLogs, orgID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

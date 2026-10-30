@@ -4,13 +4,16 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/audit/securityevent"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
@@ -108,6 +111,66 @@ func TestWithdrawIssuer_CascadesToItsAdmittedSubjects(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, assignments, "withdrawing the issuer should already have tombstoned every assignment under it")
+}
+
+// Withdrawing the issuer is a configuration change. The cascaded entry for an
+// admission the Kit runtime admitted for itself goes to the security log, with
+// the runtime's own admit and withdraw entries. The signal is the audit trail,
+// not the admission's tags: a customer can tag an admission "kit-runtime", and
+// that must not move its withdrawal out of the configuration audit log.
+func TestWithdrawIssuer_CascadedRuntimeAdmissionsGoToTheSecurityLog(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	policy := registerAnthropic(t, ctx, ti, true)
+	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
+
+	_, err := admit(t, ctx, ti, fleetRule, string(workloadidentity.MatchKindWildcard), agentID)
+	require.NoError(t, err)
+	admitted, err := admitWithTags(t, ctx, ti, agentID, []string{"kit-runtime"})
+	require.NoError(t, err)
+
+	ids := make(map[string]string, len(admitted.Admissions))
+	for _, admission := range admitted.Admissions {
+		ids[admission.Subject] = admission.ID
+	}
+	require.Len(t, ids, 2)
+
+	// The fleet rule stands in for a runtime-created admission: the Kit runtime
+	// records its own admit entry in the security log, attributed to the
+	// assistant's agent, when it creates one.
+	err = securityevent.LogWorkloadAdmissionAdmit(ctx, ti.conn, audit.LogWorkloadAdmissionAdmitEvent{
+		OrganizationID:         ti.orgID,
+		ProjectID:              uuid.NullUUID{},
+		Actor:                  urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()),
+		ActorDisplayName:       nil,
+		ActorSlug:              nil,
+		AdmissionURN:           urn.NewWorkloadAdmission(uuid.MustParse(ids[fleetRule])),
+		AdmissionDisplayName:   fleetRule,
+		AdmissionSnapshotAfter: nil,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.WithdrawIssuer(ctx, &gen.WithdrawIssuerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               policy.Issuers[0].ID,
+	})
+	require.NoError(t, err)
+
+	runtime, err := audittest.LatestSecurityAuditLogByAction(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Equal(t, ids[fleetRule], runtime.SubjectID)
+	require.Equal(t, string(urn.PrincipalTypeUser), runtime.ActorType, "the person who withdrew the issuer is still the actor")
+	_, err = audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw, ids[fleetRule])
+	require.ErrorIs(t, err, pgx.ErrNoRows, "the runtime admission's withdrawal is not in the configuration log")
+
+	_, err = audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw, ids[channelOne])
+	require.NoError(t, err, "a customer-set tag must not move a withdrawal out of the configuration log")
+
+	_, err = audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionWorkloadIssuerDelete)
+	require.NoError(t, err, "the issuer withdrawal is a configuration change")
 }
 
 func TestWithdrawIssuer_RefusesAnIssuerOutsideTheCallersTenancy(t *testing.T) {

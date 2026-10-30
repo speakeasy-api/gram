@@ -2,8 +2,10 @@ package adminmcp
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +18,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/admin"
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
@@ -46,8 +47,8 @@ func TestAuditLogEntriesFullFidelity(t *testing.T) {
 		Metadata: map[string]any{"nested": map[string]any{"email": "example@example.test", "count": float64(2)}}, CreatedAt: "2026-01-01T00:00:00Z",
 	}
 	reads.result.Logs = []*gen.AuditLog{log}
-	cursor := audit.EncodeCursor(100, "event-previous")
-	next := audit.EncodeCursor(99, log.ID)
+	cursor := testActivityCursor(100)
+	next := testActivityCursor(99)
 	reads.result.NextCursor = &next
 	status, body, data := callStaffReadTool(t, reads, "list_audit_log_entries", `{"organization_id":"org-a","cursor":"`+cursor+`"}`)
 	require.Equal(t, http.StatusOK, status)
@@ -104,8 +105,8 @@ func TestAuditLogEntriesRejectInvalidTargetsAndCursors(t *testing.T) {
 		{"long cursor", `{"organization_id":"org-a","cursor":"` + strings.Repeat("x", 129) + `"}`},
 		{"bad encoding", `{"organization_id":"org-a","cursor":"!!!"}`},
 		{"bad shape", `{"organization_id":"org-a","cursor":"YWJj"}`},
-		{"padded cursor", `{"organization_id":"org-a","cursor":"` + audit.EncodeCursor(1, "id") + `\n"}`},
-		{"bad sequence", `{"organization_id":"org-a","cursor":"` + audit.EncodeCursor(1, "id")[1:] + `"}`},
+		{"padded cursor", `{"organization_id":"org-a","cursor":"` + testActivityCursor(1) + `\n"}`},
+		{"bad sequence", `{"organization_id":"org-a","cursor":"` + testActivityCursor(1)[1:] + `"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -224,7 +225,7 @@ func TestAuditLogEntriesForwardsTypedFilters(t *testing.T) {
 	t.Parallel()
 	reads := testAuditReads()
 	projectID := uuid.New()
-	cursor := audit.EncodeCursor(100, "previous-event")
+	cursor := testActivityCursor(100)
 	input := ListAuditLogEntriesInput{
 		OrganizationID: "org-a", Cursor: cursor, ProjectID: projectID.String(),
 		ActorID: "actor-id", Action: "future:action", SubjectType: "future_subject",
@@ -385,4 +386,10 @@ func TestAuditLogEntriesAvailableWithoutSummaryReader(t *testing.T) {
 	require.NotContains(t, body, `"isError":true`)
 	require.NotNil(t, reads.filterInput)
 	require.Nil(t, reads.input)
+}
+
+// testActivityCursor is a staff activity cursor positioned below seq in the
+// configuration log, with the security log exhausted.
+func testActivityCursor(seq int) string {
+	return base64.RawURLEncoding.EncodeToString(fmt.Appendf(nil, "activity:%d:done", seq))
 }

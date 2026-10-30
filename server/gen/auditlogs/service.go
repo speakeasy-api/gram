@@ -60,7 +60,13 @@ type AuditLog struct {
 	ActingSurface string
 	// The registered OAuth client the call authenticated as, when it had one.
 	// Absent for calls that carried no OAuth client.
-	ActingClientID     *string
+	ActingClientID *string
+	// What kind of event the entry records: 'configuration' for a change to the
+	// platform's configuration, 'security' for machine access and other
+	// security-relevant activity that is not a configuration decision. Always
+	// present in responses; optional in the schema so clients built against it
+	// still read responses from servers that predate it.
+	Category           *string
 	SubjectID          string
 	SubjectType        string
 	SubjectDisplayName *string
@@ -107,6 +113,9 @@ type ListFacetsPayload struct {
 	SessionToken *string
 	// Project slug to filter facet values to a specific project.
 	ProjectSlug *string
+	// Category of entries to compute facet values from, matching the list being
+	// filtered. Defaults to 'configuration'.
+	Category string
 }
 
 // ListPayload is the payload type of the auditlogs service list method.
@@ -142,6 +151,10 @@ type ListPayload struct {
 	From *string
 	// Exclusive end of the window to list changes from. Omit for the whole history.
 	To *string
+	// Category of entries to list: 'configuration' (the default) for changes to
+	// the platform's configuration, or 'security' for machine access and other
+	// security-relevant activity such as workloads admitting themselves.
+	Category string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

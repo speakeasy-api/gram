@@ -139,6 +139,14 @@ type AuditLogCreatedPayloadV1 struct {
 	// while the value is in fact always sent.
 	ActingSurface string `json:"acting_surface,omitzero"`
 
+	// Category is what kind of event this is: "configuration" for a change to
+	// the platform's configuration, "security" for machine access and other
+	// security-relevant activity that is not a configuration decision.
+	// Subscribers filter on it to separate the two. Optional in the schema for
+	// the same reason as ActingSurface; every record Speakeasy writes carries
+	// one.
+	Category string `json:"category,omitzero"`
+
 	ProjectID          uuid.NullUUID   `json:"project_id,omitzero"`
 	ActorDisplayName   string          `json:"actor_display_name,omitzero"`
 	ActorSlug          string          `json:"actor_slug,omitzero"`

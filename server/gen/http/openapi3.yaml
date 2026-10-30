@@ -23298,6 +23298,17 @@ paths:
                     format: date-time
                     type: string
                 - allowEmptyValue: true
+                  description: 'Category of entries to list: ''configuration'' (the default) for changes to the platform''s configuration, or ''security'' for machine access and other security-relevant activity such as workloads admitting themselves.'
+                  in: query
+                  name: category
+                  schema:
+                    default: configuration
+                    description: 'Category of entries to list: ''configuration'' (the default) for changes to the platform''s configuration, or ''security'' for machine access and other security-relevant activity such as workloads admitting themselves.'
+                    enum:
+                        - configuration
+                        - security
+                    type: string
+                - allowEmptyValue: true
                   description: API Key header
                   in: header
                   name: Gram-Key
@@ -23400,6 +23411,17 @@ paths:
                   name: project_slug
                   schema:
                     description: Project slug to filter facet values to a specific project.
+                    type: string
+                - allowEmptyValue: true
+                  description: Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
+                  in: query
+                  name: category
+                  schema:
+                    default: configuration
+                    description: Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
+                    enum:
+                        - configuration
+                        - security
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -99890,6 +99912,12 @@ components:
                     type: string
                 after_snapshot: {}
                 before_snapshot: {}
+                category:
+                    type: string
+                    description: 'What kind of event the entry records: ''configuration'' for a change to the platform''s configuration, ''security'' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.'
+                    enum:
+                        - configuration
+                        - security
                 created_at:
                     type: string
                     description: The creation date of the audit log.
@@ -112265,6 +112293,13 @@ components:
         ListAuditLogFacetsForm:
             type: object
             properties:
+                category:
+                    type: string
+                    description: Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
+                    default: configuration
+                    enum:
+                        - configuration
+                        - security
                 project_slug:
                     type: string
                     description: Project slug to filter facet values to a specific project.
@@ -112302,6 +112337,13 @@ components:
                 actor_id:
                     type: string
                     description: Actor ID to filter audit logs to a specific actor.
+                category:
+                    type: string
+                    description: 'Category of entries to list: ''configuration'' (the default) for changes to the platform''s configuration, or ''security'' for machine access and other security-relevant activity such as workloads admitting themselves.'
+                    default: configuration
+                    enum:
+                        - configuration
+                        - security
                 cursor:
                     type: string
                     description: The cursor for paginating through audit logs.

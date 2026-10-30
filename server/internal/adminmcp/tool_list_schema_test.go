@@ -195,8 +195,8 @@ func TestAuditLogEntriesListedSchema(t *testing.T) {
 		require.True(t, ok)
 		fields, ok := item["properties"].(map[string]any)
 		require.True(t, ok)
-		require.Len(t, fields, 18)
-		for _, name := range []string{"id", "project_id", "project_slug", "actor_id", "actor_type", "actor_display_name", "actor_slug", "action", "acting_surface", "acting_client_id", "subject_id", "subject_type", "subject_display_name", "subject_slug", "before_snapshot", "after_snapshot", "metadata", "created_at"} {
+		require.Len(t, fields, 19)
+		for _, name := range []string{"id", "project_id", "project_slug", "actor_id", "actor_type", "actor_display_name", "actor_slug", "action", "acting_surface", "acting_client_id", "category", "subject_id", "subject_type", "subject_display_name", "subject_slug", "before_snapshot", "after_snapshot", "metadata", "created_at"} {
 			require.Contains(t, fields, name)
 		}
 		for _, name := range []string{"before_snapshot", "after_snapshot"} {

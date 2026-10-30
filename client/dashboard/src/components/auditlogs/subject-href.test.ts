@@ -7,6 +7,7 @@ function log(subjectType: string, subjectId = "prescription-1"): AuditLog {
     id: "audit-1",
     actingSurface: "dashboard",
     action: "killswitch:activate",
+    category: "configuration",
     actorId: "actor-1",
     actorType: "user",
     createdAt: new Date("2026-01-01T00:00:00Z"),

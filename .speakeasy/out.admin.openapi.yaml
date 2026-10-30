@@ -11450,6 +11450,12 @@ components:
           type: string
         after_snapshot: {}
         before_snapshot: {}
+        category:
+          type: string
+          description: 'What kind of event the entry records: ''configuration'' for a change to the platform''s configuration, ''security'' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.'
+          enum:
+            - configuration
+            - security
         created_at:
           type: string
           description: The creation date of the audit log.

@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit/securityevent"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -1128,23 +1129,37 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 		CreatedFrom:            conv.PtrToPGTimestamptz(filter.From),
 		CreatedTo:              conv.PtrToPGTimestamptz(filter.To),
 	}
+	var cursor activityCursor
 	if filter.Cursor != nil && *filter.Cursor != "" {
-		seq, err := audit.DecodeCursor(*filter.Cursor)
+		cursor, err = decodeActivityCursor(*filter.Cursor)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogWarn(ctx, s.logger)
 		}
-		params.CursorSeq = pgtype.Int8{Int64: seq, Valid: true}
 	}
 
-	rows, err := auditrepo.New(s.db).ListAuditLogs(ctx, params)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list organization activity").LogError(ctx, s.logger, attr.SlogOrganizationID(filter.OrganizationID))
+	// Staff read the configuration and security logs as one timeline. Each log
+	// pages by its own seq, so the cursor carries a position in each.
+	var configuration, security []auditrepo.ListAuditLogsRow
+	if !cursor.configuration.done {
+		params.CursorSeq = cursor.configuration.seq
+		configuration, err = auditrepo.New(s.db).ListAuditLogs(ctx, params)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list organization activity").LogError(ctx, s.logger, attr.SlogOrganizationID(filter.OrganizationID))
+		}
+	}
+	if !cursor.security.done {
+		params.CursorSeq = cursor.security.seq
+		security, err = securityevent.List(ctx, s.db, params)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list organization security activity").LogError(ctx, s.logger, attr.SlogOrganizationID(filter.OrganizationID))
+		}
 	}
 
 	const pageSize = 50
-	logs := make([]*gen.AuditLog, 0, min(len(rows), pageSize))
-	for _, row := range rows[:min(len(rows), pageSize)] {
-		log, err := adminActivityLog(row)
+	page, next := mergeActivity(configuration, security, cursor, pageSize)
+	logs := make([]*gen.AuditLog, 0, len(page))
+	for _, entry := range page {
+		log, err := adminActivityLog(entry.row, entry.category)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build organization activity response").LogError(ctx, s.logger)
 		}
@@ -1152,15 +1167,14 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 	}
 
 	var nextCursor *string
-	if len(rows) > pageSize {
-		cursor := audit.EncodeCursor(rows[pageSize-1].Seq, rows[pageSize-1].ID.String())
-		nextCursor = &cursor
+	if next != nil {
+		nextCursor = new(next.encode())
 	}
 
 	return &gen.AdminListOrganizationActivityResult{Logs: logs, NextCursor: nextCursor}, nil
 }
 
-func adminActivityLog(row auditrepo.ListAuditLogsRow) (*gen.AuditLog, error) {
+func adminActivityLog(row auditrepo.ListAuditLogsRow, category audit.Category) (*gen.AuditLog, error) {
 	var metadata map[string]any
 	if len(row.Metadata) > 0 {
 		var decoded any
@@ -1188,7 +1202,7 @@ func adminActivityLog(row auditrepo.ListAuditLogsRow) (*gen.AuditLog, error) {
 	return &gen.AuditLog{
 		ID: row.ID.String(), ProjectID: conv.FromNullableUUID(row.ProjectID), ProjectSlug: conv.FromPGText[string](row.ProjectSlug),
 		ActorID: row.ActorID, ActorType: row.ActorType, ActorDisplayName: actorDisplayName, ActorSlug: conv.FromPGText[string](row.ActorSlug),
-		Action: row.Action, ActingSurface: actingSurface, ActingClientID: conv.FromPGText[string](row.ActingClientID),
+		Action: row.Action, ActingSurface: actingSurface, ActingClientID: conv.FromPGText[string](row.ActingClientID), Category: new(string(category)),
 		SubjectID: row.SubjectID, SubjectType: row.SubjectType, SubjectDisplayName: conv.FromPGText[string](row.SubjectDisplayName), SubjectSlug: conv.FromPGText[string](row.SubjectSlug),
 		BeforeSnapshot: row.BeforeSnapshot, AfterSnapshot: row.AfterSnapshot, Metadata: metadata, CreatedAt: row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil

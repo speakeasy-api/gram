@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit/securityevent"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -127,14 +128,20 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		params.CursorSeq = pgtype.Int8{Int64: seq, Valid: true}
 	}
 
-	rows, err := repo.New(s.db).ListAuditLogs(ctx, params)
+	category := categoryOrDefault(payload.Category)
+	var rows []repo.ListAuditLogsRow
+	if category == audit.CategorySecurity {
+		rows, err = securityevent.List(ctx, s.db, params)
+	} else {
+		rows, err = repo.New(s.db).ListAuditLogs(ctx, params)
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit logs").LogError(ctx, s.logger)
 	}
 
 	logs := make([]*gen.AuditLog, 0, min(len(rows), listAuditLogsPageSize))
 	for _, row := range rows[:min(len(rows), listAuditLogsPageSize)] {
-		log, err := toAuditLog(row)
+		log, err := toAuditLog(row, category)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error building audit log response").LogError(ctx, s.logger)
 		}
@@ -218,29 +225,9 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 		return nil, err
 	}
 
-	queries := repo.New(s.db)
-	actorRows, err := queries.ListAuditActorFacets(ctx, repo.ListAuditActorFacetsParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-	})
+	actorRows, actionRows, surfaceRows, err := s.listFacetRows(ctx, categoryOrDefault(payload.Category), authCtx.ActiveOrganizationID, projectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit actor facets").LogError(ctx, s.logger)
-	}
-
-	actionRows, err := queries.ListAuditActionFacets(ctx, repo.ListAuditActionFacetsParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit action facets").LogError(ctx, s.logger)
-	}
-
-	surfaceRows, err := queries.ListAuditSurfaceFacets(ctx, repo.ListAuditSurfaceFacetsParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit surface facets").LogError(ctx, s.logger)
+		return nil, err
 	}
 
 	// Staff actor IDs are not usable as customer-facing filters. Omit those
@@ -293,7 +280,7 @@ func (s *Service) resolveProjectID(ctx context.Context, organizationID string, p
 	}
 }
 
-func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
+func toAuditLog(row repo.ListAuditLogsRow, category audit.Category) (*gen.AuditLog, error) {
 	var metadata map[string]any
 	if len(row.Metadata) > 0 {
 		metadata = make(map[string]any)
@@ -327,8 +314,58 @@ func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
 		Metadata:           metadata,
 		ActingSurface:      actingSurfaceOrUnknown(row.ActingSurface),
 		ActingClientID:     customerFacingActingClientID(row.ActingSurface, row.ActingClientID),
+		Category:           new(string(category)),
 		CreatedAt:          row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
+}
+
+// categoryOrDefault returns the category a request asked for. Goa validates the
+// value against the enum and fills the default over HTTP; in-process callers
+// that leave it blank get the audit log page's category.
+func categoryOrDefault(category string) audit.Category {
+	if category == "" {
+		return audit.CategoryConfiguration
+	}
+	return audit.Category(category)
+}
+
+// listFacetRows reads the facet values of one category's log.
+func (s *Service) listFacetRows(ctx context.Context, category audit.Category, organizationID string, projectID uuid.NullUUID) ([]repo.ListAuditActorFacetsRow, []repo.ListAuditActionFacetsRow, []repo.ListAuditSurfaceFacetsRow, error) {
+	actorParams := repo.ListAuditActorFacetsParams{OrganizationID: organizationID, ProjectID: projectID}
+	actionParams := repo.ListAuditActionFacetsParams{OrganizationID: organizationID, ProjectID: projectID}
+	surfaceParams := repo.ListAuditSurfaceFacetsParams{OrganizationID: organizationID, ProjectID: projectID}
+
+	var (
+		actors   []repo.ListAuditActorFacetsRow
+		actions  []repo.ListAuditActionFacetsRow
+		surfaces []repo.ListAuditSurfaceFacetsRow
+		err      error
+	)
+	if category == audit.CategorySecurity {
+		actors, err = securityevent.ActorFacets(ctx, s.db, actorParams)
+	} else {
+		actors, err = repo.New(s.db).ListAuditActorFacets(ctx, actorParams)
+	}
+	if err != nil {
+		return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "error listing audit actor facets").LogError(ctx, s.logger)
+	}
+	if category == audit.CategorySecurity {
+		actions, err = securityevent.ActionFacets(ctx, s.db, actionParams)
+	} else {
+		actions, err = repo.New(s.db).ListAuditActionFacets(ctx, actionParams)
+	}
+	if err != nil {
+		return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "error listing audit action facets").LogError(ctx, s.logger)
+	}
+	if category == audit.CategorySecurity {
+		surfaces, err = securityevent.SurfaceFacets(ctx, s.db, surfaceParams)
+	} else {
+		surfaces, err = repo.New(s.db).ListAuditSurfaceFacets(ctx, surfaceParams)
+	}
+	if err != nil {
+		return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "error listing audit surface facets").LogError(ctx, s.logger)
+	}
+	return actors, actions, surfaces, nil
 }
 
 // customerFacingActingClientID omits the registered OAuth client identifier

@@ -32,6 +32,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -90,6 +92,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -148,6 +152,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -206,6 +212,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -264,6 +272,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -322,6 +332,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -380,6 +392,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -438,6 +452,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -496,6 +512,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -554,6 +572,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -670,6 +690,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -728,6 +750,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -786,6 +810,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -844,6 +870,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -902,6 +930,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -960,6 +990,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1018,6 +1050,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1076,6 +1110,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1134,6 +1170,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1192,6 +1230,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1250,6 +1290,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1308,6 +1350,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1366,6 +1410,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1424,6 +1470,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1482,6 +1530,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1540,6 +1590,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1598,6 +1650,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1656,6 +1710,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1714,6 +1770,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1772,6 +1830,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1830,6 +1890,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1888,6 +1950,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -1946,6 +2010,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2004,6 +2070,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2062,6 +2130,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2178,6 +2248,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2236,6 +2308,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2294,6 +2368,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2352,6 +2428,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2410,6 +2488,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2468,6 +2548,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2526,6 +2608,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2584,6 +2668,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2642,6 +2728,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2700,6 +2788,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2758,6 +2848,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2816,6 +2908,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2874,6 +2968,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2932,6 +3028,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -2990,6 +3088,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3048,6 +3148,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3106,6 +3208,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3164,6 +3268,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3222,6 +3328,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3280,6 +3388,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3338,6 +3448,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3396,6 +3508,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3454,6 +3568,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3512,6 +3628,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3570,6 +3688,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3628,6 +3748,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3686,6 +3808,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3744,6 +3868,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3802,6 +3928,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3860,6 +3988,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3918,6 +4048,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -3976,6 +4108,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4034,6 +4168,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4092,6 +4228,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4150,6 +4288,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4208,6 +4348,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4266,6 +4408,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4324,6 +4468,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4382,6 +4528,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4440,6 +4588,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4498,6 +4648,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4556,6 +4708,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4614,6 +4768,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4672,6 +4828,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4730,6 +4888,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4788,6 +4948,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4846,6 +5008,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4904,6 +5068,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -4962,6 +5128,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -5020,6 +5188,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -5078,6 +5248,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -5136,6 +5308,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -5194,6 +5368,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -5252,6 +5428,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -5310,6 +5488,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -5368,6 +5548,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -5426,6 +5608,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -5484,6 +5668,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -5542,6 +5728,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -5600,6 +5788,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -5658,6 +5848,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -5716,6 +5908,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -5774,6 +5968,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
@@ -5832,6 +6028,8 @@ webhooks:
                                     additionalProperties: true
                                 before_snapshot:
                                     additionalProperties: true
+                                category:
+                                    type: string
                                 id:
                                     format: uuid
                                     type: string
