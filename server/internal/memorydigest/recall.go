@@ -180,3 +180,27 @@ func firstParagraph(s string, maxRunes int) string {
 	}
 	return string([]rune(s)[:maxRunes-1]) + "…"
 }
+
+// Citation formats a source the way agents cite it: [digest:<id>],
+// [chat:<id>] or [memo:<id>].
+func Citation(kind SourceKind, id uuid.UUID) string {
+	return "[" + string(kind) + ":" + id.String() + "]"
+}
+
+// Render writes entries as one text block, oldest first, each under a
+// heading that carries its citation. dropped is the number of older
+// entries Budget left out, which the block states so an agent knows to
+// search or zoom for older history.
+func Render(entries []Entry, dropped int) string {
+	var b strings.Builder
+	if dropped > 0 {
+		fmt.Fprintf(&b, "(%d older entries omitted to fit the budget; use search_team_memory for older history.)\n\n", dropped)
+	}
+	for i, e := range entries {
+		if i > 0 {
+			b.WriteString("\n\n")
+		}
+		fmt.Fprintf(&b, "## %s %s\n%s", e.Heading, Citation(e.Kind, e.ID), e.Text)
+	}
+	return b.String()
+}
