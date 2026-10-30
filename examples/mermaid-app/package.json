@@ -16,10 +16,10 @@
     "dev": "vite",
     "build:ui": "vite build",
     "build:inline": "node scripts/inline-html.mjs",
-    "build:functions": "speakeasy functions build",
+    "build:functions": "speakeasy-ai functions build",
     "build": "pnpm run build:ui && pnpm run build:inline && pnpm run build:functions",
     "lint": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.ui.json",
-    "push": "pnpm run build && speakeasy functions push --no-build"
+    "push": "pnpm run build && speakeasy-ai functions push --no-build"
   },
   "dependencies": {
     "@speakeasy-api/functions": "^0.20.0",

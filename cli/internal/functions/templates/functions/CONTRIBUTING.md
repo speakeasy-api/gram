@@ -13,9 +13,9 @@
 
 ## `package.json` scripts
 
-- `dev` - Runs the MCP Inspector playground with hot reloading enabled. `speakeasy functions dev` runs it too.
-- `build` - Runs `speakeasy functions build`, which bundles the functions code into a zip file for deployment and places it in the `dist/` directory.
-- `push` - Runs `speakeasy functions push`, which builds the project and deploys it to the Speakeasy AI Control Plane.
+- `dev` - Runs the MCP Inspector playground with hot reloading enabled. `speakeasy-ai functions dev` runs it too.
+- `build` - Runs `speakeasy-ai functions build`, which bundles the functions code into a zip file for deployment and places it in the `dist/` directory.
+- `push` - Runs `speakeasy-ai functions push`, which builds the project and deploys it to the Speakeasy AI Control Plane.
 - `lint` - Runs the TypeScript compiler in `noEmit` mode to check for type errors.
 
 <details open>

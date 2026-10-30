@@ -1,6 +1,6 @@
 # Speakeasy AI Control Plane CLI
 
-The `speakeasy` command line interface for the Speakeasy AI Control Plane.
+The `speakeasy-ai` command line interface for the Speakeasy AI Control Plane.
 
 ## Install
 
@@ -10,31 +10,54 @@ brew install speakeasy-api/tap/cli
 
 # npm
 npm i -g @speakeasy-api/cli
+
+# Install script (macOS and Linux)
+curl -fsSL https://ai.speakeasy.com/cli.sh | bash
+```
+
+Check the install. It prints `speakeasy-ai-control-plane-cli`:
+
+```bash
+speakeasy-ai --control-plane-cli
 ```
 
 Then authenticate and check your setup:
 
 ```bash
-speakeasy auth
-speakeasy whoami
+speakeasy-ai auth
+speakeasy-ai whoami
 ```
 
-The Homebrew `cli` formula conflicts with the Speakeasy SDK generator formula
-(`speakeasy-api/tap/speakeasy`), because both install a binary named
-`speakeasy`. Install one or the other with Homebrew.
+### Migrating from `speakeasy`
+
+This CLI used to install as `speakeasy`, the name the Speakeasy SDK generator
+uses. It now installs as `speakeasy-ai`, so both CLIs can be on your `PATH`, and
+the Homebrew `cli` formula no longer conflicts with the SDK generator formula
+(`speakeasy-api/tap/speakeasy`).
+
+- Homebrew and npm: upgrade as usual. The upgrade replaces `speakeasy` with
+  `speakeasy-ai`.
+- Functions projects: their `package.json` scripts call the CLI by name. Replace
+  `speakeasy functions` with `speakeasy-ai functions` in them.
+- Install script: run it again. It installs `speakeasy-ai`, and warns when an
+  old `speakeasy` copy of this CLI is in the same folder. Remove old copies in
+  other folders yourself.
+- A copy updated to this release and still run as `speakeasy` prints a
+  deprecation notice. Running an SDK generator command such as `speakeasy run`
+  with it says to install `speakeasy-ai` and remove the old copy.
 
 ### Migrating from `gram`
 
 This CLI was previously named `gram`. The `speakeasy-api/tap/gram` Homebrew
 formula still installs it under the `gram` name for now, and running it as
-`gram` prints a deprecation notice. Switch to the `speakeasy` command.
+`gram` prints a deprecation notice. Switch to the `speakeasy-ai` command.
 
 You do not need to authenticate again. Profiles now live in
 `$XDG_CONFIG_HOME/speakeasy-ai/profile.json` (`~/.config/speakeasy-ai/profile.json`
 when `XDG_CONFIG_HOME` is unset). Until that file exists, the CLI reads your
 old `~/.gram/profile.json`, and the first command that saves a profile copies
 your profiles to the new file. The old file is left in place.
-`speakeasy auth clear` empties both files.
+`speakeasy-ai auth clear` empties both files.
 
 Environment variables and files now use Speakeasy names. The old names keep
 working, and the CLI prints one deprecation line per run when you still use
@@ -56,22 +79,22 @@ an old environment variable:
 
 When both names of a variable are set, the `SPEAKEASY_AI_*` name wins. The CLI
 never reads plain `SPEAKEASY_*` names such as `SPEAKEASY_API_KEY`, which belong
-to the Speakeasy SDK generator CLI. `speakeasy stage` and `speakeasy push` use
+to the Speakeasy SDK generator CLI. `speakeasy-ai stage` and `speakeasy-ai push` use
 `speakeasy.deploy.json` by default, and keep using `gram.deploy.json` when only
 that file exists.
 
 ## Speakeasy Functions
 
-The `speakeasy functions` commands create, build and deploy
+The `speakeasy-ai functions` commands create, build and deploy
 [Speakeasy Functions](../ts-framework/functions/README.md) projects:
 
-| Command                          | What it does                                                                                                                                                 |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `speakeasy functions init [dir]` | Create a project from a built-in template (`--template functions` or `--template mcp`). Prompts for missing values on a terminal; `--yes` uses the defaults. |
-| `speakeasy functions build`      | Build the project with its own `@speakeasy-api/functions` (or `@gram-ai/functions`) package into `dist/functions.zip`. Needs Node.js 22.18.0 or later.       |
-| `speakeasy functions dev`        | Run the project's `dev` script. Arguments after `--` are passed to it.                                                                                       |
-| `speakeasy functions push`       | Build, stage and deploy the project. `--no-build` deploys the existing build.                                                                                |
-| `speakeasy functions stage`      | Add a built zip file to the deployment file without deploying, like `speakeasy stage function`.                                                              |
+| Command                             | What it does                                                                                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `speakeasy-ai functions init [dir]` | Create a project from a built-in template (`--template functions` or `--template mcp`). Prompts for missing values on a terminal; `--yes` uses the defaults. |
+| `speakeasy-ai functions build`      | Build the project with its own `@speakeasy-api/functions` (or `@gram-ai/functions`) package into `dist/functions.zip`. Needs Node.js 22.18.0 or later.       |
+| `speakeasy-ai functions dev`        | Run the project's `dev` script. Arguments after `--` are passed to it.                                                                                       |
+| `speakeasy-ai functions push`       | Build, stage and deploy the project. `--no-build` deploys the existing build.                                                                                |
+| `speakeasy-ai functions stage`      | Add a built zip file to the deployment file without deploying, like `speakeasy-ai stage function`.                                                           |
 
 They replace `npm create @gram-ai/function` and the `gf build` and `gf push`
 commands from `@gram-ai/functions`, which still work but are deprecated.
@@ -89,7 +112,7 @@ built, so both scaffolders create the same projects.
 
 To scaffold a project against a local SDK checkout, set
 `SPEAKEASY_AI_FUNCTIONS_SDK_VERSION=file:/path/to/gram/ts-framework/functions`
-when you run `speakeasy functions init`.
+when you run `speakeasy-ai functions init`.
 
 ## Local Development
 

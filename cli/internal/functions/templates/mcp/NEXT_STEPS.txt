@@ -2,11 +2,11 @@ All done! Jump in with `cd $DIR`.
 
 Some next steps:
 
-- Start a local development MCP server with `speakeasy functions dev` (or `$PACKAGE_MANAGER run dev`)
+- Start a local development MCP server with `speakeasy-ai functions dev` (or `$PACKAGE_MANAGER run dev`)
 
-- Build your function with `speakeasy functions build`
+- Build your function with `speakeasy-ai functions build`
 
-- Deploy it with `speakeasy functions push`
+- Deploy it with `speakeasy-ai functions push`
 
 - Create MCP servers from your tools in the Speakeasy dashboard: https://ai.speakeasy.com
 
