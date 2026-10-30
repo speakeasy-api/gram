@@ -60,13 +60,8 @@ func newIDJAGTestAssertion(t *testing.T) idJAGTestAssertion {
 	return idJAGTestAssertion{signer: signer, jwks: jwks}
 }
 
-func (a idJAGTestAssertion) sign(t *testing.T, issuer, audience, resource, clientID, email, assertionID string) string {
-	t.Helper()
-	return a.signWithResourceClaim(t, issuer, audience, resource, clientID, email, assertionID)
-}
-
-// signWithResourceClaim signs an ID-JAG whose resource claim may be any JSON value.
-func (a idJAGTestAssertion) signWithResourceClaim(t *testing.T, issuer, audience string, resource any, clientID, email, assertionID string) string {
+// sign signs an ID-JAG whose resource claim may be any JSON value.
+func (a idJAGTestAssertion) sign(t *testing.T, issuer, audience string, resource any, clientID, email, assertionID string) string {
 	t.Helper()
 	now := time.Now()
 	claims := jwt.Claims{

@@ -394,7 +394,7 @@ func TestSharedAuthorizationServer_IDJAGResourceClaimRefusalDoesNotConsumeIDJAG(
 	} {
 		w := sharedToken(t, ctx, ti, f.issuer.ID.String(), url.Values{
 			oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer}, oauthwire.ParamClientID: {f.client.ClientID},
-			oauthwire.ParamAssertion: {signer.signWithResourceClaim(t, sharedTestUpstreamIssuer, f.issuerURL, claim, f.client.ClientID, mockidp.MockUserEmail, assertionID)},
+			oauthwire.ParamAssertion: {signer.sign(t, sharedTestUpstreamIssuer, f.issuerURL, claim, f.client.ClientID, mockidp.MockUserEmail, assertionID)},
 		})
 		require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 		require.Equal(t, "invalid_grant", decodeSharedTokenResponse(t, w).Error, claim)

@@ -64,7 +64,7 @@ func TestSharedAuthorizationServer_IDJAGResourceRefusalsAreRecorded(t *testing.T
 		"non-string resource claim": {
 			assertion: func(t *testing.T, signer idJAGTestAssertion, issuerURL, _, clientID string) string {
 				t.Helper()
-				return signer.signWithResourceClaim(t, sharedTestUpstreamIssuer, issuerURL, 42, clientID, "user@example.test", "id-jag-bad-claim")
+				return signer.sign(t, sharedTestUpstreamIssuer, issuerURL, 42, clientID, "user@example.test", "id-jag-bad-claim")
 			},
 			code:   "invalid_grant",
 			reason: mcpmetrics.IDJAGRejectionResourceMismatch,

@@ -125,7 +125,7 @@ func TestSharedAuthorizationServer_IDJAGGatewayDefaultYieldsToNamedResource(t *t
 	w = sharedToken(t, ctx, ti, f.issuer.ID.String(), url.Values{
 		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer},
 		oauthwire.ParamClientID:  {f.client.ClientID},
-		oauthwire.ParamAssertion: {signer.signWithResourceClaim(t, sharedTestUpstreamIssuer, f.issuerURL, "not-a-resource", f.client.ClientID, mockidp.MockUserEmail, uuid.NewString())},
+		oauthwire.ParamAssertion: {signer.sign(t, sharedTestUpstreamIssuer, f.issuerURL, "not-a-resource", f.client.ClientID, mockidp.MockUserEmail, uuid.NewString())},
 	})
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 	require.Equal(t, "invalid_grant", decodeSharedTokenResponse(t, w).Error)
