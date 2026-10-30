@@ -16,9 +16,10 @@ File references are `file:line` on each option's branch, under `server/internal/
 2. [How a permission is defined](#2-how-a-permission-is-defined)
 3. [What an authorization request looks like](#3-what-an-authorization-request-looks-like)
 4. [The data model both options read](#4-the-data-model-both-options-read)
-5. [The five scenarios](#5-the-five-scenarios)
-6. [Legacy broad grants](#6-legacy-broad-grants)
-7. [Shared gaps and open questions](#7-shared-gaps-and-open-questions)
+5. [The five MCP scenarios](#5-the-five-mcp-scenarios)
+6. [More scenarios: projects, agents, time-bound access](#6-more-scenarios-projects-agents-time-bound-access)
+7. [Legacy broad grants](#7-legacy-broad-grants)
+8. [Shared gaps and open questions](#8-shared-gaps-and-open-questions)
 
 ---
 
@@ -34,6 +35,10 @@ File references are `file:line` on each option's branch, under `server/internal/
 | Where a grant may attach | `AllowedAnchors`. A broader row is still allowed, but labelled legacy | `s.AnchoredAt` (allowed) and `s.LegacyAnchoredAt` (honored, labelled legacy). Any other anchor fails decoding |
 | Rollout | Applies engine-wide for MCP scopes on the branch | Per organization, through the `MCPServerSchemaActive` switch (off everywhere today) |
 | New storage | None. Reads `principal_grants` unchanged | None. Reads `principal_grants` unchanged |
+| Project blocks vs a direct user grant | Today's rule kept: the direct grant wins (`BlockWins: false`) | The block always wins |
+| Agents (R ∩ A ∩ O) | Unchanged engine loop over the three policies | `evaluatePolicies` requires every policy to allow |
+| Relationship rules (agent owner reads history) | Sketched: hand-written `Relations` enum on a definition | Sketched: `Is`, `Via`, `SoleAttribution` in the schema language |
+| Time-bound grants | Unsupported; sketched | Unsupported; sketched |
 | Tool-level checks | Still in the engine, outside the catalogue (`MCPToolCall` builder sketched) | Evaluator implemented and tested; tool-call entry point (`RequireMCPTool`) sketched |
 | Safety net at startup | `mustValidate` panics on a bad definition; a test keeps the engine's tables equal to the catalogue | `relschema.Compile` panics on a bad schema, including any registered scope the schema neither reads nor excludes |
 
@@ -281,7 +286,7 @@ Every outcome in the Cases tables below is asserted in `authz/catalog/scenarios_
 
 ---
 
-## 5. The five scenarios
+## 5. The five MCP scenarios
 
 | # | Scenario | B | D |
 | --- | --- | --- | --- |
@@ -583,7 +588,490 @@ Connect is scenario 1's call. Tool calls and `tools/list` are scenario 4's: the 
 
 ---
 
-## 6. Legacy broad grants
+## 6. More scenarios: projects, agents, time-bound access
+
+These cases go beyond the five MCP scenarios. The status for each option is marked separately, because some of the code only exists on parked work and some exists nowhere yet.
+
+| # | Scenario | B | D |
+| --- | --- | --- | --- |
+| 6 | Role A reads every project and writes project PA | Implemented on a parked commit | Implemented in a parked patch |
+| 7 | Role B blocks project PO, but U also has a direct grant on it | Implemented on a parked commit. **The direct grant wins** | Implemented in a parked patch. **The block wins** |
+| 8 | An agent connects to a server within its owner's authority | Works through the unchanged engine. Not in B's scenario tests | Works through `evaluatePolicies`. Not in D's scenario tests |
+| 9 | An agent's history follows it when it is transferred | Sketched (slice 4 plan, paused). Today's rule is inline in the chat service | Sketched (slice 4 plan, paused). Same |
+| 10 | An admin gives a user access for a limited time | **Unsupported.** Sketched | **Unsupported.** Sketched |
+| 11 | A request for a resource in another organization | Implemented | Implemented |
+
+**Where the parked project work lives.** B's project step is commit [`1d6d00132`](https://github.com/speakeasy-api/gram/commit/1d6d00132741189e9050255c80c73f246e797fa0). It was reverted at `c7b47a9a3`, so it is not on the head of B's branch. D's project step was never committed. It is saved as `/mnt/project-files/rbac-option-d/step3-project-parked.patch`, on top of `0bd5c2953`. The line references below are for that commit and that patch.
+
+**Why scenario 11 is included.** It wasn't on your list. I added it because both options promise to refuse another tenant's resource before any grant can match. That promise is easy to state, and the two options keep it in different places. The other gaps I found are not scenarios with an outcome yet. They are listed in [section 8](#8-shared-gaps-and-open-questions).
+
+### Fixture additions
+
+| Here | B's tests | D's tests |
+| --- | --- | --- |
+| Projects `PA` and `PO` in organization A | `proj-a`, and `proj-c` for the block | `PA`, `PO` |
+| A third project in A, `PX` | `proj-b` | (not used) |
+| Project `PB` in organization B | (not used; B uses "a project in another organization") | `PB` |
+| Agent `G`, owned by U | (sketch only) | (sketch only) |
+
+---
+
+### Scenario 6. Role A reads every project and writes project PA
+
+**Status.** B: implemented through the catalogue on parked commit `1d6d00132`. `GetProject` and `UpdateProject` ask through the client. D: implemented in the parked patch, with `project` grants, blocks and permissions and a `RequireProject` entry point. No service calls it yet, so the request is **sketched**. In both, about 200 (B's count) or 80 (D's count, `project:read`/`project:write` only) other call sites still use the engine directly.
+
+#### Grants (same rows for B and D)
+
+Case 6a, read every project:
+
+| organization_id | principal_urn | scope | selectors | effect |
+| --- | --- | --- | --- | --- |
+| A | role A | `project:read` | `{"resource_kind": "project", "resource_id": "*"}` | NULL |
+
+Case 6b, write one project:
+
+| organization_id | principal_urn | scope | selectors | effect |
+| --- | --- | --- | --- | --- |
+| A | role A | `project:write` | `{"resource_kind": "project", "resource_id": "PA"}` | NULL |
+
+#### Request
+
+**B** (implemented, `projects/impl.go:113` and `:209`). The client is a field, built in the constructor (`:76`).
+
+```go
+// GetProject: load by slug within the caller's org, then check the loaded row
+proj, err := s.repo.GetProjectBySlug(ctx, repo.GetProjectBySlugParams{Slug: slug, OrganizationID: authCtx.ActiveOrganizationID})
+if _, err := s.authzClient.Require(ctx, catalog.ProjectRead(catalog.ProjectTarget(proj.OrganizationID, proj.ID.String()))); err != nil {
+	// a 403 is returned as 404, so callers cannot probe for project slugs
+}
+
+// UpdateProject: the project comes from the session, not the request body
+s.authzClient.Require(ctx, catalog.ProjectWrite(catalog.ProjectTarget(authCtx.ActiveOrganizationID, authCtx.ProjectID.String())))
+```
+
+**D** (sketched at the call site; `RequireProject` is implemented, `project_access.go:35`):
+
+```go
+project := declarative.ProjectRef{ID: proj.ID.String(), OrganizationID: proj.OrganizationID}
+if err := declarative.RequireProject(ctx, s.authz, declarative.ProjectRead, project); err != nil {
+```
+
+#### Rule setup
+
+**B** (`authz/catalog/permissions.go:76`, `:85`):
+
+```go
+{
+	Name:              authz.ScopeProjectRead,
+	Resource:          authz.ResourceKindProject,
+	AllowedAnchors:    []string{authz.ResourceKindProject, authz.ResourceKindOrg}, // one project, or every project
+	RequiredAncestors: projectAncestors,                                           // {org}
+	ImpliedBy:         []authz.Scope{authz.ScopeProjectWrite},
+	ExcludedBy:        authz.ScopeProjectBlockedRead,
+	BlockWins:         false,
+},
+{
+	Name:              authz.ScopeProjectWrite,
+	Resource:          authz.ResourceKindProject,
+	AllowedAnchors:    []string{authz.ResourceKindProject, authz.ResourceKindOrg},
+	RequiredAncestors: projectAncestors,
+	ImpliedBy:         nil,
+	ExcludedBy:        authz.ScopeProjectBlockedWrite,
+	BlockWins:         false,
+},
+```
+
+**D** (`mcp_server_schema.go:75–85` in the patch):
+
+```go
+s.NewType(project, s.Parent(org), s.StoredKind(authz.ResourceKindProject),
+	s.Grant("viewer", s.StoredAs(string(authz.ScopeProjectRead)), s.AnchoredAt(project, org)),
+	s.Grant("editor", s.StoredAs(string(authz.ScopeProjectWrite)), s.AnchoredAt(project, org)),
+	s.Block("read_blocked", s.StoredAs(string(authz.ScopeProjectBlockedRead)), s.AnchoredAt(project, org)),
+	s.Block("write_blocked", s.StoredAs(string(authz.ScopeProjectBlockedWrite)), s.AnchoredAt(project, org)),
+
+	s.Permission("read", s.Union(s.Rel("viewer"), s.Rel("editor"), root), s.ExcludedBy("read_blocked")),
+	s.Permission("write", s.Union(s.Rel("editor"), root), s.ExcludedBy("write_blocked"), s.ExcludedBy("read_blocked")),
+),
+```
+
+| Rule | B | D |
+| --- | --- | --- |
+| Write includes read | `project:read` `ImpliedBy: [project:write]` | `read` includes `editor` |
+| A grant may name one project or every project | `AllowedAnchors: [project, org]` | `s.AnchoredAt(project, org)` |
+| A read block also blocks write | Only in the engine's table (`authz/scopes.go:283`). The catalogue can't express it, because `ExcludedBy` names one block | `write` lists both `write_blocked` and `read_blocked` |
+| A project grant can't be narrowed | The engine accepts only `resource_kind` and `resource_id` on project grants (`authz/selector.go:182`) | A project row with any other key fails to decode |
+
+#### Walkthrough: U reads PA with row 6a
+
+| Step | B | D |
+| --- | --- | --- |
+| Load | `GetProject` loads PA by slug within A. An unknown slug, or one in another organization, is a 404 before any check | Same handler, today's load |
+| Validate | `prepare`: definition exists, target concrete, org = active org, ancestor org present. Check `{project:read, resource_id: PA}`, with no `project_id` | `RequireProject`: switch on, `PolicySet` fetched, `decideProject` builds `project:PA` → `organization:A` |
+| Interpret | `expand()` gives `root`, `project:read`, `project:write`. Role A's row: scope in list, `*` matches → match | `Decode`: `project:read` → `viewer`; `*` with no ancestor key → anchor `organization:A` (`decode.go:144`); an allowed anchor, not legacy |
+| Decide | No `project:blocked_read` → allowed. `*` with no `project_id` is an org anchor, which is allowed → no legacy basis | `organization:A` is in PA's reach; `read_blocked` has no rows → allowed |
+
+Listing projects is a different path. In B, `ListProjects` still calls `s.authz.Filter` (`projects/impl.go:280`), because the catalogue has no filter operation. In D, listing isn't covered.
+
+#### Cases
+
+| Request | B | D |
+| --- | --- | --- |
+| 6a: read PA, read PO | allowed | allowed |
+| 6a: write PA | denied, `no_grant` | denied |
+| 6a: read a project in organization B | denied, `cross_tenant`, in `prepare` | denied, "object belongs to another organization" |
+| 6b: write PA | allowed | allowed |
+| 6b: read PA | allowed: `project:read` expands to `project:write` | allowed: `read` includes `editor` |
+| 6b: read or write another project | denied, `no_grant` | denied |
+| only `mcp:write {mcp, *, project_id: PA}`: read PA | (not asserted) | denied: a grant on the servers in a project isn't a grant on the project |
+
+Both options keep today's outcomes for 6a and 6b.
+
+---
+
+### Scenario 7. Role B blocks project PO, but U also has a direct grant on it
+
+**Status.** The same as scenario 6. This is the one project case where B and D give **different answers**.
+
+#### Grants (same rows for B and D)
+
+U holds roles A and B. Case 7a has a write block, case 7b a read block. The last row is the variation, a grant made directly to U.
+
+| organization_id | principal_urn | scope | selectors | effect |
+| --- | --- | --- | --- | --- |
+| A | role A | `project:write` | `{"resource_kind": "project", "resource_id": "*"}` | NULL |
+| A | role B | 7a: `project:blocked_write`, 7b: `project:blocked_read` | `{"resource_kind": "project", "resource_id": "PO"}` | NULL |
+| A | `user:U` (variation) | `project:write` | `{"resource_kind": "project", "resource_id": "PO"}` | NULL |
+
+#### Request
+
+`UpdateProject` and `GetProject`, as in scenario 6.
+
+#### Rule setup
+
+| B | D |
+| --- | --- |
+| `project:write` has `ExcludedBy: project:blocked_write`, **`BlockWins: false`**. Projects aren't in the engine's `blockWinsScopes` (`authz/precedence.go:51`), so a direct user grant on one resource outranks a role's block. That is today's rule, R8 | `write` is "allows, minus `write_blocked`, minus `read_blocked`". The evaluator never looks at which principal holds a row, so **a block always wins** |
+
+#### Walkthrough: U writes PO, with the 7a rows and the direct grant
+
+| Step | B | D |
+| --- | --- | --- |
+| Allow side | Role A's `*` row matches | Role A's row → `editor` at `organization:A` → true |
+| Block side | The exclusion (`authz/checks.go:136`) matches role B's `project:blocked_write` strictly on `resource_id` PO | Role B's row → `write_blocked` at `project:PO` → true; the allow is withdrawn (`eval.go:180`) |
+| Override | `directOverride` (`precedence.go:109`): `ExclusionYieldsToDirectGrants(project:write)` is **true**. `user:U`'s row names PO → **it outranks the block** | No override step exists |
+| Result | **allowed** | **denied**, "withdrawn by a matching block" |
+
+#### Cases
+
+| Request | Today | B | D |
+| --- | --- | --- | --- |
+| 7a: write PA | allowed | allowed | allowed |
+| 7a: write PO, no direct grant | denied | denied, `blocked` | denied |
+| 7a: read PO | allowed | allowed: a write block doesn't withdraw read | allowed: `read` doesn't name `write_blocked` |
+| 7a: write PO, with U's direct grant | **allowed** (R8) | **allowed** | **denied** |
+| 7b: read PO | denied | denied, `blocked` | denied |
+| 7b: write PO | denied | denied: a read block also counts as a write block (engine table) | denied: `write` excludes `read_blocked` |
+
+**The difference is a choice, not a limit of either option.** B kept today's project rules and could switch them with `BlockWins: true`, plus adding projects to the engine's `blockWinsScopes`. D would need a precedence concept to keep R8: something like `s.ExcludedBy("write_blocked", s.YieldsToDirectGrant())`, with the evaluator told which rows are direct user grants. That is **sketched, not built**. In scenario 3, by contrast, both options make the MCP block win.
+
+---
+
+### Scenario 8. An agent connects to a server within its owner's authority
+
+**Status.** This works through code that exists today, in both options, but neither option's scenario tests assert it. B: the catalogue hands checks to the engine, which already evaluates an agent's policies. D: `PolicySet` returns the same policies, and `evaluatePolicies` (`mcp_server_access.go:184`) allows only if every one allows. Both rows below are therefore **follows from implemented code, not asserted**.
+
+#### How an agent's authority is built today
+
+An agent session doesn't run with the agent's grants alone. Admission (`agents/runtimepolicy/workload_admission.go`, and `credential_admission.go` for principal credentials) loads three policies, and every check must pass **all three**:
+
+| Policy | Where it comes from | Live or fixed |
+| --- | --- | --- |
+| R, the ceiling | The delegated grants stored on the session's credential at issuance (`contextvalues.PrincipalCredential.DelegatedGrants`) | Fixed |
+| A, the agent's policy | `principal_grants` rows for `agent:<id>` and for every role in `agent_role_assignments` (`runtimepolicy/load.go:22`) | Live |
+| O, the owner's policy | The current owner's own effective grants (`agents.owner_user_id`, `ResolveEligibleUser`) | Live |
+
+Admission refuses outright if the agent is suspended, revoked or deleted, if its owner needs reassignment, or if the owner isn't eligible. The engine loops over the policies (`authz/context.go:188`) and allows only if every policy has a matching grant.
+
+#### Data (same for B and D)
+
+`agents`:
+
+| id | organization_id | owner_user_id | project_id | suspended_at | revoked_at | owner_reassignment_required_at |
+| --- | --- | --- | --- | --- | --- | --- |
+| G | A | U | PA | NULL | NULL | NULL |
+
+`agent_role_assignments`:
+
+| organization_id | agent_id | role_urn |
+| --- | --- | --- |
+| A | G | role E |
+
+`principal_grants`:
+
+| organization_id | principal_urn | scope | selectors | effect | feeds policy |
+| --- | --- | --- | --- | --- | --- |
+| A | `agent:G` | `mcp:connect` | `{"resource_kind": "mcp", "resource_id": "S1"}` | NULL | A |
+| A | role E | `mcp:connect` | `{"resource_kind": "mcp", "resource_id": "S2"}` | NULL | A |
+| A | role A (held by U) | `mcp:connect` | `{"resource_kind": "mcp", "resource_id": "*", "project_id": "PA"}` | NULL | O |
+
+The ceiling R is stored on the credential, not in `principal_grants`. Here it covers `mcp:connect` on every server in PA.
+
+#### Request
+
+The same proxy call as scenario 1, in both options. Nothing at the call site changes for an agent. The difference is in what `PrepareContext` loaded: `AdmitWorkloadSession` or `AdmitPrincipalCredential` (`authz/engine.go:112`) puts R, A and O on the context instead of one user policy.
+
+#### Rule setup
+
+No new rule in either option. Each evaluates its normal `mcp:connect` rule once per policy:
+
+| B | D |
+| --- | --- |
+| The catalogue validates the request once, then the engine evaluates the check against each policy (`context.go:197`). An allow needs a match in R, A and O | `decideMCPServer` decodes and evaluates each policy separately. `PolicySet.Policies` is documented as "every one must allow" (`authz/policy_set.go`) |
+
+#### Walkthrough: agent G connects to S1
+
+| Step | B | D |
+| --- | --- | --- |
+| Admit | `AdmitWorkloadSession` checks G is active and U is eligible, then loads R, A, O | Same |
+| Build | Target `mcp:S1` in PA, A; `prepare` passes | `MCPServerRef{S1, PA, A}`; `PolicySet` has three policies bound to A |
+| R | Matches `mcp:connect` in PA | `connector` at `project:PA` (legacy) → true |
+| A | `agent:G`'s row names S1 → match | `connector` at `mcp_server:S1` → true |
+| O | Role A's `*` in PA → match | `connector` at `project:PA` (legacy) → true |
+| Result | allowed | allowed |
+
+#### Cases
+
+| Request | B | D | Why |
+| --- | --- | --- | --- |
+| G connects to S1 | allowed | allowed | R, A and O all allow |
+| G connects to S2 | allowed | allowed | A allows through role E |
+| G connects to C | denied | denied | A has no row for C |
+| U loses role A, then G connects to S1 | denied | denied | O is loaded live and no longer allows |
+| G is transferred to an owner with no connect grant | denied | denied | O is the new owner's policy |
+| role B blocks C for U, and A gains `agent:G mcp:connect C` | denied | denied | The block is in O. MCP blocks always win, and agent grants never override a block today (`precedence.go:31`) |
+| G is suspended | refused at admission | refused at admission | No policy reaches either option |
+
+**One difference to check.** The engine also binds `$represented_user` in selectors and keeps the represented user's own policies for auth-client checks (`authz/context.go:25`). D's `PolicySet` exposes only `Policies` and `OrganizationID`, not those two. MCP connect checks don't use them, but a row with a `$represented_user` selector would probably fail to decode in D. That is **unverified**.
+
+---
+
+### Scenario 9. An agent's history follows it when it is transferred
+
+**Status.** **Sketched in both.** This was slice 4, which is paused after Stage A. Each option has a plan: `/mnt/project-files/rbac-eval/option-b/slice4-stage-a.md` (B) and `/mnt/project-files/rbac-option-d/slice4-stage-a.md` (D). **Today's behavior is already implemented**, inline in the chat service (PR #8110). U1, the current owner of an agent, can read that agent's agent-only sessions. Ownership is resolved at read time, so a transfer moves access, and the former owner loses it at once.
+
+#### Data (same for B and D)
+
+`agents`, before and after transfer:
+
+| id | organization_id | owner_user_id |
+| --- | --- | --- |
+| G | A | U1, then U2 |
+
+`chats`:
+
+| id | organization_id | project_id | agent_id | user_id | external_user_id | captured |
+| --- | --- | --- | --- | --- | --- | --- |
+| C1 | A | PA | G | NULL | NULL | after activation |
+| C2 | A | PA | G | U1 | NULL | after activation |
+| C3 | A | PA | NULL | NULL | NULL | after activation |
+| C4 | A | PA | G | NULL | NULL | before activation |
+
+`principal_grants`:
+
+| organization_id | principal_urn | scope | selectors |
+| --- | --- | --- | --- |
+| A | `user:M` | `agent:write`, `agent:transfer`, `agent:read` | `{"resource_kind": "agent", "resource_id": "G"}` |
+| A | `user:R` | `chat:read` | `{"resource_kind": "chat", "resource_id": "*"}` |
+
+Both plans add a per-session marker recording which rules applied at capture (B: a nullable `chats.access_rules` column; D: the same idea, still an open question). Neither adds a grant row for ownership: **ownership is a relationship read from `agents.owner_user_id`, not a grant.**
+
+#### Request
+
+**Today** (`chat/impl.go:1060`, `authorizeChatAccess`):
+
+```go
+// reads only: an agent-only session is readable by the agent's current owner
+if agentOnlySession && IsAgentOwner{agent_id, chat.organization_id, caller} { allow }
+// otherwise: authz.Require(ChatReadCheck)
+```
+
+**B (sketched):** the chat service passes facts, and the catalogue resolves ownership through the backend.
+
+```go
+facts := catalog.SessionFacts{OrgID, ProjectID, ChatID, AuthorUserID, ExternalUserID, AgentID, Rules}
+s.authzClient.Require(ctx, catalog.SessionRead(facts))
+```
+
+**D (sketched):** the chat service builds a reference and loads the owner fact itself.
+
+```go
+ref := declarative.ChatRef{ID, ProjectID, OrganizationID, AuthorUserID, ExternalUserID, AgentID, Rules}
+owner := declarative.AgentOwnerFact{AgentID, OrganizationID, OwnerUserID, Eligible}
+declarative.RequireChatRead(ctx, s.authz, ref, owner)
+```
+
+#### Rule setup
+
+**B (sketched).** A `chat:read` definition with a new field, `Relations`. A relation is a **closed Go enum** whose cases are hand-written functions in the client, not a data-driven rule:
+
+```go
+{
+	Name:              authz.ScopeChatRead,
+	Resource:          "chat",
+	AllowedAnchors:    []string{"chat", authz.ResourceKindProject, authz.ResourceKindOrg},
+	RequiredAncestors: []string{authz.ResourceKindProject, authz.ResourceKindOrg},
+	ImpliedBy:         []authz.Scope{authz.ScopeChatWrite},
+	Relations:         []Relation{RelationSessionAuthor, RelationAgentOwner},
+}
+// Backend gains: agentOwnership(ctx, orgID, agentID) (Ownership{OwnerUserID, Latched, Deleted}, found)
+```
+
+**D (sketched).** New builder pieces for attributes and traversal. `SoleAttribution` stops the owner of an agent reading a session that also has a human author:
+
+```go
+s.NewType("agent", s.Parent("organization"), s.Attr("owner", "user"),
+	s.Permission("owner", s.Is("owner")), // only the current owner; management grants are deliberately absent
+),
+s.NewType("chat", s.Parent("project"),
+	s.Attr("author", "user"), s.Attr("agent", "agent"),
+	s.Grant("reader", s.StoredAs("chat:read"), s.AnchoredAt("organization")),
+	s.Permission("read", s.Union(
+		s.Is("author"),
+		s.SoleAttribution("agent", s.Via("agent", "owner")),
+		s.Rel("reader"),
+	)),
+),
+```
+
+| | B | D |
+| --- | --- | --- |
+| New concept | `Relations` on a definition, with each relation hard-coded | Attributes, `Is`, `Via`, `SoleAttribution` in the schema language |
+| Who loads ownership | The catalogue's backend, with a new authz-owned query bound to the organization | The chat service, as a fact passed in. A missing fact is undetermined, never allowed |
+| Pre-activation sessions | Today's rule, kept as the "legacy" version | The legacy rule, moved unchanged |
+
+#### Walkthrough: U2 reads C1 after G is transferred from U1
+
+| Step | B (sketched) | D (sketched) |
+| --- | --- | --- |
+| Load | `GetChat{id, project_id}`, tenant-bound to the caller's project | Same |
+| Classify | Attribution is `agent` (agent set, no human fields) | `agent` is the sole attribution |
+| Author | No author → skip | `Is("author")` false |
+| Owner | The backend looks up G's ownership in A: owner U2, not latched → allowed, basis "agent owner" | `Via("agent", "owner")` with the fact owner = U2 → true |
+| Result | allowed | allowed |
+
+#### Cases (from the two plans' fixtures)
+
+| Request | Today | B | D |
+| --- | --- | --- | --- |
+| U1 reads C1 before transfer | allowed | allowed | allowed |
+| U1 reads C1 after transfer | denied | denied | denied |
+| U2 reads C1 after transfer | allowed | allowed | allowed |
+| M (manages and transfers G) reads C1 | denied | denied: management isn't read | denied |
+| R (`chat:read`) reads C1 | allowed | allowed, basis grant | allowed |
+| U1 reads C2 (their own human session, G stamped too) after transfer | allowed | allowed: author | allowed: author |
+| U2 reads C2 | denied | denied: conflicting attribution | denied: `SoleAttribution` |
+| anyone but R reads C3 (no attribution) | denied | denied | denied |
+| C4 (before activation) | today's rule | legacy rule, same answers | legacy rule, same answers |
+| G soft-deleted, its last owner reads its session | denied | allowed for sessions captured after activation (RFC rule) | (not covered in D's plan) |
+
+**Note.** D's plan found that the earlier spike would have let anyone with `agent:write` read the transcripts, and let an agent's owner into a session with a human author. The sketch above avoids both.
+
+---
+
+### Scenario 10. An admin gives a user access for a limited time
+
+**Status.** **Unsupported in both options, and today.** `principal_grants` has no expiry column (`database/schema.sql:9374`), and nothing in either option reads a time. The sketches below are not on any branch. Two other tables do have `expires_at` (`platform_mcp_authorization_grants`, `admin_mcp_authorization_grants`), so the pattern exists in the codebase.
+
+#### Data model (sketched, shared)
+
+A nullable column on the existing table, written by the admin's grant call:
+
+| organization_id | principal_urn | scope | selectors | effect | **expires_at** |
+| --- | --- | --- | --- | --- | --- |
+| A | `user:U` | `mcp:connect` | `{"resource_kind": "mcp", "resource_id": "S1"}` | NULL | `2026-11-06 17:00Z` |
+
+Both options read rows through the same load (`authz/load.go:14`, `access/queries.sql:13`), so the simplest version is shared. The load leaves out expired rows: `WHERE expires_at IS NULL OR expires_at > now()`. Neither option's rule language changes. An expired row behaves exactly as a deleted one.
+
+#### Request
+
+Unchanged in both: scenario 1's proxy call.
+
+#### Rule setup (sketched, if the decision should say why)
+
+Filtering at load gives the right answer, but the decision can't say "expired" and the UI can't say "expires Friday". To report that, each option would carry the time through:
+
+| B | D |
+| --- | --- |
+| `authz.Grant` gains `ExpiresAt`. `decide` adds a `Basis` value, e.g. `time_bound`, when the matching grant has one, and `Authorize` can return the expiry for the UI | `relschema.Row` gains `ExpiresAt`. `Decode` keeps it on the relationship and the trace says "until …". A per-grant option such as `s.Grant("connector", ..., s.TimeBound())` could restrict which relations an admin may grant for a limited time, and `Compile` would check it |
+
+The same table in each option would also cover "can an admin give *this* permission for a limited time at all", if that needs to be limited.
+
+#### Walkthrough: U connects to S1, on 2026-11-05, then 2026-11-07
+
+| Step | Both (sketched) |
+| --- | --- |
+| 11-05 | The load query returns the row; scenario 1's path; allowed |
+| 11-07 | The load query skips the row; no grant matches; denied, `no_grant` (B) or "no relationship grants…" (D) |
+
+#### Cases and things to decide
+
+| Question | Both options |
+| --- | --- |
+| A long-lived MCP connection opened before expiry | The connect check runs when the connection opens. Tool calls are checked per call, so they stop at expiry. The open connection itself isn't cut |
+| A time-bound allow and a permanent block | The block still wins (MCP), or follows each option's project rule from scenario 7 |
+| Re-granting the same row with a new expiry | The unique index is on `(organization_id, principal_urn, scope, selectors)`, so it's an update, not a second row |
+| Cleaning up expired rows | Not needed for correctness if the load filters. A cleanup job would keep the table small |
+| Audit | The grant and its expiry go through the existing grant-change audit. An "expired" event would be new |
+| Agents | An owner's time-bound grant lapses in O (scenario 8), so their agents lose it at the same moment |
+
+---
+
+### Scenario 11. A request for a resource in another organization
+
+**Status.** Implemented in both, for MCP servers: `TestClient_refusesCrossTenantTargetDespiteGrant` (B, `catalog/client_test.go:151`) and the "another organization" case in `mcp_server_access_test.go` (D). For projects: B's `prepare` applies the same check to any definition; D asserts it in the parked project tests.
+
+#### Grants (same rows for B and D)
+
+U is a member of organization A only:
+
+| organization_id | principal_urn | scope | selectors | effect |
+| --- | --- | --- | --- | --- |
+| A | role A | `project:read` | `{"resource_kind": "project", "resource_id": "*"}` | NULL |
+
+The request is for project PB, which belongs to organization B. It can only reach the check if a handler built the target from a row it shouldn't have loaded.
+
+#### Request
+
+As in scenario 6, with a reference or target whose organization is B.
+
+#### Rule setup
+
+| B | D |
+| --- | --- |
+| `prepare` (`client.go:180`): the target's organization must equal the caller's active organization, or the outcome is `cross_tenant`. Every required ancestor must be in the same organization (`:185`) | `Evaluate` (`eval.go:87`): the object's organization must equal the organization the policy was loaded for. A `*` row only ever anchors at that organization |
+
+#### Walkthrough
+
+| Step | B | D |
+| --- | --- | --- |
+| Where it stops | In `prepare`, before any grant is read | In `Evaluate`, before any relationship is applied |
+| Result | denied, `cross_tenant` | denied, "object belongs to another organization" |
+
+#### Cases
+
+| Request | B | D |
+| --- | --- | --- |
+| read PB with a `*` row in A | denied, `cross_tenant` | denied |
+| MCP server in B | denied, `cross_tenant` | denied |
+| a server in A whose project ancestor is in B | denied, `cross_tenant` (ancestor check) | (not asserted: `MCPServerRef` carries one organization, so the case can't be built) |
+| today, the same check through the engine | relies on the handler's tenant-scoped load | relies on the handler's tenant-scoped load |
+
+Today the engine has no tenant check of its own on the target. It relies on the handler having loaded the row within the caller's organization. Both options add an explicit check, at different points.
+
+---
+
+## 7. Legacy broad grants
 
 Both options honor rows that are broader than the target design and label the allow instead of refusing it. This matches the shared decision that wildcard `mcp:connect` grants are honored as legacy until migrated.
 
@@ -600,17 +1088,21 @@ Behavior that changes from today's production in both options (B engine-wide on 
 | Rule | Today | B | D |
 | --- | --- | --- | --- |
 | `mcp:write` implies `mcp:connect` | yes | no | no |
-| A direct user grant outranks a role block (R8) | yes | no, for MCP scopes | no |
+| A direct user grant outranks a role block (R8), MCP | yes | no | no |
+| A direct user grant outranks a role block (R8), projects | yes | yes (unchanged) | no |
 
 ---
 
-## 7. Shared gaps and open questions
+## 8. Shared gaps and open questions
 
 **Gaps both options have today**
 
 - **Unannotated tools under a read-only row** (scenario 4). A tool with no annotations has disposition `""`, which neither option treats as a mismatch. In B the engine skips the key; in D the missing-fact branch passes for non-strict rows. Deciding whether an unannotated tool should count as not read-only is a behavior decision, not only code. B sketches `missing_fact` in `prepare`; D could mark tool-limited rows strict.
 - **Tool calls are not yet decided by the new model.** In B they stay in the engine interceptors (`MCPToolCall` builder sketched). In D the evaluator handles tool facts and is tested, but no request path calls it (`RequireMCPTool` sketched). Today, in both branches, the live tool-call path is the legacy interceptor.
 - **Coverage of endpoints.** Only some MCP server endpoints go through the new path. B covers the remote server's scope settings and the private endpoint proxy; other management endpoints in `remotemcp/impl.go` still check `mcp:write` on the project. D covers the MCP servers service's read and edit and the private endpoint proxy. In both, most of the code base still calls `authz.Engine.Require` with hand-built checks.
+- **Listing.** Neither option answers "which of these can I see?" yet. B's `ListProjects` still calls `s.authz.Filter`; the catalogue has no filter operation. D doesn't cover listing; slice 4's plan proposes an agreement test between the SQL list and the direct read instead of migrating the list.
+- **Time-bound access** (scenario 10). No expiry anywhere in the grant model. The shared sketch is a nullable `expires_at` filtered at load.
+- **Agents in the new model's tests** (scenario 8). Both options inherit the three-policy rule from the engine, but neither scenario suite asserts it. D's `PolicySet` also doesn't carry the `$represented_user` binding.
 
 **Open questions per option**
 
@@ -620,5 +1112,5 @@ Behavior that changes from today's production in both options (B engine-wide on 
 | Only MCP server permissions are defined; each new resource adds definitions and a builder file | Entry points are per type (`RequireMCPServer`); a generic `Require(ctx, engine, permission, ref)` comes with a second type |
 | One exception to the client-as-field pattern: the `mcp` service builds the client at the call because tests construct it as a struct literal | One compiled schema for all types, or one per area, is open; with one schema every row in a policy must decode for every check |
 | Whether project-wide connect is first-class (scenario 1) | Same question |
-
-Not included: project read and write scenarios (a third step that was withdrawn).
+| The catalogue can't express "a read block also blocks write"; it lives only in the engine's table (scenario 7) | One activation switch (`MCPServerSchemaActive`) now covers projects too; a per-type switch needs a second option, and the name is too narrow |
+| Relationship rules (scenario 9) need a new `Relations` field and a backend lookup per relation | Relationship rules need attributes and traversal added to the interpreter |
