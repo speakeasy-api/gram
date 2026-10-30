@@ -65,6 +65,7 @@ import {
   type JobScope,
 } from "./githubActions";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
+import { ProviderMismatchNotice } from "./SetupFields";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
 import {
   CONNECT_SCOPE,
@@ -1317,7 +1318,14 @@ export function CredentialsWizard({
       ? inventory.servers.filter((server) =>
           reachCoversProject(allServersProjectIDs, server.projectId),
         )
-      : selected.map((entry) => entry.server);
+      : // A selection holds the server as it was when ticked; read it back
+        // from the list so a change made since, such as a server moved to
+        // another provider in its settings, shows here.
+        selected.map(
+          (entry) =>
+            inventory.servers.find((server) => server.id === entry.server.id) ??
+            entry.server,
+        );
 
   const attachSelectedConnections = async (
     targetId: string,
@@ -1358,6 +1366,9 @@ export function CredentialsWizard({
               resourceId: server.resourceId,
               name: server.name,
               mcpUrl: server.mcpUrl,
+              issuerId: server.issuerId,
+              projectSlug: server.projectSlug,
+              slug: server.slug,
             },
           ]
         : [],
@@ -1912,6 +1923,11 @@ export function CredentialsWizard({
                 setHighlight("Platform");
               }}
             />
+            {credential === "workload" &&
+              platformKey !== null &&
+              workload.exchange.mismatch !== null && (
+                <ProviderMismatchNotice mismatch={workload.exchange.mismatch} />
+              )}
           </div>
         );
       case 4:
@@ -2078,13 +2094,25 @@ export function CredentialsWizard({
             note =
               "Using a platform's tokens needs permission to manage workload identities. Choose an API key instead.";
           }
+          // Its one token works only at servers sharing a provider, so a new
+          // agent is not created until they do.
+          const mismatched =
+            !editing &&
+            platformKey !== null &&
+            workload.exchange.mismatch !== null;
+          if (mismatched && !refused) {
+            note =
+              "Move this agent's servers onto one MCP authentication provider, or remove the ones that aren't, to continue.";
+          }
           return (
             <WizardFooter
               note={note}
               onBack={() => setStep(2)}
               primary={
                 <Button
-                  disabled={refused || workload.steps.length === 0}
+                  disabled={
+                    refused || mismatched || workload.steps.length === 0
+                  }
                   onClick={() => setStep(4)}
                 >
                   Continue

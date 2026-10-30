@@ -49,6 +49,14 @@ export type SetupServer = {
   resourceId: string;
   name: string;
   mcpUrl: string;
+  /**
+   * The MCP authentication provider (user session issuer) the server signs
+   * people in through. Only a token from that provider is accepted by it.
+   */
+  issuerId?: string;
+  /** Where the server's settings live, to link to them. */
+  projectSlug?: string;
+  slug?: string;
 };
 
 export type SetupStep = {
@@ -80,6 +88,13 @@ export type PlatformSetup = {
   connection: (values: Record<string, string>) => Connection | null;
   /** Extra words Command K matches the platform's setup by. */
   keywords?: string[];
+  /**
+   * The platform's runtime gets its Speakeasy tokens its own way, such as the
+   * device agent exchanging at each server, instead of from one shared MCP
+   * authentication provider's token endpoint. Its servers then needn't share
+   * a provider.
+   */
+  ownTokenExchange?: boolean;
   /**
    * Grants the agent needs beyond the servers it was given, for a platform
    * whose runtime calls more than MCP: the device agent polls for plugins and

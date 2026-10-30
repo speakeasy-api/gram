@@ -1,3 +1,4 @@
+import type { SetupServer } from "./setupInstructions";
 import { expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { groupTokenEndpoints, useSetupValues } from "./workloadTokenEndpoints";
@@ -126,5 +127,66 @@ it("refuses to select a newly discovered issuer belonging to another project", a
   await expect(result.current.refreshAndSelect("other")).rejects.toThrow(
     "exchange endpoint is not available",
   );
+  expect(result.current.selectedEndpointId).toBe("org");
+});
+
+function server(id: string, issuerId?: string): SetupServer {
+  return {
+    id,
+    resourceId: id,
+    name: `Server ${id}`,
+    mcpUrl: `https://gram.example.com/mcp/${id}`,
+    issuerId,
+  };
+}
+
+it("offers only the provider the agent's servers share", () => {
+  endpointQuery.items = [
+    endpoint("org", "organization"),
+    endpoint("shared", "shared", "proj-a", "Alpha"),
+  ];
+  const { result } = renderHook(() =>
+    useSetupValues(undefined, [server("a", "shared"), server("b")]),
+  );
+  expect(result.current.mismatch).toBeNull();
+  expect(result.current.selectedEndpointId).toBe("shared");
+  expect(
+    result.current.endpointGroups.flatMap((g) => g.options.map((o) => o.id)),
+  ).toEqual(["shared"]);
+  expect(result.current.values?.token_endpoint).toBe(
+    "https://gram.example.com/oauth/usi/shared/token",
+  );
+});
+
+it("names a server on its own provider and shows no values", () => {
+  endpointQuery.items = [endpoint("org", "organization")];
+  const { result } = renderHook(() =>
+    useSetupValues(undefined, [server("a", "private")]),
+  );
+  expect(result.current.values).toBeUndefined();
+  expect(result.current.mismatch).toEqual({
+    ownProvider: [server("a", "private")],
+    split: [],
+  });
+});
+
+it("names each provider when the servers are split across them", () => {
+  endpointQuery.items = [endpoint("one", "one"), endpoint("two", "two")];
+  const { result } = renderHook(() =>
+    useSetupValues(undefined, [server("a", "one"), server("b", "two")]),
+  );
+  expect(result.current.values).toBeUndefined();
+  expect(result.current.mismatch?.split).toEqual([
+    { label: "one", servers: [server("a", "one")] },
+    { label: "two", servers: [server("b", "two")] },
+  ]);
+});
+
+it("keeps today's choice when no server signs anyone in", () => {
+  endpointQuery.items = [endpoint("org", "organization"), endpoint("p", "p")];
+  const { result } = renderHook(() =>
+    useSetupValues(undefined, [server("hosted")]),
+  );
+  expect(result.current.mismatch).toBeNull();
   expect(result.current.selectedEndpointId).toBe("org");
 });

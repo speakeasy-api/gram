@@ -1,4 +1,5 @@
 import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -12,12 +13,16 @@ import {
 } from "@/components/ui/Select";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
+import { mcpServerRouteParam } from "@/lib/sources";
+import { useRoutes } from "@/routes";
 import { ExternalLink } from "lucide-react";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import { Fragment, type JSX, type ReactNode } from "react";
+import { Link } from "react-router";
 import { ConsoleRow, type ConsoleField } from "./ConsoleRow";
+import type { SetupServer } from "./setupInstructions";
 import { variableProblem, type CatalogVariable } from "./workloadCatalog";
-import type { SetupValues } from "./workloadTokenEndpoints";
+import type { ProviderMismatch, SetupValues } from "./workloadTokenEndpoints";
 
 /** One value a platform's policy asks the operator for. */
 export function VariableField({
@@ -115,6 +120,9 @@ export function ComputedStatus({
 }: {
   setupValues: SetupValues;
 }): JSX.Element {
+  if (setupValues.mismatch !== null) {
+    return <ProviderMismatchNotice mismatch={setupValues.mismatch} />;
+  }
   if (setupValues.unavailableReason !== null) {
     return (
       <Alert variant="info">
@@ -124,13 +132,13 @@ export function ComputedStatus({
   }
   return (
     <Stack gap={2}>
-      <Label htmlFor="setup-token-endpoint">User session issuer</Label>
+      <Label htmlFor="setup-token-endpoint">MCP authentication provider</Label>
       <Select
         value={setupValues.selectedEndpointId}
         onValueChange={setupValues.onEndpointChange}
       >
         <SelectTrigger id="setup-token-endpoint" className="w-full">
-          <SelectValue placeholder="Select an issuer" />
+          <SelectValue placeholder="Select a provider" />
         </SelectTrigger>
         <SelectContent>
           {setupValues.endpointGroups.map((group) => (
@@ -146,7 +154,8 @@ export function ComputedStatus({
         </SelectContent>
       </Select>
       <Text muted small>
-        Tokens are issued for the organization or project that owns this issuer.
+        Tokens are issued for the organization or project that owns this
+        provider.
       </Text>
     </Stack>
   );
@@ -171,6 +180,87 @@ export function SetupWarning({
     <Alert variant="warning">
       <div className="space-y-2 text-sm">{children}</div>
     </Alert>
+  );
+}
+
+/**
+ * Why an agent running on a platform can't be set up with these servers, and
+ * where each one is fixed: its token comes from one MCP authentication
+ * provider, and only servers on that provider accept it.
+ */
+export function ProviderMismatchNotice({
+  mismatch,
+}: {
+  mismatch: ProviderMismatch;
+}): JSX.Element {
+  return (
+    <Alert
+      variant="warning"
+      title="This agent's servers need to share one MCP authentication provider"
+    >
+      <Stack gap={3}>
+        <Text small>
+          An agent running on a platform gets one token, which only servers on a
+          single shared MCP authentication provider accept. Move these servers
+          onto one in their authentication settings, or remove them from this
+          agent.
+        </Text>
+        <ul className="divide-border w-full divide-y">
+          {mismatch.ownProvider.map((server) => (
+            <MismatchRow
+              key={server.id}
+              server={server}
+              reason="Uses its own MCP authentication provider, so it won't accept the token this setup gives the agent."
+            />
+          ))}
+          {mismatch.split.flatMap((group) =>
+            group.servers.map((server) => (
+              <MismatchRow
+                key={server.id}
+                server={server}
+                reason={`Uses ${group.label}.`}
+              />
+            )),
+          )}
+        </ul>
+      </Stack>
+    </Alert>
+  );
+}
+
+function MismatchRow({
+  server,
+  reason,
+}: {
+  server: SetupServer;
+  reason: string;
+}): JSX.Element {
+  const routes = useRoutes({ projectSlug: server.projectSlug });
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2 first:pt-0 last:pb-0">
+      <div className="min-w-0 flex-1">
+        <Text small className="block truncate">
+          {server.name}
+        </Text>
+        <Text muted small className="block">
+          {reason}
+        </Text>
+      </div>
+      {server.projectSlug && (
+        <Button variant="secondary" size="sm" asChild>
+          <Link
+            to={`${routes.mcp.details.settings.href(
+              mcpServerRouteParam({ id: server.id, slug: server.slug }),
+            )}#authentication`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open authentication settings
+            <ExternalLink className="size-3.5" aria-hidden="true" />
+          </Link>
+        </Button>
+      )}
+    </li>
   );
 }
 

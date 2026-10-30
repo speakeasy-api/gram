@@ -153,7 +153,22 @@ export function useWorkloadSetup({
   const [connecting, setConnecting] = useState(false);
   const [reuseIssuer, setReuseIssuer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const setupValues = useSetupValues(targetProjectId);
+  // The catalog's platforms come from the same map the picker offers tiles
+  // from, plus the custom flow for everything the catalog does not know.
+  const setup =
+    setupOverride ??
+    (platformKey === CUSTOM_PLATFORM_KEY
+      ? customSetupInstructions()
+      : entry === undefined
+        ? undefined
+        : platformSetup(entry));
+
+  // A platform whose runtime gets its tokens its own way doesn't take them from
+  // one shared provider, so its servers needn't share one.
+  const setupValues = useSetupValues(
+    targetProjectId,
+    setup?.ownTokenExchange ? [] : servers,
+  );
 
   // The issuer this flow has already trusted, so a retry after a later failure
   // does not try to trust it a second time. The URL rather than a flag: a
@@ -172,16 +187,6 @@ export function useWorkloadSetup({
   const registerIssuer = useRegisterWorkloadIssuerMutation();
   const admitSubject = useAdmitWorkloadSubjectMutation();
   const withdrawSubject = useWithdrawWorkloadSubjectMutation();
-
-  // The catalog's platforms come from the same map the picker offers tiles
-  // from, plus the custom flow for everything the catalog does not know.
-  const setup =
-    setupOverride ??
-    (platformKey === CUSTOM_PLATFORM_KEY
-      ? customSetupInstructions()
-      : entry === undefined
-        ? undefined
-        : platformSetup(entry));
 
   const customFlow = platformKey === CUSTOM_PLATFORM_KEY;
   const selectedIssuer = issuers.find((issuer) =>

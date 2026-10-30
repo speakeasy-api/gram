@@ -59,6 +59,8 @@ export function githubActionsSetupInstructions(
   const unreachable = controlPlaneProblem(getServerURL());
 
   return {
+    // The device agent exchanges the job's token at each server itself.
+    ownTokenExchange: true,
     // Nothing is written for an unreachable deployment, so no grant is shown
     // in the summary or checked either.
     agentGrants: (organizationId, projectId) =>

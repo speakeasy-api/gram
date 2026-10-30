@@ -1180,6 +1180,135 @@ describe("Connecting a GKE cluster", () => {
     });
   }
 
+  it("will not set up an agent whose server uses its own provider", async () => {
+    mocks.platforms.mockReturnValue([gke]);
+    mocks.tokenEndpoints.mockReturnValue([sharedServer]);
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [{ ...githubServer, userSessionIssuerId: "usi_private" }],
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Review Agent" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
+
+    expect(
+      await screen.findByText(
+        "This agent's servers need to share one MCP authentication provider",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Uses its own MCP authentication provider, so it won't accept the token this setup gives the agent.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  // GitHub Actions jobs get their tokens through the device agent at each
+  // server, so their servers needn't share a provider.
+  it("sets up GitHub Actions for an agent whose server uses its own provider", async () => {
+    mocks.platforms.mockReturnValue([gke, githubActions]);
+    mocks.tokenEndpoints.mockReturnValue([sharedServer]);
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [{ ...githubServer, userSessionIssuerId: "usi_private" }],
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(
+      await screen.findByRole("radio", { name: /GitHub Actions/ }),
+    );
+
+    await screen.findByRole("radio", { name: /GitHub Actions/, checked: true });
+    expect(
+      screen.queryByText(
+        "This agent's servers need to share one MCP authentication provider",
+      ),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
+  it("will not set up an agent whose servers use different providers", async () => {
+    mocks.platforms.mockReturnValue([gke]);
+    mocks.tokenEndpoints.mockReturnValue([
+      sharedServer,
+      {
+        ...sharedServer,
+        userSessionIssuerId: "usi_other",
+        userSessionIssuerSlug: "other",
+      },
+    ]);
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [
+        { ...githubServer, userSessionIssuerId: "usi_shared" },
+        {
+          ...githubServer,
+          id: "server_two",
+          name: "Linear",
+          slug: "linear",
+          toolsetId: "toolset_two",
+          userSessionIssuerId: "usi_other",
+        },
+      ],
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Review Agent" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
+
+    expect(await screen.findByText("Uses shared.")).toBeTruthy();
+    expect(screen.getByText("Uses other.")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("offers only the provider the agent's servers use, not the organization's first", async () => {
+    mocks.tokenEndpoints.mockReturnValue([
+      {
+        ...sharedServer,
+        userSessionIssuerId: "usi_first",
+        userSessionIssuerSlug: "first",
+        tokenEndpoint: "https://app.example.test/oauth/usi/usi_first/token",
+      },
+      sharedServer,
+    ]);
+    await reachPodStep([
+      {
+        ...githubServer,
+        userSessionIssuerId: "usi_shared",
+      } as typeof githubServer,
+    ]);
+
+    expect(screen.getAllByText(sharedServer.issuer).length).toBeGreaterThan(0);
+    expect(
+      screen.queryByText("https://app.example.test/oauth/usi/usi_first"),
+    ).toBeNull();
+  });
+
   it("names the audience, token endpoint and server URL the pod needs", async () => {
     mocks.tokenEndpoints.mockReturnValue([sharedServer]);
     await reachPodStep();
@@ -3003,6 +3132,19 @@ describe("Servers that sign in as a person", () => {
   it("attaches a personal connection before admitting a workload identity", async () => {
     mocks.sessions.mockResolvedValue([mine]);
     mocks.platforms.mockReturnValue([gke]);
+    // Linear signs in through a shared provider, so a workload can be given
+    // a token it accepts.
+    mocks.tokenEndpoints.mockReturnValue([
+      {
+        userSessionIssuerId: "issuer_linear",
+        userSessionIssuerSlug: "linear",
+        projectId: "",
+        projectName: "",
+        issuer: "https://app.example.test/oauth/usi/issuer_linear",
+        tokenEndpoint: "https://app.example.test/oauth/usi/issuer_linear/token",
+        mcpHost: "app.example.test",
+      },
+    ]);
     await reachServers();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
