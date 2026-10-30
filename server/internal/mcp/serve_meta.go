@@ -652,10 +652,15 @@ func (s *Service) handleMetaListServersCall(
 	for _, member := range catalogSelectedMembers(gate, gate.hiddenMembers) {
 		result.Hidden = append(result.Hidden, metamcp.HiddenServer{Slug: member.slug, Name: member.name})
 	}
+	notes := make([]string, 0, 2)
 	if len(result.Hidden) > 0 && gate.connectURL != "" {
 		result.ConnectURL = gate.connectURL
-		result.Note = metamcp.HiddenNote
+		notes = append(notes, metamcp.HiddenNote)
 	}
+	if slices.ContainsFunc(servers, func(server metamcp.ListedServer) bool { return server.Status == metamcp.StatusUnknown }) {
+		notes = append(notes, metamcp.UnknownNote)
+	}
+	result.Note = strings.Join(notes, " ")
 	structured, err := json.Marshal(result)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize list_servers result").LogError(ctx, logger)
