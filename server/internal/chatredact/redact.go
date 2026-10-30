@@ -128,6 +128,10 @@ func (r *Redactor) redactPlainText(ctx context.Context, text string, changed *bo
 		*changed = true
 		text = masked
 	}
+	if masked, hidden := maskPII(text); hidden {
+		*changed = true
+		text = masked
+	}
 	result, err := r.scanner.Scan(ctx, text)
 	if err != nil || !result.Completed {
 		return "", ErrScanFailed
