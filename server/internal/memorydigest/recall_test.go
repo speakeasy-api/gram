@@ -78,3 +78,19 @@ func TestChatSnippetIsCut(t *testing.T) {
 	require.Equal(t, 600, len([]rune(entries[0].Text)))
 	require.True(t, strings.HasSuffix(entries[0].Text, "…"))
 }
+
+func TestRender(t *testing.T) {
+	t.Parallel()
+
+	digestID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	chatID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	out := memorydigest.Render([]memorydigest.Entry{
+		{Kind: memorydigest.SourceDigest, ID: digestID, Heading: "October 2026 (month digest)", Text: "Picked queue X."},
+		{Kind: memorydigest.SourceChat, ID: chatID, Heading: "Chat 2026-11-10", Text: "Shipped retries."},
+	}, 3)
+
+	require.Equal(t, "(3 older entries omitted to fit the budget; use search_team_memory for older history.)\n\n"+
+		"## October 2026 (month digest) [digest:00000000-0000-0000-0000-000000000001]\nPicked queue X.\n\n"+
+		"## Chat 2026-11-10 [chat:00000000-0000-0000-0000-000000000002]\nShipped retries.", out)
+	require.Empty(t, memorydigest.Render(nil, 0))
+}
