@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -99,7 +100,7 @@ func (s *Service) HandleSharedAuthorizationServerMetadata(w http.ResponseWriter,
 	idJAGAdvertised := false
 	if issuer.idJAGConfigured {
 		// Fails closed for the same reason as the workload grant below.
-		idJAGAdvertised, err = s.idJAGAdvertised(ctx, issuer.logger, issuer.organizationID, issuer.authorizationServer.issuerID)
+		idJAGAdvertised, err = s.idJAGAdvertised(ctx, issuer.logger, issuer.organizationID, issuer.authorizationServer.issuerID, issuer.cimdAdmissionModeRaw)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "load shared authorization server capabilities").LogError(ctx, issuer.logger)
 		}
@@ -312,7 +313,8 @@ func (s *Service) sharedChallengeEndpoint(ctx context.Context, issuer *sharedIss
 // Assertion grants naming exactly one resource dispatch to that resource's
 // client-authenticated ID-JAG or clientless workload handler. A clientless
 // workload grant naming no resource is served for all of the issuer's MCP
-// servers; an ID-JAG exchange must still name one.
+// servers; an ID-JAG exchange naming none is routed by its resource claim, or
+// without one to the organization gateway that signs in through this issuer.
 func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	issuer, err := s.sharedIssuerForRequest(r)
@@ -327,7 +329,11 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 	}
 
 	if code := oauthwire.ClientAuthenticationError(r); code == oautherr.CodeInvalidRequest {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", "", "", r.PostForm.Get(oauthwire.ParamGrantType), code)
+		if grantType := r.PostForm.Get(oauthwire.ParamGrantType); grantType == oauthwire.GrantTypeJWTBearer {
+			s.recordSharedIDJAGRequestRejection(ctx, logger, r, issuer.authorizationServer.issuerID, code, mcpmetrics.IDJAGRejectionClientInvalid)
+		} else {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", "", "", grantType, code)
+		}
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, code, "invalid client authentication request")
 	}
 
@@ -353,15 +359,56 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 			return s.handleIssuerWorkloadAssertionGrant(ctx, w, r, issuer)
 		}
 		var rejection sharedResourceRejection
-		endpoint, rejection, err = s.resolveSharedResourceIndicators(ctx, logger, issuer.authorizationServer, resources)
-		if err != nil {
-			return err
+		claimed := false
+		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 0 {
+			assertion := r.PostForm.Get(oauthwire.ParamAssertion)
+			if assertion == "" {
+				s.recordSharedIDJAGRequestRejection(ctx, logger, r, issuer.authorizationServer.issuerID, "missing_assertion", mcpmetrics.IDJAGRejectionInvalidRequest)
+				return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "assertion is required")
+			}
+			// Read unverified only to choose the server; Validate binds it (ID-JAG draft resource claim).
+			resource, ok, claimErr := idjag.UnverifiedResource(assertion)
+			if idjag.ReasonOf(claimErr) == idjag.ReasonMalformed {
+				s.recordSharedIDJAGAssertionRejection(ctx, logger, issuer.authorizationServer.issuerID, claimErr)
+				return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "assertion is invalid")
+			}
+			if ok {
+				resources, claimed = []string{resource}, true
+				if claimErr != nil {
+					rejection = sharedResourceMalformed
+				}
+			} else {
+				// RFC 8707 §2: with no resource, the AS MAY use a pre-defined default resource.
+				var gatewayResource string
+				endpoint, gatewayResource, err = s.sharedOrganizationGatewayResource(ctx, logger, issuer)
+				if err != nil {
+					return oops.E(oops.CodeUnexpected, err, "resolve organization gateway for ID-JAG").LogError(ctx, logger)
+				}
+				if endpoint != nil {
+					// Indicated, so the gateway is bound exactly as if the request had named it.
+					r.PostForm[oauthwire.ParamResource] = []string{gatewayResource}
+				}
+			}
+		}
+		if rejection == sharedResourceAccepted && endpoint == nil {
+			endpoint, rejection, err = s.resolveSharedResourceIndicators(ctx, logger, issuer.authorizationServer, resources)
+			if err != nil {
+				return err
+			}
 		}
 		if rejection != sharedResourceAccepted {
-			if grantType == oauthwire.GrantTypeJWTBearer && rejection == sharedResourceMissing {
-				s.recordSharedIDJAGResourceMissing(ctx, logger, issuer.authorizationServer.issuerID, resources)
-			} else {
+			switch {
+			case grantType == oauthwire.GrantTypeJWTBearer && rejection == sharedResourceMissing:
+				s.recordSharedIDJAGResourceRejection(ctx, logger, issuer.authorizationServer.issuerID, rejection, resources, mcpmetrics.IDJAGRejectionFromValidator(idjag.ReasonResourceNotIndicated))
+			case claimed:
+				s.recordSharedIDJAGResourceRejection(ctx, logger, issuer.authorizationServer.issuerID, rejection, resources, mcpmetrics.IDJAGRejectionResourceMismatch)
+			default:
 				s.recordSharedResourceRejection(ctx, logger, issuer.authorizationServer.issuerID, mcpmetrics.OAuthFlowStageToken, rejection, resources)
+			}
+			// A resource claim the request did not name makes the assertion
+			// invalid, not the request's target (RFC 7523 §3.1).
+			if claimed {
+				return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "assertion resource does not identify an MCP server of this authorization server")
 			}
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, sharedResourceDescription(rejection))
 		}

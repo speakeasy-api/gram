@@ -103,7 +103,7 @@ func (v *Validator) Validate(ctx context.Context, raw string, request Request) (
 		return nil, reject(ReasonAudienceMismatch, errors.New("aud must be only the authorization server issuer"))
 	}
 	// The resource claim is optional (ID-JAG draft; MCP EMA §4.3 constrains it only if present).
-	resource, hasResource, err := extra.resource()
+	resource, hasResource, err := parseResourceClaim(extra.Resource)
 	switch {
 	case err != nil:
 		return nil, reject(ReasonResourceMismatch, err)

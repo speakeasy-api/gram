@@ -450,7 +450,7 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 	idJAGAdvertised := false
 	if endpoint.idJAGConfigured {
 		// Fails closed: clients cache metadata, so omitting the grant on a transient error would outlive it.
-		idJAGAdvertised, err = s.idJAGAdvertised(ctx, endpoint.LogWith(s.logger), endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+		idJAGAdvertised, err = s.idJAGAdvertised(ctx, endpoint.LogWith(s.logger), endpoint.OrganizationID, endpoint.UserSessionIssuerID, endpoint.CIMDAdmissionModeRaw)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "load authorization server capabilities").LogError(ctx, s.logger)
 		}

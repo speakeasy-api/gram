@@ -31,6 +31,18 @@ const (
 	IDJAGRejectionNone IDJAGRejectionReason = ""
 	// IDJAGRejectionInvalidRequest: the token request was malformed.
 	IDJAGRejectionInvalidRequest IDJAGRejectionReason = "invalid_request"
+	// IDJAGRejectionClientNotCIMD: the client has no client ID metadata document, so it may not use the ID-JAG grant.
+	IDJAGRejectionClientNotCIMD IDJAGRejectionReason = "client_not_cimd"
+	// IDJAGRejectionClientNotAdmitted: the issuer's client ID metadata document admission refused the client.
+	IDJAGRejectionClientNotAdmitted IDJAGRejectionReason = "client_not_admitted"
+	// IDJAGRejectionClientBlocked: the organization blocked the client's AI tool.
+	IDJAGRejectionClientBlocked IDJAGRejectionReason = "client_blocked"
+	// IDJAGRejectionClientInvalid: the client is unknown, invalid, or failed authentication.
+	IDJAGRejectionClientInvalid IDJAGRejectionReason = "client_invalid"
+	// IDJAGRejectionClientMetadataUnavailable: the client's metadata document could not be fetched; recorded with the error outcome.
+	IDJAGRejectionClientMetadataUnavailable IDJAGRejectionReason = "client_metadata_unavailable"
+	// IDJAGRejectionClientCheckUnavailable: whether the client is blocked could not be determined; recorded with the error outcome.
+	IDJAGRejectionClientCheckUnavailable IDJAGRejectionReason = "client_check_unavailable"
 	// IDJAGRejectionResourceMismatch: a resource indicator named another server.
 	IDJAGRejectionResourceMismatch IDJAGRejectionReason = "resource_mismatch"
 	// IDJAGRejectionSubjectNotAuthorized: the resolved user lacks access.
@@ -86,8 +98,9 @@ func IDJAGRejectionFromValidator(reason idjag.Reason) IDJAGRejectionReason {
 }
 
 // RecordIDJAGExchange records one ID-JAG token exchange. reason is set for a
-// rejection and for a validator refusal recorded as an error. The client ID is deliberately not a dimension: it may be a
-// client metadata document URL chosen by the caller.
+// rejection, and for a failure whose cause is bounded, including a validator
+// refusal recorded as an error. The client ID is deliberately not a
+// dimension: it may be a client metadata document URL chosen by the caller.
 func (m *Metrics) RecordIDJAGExchange(ctx context.Context, issuerID string, outcome IDJAGExchangeOutcome, reason IDJAGRejectionReason) {
 	if m == nil || m.oauthIDJAGExchangeCounter == nil {
 		return
