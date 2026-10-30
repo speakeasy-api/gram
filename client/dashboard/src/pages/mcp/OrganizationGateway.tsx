@@ -168,7 +168,7 @@ function OrganizationGatewayContent({
                   text={endpointUrl}
                   size="lg"
                   tooltip="Copy endpoint"
-                  className="h-auto shrink-0 text-black hover:bg-black/5 hover:text-black dark:text-foreground dark:hover:bg-muted dark:hover:text-foreground rounded-none"
+                  className="h-auto shrink-0 text-black hover:bg-black/5 hover:text-black dark:text-foreground dark:hover:bg-accent dark:hover:text-foreground rounded-none"
                 />
               )}
             </div>
