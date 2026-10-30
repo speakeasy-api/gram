@@ -151,6 +151,15 @@ export function ComputedStatus({
   );
 }
 
+/** Why a step cannot go on, in the error style every setup step shares. */
+export function SetupError({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <Alert variant="error">
+      <div className="text-sm">{children}</div>
+    </Alert>
+  );
+}
+
 /**
  * The documents a step points at, on one row: stacked a line each they read
  * as a reading list standing between the reader and the step.

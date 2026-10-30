@@ -1,5 +1,4 @@
-import { Alert } from "@/components/ui/Alert";
-import { Console, Links, VariableField } from "./SetupFields";
+import { Console, Links, SetupError, VariableField } from "./SetupFields";
 import type { Connection, PlatformSetup } from "./setupInstructions";
 import { subjectRule, type CatalogEntry } from "./workloadCatalog";
 
@@ -78,11 +77,7 @@ export function claudeTagSetupInstructions(entry: CatalogEntry): PlatformSetup {
                 tokens. Nobody setting this up has to read it, copy it or keep
                 it, so it is not shown — except where it decides something,
                 which is when it repeats a rule that already exists. */}
-            {ruleConflict !== null && (
-              <Alert variant="error">
-                <div className="text-sm">{ruleConflict}</div>
-              </Alert>
-            )}
+            {ruleConflict !== null && <SetupError>{ruleConflict}</SetupError>}
           </>
         ),
       },
