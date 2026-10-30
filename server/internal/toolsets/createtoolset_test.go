@@ -588,6 +588,8 @@ func TestToolsetsService_CreateToolset_SecondToolset_IsPrivateButDoesNotAutoAtta
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
+	require.True(t, *first.McpEnabled)
+	require.False(t, *first.McpIsPublic)
 
 	second, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
