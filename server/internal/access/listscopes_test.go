@@ -20,7 +20,7 @@ func TestService_ListScopes(t *testing.T) {
 
 	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Scopes, 45)
+	require.Len(t, result.Scopes, 47)
 
 	bySlug := make(map[string]*gen.ScopeDefinition, len(result.Scopes))
 	for _, scope := range result.Scopes {
@@ -50,6 +50,11 @@ func TestService_ListScopes(t *testing.T) {
 	require.Equal(t, "project", bySlug[string(authz.ScopeLogRead)].ResourceType)
 	require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(authz.ScopeLogRead)].Visibility)
 	require.Nil(t, bySlug[string(authz.ScopeLogRead)].ExclusionScope)
+	for _, scope := range []authz.Scope{authz.ScopeMemoryRead, authz.ScopeMemoryWrite} {
+		require.Equal(t, "project", bySlug[string(scope)].ResourceType)
+		require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(scope)].Visibility)
+		require.Nil(t, bySlug[string(scope)].ExclusionScope)
+	}
 	for _, scope := range []authz.Scope{authz.ScopeAgentRead, authz.ScopeAgentWrite, authz.ScopeAgentAuthorize, authz.ScopeAgentTransfer} {
 		require.Equal(t, "agent", bySlug[string(scope)].ResourceType)
 		require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(scope)].Visibility)

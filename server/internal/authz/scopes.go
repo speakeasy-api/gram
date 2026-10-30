@@ -53,6 +53,8 @@ const (
 	ScopeChatWrite               Scope = "chat:write"
 	ScopeInferenceExecute        Scope = "inference:execute"
 	ScopeLogRead                 Scope = "log:read"
+	ScopeMemoryRead              Scope = "memory:read"
+	ScopeMemoryWrite             Scope = "memory:write"
 	ScopeAgentRead               Scope = "agent:read"
 	ScopeAgentWrite              Scope = "agent:write"
 	ScopeAgentAuthorize          Scope = "agent:authorize"
@@ -131,6 +133,11 @@ var adminScopes = []Scope{
 	// logs carry tool arguments, results, prompt text, and hook payloads from
 	// every member of a project, so viewing them must be granted explicitly per
 	// project. Neither project:* nor org:admin implies it.
+	//
+	// memory:read and memory:write are NOT defaults either: team memory
+	// summarizes every member's sessions in a project, so reading it is as
+	// sensitive as reading their transcripts. Both are granted explicitly per
+	// project. memory:write satisfies memory:read via scopeExpansions.
 }
 
 // scopeVisibilityByScope is the source of truth for whether a scope is exposed
@@ -175,6 +182,8 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeChatWrite:               scopeVisibilityUserVisible,
 	ScopeInferenceExecute:        scopeVisibilityUserVisible,
 	ScopeLogRead:                 scopeVisibilityUserVisible,
+	ScopeMemoryRead:              scopeVisibilityUserVisible,
+	ScopeMemoryWrite:             scopeVisibilityUserVisible,
 	ScopeAgentRead:               scopeVisibilityUserVisible,
 	ScopeAgentWrite:              scopeVisibilityUserVisible,
 	ScopeAgentAuthorize:          scopeVisibilityUserVisible,
@@ -304,6 +313,8 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeChatWrite:               nil,
 	ScopeInferenceExecute:        nil,
 	ScopeLogRead:                 nil,
+	ScopeMemoryRead:              {ScopeMemoryWrite},
+	ScopeMemoryWrite:             nil,
 	ScopeAgentRead:               nil,
 	ScopeAgentWrite:              nil,
 	ScopeAgentAuthorize:          nil,
@@ -358,6 +369,8 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeChatWrite:               "",
 	ScopeInferenceExecute:        "",
 	ScopeLogRead:                 "",
+	ScopeMemoryRead:              "",
+	ScopeMemoryWrite:             "",
 	ScopeAgentRead:               "",
 	ScopeAgentWrite:              "",
 	ScopeAgentAuthorize:          "",

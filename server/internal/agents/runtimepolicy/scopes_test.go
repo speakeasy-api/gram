@@ -86,6 +86,7 @@ func TestRuntimeScopeAllowlist(t *testing.T) {
 		authz.ScopeRiskPolicyBypass, authz.ScopeRiskPolicyBlock,
 		authz.ScopeChatRead, authz.ScopeChatWrite,
 		authz.ScopeLogRead,
+		authz.ScopeMemoryRead, authz.ScopeMemoryWrite,
 		authz.ScopeAgentRead, authz.ScopeAgentWrite, authz.ScopeAgentAuthorize, authz.ScopeAgentTransfer,
 		scopeMCPApprovalReadTombstone, scopeMCPApprovalDecideTombstone,
 	}
