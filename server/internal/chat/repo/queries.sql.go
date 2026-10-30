@@ -4765,15 +4765,17 @@ const updateChatSummary = `-- name: UpdateChatSummary :one
 UPDATE chats
 SET summary = $1,
     summary_generated_at = NOW(),
+    summary_redacted = $2,
     updated_at = NOW()
-WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+WHERE id = $3 AND project_id = $4 AND deleted IS FALSE
 RETURNING summary, summary_generated_at
 `
 
 type UpdateChatSummaryParams struct {
-	Summary   pgtype.Text
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	Summary         pgtype.Text
+	SummaryRedacted bool
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
 }
 
 type UpdateChatSummaryRow struct {
@@ -4781,10 +4783,17 @@ type UpdateChatSummaryRow struct {
 	SummaryGeneratedAt pgtype.Timestamptz
 }
 
-// Persist an on-demand LLM session summary. Project-scoped so a summarize write
-// can never touch another project's chat. Returns the updated row timestamps.
+// Persist an LLM session summary. Project-scoped so a summarize write can
+// never touch another project's chat. summary_redacted records whether the
+// summary was built from the risk-redacted transcript; team memory reads only
+// redacted summaries. Returns the updated row timestamps.
 func (q *Queries) UpdateChatSummary(ctx context.Context, arg UpdateChatSummaryParams) (UpdateChatSummaryRow, error) {
-	row := q.db.QueryRow(ctx, updateChatSummary, arg.Summary, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, updateChatSummary,
+		arg.Summary,
+		arg.SummaryRedacted,
+		arg.ID,
+		arg.ProjectID,
+	)
 	var i UpdateChatSummaryRow
 	err := row.Scan(&i.Summary, &i.SummaryGeneratedAt)
 	return i, err

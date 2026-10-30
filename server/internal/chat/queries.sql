@@ -1608,11 +1608,14 @@ SET pinned_at = CASE WHEN @pinned::boolean THEN COALESCE(pinned_at, NOW()) ELSE 
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: UpdateChatSummary :one
--- Persist an on-demand LLM session summary. Project-scoped so a summarize write
--- can never touch another project's chat. Returns the updated row timestamps.
+-- Persist an LLM session summary. Project-scoped so a summarize write can
+-- never touch another project's chat. summary_redacted records whether the
+-- summary was built from the risk-redacted transcript; team memory reads only
+-- redacted summaries. Returns the updated row timestamps.
 UPDATE chats
 SET summary = @summary,
     summary_generated_at = NOW(),
+    summary_redacted = @summary_redacted,
     updated_at = NOW()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING summary, summary_generated_at;
