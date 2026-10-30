@@ -44,11 +44,37 @@ describe("Slack-only setup routing", () => {
       ),
     ).toBeNull();
   });
+  it("checks the installed remote rather than another endpoint offered by the catalog entry", () => {
+    const servers = [
+      {
+        remotes: [
+          { url: "https://mcp.slack.com/mcp" },
+          { url: "https://other.example/mcp" },
+        ],
+      },
+    ];
+    const status = {
+      status: "completed" as const,
+      key: "selected",
+      name: "Selected",
+      identityMode: "user" as const,
+      mcpServerId: "id",
+      mcpServerParam: "selected",
+      remoteUrl: "https://other.example/mcp",
+    };
+    expect(providerSetupInstallTarget(servers, [status])).toBeNull();
+    expect(
+      providerSetupInstallTarget(servers, [
+        { ...status, remoteUrl: "https://mcp.slack.com/mcp" },
+      ]),
+    ).toBe("selected");
+  });
   it("opens Slack setup only for User Identity", () => {
     const servers = [{ remotes: [{ url: "https://mcp.slack.com/mcp" }] }];
     const status = {
       status: "completed" as const,
       key: "slack",
+      remoteUrl: "https://mcp.slack.com/mcp",
       name: "Slack",
       mcpServerId: "id",
       mcpServerParam: "installed",

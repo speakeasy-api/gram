@@ -1,7 +1,7 @@
 import { createContext, useContext, type Dispatch } from "react";
 import type { Action, State } from "./state";
 
-type MockContextValue = {
+type SetupContextValue = {
   s: State;
   dispatch: Dispatch<Action>;
   live?: {
@@ -12,15 +12,15 @@ type MockContextValue = {
     loading: boolean;
     callbackUrl?: string;
     savedClientId?: string;
-    recovery?: "signin" | "credentials" | "settings";
+    recovery?: "signin" | "credentials" | "settings" | "permissions";
     settingsHref?: string;
     retryLoad?: () => void;
     cancelSignIn?: () => void;
   };
 };
-export const MockContext = createContext<MockContextValue | null>(null);
-export function useMock(): MockContextValue {
-  const context = useContext(MockContext);
-  if (!context) throw new Error("Provider mock context missing");
+export const SetupContext = createContext<SetupContextValue | null>(null);
+export function useSetup(): SetupContextValue {
+  const context = useContext(SetupContext);
+  if (!context) throw new Error("Provider setup context missing");
   return context;
 }

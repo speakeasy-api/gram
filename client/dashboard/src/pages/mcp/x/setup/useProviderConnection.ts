@@ -23,8 +23,26 @@ import {
 import { GramError } from "@gram/client/models/errors/gramerror";
 import type { McpServer } from "@gram/client/models/components/mcpserver";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer";
+import { invalidateAllRemoteSessions } from "@gram/client/react-query/remoteSessions";
+import { invalidateAllRemoteSessionsCount } from "@gram/client/react-query/remoteSessionsCount";
+import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers";
+
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers";
+import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers";
+import { invalidateAllRemoteSessionClient } from "@gram/client/react-query/remoteSessionClient";
+import { invalidateAllRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer";
+import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes";
+
+const sameScopes = (
+  left: readonly string[] | undefined,
+  right: readonly string[],
+) => {
+  const a = [...new Set(left ?? [])].sort(),
+    b = [...new Set(right)].sort();
+  return a.length === b.length && a.every((scope, i) => scope === b[i]);
+};
 
 const providers = {
   slack: {
@@ -44,10 +62,27 @@ type ProviderConnection = {
   loading: boolean;
   callbackUrl?: string;
   savedClientId?: string;
-  recovery?: "signin" | "credentials" | "settings";
+  recovery?: "signin" | "credentials" | "settings" | "permissions";
   retryLoad: () => void;
   cancelSignIn: () => void;
 };
+
+function connectionFailure(
+  result: { status: string; code: string },
+  action: "signin" | "test",
+): string {
+  if (result.code === "scope_mismatch")
+    return "Slack is still granting write access. Remove write scopes and revoke the app’s existing authorization in Slack, then sign in again.";
+  if (result.code === "authorization_header_conflict")
+    return "Remove the saved Authorization header in identity settings before testing User Identity.";
+  if (result.status === "configuration_required")
+    return "Review this server’s User Identity configuration before continuing.";
+  if (result.status === "authorization_required")
+    return "Sign in to Slack, then test the connection again.";
+  return action === "signin"
+    ? "Couldn’t verify Slack sign-in. Try again."
+    : "Couldn’t test the Slack connection. Review app permissions and try again.";
+}
 
 // Shared setup actions use the management API; secrets and tokens are never progress state.
 export function useProviderConnection(
@@ -58,7 +93,11 @@ export function useProviderConnection(
   const providerKey = "slack";
   const config = providers[providerKey];
   const name = config.name;
-  const requestedScopes = useMemo(() => scopesFor(s), [providerKey, s]);
+  const access = s.values.access;
+  const requestedScopes = useMemo(
+    () => scopesFor({ values: { access } }),
+    [access],
+  );
   const sdk = useSdkClient();
   const session = useSession();
   const project = useProject();
@@ -76,36 +115,115 @@ export function useProviderConnection(
   const popup = useRef<Window | null>(null);
   const generation = useRef(0);
   const hydrated = useRef(false);
+  useEffect(
+    () => () => {
+      generation.current++;
+      popup.current?.close();
+    },
+    [],
+  );
+  const targetKey = JSON.stringify([
+    project.id,
+    server.id,
+    server.userSessionIssuerId,
+    server.remoteMcpServerId,
+    server.environmentId,
+    server.updatedAt,
+  ]);
+  const currentTarget = useRef(targetKey);
+  const observedClient = useRef<string | null>(null);
   const statusKey = [
     "providerSetupConnection",
+    targetKey,
     providerKey,
     server.id,
     server.userSessionIssuerId,
     session.user.id,
   ];
+  const loadConfiguration = async () => {
+    const { associations } =
+      await sdk.remoteSessions.listServerClientAssociations({
+        mcpServerId: server.id,
+      });
+    const association = associations.find((a) => {
+      try {
+        const url = new URL(a.issuerUrl);
+        return (
+          url.origin === config.issuer &&
+          url.pathname.replace(/\/+$/, "") === "" &&
+          !url.search &&
+          !url.hash &&
+          !url.username &&
+          !url.password
+        );
+      } catch {
+        return false;
+      }
+    });
+    if (!association) return null;
+    const client = await sdk.remoteSessionClients.get({
+      id: association.remoteSessionClientId,
+    });
+    return {
+      client,
+      serverCount: association.serverCount,
+    };
+  };
   const status = useQuery({
     queryKey: statusKey,
-    queryFn: async () => {
-      const { associations } =
-        await sdk.remoteSessions.listServerClientAssociations({
-          mcpServerId: server.id,
-        });
-      const association = associations.find(
-        (a) => a.issuerUrl === config.issuer,
-      );
-      if (!association) return null;
-      const client = await sdk.remoteSessionClients.get({
-        id: association.remoteSessionClientId,
-      });
-      return {
-        client,
-        serverCount: association.serverCount,
-      };
-    },
+    queryFn: loadConfiguration,
     retry: false,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
     throwOnError: false,
   });
+  useEffect(() => {
+    if (currentTarget.current === targetKey) return;
+    currentTarget.current = targetKey;
+    hydrated.current = false;
+    observedClient.current = null;
+    generation.current++;
+    setToolCount(null);
+    popup.current?.close();
+    setSignInReady(false);
+    setPending(
+      pending === "save" || (pending === "signin" && !signInReady)
+        ? "save"
+        : null,
+    );
+    dispatch({
+      type: "connection",
+      saved: false,
+      authorized: false,
+      tested: false,
+    });
+  }, [targetKey, pending, signInReady, dispatch]);
+  useEffect(() => {
+    if (!status.isSuccess) return;
+    const fingerprint = JSON.stringify([
+      status.data?.client.id,
+      status.data?.client.scope,
+      status.data?.client.updatedAt,
+    ]);
+    if (
+      observedClient.current !== null &&
+      observedClient.current !== fingerprint
+    ) {
+      setToolCount(null);
+      dispatch({
+        type: "connection",
+        authorized: false,
+        tested: false,
+        ...(!status.data ? { saved: false } : {}),
+      });
+      if (pending !== "save" && !(pending === "signin" && !signInReady)) {
+        generation.current++;
+        popup.current?.close();
+        setSignInReady(false);
+        setPending(null);
+      }
+    }
+    observedClient.current = fingerprint;
+  }, [status.isSuccess, status.data, pending, signInReady, dispatch]);
   useEffect(() => {
     if (!status.isSuccess || hydrated.current) return;
     hydrated.current = true;
@@ -127,21 +245,75 @@ export function useProviderConnection(
     }
   }, [status.isSuccess, status.data, dispatch, providerKey]);
 
-  const checkConnection = useCallback(
-    () =>
-      unwrapAsync(
-        remoteSessionsTestServerConnection(
-          sdk,
-          { testServerConnectionRequestBody: { mcpServerId: server.id } },
-          {
-            projectSlugHeaderGramProject: project.slug,
-            sessionHeaderGramSession: session.session,
-          },
-          { timeoutMs: 30000 },
-        ),
-      ),
-    [sdk, server.id, project.slug, session.session],
+  const revokeSessions = useCallback(
+    async (items: { id: string }[], run = generation.current) => {
+      if (!items.length) return;
+      try {
+        for (const item of items) {
+          if (generation.current !== run)
+            throw new Error("Setup target changed");
+          await sdk.remoteSessions.revoke({ id: item.id });
+        }
+      } finally {
+        await Promise.all([
+          invalidateAllRemoteSessions(queryClient),
+          invalidateAllRemoteSessionsCount(queryClient),
+        ]);
+      }
+    },
+    [sdk, queryClient],
   );
+
+  const checkConnection = useCallback(async () => {
+    const run = generation.current;
+    const result = await unwrapAsync(
+      remoteSessionsTestServerConnection(
+        sdk,
+        { testServerConnectionRequestBody: { mcpServerId: server.id } },
+        {
+          projectSlugHeaderGramProject: project.slug,
+          sessionHeaderGramSession: session.session,
+        },
+        { timeoutMs: 30000 },
+      ),
+    );
+    // Slack scopes are additive. Never accept a returned write grant as read-only.
+    if (
+      result.status === "ready" &&
+      s.values.access === "read" &&
+      status.data?.client.id
+    ) {
+      const sessions = await collectPageItems(
+        sdk.remoteSessions.list({
+          remoteSessionClientId: status.data.client.id,
+        }),
+      );
+      const broader = sessions.filter(
+        (item) =>
+          item.userSessionIssuerId === server.userSessionIssuerId &&
+          item.scopes?.some((scope) => scope.includes(":write")),
+      );
+      if (broader.length) {
+        await revokeSessions(broader, run);
+        return {
+          status: "authorization_required" as const,
+          code: "scope_mismatch",
+          message: "",
+          toolCount: undefined,
+        };
+      }
+    }
+    return result;
+  }, [
+    sdk,
+    server.id,
+    server.userSessionIssuerId,
+    project.slug,
+    session.session,
+    s.values.access,
+    status.data?.client.id,
+    revokeSessions,
+  ]);
 
   useEffect(() => {
     if (pending !== "signin" || !signInReady) return;
@@ -159,11 +331,14 @@ export function useProviderConnection(
         if (authorized) {
           setPending(null);
           setError(null);
+        } else if (result.code === "scope_mismatch") {
+          popup.current?.close();
+          setPending(null);
+          setRecovery("permissions");
+          setError(connectionFailure(result, "signin"));
         } else if (result.status !== "authorization_required") {
           setPending(null);
-          setError(
-            result.message || `Couldn’t verify ${name} sign-in. Try again.`,
-          );
+          setError(connectionFailure(result, "signin"));
           if (result.status === "configuration_required")
             setRecovery("settings");
         } else if (popup.current?.closed) {
@@ -183,68 +358,103 @@ export function useProviderConnection(
     const timeout = window.setTimeout(
       () => {
         active = false;
+        generation.current++;
+        popup.current?.close();
         setPending(null);
         setError(`${name} sign-in timed out. Try signing in again.`);
       },
       5 * 60 * 1000,
     );
-    window.addEventListener("focus", check);
+    const onFocus = () => {
+      void check();
+    };
+    window.addEventListener("focus", onFocus);
     return () => {
       active = false;
       window.clearInterval(timer);
       window.clearTimeout(timeout);
-      window.removeEventListener("focus", check);
+      window.removeEventListener("focus", onFocus);
     };
   }, [pending, signInReady, name, checkConnection, dispatch]);
 
   // Revoke before changing scopes: a failed update must not leave a broader
   // grant usable, and verification must wait until both operations finish.
   const syncPermissions = async (scopes: string[]) => {
-    const saved = status.data;
-    if (
-      providerKey !== "slack" ||
-      !saved ||
-      scopes.join(" ") === saved.client.scope?.join(" ")
-    )
-      return;
-    if (saved.serverCount > 1) {
+    const run = generation.current;
+    const saved = await loadConfiguration();
+    if (generation.current !== run) throw new Error("Setup target changed");
+    if (!saved) throw new Error("Saved app configuration is missing");
+    if (saved.client.id !== status.data?.client.id) {
+      setRecovery("settings");
+      throw new Error("App configuration changed");
+    }
+    const changing = !sameScopes(saved.client.scope, scopes);
+    const readOnly = !scopes.some((scope) => scope.includes(":write"));
+    if (!changing && !readOnly) return;
+    if (saved.serverCount > 1 && changing) {
       setRecovery("settings");
       throw new Error("Shared app connection");
     }
     const sessions = await collectPageItems(
       sdk.remoteSessions.list({
         remoteSessionClientId: saved.client.id,
-        subjectUrn: `user:${session.user.id}`,
       }),
     );
-    for (const item of sessions) {
-      if (item.userSessionIssuerId === server.userSessionIssuerId)
-        await sdk.remoteSessions.revoke({ id: item.id });
-    }
-    await sdk.remoteSessionClients.update({
+    if (generation.current !== run) throw new Error("Setup target changed");
+    await revokeSessions(
+      sessions.filter(
+        (item) =>
+          item.userSessionIssuerId === server.userSessionIssuerId &&
+          (changing || item.scopes?.some((scope) => scope.includes(":write"))),
+      ),
+    );
+    if (generation.current !== run) throw new Error("Setup target changed");
+    if (!changing) return;
+    const updatedClient = await sdk.remoteSessionClients.update({
       updateRemoteSessionClientForm: { id: saved.client.id, scope: scopes },
     });
-    queryClient.setQueryData(statusKey, {
+    if (generation.current !== run) throw new Error("Setup target changed");
+    const updated = {
       ...saved,
-      client: { ...saved.client, scope: scopes },
-    });
-    await invalidateAllRemoteSessionClients(queryClient);
+      client: updatedClient ?? { ...saved.client, scope: scopes },
+    };
+    observedClient.current = JSON.stringify([
+      updated.client.id,
+      updated.client.scope,
+      updated.client.updatedAt,
+    ]);
+    queryClient.setQueryData(statusKey, updated);
+    await Promise.all([
+      invalidateAllRemoteSessionClients(queryClient),
+      invalidateAllRemoteSessionClient(queryClient),
+      invalidateAllGetRemoteMcpServerScopes(queryClient),
+    ]);
   };
 
-  const applyPermissions = async (scopes: string[], next?: Action) => {
+  const applyPermissions = async (
+    scopes: string[],
+    next?: Action | (() => Promise<void>),
+  ) => {
+    const run = generation.current;
     setErrorStep("save");
     setPending("save");
     try {
       await syncPermissions(scopes);
-      if (next) dispatch(next);
+      if (generation.current !== run) return;
+      if (typeof next === "function") await next();
+      else if (next) dispatch(next);
     } catch {
-      setError("Couldn’t update Slack permissions. Select Continue to retry.");
+      if (generation.current === run)
+        setError(
+          "Couldn’t update Slack permissions. Select Continue to retry.",
+        );
     } finally {
       setPending(null);
     }
   };
 
   const save = async () => {
+    const run = generation.current;
     if (s.saved && !s.values.clientId && !s.values.clientSecret) {
       dispatch({ type: "goto", step: "test" });
       return;
@@ -258,12 +468,14 @@ export function useProviderConnection(
     setError(null);
     try {
       let current = await sdk.mcpServers.get({ id: server.id });
+      if (generation.current !== run) return;
       const issuer = current.userSessionIssuerId
         ? await sdk.userSessionIssuers.get({ id: current.userSessionIssuerId })
         : undefined;
+      if (generation.current !== run) return;
       if (!issuer?.projectId) {
-        // Catalog installs can share the organization's issuer. Keep this demo's
-        // app binding on its own issuer, without repointing other servers.
+        // Catalog installs can share the organization's issuer. Keep this server's
+        // app binding on a dedicated issuer before saving its credentials.
         const slug = `${providerKey}-setup-${server.id.slice(-12)}`;
         let isolated;
         try {
@@ -271,6 +483,7 @@ export function useProviderConnection(
         } catch (err) {
           if (!isNotFoundError(err)) throw err;
         }
+        if (generation.current !== run) return;
         isolated ??= await sdk.userSessionIssuers.create({
           createUserSessionIssuerForm: {
             slug,
@@ -278,12 +491,13 @@ export function useProviderConnection(
             authnChallengeMode: "interactive",
           },
         });
+        if (generation.current !== run) return;
         current = await sdk.mcpServers.update({
           updateMcpServerForm: {
             id: current.id,
             visibility:
               current.visibility === "disabled"
-                ? "private"
+                ? "disabled"
                 : current.visibility === "public"
                   ? "public"
                   : "private",
@@ -293,7 +507,6 @@ export function useProviderConnection(
             userSessionIssuerId: isolated.id,
           },
         });
-        await invalidateAllGetMcpServer(queryClient);
       }
       let provider;
       try {
@@ -302,6 +515,22 @@ export function useProviderConnection(
         });
       } catch (err) {
         if (!isNotFoundError(err)) throw err;
+      }
+      if (generation.current !== run) return;
+      // Re-read immediately before committing: another editor may have changed
+      // the identity while provider metadata was loading.
+      const latest = await sdk.mcpServers.get({ id: server.id });
+      if (generation.current !== run) return;
+      if (
+        latest.userSessionIssuerId !== current.userSessionIssuerId ||
+        latest.remoteMcpServerId !== current.remoteMcpServerId ||
+        latest.environmentId !== current.environmentId
+      ) {
+        setRecovery("settings");
+        setError(
+          "This server’s identity changed. Reload its settings before saving credentials.",
+        );
+        return;
       }
       const result = await sdk.remoteSessions.commitServerIdentityConfiguration(
         {
@@ -333,7 +562,8 @@ export function useProviderConnection(
           },
         },
       );
-      if (!result.status)
+      if (generation.current !== run) return;
+      if (result.status !== "registered" && result.status !== "linked")
         throw new Error(`Couldn’t save ${name} app credentials.`);
       // A disabled catalog install must serve its private OAuth endpoint before sign-in.
       if (current.visibility === "disabled")
@@ -346,6 +576,7 @@ export function useProviderConnection(
             toolVariationsGroupId: current.toolVariationsGroupId,
           },
         });
+      if (generation.current !== run) return;
       dispatch({ type: "field", field: "clientId", value: "" });
       dispatch({ type: "field", field: "clientSecret", value: "" });
       dispatch({
@@ -360,8 +591,15 @@ export function useProviderConnection(
         invalidateAllGetMcpServer(queryClient),
         invalidateAllRemoteSessionClients(queryClient),
         invalidateAllRemoteSessionIssuers(queryClient),
+        invalidateAllRemoteSessionIssuer(queryClient),
+        invalidateAllRemoteSessionClient(queryClient),
+        invalidateAllMcpServers(queryClient),
+        invalidateAllUserSessionIssuers(queryClient),
+        invalidateAllUserSessionIssuer(queryClient),
+        invalidateAllGetRemoteMcpServerScopes(queryClient),
       ]);
     } catch (err) {
+      if (generation.current !== run) return;
       const identityConflict =
         err instanceof GramError && err.statusCode === 409;
       setRecovery(identityConflict ? "settings" : undefined);
@@ -382,6 +620,20 @@ export function useProviderConnection(
     const slug = server.platformEndpointSlug;
     if (!slug) {
       setError("This server needs an endpoint before you can sign in.");
+      return;
+    }
+    try {
+      const address = new URL(getServerURL());
+      const local = ["localhost", "127.0.0.1", "[::1]"].includes(
+        address.hostname,
+      );
+      if (
+        address.protocol !== "https:" &&
+        !(address.protocol === "http:" && local)
+      )
+        throw new Error("Insecure address");
+    } catch {
+      setError("Use an HTTPS server address before signing in to Slack.");
       return;
     }
     // Open synchronously so browsers allow the tab before any await.
@@ -439,7 +691,9 @@ export function useProviderConnection(
       } else {
         if (result.status === "authorization_required") {
           dispatch({ type: "connection", authorized: false, tested: false });
-          setRecovery("signin");
+          setRecovery(
+            result.code === "scope_mismatch" ? "permissions" : "signin",
+          );
         } else if (result.status === "configuration_required") {
           setRecovery(
             result.code === "remote_user_identity_required"
@@ -447,7 +701,7 @@ export function useProviderConnection(
               : "credentials",
           );
         }
-        setError(result.message || `Couldn’t test ${name}. Try again.`);
+        setError(connectionFailure(result, "test"));
       }
     } catch {
       if (generation.current === run)
@@ -455,15 +709,22 @@ export function useProviderConnection(
           `Couldn’t initialize ${name} and list its tools. Check app permissions, sign in again, and retry.`,
         );
     } finally {
-      setPending(null);
+      if (generation.current === run) setPending(null);
     }
   };
 
   const liveDispatch: Dispatch<Action> = (action) => {
     if (pending && !["secret", "copy"].includes(action.type)) return;
-    setError(null);
-    setRecovery(undefined);
-    if (providerKey === "slack" && s.saved) {
+    if (
+      action.type === "complete" &&
+      (status.isLoading || status.isError || error)
+    )
+      return;
+    if (!["secret", "copy"].includes(action.type)) {
+      setError(null);
+      setRecovery(undefined);
+    }
+    if (status.data?.client) {
       if (
         action.type === "field" &&
         action.field === "access" &&
@@ -487,11 +748,15 @@ export function useProviderConnection(
       }
       if (
         action.type === "next" &&
-        requestedScopes.join(" ") !== status.data?.client.scope?.join(" ")
+        !sameScopes(status.data?.client.scope, requestedScopes)
       ) {
         void applyPermissions(
           requestedScopes,
-          s.step === "credentials" ? { type: "goto", step: "test" } : action,
+          s.step === "credentials"
+            ? s.saved
+              ? { type: "goto", step: "test" }
+              : save
+            : action,
         );
         return;
       }

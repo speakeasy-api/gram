@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   updateClient: vi.fn(),
   revoke: vi.fn(),
   probe: vi.fn(),
+  serverUrl: "https://platform.example",
 }));
 vi.mock("@/contexts/Sdk", () => {
   const client = {
@@ -34,7 +35,22 @@ vi.mock("@/contexts/Sdk", () => {
       commitServerIdentityConfiguration: mocks.commit,
       revoke: mocks.revoke,
     },
-    remoteSessionClients: { get: mocks.client, update: mocks.updateClient },
+    remoteSessionClients: {
+      get: mocks.client,
+      update: async (request: {
+        updateRemoteSessionClientForm: { id: string; scope: string[] };
+      }) => {
+        const result = await mocks.updateClient(request);
+        const current = await mocks.client({
+          id: request.updateRemoteSessionClientForm.id,
+        });
+        mocks.client.mockResolvedValue({
+          ...current,
+          scope: request.updateRemoteSessionClientForm.scope,
+        });
+        return result;
+      },
+    },
     remoteSessionIssuers: { get: mocks.provider },
     userSessionIssuers: { get: mocks.issuer, create: mocks.createIssuer },
     mcpServers: { get: mocks.server, update: mocks.updateServer },
@@ -49,7 +65,7 @@ vi.mock("@gram/client/funcs/remoteSessionsTestServerConnection", () => ({
   remoteSessionsTestServerConnection: mocks.probe,
 }));
 vi.mock("@/lib/utils", () => ({
-  getServerURL: () => "https://platform.example",
+  getServerURL: () => mocks.serverUrl,
   mcpConnectionUrl: (url: string) => url,
   firstPartyConnectUrl: (url: string) => `${url}/connect/first-party`,
 }));
@@ -73,29 +89,27 @@ function mount(provider: "slack", override: Partial<State> = {}) {
   });
   clients.push(client);
   return renderHook(
-    () => {
+    ({ mcpServer }: { mcpServer: McpServer }) => {
       const [state, dispatch] = useReducer(reduce, {
         ...initialState(provider),
         ...override,
       });
-      const connection = useProviderConnection(state, dispatch, server);
+      const connection = useProviderConnection(state, dispatch, mcpServer);
       return { state, ...connection };
     },
     {
+      initialProps: { mcpServer: server },
       wrapper: ({ children }: PropsWithChildren) => (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>
       ),
     },
   );
 }
-function saved(provider: "slack", scopes: string[] = []) {
+function saved(_provider: "slack", scopes: string[] = []) {
   mocks.associations.mockResolvedValue({
     associations: [
       {
-        issuerUrl:
-          provider === "slack"
-            ? "https://mcp.slack.com"
-            : "https://mcp.slack.com",
+        issuerUrl: "https://mcp.slack.com",
         remoteSessionClientId: "client",
         serverCount: 1,
       },
@@ -112,6 +126,7 @@ async function* pages(items: unknown[]) {
 }
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.serverUrl = "https://platform.example";
   mocks.associations.mockResolvedValue({ associations: [] });
   mocks.sessions.mockImplementation(async () => pages([]));
   mocks.server.mockResolvedValue(server);
@@ -120,11 +135,12 @@ beforeEach(() => {
     projectId: "project",
   });
   mocks.provider.mockResolvedValue({ id: "provider" });
-  mocks.commit.mockResolvedValue({ status: { configured: true } });
-  mocks.updateServer.mockImplementation(async ({ updateMcpServerForm }) => ({
-    ...server,
-    ...updateMcpServerForm,
-  }));
+  mocks.commit.mockResolvedValue({ status: "registered" });
+  mocks.updateServer.mockImplementation(async ({ updateMcpServerForm }) => {
+    const updated = { ...server, ...updateMcpServerForm };
+    mocks.server.mockResolvedValue(updated);
+    return updated;
+  });
   mocks.probe.mockResolvedValue({
     ok: true,
     value: {
@@ -237,7 +253,7 @@ describe("live provider setup", () => {
     expect(result.current.state.saved).toBe(false);
     expect(result.current.state.step).toBe("credentials");
     expect(result.current.state.values.clientSecret).toBe("secret");
-    mocks.commit.mockResolvedValue({ status: {} });
+    mocks.commit.mockResolvedValue({ status: "registered" });
     act(() => result.current.dispatch({ type: "next" }));
     await waitFor(() => expect(result.current.state.saved).toBe(true));
     expect(result.current.error).toBeNull();
@@ -284,7 +300,9 @@ describe("live provider setup", () => {
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
     act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
-    act(() => window.dispatchEvent(new Event("focus")));
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
     await waitFor(() => expect(result.current.state.authorized).toBe(true));
     expect(result.current.state.tested).toBe(false);
     expect(result.current.error).toBeNull();
@@ -308,7 +326,9 @@ describe("live provider setup", () => {
         "https://platform.example/mcp/demo-endpoint/connect/first-party",
       ),
     );
-    act(() => window.dispatchEvent(new Event("focus")));
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
     await waitFor(() => expect(result.current.state.authorized).toBe(true));
     expect(mocks.updateClient).not.toHaveBeenCalled();
   });
@@ -328,7 +348,9 @@ describe("live provider setup", () => {
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
     act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
-    act(() => window.dispatchEvent(new Event("focus")));
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
     await waitFor(() =>
       expect(result.current.error).toContain("did not finish"),
     );
@@ -349,6 +371,317 @@ describe("live provider setup", () => {
     expect(popup.close).toHaveBeenCalled();
     expect(result.current.state.authorized).toBe(false);
     expect(result.current.state.tested).toBe(false);
+  });
+
+  it("refuses a write grant returned for a read-only configuration", async () => {
+    const state = initialState("slack");
+    state.values.access = "read";
+    saved("slack", scopesFor(state));
+    mocks.sessions
+      .mockImplementationOnce(async () => pages([]))
+      .mockImplementation(async () =>
+        pages([
+          {
+            id: "broader-grant",
+            userSessionIssuerId: "project-issuer",
+            scopes: ["channels:read", "chat:write"],
+          },
+        ]),
+      );
+    const popup = { closed: false, location: { href: "" }, close: vi.fn() };
+    vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
+    const { result } = mount("slack", { step: "test" });
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    await waitFor(() => expect(result.current.recovery).toBe("permissions"));
+    expect(result.current.error).toContain("still granting write access");
+    expect(mocks.revoke).toHaveBeenCalledWith({ id: "broader-grant" });
+    expect(result.current.state.authorized).toBe(false);
+    expect(result.current.state.tested).toBe(false);
+  });
+  it("does not revoke grants from a cancelled read-only sign-in check", async () => {
+    const state = initialState("slack");
+    state.values.access = "read";
+    saved("slack", scopesFor(state));
+    let finish!: (
+      value: AsyncGenerator<{ result: { items: unknown[] } }>,
+    ) => void;
+    mocks.sessions
+      .mockImplementationOnce(async () => pages([]))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+    const popup = { closed: false, location: { href: "" }, close: vi.fn() };
+    vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
+    const { result } = mount("slack", { step: "test" });
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    await waitFor(() => expect(mocks.sessions).toHaveBeenCalledTimes(2));
+    act(() => result.current.cancelSignIn());
+    await act(async () =>
+      finish(
+        pages([
+          {
+            id: "new-grant",
+            userSessionIssuerId: "project-issuer",
+            scopes: ["chat:write"],
+          },
+        ]),
+      ),
+    );
+    expect(mocks.revoke).not.toHaveBeenCalled();
+    expect(result.current.state.authorized).toBe(false);
+    expect(result.current.pending).toBeNull();
+  });
+
+  it("refuses a non-local HTTP sign-in URL before opening a popup", async () => {
+    mocks.serverUrl = "http://platform.example";
+    saved("slack", scopesFor(initialState("slack")));
+    const { result } = mount("slack", { step: "test" });
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    expect(result.current.error).toContain("HTTPS");
+    expect(window.open).not.toHaveBeenCalled();
+  });
+  it("allows HTTP only for the local development sign-in endpoint", async () => {
+    mocks.serverUrl = "http://localhost:1234";
+    saved("slack", scopesFor(initialState("slack")));
+    const popup = { closed: false, location: { href: "" }, close: vi.fn() };
+    vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
+    const { result } = mount("slack", { step: "test" });
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    await waitFor(() =>
+      expect(popup.location.href).toBe(
+        "http://localhost:1234/mcp/demo-endpoint/connect/first-party",
+      ),
+    );
+  });
+  it("loads canonically equivalent Slack issuer URLs", async () => {
+    saved("slack", scopesFor(initialState("slack")));
+    mocks.associations.mockResolvedValue({
+      associations: [
+        {
+          issuerUrl: "HTTPS://MCP.SLACK.COM:443/",
+          remoteSessionClientId: "client",
+          serverCount: 1,
+        },
+      ],
+    });
+    const { result } = mount("slack");
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+  });
+  it("does not enable a disabled server before credential saving succeeds", async () => {
+    const disabled = {
+      ...server,
+      visibility: "disabled",
+      userSessionIssuerId: "organization-issuer",
+    };
+    mocks.server.mockResolvedValue(disabled);
+    mocks.issuer.mockImplementation(async ({ slug }) => {
+      if (slug) throw { statusCode: 404 };
+      return { id: "organization-issuer" };
+    });
+    mocks.createIssuer.mockResolvedValue({ id: "isolated" });
+    mocks.commit.mockRejectedValue(new Error("Rejected"));
+    const initial = initialState("slack");
+    const { result } = mount("slack", {
+      step: "credentials",
+      values: { ...initial.values, clientId: "id", clientSecret: "secret" },
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.dispatch({ type: "next" }));
+    await waitFor(() => expect(result.current.error).toBeTruthy());
+    expect(mocks.updateServer).toHaveBeenCalledExactlyOnceWith({
+      updateMcpServerForm: expect.objectContaining({
+        visibility: "disabled",
+        userSessionIssuerId: "isolated",
+      }),
+    });
+    expect(result.current.state.saved).toBe(false);
+  });
+
+  it("saves replacement credentials after retrying a failed permissions update", async () => {
+    saved("slack", scopesFor(initialState("slack")));
+    const { result } = mount("slack", { step: "credentials" });
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    act(() => result.current.dispatch({ type: "connection", saved: false }));
+    mocks.updateClient.mockRejectedValueOnce(new Error("Offline"));
+    act(() =>
+      result.current.dispatch({
+        type: "field",
+        field: "access",
+        value: "read",
+      }),
+    );
+    await waitFor(() => expect(result.current.error).toBeTruthy());
+    act(() =>
+      result.current.dispatch({
+        type: "field",
+        field: "clientId",
+        value: "replacement-id",
+      }),
+    );
+    act(() =>
+      result.current.dispatch({
+        type: "field",
+        field: "clientSecret",
+        value: "replacement-secret",
+      }),
+    );
+    act(() => result.current.dispatch({ type: "next" }));
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalled());
+    expect(mocks.commit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          clientConfiguration: expect.objectContaining({
+            clientId: "replacement-id",
+            clientSecret: "replacement-secret",
+          }),
+        }),
+      }),
+    );
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    expect(result.current.state.step).toBe("test");
+  });
+  it("cancels a stale credential save when the rendered identity changes", async () => {
+    let finish!: (value: { id: string }) => void;
+    mocks.provider.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const state = initialState("slack");
+    const hook = mount("slack", {
+      step: "credentials",
+      values: { ...state.values, clientId: "id", clientSecret: "secret" },
+    });
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    act(() => hook.result.current.dispatch({ type: "next" }));
+    await waitFor(() => expect(mocks.provider).toHaveBeenCalled());
+    hook.rerender({
+      mcpServer: { ...server, userSessionIssuerId: "replacement-issuer" },
+    });
+    await act(async () => finish({ id: "provider" }));
+    await waitFor(() => expect(hook.result.current.pending).toBeNull());
+    expect(mocks.commit).not.toHaveBeenCalled();
+    expect(hook.result.current.state.saved).toBe(false);
+    expect(hook.result.current.state.step).toBe("credentials");
+  });
+  it("detects identity changes made by another editor before committing", async () => {
+    mocks.server.mockResolvedValueOnce(server).mockResolvedValue({
+      ...server,
+      userSessionIssuerId: "replacement-issuer",
+    });
+    const state = initialState("slack");
+    const { result } = mount("slack", {
+      step: "credentials",
+      values: { ...state.values, clientId: "id", clientSecret: "secret" },
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.dispatch({ type: "next" }));
+    await waitFor(() => expect(result.current.recovery).toBe("settings"));
+    expect(mocks.commit).not.toHaveBeenCalled();
+    expect(result.current.state.saved).toBe(false);
+  });
+
+  it("revokes every user's grant on this issuer when permissions change", async () => {
+    saved("slack", scopesFor(initialState("slack")));
+    mocks.sessions.mockImplementation(async () =>
+      pages([
+        { id: "current-user", userSessionIssuerId: "project-issuer" },
+        { id: "other-user", userSessionIssuerId: "project-issuer" },
+        { id: "other-issuer", userSessionIssuerId: "another-issuer" },
+      ]),
+    );
+    const { result } = mount("slack", { step: "app" });
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    act(() =>
+      result.current.dispatch({
+        type: "field",
+        field: "access",
+        value: "read",
+      }),
+    );
+    await waitFor(() => expect(mocks.updateClient).toHaveBeenCalled());
+    expect(mocks.sessions).toHaveBeenCalledWith({
+      remoteSessionClientId: "client",
+    });
+    expect(mocks.revoke.mock.calls).toEqual([
+      [{ id: "current-user" }],
+      [{ id: "other-user" }],
+    ]);
+  });
+  it("invalidates the stored grant even while replacement credentials are being edited", async () => {
+    saved("slack", scopesFor(initialState("slack")));
+    mocks.sessions.mockImplementation(async () =>
+      pages([{ id: "old-grant", userSessionIssuerId: "project-issuer" }]),
+    );
+    const { result } = mount("slack", { step: "app" });
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    act(() =>
+      result.current.dispatch({
+        type: "connection",
+        saved: false,
+        authorized: false,
+        tested: false,
+      }),
+    );
+    act(() =>
+      result.current.dispatch({
+        type: "field",
+        field: "access",
+        value: "read",
+      }),
+    );
+    await waitFor(() =>
+      expect(mocks.revoke).toHaveBeenCalledWith({ id: "old-grant" }),
+    );
+    expect(result.current.state.saved).toBe(false);
+  });
+  it("rechecks whether the app became shared before changing its permissions", async () => {
+    saved("slack", scopesFor(initialState("slack")));
+    const { result } = mount("slack", { step: "app" });
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    mocks.associations.mockResolvedValue({
+      associations: [
+        {
+          issuerUrl: "https://mcp.slack.com",
+          remoteSessionClientId: "client",
+          serverCount: 2,
+        },
+      ],
+    });
+    act(() =>
+      result.current.dispatch({
+        type: "field",
+        field: "access",
+        value: "read",
+      }),
+    );
+    await waitFor(() => expect(result.current.recovery).toBe("settings"));
+    expect(mocks.revoke).not.toHaveBeenCalled();
+    expect(mocks.updateClient).not.toHaveBeenCalled();
+  });
+  it("clears successful verification when the server identity changes", async () => {
+    saved("slack", scopesFor(initialState("slack")));
+    const hook = mount("slack", { step: "test" });
+    await waitFor(() => expect(hook.result.current.state.saved).toBe(true));
+    act(() => hook.result.current.dispatch({ type: "modal", modal: "test" }));
+    await waitFor(() => expect(hook.result.current.state.tested).toBe(true));
+    mocks.associations.mockResolvedValue({ associations: [] });
+    hook.rerender({
+      mcpServer: { ...server, userSessionIssuerId: "replacement-issuer" },
+    });
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    expect(hook.result.current.state.saved).toBe(false);
+    expect(hook.result.current.state.authorized).toBe(false);
+    expect(hook.result.current.state.tested).toBe(false);
+    expect(hook.result.current.toolCount).toBeNull();
   });
 
   it("invalidates the old Slack grant as soon as permissions change, before updating scopes", async () => {
@@ -403,7 +736,9 @@ describe("live provider setup", () => {
     );
     await waitFor(() => expect(mocks.updateClient).toHaveBeenCalled());
     act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
-    act(() => window.dispatchEvent(new Event("focus")));
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
     expect(mocks.probe).not.toHaveBeenCalled();
     expect(result.current.state.authorized).toBe(false);
     await act(async () => finish());
@@ -411,7 +746,9 @@ describe("live provider setup", () => {
     await waitFor(() =>
       expect(popup.location.href).toContain("/connect/first-party"),
     );
-    act(() => window.dispatchEvent(new Event("focus")));
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
     await waitFor(() => expect(result.current.state.authorized).toBe(true));
     expect(mocks.updateClient).toHaveBeenCalledTimes(1);
   });
@@ -440,7 +777,9 @@ describe("live provider setup", () => {
     );
     act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
     await waitFor(() => expect(mocks.updateClient).toHaveBeenCalledTimes(2));
-    act(() => window.dispatchEvent(new Event("focus")));
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
     expect(result.current.pending).toBe("signin");
     expect(popup.location.href).toBe("");
     expect(mocks.probe).not.toHaveBeenCalled();
@@ -510,7 +849,7 @@ describe("live provider setup", () => {
     expect(mocks.updateClient).toHaveBeenCalledTimes(1);
   });
 
-  it("updates Slack permissions and revokes only the current user's grants on this issuer before reauthorization", async () => {
+  it("updates Slack permissions and revokes grants on only the target issuer before reauthorization", async () => {
     const all = scopesFor(initialState("slack"));
     saved("slack", all);
     mocks.sessions.mockImplementation(async () =>
@@ -543,7 +882,6 @@ describe("live provider setup", () => {
     });
     expect(mocks.sessions).toHaveBeenCalledWith({
       remoteSessionClientId: "client",
-      subjectUrn: "user:person",
     });
     expect(mocks.revoke).toHaveBeenCalledExactlyOnceWith({ id: "own-grant" });
     expect(result.current.state.tested).toBe(false);
@@ -617,10 +955,14 @@ describe("live provider setup", () => {
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
     act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
-    act(() => window.dispatchEvent(new Event("focus")));
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
     await waitFor(() => expect(result.current.pending).toBeNull());
     expect(result.current.errorStep).toBe("signin");
-    expect(result.current.error).toBe("Provider unavailable. Retry.");
+    expect(result.current.error).toBe(
+      "Couldn’t verify Slack sign-in. Try again.",
+    );
     expect(result.current.state.authorized).toBe(false);
   });
 
@@ -652,7 +994,7 @@ describe("live provider setup", () => {
   });
 
   it.each(["authorization_required", "configuration_required", "failed"])(
-    "keeps %s tests incomplete and shows the backend's safe failure",
+    "keeps %s tests incomplete with a client-owned recovery message",
     async (status) => {
       mocks.probe.mockResolvedValue({
         ok: true,
@@ -666,7 +1008,13 @@ describe("live provider setup", () => {
       await waitFor(() => expect(result.current.loading).toBe(false));
       act(() => result.current.dispatch({ type: "modal", modal: "test" }));
       await waitFor(() =>
-        expect(result.current.error).toBe("Try signing in again."),
+        expect(result.current.error).toBe(
+          status === "authorization_required"
+            ? "Sign in to Slack, then test the connection again."
+            : status === "configuration_required"
+              ? "Review this server’s User Identity configuration before continuing."
+              : "Couldn’t test the Slack connection. Review app permissions and try again.",
+        ),
       );
       expect(result.current.state.tested).toBe(false);
       expect(result.current.toolCount).toBeNull();

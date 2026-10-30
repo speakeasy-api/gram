@@ -101,7 +101,10 @@ function PageHeaderComponent({
           and on one line the two read as a single path. px-8 matches
           Page.Body so the crumbs line up with the content edge. */}
         {showBreadcrumbs && (
-          <div className="border-foreground/10 flex shrink-0 items-center gap-2 border-b px-8 py-2.5">
+          <div
+            data-slot="page-breadcrumbs"
+            className="border-foreground/10 flex shrink-0 items-center gap-2 border-b px-8 py-2.5"
+          >
             {children}
           </div>
         )}

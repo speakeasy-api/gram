@@ -26,6 +26,19 @@ describe("Slack app creation handoff", () => {
     expect(manifest.oauth_config.scopes.user).not.toContain("chat:write");
     expect(manifest.settings.is_mcp_enabled).toBe(true);
   });
+  it("bounds long app names to Slack's 35-character limit without splitting Unicode characters", () => {
+    for (const name of ["A".repeat(100), "🚀".repeat(50)]) {
+      const manifest = slackAppManifest(
+        [],
+        "https://callback.example.test/callback",
+        name,
+      );
+      expect(Array.from(manifest.display_information.name)).toHaveLength(35);
+      expect(manifest.display_information.name).not.toMatch(
+        /[\uD800-\uDBFF]$/u,
+      );
+    }
+  });
   it("preserves write scopes when selected and contains no credentials", () => {
     const manifest = slackAppManifest(
       scopesFor(initialState("slack")),

@@ -31,7 +31,7 @@ const slackScopes = [
   "lists:write",
   "files:write",
 ];
-export const scopesFor = (s: State): string[] =>
+export const scopesFor = (s: { values: { access: string } }): string[] =>
   s.values.access === "read"
     ? slackScopes.filter((x) => !x.includes(":write"))
     : slackScopes;
