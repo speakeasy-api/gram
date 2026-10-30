@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/Button";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import type { JSX } from "react";
@@ -9,62 +8,23 @@ import { SwitchServerSignIn } from "./SwitchServerSignIn";
 import { useSwitchAvailability } from "./useSwitchAvailability";
 import type { ServerSignIn, SetupValues } from "./workloadTokenEndpoints";
 
-export type SignInMode = "api-key" | "workload";
-
 /**
- * How the agent will sign in, asked before its servers are chosen: an agent
- * running on a platform gets one token, which only the servers sharing its
- * sign-in accept, so the list below shows which ones those are.
+ * The sign-in an agent running on a platform gets its token from, chosen while
+ * its servers are: the token works only at the servers that use it, so the
+ * list below says which ones those are.
  */
-export function SignInChoice({
-  mode,
-  onModeChange,
-  canUsePlatform,
-  disabled,
+export function SignInPicker({
   setupValues,
 }: {
-  mode: SignInMode;
-  onModeChange: (mode: SignInMode) => void;
-  /** Whether the reader may set up an agent that runs on a platform. */
-  canUsePlatform: boolean;
-  /** Settled for an agent that already exists. */
-  disabled: boolean;
   setupValues: SetupValues;
 }): JSX.Element {
   return (
-    <Stack gap={3}>
-      <Stack gap={2}>
-        <Text small>How will this agent sign in?</Text>
-        <SegmentedControl<SignInMode>
-          ariaLabel="How will this agent sign in?"
-          value={mode}
-          onChange={onModeChange}
-          disabled={disabled}
-          options={[
-            { value: "api-key", label: "API key" },
-            {
-              value: "workload",
-              label: "Agent running on a platform",
-              disabled: !canUsePlatform,
-            },
-          ]}
-        />
-        {!canUsePlatform && !disabled && (
-          <Text muted small>
-            Setting up an agent that runs on a platform needs permission to
-            manage workload identities.
-          </Text>
-        )}
-      </Stack>
-      {mode === "workload" && (
-        <Stack gap={1}>
-          <SignInSelect setupValues={setupValues} id="mcp-selection-sign-in" />
-          <Text muted small>
-            The agent gets one token, which works at the servers that use this
-            sign-in.
-          </Text>
-        </Stack>
-      )}
+    <Stack gap={1}>
+      <SignInSelect setupValues={setupValues} id="mcp-selection-sign-in" />
+      <Text muted small>
+        The agent gets one token, which works at the servers that use this
+        provider.
+      </Text>
     </Stack>
   );
 }
@@ -85,12 +45,17 @@ export function ServerSignInNote({
     case "another_issuer":
       return (
         <>
-          Uses a different sign-in ({signIn.label}), so this token won&apos;t
-          work at {name}
+          Uses a different MCP authentication provider ({signIn.label}), so this
+          token won&apos;t work at {name}
         </>
       );
     case "not_shared":
-      return <>Uses its own sign-in, which can&apos;t give tokens to agents</>;
+      return (
+        <>
+          Uses its own MCP authentication provider, which can&apos;t give tokens
+          to agents
+        </>
+      );
   }
 }
 

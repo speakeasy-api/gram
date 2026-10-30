@@ -131,11 +131,13 @@ it("names each server the selected issuer's token won't work for, with its fix",
   expect(
     screen.getByText("This token won't work for 2 of this agent's servers"),
   ).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Use Linear's sign-in" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Use Linear's provider" }),
+  );
   expect(onEndpointChange).toHaveBeenCalledWith("other");
   expect(
     screen
-      .getByRole("link", { name: "Open sign-in settings" })
+      .getByRole("link", { name: "Open authentication settings" })
       .getAttribute("href"),
   ).toBe("/projects/default/mcp/github/settings#authentication");
 });
@@ -158,7 +160,7 @@ it("lists the servers behind an unavailable token endpoint", () => {
   expect(screen.getByText("No shared issuer.")).toBeTruthy();
   expect(screen.getByText("GitHub")).toBeTruthy();
   expect(
-    screen.getByRole("link", { name: "Open sign-in settings" }),
+    screen.getByRole("link", { name: "Open authentication settings" }),
   ).toBeTruthy();
 });
 
@@ -226,7 +228,7 @@ it("sends a server people connect their own accounts to to its settings instead"
     await screen.findByText(/People connect their own accounts/),
   ).toBeTruthy();
   expect(
-    screen.getByRole("link", { name: "Open sign-in settings" }),
+    screen.getByRole("link", { name: "Open authentication settings" }),
   ).toBeTruthy();
   expect(
     screen.queryByRole("button", { name: "Assign acme-workforce to GitHub" }),

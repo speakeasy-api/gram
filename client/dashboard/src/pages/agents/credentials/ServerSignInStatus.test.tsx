@@ -3,7 +3,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ServerSignInAction, ServerSignInNote } from "./ServerSignInStatus";
 
 vi.mock("./SetupFields", () => ({
-  ServerSignInSettingsLink: () => <a href="/settings">Open sign-in settings</a>,
+  ServerSignInSettingsLink: () => (
+    <a href="/settings">Open authentication settings</a>
+  ),
   SignInSelect: () => null,
 }));
 vi.mock("./SwitchServerSignIn", () => ({
@@ -42,7 +44,9 @@ it("names the sign-in a server uses and why the token won't work there", () => {
     />,
   );
   expect(
-    screen.getByText(/Uses a different sign-in \(slack-sign-in\)/),
+    screen.getByText(
+      /Uses a different MCP authentication provider \(slack-sign-in\)/,
+    ),
   ).toBeTruthy();
 });
 
@@ -73,7 +77,7 @@ it("links to the server's settings when assigning here isn't safe", () => {
     />,
   );
   expect(
-    screen.getByRole("link", { name: "Open sign-in settings" }),
+    screen.getByRole("link", { name: "Open authentication settings" }),
   ).toBeTruthy();
 });
 

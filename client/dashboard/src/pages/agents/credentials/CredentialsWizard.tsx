@@ -49,7 +49,7 @@ import { useWorkloadSetup } from "./useWorkloadSetup";
 import {
   ServerSignInAction,
   ServerSignInNote,
-  SignInChoice,
+  SignInPicker,
 } from "./ServerSignInStatus";
 import type { SetupServer } from "./setupInstructions";
 import { useSetupValues } from "./workloadTokenEndpoints";
@@ -117,9 +117,9 @@ function toSetupServer(server: InventoryServer, mcpUrl = ""): SetupServer {
 /** Each step's name, and the one or two words it shrinks to in a full row. */
 const STEPS = [
   { label: "Name", short: "Name" },
+  { label: "Credential", short: "Credential" },
   { label: "MCP Selection", short: "MCPs" },
   { label: "MCP Authentication", short: "Authentication" },
-  { label: "Credential", short: "Credential" },
   { label: "Install", short: "Install" },
   { label: "Verify", short: "Verify" },
 ];
@@ -257,6 +257,8 @@ export function CredentialsWizard({
   // back to. Replace rather than push: the browser's Back belongs to the
   // page the reader came from, and the wizard has its own Back.
   const [params, setParams] = useSearchParams();
+  // A preset arrives named and with its platform chosen, so it opens on that
+  // choice, where a platform that cannot be set up says why.
   const defaultStep = initialPlatformKey === undefined ? 0 : 1;
   // Presence first: `Number(null)` and `Number("")` are both 0, which reads as
   // a deep link to the first step and leaves `defaultStep` unreachable.
@@ -1391,7 +1393,7 @@ export function CredentialsWizard({
             </div>
           </div>
         );
-      case 1:
+      case 2:
         return (
           <div className="space-y-5">
             <StepServers
@@ -1414,16 +1416,9 @@ export function CredentialsWizard({
                 setHighlight(next ? "server:all" : null);
               }}
               intro={
-                <SignInChoice
-                  mode={credential}
-                  onModeChange={(mode) => {
-                    setCredential(mode);
-                    setHighlight("Credential");
-                  }}
-                  canUsePlatform={canFederate}
-                  disabled={editing}
-                  setupValues={signIn}
-                />
+                credential === "workload" ? (
+                  <SignInPicker setupValues={signIn} />
+                ) : undefined
               }
               signInNote={
                 credential === "workload"
@@ -1464,7 +1459,7 @@ export function CredentialsWizard({
             />
           </div>
         );
-      case 2:
+      case 3:
         return (
           <StepAuthentication
             servers={
@@ -1486,7 +1481,7 @@ export function CredentialsWizard({
             }}
           />
         );
-      case 3:
+      case 1:
         return (
           <div className="space-y-6">
             <WizardStepHeader
@@ -1546,53 +1541,122 @@ export function CredentialsWizard({
     }
   };
 
+  // A preset opened from a link arrives chosen, even for someone who may not
+  // trust a platform. Editing only reads the setup back.
+  const platformRefused = credential === "workload" && !editing && !canFederate;
+  const credentialBlocked =
+    credential !== "workload"
+      ? null
+      : platformRefused
+        ? "Using a platform's tokens needs permission to manage workload identities. Choose an API key instead."
+        : platformKey === null
+          ? "Choose the platform whose tokens this agent will present."
+          : workload.steps.length === 0
+            ? "Setup is unavailable. Refresh or choose another option."
+            : null;
   const blocked =
     step === 0
       ? !name.trim()
         ? "Name this agent."
         : null
-      : step === 1
-        ? !editing && !allServers && selected.length === 0
-          ? "Select at least one MCP server."
-          : refusedChoice
-            ? refusedChoice
-            : null
-        : step === 2 &&
-            offersConnections &&
-            !allServers &&
-            selected.some(
-              (entry) =>
-                entry.server.issuerId &&
-                !connectionSelectable(
-                  connections.byServer.get(entry.server.id),
-                ),
-            )
-          ? "Connect or remove the servers that need authentication."
-          : step === 2 && !editing && !allServers && selected.length === 0
+      : step === 1 || (step <= 3 && !editing && credentialBlocked)
+        ? credentialBlocked
+        : step === 2
+          ? !editing && !allServers && selected.length === 0
             ? "Select at least one MCP server."
-            : null;
+            : refusedChoice
+              ? refusedChoice
+              : null
+          : step === 3 &&
+              offersConnections &&
+              !allServers &&
+              selected.some(
+                (entry) =>
+                  entry.server.issuerId &&
+                  !connectionSelectable(
+                    connections.byServer.get(entry.server.id),
+                  ),
+              )
+            ? "Connect or remove the servers that need authentication."
+            : step === 3 && !editing && !allServers && selected.length === 0
+              ? "Select at least one MCP server."
+              : null;
+
+  /** Creates the agent, or issues a key to one that exists. */
+  const keyFooter = () => (
+    <WizardFooter
+      note={
+        blocked ??
+        (existing
+          ? "Issuing a key is recorded in the organization audit log."
+          : !project.id
+            ? "Reading the project this agent will belong to…"
+            : "Creating the agent is recorded in the organization audit log.")
+      }
+      onBack={() => setStep(step === 1 ? 0 : 2)}
+      primary={
+        <Button
+          // An agent belongs to the project it is made in, so there is
+          // nothing to create until that project has resolved.
+          disabled={!!blocked || provisioning || (!existing && !project.id)}
+          onClick={() => void provision()}
+        >
+          {provisioning
+            ? existing
+              ? "Issuing…"
+              : "Creating…"
+            : existing
+              ? "Issue key"
+              : "Create agent"}
+        </Button>
+      }
+    />
+  );
 
   const footer = () => {
     // Editing writes after authentication. Past it the flow is the ordinary
     // one for an agent that exists: adding a credential it does not have.
-    if (editing && step < 3) {
+    // An API-key agent's credential is settled, but a fresh key can still be
+    // issued from it.
+    if (editing && step === 1 && credential !== "workload") return keyFooter();
+    if (editing && step < 4) {
       return (
         <WizardFooter
           note={
             step === 0
               ? "Renaming an agent is recorded in the organization audit log."
-              : refusedChoice
-                ? refusedChoice
-                : reconciled
-                  ? "Changing what an agent reaches is recorded in the organization audit log."
-                  : inventory.isError
-                    ? "The server list could not be loaded, so the servers this agent reaches are not known. Retry the list before saving."
-                    : "Reading the servers this agent reaches…"
+              : step === 1
+                ? "What an agent signs in with is settled when it is created."
+                : refusedChoice
+                  ? refusedChoice
+                  : reconciled
+                    ? "Changing what an agent reaches is recorded in the organization audit log."
+                    : inventory.isError
+                      ? "The server list could not be loaded, so the servers this agent reaches are not known. Retry the list before saving."
+                      : "Reading the servers this agent reaches…"
           }
-          onBack={step === 0 ? undefined : () => setStep(step - 1)}
+          // The credential is settled, so editing passes over it: from the
+          // name straight to the servers. Reached from the stepper, it leads
+          // on into the platform's own setup.
+          onBack={
+            step === 0 ? undefined : () => setStep(step === 2 ? 0 : step - 1)
+          }
           primary={
-            step < 2 ? (
-              <Button disabled={!!blocked} onClick={() => setStep(step + 1)}>
+            step < 3 ? (
+              <Button
+                disabled={!!blocked}
+                onClick={() =>
+                  setStep(
+                    step === 0
+                      ? 2
+                      : step === 1 && credential === "workload"
+                        ? 4
+                        : step === 1
+                          ? 2
+                          : step + 1,
+                  )
+                }
+              >
                 Continue
               </Button>
             ) : (
@@ -1661,66 +1725,41 @@ export function CredentialsWizard({
       );
     }
     switch (step) {
+      case 1:
+        return (
+          <WizardFooter
+            note={
+              blocked ??
+              (credential === "workload"
+                ? `${platform?.displayName ?? "Your platform"} issues the tokens; you set it up after choosing the agent's servers.`
+                : "The agent gets its API key once its servers are chosen.")
+            }
+            onBack={() => setStep(0)}
+            primary={
+              <Button disabled={!!blocked} onClick={() => setStep(2)}>
+                Continue
+              </Button>
+            }
+          />
+        );
       case 3:
         if (credential === "workload") {
-          let note =
-            "Choose the platform whose tokens this agent will present.";
-          if (platformKey !== null) {
-            note =
-              workload.steps.length === 0
-                ? "Setup is unavailable. Refresh or choose another option."
-                : `${platform?.displayName ?? "Your platform"} issues the tokens; the next step sets it up.`;
-          }
-          // A preset opened from a link arrives chosen, even for someone who
-          // may not trust a platform. Editing only reads the setup back.
-          const refused = !editing && !canFederate;
-          if (refused) {
-            note =
-              "Using a platform's tokens needs permission to manage workload identities. Choose an API key instead.";
-          }
           return (
             <WizardFooter
-              note={note}
+              note={
+                blocked ??
+                `${platform?.displayName ?? "Your platform"} issues the tokens; the next step sets it up.`
+              }
               onBack={() => setStep(2)}
               primary={
-                <Button
-                  disabled={refused || workload.steps.length === 0}
-                  onClick={() => setStep(4)}
-                >
+                <Button disabled={!!blocked} onClick={() => setStep(4)}>
                   Continue
                 </Button>
               }
             />
           );
         }
-        return (
-          <WizardFooter
-            note={
-              existing
-                ? "Issuing a key is recorded in the organization audit log."
-                : !project.id
-                  ? "Reading the project this agent will belong to…"
-                  : "Creating the agent is recorded in the organization audit log."
-            }
-            onBack={() => setStep(2)}
-            primary={
-              <Button
-                // An agent belongs to the project it is made in, so there is
-                // nothing to create until that project has resolved.
-                disabled={provisioning || (!existing && !project.id)}
-                onClick={() => void provision()}
-              >
-                {provisioning
-                  ? existing
-                    ? "Issuing…"
-                    : "Creating…"
-                  : existing
-                    ? "Issue key"
-                    : "Create agent"}
-              </Button>
-            }
-          />
-        );
+        return keyFooter();
       case 4:
         return (
           <WizardFooter
@@ -1784,7 +1823,7 @@ export function CredentialsWizard({
         // existing agent has no such order, so every step is reachable until
         // the key is issued.
         // Editing has settled everything a credential step would ask.
-        settledFrom={editing ? 3 : undefined}
+        settled={editing ? (index) => index === 1 || index >= 4 : undefined}
         forward={existing && !secret}
         // Verify watches a key being used, so it has nothing to watch until
         // one is issued. Without this an existing agent could jump straight

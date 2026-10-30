@@ -77,7 +77,7 @@ export function ExchangeValues({
         Before calling MCP servers, the workload exchanges its token for a
         Speakeasy access token.{" "}
         {serversLeftOut > 0
-          ? "One access token works at every server that signs in through the user session issuer it comes from."
+          ? "One access token works at every server that uses the MCP authentication provider it comes from."
           : "One access token works at every server this agent may reach."}
       </p>
       {serversLeftOut > 0 && tokenEndpoint && issuerPicker}
@@ -127,7 +127,7 @@ export function ExchangeValues({
               : servers.length > 0
                 ? "This agent's servers are only served over plaintext HTTP, so their URLs are withheld: the access token would cross the network unencrypted. Serve them over HTTPS and reload."
                 : serversLeftOut > 0
-                  ? "No token endpoint here works for this agent's servers yet. The user session issuer section on this step names what each one needs."
+                  ? "No token endpoint here works for this agent's servers yet. The MCP authentication provider section on this step names what each one needs."
                   : "This agent can't reach any MCP servers yet. Go back to MCP Selection and choose at least one."
           }
         />

@@ -121,13 +121,13 @@ export function SignInSelect({
 }): JSX.Element {
   return (
     <Stack gap={2}>
-      <Label htmlFor={id}>User session issuer</Label>
+      <Label htmlFor={id}>MCP authentication provider</Label>
       <Select
         value={setupValues.selectedEndpointId}
         onValueChange={setupValues.onEndpointChange}
       >
         <SelectTrigger id={id} className="w-full">
-          <SelectValue placeholder="Select an issuer" />
+          <SelectValue placeholder="Select a provider" />
         </SelectTrigger>
         <SelectContent>
           {setupValues.endpointGroups.map((group) => (
@@ -175,7 +175,8 @@ export function ComputedStatus({
     <Stack gap={2}>
       <SignInSelect setupValues={setupValues} id="setup-token-endpoint" />
       <Text muted small>
-        Tokens are issued for the organization or project that owns this issuer.
+        Tokens are issued for the organization or project that owns this
+        provider.
       </Text>
       {leftOut.length > 0 && (
         <Alert
@@ -219,7 +220,7 @@ function LeftOutServers({
           {entry.reason === "another_issuer" ? (
             <LeftOutRow
               name={entry.server.name}
-              reason={`${entry.server.name} uses a different sign-in. A workload needs a separate token from that sign-in for it.`}
+              reason={`${entry.server.name} uses a different MCP authentication provider. A workload needs a separate token from that provider for it.`}
               action={
                 <Button
                   variant="secondary"
@@ -227,7 +228,7 @@ function LeftOutServers({
                   onClick={() => onSelect(entry.server.issuerId!)}
                 >
                   <Button.Text>
-                    Use {entry.server.name}&apos;s sign-in
+                    Use {entry.server.name}&apos;s provider
                   </Button.Text>
                 </Button>
               }
@@ -237,7 +238,7 @@ function LeftOutServers({
           ) : (
             <LeftOutRow
               name={entry.server.name}
-              reason={`${notShared(entry.server.name)} There is no shared sign-in to assign to it yet.`}
+              reason={`${notShared(entry.server.name)} There is no shared MCP authentication provider to assign to it yet.`}
               action={<ServerSignInSettingsLink server={entry.server} />}
             />
           )}
@@ -248,7 +249,7 @@ function LeftOutServers({
 }
 
 const notShared = (name: string) =>
-  `${name} uses its own sign-in, which can't give tokens to agents.`;
+  `${name} uses its own MCP authentication provider, which can't give tokens to agents.`;
 
 /** A server whose issuer is not shared, with a shared one to move it to. */
 function NotSharedRow({
@@ -286,7 +287,7 @@ function NotSharedRow({
       return (
         <LeftOutRow
           name={server.name}
-          reason={`${notShared(server.name)} People connect their own accounts through it, so assign ${target.label} from ${server.name}'s settings, where those connections can be set up again.`}
+          reason={`${notShared(server.name)} People connect their own accounts through its current provider, so assign ${target.label} from ${server.name}'s settings, where those connections can be set up again.`}
           action={<ServerSignInSettingsLink server={server} />}
         />
       );
@@ -294,7 +295,7 @@ function NotSharedRow({
       return (
         <LeftOutRow
           name={server.name}
-          reason={`${notShared(server.name)} Speakeasy couldn't check whether people connect their own accounts through it, so assign ${target.label} from ${server.name}'s settings.`}
+          reason={`${notShared(server.name)} Speakeasy couldn't check whether people connect their own accounts through its current provider, so assign ${target.label} from ${server.name}'s settings.`}
           action={<ServerSignInSettingsLink server={server} />}
         />
       );
@@ -349,7 +350,7 @@ export function ServerSignInSettingsLink({
         target="_blank"
         rel="noreferrer"
       >
-        Open sign-in settings
+        Open authentication settings
         <ExternalLink className="size-3.5" aria-hidden="true" />
       </Link>
     </Button>

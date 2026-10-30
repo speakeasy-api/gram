@@ -61,7 +61,7 @@ export function SwitchServerSignIn({
   const summary = impact.isError
     ? "Couldn't check where clients will sign in. You can still assign it."
     : issuerUrl
-      ? `Clients will sign in at ${target.label}, ${issuerUrl}. Update any identity provider or platform set up with ${server.name}'s current sign-in.`
+      ? `Clients will sign in at ${target.label}, ${issuerUrl}. Update any identity provider or platform set up with ${server.name}'s current MCP authentication provider.`
       : `Clients will sign in at ${target.label}.`;
 
   return (
@@ -82,7 +82,7 @@ export function SwitchServerSignIn({
         open={open}
         onOpenChange={setOpen}
         title={`Assign ${target.label} to ${server.name}?`}
-        description={`${server.name} will accept sign-ins from ${target.label}, so this agent's token works there too. Everyone connected to ${server.name} will need to sign in again.`}
+        description={`${server.name} will use ${target.label} as its MCP authentication provider, so this agent's token works there too. Everyone connected to ${server.name} will need to sign in again.`}
         confirmLabel="Assign"
         pendingLabel="Assigning…"
         confirmVariant="primary"

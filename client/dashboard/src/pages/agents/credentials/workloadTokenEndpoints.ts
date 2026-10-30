@@ -253,7 +253,7 @@ function unavailableReason(
   if (isPending) return "Loading token endpoints…";
   if (isError) return "Speakeasy couldn't load its token endpoints. Try again.";
   if (count === 0 && serversSignIn) {
-    return "None of the servers below signs in through a user session issuer with a shared authorization server, so there is no token endpoint a workload can use for them.";
+    return "None of the servers below uses an MCP authentication provider that can give tokens to agents, so there is no token endpoint a workload can use for them.";
   }
   if (count === 0 && targetProjectId !== undefined) {
     return "No shared Speakeasy authorization server is available for this project or organization.";

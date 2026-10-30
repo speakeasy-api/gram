@@ -272,11 +272,38 @@ function setup(initialPlatformKey?: string, initialEntry = "/") {
   return { ...view, onDone };
 }
 
+/**
+ * Moves past MCP Authentication. A platform agent continues to its setup; an
+ * API-key agent is created from this step, so it stays for the caller to
+ * click "Create agent" or "Issue key".
+ */
 async function continueFromAuthentication() {
   await screen.findByRole("heading", { name: "MCP Authentication" });
+  const next = screen.queryByRole("button", { name: "Continue" });
+  if (next === null) return;
+  await waitFor(() => expect(next.hasAttribute("disabled")).toBe(false));
+  fireEvent.click(next);
+}
+
+/** Moves past Credential, choosing a platform first when one is named. */
+async function passCredentialStep(platformName?: RegExp) {
+  await screen.findByRole("heading", { name: "Credential" });
+  if (platformName) {
+    fireEvent.click(await screen.findByRole("radio", { name: platformName }));
+  }
   const next = screen.getByRole("button", { name: "Continue" });
   await waitFor(() => expect(next.hasAttribute("disabled")).toBe(false));
   fireEvent.click(next);
+}
+
+/** Names a new agent and stops on Credential, where its options are read. */
+async function reachCredentialChoice() {
+  setup();
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Release Bot" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  await screen.findByRole("heading", { name: "Credential" });
 }
 
 async function reachCredentialStep() {
@@ -285,6 +312,7 @@ async function reachCredentialStep() {
     target: { value: "Release Bot" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  await passCredentialStep();
   fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   await continueFromAuthentication();
@@ -397,12 +425,12 @@ describe("Provisioning a new agent", () => {
     ).toBeNull();
   });
 
-  it("starts a named platform's draft over at its servers", async () => {
+  it("starts a named platform's draft over at its credential", async () => {
     mocks.platforms.mockReturnValue([platform]);
     setup(platform.key, "/?step=3");
 
     expect(
-      await screen.findByRole("heading", { name: "MCP Selection" }),
+      await screen.findByRole("heading", { name: "Credential" }),
     ).toBeTruthy();
     expect(mocks.createAgent).not.toHaveBeenCalled();
   });
@@ -419,6 +447,7 @@ describe("Provisioning a new agent", () => {
       target: { value: "Release Bot" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await passCredentialStep();
 
     await screen.findByRole("heading", { name: "MCP Selection" });
     expect(
@@ -573,12 +602,11 @@ async function reachPlatformSetup() {
     target: { value: "Release Bot" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  await passCredentialStep(/Claude Tag/);
   fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   await continueFromAuthentication();
   // A preset sits beside the API key, so it is one choice, not two.
-  fireEvent.click(await screen.findByRole("radio", { name: /Claude Tag/ }));
-  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   // The platform's own steps are steps of this wizard, so its first one is
   // simply the next screen.
   return screen.findByRole("heading", {
@@ -630,10 +658,7 @@ describe("Federating a platform's own tokens", () => {
     async (_case, unavailable) => {
       mocks.platforms.mockReturnValue([unavailable]);
       setup(unavailable.key);
-      fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
-      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-
-      await continueFromAuthentication();
+      await screen.findByRole("heading", { name: "Credential" });
       expect(await screen.findByText("Unavailable")).toBeTruthy();
       expect(screen.getByText(platform.description)).toBeTruthy();
       expect(screen.queryByRole("radio", { name: /Claude Tag/ })).toBeNull();
@@ -662,7 +687,7 @@ describe("Federating a platform's own tokens", () => {
   it("keeps the credential to API keys without permission to trust a platform", async () => {
     mocks.canFederate = false;
     mocks.platforms.mockReturnValue([platform]);
-    await reachCredentialStep();
+    await reachCredentialChoice();
 
     // The presets and the custom issuer stay on screen, so the reader learns
     // they exist, but none of them can be taken.
@@ -685,7 +710,7 @@ describe("Federating a platform's own tokens", () => {
     mocks.canFederate = false;
     mocks.canReadWorkloads = false;
     mocks.platforms.mockReturnValue([platform]);
-    await reachCredentialStep();
+    await reachCredentialChoice();
 
     expect(screen.queryByRole("radio", { name: /Claude Tag/ })).toBeNull();
     expect(screen.queryByText(/could not be loaded/)).toBeNull();
@@ -699,7 +724,7 @@ describe("Federating a platform's own tokens", () => {
 
   it("names the platforms still to come once the catalog has answered", async () => {
     mocks.platforms.mockReturnValue([platform]);
-    await reachCredentialStep();
+    await reachCredentialChoice();
 
     expect(
       screen.getByText(
@@ -710,7 +735,7 @@ describe("Federating a platform's own tokens", () => {
 
   it("names no platform as coming soon while the catalog loads", async () => {
     mocks.platformsStatus = "pending";
-    await reachCredentialStep();
+    await reachCredentialChoice();
 
     expect(screen.getByText("Loading platforms…")).toBeTruthy();
     expect(screen.queryByText(/Coming soon/)).toBeNull();
@@ -718,7 +743,7 @@ describe("Federating a platform's own tokens", () => {
 
   it("still offers the custom issuer when the presets fail to load", async () => {
     mocks.platformsStatus = "error";
-    await reachCredentialStep();
+    await reachCredentialChoice();
 
     expect(screen.getByRole("alert").textContent).toContain(
       "A custom OIDC issuer, under Advanced, still works.",
@@ -732,7 +757,7 @@ describe("Federating a platform's own tokens", () => {
   });
 
   it("keeps the advanced options open while the custom issuer is chosen", async () => {
-    await reachCredentialStep();
+    await reachCredentialChoice();
     const advanced = screen.getByRole("button", { name: /^Advanced:/ });
     expect(advanced.getAttribute("aria-expanded")).toBe("false");
 
@@ -754,10 +779,7 @@ describe("Federating a platform's own tokens", () => {
     mocks.canFederate = false;
     mocks.platforms.mockReturnValue([platform]);
     setup(platform.key);
-    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-
-    await continueFromAuthentication();
+    await screen.findByRole("heading", { name: "Credential" });
     await screen.findByRole("radio", { name: /Claude Tag/ });
     expect(
       screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
@@ -862,11 +884,10 @@ describe("Connecting a GKE cluster", () => {
       target: { value: "Billing Worker" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await passCredentialStep(/GKE/);
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await continueFromAuthentication();
-    fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("heading", { name: "Your cluster" });
 
     for (const [label, value] of [
@@ -944,6 +965,7 @@ describe("Connecting a GKE cluster", () => {
       target: { value: "Review Agent" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await passCredentialStep(/GKE/);
     for (const server of servers) {
       fireEvent.click(
         await screen.findByRole("checkbox", { name: server.name }),
@@ -951,8 +973,6 @@ describe("Connecting a GKE cluster", () => {
     }
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await continueFromAuthentication();
-    fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("heading", { name: "Your cluster" });
     for (const [label, value] of [
       ["Project ID", "example-project"],
@@ -1121,6 +1141,7 @@ describe("Agent project", () => {
       target: { value: "Project bound" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await passCredentialStep();
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await continueFromAuthentication();
@@ -1143,6 +1164,7 @@ describe("Agent project", () => {
       target: { value: "No project yet" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await passCredentialStep();
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await continueFromAuthentication();
@@ -1161,6 +1183,7 @@ describe("Agent project", () => {
       target: { value: "Everything here" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await passCredentialStep();
     fireEvent.click(await enabledAllServers());
 
     // The individual rows are not the choice, so counting them would read as
@@ -1178,6 +1201,7 @@ describe("Agent project", () => {
       target: { value: "Everything here" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await passCredentialStep();
 
     const all = await screen.findByRole("checkbox", { name: "All servers" });
     expect(
@@ -1268,6 +1292,7 @@ describe("Agent project", () => {
       target: { value: "Some servers" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await passCredentialStep();
 
     expect(
       await screen.findByText(
@@ -1303,6 +1328,7 @@ describe("Agent project", () => {
       target: { value: "Unchecked" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await passCredentialStep();
     expect(
       await screen.findByText("Could not check which servers you can reach."),
     ).toBeTruthy();
@@ -1330,6 +1356,7 @@ describe("Agent project", () => {
         target: { value: "Rechecked access" },
       });
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      await passCredentialStep();
       await enabledAllServers();
       fireEvent.click(screen.getByRole("checkbox", { name: selection }));
       const next = screen.getByRole("button", {
@@ -1385,6 +1412,7 @@ describe("Agent project", () => {
       target: { value: "Waiting for access" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await passCredentialStep();
 
     const all = await screen.findByRole("checkbox", { name: "All servers" });
     expect(all.hasAttribute("disabled")).toBe(true);
@@ -1434,6 +1462,7 @@ describe("Agent project", () => {
       target: { value: "Several batches" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await passCredentialStep();
     await screen.findByText("Could not check which servers you can reach.");
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Server 100" }));
@@ -1482,6 +1511,7 @@ describe("Agent project", () => {
       target: { value: "Everything here" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await passCredentialStep();
 
     const all = await screen.findByRole("checkbox", { name: "All servers" });
     expect(
@@ -1504,6 +1534,7 @@ describe("Agent project", () => {
       target: { value: "Everything here" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await passCredentialStep();
     fireEvent.click(await enabledAllServers());
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await continueFromAuthentication();
@@ -2504,12 +2535,13 @@ describe("Servers that sign in as a person", () => {
     updatedAt: new Date(),
   };
 
-  async function reachServers() {
+  async function reachServers(platformName?: RegExp) {
     setup();
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Release Bot" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await passCredentialStep(platformName);
     await screen.findByRole("heading", { name: "MCP Selection" });
     await screen.findByRole("checkbox", { name: "Linear" });
   }
@@ -2610,12 +2642,10 @@ describe("Servers that sign in as a person", () => {
   it("attaches a personal connection before admitting a workload identity", async () => {
     mocks.sessions.mockResolvedValue([mine]);
     mocks.platforms.mockReturnValue([gke]);
-    await reachServers();
+    await reachServers(/GKE/);
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await continueFromAuthentication();
-    fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("heading", { name: "Your cluster" });
     for (const [label, value] of [
       ["Project ID", "example-project"],
@@ -2683,7 +2713,7 @@ describe("Servers that sign in as a person", () => {
       fireEvent.click(server);
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
       await screen.findByRole("heading", { name: "MCP Authentication" });
-      const next = screen.getByRole("button", { name: "Continue" });
+      const next = screen.getByRole("button", { name: "Create agent" });
       await waitFor(() => expect(next.hasAttribute("disabled")).toBe(true));
       fireEvent.click(next);
       expect(mocks.createAgent).not.toHaveBeenCalled();
@@ -2716,9 +2746,6 @@ describe("Servers that sign in as a person", () => {
       );
       await waitFor(() => expect(next.hasAttribute("disabled")).toBe(false));
       fireEvent.click(next);
-      fireEvent.click(
-        await screen.findByRole("button", { name: "Create agent" }),
-      );
       await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
       expect(mocks.attach).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -2744,7 +2771,9 @@ describe("Servers that sign in as a person", () => {
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Remove Linear" })).toBeNull();
     expect(
-      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+      screen
+        .getByRole("button", { name: "Create agent" })
+        .hasAttribute("disabled"),
     ).toBe(true);
     expect(mocks.createAgent).not.toHaveBeenCalled();
   });

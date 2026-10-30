@@ -208,7 +208,7 @@ it("explains when none of the agent's servers has a shared issuer instead of off
   expect(result.current.values).toBeUndefined();
   expect(result.current.endpointGroups).toEqual([]);
   expect(result.current.unavailableReason).toMatch(
-    /None of the servers below signs in through a user session issuer with a shared authorization server/,
+    /None of the servers below uses an MCP authentication provider that can give tokens to agents/,
   );
   expect(result.current.uncoveredServers).toEqual([
     {

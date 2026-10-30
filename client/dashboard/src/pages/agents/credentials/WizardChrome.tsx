@@ -20,18 +20,18 @@ type WizardStepState = "done" | "current" | "todo";
 export function WizardStepper({
   steps,
   current,
-  settledFrom,
+  settled,
   forward = false,
   onJump,
 }: {
   steps: { label: string; short: string }[];
   current: number;
   /**
-   * Steps from here on are already settled, however far along the reader
-   * is: editing an agent that already holds a credential has nothing left
-   * to do in the steps that set one up.
+   * Steps already settled, however far along the reader is: editing an agent
+   * that already holds a credential has nothing left to do in the steps that
+   * set one up.
    */
-  settledFrom?: number;
+  settled?: (index: number) => boolean;
   /** Whether a step ahead of the current one can be jumped to. */
   forward?: boolean;
   onJump: (index: number) => void;
@@ -74,8 +74,7 @@ export function WizardStepper({
         const state: WizardStepState =
           index === current
             ? "current"
-            : index < current ||
-                (settledFrom !== undefined && index >= settledFrom)
+            : index < current || (settled?.(index) ?? false)
               ? "done"
               : "todo";
         // A step behind gives up its name once the row is full: it is done,
