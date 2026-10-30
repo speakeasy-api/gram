@@ -304,9 +304,9 @@ WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
   AND u.mcp_server_id = @linear_server_id::uuid
   AND u.auth_client_id = @auth_client_id::uuid;
 
--- The identity-bound assistant's person-backed turns use the shared token on
--- Linear, by an administrator's choice in the profile's latest version, and
--- the token is still enabled and offered there.
+-- The identity-bound assistant's person-backed and userless turns use the
+-- shared token on Linear, by an administrator's choice in each profile's
+-- latest version, and the token is still enabled and offered there.
 -- name: PostflightIDExecutionProfileChoices :one
 SELECT count(*)
 FROM upstream_client_selections u
@@ -329,7 +329,7 @@ WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
   AND u.credential_kind = 'execution_profile_version'
   AND u.source = 'admin'
   AND p.assistant_id = @assistant_id::uuid
-  AND p.execution_context = 'user_backed'
+  AND p.execution_context IN ('user_backed', 'userless')
   AND u.mcp_server_id = @linear_server_id::uuid
   AND u.auth_client_id = @auth_client_id::uuid;
 
