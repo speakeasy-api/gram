@@ -132,15 +132,17 @@ function CompactMessageRow({
   const textRef = useRef<HTMLParagraphElement>(null);
   const riskResults = ctx.riskResultsByMessage.get(row.message.id);
   const hasDetailedRisk = (riskResults?.length ?? 0) > 0;
+  const isUser = row.entryType === "user";
   const rawText = messageText(row.message.content);
-  // Preview the request OpenClaw wrapped, not its context. A flagged row keeps
-  // the full text so a finding inside the context stays highlighted.
-  const openClaw = hasDetailedRisk ? null : parseOpenClawContext(rawText);
+  // Preview the request OpenClaw wrapped, not its context. Only user turns
+  // carry the wrapper, and a flagged row keeps the full text so a finding
+  // inside the context stays highlighted.
+  const openClaw =
+    isUser && !hasDetailedRisk ? parseOpenClawContext(rawText) : null;
   const text = openClaw?.request ?? rawText;
   const flagged = rowHasRiskFlag(row) || hasDetailedRisk;
   const sensitive = hasDetailedRisk && resultsAreSensitive(riskResults!);
   const { revealed, setRevealed } = useRowReveal(sensitive);
-  const isUser = row.entryType === "user";
   const displayId = ctx.userLabelOverride ?? ctx.userLabel;
   const matches = hasDetailedRisk ? getMatchStrings(riskResults!) : [];
 
