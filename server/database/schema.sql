@@ -6789,6 +6789,12 @@ ON chat_content_parts (chat_id);
 CREATE INDEX IF NOT EXISTS chats_project_id_created_at_id_idx
 ON chats (project_id, created_at, id);
 
+-- Serves the team memory summary sweep, which finds an organization's chats
+-- that went idle since their last masked summary, newest first.
+CREATE INDEX IF NOT EXISTS chats_memory_summary_sweep_idx
+ON chats (organization_id, updated_at DESC)
+WHERE deleted IS FALSE AND memory_excluded_at IS NULL;
+
 -- Per-(organization, judge) switches and budgets for the chat analysis
 -- pipeline (the generalized session judges: work units and whatever comes
 -- after it). One row per judge rather than one column per judge, so enabling a
