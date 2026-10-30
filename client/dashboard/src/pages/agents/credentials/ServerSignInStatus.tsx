@@ -16,9 +16,13 @@ import type { ServerSignIn, SetupValues } from "./workloadTokenEndpoints";
  */
 export function SignInPicker({
   setupValues,
+  serversUsing,
 }: {
   setupValues: SetupValues;
+  /** The names of the servers each provider already serves, by its id. */
+  serversUsing: (providerId: string) => string[];
 }): JSX.Element {
+  const describe = (providerId: string) => usedByLine(serversUsing(providerId));
   if (setupValues.loadState === "loading") {
     return (
       <Text muted small>
@@ -43,13 +47,30 @@ export function SignInPicker({
   }
   return (
     <Stack gap={1}>
-      <SignInSelect setupValues={setupValues} id="mcp-selection-sign-in" />
+      <SignInSelect
+        setupValues={setupValues}
+        id="mcp-selection-sign-in"
+        describe={describe}
+      />
+      {setupValues.selectedEndpointId && (
+        <Text small>{describe(setupValues.selectedEndpointId)}</Text>
+      )}
       <Text muted small>
         The agent gets one token, which works at the servers that use this
         provider.
       </Text>
     </Stack>
   );
+}
+
+/** Names the servers a provider serves, the first few and a count after. */
+function usedByLine(names: string[]): string {
+  if (names.length === 0) return "No servers use it yet";
+  const shown = names.slice(0, 3);
+  const rest = names.length - shown.length;
+  if (rest > 0) return `Used by ${shown.join(", ")} and ${rest} more`;
+  if (shown.length === 1) return `Used by ${shown[0]}`;
+  return `Used by ${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}`;
 }
 
 /** One line under a server's name saying how it signs in. */

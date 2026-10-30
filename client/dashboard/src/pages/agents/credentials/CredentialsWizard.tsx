@@ -1417,7 +1417,15 @@ export function CredentialsWizard({
               }}
               intro={
                 credential === "workload" ? (
-                  <SignInPicker setupValues={signIn} />
+                  <SignInPicker
+                    setupValues={signIn}
+                    serversUsing={(providerId) =>
+                      inventory.servers
+                        .filter((server) => server.issuerId === providerId)
+                        .map((server) => server.name)
+                        .sort((a, b) => a.localeCompare(b))
+                    }
+                  />
                 ) : undefined
               }
               signInNote={

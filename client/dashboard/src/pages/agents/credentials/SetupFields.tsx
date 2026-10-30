@@ -115,9 +115,12 @@ export function TextField({
 export function SignInSelect({
   setupValues,
   id,
+  describe,
 }: {
   setupValues: SetupValues;
   id: string;
+  /** A line under each provider in the list, such as the servers using it. */
+  describe?: (providerId: string) => string;
 }): JSX.Element {
   return (
     <Stack gap={2}>
@@ -134,7 +137,11 @@ export function SignInSelect({
             <SelectGroup key={group.label}>
               <SelectLabel>{group.label}</SelectLabel>
               {group.options.map((option) => (
-                <SelectItem key={option.id} value={option.id}>
+                <SelectItem
+                  key={option.id}
+                  value={option.id}
+                  description={describe?.(option.id)}
+                >
                   {option.label}
                 </SelectItem>
               ))}

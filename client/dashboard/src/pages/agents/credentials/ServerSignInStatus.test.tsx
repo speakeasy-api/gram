@@ -1,6 +1,11 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { ServerSignInAction, ServerSignInNote } from "./ServerSignInStatus";
+import {
+  ServerSignInAction,
+  ServerSignInNote,
+  SignInPicker,
+} from "./ServerSignInStatus";
+import type { SetupValues } from "./workloadTokenEndpoints";
 
 vi.mock("./SetupFields", () => ({
   ServerSignInSettingsLink: () => (
@@ -89,4 +94,37 @@ it("has no fix for a server the token already works at", () => {
     />,
   );
   expect(container.textContent).toBe("");
+});
+
+function pickerValues(selectedEndpointId: string): SetupValues {
+  return {
+    unavailableReason: null,
+    loadState: "ready",
+    endpointGroups: [
+      { label: "Organization", options: [{ id: "org", label: "org" }] },
+    ],
+    selectedEndpointId,
+    onEndpointChange: vi.fn<(id: string) => void>(),
+    refreshAndSelect: vi.fn<(id: string) => Promise<void>>(),
+    coveredServers: [],
+    uncoveredServers: [],
+    signInOf: () => ({ status: "no_sign_in" }),
+  };
+}
+
+it.each([
+  [[], "No servers use it yet"],
+  [["GitHub", "Linear"], "Used by GitHub and Linear"],
+  [
+    ["GitHub", "Linear", "Notion", "Slack"],
+    "Used by GitHub, Linear, Notion and 1 more",
+  ],
+])("names the servers the selected provider serves (%j)", (names, line) => {
+  render(
+    <SignInPicker
+      setupValues={pickerValues("org")}
+      serversUsing={() => names}
+    />,
+  );
+  expect(screen.getByText(line)).toBeTruthy();
 });
