@@ -190,7 +190,7 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			if config.ProviderMutationsEnabled && encryptionClient == nil {
 				return errors.New("private ingress encryption key is required when provider mutations are enabled")
 			}
-			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, serviceEnv, "", "")
+			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, serviceEnv, "", "", "")
 			if err != nil {
 				return fmt.Errorf("create Kubernetes client: %w", err)
 			}
