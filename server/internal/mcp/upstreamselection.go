@@ -105,7 +105,9 @@ func (u *upstreamSelector) credentialKindOrDefault() string {
 // resolves that user's own connection, never its agent's or the agent
 // owner's; admission binds the same user as the represented user, so the
 // auth client check matches the connection's owner against them. Every other
-// caller resolves its own.
+// caller resolves its own: an agent API key or agent session reaches its
+// authorizer's personal connection only through the exact connection
+// attached to the agent, whose owner the agent's mcp:auth check names.
 func connectionSubject(ctx context.Context, subject urn.SessionSubject) urn.SessionSubject {
 	authenticated, ok := principalcredential.FromContext(ctx)
 	if !ok || authenticated.Credential.AuthorizerUserID == "" {

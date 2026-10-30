@@ -279,18 +279,20 @@ func TestAdmittedAgentAuthClientUsesTheAttachedConnectionOwner(t *testing.T) {
 		authorizer []authz.Grant
 		outcome    authClientOutcome
 		shadow     string
+		stale      bool
 	}{
-		{"the represented user's attachment serves", "user_owner", func(uuid.UUID) []authz.Grant { return []authz.Grant{personal} }, []authz.Grant{personal}, authClientResolved, "allow"},
+		{"the represented user's attachment serves", "user_owner", func(uuid.UUID) []authz.Grant { return []authz.Grant{personal} }, []authz.Grant{personal}, authClientResolved, "allow", false},
 		{"an owner block on that connection refuses", "user_owner", func(client uuid.UUID) []authz.Grant {
 			return []authz.Grant{personal, authz.NewGrantWithSelector(authz.ScopeMCPBlockedAuth, authz.Selector{
 				authz.SelectorKeyResourceKind: authz.ResourceKindMCPAuthClient, authz.SelectorKeyResourceID: client.String(),
 				authz.SelectorKeyClientType: authz.AuthClientTypeRemoteSession, authz.SelectorKeyConnectionOwner: "user_owner",
 			})}
-		}, []authz.Grant{personal}, authClientNoAccess, "deny"},
+		}, []authz.Grant{personal}, authClientNoAccess, "deny", false},
 		{"another lender's attachment refuses", "user_lender", func(uuid.UUID) []authz.Grant {
 			return []authz.Grant{personal, authz.NewGrant(authz.ScopeMCPAuth, authz.WildcardResource)}
-		}, []authz.Grant{personal, authz.NewGrant(authz.ScopeMCPAuth, authz.WildcardResource)}, authClientNoAccess, "deny"},
-		{"the represented user's own policy must allow", "user_owner", func(uuid.UUID) []authz.Grant { return []authz.Grant{personal} }, []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)}, authClientNoAccess, "deny"},
+		}, []authz.Grant{personal, authz.NewGrant(authz.ScopeMCPAuth, authz.WildcardResource)}, authClientNoAccess, "deny", false},
+		{"the represented user's own policy must allow", "user_owner", func(uuid.UUID) []authz.Grant { return []authz.Grant{personal} }, []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)}, authClientNoAccess, "deny", false},
+		{"a stale attachment serves no connection", "user_owner", func(uuid.UUID) []authz.Grant { return []authz.Grant{personal} }, []authz.Grant{personal}, authClientNoAccess, "deny", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -310,7 +312,7 @@ func TestAdmittedAgentAuthClientUsesTheAttachedConnectionOwner(t *testing.T) {
 			})
 			f.service.authClientPermitter = mandatoryPermitter{engine: f.service.authz}
 			session := uuid.New()
-			lookup := &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: session, OwnerUserID: tc.owner}, attached: true, err: nil, asked: nil}
+			lookup := &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: session, OwnerUserID: tc.owner}, attached: !tc.stale, err: nil, asked: nil}
 			f.service.attachedConnections = lookup
 			agentID := uuid.New()
 			agent := urn.NewAgentSubject(agentID)

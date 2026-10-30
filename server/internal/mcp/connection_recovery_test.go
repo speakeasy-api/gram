@@ -346,8 +346,11 @@ func TestPersonBackedTurnsUseTheirPersonsOwnConnection(t *testing.T) {
 	workloadSubject := urn.NewWorkloadSubject(workloadIssuer, workloadExternal)
 	require.Equal(t, workloadSubject, mcp.ConnectionSubject(mint(workload, ""), workloadSubject), "a turn acting for nobody resolves no person's connection")
 
-	// An agent API key's authorizer is the user who created the key, not a
-	// person a turn acts for, so the key keeps resolving its own connection.
+	// An agent API key reaches its creator's personal connection through the
+	// exact connection attached to the agent, checked by the agent's mcp:auth
+	// against that connection's owner
+	// (TestAdmittedAgentAuthClientUsesTheAttachedConnectionOwner), so its
+	// subject is not replaced here, which would bypass that attachment.
 	agentKey := contextvalues.WithPrincipalAPIKeyAuthorization(ctx, ac, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), contextvalues.PrincipalCredential{AuthorizerUserID: owner, DelegatedGrants: []byte("[]"), DelegatedGrantsVersion: 1, DerivesPolicyAtAdmission: false})
-	require.Equal(t, agentSubject, mcp.ConnectionSubject(agentKey, agentSubject), "an agent key never resolves its creator's personal connection")
+	require.Equal(t, agentSubject, mcp.ConnectionSubject(agentKey, agentSubject), "an agent key resolves through its exact attachment")
 }
