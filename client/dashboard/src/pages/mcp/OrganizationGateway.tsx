@@ -12,6 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { MCPAssignments } from "../access/MCPAssignments";
 import { GatewayAccessReview } from "./GatewayAccessReview";
+import { GatewayActivitySection } from "./gateway/GatewayActivitySection";
 import { SpeakeasyMark } from "@/components/mcp/OrganizationGatewayCard";
 import {
   GatewayNotServed,
@@ -87,7 +88,9 @@ function OrganizationGatewayContent({
       { replace: true },
     );
   const tab =
-    (["install", "assignments", "connections"].includes(selectedTab ?? "")
+    (["install", "assignments", "connections", "activity"].includes(
+      selectedTab ?? "",
+    )
       ? selectedTab
       : undefined) ?? (isOn === false && canManage ? "assignments" : "install");
   const endpointUrl =
@@ -185,6 +188,7 @@ function OrganizationGatewayContent({
             <PageTabsList>
               <PageTabsTrigger value="install">Install</PageTabsTrigger>
               <PageTabsTrigger value="connections">Connections</PageTabsTrigger>
+              <PageTabsTrigger value="activity">Activity</PageTabsTrigger>
               <RequireScope scope="org:admin" level="component">
                 <PageTabsTrigger value="assignments">
                   View assignments
@@ -206,6 +210,11 @@ function OrganizationGatewayContent({
           </TabsContent>
           <TabsContent value="connections" className="mt-6">
             <ClientsAndSessionsTab gateway={{}} issuerId={undefined} />
+          </TabsContent>
+          <TabsContent value="activity" className="mt-6">
+            <GatewayActivitySection
+              scope={{ kind: "organization", organizationId }}
+            />
           </TabsContent>
           <TabsContent value="assignments" className="mt-6">
             <RequireScope scope="org:admin" level="section">

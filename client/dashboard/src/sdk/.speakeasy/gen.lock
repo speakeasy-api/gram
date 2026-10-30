@@ -744,6 +744,8 @@ trackedFiles:
   src/funcs/telemetryGetMcpServerActivity.ts: {}
   src/funcs/telemetryGetMetaMcpServerUsage.ts: {}
   src/funcs/telemetryGetObservabilityOverview.ts: {}
+  src/funcs/telemetryGetOrganizationGatewayOverview.ts: {}
+  src/funcs/telemetryGetOrganizationGatewayUsage.ts: {}
   src/funcs/telemetryGetProjectMetricsSummary.ts: {}
   src/funcs/telemetryGetProjectOverview.ts: {}
   src/funcs/telemetryGetToolUsageClientToolBreakdown.ts: {}
@@ -1303,6 +1305,7 @@ trackedFiles:
   src/models/components/getmyconnectionsresult.ts: {}
   src/models/components/getobservabilityoverviewpayload.ts: {}
   src/models/components/getobservabilityoverviewresult.ts: {}
+  src/models/components/getorganizationgatewayactivitypayload.ts: {}
   src/models/components/getpluginsresult.ts: {}
   src/models/components/getprojectmetricssummarypayload.ts: {}
   src/models/components/getprojectoverviewresult.ts: {}
@@ -2530,6 +2533,8 @@ trackedFiles:
   src/models/operations/getonboardingstatus.ts: {}
   src/models/operations/getorganization.ts: {}
   src/models/operations/getorganizationgateway.ts: {}
+  src/models/operations/getorganizationgatewayoverview.ts: {}
+  src/models/operations/getorganizationgatewayusage.ts: {}
   src/models/operations/getorganizationremotesessionclient.ts: {}
   src/models/operations/getorganizationremotesessionclientdelegationstatus.ts: {}
   src/models/operations/getorganizationremotesessionclientdeletepreflight.ts: {}
@@ -3459,6 +3464,10 @@ trackedFiles:
   src/react-query/getMeterUsage.ts: {}
   src/react-query/getObservabilityOverview.core.ts: {}
   src/react-query/getObservabilityOverview.ts: {}
+  src/react-query/getOrganizationGatewayOverview.core.ts: {}
+  src/react-query/getOrganizationGatewayOverview.ts: {}
+  src/react-query/getOrganizationGatewayUsage.core.ts: {}
+  src/react-query/getOrganizationGatewayUsage.ts: {}
   src/react-query/getPaygBillingSummary.core.ts: {}
   src/react-query/getPaygBillingSummary.ts: {}
   src/react-query/getPeriodUsage.core.ts: {}
@@ -7975,6 +7984,28 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getOrganizationGatewayOverview:
+    speakeasy-default-get-organization-gateway-overview:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"comparison": {"avg_latency_ms": 4407.64, "avg_resolution_time_ms": 4108.28, "avg_session_duration_ms": 1005.15, "cache_creation_input_tokens": 992878, "cache_read_input_tokens": 561218, "failed_chats": 732481, "failed_tool_calls": 774298, "resolved_chats": 126008, "total_chats": 995626, "total_cost": 9437.16, "total_input_tokens": 635167, "total_output_tokens": 412118, "total_tokens": 547609, "total_tool_calls": 157554}, "interval_seconds": 886925, "summary": {"avg_latency_ms": 5963.61, "avg_resolution_time_ms": 550.45, "avg_session_duration_ms": 2517.5, "cache_creation_input_tokens": 152181, "cache_read_input_tokens": 922005, "failed_chats": 116030, "failed_tool_calls": 721187, "resolved_chats": 313129, "total_chats": 762259, "total_cost": 1775.82, "total_input_tokens": 884697, "total_output_tokens": 761650, "total_tokens": 780461, "total_tool_calls": 745274}, "time_series": [{"abandoned_chats": 355088, "avg_session_duration_ms": 2644.38, "avg_tool_latency_ms": 2801.4, "bucket_time_unix_nano": "<value>", "cache_creation_input_tokens": 878095, "cache_read_input_tokens": 31086, "failed_chats": 371397, "failed_tool_calls": 955190, "partial_chats": 357193, "resolved_chats": 141415, "total_chats": 737914, "total_cost": 6269.18, "total_input_tokens": 715306, "total_output_tokens": 432309, "total_tokens": 926093, "total_tool_calls": 332105}], "top_tools_by_count": [], "top_tools_by_failure_rate": [{"avg_latency_ms": 2689.9, "call_count": 955811, "failure_count": 111841, "failure_rate": 9006.17, "gram_urn": "<value>", "success_count": 933853}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getOrganizationGatewayUsage:
+    speakeasy-default-get-organization-gateway-usage:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"funnel": {"describe_server": 857003, "describe_tools": 512222, "execute_tool": 641796, "list_servers": 84616}, "members": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getOrganizationRemoteSessionClient:
     speakeasy-default-get-organization-remote-session-client:
       parameters:
@@ -9413,6 +9444,7 @@ examples:
       parameters:
         query:
           agent_id: "5aaf7be9-796f-4e39-a5a2-5465df7b9715"
+          carry_exclusions: false
       responses:
         "200":
           application/json: [{"effect": "allow", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "risk_policy"}}]

@@ -9313,7 +9313,7 @@ paths:
         name: AgentConnectionBlocks
   /rpc/agents.listDelegableGrants:
     get:
-      description: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.
+      description: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted unless carry_exclusions is set. Issuance revalidates every grant.
       operationId: listAgentDelegableGrants
       parameters:
         - allowEmptyValue: true
@@ -9344,6 +9344,14 @@ paths:
               type: string
             maxItems: 100
             type: array
+        - allowEmptyValue: true
+          description: Keep a wildcard candidate that a narrower exclusion overlaps, and return that exclusion beside it as a blocklist-scope grant, instead of omitting the candidate. Requesting both on a key needs delegated grants version 4 or later.
+          in: query
+          name: carry_exclusions
+          schema:
+            default: false
+            description: Keep a wildcard candidate that a narrower exclusion overlaps, and return that exclusion beside it as a blocklist-scope grant, instead of omitting the candidate. Requesting both on a key needs delegated grants version 4 or later.
+            type: boolean
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -71339,6 +71347,184 @@ paths:
       x-speakeasy-react-hook:
         name: GetObservabilityOverview
         type: query
+  /rpc/telemetry.getOrganizationGatewayOverview:
+    post:
+      description: Observability overview metrics for calls dispatched through the caller's Organization Gateway, across every project in the organization.
+      operationId: getOrganizationGatewayOverview
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetOrganizationGatewayActivityPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetObservabilityOverviewResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getOrganizationGatewayOverview telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: getOrganizationGatewayOverview
+      x-speakeasy-react-hook:
+        name: GetOrganizationGatewayOverview
+        type: query
+  /rpc/telemetry.getOrganizationGatewayUsage:
+    post:
+      description: Discovery funnel and per-server execution breakdown for the caller's Organization Gateway, across every project in the organization.
+      operationId: getOrganizationGatewayUsage
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetOrganizationGatewayActivityPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMetaMcpServerUsageResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getOrganizationGatewayUsage telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: getOrganizationGatewayUsage
+      x-speakeasy-react-hook:
+        name: GetOrganizationGatewayUsage
+        type: query
   /rpc/telemetry.getProjectMetricsSummary:
     post:
       description: Get aggregated metrics summary for an entire project
@@ -97227,6 +97413,23 @@ components:
         - top_tools_by_count
         - top_tools_by_failure_rate
         - interval_seconds
+    GetOrganizationGatewayActivityPayload:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Start time in ISO 8601 format
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        to:
+          type: string
+          description: End time in ISO 8601 format
+          example: "2025-12-19T11:00:00Z"
+          format: date-time
+      description: Time range for the caller's Organization Gateway activity
+      required:
+        - from
+        - to
     GetPluginsResult:
       type: object
       properties:
@@ -103692,6 +103895,9 @@ components:
           type: string
           description: The member's mcp_servers row id
           format: uuid
+        mcp_server_name:
+          type: string
+          description: Display name of the server. Set for Organization Gateway usage, whose servers span projects the caller may not have loaded.
         tool_calls:
           type: integer
           description: Tool calls dispatched to this member through the gateway

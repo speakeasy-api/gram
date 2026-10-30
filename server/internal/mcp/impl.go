@@ -897,7 +897,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/remote_login_callback", oops.BrowserErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
 
 	attachSharedAuthorizationServers(mux, service)
-	attachOrganizationGateway(mux, service)
+	attachOrganizationGateway(mux, service, metadataService)
 }
 
 // HandleRemoteLoginCallback is the chi handler at
@@ -1035,8 +1035,12 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 		}
 	}
 
-	return oops.E(oops.CodeMethodNotAllowed, nil, "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.")
+	return oops.E(oops.CodeMethodNotAllowed, nil, getServerMethodNotAllowedMessage)
 }
+
+// getServerMethodNotAllowedMessage answers a GET that opens no standalone
+// Streamable HTTP stream.
+const getServerMethodNotAllowedMessage = "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication."
 
 // ServesInstallPage reports whether HandleGetServer answers r with the HTML
 // install page. HTML takes precedence over SSE there, so such a request can
