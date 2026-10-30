@@ -31,7 +31,7 @@
             },
             "supportsDcr": {
               "type": "boolean",
-              "description": "Staff-curated record of whether the server's authorization server publishes an OAuth dynamic client registration endpoint. Native catalog listings use an explicit value for automatic-setup eligibility, overriding legacy discovery metadata; when absent, listings fall back to legacy discovery metadata. This is not proof of live OAuth readiness: installation still validates the server. Okta server suggestions default to per-user OAuth when true and treat absence as false."
+              "description": "Staff-curated record of whether the server's authorization server publishes an OAuth dynamic client registration endpoint. A true value is a positive automatic-setup eligibility hint. Missing or false values do not establish no-auth or manual setup; consult authSetup and authDiscoveryStatus. No other metadata namespace supplies a fallback. This is not proof of live OAuth readiness: installation still validates the server. Okta server suggestions default to per-user OAuth when true and treat absence as false."
             },
             "supportsCimd": {
               "type": "boolean",

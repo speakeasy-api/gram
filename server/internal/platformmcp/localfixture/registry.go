@@ -6,13 +6,12 @@ import (
 )
 
 const (
-	registryListPath    = "/v0.1/servers"
-	fixtureVersion      = "1.0.0"
-	fixtureToolName     = "local_fixture_status"
-	fixtureToolSummary  = "Returns deterministic local fixture status."
-	fixtureServerName   = "Local reviewed MCP fixture"
-	fixtureDescription  = "Synthetic reviewed Streamable HTTP MCP for local Platform MCP validation."
-	fixtureRegistryMeta = "com.pulsemcp/server-version"
+	registryListPath   = "/v0.1/servers"
+	fixtureVersion     = "1.0.0"
+	fixtureToolName    = "local_fixture_status"
+	fixtureToolSummary = "Returns deterministic local fixture status."
+	fixtureServerName  = "Local reviewed MCP fixture"
+	fixtureDescription = "Synthetic reviewed Streamable HTTP MCP for local Platform MCP validation."
 )
 
 type RegistryHTTP struct {
@@ -63,12 +62,6 @@ func (s *RegistryHTTP) entry() map[string]any {
 		"type":    "streamable-http",
 		"headers": []any{},
 	}
-	tool := map[string]any{
-		"name":        fixtureToolName,
-		"description": fixtureToolSummary,
-		"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
-		"annotations": map[string]any{"readOnlyHint": true},
-	}
 	return map[string]any{
 		"server": map[string]any{
 			"name":        CanonicalRef,
@@ -78,12 +71,13 @@ func (s *RegistryHTTP) entry() map[string]any {
 			"remotes":     []any{remote},
 		},
 		"_meta": map[string]any{
-			fixtureRegistryMeta: map[string]any{
+			"com.speakeasy.ai/catalog": map[string]any{
+				"authSetup":   "dcr",
+				"supportsDcr": true,
+			},
+			"io.modelcontextprotocol.registry/official": map[string]any{
 				"status":   "active",
 				"isLatest": true,
-				"remotes[0]": map[string]any{
-					"tools": []any{tool},
-				},
 			},
 		},
 	}

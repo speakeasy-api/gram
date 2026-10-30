@@ -402,9 +402,8 @@ func (declaringProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) 
 		Registry:  "Test Registry",
 		Specifier: "com.example/server",
 		Provenance: provenance.Provenance{
-			Catalogued: true, Official: true, Status: "active", IsLatest: true,
+			Catalogued: true, Status: "active", IsLatest: new(true),
 			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
-			VisitorsLastWeek: 120, VisitorsLastFourWeeks: 480, VisitorsTotal: 9000,
 		},
 		Tools: nil,
 	}, nil
@@ -428,9 +427,8 @@ func (cataloguedOnlyProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ b
 		Registry:  "Test Registry",
 		Specifier: "com.example/server",
 		Provenance: provenance.Provenance{
-			Catalogued: true, Official: true, Status: "active", IsLatest: true,
+			Catalogued: true, Status: "active", IsLatest: new(true),
 			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
-			VisitorsLastWeek: 120, VisitorsLastFourWeeks: 480, VisitorsTotal: 9000,
 		},
 		Tools: []capability.Declaration{
 			{
@@ -470,7 +468,8 @@ func TestAssemble_RegistryCopyFillsCapabilitiesWhenServerRefuses(t *testing.T) {
 	prov, ok := doc["provenance"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, true, prov["catalogued"])
-	require.Equal(t, true, prov["official"])
+	require.NotContains(t, prov, "official")
+	require.NotContains(t, prov, "visitors_total")
 	require.Equal(t, "Test Registry", prov["registry"])
 
 	gaps, _ := doc["gaps"].([]any)
@@ -495,9 +494,8 @@ func (cataloguedNoToolMetadata) Lookup(_ context.Context, _ uuid.UUID, _ string,
 		Registry:  "Test Registry",
 		Specifier: "com.example/server",
 		Provenance: provenance.Provenance{
-			Catalogued: true, Official: false, Status: "active", IsLatest: true,
+			Catalogued: true, Status: "active", IsLatest: new(true),
 			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
-			VisitorsLastWeek: 0, VisitorsLastFourWeeks: 0, VisitorsTotal: 0,
 		},
 		Tools: nil,
 	}, nil

@@ -1,20 +1,12 @@
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import type { Category } from "../CategoryTabs";
-import type {
-  AuthType,
-  FilterValues,
-  PopularityThreshold,
-  ToolBehavior,
-  ToolCountThreshold,
-  UpdatedRange,
-} from "../filter-defaults";
+import type { AuthType, FilterValues, UpdatedRange } from "../filter-defaults";
 
 /**
  * Sort options for the catalog listing.
  */
 export type SortOption =
-  | "popular"
   | "recent"
   | "updated"
   | "alphabetical"
@@ -30,22 +22,21 @@ export interface FilterState {
 }
 
 const VALID_SORT_OPTIONS: readonly SortOption[] = [
-  "popular",
   "recent",
   "updated",
   "alphabetical",
   "alphabetical-desc",
 ];
 
-const VALID_CATEGORIES: readonly Category[] = ["all", "popular"];
+const VALID_CATEGORIES: readonly Category[] = ["all"];
 
 const VALID_AUTH_TYPES: readonly AuthType[] = [
   "none",
   "apikey",
   "oauth",
   "other",
+  "unknown",
 ];
-const VALID_BEHAVIORS: readonly ToolBehavior[] = ["readonly", "write"];
 const VALID_UPDATED_RANGES: readonly UpdatedRange[] = [
   "any",
   "week",
@@ -56,14 +47,7 @@ const VALID_UPDATED_RANGES: readonly UpdatedRange[] = [
 /**
  * Hook to manage filter state with URL synchronization.
  *
- * URL param schema:
- * - category: "all" | "popular" | "official" | "safe" | "no-auth"
- * - sort: "popular" | "recent" | "updated" | "alphabetical" | "alphabetical-desc"
- * - auth: comma-separated auth types
- * - behavior: comma-separated behaviors
- * - minUsers: number
- * - updated: "any" | "week" | "month" | "year"
- * - minTools: number
+ * Only native-evidence filters are supported; retired URL filters are ignored.
  */
 export interface UseFilterStateReturn extends FilterState {
   setCategory: (category: Category) => void;
@@ -91,7 +75,7 @@ export function useFilterState(): UseFilterStateReturn {
       sortParam as SortOption,
     )
       ? (sortParam as SortOption)
-      : "popular";
+      : "alphabetical";
 
     // Auth types
     const authParam = searchParams.get("auth");
@@ -103,23 +87,6 @@ export function useFilterState(): UseFilterStateReturn {
           ) as AuthType[])
       : [];
 
-    // Tool behaviors
-    const behaviorParam = searchParams.get("behavior");
-    const toolBehaviors: ToolBehavior[] = behaviorParam
-      ? (behaviorParam
-          .split(",")
-          .filter((b) =>
-            VALID_BEHAVIORS.includes(b as ToolBehavior),
-          ) as ToolBehavior[])
-      : [];
-
-    // Popularity
-    const minUsersParam = searchParams.get("minUsers");
-    const minUsers: PopularityThreshold =
-      minUsersParam && [0, 100, 1000, 10000].includes(Number(minUsersParam))
-        ? (Number(minUsersParam) as PopularityThreshold)
-        : 0;
-
     // Updated range
     const updatedParam = searchParams.get("updated");
     const updatedRange: UpdatedRange = VALID_UPDATED_RANGES.includes(
@@ -128,22 +95,12 @@ export function useFilterState(): UseFilterStateReturn {
       ? (updatedParam as UpdatedRange)
       : "any";
 
-    // Tool count
-    const minToolsParam = searchParams.get("minTools");
-    const minTools: ToolCountThreshold =
-      minToolsParam && [0, 5, 10].includes(Number(minToolsParam))
-        ? (Number(minToolsParam) as ToolCountThreshold)
-        : 0;
-
     return {
       category,
       sort,
       filters: {
         authTypes,
-        toolBehaviors,
-        minUsers,
         updatedRange,
-        minTools,
         // The granular filters (incl. setup) flow through the unified filter
         // system in Catalog.tsx; this legacy hook only supplies category/sort.
         setupTypes: [],
@@ -167,7 +124,7 @@ export function useFilterState(): UseFilterStateReturn {
           }
 
           if (updates.sort !== undefined) {
-            if (updates.sort === "popular") {
+            if (updates.sort === "alphabetical") {
               params.delete("sort");
             } else {
               params.set("sort", updates.sort);
@@ -184,32 +141,11 @@ export function useFilterState(): UseFilterStateReturn {
               params.delete("auth");
             }
 
-            // Behaviors
-            if (f.toolBehaviors.length > 0) {
-              params.set("behavior", f.toolBehaviors.join(","));
-            } else {
-              params.delete("behavior");
-            }
-
-            // Popularity
-            if (f.minUsers > 0) {
-              params.set("minUsers", String(f.minUsers));
-            } else {
-              params.delete("minUsers");
-            }
-
             // Updated range
             if (f.updatedRange !== "any") {
               params.set("updated", f.updatedRange);
             } else {
               params.delete("updated");
-            }
-
-            // Tool count
-            if (f.minTools > 0) {
-              params.set("minTools", String(f.minTools));
-            } else {
-              params.delete("minTools");
             }
           }
 

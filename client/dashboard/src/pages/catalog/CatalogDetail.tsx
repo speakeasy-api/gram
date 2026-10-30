@@ -10,7 +10,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { filterToHttpRemotes } from "@/pages/catalog/remotes";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import {
-  PulseMCPServer,
+  CatalogServer,
   useIsCatalogServerInstalled,
   useListMCPCatalog,
 } from "@/pages/catalog/hooks";
@@ -26,7 +26,6 @@ import { useMutation } from "@tanstack/react-query";
 import {
   ChevronDown,
   ChevronUp,
-  ExternalLink,
   Loader2,
   Minus,
   Plus,
@@ -56,7 +55,7 @@ export function CatalogDetailRoot(): JSX.Element {
 // that comes first, but guides are published per server rather than per
 // transport: an entry that only lists an SSE endpoint still has one, and would
 // find it under no other key when the guide publishes no registry alias.
-function primaryRemoteUrl(server: PulseMCPServer): string | undefined {
+function primaryRemoteUrl(server: CatalogServer): string | undefined {
   return (
     filterToHttpRemotes(server).remotes?.[0]?.url ?? server.remotes?.[0]?.url
   );
@@ -83,7 +82,7 @@ export default function CatalogDetail(): JSX.Element {
 
   const server = useMemo(() => {
     if (!data?.servers || !decodedSpecifier) return null;
-    const allServers = data.servers as PulseMCPServer[];
+    const allServers = data.servers as CatalogServer[];
     return (
       allServers.find((s) => s.registrySpecifier === decodedSpecifier) ?? null
     );
@@ -141,11 +140,9 @@ export default function CatalogDetail(): JSX.Element {
     },
   });
 
-  const meta = server?.meta?.["com.pulsemcp/server"];
-  const versionMeta = server?.meta?.["com.pulsemcp/server-version"];
+  const versionMeta =
+    server?.meta?.["io.modelcontextprotocol.registry/official"];
   const serverUrl = server ? primaryRemoteUrl(server) : undefined;
-  const isOfficial = meta?.isOfficial;
-  const visitorsTotal = meta?.visitorsEstimateLastFourWeeks;
   const displayName =
     server?.title ??
     server?.registrySpecifier?.split("/").pop() ??
@@ -234,9 +231,6 @@ export default function CatalogDetail(): JSX.Element {
     );
   }
 
-  const weeklyUsage = meta?.visitorsEstimateMostRecentWeek;
-  const totalUsage = meta?.visitorsEstimateTotal;
-
   return (
     <Page>
       <Page.Header>
@@ -283,7 +277,6 @@ export default function CatalogDetail(): JSX.Element {
                     className="mb-2"
                   >
                     <h1 className="text-display-sm font-thin">{displayName}</h1>
-                    {isOfficial && <Badge>Official</Badge>}
                     {versionMeta?.isLatest && (
                       <Badge variant="neutral">Latest</Badge>
                     )}
@@ -374,32 +367,6 @@ export default function CatalogDetail(): JSX.Element {
               <Card>
                 <Card.Content>
                   <div className="divide-y">
-                    {(weeklyUsage || visitorsTotal || totalUsage) && (
-                      <DetailGroup label="Usage">
-                        {weeklyUsage !== undefined && weeklyUsage > 0 && (
-                          <DetailRow label="This Week">
-                            <Text className="font-medium">
-                              {weeklyUsage.toLocaleString()}
-                            </Text>
-                          </DetailRow>
-                        )}
-                        {visitorsTotal !== undefined && visitorsTotal > 0 && (
-                          <DetailRow label="Monthly">
-                            <Text className="font-medium">
-                              {visitorsTotal.toLocaleString()}
-                            </Text>
-                          </DetailRow>
-                        )}
-                        {totalUsage !== undefined && totalUsage > 0 && (
-                          <DetailRow label="All Time">
-                            <Text className="font-medium">
-                              {totalUsage.toLocaleString()}
-                            </Text>
-                          </DetailRow>
-                        )}
-                      </DetailGroup>
-                    )}
-
                     <DetailGroup label="Version & Release">
                       <DetailRow label="Version">
                         <Text className="font-mono">{server.version}</Text>
@@ -427,25 +394,6 @@ export default function CatalogDetail(): JSX.Element {
                               versionMeta.updatedAt,
                             ).toLocaleDateString()}
                           </Text>
-                        </DetailRow>
-                      )}
-                      {versionMeta?.source && (
-                        <DetailRow label="Source">
-                          <a
-                            href={
-                              versionMeta.source.startsWith("http")
-                                ? versionMeta.source
-                                : `https://${versionMeta.source}`
-                            }
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary flex items-center gap-1 hover:underline"
-                          >
-                            <Text className="max-w-[150px] truncate text-right">
-                              {versionMeta.source}
-                            </Text>
-                            <ExternalLink className="h-3 w-3 shrink-0" />
-                          </a>
                         </DetailRow>
                       )}
                     </DetailGroup>

@@ -91,11 +91,11 @@ func TestCatalogSelectsExactlyOneSource(t *testing.T) {
 
 func TestDashboardDetailsRetainEveryRemote(t *testing.T) {
 	t.Parallel()
-	result, err := decodeDashboardDetails([]byte(`{"server":{"name":"example/server","version":"1","description":"full","title":"Full title","icons":[{"src":"https://example.test/icon.png"}],"remotes":[{"type":"sse","url":"https://example.test/sse"},{"type":"streamable-http","url":"https://example.test/mcp","headers":[{"name":"X-Token","description":"token","isRequired":true}]}]},"_meta":{"com.pulsemcp/server-version":{"remotes[1]":{"tools":[{"name":"search","description":"find","inputSchema":{"type":"object"}}]}}}}`), true)
+	result, err := decodeDashboardDetails([]byte(`{"server":{"name":"example/server","version":"1","description":"full","title":"Full title","icons":[{"src":"https://example.test/icon.png"}],"remotes":[{"type":"sse","url":"https://example.test/sse"},{"type":"streamable-http","url":"https://example.test/mcp","headers":[{"name":"X-Token","description":"token","isRequired":true}]}]},"_meta":{"com.pulsemcp/server-version":{"remotes[1]":{"tools":[{"name":"search","description":"find","inputSchema":{"type":"object"}}]}}}}`))
 	require.NoError(t, err)
 	require.Len(t, result.Remotes, 2)
 	require.Len(t, result.Remotes[1].Headers, 1)
-	require.Len(t, result.Tools, 1)
+	require.Nil(t, result.Tools)
 	require.Equal(t, "Full title", *result.Title)
 	require.Equal(t, "https://example.test/icon.png", *result.IconURL)
 	require.Contains(t, result.Meta, "com.pulsemcp/server-version")

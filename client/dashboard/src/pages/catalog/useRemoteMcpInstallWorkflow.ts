@@ -6,7 +6,7 @@ import {
 } from "@/lib/mcpEndpoints";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { getServerURL } from "@/lib/utils";
-import type { PulseMCPServer } from "@/pages/catalog/hooks";
+import type { CatalogServer } from "@/pages/catalog/hooks";
 import {
   collectibleHeaders,
   getRemoteDisplayInfo,
@@ -64,7 +64,7 @@ type InstallPhaseName =
   | "complete";
 
 export interface ServerConfig {
-  server: PulseMCPServer;
+  server: CatalogServer;
   name: string;
   /** Remote endpoints to install — one remote MCP server is created per URL. */
   remotes: ExternalMCPRemote[];
@@ -78,7 +78,7 @@ export interface ServerConfig {
 
 /** Configuration for a server with multiple remotes during the selectRemotes phase */
 interface MultiRemoteServerConfig {
-  server: PulseMCPServer;
+  server: CatalogServer;
   name: string;
   remotes: ExternalMCPRemote[];
   selectedRemoteUrls: Set<string>;
@@ -93,7 +93,7 @@ export interface ServerInstallStatus {
   key: string;
   name: string;
   /** The catalog entry this server was installed from, for its logo. */
-  server?: PulseMCPServer;
+  server?: CatalogServer;
   status: "pending" | "creating" | "completed" | "failed";
   /** mcp_servers row id — used by callers that bundle installs (e.g. plugins). */
   mcpServerId?: string;
@@ -117,7 +117,7 @@ interface WorkflowBase {
    * catalog server's endpoint URLs. Informational only — installing again just
    * creates another server.
    */
-  isServerAlreadyInstalled: (server: PulseMCPServer) => boolean;
+  isServerAlreadyInstalled: (server: CatalogServer) => boolean;
   reset: () => void;
 }
 
@@ -181,7 +181,7 @@ export interface GuardrailServerSummary {
   name: string;
   registrySpecifier: string;
   iconUrl?: string;
-  toolCount: number;
+  toolCount?: number;
   destructiveTools: string[];
   oauth: boolean;
 }
@@ -231,7 +231,7 @@ export type RemoteMcpInstallWorkflow =
   | CompletePhase;
 
 interface UseRemoteMcpInstallWorkflowOptions {
-  servers: PulseMCPServer[];
+  servers: CatalogServer[];
   projectSlug?: string;
   serverNameSuffix?: string;
   /**
@@ -255,7 +255,7 @@ export function headerValueKey(remoteUrl: string, headerName: string): string {
 }
 
 function buildServerConfig(
-  server: PulseMCPServer,
+  server: CatalogServer,
   serverNameSuffix = "",
 ): ServerConfig {
   return {
@@ -275,7 +275,7 @@ function buildServerConfig(
  * tellable apart.
  */
 interface InstallTarget {
-  server: PulseMCPServer;
+  server: CatalogServer;
   remote: ExternalMCPRemote;
   name: string;
   headers: Array<{ header: ExternalMCPRemoteHeader; value: string }>;
@@ -475,7 +475,7 @@ export function useRemoteMcpInstallWorkflow({
     ],
   );
   const isServerAlreadyInstalled = useCallback(
-    (server: PulseMCPServer) =>
+    (server: CatalogServer) =>
       (server.remotes ?? []).some((remote) =>
         installedUrls.has(normalizeRemoteUrl(remote.url)),
       ),
@@ -1187,7 +1187,7 @@ function guardrailServerSummary(config: ServerConfig): GuardrailServerSummary {
     name: config.name,
     registrySpecifier: config.server.registrySpecifier,
     ...(config.server.iconUrl ? { iconUrl: config.server.iconUrl } : {}),
-    toolCount: tools.length || config.server.toolCount,
+    toolCount: tools.length || undefined,
     destructiveTools: tools
       .filter((tool) => tool.destructive)
       .map((tool) => tool.name),
@@ -1197,7 +1197,7 @@ function guardrailServerSummary(config: ServerConfig): GuardrailServerSummary {
 
 /** The annotated tools of a catalog server, for pre-filling its guardrail.
  *  Empty until the catalog detail enrichment has loaded them. */
-function serverToolsForPreset(server: PulseMCPServer): ServerTool[] {
+function serverToolsForPreset(server: CatalogServer): ServerTool[] {
   return (server.tools ?? []).flatMap((tool) =>
     tool.name
       ? [

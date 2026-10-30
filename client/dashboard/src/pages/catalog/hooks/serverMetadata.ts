@@ -1,187 +1,89 @@
 import type { ExternalMCPServer } from "@gram/client/models/components/externalmcpserver.js";
-import type { PulseMCPServer } from "../hooks";
+import type { CatalogServer } from "../hooks";
 import type { SetupType } from "../filter-defaults";
 import type { FilterState } from "./useFilterState";
 
-/**
- * Parsed metadata from a server for display and filtering.
- */
 export interface ParsedServerMetadata {
-  // Usage stats
-  visitorsWeek: number;
-  visitorsMonth: number;
-  visitorsTotal: number;
-  /** Estimated weekly breakdown for sparkline (4 values, oldest to newest) */
-  weeklyData: number[];
-
-  // Status
-  isOfficial: boolean;
-  isLatest: boolean;
+  isLatest?: boolean;
   status?: string;
-
-  // Auth
-  authType: string;
+  authType: CatalogAuthType;
   authTypeDisplay: string;
-  /** The setup path supported by the available catalog evidence. */
   setupType: SetupType;
-
-  // Tools
-  toolCount: number;
-  isReadOnly: boolean;
-
-  // Dates
   publishedAt?: Date;
   updatedAt?: Date;
 }
 
-export function isPulseMcpServer(
+// Catalog responses may legitimately contain no optional metadata.
+export function isCatalogServer(
   server: ExternalMCPServer,
-): server is PulseMCPServer {
-  return !!server.meta;
+): server is CatalogServer {
+  return typeof server.registrySpecifier === "string";
+}
+
+function authSetup(server: CatalogServer) {
+  return (
+    server.authSetup ?? server.meta?.["com.speakeasy.ai/catalog"]?.authSetup
+  );
 }
 
 /** Automatic OAuth setup still verifies the live issuer during installation. */
-export function supportsAutomaticOAuth(server: PulseMCPServer): boolean {
-  return server.supportsDcr || server.supportsCimd === true;
+export function supportsAutomaticOAuth(server: CatalogServer): boolean {
+  const metadata = server.meta?.["com.speakeasy.ai/catalog"];
+  return (
+    server.supportsDcr ||
+    server.supportsCimd === true ||
+    metadata?.supportsDcr === true ||
+    metadata?.supportsCimd === true ||
+    authSetup(server) === "dcr" ||
+    authSetup(server) === "cimd"
+  );
 }
 
-/** Missing capability evidence is inconclusive, not a manual-setup requirement. */
-export function serverSetupType(server: PulseMCPServer): SetupType {
-  switch (server.authSetup) {
-    case "none":
-    case "dcr":
-    case "cimd":
-      return "auto";
-    case "manual":
-      return "manual";
-    case "unknown":
-    case undefined:
-      break;
-  }
-  if (supportsAutomaticOAuth(server)) return "auto";
-  const authType =
-    server.meta?.["com.pulsemcp/server-version"]?.[
-      "remotes[0]"
-    ]?.authOptions?.[0]?.type?.toLowerCase();
-  if (authType === "none") return "auto";
-  if (authType?.includes("api") || authType?.includes("key")) return "manual";
-  return "unknown";
+export function serverSetupType(server: CatalogServer): SetupType {
+  const setup = authSetup(server);
+  if (setup === "none" || setup === "dcr" || setup === "cimd") return "auto";
+  if (setup === "manual") return "manual";
+  return supportsAutomaticOAuth(server) ? "auto" : "unknown";
 }
 
-export function requiresManualSetup(server: PulseMCPServer): boolean {
+export function requiresManualSetup(server: CatalogServer): boolean {
   return serverSetupType(server) === "manual";
 }
 
-export type PulseMcpAuthType = "none" | "apikey" | "oauth" | "other";
+export type CatalogAuthType = "none" | "apikey" | "oauth" | "other" | "unknown";
 
-/**
- * Extract the authentication type from server metadata.
- */
-export function extractAuthType(server: PulseMCPServer): PulseMcpAuthType {
-  if (server.authSetup === "none") return "none";
-  if (["dcr", "cimd", "manual"].includes(server.authSetup ?? ""))
+export function extractAuthType(server: CatalogServer): CatalogAuthType {
+  if (authSetup(server) === "none") return "none";
+  if (authSetup(server) === "manual" || supportsAutomaticOAuth(server))
     return "oauth";
-  const versionMeta = server.meta?.["com.pulsemcp/server-version"];
-  const remote = versionMeta?.["remotes[0]"];
-  const authOptions = remote?.authOptions?.[0];
-
-  if (!authOptions || !authOptions.type) {
-    if (supportsAutomaticOAuth(server)) return "oauth";
-    return server.authSetup === "unknown" ? "other" : "none";
-  }
-
-  const authTypeLower = authOptions.type.toLowerCase();
-
-  if (authTypeLower === "none" || authTypeLower === "") {
-    return "none";
-  }
-  if (authTypeLower.includes("oauth")) {
-    return "oauth";
-  }
-  if (authTypeLower.includes("api") || authTypeLower.includes("key")) {
-    return "apikey";
-  }
-  return "other";
+  return "unknown";
 }
 
-/**
- * Get a human-readable display string for auth type.
- */
-function getAuthTypeDisplay(authType: string): string {
-  switch (authType) {
-    case "none":
-      return "No Auth";
-    case "apikey":
-      return "API Key";
-    case "oauth":
-      return "OAuth";
-    default:
-      return "Auth Required";
-  }
+function suppliedDate(value: string | undefined): Date | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
-/**
- * Estimate weekly breakdown from monthly and weekly totals.
- * Returns 4 values representing the last 4 weeks (oldest to newest).
- */
-function estimateWeeklyData(
-  visitorsWeek: number,
-  visitorsMonth: number,
-): number[] {
-  if (visitorsMonth === 0) {
-    return [0, 0, 0, 0];
-  }
-
-  // The most recent week is known
-  const recentWeek = visitorsWeek;
-  // Remaining visitors distributed across the other 3 weeks
-  const remaining = Math.max(0, visitorsMonth - recentWeek);
-  const avgOther = Math.round(remaining / 3);
-
-  // Add slight variation for visual interest (but keep it realistic)
-  const variance = Math.round(avgOther * 0.15);
-  return [
-    Math.max(0, avgOther - variance),
-    avgOther,
-    Math.max(0, avgOther + variance),
-    recentWeek,
-  ];
-}
-
-/**
- * Parse all relevant metadata from a server.
- */
 export function parseServerMetadata(
-  server: PulseMCPServer,
+  server: CatalogServer,
 ): ParsedServerMetadata {
-  const serverMeta = server.meta?.["com.pulsemcp/server"];
-  const versionMeta = server.meta?.["com.pulsemcp/server-version"];
-
-  const visitorsWeek = serverMeta?.visitorsEstimateMostRecentWeek ?? 0;
-  const visitorsMonth = serverMeta?.visitorsEstimateLastFourWeeks ?? 0;
-  const visitorsTotal = serverMeta?.visitorsEstimateTotal ?? 0;
-
+  const lifecycle = server.meta?.["io.modelcontextprotocol.registry/official"];
   const authType = extractAuthType(server);
-
   return {
-    visitorsWeek,
-    visitorsMonth,
-    visitorsTotal,
-    weeklyData: estimateWeeklyData(visitorsWeek, visitorsMonth),
-    isOfficial: serverMeta?.isOfficial ?? false,
-    isLatest: versionMeta?.isLatest ?? false,
-    status: versionMeta?.status,
+    isLatest: lifecycle?.isLatest,
+    status: lifecycle?.status,
     authType,
-    authTypeDisplay: getAuthTypeDisplay(authType),
+    authTypeDisplay: {
+      none: "No Auth",
+      apikey: "API Key",
+      oauth: "OAuth",
+      other: "Other",
+      unknown: "Unknown",
+    }[authType],
     setupType: serverSetupType(server),
-    toolCount: server.toolCount,
-    isReadOnly: server.isReadOnly,
-    publishedAt: versionMeta?.publishedAt
-      ? new Date(versionMeta.publishedAt)
-      : undefined,
-    updatedAt: versionMeta?.updatedAt
-      ? new Date(versionMeta.updatedAt)
-      : undefined,
+    publishedAt: suppliedDate(lifecycle?.publishedAt),
+    updatedAt: suppliedDate(lifecycle?.updatedAt),
   };
 }
 
@@ -189,7 +91,8 @@ export function parseServerMetadata(
  * Check if a date is within a given range.
  */
 function isWithinRange(date: Date | undefined, range: string): boolean {
-  if (!date || range === "any") return true;
+  if (range === "any") return true;
+  if (!date) return false;
 
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -212,10 +115,10 @@ function isWithinRange(date: Date | undefined, range: string): boolean {
  * Optionally applies a search query for client-side filtering.
  */
 export function filterAndSortServers(
-  servers: PulseMCPServer[],
+  servers: CatalogServer[],
   filterState: FilterState,
   searchQuery?: string,
-): PulseMCPServer[] {
+): CatalogServer[] {
   // Parse metadata for all servers
   const serversWithMeta = servers.map((server) => ({
     server,
@@ -240,21 +143,13 @@ export function filterAndSortServers(
     });
   }
 
-  // Apply category filter
-  if (filterState.category === "popular") {
-    filtered = filtered.filter((s) => s.metadata.visitorsMonth >= 100);
-  }
-  // "all" - no filter
-
   // Apply granular filters
   const { filters } = filterState;
 
   // Auth type filter
   if (filters.authTypes.length > 0) {
     filtered = filtered.filter((s) =>
-      filters.authTypes.includes(
-        s.metadata.authType as "none" | "apikey" | "oauth" | "other",
-      ),
+      filters.authTypes.includes(s.metadata.authType),
     );
   }
 
@@ -265,24 +160,6 @@ export function filterAndSortServers(
     );
   }
 
-  // Tool behavior filter
-  if (filters.toolBehaviors.length > 0) {
-    filtered = filtered.filter((s) => {
-      if (filters.toolBehaviors.includes("readonly") && s.metadata.isReadOnly)
-        return true;
-      if (filters.toolBehaviors.includes("write") && !s.metadata.isReadOnly)
-        return true;
-      return false;
-    });
-  }
-
-  // Popularity filter
-  if (filters.minUsers > 0) {
-    filtered = filtered.filter(
-      (s) => s.metadata.visitorsMonth >= filters.minUsers,
-    );
-  }
-
   // Updated range filter
   if (filters.updatedRange !== "any") {
     filtered = filtered.filter((s) =>
@@ -290,18 +167,8 @@ export function filterAndSortServers(
     );
   }
 
-  // Tool count filter
-  if (filters.minTools > 0) {
-    filtered = filtered.filter((s) => s.metadata.toolCount >= filters.minTools);
-  }
-
   // Apply sorting
   switch (filterState.sort) {
-    case "popular":
-      filtered = filtered.sort(
-        (a, b) => b.metadata.visitorsMonth - a.metadata.visitorsMonth,
-      );
-      break;
     case "recent":
       filtered = filtered.sort((a, b) => {
         const dateA = a.metadata.publishedAt?.getTime() ?? 0;

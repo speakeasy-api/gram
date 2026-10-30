@@ -145,8 +145,8 @@ var _ = Service("mcpRegistries", func() {
 			Attribute("server_url", String, "URL of the upstream MCP server endpoint", func() {
 				Example("https://mcp.box.com")
 			})
-			Attribute("registry_specifier", String, "Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')", func() {
-				Example("com.pulsemcp.mirror/box")
+			Attribute("registry_specifier", String, "Registry specifier for the server, as returned by listCatalog (e.g., 'io.example/server')", func() {
+				Example("io.example/server")
 			})
 
 			security.SessionPayload()
@@ -208,12 +208,8 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 	Required("registry_specifier", "version", "description")
 })
 
-// ExternalMCPServerEntry is the lightweight shape returned by the catalog list
-// endpoint. It carries everything the index view needs (header, install state,
-// usage/auth metadata, remotes) but omits the per-tool definitions, which are
-// large and unused by the list. tool_count and is_read_only are precomputed so
-// cards and the tool-behavior filter don't need the tools. The detail page
-// fetches full tools via getServerDetails (ExternalMCPServer).
+// ExternalMCPServerEntry is the lightweight catalog listing shape. Tool evidence
+// is optional: native publication does not currently include tool declarations.
 var ExternalMCPServerEntry = Type("ExternalMCPServerEntry", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -240,8 +236,8 @@ var ExternalMCPServerEntry = Type("ExternalMCPServerEntry", func() {
 		Format(FormatURI)
 	})
 	Attribute("meta", Any, "Opaque metadata from the registry")
-	Attribute("tool_count", Int, "Number of tools the server exposes")
-	Attribute("is_read_only", Boolean, "Whether every tool on the server is read-only")
+	Attribute("tool_count", Int, "Number of declared tools, when catalog evidence is available")
+	Attribute("is_read_only", Boolean, "Whether every declared tool is read-only, when catalog evidence is available")
 	Attribute("supports_dcr", Boolean, "Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). False alone does not establish that manual setup is required.")
 	Attribute("supports_cimd", Boolean, "Whether issuer metadata advertises compatible Client ID Metadata Document support.")
 	Attribute("auth_setup", String, "Advertised authentication setup; unknown means evidence is insufficient, not that manual setup is required.", func() { Enum("none", "dcr", "cimd", "manual", "unknown") })
@@ -252,7 +248,7 @@ var ExternalMCPServerEntry = Type("ExternalMCPServerEntry", func() {
 
 	// These computed fields are required by existing clients. New capability fields
 	// remain optional so clients can also read responses from older servers.
-	Required("registry_specifier", "version", "description", "tool_count", "is_read_only", "supports_dcr")
+	Required("registry_specifier", "version", "description", "supports_dcr")
 })
 
 var MCPRegistry = Type("MCPRegistry", func() {

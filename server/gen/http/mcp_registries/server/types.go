@@ -1030,10 +1030,10 @@ type ExternalMCPServerEntryResponseBody struct {
 	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
 	// Opaque metadata from the registry
 	Meta any `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
-	// Number of tools the server exposes
-	ToolCount int `form:"tool_count" json:"tool_count" xml:"tool_count"`
-	// Whether every tool on the server is read-only
-	IsReadOnly bool `form:"is_read_only" json:"is_read_only" xml:"is_read_only"`
+	// Number of declared tools, when catalog evidence is available
+	ToolCount *int `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+	// Whether every declared tool is read-only, when catalog evidence is available
+	IsReadOnly *bool `form:"is_read_only,omitempty" json:"is_read_only,omitempty" xml:"is_read_only,omitempty"`
 	// Whether the server's OAuth authorization server advertises a dynamic client
 	// registration endpoint (RFC 7591). False alone does not establish that manual
 	// setup is required.

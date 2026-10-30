@@ -11,7 +11,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  type PulseMCPServer,
+  type CatalogServer,
   useIsCatalogServerInstalled,
   useListMCPCatalog,
 } from "@/pages/catalog/hooks";
@@ -41,7 +41,6 @@ import { ServerTableRow } from "./ServerTableRow";
 
 // Sort options shown in the toolbar (mirrors the legacy SortDropdown order).
 const CATALOG_SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: "popular", label: "Most Popular" },
   { value: "recent", label: "Recently Released" },
   { value: "updated", label: "Last Updated" },
   { value: "alphabetical", label: "A → Z" },
@@ -123,7 +122,7 @@ function CatalogInner() {
   );
 
   const [viewMode, setViewMode] = useViewMode();
-  const [addingServers, setAddingServers] = useState<PulseMCPServer[]>([]);
+  const [addingServers, setAddingServers] = useState<CatalogServer[]>([]);
 
   const {
     data,
@@ -138,14 +137,14 @@ function CatalogInner() {
   const deployment = deploymentResult?.deployment;
   const externalMcps = deployment?.externalMcps ?? [];
   const isInstalledByUrl = useIsCatalogServerInstalled();
-  const isServerAdded = (server: PulseMCPServer) =>
+  const isServerAdded = (server: CatalogServer) =>
     externalMcps.some(
       (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
     ) || isInstalledByUrl(server);
 
   // The backend returns the full catalog in one response.
   const allServers = useMemo(
-    () => (data?.servers as PulseMCPServer[]) ?? [],
+    () => (data?.servers as CatalogServer[]) ?? [],
     [data],
   );
 
@@ -167,7 +166,7 @@ function CatalogInner() {
   // One server at a time: the card's own Add button opens the install dialog
   // for that server. The dialog still takes a list, so a future bulk path can
   // reuse it unchanged.
-  const handleAdd = (server: PulseMCPServer) => {
+  const handleAdd = (server: CatalogServer) => {
     setAddingServers([server]);
   };
 
@@ -177,8 +176,8 @@ function CatalogInner() {
         title="MCP Catalog"
         description={
           <>
-            Discover and import official third-party MCP servers to your
-            project. Powered by the official{" "}
+            Discover and import third-party MCP servers to your project. Powered
+            by the{" "}
             <a
               href="https://www.speakeasy.com/product/mcp-gateway/catalog"
               target="_blank"
@@ -248,7 +247,6 @@ function CatalogInner() {
                 { label: "Name" },
                 { label: "Version" },
                 { label: "Description" },
-                { label: "Tools" },
                 { label: "" },
               ]}
             >

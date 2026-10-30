@@ -1,8 +1,9 @@
-import type { PulseMcpAuthType } from "@/pages/catalog/hooks/serverMetadata";
+import type { CatalogAuthType } from "@/pages/catalog/hooks/serverMetadata";
 
 export type ExternalMcpOAuthConfigStatus =
   | "required-unconfigured"
   | "configured"
+  | "unknown"
   | "not-required"
   | "not-external-mcp";
 
@@ -30,19 +31,19 @@ export function externalMcpOAuthConfigStatus({
     slug: string;
     registryServerSpecifier?: string | undefined;
   }>;
-  catalogAuthBySpecifier: ReadonlyMap<string, PulseMcpAuthType>;
+  catalogAuthBySpecifier: ReadonlyMap<string, CatalogAuthType>;
   hasOAuthServer: boolean;
   hasSessionIssuer: boolean;
 }): ExternalMcpOAuthConfigStatus {
   if (!externalMcpSlug) return "not-external-mcp";
+  if (hasOAuthServer || hasSessionIssuer) return "configured";
   const specifier = externalMcps.find(
     (mcp) => mcp.slug === externalMcpSlug,
   )?.registryServerSpecifier;
   const authType = specifier
     ? catalogAuthBySpecifier.get(specifier)
     : undefined;
+  if (!authType || authType === "unknown") return "unknown";
   if (authType !== "oauth") return "not-required";
-  return hasOAuthServer || hasSessionIssuer
-    ? "configured"
-    : "required-unconfigured";
+  return "required-unconfigured";
 }

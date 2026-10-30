@@ -45,8 +45,8 @@ type CandidateInspection struct {
 	Description            string                      `json:"description,omitempty"`
 	Version                string                      `json:"version,omitempty"`
 	Transport              string                      `json:"transport"`
-	ToolNames              []string                    `json:"tool_names"`
-	ToolCount              int                         `json:"tool_count"`
+	ToolNames              []string                    `json:"tool_names,omitempty"`
+	ToolCount              *int                        `json:"tool_count,omitempty"`
 	Configuration          []CatalogConfigurationField `json:"configuration,omitempty"`
 	RequiresDashboardSetup bool                        `json:"requires_dashboard_setup"`
 	Trust                  string                      `json:"trust"`
@@ -161,7 +161,7 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 				return directRemoteInspectionUnavailableToolResult(setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable))
 			}
 			category := setupCategoryFromInspection(inspection)
-			return nil, CandidateInspection{CanonicalURL: inspection.CanonicalURL, Transport: inspection.Transport, ToolNames: inspection.ToolNames, ToolCount: inspection.ToolCount, RequiresDashboardSetup: inspection.RequiresDashboardSetup, Trust: inspection.Trust, Authentication: inspection.Authentication, OAuthDiscovery: inspection.OAuthDiscovery, AutomaticClientRegistration: automaticClientRegistrationFromInspection(inspection), SetupCategory: category, Actions: inspectionResultActions(category)}, nil
+			return nil, CandidateInspection{CanonicalURL: inspection.CanonicalURL, Transport: inspection.Transport, ToolNames: inspection.ToolNames, ToolCount: new(inspection.ToolCount), RequiresDashboardSetup: inspection.RequiresDashboardSetup, Trust: inspection.Trust, Authentication: inspection.Authentication, OAuthDiscovery: inspection.OAuthDiscovery, AutomaticClientRegistration: automaticClientRegistrationFromInspection(inspection), SetupCategory: category, Actions: inspectionResultActions(category)}, nil
 		}
 		if catalog == nil {
 			return nil, CandidateInspection{}, ErrCatalogUnavailable

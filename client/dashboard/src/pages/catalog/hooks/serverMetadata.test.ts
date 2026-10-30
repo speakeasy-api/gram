@@ -1,18 +1,20 @@
 import { describe, expect, it } from "vitest";
 import type { FilterValues } from "../filter-defaults";
-import type { PulseMCPServer } from "../hooks";
+import type { CatalogServer } from "../hooks";
 import type { FilterState } from "./useFilterState";
 import {
   filterAndSortServers,
   requiresManualSetup,
   serverSetupType,
   extractAuthType,
+  parseServerMetadata,
+  isCatalogServer,
 } from "./serverMetadata";
 
 function server(
   registrySpecifier: string,
   supportsDcr: boolean,
-): PulseMCPServer {
+): CatalogServer {
   return {
     description: "test",
     registrySpecifier,
@@ -26,10 +28,7 @@ function server(
 
 const NO_FILTERS: FilterValues = {
   authTypes: [],
-  toolBehaviors: [],
-  minUsers: 0,
   updatedRange: "any",
-  minTools: 0,
   setupTypes: [],
 };
 
@@ -65,7 +64,7 @@ describe("requiresManualSetup", () => {
     ).toBe("auto");
   });
 
-  it("uses explicit legacy auth metadata when capability discovery is unknown", () => {
+  it("ignores legacy auth metadata when native evidence is unknown", () => {
     const legacy = {
       ...server("legacy/server", false),
       authSetup: "unknown" as const,
@@ -75,11 +74,12 @@ describe("requiresManualSetup", () => {
         },
       },
     };
-    expect(serverSetupType(legacy)).toBe("manual");
+    expect(serverSetupType(legacy)).toBe("unknown");
+    expect(extractAuthType(legacy)).toBe("unknown");
     legacy.meta["com.pulsemcp/server-version"][
       "remotes[0]"
     ].authOptions[0]!.type = "none";
-    expect(serverSetupType(legacy)).toBe("auto");
+    expect(serverSetupType(legacy)).toBe("unknown");
   });
 
   it("does not label unknown authentication as no-auth", () => {
@@ -88,12 +88,12 @@ describe("requiresManualSetup", () => {
         ...server("unknown/server", false),
         authSetup: "unknown",
       }),
-    ).toBe("other");
+    ).toBe("unknown");
   });
 });
 
 describe("filterAndSortServers setup filter", () => {
-  const servers: PulseMCPServer[] = [
+  const servers: CatalogServer[] = [
     server("auto/server", true),
     { ...server("manual/server", false), authSetup: "manual" },
     server("unknown/server", false),
@@ -139,5 +139,78 @@ describe("filterAndSortServers setup filter", () => {
       filterState({ setupTypes: ["auto", "manual"] }),
     );
     expect(result).toHaveLength(2);
+  });
+});
+
+describe("native catalog metadata", () => {
+  it("keeps sparse records unknown without fabricated tool or popularity evidence", () => {
+    const sparse = { ...server("example/sparse", false), meta: undefined };
+    expect(isCatalogServer(sparse)).toBe(true);
+    expect(parseServerMetadata(sparse)).toEqual({
+      authType: "unknown",
+      authTypeDisplay: "Unknown",
+      setupType: "unknown",
+      isLatest: undefined,
+      status: undefined,
+      publishedAt: undefined,
+      updatedAt: undefined,
+    });
+    expect(
+      filterAndSortServers([sparse], filterState({ updatedRange: "week" })),
+    ).toEqual([]);
+  });
+
+  it("reads native auth capabilities and standard lifecycle, not vendor verification", () => {
+    const native = {
+      ...server("example/native", false),
+      meta: {
+        "com.speakeasy.ai/catalog": {
+          supportsCimd: true,
+          authSetup: "cimd" as const,
+          authDiscoveryStatus: "complete" as const,
+        },
+        "io.modelcontextprotocol.registry/official": {
+          status: "active",
+          updatedAt: "2026-10-01T00:00:00Z",
+          isLatest: true,
+        },
+      },
+    };
+    expect(parseServerMetadata(native)).toMatchObject({
+      authType: "oauth",
+      setupType: "auto",
+      status: "active",
+      updatedAt: new Date("2026-10-01T00:00:00Z"),
+    });
+    expect(parseServerMetadata(native)).not.toHaveProperty("isOfficial");
+    expect(parseServerMetadata(native).publishedAt).toBeUndefined();
+  });
+
+  it("accepts explicit native no-auth but not unavailable discovery", () => {
+    const native = server("example/native", false);
+    expect(
+      extractAuthType({
+        ...native,
+        meta: {
+          "com.speakeasy.ai/catalog": {
+            authSetup: "none",
+            authDiscoveryStatus: "not_required",
+          },
+        },
+      }),
+    ).toBe("none");
+    expect(
+      extractAuthType({
+        ...native,
+        meta: {
+          "com.speakeasy.ai/catalog": {
+            supportsDcr: false,
+            supportsCimd: false,
+            authSetup: "unknown",
+            authDiscoveryStatus: "unavailable",
+          },
+        },
+      }),
+    ).toBe("unknown");
   });
 });

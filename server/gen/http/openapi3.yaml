@@ -44648,13 +44648,13 @@ paths:
                     example: https://mcp.box.com
                     type: string
                 - allowEmptyValue: true
-                  description: Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')
-                  example: com.pulsemcp.mirror/box
+                  description: Registry specifier for the server, as returned by listCatalog (e.g., 'io.example/server')
+                  example: io.example/server
                   in: query
                   name: registry_specifier
                   schema:
-                    description: Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')
-                    example: com.pulsemcp.mirror/box
+                    description: Registry specifier for the server, as returned by listCatalog (e.g., 'io.example/server')
+                    example: io.example/server
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -107438,7 +107438,7 @@ components:
                     format: uri
                 is_read_only:
                     type: boolean
-                    description: Whether every tool on the server is read-only
+                    description: Whether every declared tool is read-only, when catalog evidence is available
                 mcp_server_id:
                     type: string
                     description: ID of the attached MCP server backing this server
@@ -107476,7 +107476,7 @@ components:
                     description: Display name for the server
                 tool_count:
                     type: integer
-                    description: Number of tools the server exposes
+                    description: Number of declared tools, when catalog evidence is available
                     format: int64
                 toolset_id:
                     type: string
@@ -107491,8 +107491,6 @@ components:
                 - registry_specifier
                 - version
                 - description
-                - tool_count
-                - is_read_only
                 - supports_dcr
         ExternalMCPTool:
             type: object

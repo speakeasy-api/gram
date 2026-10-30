@@ -5,7 +5,7 @@ import type { PluginServer } from "@gram/client/models/components/pluginserver.j
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
-import type { PulseMCPServer } from "@/pages/catalog/hooks";
+import type { CatalogServer } from "@/pages/catalog/hooks";
 import { DETECTION_RULES } from "@/pages/security/policy-data";
 import { describe, expect, it } from "vitest";
 import {
@@ -39,7 +39,7 @@ function remote(overrides: Partial<RemoteMcpServer> = {}): RemoteMcpServer {
   };
 }
 
-function catalogServer(url = "https://catalog.example/mcp/"): PulseMCPServer {
+function catalogServer(url = "https://catalog.example/mcp/"): CatalogServer {
   return {
     description: "Catalog server",
     isReadOnly: true,

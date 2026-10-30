@@ -49,8 +49,8 @@ func TestNativeList(t *testing.T) {
 	require.NotNil(t, row.Title)
 	require.Equal(t, "Native", *row.Title)
 	require.NotNil(t, row.Repository)
-	require.Equal(t, 1, row.ToolCount)
-	require.True(t, row.IsReadOnly)
+	require.Nil(t, row.ToolCount)
+	require.Nil(t, row.IsReadOnly)
 	require.Equal(t, map[string]any{"keep": true}, nativeTestMap(t, row.Meta)["custom.example/metadata"])
 	require.Equal(t, "next", source.options[1].Cursor)
 	require.False(t, source.options[0].IncludeDeleted)
@@ -70,9 +70,11 @@ func TestNativeListSupportsDcr(t *testing.T) {
 		{name: "native true", catalog: map[string]any{"supportsDcr": true}, want: true},
 		{name: "native false", catalog: map[string]any{"supportsDcr": false}},
 		{name: "native false overrides Pulse", catalog: map[string]any{"supportsDcr": false}, pulse: true},
-		{name: "missing native metadata falls back to Pulse", pulse: true, want: true},
-		{name: "missing native field falls back to Pulse", catalog: map[string]any{}, pulse: true, want: true},
+		{name: "missing native metadata ignores legacy auth", pulse: true},
+		{name: "missing native field ignores legacy auth", catalog: map[string]any{}, pulse: true},
 		{name: "no capability metadata"},
+		{name: "unavailable", catalog: map[string]any{"authSetup": "unknown", "authDiscoveryStatus": "unavailable", "supportsDcr": false, "supportsCimd": false}},
+		{name: "partial", catalog: map[string]any{"authSetup": "unknown", "authDiscoveryStatus": "partial"}},
 		{name: "CIMD", catalog: map[string]any{"supportsCimd": true}, wantCIMD: true, setup: "cimd"},
 		{name: "complete manual", catalog: map[string]any{"supportsDcr": false, "supportsCimd": false, "authSetup": "manual"}, setup: "manual"},
 		{name: "explicit no auth", catalog: map[string]any{"authSetup": "none"}, setup: "none"},
@@ -142,14 +144,7 @@ func TestNativeDetailsRetainedRemoteSelection(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, "io.example/native", source.name)
 			require.Equal(t, tc.url, details.RemoteURL)
-			if tc.emptyTools {
-				require.NotNil(t, details.Tools)
-				require.Empty(t, details.Tools)
-			} else if tc.url == "https://example.com/first" {
-				require.Len(t, details.Tools, 1)
-			} else {
-				require.Nil(t, details.Tools)
-			}
+			require.Nil(t, details.Tools)
 			if tc.url == "https://example.com/mcp" {
 				require.Len(t, details.Headers, 1)
 				require.Contains(t, details.Variables, "tenant")
@@ -184,7 +179,7 @@ func TestNativeListIgnoresStaleLegacyLifecycle(t *testing.T) {
 	require.Equal(t, "deleted", nativeTestMap(t, nativeTestMap(t, result.Servers[0].Meta)["com.pulsemcp/server-version"])["status"])
 }
 
-func TestNativeListPrunesToolsPreservingMetadata(t *testing.T) {
+func TestNativeListIgnoresLegacyToolsPreservingExtensions(t *testing.T) {
 	t.Parallel()
 	var record map[string]any
 	require.NoError(t, json.Unmarshal([]byte(nativeRecord), &record))
@@ -201,15 +196,15 @@ func TestNativeListPrunesToolsPreservingMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Servers, 1)
 	row := result.Servers[0]
-	require.Equal(t, 1, row.ToolCount)
-	require.True(t, row.IsReadOnly)
-	require.True(t, row.SupportsDcr)
+	require.Nil(t, row.ToolCount)
+	require.Nil(t, row.IsReadOnly)
+	require.False(t, row.SupportsDcr)
 	got := nativeTestMap(t, row.Meta)
 	require.Equal(t, meta["custom.example/metadata"], got["custom.example/metadata"])
 	require.Equal(t, meta["io.modelcontextprotocol.registry/official"], got["io.modelcontextprotocol.registry/official"])
 	for _, key := range []string{"remotes[0]", "remotes[1]", "remotes[2]", "remotes[3]", "remotes[4]", "remotes[5]", "remotes[12]"} {
 		remote := nativeTestMap(t, nativeTestMap(t, got["com.pulsemcp/server-version"])[key])
-		require.Empty(t, remote["tools"], key)
+		require.NotEmpty(t, remote["tools"], key)
 		require.Equal(t, auth, remote["authOptions"])
 		require.Equal(t, "retained", remote["custom"])
 	}
@@ -333,6 +328,37 @@ func TestNativeDetailsPreservesCatalogAuthWithoutAllowedRemote(t *testing.T) {
 			require.Empty(t, projected.RemoteURL)
 			require.Equal(t, setup, projected.AuthSetup)
 			require.Equal(t, setup == "cimd", projected.SupportsCIMD)
+		})
+	}
+}
+
+// Mirrors promotion and curated seed output: auth metadata may be the only
+// augmentation. Lifecycle, vendor identity, popularity and tools are not promised.
+func TestNativeSparsePublication(t *testing.T) {
+	t.Parallel()
+	for _, catalog := range []string{
+		`{"supportsDcr":true}`,
+		`{"supportsDcr":false,"supportsCimd":false,"authSetup":"unknown","authDiscoveryStatus":"unavailable"}`,
+		`{"supportsDcr":false,"supportsCimd":false,"authSetup":"unknown","authDiscoveryStatus":"partial"}`,
+		`{"supportsDcr":false,"supportsCimd":false,"authSetup":"none","authDiscoveryStatus":"not_required"}`,
+	} {
+		t.Run(catalog, func(t *testing.T) {
+			raw := json.RawMessage(`{"server":{"name":"io.example/sparse","description":"Reviewed server","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.com/mcp"}]},"_meta":{"com.speakeasy.ai/catalog":` + catalog + `,"com.speakeasy.ai/registry":{"publishedAt":"2026-10-01T00:00:00Z"}}}`)
+			source := &nativeTestSource{pages: []mcpregistry.DiscoveryPage{{Records: []json.RawMessage{raw}}}, entry: mcpregistry.Entry{Data: raw}}
+			reader := NewNativeRegistryReader(source)
+			list, err := reader.ListServers(t.Context(), Registry{ID: uuid.New()}, ListServersParams{})
+			require.NoError(t, err)
+			require.Len(t, list.Servers, 1)
+			row := list.Servers[0]
+			require.Nil(t, row.ToolCount)
+			require.Nil(t, row.IsReadOnly)
+			require.NotContains(t, nativeTestMap(t, row.Meta), "io.modelcontextprotocol.registry/official")
+			details, err := reader.GetServerDetails(t.Context(), Registry{}, "io.example/sparse", nil)
+			require.NoError(t, err)
+			require.Nil(t, details.Tools)
+			require.Equal(t, *row.AuthSetup, details.AuthSetup)
+			require.Equal(t, row.SupportsDcr, details.SupportsDCR)
+			require.Equal(t, *row.SupportsCimd, details.SupportsCIMD)
 		})
 	}
 }

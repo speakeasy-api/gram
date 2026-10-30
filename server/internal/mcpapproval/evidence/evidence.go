@@ -113,7 +113,7 @@ type Document struct {
 	// source answered with zero tools, which is a real (if odd) declaration.
 	CapabilitiesSource string `json:"capabilities_source,omitempty"`
 
-	// Provenance is the registry catalog's maturity and popularity signals
+	// Provenance is the registry catalog's membership and lifecycle evidence
 	// for the matched entry, present for remote targets whose catalog lookup
 	// ran. Catalogued false is checked-and-absent — every registry answered
 	// and none carries the URL — distinct from a lookup failure, which is a
@@ -268,17 +268,13 @@ type CapabilitySection struct {
 // ProvenanceSection mirrors provenance.Provenance for storage, plus which
 // registry made the claims.
 type ProvenanceSection struct {
-	Registry              string `json:"registry,omitempty"`
-	Specifier             string `json:"specifier,omitempty"`
-	Catalogued            bool   `json:"catalogued"`
-	Official              bool   `json:"official,omitempty"`
-	Status                string `json:"status,omitempty"`
-	IsLatest              bool   `json:"is_latest,omitempty"`
-	PublishedAt           string `json:"published_at,omitempty"`
-	UpdatedAt             string `json:"updated_at,omitempty"`
-	VisitorsLastWeek      int    `json:"visitors_last_week,omitempty"`
-	VisitorsLastFourWeeks int    `json:"visitors_last_four_weeks,omitempty"`
-	VisitorsTotal         int    `json:"visitors_total,omitempty"`
+	Registry    string `json:"registry,omitempty"`
+	Specifier   string `json:"specifier,omitempty"`
+	Catalogued  bool   `json:"catalogued"`
+	Status      string `json:"status,omitempty"`
+	IsLatest    *bool  `json:"is_latest,omitempty"`
+	PublishedAt string `json:"published_at,omitempty"`
+	UpdatedAt   string `json:"updated_at,omitempty"`
 }
 
 // Gap names for the sources that can fail independently.
@@ -744,17 +740,13 @@ func (a *Assembler) lookupCatalog(ctx context.Context, projectID uuid.UUID, serv
 
 	if match == nil {
 		document.Provenance = &ProvenanceSection{
-			Registry:              "",
-			Specifier:             "",
-			Catalogued:            false,
-			Official:              false,
-			Status:                "",
-			IsLatest:              false,
-			PublishedAt:           "",
-			UpdatedAt:             "",
-			VisitorsLastWeek:      0,
-			VisitorsLastFourWeeks: 0,
-			VisitorsTotal:         0,
+			Registry:    "",
+			Specifier:   "",
+			Catalogued:  false,
+			Status:      "",
+			IsLatest:    nil,
+			PublishedAt: "",
+			UpdatedAt:   "",
 		}
 		if !serverDeclared {
 			document.Gaps = append(document.Gaps, GapToolDeclarations)
@@ -763,17 +755,13 @@ func (a *Assembler) lookupCatalog(ctx context.Context, projectID uuid.UUID, serv
 	}
 
 	document.Provenance = &ProvenanceSection{
-		Registry:              match.Registry,
-		Specifier:             match.Specifier,
-		Catalogued:            match.Provenance.Catalogued,
-		Official:              match.Provenance.Official,
-		Status:                match.Provenance.Status,
-		IsLatest:              match.Provenance.IsLatest,
-		PublishedAt:           formatTime(match.Provenance.PublishedAt),
-		UpdatedAt:             formatTime(match.Provenance.UpdatedAt),
-		VisitorsLastWeek:      match.Provenance.VisitorsLastWeek,
-		VisitorsLastFourWeeks: match.Provenance.VisitorsLastFourWeeks,
-		VisitorsTotal:         match.Provenance.VisitorsTotal,
+		Registry:    match.Registry,
+		Specifier:   match.Specifier,
+		Catalogued:  match.Provenance.Catalogued,
+		Status:      match.Provenance.Status,
+		IsLatest:    match.Provenance.IsLatest,
+		PublishedAt: formatTime(match.Provenance.PublishedAt),
+		UpdatedAt:   formatTime(match.Provenance.UpdatedAt),
 	}
 
 	if serverDeclared {

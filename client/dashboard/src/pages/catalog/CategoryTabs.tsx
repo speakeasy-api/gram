@@ -1,1 +1,1 @@
-export type Category = "all" | "popular";
+export type Category = "all";

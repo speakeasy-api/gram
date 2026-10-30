@@ -117,7 +117,7 @@ vi.mock("@tanstack/react-query", () => ({
 
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
-import type { PulseMCPServer } from "@/pages/catalog/hooks";
+import type { CatalogServer } from "@/pages/catalog/hooks";
 import {
   ISSUER_LOOKUP_FAILED_MESSAGE,
   useRemoteMcpInstallWorkflow,
@@ -135,7 +135,7 @@ function remote(url: string, headerNames: string[] = []): ExternalMCPRemote {
   };
 }
 
-function makeServer(overrides: Partial<PulseMCPServer> = {}): PulseMCPServer {
+function makeServer(overrides: Partial<CatalogServer> = {}): CatalogServer {
   return {
     description: "A test server",
     registryId: "reg-1",
@@ -147,14 +147,14 @@ function makeServer(overrides: Partial<PulseMCPServer> = {}): PulseMCPServer {
     supportsDcr: false,
     remotes: [remote("https://mcp.example.com/mcp")],
     ...overrides,
-  } as PulseMCPServer;
+  } as CatalogServer;
 }
 
 // IMPORTANT: The hook re-partitions on server-array identity changes, so the
 // servers array must be a stable reference across renders. Inline `[]`
 // literals in the renderHook callback create a new array each render →
 // infinite loop → OOM.
-const EMPTY_SERVERS: PulseMCPServer[] = [];
+const EMPTY_SERVERS: CatalogServer[] = [];
 
 describe("useRemoteMcpInstallWorkflow", () => {
   beforeEach(() => {
