@@ -292,12 +292,16 @@ describe("Agent sessions", () => {
   it("explains how to establish an agent session in the empty state", () => {
     setup({ sessions: [] });
     expect(screen.getByText("No sessions yet")).toBeTruthy();
-    expect(screen.getByText(/Choose this agent when authorizing/)).toBeTruthy();
+    expect(
+      screen.getByText(/API key is used, a platform signs in/),
+    ).toBeTruthy();
   });
   it("lists the client as unverified without exposing raw session IDs", () => {
     setup();
-    expect(screen.getByText("Client name (unverified)")).toBeTruthy();
-    expect(screen.getByText("Example client")).toBeTruthy();
+    expect(screen.getByText("Client")).toBeTruthy();
+    expect(screen.getByText("Example client").getAttribute("title")).toContain(
+      "Not verified",
+    );
     expect(screen.getByText("Active")).toBeTruthy();
     expect(screen.queryByText("session_example")).toBeNull();
   });
