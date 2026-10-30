@@ -244,7 +244,7 @@ type Service struct {
 	platformFeatureChecker platformtools.FeatureChecker
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
-	// Short-lived, single-use install codes. Holds a live agent key, so it is
+	// Short-lived install codes. Holds a live agent key, so it is
 	// cache-only and never written to the database.
 	agentInstallCache cache.TypedCacheObject[agentInstallCode]
 	remoteLoginCache  cache.TypedCacheObject[remotesessions.RemoteLoginState]
