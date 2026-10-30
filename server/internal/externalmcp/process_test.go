@@ -25,7 +25,7 @@ func TestToolExtractorUnsupportedSource(t *testing.T) {
 	require.NoError(t, err)
 	db.Close()
 	native := &failedCatalogReader{}
-	catalog := NewCatalogService(nil, nil, native)
+	catalog := NewCatalogService(nil, native)
 	registryID := uuid.New()
 	catalog.repo = routingRepo{rows: []repo.ListMCPRegistriesRow{{ID: registryID, Url: "https://unsupported.example.test"}}}
 	var logs bytes.Buffer

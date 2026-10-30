@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 )
 
@@ -60,7 +59,7 @@ type CatalogService struct {
 }
 
 // NewCatalogService admits only the native reader.
-func NewCatalogService(db *pgxpool.Pool, legacy RegistryReader, native RegistryReader, providers ...feature.Provider) *CatalogService {
+func NewCatalogService(db *pgxpool.Pool, native RegistryReader) *CatalogService {
 	adapters := make(map[string]RegistryReader, 1)
 	if native != nil {
 		adapters[registryAdapterKey(registrySourceTypeNative, registryAuthProfileNone)] = native

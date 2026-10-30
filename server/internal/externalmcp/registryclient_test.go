@@ -405,7 +405,7 @@ func TestListServers_CachesResultAndClearCacheRefetches(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, newRegistryTestCache())
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, nil, newRegistryTestCache())
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
