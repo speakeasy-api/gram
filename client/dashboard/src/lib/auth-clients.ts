@@ -49,7 +49,7 @@ type StatusPresentation = {
   tone: "success" | "warning" | "neutral";
 };
 
-export const NO_AUTH_STATUS: StatusPresentation = {
+const NO_AUTH_STATUS: StatusPresentation = {
   label: "No authentication required",
   hint: "Speakeasy sends no credentials upstream. Callers still need access to the server itself.",
   tone: "neutral",

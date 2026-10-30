@@ -1129,6 +1129,49 @@ func (q *Queries) LockAuthClient(ctx context.Context, arg LockAuthClientParams) 
 	return i, err
 }
 
+const lockAuthClientOfferingServers = `-- name: LockAuthClientOfferingServers :many
+SELECT ms.id
+FROM mcp_server_auth_clients msac
+JOIN mcp_servers ms
+  ON ms.id = msac.mcp_server_id
+ AND ms.project_id = msac.project_id
+ AND ms.deleted IS FALSE
+JOIN projects p
+  ON p.id = ms.project_id
+ AND p.organization_id = msac.organization_id
+ AND p.deleted IS FALSE
+WHERE msac.organization_id = $1
+  AND msac.auth_client_id = $2
+  AND msac.deleted IS FALSE
+ORDER BY ms.id
+FOR SHARE OF ms
+`
+
+type LockAuthClientOfferingServersParams struct {
+	OrganizationID string
+	AuthClientID   uuid.UUID
+}
+
+func (q *Queries) LockAuthClientOfferingServers(ctx context.Context, arg LockAuthClientOfferingServersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockAuthClientOfferingServers, arg.OrganizationID, arg.AuthClientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockIssuanceProfile = `-- name: LockIssuanceProfile :one
 SELECT p.id, p.organization_id, p.project_id, p.user_session_issuer_id, p.user_session_client_id, p.workload_issuer_id, p.workload_subject, p.name, p.created_by_user_id, p.created_at, p.updated_at, p.deleted_at, p.deleted
 FROM issuance_selection_profiles AS p

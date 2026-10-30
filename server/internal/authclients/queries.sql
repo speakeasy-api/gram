@@ -88,6 +88,23 @@ WHERE msac.organization_id = @organization_id
   AND msac.deleted IS FALSE
 ORDER BY msac.auth_client_id, ms.id;
 
+-- name: LockAuthClientOfferingServers :many
+SELECT ms.id
+FROM mcp_server_auth_clients msac
+JOIN mcp_servers ms
+  ON ms.id = msac.mcp_server_id
+ AND ms.project_id = msac.project_id
+ AND ms.deleted IS FALSE
+JOIN projects p
+  ON p.id = ms.project_id
+ AND p.organization_id = msac.organization_id
+ AND p.deleted IS FALSE
+WHERE msac.organization_id = @organization_id
+  AND msac.auth_client_id = @auth_client_id
+  AND msac.deleted IS FALSE
+ORDER BY ms.id
+FOR SHARE OF ms;
+
 -- name: ListAuthClientHeaders :many
 SELECT
   h.auth_client_id,
