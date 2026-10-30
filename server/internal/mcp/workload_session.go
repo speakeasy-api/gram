@@ -29,7 +29,7 @@ var errWorkloadSessionAdmissionLoad = errors.New("load workload session admissio
 // errWorkloadSessionOutOfReach marks a live workload session presented to an
 // MCP server it does not reach, when it was minted for every MCP server of its
 // issuer: the assigned agent may not connect to this one, or the endpoint
-// cannot carry an agent session policy at all. The token still works at the
+// cannot carry a workload session policy at all. The token still works at the
 // issuer's other servers, and a fresh one would be refused here too, so it is
 // answered with 403 rather than invalid_token.
 var errWorkloadSessionOutOfReach = errors.New("workload session does not reach this MCP server")
@@ -90,7 +90,8 @@ func encodeIssuerWorkloadSessionPolicy(issuerProjectID uuid.UUID, version runtim
 }
 
 // loadWorkloadSessionCredential validates the stored ceiling of a session
-// minted for one MCP server against the endpoint it is being presented to.
+// minted for the endpoint's own resource against the endpoint it is being
+// presented to.
 //
 // The stored policy is re-encoded and compared byte for byte with the policy
 // this endpoint would mint, so a row edited to name another resource cannot
@@ -105,11 +106,14 @@ func loadWorkloadSessionCredential(
 	delegatedGrantsVersion pgtype.Int4,
 ) (workloadSessionCredential, error) {
 	return checkWorkloadSessionCredential(endpoint.OrganizationID, subject, storedSubject, organizationID, delegatedGrants, delegatedGrantsVersion, func(version runtimepolicy.DelegatedPolicyVersion) ([]byte, error) {
-		target, ok := agentAuthorizationTarget(endpoint)
-		if !ok {
-			return nil, errors.New("endpoint cannot carry an agent session policy")
+		policy, ok, err := endpointWorkloadSessionPolicy(endpoint, version)
+		if err != nil {
+			return nil, err
 		}
-		return encodeAgentSessionPolicy(*target, version)
+		if !ok {
+			return nil, errors.New("endpoint cannot carry a workload session policy")
+		}
+		return policy, nil
 	})
 }
 
@@ -239,7 +243,15 @@ func (s *Service) admitWorkloadSession(ctx context.Context, organizationID strin
 // A session minted for this one server is withdrawn when it may not: nothing
 // else could accept it. A session minted for all of the issuer's servers is
 // only out of reach here, and stays valid at the others.
+//
+// A stored gateway has no single server to check: each request admits its
+// members instead. A gateway session that reaches no member gets an empty
+// list rather than invalid_token, because members and grants can change while
+// the session lives; an empty gateway says nothing final about the token.
 func (s *Service) requireWorkloadSessionAuthorization(ctx context.Context, endpoint *ResolvedMcpEndpoint, reach workloadSessionReach) (context.Context, error) {
+	if agentGatewayAddressable(endpoint) {
+		return ctx, nil
+	}
 	target, ok := agentAuthorizationTarget(endpoint)
 	if !ok {
 		if reach == workloadSessionReachIssuer {

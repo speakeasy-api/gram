@@ -45,9 +45,9 @@ func (s *Service) authenticatePrincipalCredential(ctx context.Context, token str
 // authenticateIssuerGatePrincipalCredential admits a principal credential at
 // an issuer-gated endpoint the way an agent API key is admitted: in the
 // endpoint's tenant, through credential or workload admission and the
-// endpoint's mcp:connect check. Unlike an agent key, it does not re-evaluate
-// the agent authorization rollout: only the server mints principal
-// credentials.
+// endpoint's mcp:connect check, or each member's for a stored gateway. Unlike
+// an agent key, it does not re-evaluate the agent authorization rollout: only
+// the server mints principal credentials.
 func (s *Service) authenticateIssuerGatePrincipalCredential(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, error) {
 	authed, err := s.authenticatePrincipalCredential(ctx, token)
 	if err != nil {
@@ -56,7 +56,7 @@ func (s *Service) authenticateIssuerGatePrincipalCredential(ctx context.Context,
 	if err := requirePrincipalCredentialProject(authed, endpoint.ProjectID); err != nil {
 		return ctx, nil, fmt.Errorf("%w: %w", errCredentialRejected, err)
 	}
-	authed, err = s.requireAgentSessionAuthorization(authed, endpoint)
+	authed, err = s.requireAgentCredentialAuthorization(authed, endpoint)
 	if err != nil {
 		return ctx, nil, fmt.Errorf("%w: %w", errCredentialRejected, err)
 	}

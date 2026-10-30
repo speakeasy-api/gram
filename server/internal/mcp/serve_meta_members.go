@@ -194,7 +194,7 @@ func (s *Service) resolveMetaMemberSnapshot(
 		})
 	}
 
-	return s.admitMetaMembers(ctx, logger, surface, organizationID, candidates)
+	return s.admitMetaMembers(ctx, logger, surface, organizationID, candidates, delegatedCaller(ctx))
 }
 
 // resolveEndpointMemberSnapshot resolves the members an OAuth flow for a
@@ -347,7 +347,8 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		})
 	}
 
-	ctx, members, err := s.admitMetaMembers(ctx, logger, authzSurface, organizationID, candidates)
+	// Derived gateways keep public members open to every caller.
+	ctx, members, err := s.admitMetaMembers(ctx, logger, authzSurface, organizationID, candidates, false)
 	if err != nil {
 		return ctx, nil, err
 	}
@@ -425,12 +426,16 @@ func qualifyMemberSlugsByProject(members []metaMember) []metaMember {
 // admitMetaMembers applies the visibility and RBAC filter every meta surface
 // shares. The caller must have prepared the authz context; admission is not
 // the place to discover an unprepared one.
+//
+// connectPublic holds public members to mcp:connect too, for a
+// delegatedCaller at a stored gateway.
 func (s *Service) admitMetaMembers(
 	ctx context.Context,
 	logger *slog.Logger,
 	surface string,
 	organizationID string,
 	candidates []metaMemberCandidate,
+	connectPublic bool,
 ) (context.Context, []metaMember, error) {
 	shadow := s.newMandatoryShadow(ctx, organizationID)
 	members := make([]metaMember, 0, len(candidates))
@@ -444,39 +449,33 @@ func (s *Service) admitMetaMembers(
 			backend = metaMemberBackendHosted
 		}
 
-		// mcp:connect grants are keyed on the toolset id for toolset-backed
-		// servers and the mcp_servers id for proxy backends. Checking the
-		// wrong one silently hides the member from every resource-scoped
-		// grant the dashboard writes (see grantResourceIdForMcpServer).
-		connectResourceID := candidate.serverID
-		if candidate.toolsetID.Valid {
-			connectResourceID = candidate.toolsetID.UUID
-		}
-
-		// Visibility gates exposure and fails closed: public members are open,
-		// private members require mcp:connect (as authorizeProxyBackendAccess)
-		// with denied members filtered so unauthorized reads as nonexistent,
-		// and any other value (malformed or future) is filtered the same way.
-		// This gates on the member server's own visibility only: a hosted
-		// member whose toolset is private still lists here (its endpoint is
-		// public), then reads as nonexistent on drill-down (loadMemberToolset).
-		connect := authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), candidate.projectID.String())
-		switch candidate.visibility {
-		case mcpservers.VisibilityPublic:
+		// Visibility gates exposure and fails closed: public members are open
+		// unless connectPublic is set, private members require mcp:connect (as
+		// authorizeProxyBackendAccess) with denied members filtered so
+		// unauthorized reads as nonexistent, and any other value (malformed or
+		// future) is filtered the same way. This gates on the member server's
+		// own visibility only: a hosted member whose toolset is private still
+		// lists here (its endpoint is public), then reads as nonexistent on
+		// drill-down (loadMemberToolset).
+		connect := metaMemberConnectCheck(candidate.serverID, candidate.toolsetID, candidate.projectID)
+		public := candidate.visibility == mcpservers.VisibilityPublic
+		switch {
+		case public && !connectPublic:
 			shadow.recordServer(ctx, surface, true, authz.MandatoryServerPublic, connect)
-		case mcpservers.VisibilityPrivate:
+		case public, candidate.visibility == mcpservers.VisibilityPrivate:
+			visibility := mandatoryVisibility(public)
 			if err := s.authz.Require(ctx, connect); err != nil {
 				// Forbidden and Unauthorized (anonymous callers on an ungated
 				// endpoint carry no AuthContext) are denials: filter the
 				// member. Anything else is an evaluation failure.
 				var oopsErr *oops.ShareableError
 				if errors.As(err, &oopsErr) && (oopsErr.Code == oops.CodeForbidden || oopsErr.Code == oops.CodeUnauthorized) {
-					shadow.recordServer(ctx, surface, false, authz.MandatoryServerPrivate, connect)
+					shadow.recordServer(ctx, surface, false, visibility, connect)
 					continue
 				}
 				return ctx, nil, oops.E(oops.CodeUnexpected, err, "check member authz").LogError(ctx, logger)
 			}
-			shadow.recordServer(ctx, surface, true, authz.MandatoryServerPrivate, connect)
+			shadow.recordServer(ctx, surface, true, visibility, connect)
 		default:
 			continue
 		}

@@ -557,30 +557,14 @@ func (s *Service) loadMemberToolset(
 	if !member.toolsetID.Valid {
 		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, nil, "hosted member %q has no toolset", member.slug).LogError(ctx, logger)
 	}
-	toolset, err := toolsets_repo.New(s.db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
-		ID: member.toolsetID.UUID,
-		// The member's own project: an agent gateway's members are not all in
-		// one, and a mismatch here reads as "not servable" rather than failing
-		// loudly, so it would silently hide members.
-		ProjectID: member.projectID,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, hostingstate.NotHosted(), uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
-	case err != nil:
-		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member toolset").LogError(ctx, logger)
-	}
-	hosting, _, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
+	toolset, hosting, servable, err := loadServableMemberToolset(ctx, s.db, member.serverID, member.toolsetID.UUID, member.projectID)
 	if err != nil {
-		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member hosting state").LogError(ctx, logger)
+		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member toolset and hosting state").LogError(ctx, logger)
 	}
-	// Match direct wrapper dispatch: only the canonical wrapper gates on the
-	// toolset's hosting state. Independently configured servers use their own
-	// visibility, already checked during member admission.
-	if member.serverID == toolset.ID && !hosting.Enabled {
+	if !servable {
 		return nil, hostingstate.NotHosted(), uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	}
-	allowed, err := s.memberToolsetConnectAllowed(ctx, s.newMandatoryShadow(ctx, toolset.OrganizationID), mandatorySurfaceGatewayMember, gate.authenticated, &toolset, hosting.Public)
+	allowed, err := s.memberToolsetConnectAllowed(ctx, s.newMandatoryShadow(ctx, toolset.OrganizationID), mandatorySurfaceGatewayMember, gate.authenticated, toolset, hosting.Public, gate.publicMembersNeedConnect(ctx))
 	if err != nil {
 		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "check toolset-level authz").LogError(ctx, logger)
 	}
@@ -588,24 +572,47 @@ func (s *Service) loadMemberToolset(
 		// Unauthorized reads as nonexistent (as in ServeToolsetResolved).
 		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogWarn(ctx, logger)
 	}
-	return &toolset, hosting, toolset.ProjectID, nil
+	return toolset, hosting, toolset.ProjectID, nil
+}
+
+// loadServableMemberToolset loads a hosted member's toolset from the member's
+// own project and reports whether it serves. As in direct wrapper dispatch,
+// only the canonical wrapper gates on the toolset's hosting state.
+func loadServableMemberToolset(ctx context.Context, db toolsets_repo.DBTX, serverID, toolsetID, projectID uuid.UUID) (*toolsets_repo.Toolset, hostingstate.Hosting, bool, error) {
+	toolset, err := toolsets_repo.New(db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: toolsetID, ProjectID: projectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, hostingstate.NotHosted(), false, nil
+	case err != nil:
+		return nil, hostingstate.NotHosted(), false, fmt.Errorf("load member toolset: %w", err)
+	}
+	hosting, _, err := hostedmcp.LoadServerState(ctx, db, toolset)
+	if err != nil {
+		return nil, hostingstate.NotHosted(), false, fmt.Errorf("load member hosting state: %w", err)
+	}
+	if serverID == toolset.ID && !hosting.Enabled {
+		return nil, hostingstate.NotHosted(), false, nil
+	}
+	return &toolset, hosting, true, nil
 }
 
 // memberToolsetConnectAllowed applies a non-public toolset's own mcp:connect
-// gate, matching ServeToolsetResolved's connection check. Grants context was
-// prepared when the member snapshot was resolved.
-func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public bool) (bool, error) {
+// gate, matching ServeToolsetResolved's connection check, or a public one's
+// when connectPublic is set. Grants context was prepared when the member
+// snapshot was resolved.
+func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public, connectPublic bool) (bool, error) {
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())
-	if public {
-		shadow.recordServer(ctx, shadowSurface, true, authz.MandatoryServerPublic, connect)
+	visibility := mandatoryVisibility(public)
+	if public && !connectPublic {
+		shadow.recordServer(ctx, shadowSurface, true, visibility, connect)
 		return true, nil
 	}
 	if !authenticated {
-		shadow.recordServer(ctx, shadowSurface, false, authz.MandatoryServerPrivate, connect)
+		shadow.recordServer(ctx, shadowSurface, false, visibility, connect)
 		return false, nil
 	}
 	err := s.authz.Require(ctx, connect)
-	shadow.shadowRequireServer(ctx, shadowSurface, err, authz.MandatoryServerPrivate, connect)
+	shadow.shadowRequireServer(ctx, shadowSurface, err, visibility, connect)
 	if err != nil {
 		if oopsErr, ok := errors.AsType[*oops.ShareableError](err); ok && oopsErr.Code == oops.CodeForbidden {
 			return false, nil

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
@@ -168,4 +169,22 @@ func (f testAuthClientPermission) Permitted(context.Context, authClientPermitReq
 // RecordConnectionPopupGrant exercises the callback's parent-state correlation.
 func (s *Service) RecordConnectionPopupGrant(ctx context.Context, grant remotesessions.RemoteGrant) error {
 	return s.recordConnectionPopupGrant(ctx, grant)
+}
+
+// FreshGatewayMemberResources runs issuance's member re-read for a preflight
+// that reached reached, returning the resource of each remaining check.
+func FreshGatewayMemberResources(ctx context.Context, db *pgxpool.Pool, endpoint *ResolvedMcpEndpoint, reached ...uuid.UUID) ([]string, error) {
+	reach := gatewayWorkloadReach{members: make(map[uuid.UUID]struct{}, len(reached))}
+	for _, id := range reached {
+		reach.members[id] = struct{}{}
+	}
+	checks, err := reach.freshMemberChecks(ctx, db, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	resources := make([]string, 0, len(checks))
+	for _, check := range checks {
+		resources = append(resources, check.ResourceID)
+	}
+	return resources, nil
 }

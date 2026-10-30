@@ -264,8 +264,8 @@ func TestAdmitMetaMembersShadowLeavesAdmissionUnchanged(t *testing.T) {
 	public, granted, denied := candidate("public"), candidate("private"), candidate("private")
 	ctx := sessionContext(t, shadowOrg, authz.NewGrant(authz.ScopeMCPConnect, granted.serverID.String()))
 
-	admitted := func(h shadowHarness) []uuid.UUID {
-		_, members, err := h.service.admitMetaMembers(ctx, testenv.NewLogger(t), mandatorySurfaceConsent, shadowOrg, []metaMemberCandidate{public, granted, denied})
+	admitted := func(h shadowHarness, connectPublic bool) []uuid.UUID {
+		_, members, err := h.service.admitMetaMembers(ctx, testenv.NewLogger(t), mandatorySurfaceConsent, shadowOrg, []metaMemberCandidate{public, granted, denied}, connectPublic)
 		require.NoError(t, err)
 		ids := make([]uuid.UUID, 0, len(members))
 		for _, member := range members {
@@ -275,13 +275,42 @@ func TestAdmitMetaMembersShadowLeavesAdmissionUnchanged(t *testing.T) {
 	}
 
 	on, off := newShadowHarness(t, true), newShadowHarness(t, false)
-	require.Equal(t, admitted(off), admitted(on), "the shadow never changes which members are admitted")
-	require.Equal(t, []uuid.UUID{public.serverID, granted.serverID}, admitted(off))
+	require.Equal(t, admitted(off, false), admitted(on, false), "the shadow never changes which members are admitted")
+	require.Equal(t, []uuid.UUID{public.serverID, granted.serverID}, admitted(off, false))
 	require.Equal(t, map[attribute.Set]int64{
 		shadowKey(mandatorySurfaceConsent, mandatoryCallerRepresented, "user", true, "deny", "request", "not_granted"):  1,
 		shadowKey(mandatorySurfaceConsent, mandatoryCallerRepresented, "user", true, "allow", "request", "none"):        1,
 		shadowKey(mandatorySurfaceConsent, mandatoryCallerRepresented, "user", false, "deny", "request", "not_granted"): 1,
 	}, on.points(t), "each member is recorded once under the caller's surface")
+}
+
+func TestAdmitMetaMembersConnectPublicChecksPublicMembers(t *testing.T) {
+	t.Parallel()
+
+	project := uuid.New()
+	candidate := func(visibility string) metaMemberCandidate {
+		id := uuid.New()
+		return metaMemberCandidate{
+			serverID: id, projectID: project, projectSlug: "p", slug: "s-" + id.String()[:8], name: "s", sortOrder: 0,
+			visibility: visibility, unproxied: false, toolsetID: uuid.NullUUID{}, remoteServerID: uuid.NullUUID{UUID: id, Valid: true},
+			tunneledServerID: uuid.NullUUID{}, environmentID: uuid.NullUUID{}, toolVariationsGroupID: uuid.NullUUID{},
+			remoteSessionIssuerID: uuid.NullUUID{}, tunneledResourceIdentifier: "",
+		}
+	}
+	grantedPublic, ungrantedPublic, grantedPrivate := candidate("public"), candidate("public"), candidate("private")
+	ctx := sessionContext(t, shadowOrg,
+		authz.NewGrant(authz.ScopeMCPConnect, grantedPublic.serverID.String()),
+		authz.NewGrant(authz.ScopeMCPConnect, grantedPrivate.serverID.String()),
+	)
+
+	h := newShadowHarness(t, false)
+	_, members, err := h.service.admitMetaMembers(ctx, testenv.NewLogger(t), mandatorySurfaceGatewayMember, shadowOrg, []metaMemberCandidate{grantedPublic, ungrantedPublic, grantedPrivate}, true)
+	require.NoError(t, err)
+	ids := make([]uuid.UUID, 0, len(members))
+	for _, member := range members {
+		ids = append(ids, member.serverID)
+	}
+	require.Equal(t, []uuid.UUID{grantedPublic.serverID, grantedPrivate.serverID}, ids)
 }
 
 func TestShadowMandatoryDedupeHoldsUnderConcurrency(t *testing.T) {
