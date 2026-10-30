@@ -20,12 +20,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -131,23 +131,6 @@ func seedProjectHooksIngestGrant(t *testing.T, ti *testInstance, organizationID 
 	require.NoError(t, err)
 }
 
-// newDeviceAgentPluginService is the agent service that serves getPlugins, on
-// the fixture's database, authenticating device-agent tokens with tokens.
-func newDeviceAgentPluginService(t *testing.T, f deviceAgentGrantFixture, tokens *deviceagenttoken.Issuer) *agent.Service {
-	t.Helper()
-
-	return agent.NewService(f.ti.logger, f.ti.tracerProvider, f.ti.conn, f.ti.sessionManager, f.ti.authzEngine, f.ti.audit,
-		noProductFeatures{}, f.ti.serverURL.String(), orghost.New(orghost.Config{ServerURL: f.ti.serverURL, SiteURL: nil}),
-		assetstest.NewTestBlobStore(t), nil, nil, tokens)
-}
-
-// noProductFeatures turns every product feature off.
-type noProductFeatures struct{}
-
-func (noProductFeatures) IsFeatureEnabled(context.Context, string, productfeatures.Feature) (bool, error) {
-	return false, nil
-}
-
 // deviceAgentAccessToken reads the access token out of a device-agent token
 // response body.
 func deviceAgentAccessToken(t *testing.T, body []byte) string {
@@ -177,16 +160,19 @@ func TestGitHubActionsRule_OneAgentForPluginsMCPAndHooks(t *testing.T) {
 	callerIssuer, err := sharedCallerIssuer()
 	require.NoError(t, err)
 	tokens := deviceagenttoken.New(callerIssuer, f.ti.conn)
-	admitted, agent, err := tokens.Admit(t.Context(), accessToken, f.ti.authzEngine)
+	admitted, assigned, err := tokens.Admit(t.Context(), accessToken, f.ti.authzEngine)
 	require.NoError(t, err)
-	require.Equal(t, f.agentID.String(), agent.Principal.ID, "the job acts as the agent the rule assigns")
+	require.Equal(t, f.agentID.String(), assigned.Principal.ID, "the job acts as the agent the rule assigns")
 
 	// The real getPlugins handler, behind its own device-agent token
-	// authentication, polls as that agent. Hooks ingestion is driven through
-	// its handler in internal/hooks (TestClaude_GitHubActionsJob*), whose
-	// service this package's fixtures cannot build.
-	plugins := newDeviceAgentPluginService(t, f, tokens)
-	polling, err := plugins.JWTAuth(context.WithValue(t.Context(), goa.MethodKey, "getPlugins"), accessToken, &security.JWTScheme{Name: "device_agent_token", Scopes: []string{}, RequiredScopes: []string{}})
+	// authentication, polls as that agent. The hooks handler is driven in
+	// internal/hooks (TestClaude_GitHubActionsJob*), whose service this
+	// package's fixtures cannot build; here the exchanged token's hooks reach
+	// is checked against the engine that handler uses.
+	plugins := agent.NewService(f.ti.logger, f.ti.tracerProvider, f.ti.conn, f.ti.sessionManager, f.ti.authzEngine, f.ti.audit,
+		f.ti.productFeatures, f.ti.serverURL.String(), orghost.New(orghost.Config{ServerURL: f.ti.serverURL, SiteURL: nil}),
+		assetstest.NewTestBlobStore(t), nil, nil, tokens)
+	polling, err := plugins.JWTAuth(context.WithValue(t.Context(), goa.MethodKey, "getPlugins"), accessToken, &security.JWTScheme{Name: constants.DeviceAgentTokenSecurityScheme, Scopes: []string{}, RequiredScopes: []string{}})
 	require.NoError(t, err)
 	polled, err := plugins.GetPlugins(polling, &agentgen.GetPluginsPayload{})
 	require.NoError(t, err)

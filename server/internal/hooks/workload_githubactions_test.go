@@ -9,17 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
-	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
-	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
-	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
@@ -43,29 +37,12 @@ func newGitHubActionsHooksWorkload(t *testing.T, ctx context.Context, ti *testIn
 	})
 	require.NoError(t, err)
 	actor := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
-	grant := projectHooksGrant(organizationID, *authCtx.ProjectID)
-	selectors, err := grant.Selector.MarshalJSON()
-	require.NoError(t, err)
-	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
-		OrganizationID: organizationID,
-		PrincipalUrn:   actor,
-		Scope:          string(grant.Scope),
-		Selectors:      selectors,
-	})
-	require.NoError(t, err)
-	// The owner, an administrator in practice, may send hooks anywhere, so the
-	// agent's project-bound grant alone decides.
+	seedPrincipalGrant(t, ctx, ti, organizationID, actor, projectHooksGrant(organizationID, *authCtx.ProjectID))
+	// The owner, an administrator in practice, may read every project and
+	// send hooks to any of them, so the agent's project-bound grant decides.
 	owner := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	seedHooksIngestGrant(t, ctx, ti, organizationID, owner)
-	ownerProjectRead, err := authz.NewSelector(authz.ScopeProjectRead, authz.WildcardResource).MarshalJSON()
-	require.NoError(t, err)
-	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
-		OrganizationID: organizationID,
-		PrincipalUrn:   owner,
-		Scope:          string(authz.ScopeProjectRead),
-		Selectors:      ownerProjectRead,
-	})
-	require.NoError(t, err)
+	seedPrincipalGrant(t, ctx, ti, organizationID, owner, authz.NewGrant(authz.ScopeProjectRead, authz.WildcardResource))
 
 	rule := "repo:acme/payments-api:*"
 	fixtures := testrepo.New(ti.conn)
@@ -92,14 +69,7 @@ func newGitHubActionsHooksWorkload(t *testing.T, ctx context.Context, ti *testIn
 		AgentID:          agent.ID,
 	}))
 
-	engine := authz.NewEngine(testenv.NewLogger(t), ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{
-		DevMode:                          false,
-		AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
-		AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
-		AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
-	})
-	ti.service.authz = engine
-	ti.service.auth = auth.New(testenv.NewLogger(t), ti.conn, ti.sessionManager, engine)
+	admitWorkloads(t, ti)
 
 	subject := "repo:acme/payments-api:pull_request"
 	token, _, err := ti.service.deviceAgentTokens.Mint(organizationID, urn.NewWorkloadPrincipal(issuerID, subject), time.Now())
@@ -111,9 +81,8 @@ func newGitHubActionsHooksWorkload(t *testing.T, ctx context.Context, ti *testIn
 // sends with its device-agent token, naming projectSlug.
 func workloadClaudePrompt(token, projectSlug, sessionID string) *gen.ClaudePayload {
 	payload := claudePluginPrompt(sessionID)
-	bearer := "Bearer " + token
 	payload.ApikeyToken = nil
-	payload.DeviceAgentToken = &bearer
+	payload.DeviceAgentToken = bearer(token)
 	payload.ProjectSlugInput = &projectSlug
 	return payload
 }
