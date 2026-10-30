@@ -959,8 +959,10 @@ func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principa
 	return mcp, nil
 }
 
+// setInventoryVersion stamps every server, not only Platform registrations:
+// delete_mcp takes this version back for any server in the project.
 func (r *PostgresReader) setInventoryVersion(mcp *MCP) {
-	if r == nil || mcp == nil || mcp.Registration == nil || len(r.metadataVersionKey) == 0 {
+	if r == nil || mcp == nil || len(r.metadataVersionKey) == 0 {
 		return
 	}
 	mcp.Version = lifecycleMetadataVersion(r.metadataVersionKey, mcp.ID, mcp.ProjectID, inventoryMCPDisplayName(mcp), mcp.Slug, mcp.Visibility)

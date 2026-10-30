@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 
+	mcpserversgen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -111,6 +112,10 @@ type platformMCPConfig struct {
 	AccessRoles            access.RoleProvider
 	PluginPublisher        *plugins.Service
 	PluginManagement       *plugins.Service
+	// MCPServerManagement is the dashboard's mcpServers service. delete_mcp
+	// runs its delete so both surfaces remove a server the same way. Nil keeps
+	// the tool visible as unavailable.
+	MCPServerManagement *mcpservers.Service
 	// DirectoryReview backs the directory review tools with the dashboard's
 	// access service, so they share its authorization, checks and audit.
 	DirectoryReview        platformmcp.DirectoryReviewBackend
@@ -449,6 +454,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDirectRemoteInspector(platformmcp.NewGuardianDirectRemoteInspector(config.GuardianPolicy)).
 		WithLifecycleMetadata(lifecycleMetadata).
 		WithLifecycleVisibility(lifecycleVisibility).
+		WithLifecycleDelete(newPlatformMCPLifecycleDeleteService(config)).
 		WithOperationBudgets(budgets).
 		WithReadiness(readiness).
 		WithDashboardURL(config.DashboardURL).
@@ -779,6 +785,22 @@ func newPlatformMCPLifecycleVisibilityService(config platformMCPConfig, readines
 		return nil, err
 	}
 	return service.WithDistributionAdmission(config.DistributionAdmission).WithAdministratorAuthorization(config.Authz), nil
+}
+
+// newPlatformMCPLifecycleDeleteService composes delete_mcp from the dashboard
+// delete. A missing dependency leaves the tool registered as unavailable.
+func newPlatformMCPLifecycleDeleteService(config platformMCPConfig) *platformmcp.LifecycleDeleteService {
+	if config.MCPServerManagement == nil {
+		return nil
+	}
+	service, err := platformmcp.NewLifecycleDeleteService(config.DB, config.Authz, func(ctx context.Context, serverID uuid.UUID) error {
+		return config.MCPServerManagement.DeleteMcpServer(ctx, &mcpserversgen.DeleteMcpServerPayload{ID: serverID.String(), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	}, config.JWTSigningKey)
+	if err != nil {
+		config.Logger.WarnContext(context.Background(), "Platform MCP delete_mcp unavailable", attr.SlogError(err))
+		return nil
+	}
+	return service
 }
 
 func newPlatformMCPDistributionService(config platformMCPConfig, pluginTargets platformmcp.PluginTargetResolver) *platformmcp.DistributionService {
@@ -1215,6 +1237,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDirectRemoteInspector(platformmcp.NewGuardianDirectRemoteInspector(config.GuardianPolicy)).
 		WithLifecycleMetadata(lifecycleMetadata).
 		WithLifecycleVisibility(lifecycleVisibility).
+		WithLifecycleDelete(newPlatformMCPLifecycleDeleteService(config)).
 		WithOperationBudgets(budgets).
 		WithReadiness(readiness).
 		WithDashboardURL(config.DashboardURL).

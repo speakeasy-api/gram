@@ -93,6 +93,7 @@ type RegistrationService struct {
 	directRemoteInspector      DirectRemoteInspector
 	lifecycleMetadata          *LifecycleMetadataService
 	lifecycleVisibility        *LifecycleVisibilityService
+	lifecycleDelete            *LifecycleDeleteService
 	clientAdmission            *ClientAdmissionService
 	budgets                    OperationBudgets
 	telemetry                  LifecycleTelemetry
@@ -262,6 +263,16 @@ func (s *RegistrationService) clientAdmissionTarget(ctx context.Context, princip
 func (s *RegistrationService) WithLifecycleVisibility(visibility *LifecycleVisibilityService) *RegistrationService {
 	if s != nil {
 		s.lifecycleVisibility = visibility
+	}
+	return s
+}
+
+// WithLifecycleDelete enables organization-administrator deletes of any MCP
+// server in a project. The deleter is injected from server composition so the
+// Platform MCP shares the dashboard's delete path.
+func (s *RegistrationService) WithLifecycleDelete(service *LifecycleDeleteService) *RegistrationService {
+	if s != nil {
+		s.lifecycleDelete = service
 	}
 	return s
 }
