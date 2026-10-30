@@ -515,7 +515,7 @@ func TestTokenIDJAGExchangeWithoutResourceClaimBindsRequestedResource(t *testing
 	assertion := assertionSigner.signWithoutResource(t, upstreamIssuer, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString())
 	missing := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, assertion)
 	require.Equal(t, http.StatusBadRequest, missing.Code, missing.Body.String())
-	require.Equal(t, "invalid_request", decodeSharedTokenResponse(t, missing).Error)
+	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, missing).Error)
 
 	accepted := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, assertion, resource)
 	require.Equal(t, http.StatusOK, accepted.Code, accepted.Body.String())

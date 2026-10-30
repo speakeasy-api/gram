@@ -410,11 +410,7 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 			if claimed {
 				return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "assertion resource does not identify an MCP server of this authorization server")
 			}
-			code := oautherr.CodeInvalidTarget
-			if rejection == sharedResourceMissing {
-				code = oautherr.CodeInvalidRequest
-			}
-			return writeTokenError(ctx, w, logger, http.StatusBadRequest, code, sharedResourceDescription(rejection))
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, sharedResourceDescription(rejection))
 		}
 	default:
 		creds := extractClientCredentials(r)

@@ -36,7 +36,7 @@ func TestSharedAuthorizationServer_IDJAGResourceRefusalsAreRecorded(t *testing.T
 				t.Helper()
 				return signer.signWithoutResource(t, sharedTestUpstreamIssuer, issuerURL, clientID, "user@example.test", "id-jag-no-claim")
 			},
-			code:   "invalid_request",
+			code:   "invalid_target",
 			reason: mcpmetrics.IDJAGRejectionFromValidator(idjag.ReasonResourceNotIndicated),
 		},
 		"resource claim outside the issuer": {
