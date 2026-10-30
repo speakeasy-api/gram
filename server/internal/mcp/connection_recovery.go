@@ -172,6 +172,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	}
 	subject := urn.NewUserSubject(recovery.UserID)
 	authorizationURL, err := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+		ConnectionPopup:     false,
 		ID:                  login.ID,
 		ProjectID:           recovery.ProjectID,
 		OrganizationID:      recovery.OrganizationID,
@@ -303,6 +304,7 @@ func (s *Service) connectionRecoveryAccess(ctx context.Context, authed context.C
 		OrganizationID: recovery.OrganizationID, ProjectID: recovery.ProjectID, ServerID: recovery.McpServerID,
 		ClientID: recovery.AuthClientID, ClientType: authClientTypeRemoteSession, RegistrationID: uuid.NullUUID{UUID: recovery.RegistrationID, Valid: true},
 		CredentialKind: "", CredentialID: uuid.Nil, Subject: urn.NewUserSubject(recovery.UserID),
+		UserSessionIssuerID: uuid.Nil, ConnectionOwner: "",
 	})
 	if err != nil {
 		return fmt.Errorf("check connection permission: %w", err)
