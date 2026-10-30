@@ -94,8 +94,10 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 							http.Error(w, "invalid shared credential", http.StatusUnauthorized)
 							return
 						}
-						if state != "noauth" && state != "shared_static_client" && state != "disabled_typed_client" && state != "legacy_static_client" && token != "Bearer exact-owner-connection" && token != "Bearer reconnected-owner-connection" &&
-							!(state == "replaced_source_without_reattach" && mode == "enforced" && token == "Bearer replacement-source-token") {
+						// Under enforcement a replaced source without reattachment is
+						// served by the authorizer's own, replacement connection.
+						authorizerReplacement := state == "replaced_source_without_reattach" && mode == "enforced" && token == "Bearer replacement-source-token"
+						if state != "noauth" && state != "shared_static_client" && state != "disabled_typed_client" && state != "legacy_static_client" && token != "Bearer exact-owner-connection" && token != "Bearer reconnected-owner-connection" && !authorizerReplacement {
 							rejected.Add(1)
 							http.Error(w, "invalid upstream credential", http.StatusUnauthorized)
 							return

@@ -565,11 +565,26 @@ func TestAgentKeyAuthClientUsesItsAuthorizersConnection(t *testing.T) {
 			if tc.attached {
 				require.Equal(t, session, res.attachedSession, "the attachment keeps binding its exact connection")
 				require.Empty(t, res.authorizerOwner)
-				require.Equal(t, agent, tokenSubject(ctx, agent, res.authorizerOwner), "tokens come through the attachment")
 			} else {
 				require.Equal(t, uuid.Nil, res.attachedSession)
 				require.Equal(t, "user_owner", res.authorizerOwner, "without an attachment the authorizer owns the connection checked")
-				require.Equal(t, urn.NewUserSubject("user_owner"), tokenSubject(ctx, agent, res.authorizerOwner), "tokens come from the authorizer's own connection")
+			}
+			if tc.outcome == authClientResolved {
+				source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: session}
+				f.service.upstreamTokens = source
+				authentication := &issuerGateAuthentication{
+					endpoint: &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: selector.userSessionIssuerID},
+					subject:  agent, chosenClient: res.choice.clientID, authClient: &res,
+					attachedSession: res.attachedSession, authorizerOwner: res.authorizerOwner,
+				}
+				tokens, err := f.service.resolveSelectedAccessTokens(ctx, authentication, false)
+				require.NoError(t, err)
+				require.Equal(t, session, tokens[source.issuerID].RemoteSessionID)
+				want := urn.NewUserSubject("user_owner")
+				if tc.attached {
+					want = agent
+				}
+				require.Equal(t, []urn.SessionSubject{want}, source.subjects, "the token read asks for the connection the permit was decided for")
 			}
 			want := "deny"
 			if tc.outcome == authClientResolved {
