@@ -1,18 +1,21 @@
 import { Alert } from "@/components/ui/Alert";
+import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
 import { useQueries } from "@tanstack/react-query";
-import type { JSX } from "react";
+import { useState, type JSX } from "react";
 import { Link } from "react-router";
 import { CodeBlock } from "./CodeBlock";
 import {
   ACTION_DOCS,
+  WORKFLOW_AGENTS,
   pluginsForEveryAgent,
   unreachablePluginServers,
   workflowYaml,
+  type WorkflowAgent,
 } from "./githubActions";
 import { Links } from "./SetupFields";
 import type { SetupServer } from "./setupInstructions";
@@ -129,7 +132,10 @@ export function PluginsStep({
 export function WorkflowStep(): JSX.Element {
   const organization = useOrganization();
   const project = useProject();
+  const [agent, setAgent] = useState<WorkflowAgent>("claude");
+  const selected = WORKFLOW_AGENTS[agent];
   const yaml = workflowYaml({
+    agent,
     organizationId: organization.id,
     projectSlug: project.slug,
     controlPlaneUrl: getServerURL(),
@@ -141,6 +147,23 @@ export function WorkflowStep(): JSX.Element {
         Add this workflow to the repository, or add the steps to a job you
         already have. The job proves who it is with its own GitHub token, so no
         Speakeasy secret is stored in GitHub.
+      </p>
+      <RadioCardGroup
+        aria-label="Workflow agent"
+        value={agent}
+        onValueChange={(value) => {
+          if (value === "claude" || value === "codex") setAgent(value);
+        }}
+        orientation="horizontal"
+        size="sm"
+      >
+        <RadioCard value="claude" title="Claude Code" />
+        <RadioCard value="codex" title="Codex" />
+      </RadioCardGroup>
+      <p>
+        Add <code>{selected.secret}</code> to your repository&apos;s Actions
+        secrets for {selected.name}, then replace the example prompt with your
+        task. Speakeasy access uses the job&apos;s GitHub token separately.
       </p>
       <CodeBlock
         value={yaml}
@@ -172,12 +195,17 @@ export function WorkflowStep(): JSX.Element {
           them.
         </li>
         <li>
-          Later steps reach the agent&apos;s MCP servers through Claude Code or
-          Codex. With <code>anthropics/claude-code-action</code>, keep this
-          action before it in the same job.
+          Keep <strong>Connect to Speakeasy</strong> before{" "}
+          <strong>Run {selected.name}</strong> in the same job so it can use the
+          configured MCP servers.
         </li>
       </ul>
-      <Links links={[{ href: ACTION_DOCS, label: "Device agent action" }]} />
+      <Links
+        links={[
+          { href: ACTION_DOCS, label: "Device agent action" },
+          { href: selected.docs, label: `${selected.name} action` },
+        ]}
+      />
     </div>
   );
 }

@@ -121,6 +121,7 @@ describe("GitHub Actions setup", () => {
 
 describe("workflowYaml", () => {
   const base = {
+    agent: "claude" as const,
     organizationId: "org-123",
     projectSlug: "ci",
     controlPlaneUrl: ACTION_DEFAULT_CONTROL_PLANE,
@@ -135,6 +136,52 @@ describe("workflowYaml", () => {
     expect(yaml).toContain("project: ci");
     expect(yaml).not.toContain("control-plane-url");
     expect(yaml).not.toContain("speakeasyd-binary");
+  });
+
+  it("runs Claude after Speakeasy has configured its MCP servers", () => {
+    const yaml = workflowYaml(base);
+    expect(yaml).toContain("uses: anthropics/claude-code-action@v1");
+    expect(yaml).toContain(
+      "anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}",
+    );
+    expect(yaml).toContain('mkdir -p "$HOME/.claude"');
+    expect(yaml).toContain("run: claude mcp list");
+    expect(yaml).toContain("persist-credentials: false");
+    expect(yaml.indexOf("mkdir -p")).toBeLessThan(
+      yaml.indexOf("uses: speakeasy-api/device-agent-action"),
+    );
+    expect(
+      yaml.indexOf("uses: speakeasy-api/device-agent-action"),
+    ).toBeLessThan(yaml.indexOf("uses: anthropics/claude-code-action"));
+    expect(yaml).not.toContain("OPENAI_API_KEY");
+    expect(yaml).not.toContain("openai/codex-action");
+  });
+
+  it("shares Codex's configuration between Speakeasy and the official action", () => {
+    const yaml = workflowYaml({ ...base, agent: "codex" });
+    expect(yaml).toContain("CODEX_HOME: ${{ runner.temp }}/speakeasy-codex");
+    expect(yaml).toContain('mkdir -p "$CODEX_HOME"');
+    expect(yaml).toContain("npm install -g @openai/codex");
+    expect(yaml).toContain("run: codex mcp list");
+    expect(yaml).toContain("uses: openai/codex-action@v1");
+    expect(yaml).toContain("openai-api-key: ${{ secrets.OPENAI_API_KEY }}");
+    expect(yaml).toContain("codex-home: ${{ env.CODEX_HOME }}");
+    expect(yaml.indexOf("mkdir -p")).toBeLessThan(
+      yaml.indexOf("uses: speakeasy-api/device-agent-action"),
+    );
+    expect(
+      yaml.indexOf("uses: speakeasy-api/device-agent-action"),
+    ).toBeLessThan(yaml.indexOf("uses: openai/codex-action"));
+    expect(yaml).not.toContain("ANTHROPIC_API_KEY");
+    expect(yaml).not.toContain("anthropics/claude-code-action");
+  });
+
+  it("skips fork pull requests before invoking an agent with a provider secret", () => {
+    for (const agent of ["claude", "codex"] as const) {
+      expect(workflowYaml({ ...base, agent })).toContain(
+        "if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false",
+      );
+    }
   });
 
   it("names a deployment other than the action's default", () => {

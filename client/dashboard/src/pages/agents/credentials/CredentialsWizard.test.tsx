@@ -2568,5 +2568,26 @@ describe("Connecting a GitHub repository", () => {
     );
     expect(workflow.textContent).toContain("organization-id: org_example");
     expect(workflow.textContent).toContain("project: project-one");
+    expect(workflow.textContent).toContain("anthropics/claude-code-action@v1");
+    expect(
+      screen
+        .getByRole("radio", { name: "Claude Code" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+
+    fireEvent.click(screen.getByRole("radio", { name: "Codex" }));
+    expect(workflow.textContent).toContain("openai/codex-action@v1");
+    expect(workflow.textContent).toContain(
+      "openai-api-key: ${{ secrets.OPENAI_API_KEY }}",
+    );
+    expect(workflow.textContent).toContain("codex-home: ${{ env.CODEX_HOME }}");
+    expect(workflow.textContent).not.toContain("anthropics/claude-code-action");
+    expect(
+      screen.getByRole("link", { name: "Codex action" }).getAttribute("href"),
+    ).toBe("https://learn.chatgpt.com/docs/github-action");
+
+    fireEvent.click(screen.getByRole("radio", { name: "Claude Code" }));
+    expect(workflow.textContent).toContain("anthropics/claude-code-action@v1");
+    expect(workflow.textContent).not.toContain("openai/codex-action");
   });
 });

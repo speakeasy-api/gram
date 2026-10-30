@@ -13,6 +13,23 @@ export const ACTION_DOCS = `https://github.com/${ACTION}`;
 export const OIDC_DOCS =
   "https://docs.github.com/en/actions/reference/security/oidc";
 
+export type WorkflowAgent = "claude" | "codex";
+
+export const WORKFLOW_AGENTS = {
+  claude: {
+    name: "Claude Code",
+    action: "anthropics/claude-code-action@v1",
+    secret: "ANTHROPIC_API_KEY",
+    docs: "https://github.com/anthropics/claude-code-action",
+  },
+  codex: {
+    name: "Codex",
+    action: "openai/codex-action@v1",
+    secret: "OPENAI_API_KEY",
+    docs: "https://learn.chatgpt.com/docs/github-action",
+  },
+} as const;
+
 /**
  * The control plane the action talks to when its input is left out. The token
  * audience is built from it, so a deployment at any other address names its
@@ -87,11 +104,13 @@ export function repositoryName(values: Record<string, string>): string {
  * because the token's audience is built from it.
  */
 export function workflowYaml({
+  agent,
   organizationId,
   projectSlug,
   controlPlaneUrl,
   buildFromSource,
 }: {
+  agent: WorkflowAgent;
   organizationId: string;
   projectSlug: string;
   controlPlaneUrl: string;
@@ -109,14 +128,33 @@ export function workflowYaml({
     "",
     "jobs:",
     "  agent:",
+    "    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false",
     "    runs-on: ubuntu-latest",
+  ];
+  if (agent === "codex") {
+    lines.push(
+      "    env:",
+      "      CODEX_HOME: ${{ runner.temp }}/speakeasy-codex",
+    );
+  }
+  lines.push(
     "    permissions:",
     "      id-token: write # lets the job request its GitHub OIDC token",
     "      contents: read",
     "    steps:",
-    "      # The action writes each installed tool's MCP servers, so install the tools first.",
-    "      - run: npm install -g @anthropic-ai/claude-code",
-  ];
+    "      - uses: actions/checkout@v7",
+    "        with:",
+    "          persist-credentials: false",
+    "      # Install the tool and create its configuration directory before Speakeasy syncs.",
+    `      - name: Install ${WORKFLOW_AGENTS[agent].name}`,
+    "        run: |",
+    agent === "codex"
+      ? "          npm install -g @openai/codex"
+      : "          npm install -g @anthropic-ai/claude-code",
+    agent === "codex"
+      ? '          mkdir -p "$CODEX_HOME"'
+      : '          mkdir -p "$HOME/.claude"',
+  );
   if (buildFromSource) {
     lines.push(
       "      # Until a speakeasyd release supports GitHub Actions, build it from source.",
@@ -134,7 +172,9 @@ export function workflowYaml({
     );
   }
   lines.push(
-    `      - uses: ${ACTION}@main`,
+    "      - name: Connect to Speakeasy",
+    "        id: speakeasy",
+    `        uses: ${ACTION}@main`,
     "        with:",
     `          organization-id: ${organizationId || "SPEAKEASY_ORGANIZATION_ID"}`,
     `          project: ${projectSlug || "SPEAKEASY_PROJECT"} # hook events go to this project`,
@@ -147,7 +187,24 @@ export function workflowYaml({
   }
   lines.push(
     "      # Lists the agent's Speakeasy MCP servers; each one connects with a fresh token.",
-    "      - run: claude mcp list",
+    `      - run: ${agent === "codex" ? "codex" : "claude"} mcp list`,
+    `      - name: Run ${WORKFLOW_AGENTS[agent].name}`,
+    `        uses: ${WORKFLOW_AGENTS[agent].action}`,
+    "        with:",
+  );
+  if (agent === "codex") {
+    lines.push(
+      "          openai-api-key: ${{ secrets.OPENAI_API_KEY }}",
+      "          codex-home: ${{ env.CODEX_HOME }}",
+    );
+  } else {
+    lines.push(
+      "          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}",
+      "          github_token: ${{ github.token }}",
+    );
+  }
+  lines.push(
+    "          prompt: Describe this repository and list the Speakeasy MCP tools available to you. Do not modify files.",
   );
   return lines.join("\n");
 }

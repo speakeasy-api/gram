@@ -182,8 +182,8 @@ export function githubActionsSetupInstructions(
               Run the workflow. The <strong>Connect to Speakeasy</strong> step
               prints the agent the job signed in as, which should be{" "}
               <strong>{agentName || "this agent"}</strong>, and each tool it set
-              up. <code>claude mcp list</code> then shows the agent&apos;s
-              servers as connected.
+              up. The workflow then lists the configured MCP servers and runs
+              your chosen agent.
             </p>
             <ul className="list-disc space-y-1 pl-5">
               <li>
