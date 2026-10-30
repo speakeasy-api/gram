@@ -402,12 +402,7 @@ func TestTokenIDJAGExchangeWithoutResourceClaimBindsRequestedResource(t *testing
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	const upstreamIssuer = "https://identity.example.test"
 	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, upstreamIssuer, jwksURL)
-	toolset, err := toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, *authCtx.ProjectID, toolset, issuer.ID)
 	client := createIDJAGClient(t, ctx, ti, issuer.ID)
 	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)

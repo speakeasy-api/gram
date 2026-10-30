@@ -450,12 +450,7 @@ func TestHandleGetAuthorizationServer_OmitsIDJAGWithoutTrustedIssuerJWKS(t *test
 		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: remoteIssuer.ID, Valid: true},
 	})
 	require.NoError(t, err)
-	toolset, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, *authCtx.ProjectID, toolset, issuer.ID)
 
 	require.Empty(t, loadAuthorizationServerGrantMetadata(t, ctx, ti, toolset.McpSlug.String).GrantProfiles)
 }
