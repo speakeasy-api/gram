@@ -2,6 +2,8 @@ package background
 
 import (
 	"context"
+	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"testing"
 
 	"github.com/google/uuid"
@@ -103,4 +105,51 @@ func TestProcessGuardedDeploymentWorkflowRefusesMissingGuard(t *testing.T) {
 func TestProcessGuardedDeploymentWorkflowRetriesDuringRollingRegistration(t *testing.T) {
 	t.Parallel()
 	testProcessDeploymentWorkflowCompletionActivity(t, true, 6)
+}
+
+func TestProcessDeploymentWorkflowUnsupportedSourceFailsWithoutRetry(t *testing.T) {
+	t.Parallel()
+	for _, guarded := range []bool{false, true} {
+		t.Run(fmt.Sprintf("guarded=%t", guarded), func(t *testing.T) {
+			t.Parallel()
+			var suite testsuite.WorkflowTestSuite
+			env := suite.NewTestWorkflowEnvironment()
+			env.RegisterWorkflow(ProcessDeploymentWorkflow)
+			env.RegisterWorkflow(ProcessGuardedDeploymentWorkflow)
+			var statuses []string
+			attempts := 0
+			env.RegisterActivityWithOptions(func(_ context.Context, _ uuid.UUID, _ uuid.UUID, status string) (*backgroundactivities.TransitionDeploymentResult, error) {
+				statuses = append(statuses, status)
+				return &backgroundactivities.TransitionDeploymentResult{Status: status, Moved: true}, nil
+			}, activity.RegisterOptions{Name: "TransitionDeployment"})
+			env.RegisterActivityWithOptions(func(context.Context, uuid.UUID, uuid.UUID) error { return nil }, activity.RegisterOptions{Name: "ValidateDeployment"})
+			env.RegisterActivityWithOptions(func(context.Context, uuid.UUID, uuid.UUID) error {
+				attempts++
+				return temporal.NewNonRetryableApplicationError("unsupported catalog source", "unsupported_catalog_source", externalmcp.ErrUnsupportedCatalogSource)
+			}, activity.RegisterOptions{Name: "ProcessDeployment"})
+			env.RegisterActivityWithOptions(func(context.Context, uuid.UUID, uuid.UUID) error { return nil }, activity.RegisterOptions{Name: "ProvisionFunctionsAccess"})
+			env.RegisterActivityWithOptions(func(context.Context, backgroundactivities.DeployFunctionRunnersRequest) error { return nil }, activity.RegisterOptions{Name: "DeployFunctionRunners"})
+			activationCalls := 0
+			env.RegisterActivityWithOptions(func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (*backgroundactivities.TransitionDeploymentResult, error) {
+				activationCalls++
+				return &backgroundactivities.TransitionDeploymentResult{Status: "completed", Moved: true}, nil
+			}, activity.RegisterOptions{Name: "CompleteDeploymentWithExpectedActive"})
+			params := ProcessDeploymentWorkflowParams{ProjectID: uuid.New(), DeploymentID: uuid.New()}
+			if guarded {
+				expected := uuid.New()
+				params.ExpectedActiveDeploymentID = &expected
+				env.ExecuteWorkflow(ProcessGuardedDeploymentWorkflow, params)
+			} else {
+				env.ExecuteWorkflow(ProcessDeploymentWorkflow, params)
+			}
+			require.True(t, env.IsWorkflowCompleted())
+			require.NoError(t, env.GetWorkflowError())
+			var result ProcessDeploymentWorkflowResult
+			require.NoError(t, env.GetWorkflowResult(&result))
+			require.Equal(t, "failed", result.Status)
+			require.Equal(t, []string{"pending", "failed"}, statuses)
+			require.Equal(t, 1, attempts)
+			require.Zero(t, activationCalls)
+		})
+	}
 }

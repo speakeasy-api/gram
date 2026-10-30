@@ -106,7 +106,11 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 
 	serverDetails, err := te.catalog.IdentityDetails(ctx, task.MCP.RegistryID.UUID, task.MCP.RegistryServerSpecifier, task.MCP.SelectedRemotes)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "[%s] error fetching server details from registry", task.MCP.Name).LogError(ctx, logger)
+		var attrs []slog.Attr
+		if errors.Is(err, ErrUnsupportedCatalogSource) {
+			attrs = append(attrs, attr.SlogExternalMCPFailureReason(UnsupportedCatalogSourceFailureReason))
+		}
+		return oops.E(oops.CodeUnexpected, err, "[%s] error fetching server details from registry", task.MCP.Name).LogError(ctx, logger, attrs...)
 	}
 
 	var requiresOAuth bool
