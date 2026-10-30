@@ -858,8 +858,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.BrowserErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback/{clientID}", oops.BrowserErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.BrowserErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", connectionRecoveryRoute, oops.ErrHandle(service.logger, service.HandleConnectionRecovery).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", connectionRecoveryDonePath, oops.ErrHandle(service.logger, service.HandleConnectionRecoveryDone).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", connectionRecoveryRoute, oops.BrowserErrHandle(service.logger, service.HandleConnectionRecovery).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", connectionRecoveryDonePath, oops.BrowserErrHandle(service.logger, service.HandleConnectionRecoveryDone).ServeHTTP)
 	// Both stops of the remote login browser hop: the bind stop on a remote
 	// client's callback host, and the confirm stop on the IdP callback host.
 	o11y.AttachHandler(mux, "GET", remoteLoginBindPath, oops.BrowserErrHandle(service.logger, service.HandleRemoteLoginBind).ServeHTTP)

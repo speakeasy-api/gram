@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -29,15 +30,25 @@ import (
 type connectionRecoveryFixture struct {
 	ti *testInstance
 	//nolint:containedctx // the test's authenticated context, used by every request it makes
-	ctx     context.Context
-	link    mcp.ConnectionRecoveryLink
-	router  chi.Router
-	asBase  string
-	userID  string
-	otherID string
+	ctx      context.Context
+	link     mcp.ConnectionRecoveryLink
+	router   chi.Router
+	asBase   string
+	userID   string
+	otherID  string
+	fixtures *authclientfixtures.Queries
 }
 
+// newConnectionRecoveryFixture links a personal auth client to a server; its
+// registration's callback lands on the dashboard's own host.
 func newConnectionRecoveryFixture(t *testing.T) *connectionRecoveryFixture {
+	t.Helper()
+	return newConnectionRecoveryFixtureWithCallback(t, "")
+}
+
+// newConnectionRecoveryFixtureWithCallback records callbackBase, when set, as
+// the registration's callback origin.
+func newConnectionRecoveryFixtureWithCallback(t *testing.T, callbackBase string) *connectionRecoveryFixture {
 	t.Helper()
 	ctx, ti := newTestMCPService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -51,9 +62,20 @@ func newConnectionRecoveryFixture(t *testing.T) *connectionRecoveryFixture {
 	slug := "recovery-" + uuid.NewString()[:6]
 	f.asBase = "https://" + slug + "-as.example.com"
 	registration := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, "", nil)
+	if callbackBase != "" {
+		_, err := ti.conn.Exec(ctx, "UPDATE remote_session_clients SET callback_base_url = $1 WHERE id = $2", callbackBase, registration)
+		require.NoError(t, err)
+	}
+	f.fixtures = authclientfixtures.New(ti.conn)
+	remoteID, serverID := uuid.New(), uuid.New()
+	require.NoError(t, f.fixtures.SeedRemoteMCPServerFixture(ctx, authclientfixtures.SeedRemoteMCPServerFixtureParams{ID: remoteID, ProjectID: *authCtx.ProjectID, Url: "https://mcp.example.com/" + remoteID.String()[:8]}))
+	require.NoError(t, f.fixtures.SeedMCPServerFixture(ctx, authclientfixtures.SeedMCPServerFixtureParams{ID: serverID, ProjectID: *authCtx.ProjectID, Slug: pgtype.Text{String: "s-" + serverID.String()[:8], Valid: true}, RemoteMcpServerID: uuid.NullUUID{UUID: remoteID, Valid: true}}))
+	authClientID, err := f.fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
+	require.NoError(t, err)
+	require.NoError(t, f.fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
 	f.link = mcp.ConnectionRecoveryLink{
 		OrganizationID: authCtx.ActiveOrganizationID, UserID: f.userID, ProjectID: *authCtx.ProjectID,
-		McpServerID: uuid.New(), AuthClientID: uuid.New(), RegistrationID: registration,
+		McpServerID: serverID, AuthClientID: authClientID, RegistrationID: registration,
 	}
 	ti.service.SetBrowserSession(func(ctx context.Context, token string) (context.Context, error) {
 		if token == "" || strings.HasPrefix(token, "invalid") {
@@ -62,20 +84,74 @@ func newConnectionRecoveryFixture(t *testing.T) *connectionRecoveryFixture {
 		return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{ActiveOrganizationID: "", UserID: token}), nil
 	})
 	ti.service.SetAuthClientPermitted(true)
-	f.router.Get(mcp.ConnectionRecoveryRoute, oops.ErrHandle(ti.logger, ti.service.HandleConnectionRecovery).ServeHTTP)
+	f.router.Get(mcp.ConnectionRecoveryRoute, oops.BrowserErrHandle(ti.logger, ti.service.HandleConnectionRecovery).ServeHTTP)
+	f.router.Get(mcp.RemoteLoginBindPath, oops.BrowserErrHandle(ti.logger, ti.service.HandleRemoteLoginBind).ServeHTTP)
 	return f
 }
 
 // open requests path signed in as userID, or signed out when it is empty.
 func (f *connectionRecoveryFixture) open(t *testing.T, path, userID string) *httptest.ResponseRecorder {
 	t.Helper()
+	return f.request(t, path, userID, nil)
+}
+
+// request requests path as a browser signed in as userID, or signed out when
+// it is empty, holding cookies.
+func (f *connectionRecoveryFixture) request(t *testing.T, path, userID string, cookies []*http.Cookie) *httptest.ResponseRecorder {
+	t.Helper()
 	req := httptest.NewRequestWithContext(f.ctx, http.MethodGet, path, nil)
 	if userID != "" {
 		req.AddCookie(&http.Cookie{Name: constants.SessionCookie, Value: userID})
 	}
+	for _, cookie := range cookies {
+		req.AddCookie(&http.Cookie{Name: cookie.Name, Value: cookie.Value})
+	}
 	rec := httptest.NewRecorder()
 	f.router.ServeHTTP(rec, req)
 	return rec
+}
+
+// start opens a link signed in as userID and follows any browser hop, as that
+// browser, to the upstream authorization URL. It returns that URL and the
+// cookies the browser was given on the way.
+func (f *connectionRecoveryFixture) start(t *testing.T, path, userID string) (*url.URL, []*http.Cookie) {
+	t.Helper()
+	res := f.open(t, path, userID)
+	var cookies []*http.Cookie
+	for {
+		require.Equal(t, http.StatusFound, res.Code, res.Body.String())
+		cookies = append(cookies, res.Result().Cookies()...)
+		location, err := url.Parse(res.Header().Get("Location"))
+		require.NoError(t, err)
+		if location.Path != mcp.RemoteLoginBindPath {
+			return location, cookies
+		}
+		res = f.request(t, location.RequestURI(), userID, cookies)
+	}
+}
+
+// callback is a remote login callback from a browser signed in as userID, or
+// signed out when it is empty, holding cookies.
+func (f *connectionRecoveryFixture) callback(userID string, cookies []*http.Cookie) *http.Request {
+	req := httptest.NewRequestWithContext(f.ctx, http.MethodGet, "/mcp/remote_login_callback", nil)
+	if userID != "" {
+		req.AddCookie(&http.Cookie{Name: constants.SessionCookie, Value: userID})
+	}
+	for _, cookie := range cookies {
+		req.AddCookie(&http.Cookie{Name: cookie.Name, Value: cookie.Value})
+	}
+	return req
+}
+
+// started issues a link and starts its login as the link's person.
+func (f *connectionRecoveryFixture) started(t *testing.T) (remotesessions.RemoteLoginState, []*http.Cookie) {
+	t.Helper()
+	path, err := f.ti.service.IssueConnectionRecovery(f.ctx, f.link)
+	require.NoError(t, err)
+	location, cookies := f.start(t, path, f.userID)
+	remote, err := f.ti.service.RemoteLoginState(f.ctx, location.Query().Get("state"))
+	require.NoError(t, err)
+	return remote, cookies
 }
 
 func TestConnectionRecoveryStartsTheNamedPersonsLoginOnce(t *testing.T) {
@@ -93,11 +169,9 @@ func TestConnectionRecoveryStartsTheNamedPersonsLoginOnce(t *testing.T) {
 	require.Contains(t, other.Body.String(), "for someone else")
 	require.NotContains(t, other.Body.String(), f.asBase)
 
-	started := f.open(t, path, f.userID)
-	require.Equal(t, http.StatusFound, started.Code, started.Body.String())
-	location, err := url.Parse(started.Header().Get("Location"))
-	require.NoError(t, err)
+	location, cookies := f.start(t, path, f.userID)
 	require.Equal(t, f.asBase+"/authorize", location.Scheme+"://"+location.Host+location.Path)
+	require.NotEmpty(t, cookies, "the starting browser is bound to the login")
 
 	again := f.open(t, path, f.userID)
 	require.Equal(t, http.StatusNotFound, again.Code, "a link starts one login")
@@ -108,42 +182,95 @@ func TestConnectionRecoveryStartsTheNamedPersonsLoginOnce(t *testing.T) {
 	require.Equal(t, f.userID, remote.Subject.ID, "the login connects the named person's own account")
 	require.True(t, strings.HasSuffix(remote.FinalRedirectURI, mcp.ConnectionRecoveryDonePath))
 
-	callback := func(userID string) *http.Request {
-		req := httptest.NewRequestWithContext(f.ctx, http.MethodGet, "/mcp/remote_login_callback", nil)
-		req.AddCookie(&http.Cookie{Name: constants.SessionCookie, Value: userID})
-		return req
-	}
-	recovery, err := f.ti.service.VerifyConnectionRecoveryCompletion(callback(f.otherID), remote)
+	recovery, err := f.ti.service.VerifyConnectionRecoveryCompletion(f.callback(f.otherID, cookies), remote)
 	require.True(t, recovery)
 	require.Error(t, err, "completing as someone else is refused")
-	recovery, err = f.ti.service.VerifyConnectionRecoveryCompletion(callback(f.userID), remote)
+	recovery, err = f.ti.service.VerifyConnectionRecoveryCompletion(f.callback("", nil), remote)
+	require.True(t, recovery)
+	require.Error(t, err, "a browser that did not start the login cannot complete it with its own account")
+	recovery, err = f.ti.service.VerifyConnectionRecoveryCompletion(f.callback(f.userID, nil), remote)
+	require.True(t, recovery)
+	require.Error(t, err, "even the person's session does not stand in for the starting browser")
+	recovery, err = f.ti.service.VerifyConnectionRecoveryCompletion(f.callback(f.userID, cookies), remote)
 	require.True(t, recovery)
 	require.NoError(t, err, "a refused callback does not spend the person's login")
-	_, err = f.ti.service.VerifyConnectionRecoveryCompletion(callback(f.userID), remote)
+	_, err = f.ti.service.VerifyConnectionRecoveryCompletion(f.callback(f.userID, cookies), remote)
 	require.Error(t, err, "a login completes once")
 
-	path, err = f.ti.service.IssueConnectionRecovery(f.ctx, f.link)
-	require.NoError(t, err)
-	started = f.open(t, path, f.userID)
-	location, err = url.Parse(started.Header().Get("Location"))
-	require.NoError(t, err)
-	remote, err = f.ti.service.RemoteLoginState(f.ctx, location.Query().Get("state"))
-	require.NoError(t, err)
-	signedOutCallback := httptest.NewRequestWithContext(f.ctx, http.MethodGet, "/mcp/remote_login_callback", nil)
-	recovery, err = f.ti.service.VerifyConnectionRecoveryCompletion(signedOutCallback, remote)
+	remote, cookies = f.started(t)
+	recovery, err = f.ti.service.VerifyConnectionRecoveryCompletion(f.callback("", cookies), remote)
 	require.True(t, recovery)
-	require.NoError(t, err, "a callback on a host without the session completes on the person's rechecked access")
+	require.NoError(t, err, "the starting browser completes on a host without the session, on the person's rechecked access")
 
+	remote, cookies = f.started(t)
+	f.ti.service.SetAuthClientPermitted(false)
+	_, err = f.ti.service.VerifyConnectionRecoveryCompletion(f.callback(f.userID, cookies), remote)
+	require.Error(t, err, "a person who lost access cannot complete")
+}
+
+// A registration whose callback lands on another host binds the starting
+// browser there through the browser hop, whose confirm stop needs the
+// person's own session.
+func TestConnectionRecoveryBindsACallbackOnAnotherHost(t *testing.T) {
+	t.Parallel()
+	f := newConnectionRecoveryFixtureWithCallback(t, "https://callback.example.com")
+
+	remote, cookies := f.started(t)
+	require.NotEmpty(t, cookies)
+	recovery, err := f.ti.service.VerifyConnectionRecoveryCompletion(f.callback("", nil), remote)
+	require.True(t, recovery)
+	require.Error(t, err, "a browser the hop did not bind cannot complete")
+	recovery, err = f.ti.service.VerifyConnectionRecoveryCompletion(f.callback("", cookies), remote)
+	require.True(t, recovery)
+	require.NoError(t, err, "the browser the hop bound completes on the callback host")
+
+	// A copied bind link gives another browser the cookie, but its confirm
+	// stop needs the person's session, so the authorization URL is never
+	// revealed to it.
+	path, err := f.ti.service.IssueConnectionRecovery(f.ctx, f.link)
+	require.NoError(t, err)
+	started := f.open(t, path, f.userID)
+	require.Equal(t, http.StatusFound, started.Code, started.Body.String())
+	bind, err := url.Parse(started.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "callback.example.com", bind.Host)
+	require.Equal(t, mcp.RemoteLoginBindPath, bind.Path)
+	copied := f.request(t, bind.RequestURI(), "", nil)
+	require.Equal(t, http.StatusFound, copied.Code, copied.Body.String())
+	confirm, err := url.Parse(copied.Header().Get("Location"))
+	require.NoError(t, err)
+	refused := f.request(t, confirm.RequestURI(), f.otherID, copied.Result().Cookies())
+	require.NotEqual(t, http.StatusFound, refused.Code)
+	require.NotContains(t, refused.Header().Get("Location"), f.asBase)
+	require.NotContains(t, refused.Body.String(), f.asBase)
+}
+
+// A link connects only through a client the server still offers on the same
+// registration, both when its login starts and when it completes.
+func TestConnectionRecoveryRefusesAClientTheServerNoLongerOffers(t *testing.T) {
+	t.Parallel()
+	f := newConnectionRecoveryFixture(t)
+
+	remote, cookies := f.started(t)
+	require.NoError(t, f.fixtures.SetAuthClientEnabledFixture(f.ctx, authclientfixtures.SetAuthClientEnabledFixtureParams{Enabled: false, ID: f.link.AuthClientID}))
+	_, err := f.ti.service.VerifyConnectionRecoveryCompletion(f.callback(f.userID, cookies), remote)
+	require.Error(t, err, "a disabled client stores no connection")
+	path, err := f.ti.service.IssueConnectionRecovery(f.ctx, f.link)
+	require.NoError(t, err)
+	disabled := f.open(t, path, f.userID)
+	require.Equal(t, http.StatusConflict, disabled.Code)
+	require.NotContains(t, disabled.Body.String(), f.asBase)
+
+	require.NoError(t, f.fixtures.SetAuthClientEnabledFixture(f.ctx, authclientfixtures.SetAuthClientEnabledFixtureParams{Enabled: true, ID: f.link.AuthClientID}))
+	remote, cookies = f.started(t)
+	require.NoError(t, f.fixtures.SoftDeleteServerAuthClientLinksFixture(f.ctx, f.link.McpServerID))
+	_, err = f.ti.service.VerifyConnectionRecoveryCompletion(f.callback(f.userID, cookies), remote)
+	require.Error(t, err, "a client detached from the server stores no connection")
 	path, err = f.ti.service.IssueConnectionRecovery(f.ctx, f.link)
 	require.NoError(t, err)
-	started = f.open(t, path, f.userID)
-	location, err = url.Parse(started.Header().Get("Location"))
-	require.NoError(t, err)
-	remote, err = f.ti.service.RemoteLoginState(f.ctx, location.Query().Get("state"))
-	require.NoError(t, err)
-	f.ti.service.SetAuthClientPermitted(false)
-	_, err = f.ti.service.VerifyConnectionRecoveryCompletion(callback(f.userID), remote)
-	require.Error(t, err, "a person who lost access cannot complete")
+	detached := f.open(t, path, f.userID)
+	require.Equal(t, http.StatusConflict, detached.Code)
+	require.NotContains(t, detached.Body.String(), f.asBase)
 }
 
 func TestConnectionRecoveryShowsNoAccessWithoutAWayToConnect(t *testing.T) {
@@ -214,7 +341,13 @@ func TestPersonBackedTurnsUseTheirPersonsOwnConnection(t *testing.T) {
 	require.False(t, ok, "a person's own session reconnects through its client as before")
 
 	require.Equal(t, urn.NewUserSubject(ac.UserID), mcp.ConnectionSubject(mint(urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), ac.UserID), agentSubject), "a turn acting for a person resolves that person's connection, not the agent owner's")
-	workload := urn.NewWorkloadPrincipal(uuid.New(), "assistant-trigger:"+uuid.NewString())
-	workloadSubject := urn.NewWorkloadSubject(uuid.New(), "assistant-trigger")
+	workloadIssuer, workloadExternal := uuid.New(), "assistant-trigger:"+uuid.NewString()
+	workload := urn.NewWorkloadPrincipal(workloadIssuer, workloadExternal)
+	workloadSubject := urn.NewWorkloadSubject(workloadIssuer, workloadExternal)
 	require.Equal(t, workloadSubject, mcp.ConnectionSubject(mint(workload, ""), workloadSubject), "a turn acting for nobody resolves no person's connection")
+
+	// An agent API key's authorizer is the user who created the key, not a
+	// person a turn acts for, so the key keeps resolving its own connection.
+	agentKey := contextvalues.WithPrincipalAPIKeyAuthorization(ctx, ac, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), contextvalues.PrincipalCredential{AuthorizerUserID: owner, DelegatedGrants: []byte("[]"), DelegatedGrantsVersion: 1, DerivesPolicyAtAdmission: false})
+	require.Equal(t, agentSubject, mcp.ConnectionSubject(agentKey, agentSubject), "an agent key never resolves its creator's personal connection")
 }

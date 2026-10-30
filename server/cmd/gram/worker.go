@@ -790,6 +790,13 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			var siteURL *url.URL
+			if raw := c.String("site-url"); raw != "" {
+				siteURL, err = url.Parse(raw)
+				if err != nil {
+					return fmt.Errorf("failed to parse site url: %w", err)
+				}
+			}
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
 			assistantsCore.SetWakeCanceller(triggerApp)
@@ -802,6 +809,9 @@ func newWorkerCommand() *cli.Command {
 			assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
 			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
 			assistantsCore.SetFeatureProvider(featureFlags)
+			// Turns this worker runs relay the connection links the MCP service
+			// issues on the dashboard origin, as the server's turns do.
+			assistantsCore.SetSiteURL(siteURL)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
@@ -811,13 +821,6 @@ func newWorkerCommand() *cli.Command {
 
 			piScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, db).Classify)
 
-			var siteURL *url.URL
-			if raw := c.String("site-url"); raw != "" {
-				siteURL, err = url.Parse(raw)
-				if err != nil {
-					return fmt.Errorf("failed to parse site url: %w", err)
-				}
-			}
 			platformHosts, err := customdomains.ParsePlatformHosts(c.StringSlice(platformHostsFlag))
 			if err != nil {
 				return fmt.Errorf("invalid platform hosts: %w", err)

@@ -181,6 +181,7 @@ func (s *Service) VerifyConnectionRecoveryCompletion(r *http.Request, remote rem
 const (
 	ConnectionRecoveryRoute    = connectionRecoveryRoute
 	ConnectionRecoveryDonePath = connectionRecoveryDonePath
+	RemoteLoginBindPath        = remoteLoginBindPath
 )
 
 // ConnectionSubject exposes whose stored connection a typed auth client
