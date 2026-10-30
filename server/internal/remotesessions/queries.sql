@@ -4367,20 +4367,6 @@ WHERE b.project_id = @project_id::uuid
   AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)));
 
--- name: HasPrincipalRemoteSessionBindingHistory :one
--- Any binding this agent ever had for the sign-in and registration, live,
--- revoked or pinned to a replaced source. An explicit binding keeps governing
--- the agent: its revocation or staleness is never bypassed by another source.
-SELECT EXISTS (
-  SELECT 1
-  FROM principal_remote_session_bindings AS b
-  WHERE b.project_id = @project_id::uuid
-    AND b.organization_id = @organization_id::text
-    AND b.principal_id = @principal_id::uuid
-    AND b.user_session_issuer_id = @user_session_issuer_id::uuid
-    AND b.remote_session_client_id = @remote_session_client_id::uuid
-)::boolean AS has_binding;
-
 -- name: ListEligiblePrincipalRemoteSessionBindings :many
 -- Read current credentials from the attached row, never a replacement after deletion.
 SELECT s.*

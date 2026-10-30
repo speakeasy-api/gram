@@ -350,5 +350,5 @@ func TestPersonBackedTurnsUseTheirPersonsOwnConnection(t *testing.T) {
 	agentKey := contextvalues.WithPrincipalAPIKeyAuthorization(ctx, ac, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), contextvalues.PrincipalCredential{AuthorizerUserID: owner, DelegatedGrants: []byte("[]"), DelegatedGrantsVersion: 1, DerivesPolicyAtAdmission: false})
 	require.Equal(t, agentSubject, mcp.ConnectionSubject(agentKey, agentSubject), "an agent key keeps its subject; its attachment, else its authorizer, owns the connection")
 	agentSession := contextvalues.WithPrincipalCredentialAuthorization(ctx, ac, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), contextvalues.PrincipalCredential{AuthorizerUserID: owner, DelegatedGrants: []byte("[]"), DelegatedGrantsVersion: 1, DerivesPolicyAtAdmission: false})
-	require.Equal(t, agentSubject, mcp.ConnectionSubject(agentSession, agentSubject), "an agent session keeps its exact attachment")
+	require.Equal(t, agentSubject, mcp.ConnectionSubject(agentSession, agentSubject), "an agent session keeps its subject; its attachment, else its authorizer, owns the connection")
 }

@@ -43,13 +43,13 @@ func remoteSessionCallerPrincipal(ctx context.Context, subject urn.SessionSubjec
 	return uuid.Nil, false, nil
 }
 
-// principalAPIKeyAuthorizer reports the validated authorizer of a
-// principal-backed API key when caller is exactly that user's subject, the
-// owner the typed auth client check named. Any other caller keeps the
-// key's own principal.
+// principalAPIKeyAuthorizer reports the validated authorizer of an admitted
+// agent principal (a principal-backed API key or an agent session) when
+// caller is exactly that user's subject, the owner the auth client check
+// named. Any other caller keeps the agent's own principal.
 func principalAPIKeyAuthorizer(ctx context.Context, caller urn.SessionSubject) (string, bool) {
-	mode, ok := contextvalues.APIKeyAuthorization(ctx)
-	if !ok || mode != contextvalues.APIKeyAuthorizationModePrincipal || caller.Kind != urn.SessionSubjectKindUser {
+	actor, ok := contextvalues.AuthenticatedActor(ctx)
+	if !ok || actor.Type != urn.PrincipalTypeAgent || caller.Kind != urn.SessionSubjectKindUser {
 		return "", false
 	}
 	credential, ok := contextvalues.PrincipalCredentialAuthorization(ctx)
@@ -61,7 +61,10 @@ func principalAPIKeyAuthorizer(ctx context.Context, caller urn.SessionSubject) (
 
 // resolveCallerUpstreamToken separates admission identity from credential
 // source. Only scoped callers can use attachments; a missing or revoked
-// attachment never falls back to the agent's, owner's, or authorizer's grant.
+// attachment never falls back to the agent's or owner's grant, and a revoked
+// attachment never serves. An admitted agent principal reads its authorizer's
+// own connection only when the caller asks for exactly that user, after the
+// auth client check decided the agent's own mcp:auth for that owner.
 func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, lookup tokenLookup, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, caller urn.SessionSubject, resource string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
 	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeWorkload {

@@ -77,10 +77,6 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 		return fallback, nil
 	case err != nil:
 		return none, fmt.Errorf("resolve attached connection owner: %w", err)
-	case !attached && conn.Bound:
-		// An explicit binding that was revoked or went stale keeps governing
-		// the agent; the authorizer's own connection never bypasses it.
-		return none, nil
 	case !attached:
 		return fallback, nil
 	case conn.RemoteSessionID == uuid.Nil:
@@ -91,12 +87,12 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 	return authClientConnectionOwner{owner: conn.OwnerUserID, attachedSession: conn.RemoteSessionID, authorizer: false}, nil
 }
 
-// agentKeyAuthorizer is the validated authorizer of a principal-backed agent
-// API key whose agent is subject. Agent sessions, signed principal
-// credentials, legacy keys and workloads have none.
+// agentKeyAuthorizer is the validated authorizer of an admitted agent
+// principal (a principal-backed API key or an agent session) whose agent is
+// subject. Signed principal credentials resolve their authorizer earlier
+// (connectionSubject); legacy keys and workloads have none.
 func agentKeyAuthorizer(ctx context.Context, subject urn.SessionSubject) (string, bool) {
-	mode, ok := contextvalues.APIKeyAuthorization(ctx)
-	if !ok || mode != contextvalues.APIKeyAuthorizationModePrincipal || subject.Kind != urn.SessionSubjectKindAgent {
+	if subject.Kind != urn.SessionSubjectKindAgent {
 		return "", false
 	}
 	actor, ok := contextvalues.AuthenticatedActor(ctx)
