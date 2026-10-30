@@ -1,3 +1,4 @@
+import { asSchema } from "ai";
 import { describe, expect, it, vi } from "vitest";
 import {
   createLoadSkillTool,
@@ -193,5 +194,45 @@ describe("createLoadSkillTool", () => {
       messages: [],
     } as never);
     expect(missing).toMatchObject({ isError: true });
+  });
+
+  it("distinguishes same-named skills from different projects", async () => {
+    const readResource = vi.fn().mockResolvedValue({
+      contents: [{ uri: "skill://project-b/deploy/SKILL.md", text: "# B" }],
+    });
+    const skills = ["project-a", "project-b"].map((project) => ({
+      uri: `skill://${project}/deploy/SKILL.md`,
+      name: "deploy",
+      description: `Deploy ${project}`,
+    }));
+    skills.push({
+      uri: "skill://project-a/lint/SKILL.md",
+      name: "lint",
+      description: "Lint.",
+    });
+    const loadSkill = createLoadSkillTool(
+      { initializeResult: {} as never, readResource },
+      skills,
+    );
+
+    const schema = (await asSchema(loadSkill.inputSchema).jsonSchema) as {
+      properties: { name: { enum: string[] } };
+    };
+    expect(schema.properties.name.enum).toEqual([
+      "skill://project-a/deploy/SKILL.md",
+      "skill://project-b/deploy/SKILL.md",
+      "lint",
+    ]);
+    expect(loadSkill.description).toContain(
+      "- skill://project-b/deploy/SKILL.md: Deploy project-b",
+    );
+
+    await loadSkill.execute!({ name: "skill://project-b/deploy/SKILL.md" }, {
+      toolCallId: "1",
+      messages: [],
+    } as never);
+    expect(readResource).toHaveBeenCalledWith({
+      uri: "skill://project-b/deploy/SKILL.md",
+    });
   });
 });

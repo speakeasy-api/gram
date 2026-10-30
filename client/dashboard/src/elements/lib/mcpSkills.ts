@@ -171,6 +171,25 @@ async function readJSONRPCResponse(
 }
 
 /**
+ * Gives each skill a name the model can pick it by. Skill names are only
+ * unique within a project, and a gateway can serve skills from several
+ * projects, so a name shared by more than one skill is qualified with the
+ * skill's URI (`skill://<project>/<name>/SKILL.md`) instead.
+ */
+function selectableSkillNames(skills: ServedSkill[]): Map<string, ServedSkill> {
+  const counts = new Map<string, number>();
+  for (const skill of skills) {
+    counts.set(skill.name, (counts.get(skill.name) ?? 0) + 1);
+  }
+  const byName = new Map<string, ServedSkill>();
+  for (const skill of skills) {
+    const key = counts.get(skill.name) === 1 ? skill.name : skill.uri;
+    if (!byName.has(key)) byName.set(key, skill);
+  }
+  return byName;
+}
+
+/**
  * Builds the tool that loads a served skill. The available skills are listed
  * in the tool's description, so the model sees what each one is for and loads
  * a skill's SKILL.md (through `resources/read`, which the server records as a
@@ -180,9 +199,9 @@ export function createLoadSkillTool(
   client: SkillsClient,
   skills: ServedSkill[],
 ): Tool<{ name: string }, LoadSkillResult> {
-  const byName = new Map(skills.map((skill) => [skill.name, skill]));
-  const index = skills
-    .map((skill) => `- ${skill.name}: ${skill.description}`)
+  const byName = selectableSkillNames(skills);
+  const index = [...byName]
+    .map(([name, skill]) => `- ${name}: ${skill.description}`)
     .join("\n");
 
   return tool({
@@ -198,8 +217,8 @@ export function createLoadSkillTool(
       properties: {
         name: {
           type: "string",
-          enum: skills.map((skill) => skill.name),
-          description: "Name of the skill to load.",
+          enum: [...byName.keys()],
+          description: "Name of the skill to load, as listed above.",
         },
       },
       required: ["name"],
