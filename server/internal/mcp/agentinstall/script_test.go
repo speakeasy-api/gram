@@ -208,7 +208,8 @@ const (
 )
 
 // The stub records its argv, answers --help with $STUB_INSTALL_HELP, and on a
-// real install keeps the archive and, unless $STUB_SKIP_LAYOUT is set, lays
+// real install keeps the archive, prints $STUB_INSTALL_OUTPUT and, unless
+// $STUB_SKIP_LAYOUT is set, lays
 // out the installed plugin the way OpenClaw does, world-readable, with the
 // stub bootstrapper in place of the real one.
 const stubOpenClaw = `#!/bin/sh
@@ -229,6 +230,7 @@ if [ "$1 $2" = "plugins install" ]; then
   esac
   for archive in "$@"; do :; done
   cp "$archive" "$STUB_DIR/installed.zip"
+  [ -n "${STUB_INSTALL_OUTPUT:-}" ] && printf '%s\n' "$STUB_INSTALL_OUTPUT"
   [ -n "$STUB_SKIP_LAYOUT" ] && exit 0
   plugin="${STUB_PLUGIN_DIR:-$OPENCLAW_STATE_DIR/extensions/speakeasy-observability}"
   mkdir -p "$plugin/hooks"
@@ -393,6 +395,19 @@ func TestScriptConfiguresOpenClawAndPassesTheSelfCheck(t *testing.T) {
 
 // Releases before 2026.8.1 reject --accept-capabilities, so the script asks
 // the installed CLI before passing it.
+// Current OpenClaw applies the installed plugin to the running Gateway, and a
+// needless restart note sends the agent off to restart its own Gateway.
+func TestScriptSkipsTheRestartNoteWhenOpenClawAppliedThePlugin(t *testing.T) {
+	t.Parallel()
+	h := newOpenClawHarness(t, helpWithAcceptCapabilities, `{"seq":1}`)
+	h.env = append(h.env, "STUB_INSTALL_OUTPUT=Installed plugin: speakeasy-observability\nApplied in Gateway generation 4.")
+	out := h.run(t, renderScript(t, testParams()))
+
+	require.Contains(t, out, "Applied in Gateway generation 4.", "the installer's own output is shown")
+	require.Contains(t, out, "Speakeasy hooks: PASS")
+	require.NotContains(t, out, "restart the OpenClaw Gateway")
+}
+
 func TestScriptOmitsAcceptCapabilitiesForOlderOpenClaw(t *testing.T) {
 	t.Parallel()
 	h := newOpenClawHarness(t, helpWithoutAcceptCapabilities, `{"seq":1}`)
@@ -515,7 +530,8 @@ func TestScriptWithoutAProjectConfiguresOpenClawWithoutHooks(t *testing.T) {
 	out := h.run(t, script)
 	require.Contains(t, out, "Configured OpenClaw.")
 	require.Contains(t, out, "Speakeasy hooks: FAIL: this agent has no project, or its project was deleted")
-	require.Contains(t, out, "Next: restart the OpenClaw Gateway.")
+	// OpenClaw applies a gateway entry by itself; only a plugin needs a restart.
+	require.NotContains(t, out, "restart the OpenClaw Gateway")
 
 	calls := h.calls(t)
 	require.Len(t, calls, 3, "openclaw calls: %v", calls)
