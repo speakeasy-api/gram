@@ -114,8 +114,7 @@ func TestDefinitions_blockWinsOnlyForDefinedPermissions(t *testing.T) {
 	for _, scope := range []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPWrite, authz.ScopeMCPConnect} {
 		require.False(t, authz.ExclusionYieldsToDirectGrants(scope), scope)
 	}
-	// Permissions defined without BlockWins, and families without a
-	// definition, keep the direct-user override.
+	// Families without a definition keep the direct-user override.
 	for _, scope := range []authz.Scope{authz.ScopeMCPAuth, authz.ScopeProjectRead, authz.ScopeProjectWrite} {
 		require.True(t, authz.ExclusionYieldsToDirectGrants(scope), scope)
 	}
@@ -194,7 +193,7 @@ func TestClient_rejectsMalformedRequests(t *testing.T) {
 	ctx := authz.GrantsToContext(sessionCtx(t), []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
 
 	for name, request := range map[string]Request{
-		"undefined permission": {Permission: authz.ScopeEnvironmentRead, Target: clientTarget(clientServer)},
+		"undefined permission": {Permission: authz.ScopeProjectRead, Target: clientTarget(clientServer)},
 		"wildcard target":      {Permission: authz.ScopeMCPConnect, Target: clientTarget(authz.WildcardResource)},
 		"wrong kind":           {Permission: authz.ScopeMCPConnect, Target: Target{Resource: ResourceRef{OrganizationID: clientOrg, Kind: authz.ResourceKindProject, ID: clientProject}, Ancestors: nil}},
 	} {

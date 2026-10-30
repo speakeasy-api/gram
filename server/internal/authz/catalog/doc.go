@@ -1,7 +1,7 @@
 // Package catalog answers "may this caller do this to that resource?" for
 // the permissions it declares, over the grants and engine package authz
-// already has. It is option B of the RBAC evaluation. GUIDE.md answers
-// "how would option B handle X?" one case at a time, in plain words.
+// already has. It is option B of the RBAC evaluation, slice 1: configure an
+// MCP server without using it.
 //
 // # How a decision is made
 //
@@ -26,8 +26,7 @@
 //   - client.go: Target, Request, Decision, and Client.
 //   - backend.go: the Backend over authz.Engine.
 //   - mcpserver.go: request builders for MCP servers.
-//   - project.go: request builders for projects.
-//   - GUIDE.md: questions answered case by case.
+//   - GUIDE.md: option B explained step by step, in plain words.
 //   - walkthroughs/: one request followed end to end, with diagrams.
 //     01-mcp-server-configure-vs-use.md: an editor pins a server's scopes
 //     but is refused when using it.

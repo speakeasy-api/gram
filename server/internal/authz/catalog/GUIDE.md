@@ -1,231 +1,204 @@
-# Option B, case by case
+# Option B, step by step
 
-This guide answers one question at a time: "how would option B handle X?" Each
-section shows the code that answers it and then says, in plain words, what that
-code does when a request arrives. New questions are added at the end.
+This guide explains option B one step at a time, in plain words, with the code
+that implements each step. New steps are added at the end as they are asked
+for.
 
-Option B in one paragraph: a **catalogue** of permission definitions
-(`permissions.go`) sits on top of the grant storage and engine that Speakeasy
-already has (`server/internal/authz`). A service describes the resource it
-loaded as a `Target`, asks for a `Request` through a small builder, and a
-`Client` checks the request against its definition before the existing engine
-reads any grant. The flow is in `doc.go`.
-
-Each section is labelled:
+Labels:
 
 - **Implemented**: the code exists on this branch and has tests.
-- **Sketched**: proposed code that is not wired in or not tested. It is
-  written to show the shape and may not compile as is.
+- **Sketched**: proposed code that is not wired in or not tested.
 
-## Questions
+## Steps
 
-1. [How would the definition of project authz look?](#1-how-would-the-definition-of-project-authz-look)
-2. [How would checking authz when connecting to an MCP server look?](#2-how-would-checking-authz-when-connecting-to-an-mcp-server-look)
+1. [The scaffolding: defining checks and injecting the client](#step-1-the-scaffolding)
 
 ---
 
-## 1. How would the definition of project authz look?
+## Step 1. The scaffolding
 
-**Status:** the definitions and builders are implemented and tested
-(`permissions.go`, `project.go`, `project_test.go`). No service uses them yet;
-the call-site change below is sketched.
+**Status:** implemented. Everything below is in `server/internal/authz/catalog`
+on this branch.
 
-### Short answer
+### Where it sits
 
-A project permission is two entries in the same registry as the MCP ones. They
-encode today's project rules, unchanged: `project:write` lets a caller view the
-project too, a grant may name one project or the whole organization, and a
-direct grant to a user outranks a block that user inherits from a role.
-
-### The definition
-
-`permissions.go:76`
-
-```go
-{
-	Name:              authz.ScopeProjectRead,
-	Resource:          authz.ResourceKindProject,
-	AllowedAnchors:    []string{authz.ResourceKindProject, authz.ResourceKindOrg},
-	RequiredAncestors: projectAncestors, // {org}
-	ImpliedBy:         []authz.Scope{authz.ScopeProjectWrite},
-	ExcludedBy:        authz.ScopeProjectBlockedRead,
-	BlockWins:         false,
-},
-{
-	Name:              authz.ScopeProjectWrite,
-	Resource:          authz.ResourceKindProject,
-	AllowedAnchors:    []string{authz.ResourceKindProject, authz.ResourceKindOrg},
-	RequiredAncestors: projectAncestors, // {org}
-	ImpliedBy:         nil,
-	ExcludedBy:        authz.ScopeProjectBlockedWrite,
-	BlockWins:         false,
-},
+```
+handler (e.g. remotemcp)
+   │  builds a Target from records it loaded, asks for Requests
+   ▼
+catalog.Client          checks each Request against its Definition
+   │                    (right kind of resource, same organization, containers present)
+   ▼
+catalog.Backend         one implementation today: the existing engine
+   ▼
+authz.Engine            unchanged: loads the caller's grants from principal_grants and matches them
 ```
 
-Read field by field, `project:write` means:
+The catalogue adds no new storage. Grants, roles and the engine stay as they
+are; the catalogue decides what a check means before the engine reads any grant.
 
-| Field | Value | In plain words |
-| --- | --- | --- |
-| `Resource` | `project` | The thing being checked is one project. A check on "every project" is a programming error, not a deny. |
-| `AllowedAnchors` | project, org | A grant can name one project or cover the whole organization. Both are normal, so neither is flagged as legacy. |
-| `RequiredAncestors` | org | The caller must say which organization the project belongs to. If it is not the caller's active organization, the answer is "cross-tenant" before any grant is read. |
-| `ImpliedBy` | nothing | Only a `project:write` grant (or `root`) allows it. `project:read` is implied by `project:write`, one step and written down. |
-| `ExcludedBy` | `project:blocked_write` | A matching block withdraws it. |
-| `BlockWins` | false | Today's precedence: a block from a role or from "all users" loses to a grant made directly to that user for that project. A block and an allow from the same role: the block wins. |
+### 1. How a check is defined
 
-The MCP definitions set `BlockWins: true` instead, because slice 1 removed that
-override for MCP servers. The two families sit side by side in one table, so
-the difference is visible in the code rather than hidden in a precedence list.
-
-### How a service asks
-
-`project.go`
+Each permission the code can check is one `Definition` (`permissions.go:11`):
 
 ```go
-target := catalog.ProjectTarget(authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
-decision, err := client.Require(ctx, catalog.ProjectWrite(target))
+type Definition struct {
+	Name              authz.Scope   // the stored scope, e.g. "mcp:connect"
+	Resource          string        // the kind of thing it protects, e.g. "mcp"
+	AllowedAnchors    []string      // where a grant may point: one resource, a project, the org
+	RequiredAncestors []string      // containers the target must name, e.g. project and org
+	ImpliedBy         []authz.Scope // other permissions that also satisfy it, one step, explicit
+	ExcludedBy        authz.Scope   // the block that withdraws it
+	BlockWins         bool          // a block beats every allow, even a direct grant to the user
+}
 ```
 
-`ProjectTarget` builds the project plus its organization. The project comes
-from the caller's verified session or a loaded project row, never from a field
-in the request body.
+All definitions live in one list, `definitions` (`permissions.go:39`). It holds
+the three MCP server permissions so far. Two safeguards keep the list honest:
 
-**Sketched:** today about 200 call sites build the check by hand, for example
-`packages/impl.go:133`:
+- **At startup.** `mustValidate` runs when the package loads and panics on a bad
+  entry: a duplicate, a block used as a permission, a resource kind that does not
+  match the scope, an implication across kinds, or a missing block.
+- **In tests.** The engine cannot import this package, so it keeps its own scope
+  tables. `TestDefinitionsMatchEngine` (`client_test.go:69`) fails if what the
+  engine implies, which block it pairs with, or whether a block wins ever
+  differs from the list.
+
+### 2. The types a handler uses
+
+From `client.go`:
 
 ```go
-// today
-s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+// One resource and the organization that owns it.
+type ResourceRef struct{ OrganizationID, Kind, ID string }
 
-// with the catalogue (not done on this branch)
-_, err := s.authzClient.Require(ctx, catalog.ProjectWrite(catalog.ProjectTarget(authCtx.ActiveOrganizationID, authCtx.ProjectID.String())))
+// The resource being acted on, plus the containers it actually sits in.
+// Built from rows the handler loaded, never from request input alone.
+type Target struct {
+	Resource  ResourceRef
+	Ancestors []ResourceRef
+}
+
+// "Does the caller hold Permission on Target?"
+type Request struct {
+	Permission authz.Scope
+	Target     Target
+}
+
+// The answer.
+type Decision struct {
+	Outcome Outcome  // allowed, denied, or unresolved (a fact was missing; never allows)
+	Reason  Reason   // allowed, no_grant, blocked, cross_tenant, missing_fact, not_enforced
+	Basis   Basis    // set when an allow rested on an old, broader grant
+	Request Request  // the first request that was not allowed
+	Grants  []authz.Grant
+}
 ```
 
-Both reach the same engine decision. The catalogue version adds the
-organization check and the "one concrete project" check before the grants are
-read, and returns a `Decision` that says why.
-
-### How it behaves
-
-These rows are `TestProject_definitionKeepsTodaysRules` in `project_test.go`.
-Every row is checked through both `Authorize` (used for "can I?" answers in
-the UI) and `Require` (used to enforce), and both must agree.
-
-| Caller holds | Asks for | Answer |
-| --- | --- | --- |
-| `project:write` on P1 | write P1 | allowed |
-| `project:write` on P1 | read P1 | allowed (write implies read) |
-| `project:write` on P1 | write P2 | denied: no grant |
-| `project:read` on every project, via a role | read P2 | allowed |
-| `project:read` on every project, via a role | write P1 | denied: no grant |
-| direct `project:write` on P1, plus a role's `project:blocked_write` on P1 | write P1 | allowed: the direct grant outranks the inherited block |
-| a role's `project:write` and `project:blocked_write` on P1 | write P1 | denied: blocked |
-| `project:write` on P1 | write P1 in another organization | denied: cross-tenant, before grants are read |
-
-### What this does not change
-
-- The engine keeps its own tables (`authz/scopes.go`, `authz/precedence.go`),
-  because `authz` cannot import the catalogue. `TestDefinitionsMatchEngine`
-  fails if the project entries ever disagree with them.
-- Nothing about storage, roles or the dashboard changes. Adding the
-  definitions alone changes no behaviour, because no service calls them yet.
-- Organization-level permissions (`org:read`, `org:admin`) are not defined
-  yet. They would follow the same pattern with no required ancestor.
-
----
-
-## 2. How would checking authz when connecting to an MCP server look?
-
-**Status:** implemented in slice 1 for the private remote-backed endpoint
-proxy and its consent paths. Walkthrough 01
-(`walkthroughs/01-mcp-server-configure-vs-use.md`) follows one request in
-detail with diagrams; this section is the short version.
-
-### Short answer
-
-Connecting asks for `mcp:connect` on that one server, inside its project and
-organization. Nothing else satisfies it: being able to configure the server
-(`mcp:write`) or view it (`mcp:read`) does not. A matching block always wins,
-including over a grant made directly to the user. A public server needs no
-server-level permission.
-
-### The definition
-
-`permissions.go:67`
+Handlers do not assemble these by hand. Each resource kind has a small file of
+builders, so the check for an operation is written once. For MCP servers it is
+`mcpserver.go`:
 
 ```go
-{
-	Name:              authz.ScopeMCPConnect,
-	Resource:          authz.ResourceKindMCP,
-	AllowedAnchors:    []string{authz.ResourceKindMCP},  // one server only
-	RequiredAncestors: mcpServerAncestors,               // {project, org}
-	ImpliedBy:         nil,                              // management never implies use
-	ExcludedBy:        authz.ScopeMCPBlockedConnect,
-	BlockWins:         true,
-},
+func MCPServerTarget(organizationID, projectID, serverID string) Target
+func MCPServerRead(target Target) Request
+func MCPScopePin(target Target, sharing []Target) []Request
+func MCPServerUse(target Target, visibility MCPServerVisibility) ([]Request, error)
 ```
 
-### What happens on a request
+### 3. How the client is built
 
-1. **Identity first, in the service.** The endpoint handler authenticates the
-   caller, refuses a caller from another organization, and loads the server row
-   and its project (`mcp/serveendpoint.go:915` onwards). None of this is
-   authorization policy.
-2. **The service describes what it loaded** (`mcp/serveendpoint.go:1056`):
-   ```go
-   target := catalog.MCPServerTarget(organizationID, projectID.String(), mcpServer.ID.String())
-   ```
-   The organization and project come from the endpoint's own records, not from
-   the request.
-3. **The builder says what using it requires** (`mcpserver.go:55`):
-   ```go
-   requests, err := catalog.MCPServerUse(target, catalog.MCPServerVisibility(mcpServer.Visibility))
-   ```
-   Public: no requests, so the call returns allowed. Private: one `mcp:connect`
-   request. Any other visibility is an error, so it fails closed.
-4. **The engine loads the caller's grants** (`s.authz.PrepareContext`,
-   `mcp/serveendpoint.go:1084`), exactly as before.
-5. **The client decides** (`mcp/serveendpoint.go:1092`, `client.go:137`):
-   ```go
-   decision, err := catalog.NewEngineClient(s.authz).Require(ctx, requests...)
-   ```
-   - `prepare` (`client.go:162`) checks the definition: one concrete server;
-     the server's organization is the caller's; the project and organization
-     are both present. A failure here is denied ("cross_tenant") or unresolved
-     ("missing_fact") without reading grants.
-   - The backend (`backend.go`) asks the existing engine. The engine looks for
-     an `mcp:connect` grant on that server whose project, if it names one,
-     matches; then applies `mcp:blocked_connect`, which always wins.
-   - `decide` (`client.go:235`) returns allowed, denied ("no_grant" or
-     "blocked") or unresolved. If the allow came from an old wildcard connect
-     grant, it is labelled `legacy_broad_grant` and logged.
-6. **On a deny**, the service returns 403 with a request-access link
-   (`mcp/serveendpoint.go:1098`). The upstream server is never contacted.
+`client.go:92` and `backend.go`:
 
-### How it behaves
+```go
+type Backend interface {
+	evaluate(ctx, checks) ([]authz.CheckResult, error) // decide, record nothing
+	enforce(ctx, checks) error                         // decide and record the challenge
+	reject(ctx, err) error                             // map a refusal to the API error
+}
 
-From `TestClient_authorizeAgreesWithRequire` (`client_test.go`) and the
-end-to-end test `mcp/configure_without_use_test.go`:
+func NewClient(backend Backend, defs []Definition) (*Client, error)
+func NewEngineClient(engine *authz.Engine) *Client // NewClient(NewEngineBackend(engine), Definitions())
+```
 
-| Caller holds | Connect to S1 | Connect to S2 |
-| --- | --- | --- |
-| `mcp:write` on S1 (can configure it) | **denied** | denied |
-| `mcp:connect` on S1 | allowed | denied |
-| direct `mcp:connect` on S1, plus a role's `mcp:blocked_connect` on S1 | **denied: blocked** | denied |
-| `mcp:connect` on S1 scoped to its project | allowed | denied |
-| `mcp:connect` on every server (old wildcard grant) | allowed, logged as legacy | allowed, logged as legacy |
-| grants on a server in another organization | denied: cross-tenant | - |
+The backend is the only part that talks to the engine. It is picked once, when
+the client is built, so a different backend (a fake in tests, or a future
+store) would not change any handler.
 
-### What this does not cover
+### 4. How the client reaches a handler
 
-- **Tool calls on an open connection.** The per-tool interceptors and about 18
-  other production call sites still build `authz.MCPCheck(ScopeMCPConnect, ...)`
-  by hand instead of going through the client. They get the same answer,
-  because slice 1 changed the engine's own tables (nothing implies connect;
-  MCP blocks always win), but they skip the client's organization and project
-  checks.
-- **Lists and explanations.** The SQL that lists accessible servers, the
-  dashboard's `useRBAC`, the access-list API and the explain endpoint still
-  apply the old rules, so they can disagree with the check until each is moved.
-- **Stored roles.** A custom role that holds only `mcp:write` loses the ability
-  to connect. There is no migration for it yet.
+The engine is built once at startup (`cmd/gram/start.go:1028`) and passed to
+each service constructor, as it was before. The service builds its client from
+that engine and keeps it as a field (`remotemcp/impl.go:55`, `:96`):
+
+```go
+type Service struct {
+	// ...
+	authz       *authz.Engine
+	authzClient *catalog.Client
+}
+
+func NewService(..., authzEngine *authz.Engine, ...) *Service {
+	return &Service{
+		// ...
+		authz:       authzEngine,
+		authzClient: catalog.NewEngineClient(authzEngine),
+	}
+}
+```
+
+So no constructor signature changes, and `start.go` does not change.
+
+One exception: the `mcp` service builds the client at the call
+(`catalog.NewEngineClient(s.authz)`, `mcp/serveendpoint.go:1092`) instead of
+keeping a field. Several of its tests create `mcp.Service` as a struct literal,
+which would leave the field nil and panic. Building the client is cheap, since
+it only copies the definition list, but the field is the intended pattern.
+
+### 5. The call shape
+
+A handler asks one of two questions:
+
+- `Require(ctx, requests...)` enforces. If anything is not allowed it returns a
+  403 error, and the engine records the challenge exactly as before.
+- `Authorize(ctx, requests...)` answers "could I?" for the UI, such as a
+  `can_pin` flag, without recording anything. It reaches the same decision as
+  `Require` for the same requests; tests check that the two agree.
+
+From `remotemcp/serverscopes.go`:
+
+```go
+// enforce (serverscopes.go:235)
+if _, err := s.authzClient.Require(ctx, scopePinRequests(authCtx, target, sharing)...); err != nil {
+	return nil, err
+}
+
+// capability (serverscopes.go:244)
+decision, err := s.authzClient.Authorize(ctx, scopePinRequests(authCtx, target, sharing)...)
+return decision.Allowed()
+```
+
+Both lines use the same request builder, so the "can I?" answer and the
+enforcement cannot drift apart.
+
+### What the client does on every call
+
+1. **Validate** (`client.go:162`, `prepare`). The permission must have a
+   definition. The target must be one concrete resource of the right kind, not
+   a wildcard. Its organization must be the caller's active organization, or
+   the answer is `cross_tenant`. Every required container must be present and
+   in the same organization, or the answer is `missing_fact`. All of this
+   happens before any grant is read.
+2. **Evaluate** through the backend, which uses the grants the engine already
+   loaded for this request.
+3. **Decide** (`client.go:229`). This returns allowed, or the first request
+   that failed and why. An allow that came from an old grant broader than the
+   definition now permits is labelled `legacy_broad_grant`.
+
+### Not part of step 1
+
+- Only the MCP server permissions are defined so far. Other resources would add
+  entries to the same list and a builder file of their own.
+- Most of the code base still calls `authz.Engine.Require` with hand-built
+  checks. The scaffolding lets each operation move over on its own; it does not
+  move them.
