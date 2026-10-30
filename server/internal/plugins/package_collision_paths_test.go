@@ -24,12 +24,14 @@ func TestProcessRoleDistributionSetup_RefusesPackageDirectoryCollision(t *testin
 			ctx, ti := newTestPluginsService(t)
 			_, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: tc.existing, Slug: &tc.existing})
 			require.NoError(t, err)
+			before, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{})
+			require.NoError(t, err)
 			role := createTestRolePrincipal(t, ctx, ti, tc.role)
 			err = processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{})
 			require.ErrorIs(t, err, plugins.ErrPluginSlugUnavailable)
 			listed, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{})
 			require.NoError(t, err)
-			require.Len(t, listed.Plugins, 1, "a refused setup must not leave a partial role plugin")
+			require.Len(t, listed.Plugins, len(before.Plugins), "a refused setup must not leave a partial role plugin")
 		})
 	}
 }
@@ -40,16 +42,16 @@ func TestPluginsService_RefusesCollidingPauseBeforeFirstPublish(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	f := newAutoSyncFixtureFor(t, ctx, ti, nil)
+	var collidingPlugins []*gen.Plugin
 	for _, slug := range []string{"legacy", "legacy-codex"} {
-		_, err := pluginsrepo.New(ti.conn).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
+		plugin, err := pluginsrepo.New(ti.conn).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
 			OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
 			Name: slug, Slug: slug, Description: pgtype.Text{}, AutoSyncEnabled: pgtype.Bool{},
 		})
 		require.NoError(t, err)
+		collidingPlugins = append(collidingPlugins, &gen.Plugin{ID: plugin.ID.String()})
 	}
-	listed, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{})
-	require.NoError(t, err)
-	for _, plugin := range listed.Plugins {
+	for _, plugin := range collidingPlugins {
 		_, err := f.setAutoSync(ctx, plugin, false)
 		requireFailedPrecondition(t, err, "Cannot turn off auto sync")
 	}

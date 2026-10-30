@@ -6,8 +6,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace/noop"
 
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -52,7 +52,7 @@ func TestPlatformMCPGetPluginUsesAuthorizedPublicationEvidence(t *testing.T) {
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{{PrincipalUrn: "role:admin", Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, organizationID)}})
 	logger := testenv.NewLogger(t)
 	engine := authz.NewEngine(logger, pool, nil, nil)
-	management := plugins.NewService(logger, noop.NewTracerProvider(), pool, nil, nil, engine, nil, nil, "test", "https://api.example.test", nil, nil)
+	management := plugins.NewService(logger, testenv.NewTracerProvider(t), pool, &sessions.Manager{}, nil, engine, nil, nil, "test", "https://api.example.test", nil, nil)
 	publisher := plugins.NewPublisher(logger, pool, nil, nil, "test", "https://api.example.test", nil)
 	limiter := allowingPlatformMCPBudget{}
 	inventory := platformmcp.NewPluginsService(pool, platformmcp.OperationBudget{Connection: limiter, Organization: limiter}, "test-key")

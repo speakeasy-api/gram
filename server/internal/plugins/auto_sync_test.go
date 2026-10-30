@@ -776,7 +776,7 @@ func TestAutoSync_EvidenceWithoutRecordedFingerprintsShowsPausedPluginWaiting(t 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	off := false
-	paused, err := f.ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Unrecorded Paused", AutoSyncEnabled: &off})
+	paused, err := f.ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Unrecorded New Paused", AutoSyncEnabled: &off})
 	require.NoError(t, err)
 	_, err = f.ti.conn.Exec(ctx, "UPDATE plugin_github_connections SET published_mcp_fingerprints = NULL WHERE project_id = $1", f.projectID) //nolint:glint // notestingrawsql: arrange pre-fingerprint publication without changing the last-published timestamp
 	require.NoError(t, err)
