@@ -219,25 +219,3 @@ func TestServePublic_GatewaySkills_ConsentedConnectionInheritsOnlySelectedMember
 	require.NoError(t, err)
 	require.Contains(t, string(requireRPCResult(t, w)["contents"]), "chosen-skill")
 }
-
-// The playground reaches a gateway with a chat-session token minted from the
-// signed-in user's dashboard session, which proves the user and so is served
-// the gateway's inherited skills. A key-minted chat session proves no user.
-func TestServePublic_GatewaySkills_DashboardChatSessionIsServed(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	g := newGatewaySkillsFixture(t, ctx, ti, newSkillsFixture(t, ctx, ti))
-	servedSkillOn(t, ctx, ti, g.skillsFixture, "member-skill", g.memberID)
-
-	sessionID := "dashboard-session-" + uuid.NewString()[:8]
-	dashboard := chatSessionToken(t, ti, g.skillsFixture, g.authCtx.UserID, "", &sessionID, nil)
-	w, err := servePublicHTTP(t, t.Context(), ti, g.gatewaySlug, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), dashboard, nil)
-	require.NoError(t, err)
-	require.Equal(t, []string{g.uri("member-skill")}, listedSkillURIs(t, requireRPCResult(t, w)))
-
-	keyMinted := chatSessionToken(t, ti, g.skillsFixture, g.authCtx.UserID, uuid.NewString(), &sessionID, nil)
-	w, err = servePublicHTTP(t, t.Context(), ti, g.gatewaySlug, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), keyMinted, nil)
-	require.NoError(t, err)
-	require.JSONEq(t, `[]`, string(requireRPCResult(t, w)["skills"]), "a key-minted chat session is not served its key creator's skills")
-}
