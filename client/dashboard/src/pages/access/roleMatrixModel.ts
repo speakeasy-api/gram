@@ -585,6 +585,14 @@ const EXTRA_COPY: Record<string, { label: string; description: string }> = {
     label: "Agent ownership",
     description: "Hand an agent to another owner",
   },
+  "memory:read": {
+    label: "Team memory",
+    description: "Search and recall the project's team memory",
+  },
+  "memory:write": {
+    label: "Team memos",
+    description: "Save memos to the project's team memory",
+  },
 };
 
 export function extraCopy(scope: ScopeDefinition): {

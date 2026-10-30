@@ -122,6 +122,8 @@ const (
 	ScopeChatRead           Scope = "chat:read"
 	ScopeChatWrite          Scope = "chat:write"
 	ScopeLogRead            Scope = "log:read"
+	ScopeMemoryRead         Scope = "memory:read"
+	ScopeMemoryWrite        Scope = "memory:write"
 )
 ```
 
@@ -134,6 +136,8 @@ Agents and assistants follow the same rule. `log:read` is not agent-runtime-safe
 `chat:read` protects reading _other members'_ agent session transcripts (`chat.load`, `chat.summarize`) and pinning them (`chat.setPinned`). `chat:write` protects destructive mutations — `chat.delete`, `chat.submitFeedback`, and the rename path of `chat.generateTitle`. Neither is a default for any system role — not even `admin` — because session transcripts are sensitive and deleting one is destructive; both must be granted explicitly via a custom role grant.
 
 The two are separate so a session reviewer can be given `chat:read` alone: they can open every transcript in the project and pin one as a shared bookmark, but cannot delete or otherwise alter one. `chat:write` satisfies `chat:read` through the normal expansion rules, so a role that needs both only has to carry `chat:write`.
+
+`memory:read` protects a project's team memory: the masked session summaries, memos and digests that the Platform MCP team memory tools return. `memory:write` lets the holder save memos to it, and satisfies `memory:read`. Team memory summarizes every member's sessions, so neither scope is a default for any system role, not even `admin`; neither `project:*`, `org:admin` nor `chat:read` implies them, and neither is agent-runtime-safe. Grant them per project through a custom role. Holding `memory:read` never grants access to raw transcripts, which still need `chat:read`.
 
 Everyone (members and admins alike) can always read _and_ mutate sessions they own: the chat handlers bypass the scope check when the caller owns the session (`chat.user_id == caller`), and the session list filters to the caller's own sessions when they lack `chat:read`. Reaching another user's session — or an ownerless/external session — requires the corresponding unrestricted grant.
 
@@ -170,10 +174,12 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeChatRead:           {ScopeChatWrite},
 	ScopeChatWrite:          nil,
 	ScopeLogRead:            nil,
+	ScopeMemoryRead:         {ScopeMemoryWrite},
+	ScopeMemoryWrite:        nil,
 }
 ```
 
-Read this map as "if a handler requires the key scope, any scope in the value list also satisfies the check." A `project:write` grant satisfies a `project:read` check. An `assistant:write` grant satisfies `assistant:read`. An `mcp:write` grant satisfies `mcp:read`, and both `mcp:read` and `mcp:write` satisfy `mcp:connect`. `environment:write` satisfies `environment:read`, `skill:write` satisfies `skill:read`, and `chat:write` satisfies `chat:read`. `org:admin` satisfies `org:read`, and `root` satisfies every check.
+Read this map as "if a handler requires the key scope, any scope in the value list also satisfies the check." A `project:write` grant satisfies a `project:read` check. An `assistant:write` grant satisfies `assistant:read`. An `mcp:write` grant satisfies `mcp:read`, and both `mcp:read` and `mcp:write` satisfy `mcp:connect`. `environment:write` satisfies `environment:read`, `skill:write` satisfies `skill:read`, and `chat:write` satisfies `chat:read`. `memory:write` satisfies `memory:read`. `org:admin` satisfies `org:read`, and `root` satisfies every check.
 
 Expansion happens when the engine evaluates a check. If code asks for `project:read`, the engine checks for `root`, `project:read`, and `project:write` against the same resource selector. The API also exposes the inverse relationship as `sub_scopes` so role UIs can show what a broader grant implies; those sub-scopes are derived from code and are not additional database rows.
 
