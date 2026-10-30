@@ -254,12 +254,17 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 			}
 			return result
 		}
+		var message runnerMessage
+		decodeErr := decodeStrict(frame, &message)
 		if ctx.Err() != nil {
+			// A call read after cancellation is never dispatched, but still recorded.
+			if decodeErr == nil && message.Type == "callback" && started && !seen[message.ID] {
+				state.notDispatched(state.receiveCall(message))
+			}
 			failCancelled()
 			return result
 		}
-		var message runnerMessage
-		if err := decodeStrict(frame, &message); err != nil {
+		if decodeErr != nil {
 			fail("protocol_error", "invalid runtime response; do not replay automatically")
 			return result
 		}
@@ -275,7 +280,9 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 				fail("protocol_error", "invalid runtime callback; do not replay automatically")
 				return result
 			}
+			call := state.receiveCall(message)
 			if len(seen) >= maxCallbacks {
+				state.notDispatched(call)
 				fail("callback_limit", "execution stopped at callback boundary")
 				return result
 			}
@@ -283,13 +290,14 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 			state.mu.Lock()
 			if state.active >= maxConcurrentCallbacks {
 				state.mu.Unlock()
+				state.notDispatched(call)
 				fail("callback_limit", "too many concurrent helper calls")
 				return result
 			}
 			state.active++
 			state.mu.Unlock()
 			callbacks.Go(func() {
-				value, callbackErr := state.callback(ctx, host, message)
+				value, callbackErr := state.callback(ctx, host, message, call)
 				if errors.Is(callbackErr, ErrExecutionRevoked) {
 					cancelCause(ErrExecutionRevoked)
 					return
@@ -348,8 +356,47 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 	}
 }
 
-func (s *executionState) callback(ctx context.Context, host Host, message runnerMessage) (json.RawMessage, error) {
+// toolCall is a received tool call and the index of its recorded outcome.
+type toolCall struct {
+	index     int
+	path      string
+	arguments json.RawMessage
+}
+
+// receiveCall records a tool call as unknown when its callback arrives, before
+// any limit or cancellation check, so ToolCalls lists every call the runner
+// sent even when the run ends first. It returns nil for other helpers and for
+// invalid call arguments, which are never dispatched.
+func (s *executionState) receiveCall(message runnerMessage) *toolCall {
+	if message.Method != "call" {
+		return nil
+	}
+	var args struct {
+		Path      string          `json:"path"`
+		Arguments json.RawMessage `json:"arguments"`
+	}
+	if err := decodeStrict(message.Arguments, &args); err != nil || len(args.Path) > 1024 {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls = append(s.calls, CallOutcome{Path: args.Path, Outcome: "unknown"})
+	return &toolCall{index: len(s.calls) - 1, path: args.Path, arguments: args.Arguments}
+}
+
+// notDispatched records that a received call never reached its backend.
+func (s *executionState) notDispatched(call *toolCall) {
+	if call == nil {
+		return
+	}
+	s.mu.Lock()
+	s.calls[call.index].Outcome = "not_dispatched"
+	s.mu.Unlock()
+}
+
+func (s *executionState) callback(ctx context.Context, host Host, message runnerMessage, call *toolCall) (json.RawMessage, error) {
 	if err := ctx.Err(); err != nil {
+		s.notDispatched(call)
 		return nil, fmt.Errorf("helper cancelled: %w", err)
 	}
 	var value any
@@ -376,28 +423,20 @@ func (s *executionState) callback(ctx context.Context, host Host, message runner
 		}
 		value, err = host.Describe(ctx, args.Path)
 	case "call":
-		var args struct {
-			Path      string          `json:"path"`
-			Arguments json.RawMessage `json:"arguments"`
-		}
-		if err := decodeStrict(message.Arguments, &args); err != nil || len(args.Path) > 1024 {
+		if call == nil {
 			return nil, fmt.Errorf("invalid tool call arguments")
 		}
-		s.mu.Lock()
-		index := len(s.calls)
-		s.calls = append(s.calls, CallOutcome{Path: args.Path, Outcome: "unknown"})
-		s.mu.Unlock()
 		var result *ToolResult
-		result, err = host.Call(ctx, args.Path, args.Arguments)
+		result, err = host.Call(ctx, call.path, call.arguments)
 		s.mu.Lock()
 		if err != nil {
 			_, refused := errors.AsType[*callNotDispatchedError](err)
 			dispatch, known := errors.AsType[*DispatchError](err)
 			if refused || (known && dispatch.BeforeInvoke) {
-				s.calls[index].Outcome = "not_dispatched"
+				s.calls[call.index].Outcome = "not_dispatched"
 			}
 		} else if result != nil {
-			s.calls[index].Outcome = result.Outcome
+			s.calls[call.index].Outcome = result.Outcome
 		}
 		s.mu.Unlock()
 		value = result
