@@ -194,21 +194,22 @@ func issuerIDJAGConfigured(issuer usersessions_repo.UserSessionIssuer) bool {
 // idJAGAdvertised reports whether the validator's trust lookup would accept
 // ID-JAGs for an issuer whose admission admits some client. Only admitted
 // client ID metadata document clients may exchange one, so disabled admission
-// leaves the grant unusable.
-func (s *Service) idJAGAdvertised(ctx context.Context, logger *slog.Logger, organizationID string, issuerID uuid.UUID, cimdAdmissionModeRaw pgtype.Text) bool {
+// leaves the grant unusable. Only that or a missing or unusable trust link
+// omits the grant; any other lookup error is returned so metadata fails closed.
+func (s *Service) idJAGAdvertised(ctx context.Context, logger *slog.Logger, organizationID string, issuerID uuid.UUID, cimdAdmissionModeRaw pgtype.Text) (bool, error) {
 	if mode, _ := admission.ResolveMode(cimdAdmissionModeRaw.String, cimdAdmissionModeRaw.Valid); mode == admission.ModeDisabled {
-		return false
+		return false, nil
 	}
 	_, err := s.idJAGTrust.TrustedIssuer(ctx, organizationID, issuerID)
 	switch {
 	case err == nil:
-		return true
+		return true, nil
 	case errors.Is(err, idjag.ErrNoTrustedIssuer), errors.Is(err, idjag.ErrTrustedIssuerHasNoJWKS):
 		logger.InfoContext(ctx, "ID-JAG grant not advertised", attr.SlogError(err))
+		return false, nil
 	default:
-		logger.ErrorContext(ctx, "load ID-JAG trust link for metadata", attr.SlogError(err))
+		return false, fmt.Errorf("load ID-JAG trust link: %w", err)
 	}
-	return false
 }
 
 // sharedAuthorizationServerFor builds the shared authorization server of an

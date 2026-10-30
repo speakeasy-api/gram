@@ -2,14 +2,17 @@ package mcp_test
 
 import (
 	"bufio"
+	"context"
 	"crypto/x509"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -21,6 +24,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
@@ -94,10 +99,27 @@ func TestTokenIDJAGExchangeRecordsOutcomeAndRejectionReason(t *testing.T) {
 	w = postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, accepted)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
+	choice := assertionSigner.sign(t, upstreamIssuer, resource, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString())
+	form := url.Values{
+		"grant_type":           {oauthwire.GrantTypeJWTBearer},
+		"client_id":            {client.ClientID},
+		"assertion":            {choice},
+		"upstream_auth_client": {uuid.NewString() + ":none"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx))
+	var oauthErr *oops.OAuthError
+	require.ErrorAs(t, ti.service.HandleToken(httptest.NewRecorder(), req), &oauthErr)
+	require.Equal(t, http.StatusBadRequest, oauthErr.Status)
+
 	require.Equal(t, map[string]int64{
-		string(mcpmetrics.IDJAGExchangeRejected) + "/" + string(idjag.ReasonNotProvisioned):   1,
-		string(mcpmetrics.IDJAGExchangeRejected) + "/" + string(idjag.ReasonAudienceMismatch): 1,
-		string(mcpmetrics.IDJAGExchangeAccepted) + "/":                                        1,
+		string(mcpmetrics.IDJAGExchangeRejected) + "/" + string(idjag.ReasonNotProvisioned):                        1,
+		string(mcpmetrics.IDJAGExchangeRejected) + "/" + string(idjag.ReasonAudienceMismatch):                      1,
+		string(mcpmetrics.IDJAGExchangeAccepted) + "/":                                                             1,
+		string(mcpmetrics.IDJAGExchangeRejected) + "/" + string(mcpmetrics.IDJAGRejectionUpstreamCredentialChoice): 1,
 	}, idJAGExchangeCounts(t, reader, issuer.ID))
 }
 
