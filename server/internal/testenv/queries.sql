@@ -1143,7 +1143,9 @@ WHERE organization_id = @organization_id
   AND id = (@grant_json::jsonb->>'id')::uuid;
 
 -- name: CountDemoSeedAgentGrantsFixture :one
-SELECT count(*) FROM principal_grants
+SELECT count(*) FILTER (WHERE scope = 'mcp:auth') AS auth_grants,
+       count(*) FILTER (WHERE scope <> 'mcp:auth') AS policy_grants
+FROM principal_grants
 WHERE organization_id = @organization_id AND principal_urn LIKE 'agent:%';
 
 -- name: CountDemoSeedAPIKeysFixture :one

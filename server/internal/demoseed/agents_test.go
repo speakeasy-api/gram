@@ -78,9 +78,8 @@ func TestAgentGrantsReseed(t *testing.T) {
 
 				grants, err := fixtures.CountDemoSeedAgentGrantsFixture(ctx, spec.OrgID)
 				require.NoError(t, err)
-				// 7 scoped seed policies plus the 10 default mcp:auth grants the
-				// upstream auth migration provisions for the recreated agents.
-				require.EqualValues(t, 17, grants, "recreated agents must retain only the scoped seed policies and their default auth permissions")
+				require.EqualValues(t, 7, grants.PolicyGrants, "recreated agents must retain only the scoped seed policies")
+				require.EqualValues(t, 10, grants.AuthGrants, "recreated agents must hold exactly the default auth permissions the upstream auth migration provisions")
 				keys, err := fixtures.CountDemoSeedAPIKeysFixture(ctx, spec.OrgID)
 				require.NoError(t, err)
 				require.Zero(t, keys, "shared SQL must never leave usable API keys")

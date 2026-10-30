@@ -382,15 +382,22 @@ func (q *Queries) CountDemoSeedAPIKeysFixture(ctx context.Context, organizationI
 }
 
 const countDemoSeedAgentGrantsFixture = `-- name: CountDemoSeedAgentGrantsFixture :one
-SELECT count(*) FROM principal_grants
+SELECT count(*) FILTER (WHERE scope = 'mcp:auth') AS auth_grants,
+       count(*) FILTER (WHERE scope <> 'mcp:auth') AS policy_grants
+FROM principal_grants
 WHERE organization_id = $1 AND principal_urn LIKE 'agent:%'
 `
 
-func (q *Queries) CountDemoSeedAgentGrantsFixture(ctx context.Context, organizationID string) (int64, error) {
+type CountDemoSeedAgentGrantsFixtureRow struct {
+	AuthGrants   int64
+	PolicyGrants int64
+}
+
+func (q *Queries) CountDemoSeedAgentGrantsFixture(ctx context.Context, organizationID string) (CountDemoSeedAgentGrantsFixtureRow, error) {
 	row := q.db.QueryRow(ctx, countDemoSeedAgentGrantsFixture, organizationID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+	var i CountDemoSeedAgentGrantsFixtureRow
+	err := row.Scan(&i.AuthGrants, &i.PolicyGrants)
+	return i, err
 }
 
 const countFunctionsAccess = `-- name: CountFunctionsAccess :one

@@ -51,6 +51,12 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		return err
 	}
 
+	// The advisory lock holds one connection for the whole run, and the
+	// upstream auth backfills acquire another while it is held.
+	if db.Config().MaxConns < 2 {
+		return fmt.Errorf("demo seed needs a postgres pool of at least 2 connections, got %d", db.Config().MaxConns)
+	}
+
 	conn, err := db.Acquire(ctx)
 	if err != nil {
 		return fmt.Errorf("acquire postgres connection: %w", err)
