@@ -1,6 +1,7 @@
 package mcp_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,15 +10,22 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	goa "goa.design/goa/v3/pkg"
+	"goa.design/goa/v3/security"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
+	agentgen "github.com/speakeasy-api/gram/server/gen/agent"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agent"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -123,6 +131,23 @@ func seedProjectHooksIngestGrant(t *testing.T, ti *testInstance, organizationID 
 	require.NoError(t, err)
 }
 
+// newDeviceAgentPluginService is the agent service that serves getPlugins, on
+// the fixture's database, authenticating device-agent tokens with tokens.
+func newDeviceAgentPluginService(t *testing.T, f deviceAgentGrantFixture, tokens *deviceagenttoken.Issuer) *agent.Service {
+	t.Helper()
+
+	return agent.NewService(f.ti.logger, f.ti.tracerProvider, f.ti.conn, f.ti.sessionManager, f.ti.authzEngine, f.ti.audit,
+		noProductFeatures{}, f.ti.serverURL.String(), orghost.New(orghost.Config{ServerURL: f.ti.serverURL, SiteURL: nil}),
+		assetstest.NewTestBlobStore(t), nil, nil, tokens)
+}
+
+// noProductFeatures turns every product feature off.
+type noProductFeatures struct{}
+
+func (noProductFeatures) IsFeatureEnabled(context.Context, string, productfeatures.Feature) (bool, error) {
+	return false, nil
+}
+
 // deviceAgentAccessToken reads the access token out of a device-agent token
 // response body.
 func deviceAgentAccessToken(t *testing.T, body []byte) string {
@@ -148,14 +173,27 @@ func TestGitHubActionsRule_OneAgentForPluginsMCPAndHooks(t *testing.T) {
 	w := f.exchangeDeviceAgent(t, f.assertion(t, f.tokenURL))
 	requireDeviceAgentToken(t, w, f.fx.orgID, f.issuerID, f.subject)
 
+	accessToken := deviceAgentAccessToken(t, w.Body.Bytes())
 	callerIssuer, err := sharedCallerIssuer()
 	require.NoError(t, err)
-	admitted, agent, err := deviceagenttoken.New(callerIssuer, f.ti.conn).Admit(t.Context(), deviceAgentAccessToken(t, w.Body.Bytes()), f.ti.authzEngine)
+	tokens := deviceagenttoken.New(callerIssuer, f.ti.conn)
+	admitted, agent, err := tokens.Admit(t.Context(), accessToken, f.ti.authzEngine)
 	require.NoError(t, err)
 	require.Equal(t, f.agentID.String(), agent.Principal.ID, "the job acts as the agent the rule assigns")
 
-	// getPlugins' check, then hooks for the workflow's project.
-	require.NoError(t, f.ti.authzEngine.Require(admitted, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: f.fx.orgID, Dimensions: nil}))
+	// The real getPlugins handler, behind its own device-agent token
+	// authentication, polls as that agent. Hooks ingestion is driven through
+	// its handler in internal/hooks (TestClaude_GitHubActionsJob*), whose
+	// service this package's fixtures cannot build.
+	plugins := newDeviceAgentPluginService(t, f, tokens)
+	polling, err := plugins.JWTAuth(context.WithValue(t.Context(), goa.MethodKey, "getPlugins"), accessToken, &security.JWTScheme{Name: "device_agent_token", Scopes: []string{}, RequiredScopes: []string{}})
+	require.NoError(t, err)
+	polled, err := plugins.GetPlugins(polling, &agentgen.GetPluginsPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, polled.Principal)
+	require.Equal(t, urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String()).String(), polled.Principal.Urn, "getPlugins answers for the agent the rule assigns")
+
+	// Hooks for the workflow's project.
 	require.NoError(t, f.ti.authzEngine.Require(admitted, authz.HooksIngestCheck(f.fx.orgID, f.fx.target.ProjectID.String())))
 
 	// Hooks for any other project are refused: the grant names one project.
