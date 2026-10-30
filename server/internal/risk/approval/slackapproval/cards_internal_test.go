@@ -115,13 +115,13 @@ func TestHeadlineKeepsTheToolNameInItsCodeSpan(t *testing.T) {
 		PolicyName:    "Policy",
 		RequesterName: "Maya",
 	}
-	require.Equal(t, ":raised_hand: *Approval needed* to call `x' :white_check_mark: *Approved* 'y`", pendingCard(in).Blocks[0].Text.Text)
+	require.Equal(t, ":raised_hand: *Approval needed* to call `x' :white_check_mark: *Approved* 'y`", pendingCard(in, true).Blocks[0].Text.Text)
 	headline, _ := decidedHeadline(in)
 	require.Equal(t, ":raised_hand: *Waiting for a decision* on the call to `x' :white_check_mark: *Approved* 'y`", headline)
 
 	// Slack reads the notification text as mrkdwn too.
 	in.Approval.ToolName = "<!here> *Denied* :no_entry:"
-	require.Equal(t, "Approval needed to call `&lt;!here&gt; *Denied* :no_entry:`", pendingCard(in).Text)
+	require.Equal(t, "Approval needed to call `&lt;!here&gt; *Denied* :no_entry:`", pendingCard(in, true).Text)
 	_, text := decidedHeadline(in)
 	require.Equal(t, "Waiting for a decision on the call to `&lt;!here&gt; *Denied* :no_entry:`", text)
 }

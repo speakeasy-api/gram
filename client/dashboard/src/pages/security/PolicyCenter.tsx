@@ -34,7 +34,6 @@ import {
 } from "@/components/ui/Dropdown";
 import { Stack } from "@/components/ui/Stack";
 import { type Column, Table } from "@/components/ui/Table";
-import { type BadgeProps } from "@/components/ui/Badge";
 import {
   Plus,
   Shield,
@@ -81,6 +80,7 @@ import {
   type PolicyAction,
 } from "./policy-data";
 import { POLICY_TYPE_LABEL, policyTypeOf } from "./policy-type";
+import { actionBadgeVariant } from "./policy-draft";
 import { cn } from "@/lib/utils";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useDetectionRulesStore } from "./detection-rules-data";
@@ -1696,22 +1696,20 @@ export function AudiencePrincipalRow({
 /*  ActionBadge                                                               */
 /* -------------------------------------------------------------------------- */
 
-const ACTION_BADGE_CONFIG: Record<
-  PolicyAction,
-  { label: string; variant: NonNullable<BadgeProps["variant"]> }
-> = {
-  flag: { label: "Flag", variant: "neutral" },
-  warn: { label: "Warn", variant: "warning" },
-  block: { label: "Block", variant: "destructive" },
-  quarantine: { label: "Quarantine", variant: "destructive" },
-  require_approval: { label: "Require approval", variant: "information" },
+const ACTION_BADGE_LABEL: Record<PolicyAction, string> = {
+  flag: "Flag",
+  warn: "Warn",
+  block: "Block",
+  quarantine: "Quarantine",
+  require_approval: "Require approval",
 };
 
 function ActionBadge({ action }: { action: PolicyAction }): JSX.Element {
-  const config = ACTION_BADGE_CONFIG[action] ?? ACTION_BADGE_CONFIG.flag;
   return (
-    <Badge variant={config.variant}>
-      <Badge.Text>{config.label}</Badge.Text>
+    <Badge variant={actionBadgeVariant(action)}>
+      <Badge.Text>
+        {ACTION_BADGE_LABEL[action] ?? ACTION_BADGE_LABEL.flag}
+      </Badge.Text>
     </Badge>
   );
 }
