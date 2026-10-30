@@ -51,7 +51,7 @@ import { CredentialPicker } from "./CredentialPicker";
 import { StepWorkload } from "./StepWorkload";
 import { useWorkloadSetup } from "./useWorkloadSetup";
 import { platformSetup } from "./platformSetups";
-import { GITHUB_ACTIONS_KEY } from "./githubActions";
+import { GITHUB_ACTIONS_KEY, repositoryName } from "./githubActions";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
 import {
@@ -165,6 +165,23 @@ function grantRefusal(
     ? `This agent's owner does not hold ${scopes}, so the agent cannot be given it. Ask an organization administrator to give the owner that permission, or to run this setup.`
     : `You do not hold ${scopes}, so you cannot give it to this agent. Ask an organization administrator to run this setup.`;
 }
+
+/**
+ * The summary row a platform's field fills in, so typing into the field lights
+ * up the row it changes. Fields with no row of their own light nothing.
+ */
+const SUMMARY_ROW_FOR_FIELD = new Map<string, string>([
+  ["org_id", "Anthropic organization"],
+  ["owner", "Repository"],
+  ["repo", "Repository"],
+  ["project", "Cluster"],
+  ["location", "Cluster"],
+  ["cluster", "Cluster"],
+  ["namespace", "Service account"],
+  ["service_account", "Service account"],
+  ["name", "Platform"],
+  ["issuer", "Issuer"],
+]);
 
 /**
  * Whether a grant the agent holds already covers one it would be given, by
@@ -726,8 +743,12 @@ export function CredentialsWizard({
    */
   const checkedPlatformGrants = async (): Promise<AgentPolicyGrantForm[]> => {
     if (platformGrants.length === 0 || editing) return [];
-    const answer =
-      platformGrantCheck.data ?? (await platformGrantCheck.refetch()).data;
+    // Asked again rather than read from the cache: the answer shown while the
+    // wizard was open may predate a grant written or withdrawn since, and a
+    // stale list of what is missing is the partial write this check prevents.
+    // A failed refetch keeps the last data, so the error is checked first.
+    const result = await platformGrantCheck.refetch();
+    const answer = result.isError ? undefined : result.data;
     if (answer === undefined) {
       throw new Error(
         "Could not check that this agent can be given the permissions its platform needs. Try again.",
@@ -1161,21 +1182,7 @@ export function CredentialsWizard({
               match_kind: admitted.matchKind,
             },
     onValueChange: (key) =>
-      setHighlight(
-        key === "org_id"
-          ? "Anthropic organization"
-          : key === "owner" || key === "repo"
-            ? "Repository"
-            : ["project", "location", "cluster"].includes(key)
-              ? "Cluster"
-              : ["namespace", "service_account"].includes(key)
-                ? "Service account"
-                : key === "name"
-                  ? "Platform"
-                  : key === "issuer"
-                    ? "Issuer"
-                    : null,
-      ),
+      setHighlight(SUMMARY_ROW_FOR_FIELD.get(key) ?? null),
   });
   // A platform's own setup steps are steps of this wizard, not a wizard of
   // their own: one stepper, one Back and one Continue throughout.
@@ -1417,8 +1424,7 @@ export function CredentialsWizard({
                 label: "Repository",
                 value: (
                   <code className="text-xs break-all">
-                    {workload.values["owner"]?.trim()}/
-                    {workload.values["repo"]?.trim()}
+                    {repositoryName(workload.values)}
                   </code>
                 ),
               },

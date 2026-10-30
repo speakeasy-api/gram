@@ -2928,6 +2928,37 @@ describe("Connecting a GitHub repository", () => {
     ).toBe("org:hooks_ingest");
   });
 
+  it("asks again on connect what an existing agent lacks, rather than trusting what it lacked on opening", async () => {
+    // On opening, the agent lacks both grants; by the time Connect is
+    // pressed, something else has given it both.
+    mocks.listPolicyGrants.mockResolvedValue([]);
+    await reachRepositoryStepForExistingAgent();
+    await waitFor(() => expect(mocks.checkPolicyGrants).toHaveBeenCalled());
+    mocks.listPolicyGrants.mockResolvedValue([
+      {
+        id: "grant_sync",
+        effect: "allow",
+        scope: "org:device_agent_sync",
+        selector: { resourceKind: "org", resourceId: "*" },
+      },
+      {
+        id: "grant_hooks",
+        effect: "allow",
+        scope: "org:hooks_ingest",
+        selector: {
+          resourceKind: "org",
+          resourceId: "org_example",
+          projectId: "project_one",
+        },
+      },
+    ]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+  });
+
   it("writes no grant to an existing agent when one of them would be refused", async () => {
     mocks.checkPolicyGrants.mockImplementation(
       (request: {
@@ -3023,7 +3054,12 @@ describe("Connecting a GitHub repository", () => {
     await reachRepositoryStep();
     expect(screen.getByText(/This project also trusts/)).toBeTruthy();
     // The remedy is withdrawing the project's own issuer, not an agent's
-    // access, which would leave the issuer shadowing the rule.
+    // access, which would leave the issuer shadowing the rule. The call that
+    // does it is under the technical details.
+    expect(
+      screen.getByText(/the project's own issuer has to be withdrawn/),
+    ).toBeTruthy();
+    expect(screen.getByText("Technical details")).toBeTruthy();
     expect(
       screen.getByText(
         "DELETE /rpc/workloadIdentities.withdrawIssuer?id=issuer_project",
