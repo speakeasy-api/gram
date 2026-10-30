@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"net/url"
 	"strings"
 
@@ -25,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
@@ -34,15 +33,15 @@ import (
 )
 
 type Service struct {
-	tracer         trace.Tracer
-	logger         *slog.Logger
-	db             *pgxpool.Pool
-	repo           *repo.Queries
-	auth           *auth.Auth
-	authz          *authz.Engine
-	sessions       *sessions.Manager
-	registryClient *RegistryClient
-	catalog        *CatalogService
+	tracer    trace.Tracer
+	logger    *slog.Logger
+	db        *pgxpool.Pool
+	repo      *repo.Queries
+	auth      *auth.Auth
+	authz     *authz.Engine
+	sessions  *sessions.Manager
+	cacheImpl cache.Cache
+	catalog   *CatalogService
 	// callbackOrigins resolves new-client redirect URIs shown in setup guides.
 	callbackOrigins remotesessions.CallbackOrigins
 }
@@ -50,7 +49,7 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient, catalog *CatalogService, authzEngine *authz.Engine, callbackOrigin *url.URL) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, cacheImpl cache.Cache, catalog *CatalogService, authzEngine *authz.Engine, callbackOrigin *url.URL) *Service {
 	logger = logger.With(attr.SlogComponent("external_mcp"))
 
 	return &Service{
@@ -61,7 +60,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		auth:            auth.New(logger, db, sessions, authzEngine),
 		authz:           authzEngine,
 		sessions:        sessions,
-		registryClient:  registryClient,
+		cacheImpl:       cacheImpl,
 		catalog:         catalog,
 		callbackOrigins: remotesessions.DefaultCallbackOrigins(callbackOrigin),
 	}
@@ -108,7 +107,7 @@ func (s *Service) ClearCache(ctx context.Context, payload *gen.ClearCachePayload
 		return oops.E(oops.CodeUnexpected, err, "get registry").LogError(ctx, s.logger)
 	}
 
-	if err := s.registryClient.ClearCache(ctx, registry.Url); err != nil {
+	if err := s.clearRegistryCache(ctx, registry.Url); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "clear registry cache").LogError(ctx, s.logger)
 	}
 
@@ -226,11 +225,7 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 	}
 
 	var details *serverDetailsResult
-	if _, ok := reader.(*RegistryClient); ok {
-		// Preserve the dashboard's existing Pulse detail projection, which includes
-		// every remote and the Pulse-specific per-remote tool metadata.
-		details, err = s.fetchServerDetails(ctx, source.Registry, payload.ServerSpecifier)
-	} else if native, ok := reader.(*NativeRegistryReader); ok {
+	if native, ok := reader.(*NativeRegistryReader); ok {
 		entry, lookupErr := native.discoveryEntry(ctx, payload.ServerSpecifier)
 		if lookupErr != nil {
 			err = lookupErr
@@ -305,41 +300,13 @@ type serverDetailsResult struct {
 	Remotes     []*types.ExternalMCPRemote
 }
 
-// fetchServerDetails fetches all server details from the registry in a single HTTP call.
-func (s *Service) fetchServerDetails(ctx context.Context, registry Registry, serverName string) (*serverDetailsResult, error) {
-	registryURL, err := reviewedRegistryDetailsURL(registry.URL)
-	if err != nil {
-		return nil, err
+// clearRegistryCache preserves invalidation of both generic registry cache namespaces.
+func (s *Service) clearRegistryCache(ctx context.Context, registryURL string) error {
+	client := &RegistryClient{
+		listCache:    cache.NewTypedObjectCache[CachedListServers](s.logger, s.cacheImpl, cache.SuffixNone),
+		detailsCache: cache.NewTypedObjectCache[CachedServerDetailsResponse](s.logger, s.cacheImpl, cache.SuffixNone),
 	}
-	requestURL := registryURL.JoinPath("v0.1", "servers", url.PathEscape(serverName), "versions", "latest")
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), http.NoBody)
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	if s.registryClient.backend.Match(req) {
-		if err := s.registryClient.backend.Authorize(req); err != nil {
-			return nil, fmt.Errorf("authorize request: %w", err)
-		}
-	}
-
-	resp, err := s.registryClient.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("send request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("registry returned status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	return decodeDashboardDetails(body, false)
+	return client.ClearCache(ctx, registryURL)
 }
 
 func decodeDashboardDetails(body []byte, nativeSelection bool) (*serverDetailsResult, error) {

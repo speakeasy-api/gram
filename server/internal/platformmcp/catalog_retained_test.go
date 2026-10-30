@@ -59,7 +59,7 @@ func newRetainedCatalogFixture(t *testing.T) (*DynamicRegistryCatalog, *retained
 	require.NoError(t, err)
 	require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, conn))
 	native := &retainedCatalogRecord{published: true, data: json.RawMessage(`{"server":{"name":"reviewed/mcp","description":"Native retained record","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://native.test/{region}/mcp","headers":[{"name":"Authorization","isRequired":true,"isSecret":true}],"variables":{"region":{"default":"us","isRequired":true,"choices":["us","eu"]}}}]}}`)}
-	identity := externalmcp.NewCatalogService(conn, nil, externalmcp.NewNativeRegistryReader(native))
+	identity := externalmcp.NewCatalogService(conn, externalmcp.NewNativeRegistryReader(native))
 	nativeSource, err := identity.SelectedSource(ctx, "organization", "organization")
 	require.NoError(t, err)
 	require.Equal(t, "speakeasy", nativeSource.SourceKey)

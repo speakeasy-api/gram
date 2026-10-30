@@ -151,7 +151,6 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"api key", localAPIKeySQL, []any{spec.OrgID, spec.ProjectID(), dev.ID, localAPIKeyID(), LocalAPIKeyName, apiKeyHash, apiKey[:len(auth.APIKeyPrefix(env))+5]}},
 		{"api key policy", localAPIKeyPolicySQL, []any{spec.OrgID, localAPIKeyID(), spec.ProjectID()}},
 		{"default environment", localEnvironmentSQL, []any{spec.OrgID, spec.ProjectID(), localEnvironmentID()}},
-		{"mcp registry", localMCPRegistrySQL, nil},
 		{"enable code mode", localCodeModeFeatureSQL, []any{spec.OrgID}},
 		{"code mode gateway", localCodeModeGatewaySQL, []any{spec.OrgID, spec.ProjectID()}},
 		{"mcp app asset", localMCPAppAssetSQL, []any{
@@ -445,14 +444,6 @@ DO UPDATE SET name = EXCLUDED.name, updated_at = clock_timestamp()
 const localCodeModeGatewaySQL = `
 UPDATE meta_mcp_servers SET discovery_mode = 'code_mode', updated_at = clock_timestamp()
 WHERE organization_id = $1 AND project_id = $2 AND name = 'Python Code Gateway' AND deleted IS FALSE
-`
-
-// The default registry backing the Catalog page. Global, not tenant-scoped,
-// which is precisely why it cannot live in the tenant seed.
-const localMCPRegistrySQL = `
-INSERT INTO mcp_registries (name, url)
-VALUES ('Speakeasy Recommended', 'https://api.pulsemcp.com')
-ON CONFLICT (url) WHERE deleted IS FALSE DO NOTHING
 `
 
 func emailDomain(email string) string {

@@ -1,0 +1,31 @@
+package deployments
+
+import (
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
+	"go.opentelemetry.io/otel/trace/noop"
+	"log/slog"
+	"reflect"
+	"testing"
+
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	"github.com/stretchr/testify/require"
+)
+
+func TestNewServiceRequiresExplicitCatalog(t *testing.T) {
+	signature := reflect.TypeOf(NewService)
+	require.False(t, signature.IsVariadic(), "catalog must be a required dependency, not an empty fallback")
+	require.Equal(t, reflect.TypeFor[*externalmcp.CatalogService](), signature.In(signature.NumIn()-1))
+}
+
+func TestNewServiceKeepsNativeCatalogReader(t *testing.T) {
+	validator, err := mcpregistry.LoadValidator()
+	require.NoError(t, err)
+	reader := externalmcp.NewNativeRegistryReader(mcpregistry.New(nil, validator))
+	catalog := externalmcp.NewCatalogService(nil, reader)
+	service := NewService(slog.Default(), noop.NewTracerProvider(), nil, nil, &sessions.Manager{}, nil, nil, nil, nil, nil, catalog)
+	require.Same(t, catalog, service.catalog)
+	resolved, err := service.catalog.ReaderFor(externalmcp.CatalogSource{Registry: externalmcp.Registry{ID: externalmcp.NativeCatalogRegistryID}, SourceType: "native_v1", AuthProfile: "none"})
+	require.NoError(t, err)
+	require.Same(t, reader, resolved)
+}

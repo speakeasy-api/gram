@@ -470,7 +470,7 @@ func (c *RegistryClient) fetchAllServers(ctx context.Context, registry Registry,
 		if err != nil {
 			return CachedListServers{}, false, err
 		}
-		if c.backend.Match(req) {
+		if c.backend != nil && c.backend.Match(req) {
 			if err := c.backend.Authorize(req); err != nil {
 				return CachedListServers{}, false, fmt.Errorf("authorize list servers request: %w", err)
 			}
@@ -799,7 +799,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		return nil, oops.Permanent(fmt.Errorf("create external mcp server details request: %w", err))
 	}
 
-	if c.backend.Match(req) {
+	if c.backend != nil && c.backend.Match(req) {
 		if err := c.backend.Authorize(req); err != nil {
 			return nil, fmt.Errorf("authorize external mcp server details request: %w", err)
 		}

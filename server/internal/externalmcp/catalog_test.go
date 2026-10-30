@@ -12,7 +12,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 )
 
 func TestCatalogSourceFromRowAdmitsOnlyCertifiedReviewedSources(t *testing.T) {
@@ -67,16 +66,6 @@ func (r routingRepo) GetMCPRegistryByID(_ context.Context, id uuid.UUID) (repo.G
 	return repo.GetMCPRegistryByIDRow{}, errors.New("missing")
 }
 
-type routingFlags struct {
-	feature.Provider
-	on  bool
-	err error
-}
-
-func (f routingFlags) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
-	return f.on, f.err
-}
-
 func TestCatalogSelectsExactlyOneSource(t *testing.T) {
 	t.Parallel()
 	legacyID := uuid.New()
@@ -84,22 +73,20 @@ func TestCatalogSelectsExactlyOneSource(t *testing.T) {
 		{ID: legacyID, Url: "https://api.pulsemcp.com"},
 		{ID: NativeCatalogRegistryID, Url: NativeCatalogRegistryURL, SourceType: pgtype.Text{String: registrySourceTypeNative, Valid: true}, AuthProfile: pgtype.Text{String: registryAuthProfileNone, Valid: true}, Enabled: pgtype.Bool{Bool: true, Valid: true}, CertificationState: pgtype.Text{String: "certified", Valid: true}, SourceKey: pgtype.Text{String: "speakeasy", Valid: true}},
 	}
-	for _, flags := range []feature.Provider{nil, routingFlags{}, routingFlags{on: true}, routingFlags{err: errors.New("flags down")}} {
-		s := NewCatalogService(nil, &RegistryClient{}, &NativeRegistryReader{}, flags)
-		s.repo = routingRepo{rows}
-		source, err := s.SelectedSource(t.Context(), "org-id", "org-slug")
-		require.NoError(t, err)
-		require.Equal(t, NativeCatalogRegistryID, source.Registry.ID)
-		_, err = s.SelectSource(t.Context(), "org-id", "org-slug", legacyID)
-		require.ErrorIs(t, err, ErrCatalogSourceNotFound)
-		_, err = s.IdentitySource(t.Context(), NativeCatalogRegistryID)
-		require.NoError(t, err)
-		_, err = s.IdentitySource(t.Context(), legacyID)
-		require.ErrorIs(t, err, ErrUnsupportedCatalogSource)
-		s.repo = routingRepo{rows: rows[:1]}
-		_, err = s.SelectedSource(t.Context(), "org-id", "org-slug")
-		require.ErrorIs(t, err, ErrCatalogSourceNotFound)
-	}
+	s := NewCatalogService(nil, &NativeRegistryReader{})
+	s.repo = routingRepo{rows}
+	source, err := s.SelectedSource(t.Context(), "org-id", "org-slug")
+	require.NoError(t, err)
+	require.Equal(t, NativeCatalogRegistryID, source.Registry.ID)
+	_, err = s.SelectSource(t.Context(), "org-id", "org-slug", legacyID)
+	require.ErrorIs(t, err, ErrCatalogSourceNotFound)
+	_, err = s.IdentitySource(t.Context(), NativeCatalogRegistryID)
+	require.NoError(t, err)
+	_, err = s.IdentitySource(t.Context(), legacyID)
+	require.ErrorIs(t, err, ErrUnsupportedCatalogSource)
+	s.repo = routingRepo{rows: rows[:1]}
+	_, err = s.SelectedSource(t.Context(), "org-id", "org-slug")
+	require.ErrorIs(t, err, ErrCatalogSourceNotFound)
 }
 
 func TestDashboardDetailsRetainEveryRemote(t *testing.T) {
@@ -127,7 +114,7 @@ func (r *failedCatalogReader) GetServerDetails(context.Context, Registry, string
 func TestCatalogSelectedFailureNeverFallsBack(t *testing.T) {
 	t.Parallel()
 	legacy, native := &failedCatalogReader{}, &failedCatalogReader{}
-	s := NewCatalogService(nil, legacy, native)
+	s := NewCatalogService(nil, native)
 	s.repo = routingRepo{rows: []repo.ListMCPRegistriesRow{
 		{ID: uuid.New(), Url: "https://api.pulsemcp.com"},
 		{ID: NativeCatalogRegistryID, Url: NativeCatalogRegistryURL, SourceType: pgtype.Text{String: registrySourceTypeNative, Valid: true}, AuthProfile: pgtype.Text{String: registryAuthProfileNone, Valid: true}, Enabled: pgtype.Bool{Bool: true, Valid: true}, CertificationState: pgtype.Text{String: "certified", Valid: true}, SourceKey: pgtype.Text{String: "speakeasy", Valid: true}},
@@ -171,7 +158,7 @@ func TestCatalogUnsupportedIdentity(t *testing.T) {
 				if state == "uncertified" {
 					row.CertificationState.String = "pending"
 				}
-				s := NewCatalogService(nil, nil, &NativeRegistryReader{})
+				s := NewCatalogService(nil, &NativeRegistryReader{})
 				s.repo = routingRepo{rows: []repo.ListMCPRegistriesRow{row}}
 				_, err := s.IdentitySource(t.Context(), row.ID)
 				require.ErrorIs(t, err, ErrUnsupportedCatalogSource)
@@ -208,7 +195,7 @@ func TestCatalogNativeIdentityAdmission(t *testing.T) {
 				row.AuthProfile.String = "unknown"
 				want = ErrUnsupportedCatalogSource
 			}
-			s := NewCatalogService(nil, nil, &NativeRegistryReader{})
+			s := NewCatalogService(nil, &NativeRegistryReader{})
 			s.repo = routingRepo{rows: []repo.ListMCPRegistriesRow{row}}
 			_, err := s.IdentitySource(t.Context(), row.ID)
 			require.ErrorIs(t, err, want)
@@ -218,7 +205,7 @@ func TestCatalogNativeIdentityAdmission(t *testing.T) {
 
 func TestCatalogDoesNotAdmitUnsupportedAdapter(t *testing.T) {
 	t.Parallel()
-	s := NewCatalogService(nil, nil, &NativeRegistryReader{})
+	s := NewCatalogService(nil, &NativeRegistryReader{})
 	_, err := s.ReaderFor(CatalogSource{SourceType: "unsupported_v1", AuthProfile: "unsupported_auth"})
 	require.ErrorIs(t, err, ErrUnknownRegistrySource)
 }
@@ -243,7 +230,7 @@ func TestCatalogIdentityLookupErrors(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s := NewCatalogService(nil, nil, &NativeRegistryReader{})
+			s := NewCatalogService(nil, &NativeRegistryReader{})
 			s.repo = failingIdentityRepo{err: tc.cause}
 			_, err := s.IdentitySource(t.Context(), NativeCatalogRegistryID)
 			require.ErrorIs(t, err, tc.want)
