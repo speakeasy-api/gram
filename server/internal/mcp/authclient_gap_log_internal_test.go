@@ -42,6 +42,11 @@ func TestNoteAuthClientGap(t *testing.T) {
 	require.Contains(t, lines[2], `"level":"DEBUG"`)
 	require.Contains(t, lines[2], `"gram.auth_client.reason":"missing_choice"`)
 
+	buf.Reset()
+	s.noteAuthClientGap(t.Context(), logger, user, member, gapResolution(authClientReasonUnassociated))
+	require.Contains(t, buf.String(), `"level":"WARN"`, "a client no longer offered on the server is broken setup")
+	require.Contains(t, buf.String(), `"gram.auth_client.reason":"client_unassociated"`)
+
 	withClient := gapResolution(authClientReasonClientDisabled)
 	withClient.clientID = uuid.New()
 	buf.Reset()

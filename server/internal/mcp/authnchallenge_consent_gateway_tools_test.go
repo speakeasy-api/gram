@@ -347,7 +347,7 @@ func TestGatewayConsentUnchosenConnectionSaysWhy(t *testing.T) {
 	outcomes := gatewayOutcomesFromPage(page)
 	require.Len(t, outcomes, 1)
 	require.Equal(t, "reconnect", outcomes[0].Status)
-	require.Equal(t, "Two connections can sign in to this server — ask an admin to keep one", outcomes[0].Label)
+	require.Equal(t, "More than one connection can sign in to this server — ask an admin to keep one", outcomes[0].Label)
 	require.NotContains(t, page, "Needs reconnecting")
 	require.Zero(t, upstream.requests.Load())
 }

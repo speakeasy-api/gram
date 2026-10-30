@@ -503,7 +503,8 @@ func TestGapReconnectLabel(t *testing.T) {
 		{"a disabled client", authClientReasonClientDisabled, nil, 1, "Ask an admin to finish setting up this server", true},
 		{"a deleted client", authClientReasonClientDeleted, nil, 1, "Ask an admin to finish setting up this server", true},
 		{"an unassociated client", authClientReasonUnassociated, nil, 1, "Ask an admin to finish setting up this server", true},
-		{"two connections and no picker", authClientReasonNoAuthStale, nil, 2, "Two connections can sign in to this server — ask an admin to keep one", true},
+		{"two connections and no picker", authClientReasonNoAuthStale, nil, 2, "More than one connection can sign in to this server — ask an admin to keep one", true},
+		{"three connections and no picker", authClientReasonNoAuthStale, nil, 3, "More than one connection can sign in to this server — ask an admin to keep one", true},
 		{"anything else keeps the generic label", authClientReasonNoAuthStale, nil, 1, "", false},
 	}
 	for _, tc := range cases {

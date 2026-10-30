@@ -330,7 +330,7 @@ func gapReconnectLabel(reason string, auth *consentServerAuth, connectedCards in
 	case reason == authClientReasonClientDisabled, reason == authClientReasonClientDeleted, reason == authClientReasonUnassociated:
 		return "Ask an admin to finish setting up this server", true
 	case connectedCards > 1:
-		return "Two connections can sign in to this server — ask an admin to keep one", true
+		return "More than one connection can sign in to this server — ask an admin to keep one", true
 	default:
 		return "", false
 	}

@@ -729,6 +729,7 @@ var authClientGapWarnReasons = map[string]bool{
 	authClientReasonClientGone:      true,
 	authClientReasonClientDeleted:   true,
 	authClientReasonClientDisabled:  true,
+	authClientReasonUnassociated:    true,
 	authClientReasonRegistration:    true,
 	authClientReasonDetached:        true,
 	authClientReasonHeadersStale:    true,
