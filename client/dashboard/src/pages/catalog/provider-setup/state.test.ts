@@ -2,30 +2,33 @@ import { describe, expect, it } from "vitest";
 import { initialState, reduce, ready, steps, validate } from "./state";
 
 describe("Slack setup state", () => {
-  it("clears both credentials and connection results when the app changes", () => {
-    const initial = initialState("slack");
-    const state = reduce(
-      {
-        ...initial,
-        saved: true,
-        authorized: true,
-        tested: true,
-        values: {
-          ...initial.values,
-          clientId: "app-id",
-          clientSecret: "secret",
+  it.each(["slack", "github"] as const)(
+    "clears both %s credentials and connection results when the app changes",
+    (provider) => {
+      const initial = initialState(provider);
+      const state = reduce(
+        {
+          ...initial,
+          saved: true,
+          authorized: true,
+          tested: true,
+          values: {
+            ...initial.values,
+            clientId: "app-id",
+            clientSecret: "secret",
+          },
         },
-      },
-      { type: "field", field: "appChoice", value: "existing" },
-    );
-    expect(state.values.clientId).toBe("");
-    expect(state.values.clientSecret).toBe("");
-    expect([state.saved, state.authorized, state.tested]).toEqual([
-      false,
-      false,
-      false,
-    ]);
-  });
+        { type: "field", field: "appChoice", value: "existing" },
+      );
+      expect(state.values.clientId).toBe("");
+      expect(state.values.clientSecret).toBe("");
+      expect([state.saved, state.authorized, state.tested]).toEqual([
+        false,
+        false,
+        false,
+      ]);
+    },
+  );
   it("keeps saved credentials but invalidates authorization and testing after a permission change", () => {
     const state = reduce(
       { ...initialState("slack"), saved: true, authorized: true, tested: true },
@@ -76,6 +79,27 @@ describe("Slack setup state", () => {
     expect(state.returnToTest).toBe(true);
     expect(reduce(state, { type: "next" }).step).toBe("test");
   });
+});
+
+it("validates GitHub organizations and requires one for completion", () => {
+  const s = initialState("github");
+  for (const org of ["", "https://github.com/example", "bad--org", "-bad"])
+    expect(
+      validate({ ...s, step: "organization", values: { ...s.values, org } })
+        .org,
+    ).toBeTruthy();
+  const valid = { ...s, values: { ...s.values, org: "example-org" } };
+  expect(validate({ ...valid, step: "organization" })).toEqual({});
+  expect(
+    reduce({ ...valid, saved: true, authorized: true }, { type: "complete" })
+      .screen,
+  ).toBe("setup");
+  expect(
+    reduce(
+      { ...valid, saved: true, authorized: true, tested: true },
+      { type: "complete" },
+    ).screen,
+  ).toBe("success");
 });
 
 it("clears the permission-change reminder only after a successful connection test", () => {

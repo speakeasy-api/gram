@@ -18,7 +18,7 @@ vi.mock(
   }),
 );
 afterEach(cleanup);
-function SavedCredentials({ provider }: { provider: "slack" }) {
+function SavedCredentials({ provider }: { provider: "slack" | "github" }) {
   const [s, dispatch] = useReducer(reduce, {
     ...initialState(provider),
     step: "credentials",
@@ -46,7 +46,7 @@ function SavedCredentials({ provider }: { provider: "slack" }) {
   );
 }
 describe("saved credentials", () => {
-  it.each(["slack"] as const)(
+  it.each(["slack", "github"] as const)(
     "shows the full %s form disabled and enables replacement without revealing the secret",
     async (provider) => {
       const user = userEvent.setup();
@@ -59,7 +59,9 @@ describe("saved credentials", () => {
       expect(secret.type).toBe("password");
       expect(secret.value).toBe("••••••••");
       expect(screen.queryByRole("button", { name: "Show" })).toBeNull();
-      expect(screen.getByText(`In ${"Slack"}`)).toBeDefined();
+      expect(
+        screen.getByText(`In ${provider === "github" ? "GitHub" : "Slack"}`),
+      ).toBeDefined();
       await user.click(
         screen.getByRole("button", { name: "Update credentials" }),
       );
@@ -105,6 +107,41 @@ it.each([false, true])(
         ? "https://previous.example/callback"
         : "https://current.example/callback",
     );
+  },
+);
+
+it.each(["new", "existing"])(
+  "uses the real callback and org-owned GitHub app settings (%s)",
+  (appChoice) => {
+    const initial = initialState("github");
+    const dispatch = vi.fn<() => void>();
+    render(
+      <SetupContext
+        value={{
+          s: {
+            ...initial,
+            step: "app",
+            values: { ...initial.values, org: "example-org", appChoice },
+          },
+          dispatch,
+          live: connectionFixture(dispatch),
+        }}
+      >
+        <ProviderTask serverName="GitHub" />
+      </SetupContext>,
+    );
+    expect(screen.getByLabelText("Redirect URI").getAttribute("value")).toBe(
+      "https://current.example/callback",
+    );
+    expect(
+      screen
+        .getByRole("link", { name: "Open GitHub settings" })
+        .getAttribute("href"),
+    ).toBe(
+      "https://github.com/organizations/example-org/settings/applications",
+    );
+    expect(screen.getByText("Enable Device Flow")).toBeDefined();
+    expect(screen.getByText(/off\./)).toBeDefined();
   },
 );
 

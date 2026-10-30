@@ -102,6 +102,53 @@ it("allows a waiting sign-in to be cancelled", async () => {
   expect(cancelSignIn).toHaveBeenCalledTimes(1);
 });
 
+it.each(["signin", "test"] as const)(
+  "offers GitHub recovery beneath the failed %s action",
+  (errorStep) => {
+    const state = initialState("github");
+    const dispatch = vi.fn<() => void>();
+    render(
+      <SetupContext
+        value={{
+          s: {
+            ...state,
+            saved: true,
+            authorized: errorStep === "test",
+            values: { ...state.values, org: "example-org" },
+          },
+          dispatch,
+          live: connectionFixture(dispatch, {
+            pending: null,
+            error: "Couldn’t connect GitHub.",
+            errorStep,
+            toolCount: null,
+            loading: false,
+          }),
+        }}
+      >
+        <ConnectionTask />
+      </SetupContext>,
+    );
+    const row = screen.getByText("Couldn’t connect GitHub.").closest("tr");
+    expect(row?.previousElementSibling?.textContent).toContain(
+      errorStep === "signin" ? "GitHub sign-in" : "Connection test",
+    );
+    expect(
+      screen.getByRole("button", { name: "Review credentials" }),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Review app settings" }),
+    ).toBeDefined();
+    expect(screen.getByText("Review organization approval")).toBeDefined();
+    expect(screen.getByText("Review SSO sign-in")).toBeDefined();
+    expect(
+      screen
+        .getByRole("link", { name: "Open organization ↗" })
+        .getAttribute("href"),
+    ).toBe("https://github.com/example-org");
+  },
+);
+
 it.each([
   [0, "Connected · 0 tools discovered. No tools were run."],
   [1, "Connected · 1 tool discovered. No tools were run."],

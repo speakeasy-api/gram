@@ -7,16 +7,54 @@ import { Button } from "@/components/ui/Button";
 import { names, ready } from "./state";
 import { Correction } from "./shared";
 function LiveConnectionError() {
-  const { live } = useSetup();
+  const { s, live } = useSetup();
   return (
     <>
       <p>{live.error}</p>
+      {s.provider === "github" && (
+        <>
+          <Correction step="credentials">Review credentials</Correction>
+          {" · "}
+          <Correction step="app">Review app settings</Correction>
+          <details className="mt-3">
+            <summary>Review organization approval</summary>
+            <p>
+              Open your authorized OAuth apps, choose this app, and next to{" "}
+              {s.values.org} select Request access → Request approval from
+              owners. An organization owner approves it in Settings →
+              Third-party Access → OAuth app policy → Review → Grant access.
+            </p>
+            <a
+              href="https://github.com/settings/applications"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open GitHub application settings ↗
+            </a>
+            <p>Sign in again and retry the connection test.</p>
+          </details>
+          <details className="mt-3">
+            <summary>Review SSO sign-in</summary>
+            <p>
+              Sign in to {s.values.org} through your organization’s identity
+              provider, then sign in to GitHub again.
+            </p>
+            <a
+              href={`https://github.com/${encodeURIComponent(s.values.org.trim())}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open organization ↗
+            </a>
+          </details>
+        </>
+      )}
       {live.recovery === "signin" && (
         <Button variant="secondary" size="sm" onClick={live.signIn}>
           <Button.Text>Sign in again ↗</Button.Text>
         </Button>
       )}
-      {live.recovery === "credentials" && (
+      {s.provider !== "github" && live.recovery === "credentials" && (
         <Correction step="credentials">Review credentials</Correction>
       )}
       {live.recovery === "permissions" && (
@@ -56,7 +94,7 @@ export function ConnectionTask(): JSX.Element {
       step: "credentials",
     },
     {
-      label: "Slack sign-in",
+      label: `${names[s.provider]} sign-in`,
       done: s.authorized,
       status: "Signed in",
       action:
@@ -81,7 +119,7 @@ export function ConnectionTask(): JSX.Element {
       available: available && s.authorized,
       run: live.testConnection,
       pending: live.pending === "test",
-      hint: "Sign in to Slack first.",
+      hint: `Sign in to ${names[s.provider]} first.`,
       error:
         live.error && live.errorStep === "test" ? (
           <LiveConnectionError />

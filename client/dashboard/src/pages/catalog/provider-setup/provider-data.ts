@@ -40,6 +40,10 @@ export function taskTitle(s: State): string {
   if (s.step === "begin") return "Setup plan";
   if (s.step === "test") return "Connect and test";
   if (s.step === "credentials") return "Enter app credentials";
+  if (s.provider === "github")
+    return s.step === "organization"
+      ? "Enter your GitHub organization"
+      : "Set up OAuth app";
   return s.returnToTest
     ? "Review Slack permissions"
     : s.values.appChoice === "new"

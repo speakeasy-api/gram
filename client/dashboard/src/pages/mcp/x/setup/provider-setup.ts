@@ -27,6 +27,8 @@ export function setupProviderForUrl(
     const path = url.pathname.replace(/\/+$/, "");
     if (url.origin === "https://mcp.slack.com" && path === "/mcp")
       return "slack";
+    if (url.origin === "https://api.githubcopilot.com" && path === "/mcp")
+      return "github";
     return null;
   } catch {
     return null;
@@ -72,6 +74,7 @@ export function saveProviderProgress(key: string, state: State): void {
           (step) => !["credentials", "test"].includes(step),
         ),
         values: {
+          ...(state.provider === "github" ? { org: state.values.org } : {}),
           appChoice: state.values.appChoice,
           ...(state.accessChosen ? { access: state.values.access } : {}),
         },
@@ -102,6 +105,13 @@ export function loadProviderProgress(
     )
       return initial;
     const { values } = value;
+    if (
+      provider === "github" &&
+      "org" in values &&
+      typeof values.org === "string" &&
+      values.org.length <= 10000
+    )
+      initial.values.org = values.org;
     if (
       "appChoice" in values &&
       (values.appChoice === "new" || values.appChoice === "existing")

@@ -26,9 +26,11 @@ function clientOptions(sdk: Gram, id: string) {
 function matchesIssuer(value: string, issuer: string): boolean {
   try {
     const url = new URL(value);
+    const expected = new URL(issuer);
     return (
-      url.origin === issuer &&
-      url.pathname.replace(/\/+$/, "") === "" &&
+      url.origin === expected.origin &&
+      url.pathname.replace(/\/+$/, "") ===
+        expected.pathname.replace(/\/+$/, "") &&
       !url.search &&
       !url.hash &&
       !url.username &&
