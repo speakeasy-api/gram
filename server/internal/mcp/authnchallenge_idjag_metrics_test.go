@@ -116,3 +116,36 @@ func TestTokenIDJAGExchangeRecordsOutcomeAndRejectionReason(t *testing.T) {
 		string(mcpmetrics.IDJAGExchangeRejected) + "/" + string(mcpmetrics.IDJAGRejectionUpstreamCredentialChoice): 1,
 	}, idJAGExchangeCounts(t, reader, issuer.ID))
 }
+
+func TestTokenIDJAGExchangeRecordsInfrastructureRefusalAsError(t *testing.T) {
+	t.Parallel()
+
+	assertionSigner := newIDJAGTestAssertion(t)
+	jwksServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(jwksServer.Close)
+	rootCAs := x509.NewCertPool()
+	rootCAs.AddCert(jwksServer.Certificate())
+	reader := sdkmetric.NewManualReader()
+	ctx, ti := newTestMCPServiceWithMeterProviderAndGuardianOptions(t, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), guardian.WithTLSRootCAs(rootCAs))
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	const upstreamIssuer = "https://identity.example.test"
+	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, upstreamIssuer, jwksServer.URL)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, *authCtx.ProjectID, toolset, issuer.ID)
+	client := createIDJAGClient(t, ctx, ti, issuer.ID)
+	resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
+
+	assertion := assertionSigner.sign(t, upstreamIssuer, resource, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString())
+	w := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, assertion)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), "invalid_grant")
+
+	require.Equal(t, map[string]int64{
+		string(mcpmetrics.IDJAGExchangeError) + "/" + string(idjag.ReasonKeyUnresolvable): 1,
+	}, idJAGExchangeCounts(t, reader, issuer.ID))
+}

@@ -85,8 +85,8 @@ func IDJAGRejectionFromValidator(reason idjag.Reason) IDJAGRejectionReason {
 	return IDJAGRejectionAssertionOther
 }
 
-// RecordIDJAGExchange records one ID-JAG token exchange. reason is set only
-// for a rejection. The client ID is deliberately not a dimension: it may be a
+// RecordIDJAGExchange records one ID-JAG token exchange. reason is set for a
+// rejection and for a validator refusal recorded as an error. The client ID is deliberately not a dimension: it may be a
 // client metadata document URL chosen by the caller.
 func (m *Metrics) RecordIDJAGExchange(ctx context.Context, issuerID string, outcome IDJAGExchangeOutcome, reason IDJAGRejectionReason) {
 	if m == nil || m.oauthIDJAGExchangeCounter == nil {
