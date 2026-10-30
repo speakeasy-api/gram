@@ -198,7 +198,8 @@ export function HeadlessCallersSection({
           label: profile.name,
         };
 
-  if (credentials.length < 2 && configured.length === 0) return null;
+  if (credentials.length < 2 && configured.length === 0 && !profiles.isError)
+    return null;
 
   return (
     <AuthRow
