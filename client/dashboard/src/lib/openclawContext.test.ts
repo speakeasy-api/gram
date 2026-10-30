@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseOpenClawContext } from "./openclawContext";
 
 const info =
-  'Conversation info: [openclaw:ctx]\n```json\n{"requester_profile":{"id":"gateway-owner"},"requester_profile_hint":"requester_profile is the verified linked requester."}\n```';
+  'Conversation info: ⟦openclaw:ctx⟧\n```json\n{"requester_profile":{"id":"gateway-owner"},"requester_profile_hint":"requester_profile is the verified linked requester."}\n```';
 
 const replay =
   '[user sender={"id":"gateway-owner"}]\nhey\n\n[assistant]\nHey! What can I help with?';
@@ -51,7 +51,7 @@ describe("parseOpenClawContext", () => {
 
   it("keeps the info block as text when it is not valid JSON", () => {
     const parsed = parseOpenClawContext(
-      "Conversation info: [openclaw:ctx]\n```json\nnot json\n```\n\nhello",
+      "Conversation info: ⟦openclaw:ctx⟧\n```json\nnot json\n```\n\nhello",
     );
     expect(parsed?.conversationInfo).toBe("not json");
     expect(parsed?.request).toBe("hello");
@@ -66,6 +66,12 @@ describe("parseOpenClawContext", () => {
     ).toBeNull();
     expect(
       parseOpenClawContext(`please explain this:\n${assembled("hi")}`),
+    ).toBeNull();
+    // OpenClaw's marker uses U+27E6 and U+27E7, not ASCII brackets.
+    expect(
+      parseOpenClawContext(
+        "Conversation info: [openclaw:ctx]\n```json\n{}\n```\n\nhi",
+      ),
     ).toBeNull();
   });
 

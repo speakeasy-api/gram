@@ -1,6 +1,6 @@
 // Display-time parsing of the context wrapper OpenClaw puts around every user
 // turn it sends through the gateway. The turn opens with a
-// "Conversation info: [openclaw:ctx]" JSON block (the verified requester
+// "Conversation info: ⟦openclaw:ctx⟧" JSON block (the verified requester
 // profile), optionally followed by a replay of the earlier conversation and a
 // "Current user request:" label. The request the person actually typed comes
 // last, so a session's first message can bury it under hours of replayed chat.
@@ -20,7 +20,7 @@ export interface OpenClawContext {
 }
 
 const HEADER_RE =
-  /^Conversation info: \[openclaw:ctx\][ \t]*\n```json[ \t]*\n([\s\S]*?)\n```[ \t]*(?:\n|$)/;
+  /^Conversation info: ⟦openclaw:ctx⟧[ \t]*\n```json[ \t]*\n([\s\S]*?)\n```[ \t]*(?:\n|$)/;
 const ASSEMBLED_PREFIX = "OpenClaw assembled context for this turn:";
 const CONTEXT_OPEN = "<conversation_context>";
 const CONTEXT_CLOSE_RE =
