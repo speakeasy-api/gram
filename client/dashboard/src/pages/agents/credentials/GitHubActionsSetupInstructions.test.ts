@@ -1,5 +1,5 @@
 import type { Plugin } from "@gram/client/models/components/plugin.js";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ACTION_DEFAULT_CONTROL_PLANE,
   controlPlaneProblem,
@@ -14,6 +14,15 @@ import {
 import { githubActionsSetupInstructions } from "./GitHubActionsSetupInstructions";
 import { hasPlatformSetup } from "./platformSetups";
 import { subjectRule, type CatalogEntry } from "./workloadCatalog";
+
+const server = vi.hoisted(() => ({ url: "" }));
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  getServerURL: () => server.url,
+}));
+afterEach(() => {
+  server.url = "";
+});
 
 // Patterns copied from
 // server/internal/workloadpolicy/catalog/platforms/github-actions.yaml.
@@ -96,6 +105,13 @@ describe("GitHub Actions setup", () => {
       repositoryProblem({ owner: "acme@123", repo: "app@456" }),
     ).toBeNull();
     expect(setup.connection({ owner: "acme@123", repo: "app" })).toBeNull();
+  });
+
+  it("gives no grants to show or check while the deployment is unreachable", () => {
+    server.url = "http://speakeasy.example.com";
+    const setup = githubActionsSetupInstructions(github);
+    expect(setup.agentGrants?.("org-1", "project-1")).toEqual([]);
+    expect(setup.connection({ owner: "acme", repo: "app" })).toBeNull();
   });
 
   it("gives the agent device sync and hooks for one project", () => {

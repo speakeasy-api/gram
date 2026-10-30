@@ -39,7 +39,12 @@ export function githubActionsSetupInstructions(
   const unreachable = controlPlaneProblem(getServerURL());
 
   return {
-    agentGrants: githubActionsAgentGrants,
+    // Nothing is written for an unreachable deployment, so no grant is shown
+    // in the summary or checked either.
+    agentGrants: (organizationId, projectId) =>
+      unreachable === null
+        ? githubActionsAgentGrants(organizationId, projectId)
+        : [],
     keywords: ["GitHub", "CI", "workflow", "device agent"],
     connection: (values): Connection | null => {
       const rule = subjectRule(entry, values);
