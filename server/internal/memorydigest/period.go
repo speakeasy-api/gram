@@ -120,6 +120,8 @@ func (l Level) ChildStarts(start time.Time) []time.Time {
 				starts = append(starts, w)
 			}
 		}
+	case LevelDay:
+		// Unreachable: ChildLevel reports no children for days.
 	}
 	return starts
 }

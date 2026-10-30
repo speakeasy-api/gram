@@ -129,7 +129,7 @@ func Uncovered(digests []Digest, chats []ChatNote) []Entry {
 		}
 		heading := "Chat " + c.SummarizedAt.UTC().Format(time.DateOnly)
 		if c.Title != "" {
-			heading += ": " + c.Title
+			heading += ": " + strings.Join(strings.Fields(c.Title), " ")
 		}
 		entries = append(entries, Entry{
 			Kind:    SourceChat,
@@ -146,9 +146,12 @@ func Uncovered(digests []Digest, chats []ChatNote) []Entry {
 
 // Budget keeps the newest entries whose estimated size fits budgetTokens and
 // returns them oldest first, with the number of older entries dropped.
+// Entries are ordered by At first, so callers need not pre-sort them.
 // Recent history is the most detailed and the most often needed, so the
 // oldest entries go first when a project outgrows the budget.
 func Budget(entries []Entry, budgetTokens int) (kept []Entry, dropped int) {
+	entries = slices.Clone(entries)
+	slices.SortStableFunc(entries, func(a, b Entry) int { return a.At.Compare(b.At) })
 	used := 0
 	start := len(entries)
 	for i := len(entries) - 1; i >= 0; i-- {

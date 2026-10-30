@@ -2,6 +2,7 @@ package memorydigest
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -30,9 +31,13 @@ const (
 	// project day that exceeds it keeps its newest items.
 	maxPromptRunes = 120_000
 
-	// maxTitleRunes caps a chat title in the prompt; titles are generated at
-	// 3 to 6 words and manual renames are limited to 200 runes.
+	// maxTitleRunes caps a chat title or memo author name in the prompt;
+	// titles are generated at 3 to 6 words and manual renames are limited
+	// to 200 runes.
 	maxTitleRunes = 200
+
+	// inputSeparator sits between input blocks in the user message.
+	inputSeparator = "\n\n"
 )
 
 // Input is one item a digest folds: a masked chat summary or memo for a day
@@ -91,13 +96,19 @@ func (l Level) Prompt(start time.Time, inputs []Input) (system, user string, ok 
 	}
 	system = fmt.Sprintf(systemPrompt, l, l.Label(start), what, wordBudget[l])
 
-	blocks := make([]string, 0, len(inputs))
+	ordered := slices.Clone(inputs)
+	slices.SortStableFunc(ordered, func(a, b Input) int { return a.At.Compare(b.At) })
+
+	blocks := make([]string, 0, len(ordered))
 	total := 0
 	// Walk newest first so an over-long period keeps its latest material,
 	// then restore chronological order for the model.
-	for i := len(inputs) - 1; i >= 0; i-- {
-		block := formatInput(inputs[i])
+	for i := len(ordered) - 1; i >= 0; i-- {
+		block := formatInput(ordered[i])
 		n := utf8.RuneCountInString(block)
+		if len(blocks) > 0 {
+			n += utf8.RuneCountInString(inputSeparator)
+		}
 		if total+n > maxPromptRunes {
 			break
 		}
@@ -107,7 +118,7 @@ func (l Level) Prompt(start time.Time, inputs []Input) (system, user string, ok 
 	for i, j := 0, len(blocks)-1; i < j; i, j = i+1, j-1 {
 		blocks[i], blocks[j] = blocks[j], blocks[i]
 	}
-	return system, strings.Join(blocks, "\n\n"), true
+	return system, strings.Join(blocks, inputSeparator), true
 }
 
 func formatInput(in Input) string {
@@ -120,7 +131,7 @@ func formatInput(in Input) string {
 	}
 	if in.Author != "" {
 		head.WriteString(" (saved by ")
-		head.WriteString(in.Author)
+		head.WriteString(conv.TruncateString(in.Author, maxTitleRunes))
 		head.WriteString(")")
 	}
 	head.WriteString(" · ")

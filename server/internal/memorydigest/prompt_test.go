@@ -3,6 +3,7 @@ package memorydigest_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -60,8 +61,20 @@ func TestPromptKeepsNewestWhenOverLong(t *testing.T) {
 
 	_, user, ok := memorydigest.LevelDay.Prompt(date(2026, 10, 29), inputs)
 	require.True(t, ok)
-	require.LessOrEqual(t, len([]rune(user)), 120_000+80*2)
+	require.LessOrEqual(t, len([]rune(user)), 120_000)
 	require.Contains(t, user, "newest")
 	require.NotContains(t, user, "oldest")
 	require.True(t, strings.HasSuffix(user, strings.Repeat(string(rune('a'+79%26)), 2_400)))
+}
+
+func TestPromptOrdersByAtAndCapsAuthor(t *testing.T) {
+	t.Parallel()
+
+	_, user, ok := memorydigest.LevelDay.Prompt(date(2026, 10, 29), []memorydigest.Input{
+		{Kind: memorydigest.SourceMemo, At: date(2026, 10, 29).Add(2 * time.Hour), Author: strings.Repeat("a", 500), Text: "later"},
+		{Kind: memorydigest.SourceChat, At: date(2026, 10, 29).Add(time.Hour), Text: "earlier"},
+	})
+	require.True(t, ok)
+	require.Less(t, strings.Index(user, "earlier"), strings.Index(user, "later"))
+	require.NotContains(t, user, strings.Repeat("a", 201))
 }

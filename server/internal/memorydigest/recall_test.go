@@ -26,7 +26,7 @@ func TestUncoveredShowsEachPeriodAtItsMostCompressedLevel(t *testing.T) {
 		[]memorydigest.Digest{openDay, dayInWeek, month, openWeek, weekInMonth},
 		[]memorydigest.ChatNote{
 			{ID: chatInDay, SummarizedAt: date(2026, 10, 5), Summary: "covered"},
-			{ID: chatToday, Title: "Retry queue", SummarizedAt: date(2026, 11, 10), Summary: "Picked queue X.\n\nMore detail."},
+			{ID: chatToday, Title: "Retry\n## queue", SummarizedAt: date(2026, 11, 10), Summary: "Picked queue X.\n\nMore detail."},
 		},
 	)
 
@@ -37,7 +37,7 @@ func TestUncoveredShowsEachPeriodAtItsMostCompressedLevel(t *testing.T) {
 	require.Equal(t, []uuid.UUID{month.ID, openWeek.ID, openDay.ID, chatToday}, ids)
 	require.Equal(t, "October 2026 (month digest)", entries[0].Heading)
 	require.Equal(t, memorydigest.SourceChat, entries[3].Kind)
-	require.Equal(t, "Chat 2026-11-10: Retry queue", entries[3].Heading)
+	require.Equal(t, "Chat 2026-11-10: Retry ## queue", entries[3].Heading)
 	require.Equal(t, "Picked queue X.", entries[3].Text)
 }
 
@@ -63,6 +63,12 @@ func TestBudgetDropsOldestFirst(t *testing.T) {
 	require.Zero(t, dropped)
 	require.Len(t, kept, 10)
 
+	// Order comes from At, not from the slice.
+	shuffled := []memorydigest.Entry{entries[9], entries[0], entries[8]}
+	kept, dropped = memorydigest.Budget(shuffled, 250)
+	require.Equal(t, 1, dropped)
+	require.Equal(t, []memorydigest.Entry{entries[8], entries[9]}, kept)
+
 	kept, dropped = memorydigest.Budget(nil, 100)
 	require.Zero(t, dropped)
 	require.Empty(t, kept)
@@ -75,7 +81,7 @@ func TestChatSnippetIsCut(t *testing.T) {
 		{ID: uuid.New(), SummarizedAt: time.Now(), Summary: strings.Repeat("y", 2_000)},
 	})
 	require.Len(t, entries, 1)
-	require.Equal(t, 600, len([]rune(entries[0].Text)))
+	require.Len(t, []rune(entries[0].Text), 600)
 	require.True(t, strings.HasSuffix(entries[0].Text, "…"))
 }
 
