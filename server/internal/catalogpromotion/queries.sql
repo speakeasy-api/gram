@@ -1,6 +1,57 @@
 -- name: GetSource :one
 SELECT p.organization_id, m.project_id, m.id AS mcp_server_id, r.id AS remote_mcp_server_id, left(m.name,200)::text AS source_name,
-  r.url, r.transport_type, m.visibility, left(COALESCE(r.name,''),200)::text AS remote_name, COALESCE(m.requires_upstream_auth,false)::boolean AS requires_upstream_auth, (m.requires_upstream_auth IS NOT NULL)::boolean AS upstream_auth_known, m.remote_session_issuer_id,
+  r.url, r.transport_type, m.visibility, left(COALESCE(r.name,''),200)::text AS remote_name, EXISTS (
+    -- The server needs upstream authentication when it offers a live,
+    -- enabled auth client in its tenant.
+    SELECT 1
+    FROM mcp_server_auth_clients AS req_link
+    JOIN mcp_auth_clients AS req_client
+      ON req_client.id = req_link.auth_client_id
+     AND req_client.organization_id = req_link.organization_id
+     AND (req_client.project_id IS NULL OR req_client.project_id = req_link.project_id)
+     AND req_client.deleted IS FALSE
+     AND req_client.enabled
+    WHERE req_link.mcp_server_id = m.id
+      AND req_link.project_id = m.project_id
+      AND req_link.organization_id = p.organization_id
+      AND req_link.deleted IS FALSE
+  )::boolean AS requires_upstream_auth,
+  (
+    -- Upstream credentials the auth client records do not cover yet: no
+    -- auth client was ever linked to the server, live or detached, but it
+    -- has an upstream OAuth client or a credential header on its source.
+    NOT EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS pend_link
+      WHERE pend_link.mcp_server_id = m.id
+        AND pend_link.project_id = m.project_id
+        AND pend_link.organization_id = p.organization_id
+    )
+    AND (
+      EXISTS (
+        SELECT 1
+        FROM mcp_server_remote_session_clients AS pend_assoc
+        WHERE pend_assoc.mcp_server_id = m.id
+          AND pend_assoc.project_id = m.project_id
+          AND pend_assoc.organization_id = p.organization_id
+          AND pend_assoc.deleted IS FALSE
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM remote_mcp_server_headers AS pend_header
+        WHERE pend_header.remote_mcp_server_id = m.remote_mcp_server_id
+          AND pend_header.deleted IS FALSE
+          AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM tunneled_mcp_server_headers AS pend_header
+        WHERE pend_header.tunneled_mcp_server_id = m.tunneled_mcp_server_id
+          AND pend_header.deleted IS FALSE
+          AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+      )
+    )
+  )::boolean AS upstream_auth_pending, m.remote_session_issuer_id,
   left(COALESCE(pr.resource_name,''),200)::text AS resource_name, left(COALESCE(pr.resource_documentation,''),2049)::text AS resource_documentation,
   md5(m.updated_at::text || r.updated_at::text || COALESCE(h.revision, '') || COALESCE(a.revision, ''))::text AS source_revision,
   GREATEST(m.updated_at, r.updated_at, h.updated_at, a.updated_at)::timestamptz AS changed_at,

@@ -18,9 +18,9 @@ export type ListMcpServerAuthClientChoicesResponseBody = {
    */
   choices: Array<AuthClientChoice>;
   /**
-   * Whether the upstream needs authentication. Omitted while undecided.
+   * Whether the upstream needs authentication: true when the server offers at least one enabled auth client.
    */
-  requiresUpstreamAuth?: boolean | undefined;
+  requiresUpstreamAuth: boolean;
 };
 
 /** @internal */
@@ -28,7 +28,7 @@ export const ListMcpServerAuthClientChoicesResponseBody$inboundSchema:
   z.ZodMiniType<ListMcpServerAuthClientChoicesResponseBody, unknown> = z.pipe(
     z.object({
       choices: z.array(AuthClientChoice$inboundSchema),
-      requires_upstream_auth: z.optional(z.boolean()),
+      requires_upstream_auth: z.boolean(),
     }),
     z.transform((v) => {
       return remap$(v, {

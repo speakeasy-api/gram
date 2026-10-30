@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -55,5 +54,5 @@ func (s *Service) ListMcpServerAuthClientChoices(ctx context.Context, payload *g
 			choices = append(choices, &types.AuthClientChoice{ID: row.AuthClientID.UUID.String(), Name: row.AuthClientName.String, ClientType: row.ClientType.String})
 		}
 	}
-	return &gen.ListMcpServerAuthClientChoicesResult{RequiresUpstreamAuth: conv.FromPGBool[bool](server.RequiresUpstreamAuth), Choices: choices}, nil
+	return &gen.ListMcpServerAuthClientChoicesResult{RequiresUpstreamAuth: len(rows) > 0 && rows[0].RequiresUpstreamAuth, Choices: choices}, nil
 }

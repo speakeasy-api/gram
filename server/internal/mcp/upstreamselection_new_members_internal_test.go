@@ -73,8 +73,7 @@ func TestRecordNewMemberChoices(t *testing.T) {
 
 	noAuth, _ := f.server()
 	f.serverID = noAuth
-	staticClient()
-	require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{ID: noAuth, RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true}}))
+	require.NoError(t, f.q.SetAuthClientEnabledFixture(ctx, authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: staticClient()}))
 	join(noAuth)
 
 	choices := &memberChoices{

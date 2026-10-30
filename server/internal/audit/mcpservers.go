@@ -63,9 +63,6 @@ const (
 
 	// ActionMcpServerScopePinUpdate records a change to the scope pin on a remote-backed server's protected resource.
 	ActionMcpServerScopePinUpdate Action = "mcp-server:update-scope-pin"
-
-	// ActionMcpServerUpstreamAuthRequirementUpdate records whether a server declares that its upstream needs authentication.
-	ActionMcpServerUpstreamAuthRequirementUpdate Action = "mcp-server:update-upstream-auth-requirement"
 )
 
 type LogMcpServerCreateEvent struct {
@@ -310,59 +307,6 @@ func (l *Logger) LogMcpServerScopePinUpdate(ctx context.Context, dbtx repo.DBTX,
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
 		Metadata:       metadata,
-	}
-
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServerV1})
-}
-
-type LogMcpServerUpstreamAuthRequirementUpdateEvent struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-
-	Actor            urn.Principal
-	ActorDisplayName *string
-	ActorSlug        *string
-
-	McpServerURN  urn.McpServer
-	McpServerName string
-	McpServerSlug string
-	// RequiredBefore is nil when the requirement was undecided.
-	RequiredBefore *bool
-	RequiredAfter  bool
-}
-
-func (l *Logger) LogMcpServerUpstreamAuthRequirementUpdate(ctx context.Context, dbtx repo.DBTX, event LogMcpServerUpstreamAuthRequirementUpdateEvent) error {
-	action := ActionMcpServerUpstreamAuthRequirementUpdate
-
-	beforeSnapshot, err := marshalAuditPayload(map[string]any{"requires_upstream_auth": event.RequiredBefore})
-	if err != nil {
-		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
-	}
-
-	afterSnapshot, err := marshalAuditPayload(map[string]any{"requires_upstream_auth": event.RequiredAfter})
-	if err != nil {
-		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
-	}
-
-	entry := repo.InsertAuditLogParams{
-		OrganizationID: event.OrganizationID,
-		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
-
-		ActorID:          event.Actor.ID,
-		ActorType:        string(event.Actor.Type),
-		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
-		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
-
-		Action: string(action),
-
-		SubjectID:          event.McpServerURN.ID.String(),
-		SubjectType:        string(subjectTypeMcpServer),
-		SubjectDisplayName: conv.ToPGTextEmpty(event.McpServerName),
-		SubjectSlug:        conv.ToPGTextEmpty(event.McpServerSlug),
-
-		BeforeSnapshot: beforeSnapshot,
-		AfterSnapshot:  afterSnapshot,
-		Metadata:       nil,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServerV1})

@@ -54,7 +54,42 @@ WHERE p.organization_id = @organization_id
 -- the live, enabled clients linked to it.
 SELECT s.id AS mcp_server_id,
        s.project_id,
-       s.requires_upstream_auth,
+       (
+         -- Upstream credentials the auth client records do not cover yet: no
+         -- auth client was ever linked to the server, live or detached, but it
+         -- has an upstream OAuth client or a credential header on its source.
+         NOT EXISTS (
+           SELECT 1
+           FROM mcp_server_auth_clients AS pend_link
+           WHERE pend_link.mcp_server_id = s.id
+             AND pend_link.project_id = s.project_id
+             AND pend_link.organization_id = @organization_id
+         )
+         AND (
+           EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS pend_assoc
+             WHERE pend_assoc.mcp_server_id = s.id
+               AND pend_assoc.project_id = s.project_id
+               AND pend_assoc.organization_id = @organization_id
+               AND pend_assoc.deleted IS FALSE
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM remote_mcp_server_headers AS pend_header
+             WHERE pend_header.remote_mcp_server_id = s.remote_mcp_server_id
+               AND pend_header.deleted IS FALSE
+               AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM tunneled_mcp_server_headers AS pend_header
+             WHERE pend_header.tunneled_mcp_server_id = s.tunneled_mcp_server_id
+               AND pend_header.deleted IS FALSE
+               AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+           )
+         )
+       )::boolean AS upstream_auth_pending,
        EXISTS (
          SELECT 1
          FROM upstream_client_selections AS sel

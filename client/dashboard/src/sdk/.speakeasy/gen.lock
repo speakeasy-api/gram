@@ -7878,7 +7878,7 @@ examples:
           mcp_server_id: "8482bdeb-31bf-4cbe-99cf-00205696f2bd"
       responses:
         "200":
-          application/json: {"clients": [], "mcp_server_id": "8444839a-9293-4d3c-977f-11417ff43272", "project_id": "fa041fce-7fda-4a6f-bd05-c354edb76fe4", "public": false, "status": "setup_incomplete"}
+          application/json: {"clients": [], "mcp_server_id": "8444839a-9293-4d3c-977f-11417ff43272", "project_id": "fa041fce-7fda-4a6f-bd05-c354edb76fe4", "public": false, "requires_upstream_auth": false, "status": "setup_incomplete"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -10282,7 +10282,7 @@ examples:
           mcp_server_id: "8810e064-7540-4440-95fd-d8ba8e7584ab"
       responses:
         "200":
-          application/json: {"choices": []}
+          application/json: {"choices": [], "requires_upstream_auth": false}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -13035,7 +13035,7 @@ examples:
         application/json: {"mcp_server_id": "ccb8c230-762a-46ad-9412-090104bb3243", "requires_upstream_auth": true}
       responses:
         "200":
-          application/json: {"clients": [], "mcp_server_id": "7c924e12-5da7-4110-918d-429936da8062", "project_id": "21805c97-a53b-4760-8952-b14d302b33d5", "public": false, "status": "setup_incomplete"}
+          application/json: {"clients": [], "mcp_server_id": "7c924e12-5da7-4110-918d-429936da8062", "project_id": "21805c97-a53b-4760-8952-b14d302b33d5", "public": false, "requires_upstream_auth": false, "status": "setup_incomplete"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

@@ -199,8 +199,7 @@ type ServersInsertAuthClientParams struct {
 // Typed auth clients, as the upstream OAuth migration records them: Linear's
 // personal client over its OAuth registration, and one static credential
 // shared by GitHub and Linear, so the server settings show a shared client
-// and a server offering two. Slack is left undecided about upstream
-// authentication.
+// and a server offering two. Slack offers none.
 // The projects delete cascades the clients, their headers and associations.
 func (q *Queries) ServersInsertAuthClient(ctx context.Context, arg ServersInsertAuthClientParams) error {
 	_, err := q.db.Exec(ctx, serversInsertAuthClient,
@@ -2129,23 +2128,6 @@ func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg Servers
 		arg.HoursAgo,
 		arg.DaysAgo,
 	)
-	return err
-}
-
-const serversMarkRequiresUpstreamAuth = `-- name: ServersMarkRequiresUpstreamAuth :exec
-UPDATE mcp_servers
-SET requires_upstream_auth = TRUE
-WHERE project_id = $1::uuid
-  AND id = ANY($2::uuid[])
-`
-
-type ServersMarkRequiresUpstreamAuthParams struct {
-	ProjectID uuid.UUID
-	Ids       []uuid.UUID
-}
-
-func (q *Queries) ServersMarkRequiresUpstreamAuth(ctx context.Context, arg ServersMarkRequiresUpstreamAuthParams) error {
-	_, err := q.db.Exec(ctx, serversMarkRequiresUpstreamAuth, arg.ProjectID, arg.Ids)
 	return err
 }
 

@@ -439,27 +439,58 @@ SELECT sel.mcp_server_id,
            AND link.organization_id = sel.organization_id
            AND link.deleted IS FALSE
        )::boolean AS associated,
-       m.requires_upstream_auth,
+       EXISTS (
+         -- The server needs upstream authentication when it offers a live,
+         -- enabled auth client in its tenant.
+         SELECT 1
+         FROM mcp_server_auth_clients AS req_link
+         JOIN mcp_auth_clients AS req_client
+           ON req_client.id = req_link.auth_client_id
+          AND req_client.organization_id = req_link.organization_id
+          AND (req_client.project_id IS NULL OR req_client.project_id = req_link.project_id)
+          AND req_client.deleted IS FALSE
+          AND req_client.enabled
+         WHERE req_link.mcp_server_id = m.id
+           AND req_link.project_id = m.project_id
+           AND req_link.organization_id = sel.organization_id
+           AND req_link.deleted IS FALSE
+       )::boolean AS requires_upstream_auth,
        (
-         EXISTS (
+         -- Upstream credentials the auth client records do not cover yet: no
+         -- auth client was ever linked to the server, live or detached, but it
+         -- has an upstream OAuth client or a credential header on its source.
+         NOT EXISTS (
            SELECT 1
-           FROM mcp_server_auth_clients AS link
-           JOIN mcp_auth_clients AS other
-             ON other.id = link.auth_client_id
-            AND other.organization_id = link.organization_id
-            AND other.deleted IS FALSE
-           WHERE link.mcp_server_id = sel.mcp_server_id
-             AND link.organization_id = sel.organization_id
-             AND link.deleted IS FALSE
+           FROM mcp_server_auth_clients AS pend_link
+           WHERE pend_link.mcp_server_id = m.id
+             AND pend_link.project_id = m.project_id
+             AND pend_link.organization_id = sel.organization_id
          )
-         OR EXISTS (
-           SELECT 1
-           FROM mcp_server_remote_session_clients AS a
-           WHERE a.mcp_server_id = sel.mcp_server_id
-             AND a.organization_id = sel.organization_id
-             AND a.deleted IS FALSE
+         AND (
+           EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS pend_assoc
+             WHERE pend_assoc.mcp_server_id = m.id
+               AND pend_assoc.project_id = m.project_id
+               AND pend_assoc.organization_id = sel.organization_id
+               AND pend_assoc.deleted IS FALSE
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM remote_mcp_server_headers AS pend_header
+             WHERE pend_header.remote_mcp_server_id = m.remote_mcp_server_id
+               AND pend_header.deleted IS FALSE
+               AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM tunneled_mcp_server_headers AS pend_header
+             WHERE pend_header.tunneled_mcp_server_id = m.tunneled_mcp_server_id
+               AND pend_header.deleted IS FALSE
+               AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+           )
          )
-       )::boolean AS server_has_clients,
+       )::boolean AS upstream_auth_pending,
        EXISTS (
          SELECT 1
          FROM mcp_server_auth_clients AS link
@@ -610,8 +641,8 @@ type GetAuthClientSelectionRow struct {
 	RegistrationLive           bool
 	RegistrationAttached       bool
 	Associated                 bool
-	RequiresUpstreamAuth       pgtype.Bool
-	ServerHasClients           bool
+	RequiresUpstreamAuth       bool
+	UpstreamAuthPending        bool
 	ServerHasHeaderClients     bool
 	ServerHasOauthClients      bool
 	HeadersStale               bool
@@ -666,7 +697,7 @@ func (q *Queries) GetAuthClientSelection(ctx context.Context, arg GetAuthClientS
 			&i.RegistrationAttached,
 			&i.Associated,
 			&i.RequiresUpstreamAuth,
-			&i.ServerHasClients,
+			&i.UpstreamAuthPending,
 			&i.ServerHasHeaderClients,
 			&i.ServerHasOauthClients,
 			&i.HeadersStale,
@@ -1158,7 +1189,58 @@ func (q *Queries) ListServerAssociatedClients(ctx context.Context, arg ListServe
 
 const listServerConsentAuthClients = `-- name: ListServerConsentAuthClients :many
 SELECT m.id AS mcp_server_id,
-       m.requires_upstream_auth,
+       EXISTS (
+         -- The server needs upstream authentication when it offers a live,
+         -- enabled auth client in its tenant.
+         SELECT 1
+         FROM mcp_server_auth_clients AS req_link
+         JOIN mcp_auth_clients AS req_client
+           ON req_client.id = req_link.auth_client_id
+          AND req_client.organization_id = req_link.organization_id
+          AND (req_client.project_id IS NULL OR req_client.project_id = req_link.project_id)
+          AND req_client.deleted IS FALSE
+          AND req_client.enabled
+         WHERE req_link.mcp_server_id = m.id
+           AND req_link.project_id = m.project_id
+           AND req_link.organization_id = p.organization_id
+           AND req_link.deleted IS FALSE
+       )::boolean AS requires_upstream_auth,
+       (
+         -- Upstream credentials the auth client records do not cover yet: no
+         -- auth client was ever linked to the server, live or detached, but it
+         -- has an upstream OAuth client or a credential header on its source.
+         NOT EXISTS (
+           SELECT 1
+           FROM mcp_server_auth_clients AS pend_link
+           WHERE pend_link.mcp_server_id = m.id
+             AND pend_link.project_id = m.project_id
+             AND pend_link.organization_id = p.organization_id
+         )
+         AND (
+           EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS pend_assoc
+             WHERE pend_assoc.mcp_server_id = m.id
+               AND pend_assoc.project_id = m.project_id
+               AND pend_assoc.organization_id = p.organization_id
+               AND pend_assoc.deleted IS FALSE
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM remote_mcp_server_headers AS pend_header
+             WHERE pend_header.remote_mcp_server_id = m.remote_mcp_server_id
+               AND pend_header.deleted IS FALSE
+               AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM tunneled_mcp_server_headers AS pend_header
+             WHERE pend_header.tunneled_mcp_server_id = m.tunneled_mcp_server_id
+               AND pend_header.deleted IS FALSE
+               AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+           )
+         )
+       )::boolean AS upstream_auth_pending,
        c.id AS auth_client_id,
        c.name AS auth_client_name,
        c.client_type,
@@ -1190,7 +1272,8 @@ type ListServerConsentAuthClientsParams struct {
 
 type ListServerConsentAuthClientsRow struct {
 	McpServerID           uuid.UUID
-	RequiresUpstreamAuth  pgtype.Bool
+	RequiresUpstreamAuth  bool
+	UpstreamAuthPending   bool
 	AuthClientID          uuid.NullUUID
 	AuthClientName        pgtype.Text
 	ClientType            pgtype.Text
@@ -1198,9 +1281,10 @@ type ListServerConsentAuthClientsRow struct {
 }
 
 // The enabled auth clients each MCP server offers, for the consent screen to
-// choose among, with whether the server needs upstream authentication. A
-// server with no enabled client still has a row, with no client, so the
-// screen can tell no-auth from incomplete setup.
+// choose among, with whether the server needs upstream authentication and
+// whether it has upstream credentials no auth client records yet. A server
+// with no enabled client still has a row, with no client, so the screen can
+// tell no-auth from incomplete setup.
 func (q *Queries) ListServerConsentAuthClients(ctx context.Context, arg ListServerConsentAuthClientsParams) ([]ListServerConsentAuthClientsRow, error) {
 	rows, err := q.db.Query(ctx, listServerConsentAuthClients, arg.OrganizationID, arg.McpServerIds)
 	if err != nil {
@@ -1213,6 +1297,7 @@ func (q *Queries) ListServerConsentAuthClients(ctx context.Context, arg ListServ
 		if err := rows.Scan(
 			&i.McpServerID,
 			&i.RequiresUpstreamAuth,
+			&i.UpstreamAuthPending,
 			&i.AuthClientID,
 			&i.AuthClientName,
 			&i.ClientType,

@@ -60,8 +60,8 @@ func migrateUpstreamAuth(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		return fmt.Errorf("record execution selection profiles: %w", err)
 	}
 	logger.InfoContext(ctx, fmt.Sprintf(
-		"demo seed recorded typed upstream auth: %d auth clients, %d links, %d header copies, %d servers marked, %d choices mapped, %d grants, %d profile versions",
-		clients.ClientsWritten, clients.LinksWritten, clients.HeadersWritten, clients.ServersMarked, clients.SelectionsMapped, clients.GrantsWritten, profiles.VersionsWritten,
+		"demo seed recorded typed upstream auth: %d auth clients, %d links, %d header copies, %d choices mapped, %d grants, %d profile versions",
+		clients.ClientsWritten, clients.LinksWritten, clients.HeadersWritten, clients.SelectionsMapped, clients.GrantsWritten, profiles.VersionsWritten,
 	), attr.SlogOrganizationID(organizationID))
 
 	return upstreamAuthReadiness(ctx, logger, db, organizationID)
@@ -139,7 +139,6 @@ func upstreamAuthReadiness(ctx context.Context, logger *slog.Logger, db *pgxpool
 	pending("typed auth client header copies to record", clients.PendingHeaders)
 	pending("typed auth client decisions unresolved", clients.Gaps)
 	pending("typed auth clients or links to retire", clients.PendingRetiredClients+clients.PendingRetiredLinks)
-	pending("servers to mark as requiring upstream auth", clients.PendingMarkedServers)
 	pending("credential choices to map onto auth clients", clients.PendingSelectionMappings)
 	pending("default auth permission grants to write", clients.PendingGrants)
 	pending("agent attachment grants to write", clients.AttachmentsWaiting)

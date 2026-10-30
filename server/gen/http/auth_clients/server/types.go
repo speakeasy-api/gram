@@ -107,7 +107,7 @@ type DeleteIssuanceProfileRequestBody struct {
 type SetMcpServerUpstreamAuthRequirementRequestBody struct {
 	// The MCP server id.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// Whether the upstream needs authentication.
+	// Ignored.
 	RequiresUpstreamAuth *bool `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
 }
 
@@ -360,8 +360,9 @@ type DetachAuthClientFromMcpServerResponseBody struct {
 // ListMcpServerAuthClientChoicesResponseBody is the type of the "authClients"
 // service "listMcpServerAuthClientChoices" endpoint HTTP response body.
 type ListMcpServerAuthClientChoicesResponseBody struct {
-	// Whether the upstream needs authentication. Omitted while undecided.
-	RequiresUpstreamAuth *bool `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
+	// Whether the upstream needs authentication: true when the server offers at
+	// least one enabled auth client.
+	RequiresUpstreamAuth bool `form:"requires_upstream_auth" json:"requires_upstream_auth" xml:"requires_upstream_auth"`
 	// The enabled shared credentials the server offers.
 	Choices []*AuthClientChoiceResponseBody `form:"choices" json:"choices" xml:"choices"`
 }
@@ -402,12 +403,12 @@ type GetMcpServerAuthenticationResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// Whether the MCP server is public.
 	Public bool `form:"public" json:"public" xml:"public"`
-	// Whether the upstream needs authentication. Omitted while undecided.
-	RequiresUpstreamAuth *bool `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
-	// configured when authentication is required and at least one enabled client
-	// is offered; setup_incomplete when it is required and none is;
-	// no_auth_required when the upstream explicitly needs none; undecided when
-	// nobody has said.
+	// Whether the upstream needs authentication: true when the server offers at
+	// least one enabled auth client.
+	RequiresUpstreamAuth bool `form:"requires_upstream_auth" json:"requires_upstream_auth" xml:"requires_upstream_auth"`
+	// configured when the server offers at least one enabled auth client;
+	// setup_incomplete when it has upstream credentials configured that no auth
+	// client records yet; no_auth_required otherwise.
 	Status string `form:"status" json:"status" xml:"status"`
 	// The auth clients the server offers.
 	Clients []*AuthClientResponseBody `form:"clients" json:"clients" xml:"clients"`
@@ -423,12 +424,12 @@ type SetMcpServerUpstreamAuthRequirementResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// Whether the MCP server is public.
 	Public bool `form:"public" json:"public" xml:"public"`
-	// Whether the upstream needs authentication. Omitted while undecided.
-	RequiresUpstreamAuth *bool `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
-	// configured when authentication is required and at least one enabled client
-	// is offered; setup_incomplete when it is required and none is;
-	// no_auth_required when the upstream explicitly needs none; undecided when
-	// nobody has said.
+	// Whether the upstream needs authentication: true when the server offers at
+	// least one enabled auth client.
+	RequiresUpstreamAuth bool `form:"requires_upstream_auth" json:"requires_upstream_auth" xml:"requires_upstream_auth"`
+	// configured when the server offers at least one enabled auth client;
+	// setup_incomplete when it has upstream credentials configured that no auth
+	// client records yet; no_auth_required otherwise.
 	Status string `form:"status" json:"status" xml:"status"`
 	// The auth clients the server offers.
 	Clients []*AuthClientResponseBody `form:"clients" json:"clients" xml:"clients"`

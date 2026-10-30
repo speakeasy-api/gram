@@ -71,7 +71,7 @@ type MCPServerHealth struct {
 // values are never included.
 type MCPServerHealthUpstream struct {
 	Status               string                      `json:"status"`
-	RequiresUpstreamAuth *bool                       `json:"requires_upstream_auth,omitempty"`
+	RequiresUpstreamAuth bool                        `json:"requires_upstream_auth"`
 	AuthClients          []MCPServerHealthAuthClient `json:"auth_clients"`
 }
 
@@ -312,7 +312,7 @@ func projectServerHealth(result *gen.AdminMcpServerHealth, calls *gen.AdminMcpSe
 }
 
 var (
-	healthUpstreamStatuses = []string{"configured", "setup_incomplete", "no_auth_required", "undecided"}
+	healthUpstreamStatuses = []string{"configured", "setup_incomplete", "no_auth_required"}
 	healthAuthClientTypes  = []string{"remote_session", "service_account", "static_credential", "pass_through", "ema"}
 	healthAuthClientSource = []string{"backfill", "admin"}
 )

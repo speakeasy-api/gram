@@ -452,8 +452,43 @@ SELECT
   ms.name,
   ms.slug,
   ms.visibility,
-  ms.requires_upstream_auth,
-  ms.toolset_id
+  ms.toolset_id,
+  (
+    -- Upstream credentials the auth client records do not cover yet: no
+    -- auth client was ever linked to the server, live or detached, but it
+    -- has an upstream OAuth client or a credential header on its source.
+    NOT EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS pend_link
+      WHERE pend_link.mcp_server_id = ms.id
+        AND pend_link.project_id = ms.project_id
+        AND pend_link.organization_id = p.organization_id
+    )
+    AND (
+      EXISTS (
+        SELECT 1
+        FROM mcp_server_remote_session_clients AS pend_assoc
+        WHERE pend_assoc.mcp_server_id = ms.id
+          AND pend_assoc.project_id = ms.project_id
+          AND pend_assoc.organization_id = p.organization_id
+          AND pend_assoc.deleted IS FALSE
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM remote_mcp_server_headers AS pend_header
+        WHERE pend_header.remote_mcp_server_id = ms.remote_mcp_server_id
+          AND pend_header.deleted IS FALSE
+          AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM tunneled_mcp_server_headers AS pend_header
+        WHERE pend_header.tunneled_mcp_server_id = ms.tunneled_mcp_server_id
+          AND pend_header.deleted IS FALSE
+          AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+      )
+    )
+  )::boolean AS upstream_auth_pending
 FROM mcp_servers ms
 JOIN projects p
   ON p.id = ms.project_id
@@ -469,13 +504,13 @@ type GetOrganizationMCPServerParams struct {
 }
 
 type GetOrganizationMCPServerRow struct {
-	ID                   uuid.UUID
-	ProjectID            uuid.UUID
-	Name                 pgtype.Text
-	Slug                 pgtype.Text
-	Visibility           string
-	RequiresUpstreamAuth pgtype.Bool
-	ToolsetID            uuid.NullUUID
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	Name                pgtype.Text
+	Slug                pgtype.Text
+	Visibility          string
+	ToolsetID           uuid.NullUUID
+	UpstreamAuthPending bool
 }
 
 func (q *Queries) GetOrganizationMCPServer(ctx context.Context, arg GetOrganizationMCPServerParams) (GetOrganizationMCPServerRow, error) {
@@ -487,8 +522,8 @@ func (q *Queries) GetOrganizationMCPServer(ctx context.Context, arg GetOrganizat
 		&i.Name,
 		&i.Slug,
 		&i.Visibility,
-		&i.RequiresUpstreamAuth,
 		&i.ToolsetID,
+		&i.UpstreamAuthPending,
 	)
 	return i, err
 }
@@ -996,7 +1031,6 @@ SELECT
   ms.id,
   ms.project_id,
   ms.name,
-  ms.requires_upstream_auth,
   (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS proxied,
   (ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS tunneled
 FROM mcp_servers ms
@@ -1015,16 +1049,15 @@ type LockAttachableMCPServerParams struct {
 }
 
 type LockAttachableMCPServerRow struct {
-	ID                   uuid.UUID
-	ProjectID            uuid.UUID
-	Name                 pgtype.Text
-	RequiresUpstreamAuth pgtype.Bool
-	Proxied              bool
-	Tunneled             bool
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Name      pgtype.Text
+	Proxied   bool
+	Tunneled  bool
 }
 
-// A proxied (remote or tunneled) MCP server in the organization, locked so an
-// attachment serializes with SetMcpServerUpstreamAuthRequirement.
+// A proxied (remote or tunneled) MCP server in the organization, locked so
+// attachments to it serialize.
 func (q *Queries) LockAttachableMCPServer(ctx context.Context, arg LockAttachableMCPServerParams) (LockAttachableMCPServerRow, error) {
 	row := q.db.QueryRow(ctx, lockAttachableMCPServer, arg.OrganizationID, arg.ID)
 	var i LockAttachableMCPServerRow
@@ -1032,7 +1065,6 @@ func (q *Queries) LockAttachableMCPServer(ctx context.Context, arg LockAttachabl
 		&i.ID,
 		&i.ProjectID,
 		&i.Name,
-		&i.RequiresUpstreamAuth,
 		&i.Proxied,
 		&i.Tunneled,
 	)
@@ -1083,10 +1115,8 @@ func (q *Queries) LockAuthClient(ctx context.Context, arg LockAuthClientParams) 
 	return i, err
 }
 
-const lockAuthClientServerRequirements = `-- name: LockAuthClientServerRequirements :many
-SELECT
-  ms.id,
-  ms.requires_upstream_auth
+const lockAuthClientOfferingServers = `-- name: LockAuthClientOfferingServers :many
+SELECT ms.id
 FROM mcp_server_auth_clients msac
 JOIN mcp_servers ms
   ON ms.id = msac.mcp_server_id
@@ -1103,29 +1133,24 @@ ORDER BY ms.id
 FOR SHARE OF ms
 `
 
-type LockAuthClientServerRequirementsParams struct {
+type LockAuthClientOfferingServersParams struct {
 	OrganizationID string
 	AuthClientID   uuid.UUID
 }
 
-type LockAuthClientServerRequirementsRow struct {
-	ID                   uuid.UUID
-	RequiresUpstreamAuth pgtype.Bool
-}
-
-func (q *Queries) LockAuthClientServerRequirements(ctx context.Context, arg LockAuthClientServerRequirementsParams) ([]LockAuthClientServerRequirementsRow, error) {
-	rows, err := q.db.Query(ctx, lockAuthClientServerRequirements, arg.OrganizationID, arg.AuthClientID)
+func (q *Queries) LockAuthClientOfferingServers(ctx context.Context, arg LockAuthClientOfferingServersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockAuthClientOfferingServers, arg.OrganizationID, arg.AuthClientID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []LockAuthClientServerRequirementsRow
+	var items []uuid.UUID
 	for rows.Next() {
-		var i LockAuthClientServerRequirementsRow
-		if err := rows.Scan(&i.ID, &i.RequiresUpstreamAuth); err != nil {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1234,55 +1259,6 @@ func (q *Queries) LockIssuanceProfileForCaller(ctx context.Context, arg LockIssu
 	return i, err
 }
 
-const lockOrganizationMCPServer = `-- name: LockOrganizationMCPServer :one
-SELECT
-  ms.id,
-  ms.project_id,
-  ms.name,
-  ms.slug,
-  ms.visibility,
-  ms.requires_upstream_auth,
-  ms.toolset_id
-FROM mcp_servers ms
-JOIN projects p
-  ON p.id = ms.project_id
- AND p.organization_id = $1
- AND p.deleted IS FALSE
-WHERE ms.id = $2
-  AND ms.deleted IS FALSE
-FOR UPDATE OF ms
-`
-
-type LockOrganizationMCPServerParams struct {
-	OrganizationID string
-	ID             uuid.UUID
-}
-
-type LockOrganizationMCPServerRow struct {
-	ID                   uuid.UUID
-	ProjectID            uuid.UUID
-	Name                 pgtype.Text
-	Slug                 pgtype.Text
-	Visibility           string
-	RequiresUpstreamAuth pgtype.Bool
-	ToolsetID            uuid.NullUUID
-}
-
-func (q *Queries) LockOrganizationMCPServer(ctx context.Context, arg LockOrganizationMCPServerParams) (LockOrganizationMCPServerRow, error) {
-	row := q.db.QueryRow(ctx, lockOrganizationMCPServer, arg.OrganizationID, arg.ID)
-	var i LockOrganizationMCPServerRow
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.Name,
-		&i.Slug,
-		&i.Visibility,
-		&i.RequiresUpstreamAuth,
-		&i.ToolsetID,
-	)
-	return i, err
-}
-
 const renameIssuanceProfile = `-- name: RenameIssuanceProfile :one
 UPDATE issuance_selection_profiles
 SET name = $1,
@@ -1318,39 +1294,6 @@ func (q *Queries) RenameIssuanceProfile(ctx context.Context, arg RenameIssuanceP
 		&i.Deleted,
 	)
 	return i, err
-}
-
-const setMCPServerRequiresUpstreamAuth = `-- name: SetMCPServerRequiresUpstreamAuth :execrows
-UPDATE mcp_servers ms
-SET requires_upstream_auth = $1,
-    updated_at = clock_timestamp()
-FROM projects p
-WHERE ms.id = $2
-  AND ms.project_id = $3
-  AND ms.deleted IS FALSE
-  AND p.id = ms.project_id
-  AND p.organization_id = $4
-  AND p.deleted IS FALSE
-`
-
-type SetMCPServerRequiresUpstreamAuthParams struct {
-	RequiresUpstreamAuth pgtype.Bool
-	ID                   uuid.UUID
-	ProjectID            uuid.UUID
-	OrganizationID       string
-}
-
-func (q *Queries) SetMCPServerRequiresUpstreamAuth(ctx context.Context, arg SetMCPServerRequiresUpstreamAuthParams) (int64, error) {
-	result, err := q.db.Exec(ctx, setMCPServerRequiresUpstreamAuth,
-		arg.RequiresUpstreamAuth,
-		arg.ID,
-		arg.ProjectID,
-		arg.OrganizationID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const updateAuthClient = `-- name: UpdateAuthClient :one

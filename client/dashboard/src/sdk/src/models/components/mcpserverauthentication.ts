@@ -12,16 +12,15 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { AuthClient, AuthClient$inboundSchema } from "./authclient.js";
 
 /**
- * configured when authentication is required and at least one enabled client is offered; setup_incomplete when it is required and none is; no_auth_required when the upstream explicitly needs none; undecided when nobody has said.
+ * configured when the server offers at least one enabled auth client; setup_incomplete when it has upstream credentials configured that no auth client records yet; no_auth_required otherwise.
  */
 export const McpServerAuthenticationStatus = {
   Configured: "configured",
   SetupIncomplete: "setup_incomplete",
   NoAuthRequired: "no_auth_required",
-  Undecided: "undecided",
 } as const;
 /**
- * configured when authentication is required and at least one enabled client is offered; setup_incomplete when it is required and none is; no_auth_required when the upstream explicitly needs none; undecided when nobody has said.
+ * configured when the server offers at least one enabled auth client; setup_incomplete when it has upstream credentials configured that no auth client records yet; no_auth_required otherwise.
  */
 export type McpServerAuthenticationStatus = OpenEnum<
   typeof McpServerAuthenticationStatus
@@ -48,11 +47,11 @@ export type McpServerAuthentication = {
    */
   public: boolean;
   /**
-   * Whether the upstream needs authentication. Omitted while undecided.
+   * Whether the upstream needs authentication: true when the server offers at least one enabled auth client.
    */
-  requiresUpstreamAuth?: boolean | undefined;
+  requiresUpstreamAuth: boolean;
   /**
-   * configured when authentication is required and at least one enabled client is offered; setup_incomplete when it is required and none is; no_auth_required when the upstream explicitly needs none; undecided when nobody has said.
+   * configured when the server offers at least one enabled auth client; setup_incomplete when it has upstream credentials configured that no auth client records yet; no_auth_required otherwise.
    */
   status: McpServerAuthenticationStatus;
 };
@@ -73,7 +72,7 @@ export const McpServerAuthentication$inboundSchema: z.ZodMiniType<
     mcp_server_id: z.string(),
     project_id: z.string(),
     public: z.boolean(),
-    requires_upstream_auth: z.optional(z.boolean()),
+    requires_upstream_auth: z.boolean(),
     status: McpServerAuthenticationStatus$inboundSchema,
   }),
   z.transform((v) => {

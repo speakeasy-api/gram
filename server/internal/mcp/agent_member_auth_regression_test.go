@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	agentsgen "github.com/speakeasy-api/gram/server/gen/agents"
@@ -112,10 +111,6 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 				serverID := mcpServerBySlug(t, ctx, ti, projectID, fx.granted)
 				_, err = mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: serverID, ProjectID: projectID, Name: conv.ToPGText(fx.granted), Slug: conv.ToPGText(fx.granted), RemoteMcpServerID: conv.ToNullUUID(remote.ID), UserSessionIssuerID: conv.ToNullUUID(issuerID), Visibility: mcpservers.VisibilityPrivate})
 				require.NoError(t, err)
-				// Normal configuration writer: this fixture requires upstream auth.
-				n, err := authclientsrepo.New(ti.conn).SetMCPServerRequiresUpstreamAuth(ctx, authclientsrepo.SetMCPServerRequiresUpstreamAuthParams{ID: serverID, ProjectID: projectID, OrganizationID: ac.ActiveOrganizationID, RequiresUpstreamAuth: pgtype.Bool{Bool: state != "noauth", Valid: true}})
-				require.NoError(t, err)
-				require.EqualValues(t, 1, n)
 				if state == "legacy_static_client" {
 					// Mark the API key as a credential, not ordinary public metadata.
 					_, err := remotemcp.NewHeaders(testenv.NewLogger(t), ti.conn, ti.enc).CreateServerHeader(ctx, remotemcprepo.CreateServerHeaderParams{
