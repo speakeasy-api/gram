@@ -340,17 +340,21 @@ func TestAdmittedAgentAuthClientUsesTheAttachedConnectionOwner(t *testing.T) {
 type fakeUpstreamTokens struct {
 	issuerID uuid.UUID
 	bound    uuid.UUID
+	// subjects records whose connection each read asked for.
+	subjects []urn.SessionSubject
 }
 
 func (f *fakeUpstreamTokens) tokens() map[uuid.UUID]remotesessions.UpstreamToken {
 	return map[uuid.UUID]remotesessions.UpstreamToken{f.issuerID: {Token: "token-" + f.bound.String(), RemoteSessionID: f.bound, Resource: "https://mcp.example.com"}}
 }
 
-func (f *fakeUpstreamTokens) ResolveAuthClientAccessTokens(context.Context, remotesessions.AuthClientTokenRequest) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+func (f *fakeUpstreamTokens) ResolveAuthClientAccessTokens(_ context.Context, req remotesessions.AuthClientTokenRequest) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	f.subjects = append(f.subjects, req.Subject)
 	return f.tokens(), nil
 }
 
-func (f *fakeUpstreamTokens) ResolveClientAccessTokens(context.Context, uuid.UUID, string, uuid.UUID, urn.SessionSubject, uuid.UUID, bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+func (f *fakeUpstreamTokens) ResolveClientAccessTokens(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID, subject urn.SessionSubject, _ uuid.UUID, _ bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	f.subjects = append(f.subjects, subject)
 	return f.tokens(), nil
 }
 
@@ -561,11 +565,11 @@ func TestAgentKeyAuthClientUsesItsAuthorizersConnection(t *testing.T) {
 			if tc.attached {
 				require.Equal(t, session, res.attachedSession, "the attachment keeps binding its exact connection")
 				require.Empty(t, res.authorizerOwner)
-				require.Equal(t, agent, tokenSubject(ctx, agent, &res), "tokens come through the attachment")
+				require.Equal(t, agent, tokenSubject(ctx, agent, res.authorizerOwner), "tokens come through the attachment")
 			} else {
 				require.Equal(t, uuid.Nil, res.attachedSession)
 				require.Equal(t, "user_owner", res.authorizerOwner, "without an attachment the authorizer owns the connection checked")
-				require.Equal(t, urn.NewUserSubject("user_owner"), tokenSubject(ctx, agent, &res), "tokens come from the authorizer's own connection")
+				require.Equal(t, urn.NewUserSubject("user_owner"), tokenSubject(ctx, agent, res.authorizerOwner), "tokens come from the authorizer's own connection")
 			}
 			want := "deny"
 			if tc.outcome == authClientResolved {

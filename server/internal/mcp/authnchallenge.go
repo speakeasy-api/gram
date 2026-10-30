@@ -1045,6 +1045,10 @@ type issuerGateAuthentication struct {
 	// selects how the request is served, so a compatibility handback to the
 	// upstream client choice still serves only that connection.
 	attachedSession uuid.UUID
+
+	// authorizerOwner is the validated authorizer whose own connection an
+	// unattached agent key's permit was decided for, typed or handed back.
+	authorizerOwner string
 }
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
@@ -1182,6 +1186,7 @@ func (s *Service) authenticateIssuerGate(
 		authClient:             nil,
 		chainingAuthClient:     nil,
 		attachedSession:        uuid.Nil,
+		authorizerOwner:        "",
 	}, toolSelection, nil
 }
 

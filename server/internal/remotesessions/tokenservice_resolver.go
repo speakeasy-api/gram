@@ -74,10 +74,11 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, looku
 	if credential, ok := principalcredential.FromContext(ctx); ok {
 		return m.resolveAuthorizerUpstreamToken(ctx, lookup, projectID, organizationID, userSessionIssuerID, clientID, resource, credential.Credential.AuthorizerUserID)
 	}
-	// A typed auth client already checked the agent's own mcp:auth against
-	// the authorizer as the connection's owner; the key then reads exactly
-	// that user's connection, never an attachment or the agent's own.
-	if authorizer, ok := principalAPIKeyAuthorizer(ctx, caller); ok && lookup == lookupAuthClient {
+	// The auth client check already decided the agent's own mcp:auth against
+	// the authorizer as the connection's owner, for a typed client or a
+	// handback to the upstream client choice; the key then reads exactly that
+	// user's connection, never an attachment or the agent's own.
+	if authorizer, ok := principalAPIKeyAuthorizer(ctx, caller); ok {
 		return m.resolveAuthorizerUpstreamToken(ctx, lookup, projectID, organizationID, userSessionIssuerID, clientID, resource, authorizer)
 	}
 	principalID, attached, err := remoteSessionCallerPrincipal(ctx, caller)

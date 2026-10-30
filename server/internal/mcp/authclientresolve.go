@@ -681,6 +681,7 @@ func (s *Service) enforceAuthClient(ctx context.Context, w http.ResponseWriter, 
 	// The connection the permit was decided for binds every token path,
 	// including a handback to the upstream client choice.
 	authentication.attachedSession = res.attachedSession
+	authentication.authorizerOwner = res.authorizerOwner
 	switch res.outcome {
 	case authClientLegacy:
 		if res.sendsClientHeaders() {

@@ -409,7 +409,7 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 			ProjectID:           endpoint.ProjectID,
 			OrganizationID:      endpoint.OrganizationID,
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
-			Subject:             tokenSubject(ctx, authentication.subject, authentication.authClient),
+			Subject:             tokenSubject(ctx, authentication.subject, authentication.authorizerOwner),
 			RegistrationID:      authentication.chosenClient.UUID,
 			SkipUnusable:        skipUnusable,
 		})
@@ -419,7 +419,7 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 		return tokens, nil
 	}
 	if authentication.chosenClient.Valid {
-		tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, authentication.chosenClient.UUID, skipUnusable)
+		tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, handbackSubject(authentication.subject, authentication.authorizerOwner), authentication.chosenClient.UUID, skipUnusable)
 		if err != nil {
 			return nil, fmt.Errorf("resolve chosen client: %w", err)
 		}
@@ -527,16 +527,16 @@ func (s *Service) resolveChosenMemberTokens(ctx context.Context, endpoint *Resol
 	// for binds its tokens, typed or handed back to the upstream
 	// client choice. Without its token the member fails: an empty
 	// resolution would dial anonymously or chain another identity.
-	pinned := uuid.Nil
+	pinned, authorizerOwner := uuid.Nil, ""
 	if enforced && member.authClient != nil {
-		pinned = member.authClient.attachedSession
+		pinned, authorizerOwner = member.authClient.attachedSession, member.authClient.authorizerOwner
 	}
 	if member.typedAuthClient {
 		tokens, err := s.upstreamTokenSource().ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
 			ProjectID:           member.projectID,
 			OrganizationID:      endpoint.OrganizationID,
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
-			Subject:             tokenSubject(ctx, subject, member.authClient),
+			Subject:             tokenSubject(ctx, subject, authorizerOwner),
 			RegistrationID:      member.chosenClientID.UUID,
 			SkipUnusable:        true,
 		})
@@ -545,7 +545,7 @@ func (s *Service) resolveChosenMemberTokens(ctx context.Context, endpoint *Resol
 		}
 		return pinAttachedSession(tokens, pinned, false)
 	}
-	tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.chosenClientID.UUID, true)
+	tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, handbackSubject(subject, authorizerOwner), member.chosenClientID.UUID, true)
 	switch {
 	case errors.Is(err, remotesessions.ErrChosenClientUnbound):
 		return nil, fmt.Errorf("resolve chosen client: %w", err)

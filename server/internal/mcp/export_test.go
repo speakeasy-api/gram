@@ -200,7 +200,7 @@ func (s *Service) ConnectionRecoveryErrorFor(ctx context.Context, endpoint *Reso
 	res.serverName = "Linear"
 	authentication := &issuerGateAuthentication{
 		endpoint: endpoint, protectedResourceURL: "", mcpURL: "", surface: "", subject: subject, refreshableUserSession: false,
-		chosenClient: uuid.NullUUID{UUID: registrationID, Valid: true}, chosenNoAuth: false, authClient: &res,
+		chosenClient: uuid.NullUUID{UUID: registrationID, Valid: true}, chosenNoAuth: false, authClient: &res, authorizerOwner: "",
 	}
 	return s.connectionRecoveryError(ctx, authentication)
 }

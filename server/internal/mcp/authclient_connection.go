@@ -106,14 +106,24 @@ func agentKeyAuthorizer(ctx context.Context, subject urn.SessionSubject) (string
 	return credential.AuthorizerUserID, true
 }
 
-// tokenSubject is whose connection serves tokens for subject: the authorizer
-// an unattached agent key's permit was decided for, otherwise the connection
-// subject.
-func tokenSubject(ctx context.Context, subject urn.SessionSubject, res *authClientResolution) urn.SessionSubject {
-	if res != nil && res.authorizerOwner != "" {
-		return urn.NewUserSubject(res.authorizerOwner)
+// tokenSubject is whose connection serves a typed client's tokens for
+// subject: the authorizer an unattached agent key's permit was decided for,
+// otherwise the connection subject.
+func tokenSubject(ctx context.Context, subject urn.SessionSubject, authorizerOwner string) urn.SessionSubject {
+	if authorizerOwner != "" {
+		return urn.NewUserSubject(authorizerOwner)
 	}
 	return connectionSubject(ctx, subject)
+}
+
+// handbackSubject is whose connection serves a handback to the upstream
+// client choice: the authorizer an unattached agent key's permit was decided
+// for, otherwise subject unchanged.
+func handbackSubject(subject urn.SessionSubject, authorizerOwner string) urn.SessionSubject {
+	if authorizerOwner != "" {
+		return urn.NewUserSubject(authorizerOwner)
+	}
+	return subject
 }
 
 // upstreamTokenSource resolves a caller's upstream tokens for serving.

@@ -45,7 +45,9 @@ import (
 // Direct repository fixtures, not browser consent or assistant-turn issuance.
 // This finite catalog drives HTTP handlers and a real upstream HTTP server.
 // A missing or revoked attachment deliberately denies rather than choosing
-// another user's valid connection. Same-source reconnect follows the current
+// another user's valid connection; under enforcement an agent key then falls
+// back only to its validated authorizer's own connection, under the agent's
+// own mcp:auth. Same-source reconnect follows the current
 // credentials by design. No request-time migration runs.
 // Auth permissions and the credential ceiling are explicitly approved through
 // management APIs, scoped to this member and its configured auth clients.
@@ -92,7 +94,8 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 							http.Error(w, "invalid shared credential", http.StatusUnauthorized)
 							return
 						}
-						if state != "noauth" && state != "shared_static_client" && state != "disabled_typed_client" && state != "legacy_static_client" && token != "Bearer exact-owner-connection" && token != "Bearer reconnected-owner-connection" {
+						if state != "noauth" && state != "shared_static_client" && state != "disabled_typed_client" && state != "legacy_static_client" && token != "Bearer exact-owner-connection" && token != "Bearer reconnected-owner-connection" &&
+							!(state == "replaced_source_without_reattach" && mode == "enforced" && token == "Bearer replacement-source-token") {
 							rejected.Add(1)
 							http.Error(w, "invalid upstream credential", http.StatusUnauthorized)
 							return
@@ -285,7 +288,11 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 				}
 				// Connection-owner policy remains connect-equivalent: only enforced
 				// mode applies typed-client enablement and mcp:blocked_auth.
-				allowed := state == "sibling_issuer_client" || state == "live" || state == "same_source_new_generation" || state == "noauth" || state == "shared_static_client" || state == "shared_oauth_registration" || ((state == "owner_block" || state == "disabled_typed_client" || state == "legacy_static_client") && mode != "enforced")
+				allowed := state == "sibling_issuer_client" || state == "live" || state == "same_source_new_generation" || state == "noauth" || state == "shared_static_client" || state == "shared_oauth_registration" || ((state == "owner_block" || state == "disabled_typed_client" || state == "legacy_static_client") && mode != "enforced") ||
+					// Under enforcement an agent key without a usable attachment is
+					// served by its authorizer's own connection when the agent's own
+					// mcp:auth permits that owner; before enforcement it is denied.
+					((state == "missing_attachment" || state == "revoked_attachment" || state == "replaced_source_without_reattach") && mode == "enforced")
 				if allowed {
 					require.NoError(t, callErr)
 					require.Equal(t, http.StatusOK, response.Code)
@@ -294,6 +301,9 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 					expected := "Bearer exact-owner-connection"
 					if state == "same_source_new_generation" {
 						expected = "Bearer reconnected-owner-connection"
+					}
+					if state == "replaced_source_without_reattach" {
+						expected = "Bearer replacement-source-token"
 					}
 					if state == "noauth" || state == "legacy_static_client" {
 						expected = ""

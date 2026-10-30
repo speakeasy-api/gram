@@ -228,6 +228,10 @@ func TestResolveAuthClientAccessTokens_PrincipalAPIKeyServesTheAuthorizersConsen
 	require.NoError(t, err)
 	require.False(t, reconnect)
 
+	signIn, err := f.mgr.ResolveClientAccessTokens(keyCtx, f.projectID, f.organizationID, f.signInA, authorizer, f.clientID, false)
+	require.NoError(t, err)
+	require.Equal(t, "authorizer-token", signIn[f.issuerID].Token, "a handback to the upstream client choice reads the same connection")
+
 	_, err = f.mgr.ResolveAuthClientAccessTokens(keyCtx, f.request(urn.NewAgentSubject(uuid.MustParse(agent.ID)), f.clientID))
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "the agent's own subject keeps the attachment path, which has none")
 }
