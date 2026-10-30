@@ -171,6 +171,11 @@ func attachedCaller(ctx context.Context, subject urn.SessionSubject) (bool, erro
 	if _, ok := principalcredential.FromContext(ctx); ok {
 		return false, nil
 	}
+	// A principal-backed key asking for its authorizer's own connection reads
+	// it directly; any other subject keeps the key's attachment.
+	if _, ok := principalAPIKeyAuthorizer(ctx, subject); ok {
+		return false, nil
+	}
 	_, attached, err := remoteSessionCallerPrincipal(ctx, subject)
 	return attached, err
 }

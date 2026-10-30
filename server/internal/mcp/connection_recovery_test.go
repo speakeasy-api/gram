@@ -7,12 +7,10 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -21,12 +19,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -65,7 +61,7 @@ func newConnectionRecoveryFixtureWithCallback(t *testing.T, callbackBase string)
 	}
 	slug := "recovery-" + uuid.NewString()[:6]
 	f.asBase = "https://" + slug + "-as.example.com"
-	registration := createRecoveryRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, f.asBase, callbackBase)
+	registration := createConsentRemoteClientWithCallback(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, f.asBase, nil, callbackBase)
 	f.fixtures = authclientfixtures.New(ti.conn)
 	remoteID, serverID := uuid.New(), uuid.New()
 	require.NoError(t, f.fixtures.SeedRemoteMCPServerFixture(ctx, authclientfixtures.SeedRemoteMCPServerFixtureParams{ID: remoteID, ProjectID: *authCtx.ProjectID, Url: "https://mcp.example.com/" + remoteID.String()[:8]}))
@@ -87,36 +83,6 @@ func newConnectionRecoveryFixtureWithCallback(t *testing.T, callbackBase string)
 	f.router.Get(mcp.ConnectionRecoveryRoute, oops.BrowserErrHandle(ti.logger, ti.service.HandleConnectionRecovery).ServeHTTP)
 	f.router.Get(mcp.RemoteLoginBindPath, oops.BrowserErrHandle(ti.logger, ti.service.HandleRemoteLoginBind).ServeHTTP)
 	return f
-}
-
-// createRecoveryRemoteClient creates a personal registration whose callback
-// lands on callbackBase, or on the default origin when it is empty.
-func createRecoveryRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID, slug, asBase, callbackBase string) uuid.UUID {
-	t.Helper()
-	q := remotesessions_repo.New(conn)
-	rsi, err := q.CreateRemoteSessionIssuer(ctx, remotesessions_repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         uuid.NullUUID{UUID: projectID, Valid: true},
-		Slug:                              slug + "-rsi",
-		Issuer:                            asBase,
-		AuthorizationEndpoint:             conv.ToPGText(asBase + "/authorize"),
-		TokenEndpoint:                     conv.ToPGText(asBase + "/token"),
-		ScopesSupported:                   []string{},
-		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
-		ResponseTypesSupported:            []string{"code"},
-		TokenEndpointAuthMethodsSupported: []string{"none"},
-		CodeChallengeMethodsSupported:     []string{"S256"},
-	})
-	require.NoError(t, err)
-	rsc, err := q.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
-		ProjectID:             conv.ToNullUUID(projectID),
-		OrganizationID:        conv.ToPGTextEmpty(organizationID),
-		RemoteSessionIssuerID: rsi.ID,
-		ClientID:              slug + "-external-client",
-		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
-		CallbackBaseUrl:       conv.ToPGTextEmpty(callbackBase),
-	})
-	require.NoError(t, err)
-	return rsc.ID
 }
 
 // open requests path signed in as userID, or signed out when it is empty.

@@ -527,7 +527,7 @@ func TestAgentKeyAuthClientUsesItsAuthorizersConnection(t *testing.T) {
 			client := f.oauthClient(authClientTypeRemoteSession)
 			selector := f.choose(validUUID(client))
 			selector.userSessionIssuerID = uuid.New()
-			_ = enforcedShadowService(t, f)
+			reader := enforcedShadowService(t, f)
 			owner := []authz.Grant{personal}
 			if tc.block {
 				owner = append(owner, authz.NewGrantWithSelector(authz.ScopeMCPBlockedAuth, authz.Selector{
@@ -555,6 +555,15 @@ func TestAgentKeyAuthClientUsesItsAuthorizersConnection(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.outcome, res.outcome)
 			require.Empty(t, lookup.asked, "no attachment stands in for the authorizer's own connection")
+			want := "deny"
+			if tc.outcome == authClientResolved {
+				want = "allow"
+			}
+			outcomes := map[string]int64{}
+			for key, n := range authClientShadowOutcomes(t, reader) {
+				outcomes[strings.SplitN(key, "/", 2)[0]] += n
+			}
+			require.Equal(t, map[string]int64{want: 1}, outcomes, "the shadow decides the same check")
 		})
 	}
 }

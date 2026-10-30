@@ -208,6 +208,31 @@ func TestResolveAuthClientAccessTokens_PrincipalCredentialServesTheAuthorizersCo
 	require.True(t, reconnect)
 }
 
+// A principal-backed agent key that the typed auth client check let use its
+// authorizer's connection reads exactly that user's consent, directly and
+// through a gateway member alike, and never another user's.
+func TestResolveAuthClientAccessTokens_PrincipalAPIKeyServesTheAuthorizersConsent(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAuthClientTokenFixture(t, "ac-agent-key")
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString())
+	keyCtx := contextvalues.WithPrincipalAPIKeyAuthorization(ctx, auth, agent, contextvalues.PrincipalCredential{AuthorizerUserID: auth.UserID, DelegatedGrants: []byte("[]"), DelegatedGrantsVersion: 1, DerivesPolicyAtAdmission: false})
+	authorizer := f.member(t, ctx)
+
+	session := f.consent(t, authorizer, f.signInA, f.clientID, "authorizer-token")
+	tokens, err := f.mgr.ResolveAuthClientAccessTokens(keyCtx, f.request(authorizer, f.clientID))
+	require.NoError(t, err)
+	require.Equal(t, "authorizer-token", tokens[f.issuerID].Token, "the key reads its authorizer's own consent")
+	require.Equal(t, session.ID, tokens[f.issuerID].RemoteSessionID)
+	reconnect, err := f.mgr.AuthClientNeedsReconnect(keyCtx, f.request(authorizer, f.clientID))
+	require.NoError(t, err)
+	require.False(t, reconnect)
+
+	_, err = f.mgr.ResolveAuthClientAccessTokens(keyCtx, f.request(urn.NewAgentSubject(uuid.MustParse(agent.ID)), f.clientID))
+	require.Error(t, err, "the agent's own subject keeps the attachment path, which has none")
+}
+
 func TestResolveAuthClientAccessTokens_GlobalRegistrationStaysInItsOrganization(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAuthClientTokenFixture(t, "ac-global")
