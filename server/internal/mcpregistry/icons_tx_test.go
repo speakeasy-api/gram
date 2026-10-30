@@ -19,9 +19,18 @@ func TestSetCatalogIconsTxRollbackAndRevision(t *testing.T) {
 	ctx, s, db := newTestService(t)
 	original, err := s.Create(ctx, json.RawMessage(basicRecord))
 	require.NoError(t, err)
-	tx := testenv.BeginTx(t, ctx, db)
-	updated, err := s.SetCatalogIconsTx(ctx, tx, original.ID, Token(original), CatalogIcons{})
+	base, err := url.Parse("https://assets.example")
 	require.NoError(t, err)
+	s.WithAssetBaseURL(base)
+	asset, err := assetrepo.New(db).CreatePlatformAsset(ctx, assetrepo.CreatePlatformAssetParams{Name: "icon.svg", Url: "icon.svg", Sha256: "icon", Kind: "image", ContentType: "image/svg+xml", ContentLength: 10})
+	require.NoError(t, err)
+	icons := CatalogIcons{Default: &CatalogIcon{Src: assets.ServeImageURL(base, asset.ID), MimeType: "image/svg+xml", Sizes: []string{"any"}}}
+	tx := testenv.BeginTx(t, ctx, db)
+	updated, err := s.SetCatalogIconsTx(ctx, tx, original.ID, Token(original), icons)
+	require.NoError(t, err)
+	got, err := ParseCatalogIcons(updated.Data)
+	require.NoError(t, err)
+	require.Equal(t, icons, got)
 	require.NotEqual(t, Token(original), Token(updated))
 	require.Equal(t, original.Published, updated.Published)
 	require.Equal(t, original.PublishedAt, updated.PublishedAt)
@@ -32,6 +41,17 @@ func TestSetCatalogIconsTxRollbackAndRevision(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, Token(original), Token(actual))
 	require.JSONEq(t, string(original.Data), string(actual.Data))
+
+	tx = testenv.BeginTx(t, ctx, db)
+	updated, err = s.SetCatalogIconsTx(ctx, tx, original.ID, Token(original), icons)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+	actual, err = s.Get(ctx, original.ID)
+	require.NoError(t, err)
+	require.Equal(t, Token(updated), Token(actual))
+	got, err = ParseCatalogIcons(actual.Data)
+	require.NoError(t, err)
+	require.Equal(t, icons, got)
 }
 
 func TestCatalogIconsPrepareSizeAdmission(t *testing.T) {
