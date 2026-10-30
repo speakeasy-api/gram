@@ -4549,6 +4549,8 @@ func EncodeDeleteError(encoder func(context.Context, http.ResponseWriter) goahtt
 func marshalAgentsAgentSessionToAgentSessionResponseBody(v *agents.AgentSession) *AgentSessionResponseBody {
 	res := &AgentSessionResponseBody{
 		ID:               v.ID,
+		SubjectKind:      v.SubjectKind,
+		WorkloadSubject:  v.WorkloadSubject,
 		ProjectID:        v.ProjectID,
 		IssuerID:         v.IssuerID,
 		IssuerSlug:       v.IssuerSlug,

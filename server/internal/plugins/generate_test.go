@@ -2213,6 +2213,24 @@ func TestHooksBootstrapEmbedsPinnedReleaseMetadata(t *testing.T) {
 	require.NotContains(t, string(renderHooksPowerShellBootstrap(cfg)), "github.com")
 }
 
+func TestHooksConfigHashTracksAgentKeyIdentity(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Example"}
+	shared := hooksConfigSnapshot(cfg)
+	sharedJSON, err := marshalHooksConfig(shared)
+	require.NoError(t, err)
+	require.NotContains(t, string(sharedJSON), "hooks_key_is_agent", "preserve snapshots from before the flag existed")
+
+	cfg.HooksKeyIsAgent = true
+	agent := hooksConfigSnapshot(cfg)
+	require.True(t, agent.HooksKeyIsAgent)
+	require.NotEqual(t, hooksConfigHash(shared), hooksConfigHash(agent))
+	agentJSON, err := marshalHooksConfig(agent)
+	require.NoError(t, err)
+	require.Contains(t, string(agentJSON), `"hooks_key_is_agent":true`)
+	require.Equal(t, hooksConfigHash(agent), storedHooksConfigHash(agentJSON))
+}
+
 func TestHooksConfigHashTracksBinaryReleaseMetadata(t *testing.T) {
 	t.Parallel()
 	current := hooksConfigSnapshot(GenerateConfig{OrgName: "Acme"})
@@ -2357,12 +2375,15 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 	var manifest struct {
 		ID         string `json:"id"`
 		Activation struct {
-			OnStartup bool `json:"onStartup"`
+			OnStartup      bool     `json:"onStartup"`
+			OnCapabilities []string `json:"onCapabilities"`
 		} `json:"activation"`
 	}
 	require.NoError(t, json.Unmarshal(files["openclaw.plugin.json"], &manifest))
 	require.Equal(t, "speakeasy-observability", manifest.ID)
 	require.True(t, manifest.Activation.OnStartup)
+	// OpenClaw 2026.9.3 and later may not start a hook-only plugin without it.
+	require.Contains(t, manifest.Activation.OnCapabilities, "hook")
 
 	var pkg struct {
 		OpenClaw struct {
@@ -2426,6 +2447,146 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 		out, err := exec.Command(nodePath, "--check", path).CombinedOutput()
 		require.NoError(t, err, "index.js failed node --check: %s", out)
 	}
+}
+
+// OpenClaw's built-in runtime can fire agent_end just before the run's last
+// llm_output. The shim must still send agent_end once, carrying that
+// llm_output's final message, and must not hold an agent_end forever when no
+// llm_output follows.
+func TestGenerateOpenClawShimSplicesFinalMessageInEitherOrder(t *testing.T) {
+	t.Parallel()
+	nodePath, err := exec.LookPath("node")
+	require.NoError(t, err, "node is required to run the generated shim")
+	files, err := GenerateObservabilityPluginPackage(GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}, "openclaw")
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "index.js"), files["index.js"], 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"type":"module"}`), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "hooks"), 0o700))
+	// The fake daemon records each frame and acknowledges it.
+	daemon := "while IFS= read -r line; do\n" +
+		"  printf '%s\\n' \"$line\" >>\"$FRAMES\"\n" +
+		"  seq=$(printf '%s' \"$line\" | sed -n 's/^{\"seq\":\\([0-9]*\\).*/\\1/p')\n" +
+		"  printf '{\"seq\":%s}\\n' \"$seq\"\n" +
+		"done\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hooks", "bootstrap.sh"), []byte(daemon), 0o600))
+	driver := `import plugin from "./index.js"
+const handlers = {}
+plugin.register({ on(name, fn) { handlers[name] = fn } })
+const ctx = (runId) => ({ runId, sessionId: "session-" + runId, agentId: "main" })
+handlers.agent_end({ runId: "late-output", success: true, messages: [] }, ctx("late-output"))
+handlers.llm_output({ runId: "late-output", assistantTexts: ["hello world"], usage: { input: 1, output: 2 } }, ctx("late-output"))
+handlers.agent_end({ runId: "no-output", success: true, messages: [] }, ctx("no-output"))
+handlers.agent_end({ success: true, messages: [] }, ctx("ctx-only"))
+handlers.llm_output({ assistantTexts: ["from ctx"], usage: { input: 1, output: 2 } }, ctx("ctx-only"))
+handlers.llm_output({ runId: "early-output", assistantTexts: ["said first"], usage: { input: 1, output: 2 } }, ctx("early-output"))
+handlers.agent_end({ runId: "early-output", success: true, messages: [] }, ctx("early-output"))
+// A late llm_output after the wait ran out is not cached, so a later run that
+// reuses its key gets no stale final message.
+setTimeout(() => {
+  handlers.llm_output({ runId: "no-output", assistantTexts: ["too late"], usage: { input: 1, output: 2 } }, ctx("no-output"))
+  handlers.agent_end({ runId: "no-output", success: true, messages: [] }, ctx("no-output"))
+}, 2500)
+setTimeout(() => process.exit(0), 5500)
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "driver.mjs"), []byte(driver), 0o600))
+
+	frames := filepath.Join(dir, "frames.ndjson")
+	cmd := exec.CommandContext(t.Context(), nodePath, "driver.mjs")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "FRAMES="+frames)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "shim driver failed: %s", out)
+
+	raw, err := os.ReadFile(frames)
+	require.NoError(t, err)
+	ends := map[string][]map[string]any{}
+	for line := range strings.SplitSeq(strings.TrimSpace(string(raw)), "\n") {
+		var frame struct {
+			Hook  string         `json:"hook"`
+			Event map[string]any `json:"event"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(line), &frame))
+		if frame.Hook == "agent_end" {
+			runID, _ := frame.Event["runId"].(string)
+			ends[runID] = append(ends[runID], frame.Event)
+		}
+	}
+	require.Len(t, ends["late-output"], 1, "agent_end is sent once")
+	require.Equal(t, "hello world", ends["late-output"][0]["finalMessage"])
+	require.Len(t, ends["early-output"], 1, "agent_end is sent once")
+	require.Equal(t, "said first", ends["early-output"][0]["finalMessage"])
+	require.Len(t, ends["no-output"], 2, "agent_end without an llm_output is still sent")
+	require.NotContains(t, ends["no-output"][0], "finalMessage")
+	require.NotContains(t, ends["no-output"][1], "finalMessage", "a late llm_output must not be spliced into a later agent_end")
+	// A run ID that only ctx carries still pairs the two hooks.
+	require.Len(t, ends[""], 1, "agent_end with a ctx-only run ID is sent once")
+	require.Equal(t, "from ctx", ends[""][0]["finalMessage"])
+}
+
+// OpenClaw's Codex app-server harness fires llm_input but no before_agent_run,
+// so the shim must forward llm_input for the daemon to report the prompt of
+// those runs. OpenClaw does not await llm_input, so the shim registers it
+// observe-only, without a gate deadline that could fail a turn closed.
+func TestGenerateOpenClawShimObservesLLMInputWithoutGate(t *testing.T) {
+	t.Parallel()
+	files, err := GenerateObservabilityPluginPackage(GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}, "openclaw")
+	require.NoError(t, err)
+	shim, ok := files["index.js"]
+	require.True(t, ok, "openclaw package must ship the index.js shim")
+
+	shimConst := func(name string) string {
+		for line := range strings.SplitSeq(string(shim), "\n") {
+			if value, ok := strings.CutPrefix(line, "const "+name+" = "); ok {
+				return value
+			}
+		}
+		t.Fatalf("shim declares no %s", name)
+		return ""
+	}
+
+	var hooks []string
+	require.NoError(t, json.Unmarshal([]byte(shimConst("HOOKS")), &hooks))
+	require.Contains(t, hooks, "llm_input")
+	require.Contains(t, hooks, "before_agent_run", "built-in harnesses still report and gate the prompt on before_agent_run")
+
+	gates := shimConst("GATE_TIMEOUT_MS")
+	require.NotContains(t, gates, "llm_input", "llm_input must not get a gate deadline")
+	require.Contains(t, string(shim), "if (gateTimeoutMs === undefined) {\n          void call(hook, event, sanitizeCtx(hook, ctx))\n          return\n        }",
+		"hooks without a gate deadline must be forwarded fire-and-forget")
+
+	// The daemon reads only the prompt and the run identity from llm_input.
+	require.Contains(t, string(shim), `if (hook === "llm_input") {`)
+	require.Contains(t, string(shim), "const { historyMessages, systemPrompt, tools, ...rest } = event")
+}
+
+// The hooks binary prefers an agent's key to a cached personal sign-in only
+// when speakeasy.json says the baked key is the agent's.
+func TestGenerateObservabilityPluginMarksAgentKey(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgID:           "org_123",
+		ServerURL:       "https://app.getgram.ai",
+		HooksAPIKey:     "gram_local_agent_key",
+		HooksKeyIsAgent: true,
+		ProjectSlug:     "agents",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "openclaw")
+	require.NoError(t, err)
+
+	var config relay.FileConfig
+	require.NoError(t, json.Unmarshal(files["speakeasy.json"], &config))
+	require.Equal(t, "gram_local_agent_key", config.HooksAPIKey)
+	require.True(t, config.AgentKey)
 }
 
 type codexOTLPHTTPExporter struct {
@@ -3196,6 +3357,8 @@ func TestWritePluginZipMakesShellScriptsExecutable(t *testing.T) {
 		"install.sh":                 []byte("#!/usr/bin/env bash\necho hi\n"),
 		".claude-plugin/plugin.json": []byte("{}"),
 		"README.md":                  []byte("# readme\n"),
+		"speakeasy.json":             []byte(`{"hooks_api_key":"k"}`),
+		"plugin/speakeasy.json":      []byte(`{"hooks_api_key":"k"}`),
 	}
 
 	var buf bytes.Buffer
@@ -3210,9 +3373,11 @@ func TestWritePluginZipMakesShellScriptsExecutable(t *testing.T) {
 	}
 
 	require.Equal(t, uint32(0o755), modes["hooks/bootstrap.sh"], "bootstrap.sh must be executable after unzip")
-	require.Equal(t, uint32(0o755), modes["install.sh"], "install.sh must be executable after unzip")
+	require.Equal(t, uint32(0o700), modes["install.sh"], "install.sh embeds the hooks key, so it must be owner-only and executable")
 	require.Equal(t, uint32(0o644), modes[".claude-plugin/plugin.json"], "non-script files keep default mode")
 	require.Equal(t, uint32(0o644), modes["README.md"], "non-script files keep default mode")
+	require.Equal(t, uint32(0o600), modes["speakeasy.json"], "speakeasy.json carries the hooks key and must stay owner-only")
+	require.Equal(t, uint32(0o600), modes["plugin/speakeasy.json"], "speakeasy.json carries the hooks key and must stay owner-only")
 }
 
 // Each publish must stamp a fresh manifest version into every plugin.json.
@@ -3487,7 +3652,8 @@ func TestGeneratePlatformMCPPackageGatesRemoteURLProviderAttachment(t *testing.T
 		"automatic sign-in setup, not manual setup",
 		"`oauth_discovery: available` (`automatic_client_registration: none`)",
 		"incomplete or absent OAuth discovery",
-		"Service Account credential through the dashboard setup URL",
+		"Static credential (stored headers) through the dashboard setup URL",
+		"Service account credential (OAuth client credentials)",
 		"do not attempt attachment",
 	} {
 		require.Contains(t, workflow, required)

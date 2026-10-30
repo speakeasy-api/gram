@@ -111,6 +111,10 @@ func TestConsentTemplate_GatewayHiddenServersListedSeparately(t *testing.T) {
 	}
 	require.Contains(t, visible, `value="hide_server"`)
 	require.NotContains(t, visible, `value="show_server"`)
+	require.Contains(t, visible, `title="Hide this server, preventing your agent from attempting to access it."`)
+	// The row attribute swaps the hover-only hide icon for a visible Show.
+	require.NotContains(t, visible, "data-gateway-server-hidden")
+	require.Contains(t, hidden, "data-gateway-server-hidden")
 	require.Contains(t, page, "data-gateway-all-hidden hidden")
 	require.NotContains(t, page, "data-gateway-hidden-section hidden")
 	require.Contains(t, page, `<input type="hidden" name="csrf_token" value="csrf" />`)

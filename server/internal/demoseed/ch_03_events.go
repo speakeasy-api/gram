@@ -9,6 +9,8 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
 )
 
 // chCheck is one postflight assert. cond is a ClickHouse boolean expression
@@ -45,6 +47,7 @@ func (s *seeder) chCheckArgs() []any {
 		clickhouse.Named("proj", s.projectID().String()),
 		clickhouse.Named("marker", s.spec.Marker),
 		clickhouse.Named("github", s.det("mcpserver-github").String()),
+		clickhouse.Named("orggateway", orggateway.GatewayID(s.orgID()).String()),
 		clickhouse.Named("gateway_suffix", "/mcp/"+s.spec.OrgSlug+"-gateway"),
 		clickhouse.Named("tunnel_source", s.tunnelSourceID().String()),
 	}
@@ -129,10 +132,28 @@ func (s *seeder) chTelemetryChecks() []chCheck {
 		{
 			cond: `(SELECT count() FROM telemetry_logs
    WHERE gram_project_id = toUUID(@proj)
+     AND meta_mcp_server_id = @orggateway
+     AND event_source = 'tool_call') < 120`,
+			settings: "",
+			msg:      "demo seed postflight: organization gateway dispatches missing",
+		},
+		{
+			cond: `(SELECT count() FROM telemetry_logs
+   WHERE gram_project_id = toUUID(@proj)
      AND event_source = 'hook'
      AND endsWith(toString(attributes.gram.mcp.server_url), @gateway_suffix)) < 40`,
 			settings: "",
 			msg:      "demo seed postflight: hook-observed gateway calls missing",
+		},
+		// Skill loads over MCP: what the "Loaded via" MCP filter on Logs and
+		// the skill-load counts on MCP & Tools read.
+		{
+			cond: `(SELECT count() FROM telemetry_logs
+   WHERE gram_project_id = toUUID(@proj)
+     AND event_source = 'resource_read'
+     AND skill_name != '') != 60`,
+			settings: "",
+			msg:      "demo seed postflight: expected 60 MCP skill load rows",
 		},
 		// Hooks sent with an agent key: without them the Tool Logs agent
 		// filter only ever matches gateway calls.

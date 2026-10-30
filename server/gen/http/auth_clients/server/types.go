@@ -26,6 +26,44 @@ type UpdateAuthClientRequestBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
+// CreateAuthClientRequestBody is the type of the "authClients" service
+// "createAuthClient" endpoint HTTP request body.
+type CreateAuthClientRequestBody struct {
+	// How the client authenticates upstream.
+	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
+	// The client's name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Confine the client to one project. Omit to share it across the
+	// organization's projects.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The OAuth registration behind a remote_session or service_account client.
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+	// The headers the client sends upstream. Required for static_credential and
+	// pass_through clients. Token-generating clients produce their own
+	// Authorization header, which cannot be configured.
+	Headers []*AuthClientHeaderInputRequestBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
+	// MCP servers that should offer the client.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
+}
+
+// AttachAuthClientToMcpServerRequestBody is the type of the "authClients"
+// service "attachAuthClientToMcpServer" endpoint HTTP request body.
+type AttachAuthClientToMcpServerRequestBody struct {
+	// The auth client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The MCP server id.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+}
+
+// SetAuthClientHeadersRequestBody is the type of the "authClients" service
+// "setAuthClientHeaders" endpoint HTTP request body.
+type SetAuthClientHeadersRequestBody struct {
+	// The auth client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Every header the client should send.
+	Headers []*AuthClientHeaderInputRequestBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
+}
+
 // DetachAuthClientFromMcpServerRequestBody is the type of the "authClients"
 // service "detachAuthClientFromMcpServer" endpoint HTTP request body.
 type DetachAuthClientFromMcpServerRequestBody struct {
@@ -33,6 +71,34 @@ type DetachAuthClientFromMcpServerRequestBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The MCP server id.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+}
+
+// SetIssuanceProfileRequestBody is the type of the "authClients" service
+// "setIssuanceProfile" endpoint HTTP request body.
+type SetIssuanceProfileRequestBody struct {
+	// The sign-in.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The OAuth client, for a client's profile.
+	UserSessionClientID *string `form:"user_session_client_id,omitempty" json:"user_session_client_id,omitempty" xml:"user_session_client_id,omitempty"`
+	// The workload issuer, for a workload's profile.
+	WorkloadIssuerID *string `form:"workload_issuer_id,omitempty" json:"workload_issuer_id,omitempty" xml:"workload_issuer_id,omitempty"`
+	// The workload subject, for a workload's profile.
+	WorkloadSubject *string `form:"workload_subject,omitempty" json:"workload_subject,omitempty" xml:"workload_subject,omitempty"`
+	// The profile's name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Every choice the profile should hold. With mcp_server_id, the choice for
+	// that server alone, or none to remove it.
+	Choices []*IssuanceProfileChoiceRequestBody `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
+	// Limits the write to this MCP server: the profile's choices for other servers
+	// are kept as they are.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+}
+
+// DeleteIssuanceProfileRequestBody is the type of the "authClients" service
+// "deleteIssuanceProfile" endpoint HTTP request body.
+type DeleteIssuanceProfileRequestBody struct {
+	// The profile id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 
 // SetMcpServerUpstreamAuthRequirementRequestBody is the type of the
@@ -139,6 +205,120 @@ type UpdateAuthClientResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// CreateAuthClientResponseBody is the type of the "authClients" service
+// "createAuthClient" endpoint HTTP response body.
+type CreateAuthClientResponseBody struct {
+	// The auth client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project the client belongs to. Omitted for a client shared across the
+	// organization's projects.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// How the client authenticates upstream.
+	ClientType string `form:"client_type" json:"client_type" xml:"client_type"`
+	// backfill when the client was created from existing configuration, admin when
+	// an administrator created it.
+	Source string `form:"source" json:"source" xml:"source"`
+	// The client's name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Whether the client is enabled. Where typed auth client resolution is
+	// enforced, a disabled client is never selected or resolved. Disabling revokes
+	// no upstream credentials, and elsewhere, including in shadow mode, an MCP
+	// server's existing upstream configuration keeps serving.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// The OAuth registration behind remote_session, service_account and ema
+	// clients.
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+	// Whether each caller uses their own connection through the client. A grant on
+	// a personal client never lets one user use another user's connection.
+	Personal bool `form:"personal" json:"personal" xml:"personal"`
+	// The headers the client sends upstream.
+	Headers []*AuthClientHeaderResponseBody `form:"headers" json:"headers" xml:"headers"`
+	// The MCP servers that offer the client. Where typed auth client resolution is
+	// enforced, changing or disabling the client changes upstream behavior on
+	// every one of them.
+	Servers []*AuthClientServerResponseBody `form:"servers" json:"servers" xml:"servers"`
+	// When the client was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the client was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// AttachAuthClientToMcpServerResponseBody is the type of the "authClients"
+// service "attachAuthClientToMcpServer" endpoint HTTP response body.
+type AttachAuthClientToMcpServerResponseBody struct {
+	// The auth client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project the client belongs to. Omitted for a client shared across the
+	// organization's projects.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// How the client authenticates upstream.
+	ClientType string `form:"client_type" json:"client_type" xml:"client_type"`
+	// backfill when the client was created from existing configuration, admin when
+	// an administrator created it.
+	Source string `form:"source" json:"source" xml:"source"`
+	// The client's name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Whether the client is enabled. Where typed auth client resolution is
+	// enforced, a disabled client is never selected or resolved. Disabling revokes
+	// no upstream credentials, and elsewhere, including in shadow mode, an MCP
+	// server's existing upstream configuration keeps serving.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// The OAuth registration behind remote_session, service_account and ema
+	// clients.
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+	// Whether each caller uses their own connection through the client. A grant on
+	// a personal client never lets one user use another user's connection.
+	Personal bool `form:"personal" json:"personal" xml:"personal"`
+	// The headers the client sends upstream.
+	Headers []*AuthClientHeaderResponseBody `form:"headers" json:"headers" xml:"headers"`
+	// The MCP servers that offer the client. Where typed auth client resolution is
+	// enforced, changing or disabling the client changes upstream behavior on
+	// every one of them.
+	Servers []*AuthClientServerResponseBody `form:"servers" json:"servers" xml:"servers"`
+	// When the client was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the client was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// SetAuthClientHeadersResponseBody is the type of the "authClients" service
+// "setAuthClientHeaders" endpoint HTTP response body.
+type SetAuthClientHeadersResponseBody struct {
+	// The auth client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project the client belongs to. Omitted for a client shared across the
+	// organization's projects.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// How the client authenticates upstream.
+	ClientType string `form:"client_type" json:"client_type" xml:"client_type"`
+	// backfill when the client was created from existing configuration, admin when
+	// an administrator created it.
+	Source string `form:"source" json:"source" xml:"source"`
+	// The client's name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Whether the client is enabled. Where typed auth client resolution is
+	// enforced, a disabled client is never selected or resolved. Disabling revokes
+	// no upstream credentials, and elsewhere, including in shadow mode, an MCP
+	// server's existing upstream configuration keeps serving.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// The OAuth registration behind remote_session, service_account and ema
+	// clients.
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+	// Whether each caller uses their own connection through the client. A grant on
+	// a personal client never lets one user use another user's connection.
+	Personal bool `form:"personal" json:"personal" xml:"personal"`
+	// The headers the client sends upstream.
+	Headers []*AuthClientHeaderResponseBody `form:"headers" json:"headers" xml:"headers"`
+	// The MCP servers that offer the client. Where typed auth client resolution is
+	// enforced, changing or disabling the client changes upstream behavior on
+	// every one of them.
+	Servers []*AuthClientServerResponseBody `form:"servers" json:"servers" xml:"servers"`
+	// When the client was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the client was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // DetachAuthClientFromMcpServerResponseBody is the type of the "authClients"
 // service "detachAuthClientFromMcpServer" endpoint HTTP response body.
 type DetachAuthClientFromMcpServerResponseBody struct {
@@ -174,6 +354,42 @@ type DetachAuthClientFromMcpServerResponseBody struct {
 	// When the client was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the client was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ListMcpServerAuthClientChoicesResponseBody is the type of the "authClients"
+// service "listMcpServerAuthClientChoices" endpoint HTTP response body.
+type ListMcpServerAuthClientChoicesResponseBody struct {
+	// Whether the upstream needs authentication. Omitted while undecided.
+	RequiresUpstreamAuth *bool `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
+	// The enabled shared credentials the server offers.
+	Choices []*AuthClientChoiceResponseBody `form:"choices" json:"choices" xml:"choices"`
+}
+
+// ListIssuanceProfilesResponseBody is the type of the "authClients" service
+// "listIssuanceProfiles" endpoint HTTP response body.
+type ListIssuanceProfilesResponseBody struct {
+	Items []*IssuanceProfileResponseBody `form:"items" json:"items" xml:"items"`
+}
+
+// SetIssuanceProfileResponseBody is the type of the "authClients" service
+// "setIssuanceProfile" endpoint HTTP response body.
+type SetIssuanceProfileResponseBody struct {
+	// The profile id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The profile's name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The sign-in the caller's sessions come from.
+	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	// The OAuth client the profile applies to, for a client.
+	UserSessionClientID *string `form:"user_session_client_id,omitempty" json:"user_session_client_id,omitempty" xml:"user_session_client_id,omitempty"`
+	// The workload issuer, for a workload subject.
+	WorkloadIssuerID *string `form:"workload_issuer_id,omitempty" json:"workload_issuer_id,omitempty" xml:"workload_issuer_id,omitempty"`
+	// The workload subject, for a workload.
+	WorkloadSubject *string `form:"workload_subject,omitempty" json:"workload_subject,omitempty" xml:"workload_subject,omitempty"`
+	// The credential for each MCP server.
+	Choices []*IssuanceProfileChoiceResponseBody `form:"choices" json:"choices" xml:"choices"`
+	// When the profile last changed.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
@@ -808,6 +1024,575 @@ type UpdateAuthClientGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateAuthClientUnauthorizedResponseBody is the type of the "authClients"
+// service "createAuthClient" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateAuthClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateAuthClientForbiddenResponseBody is the type of the "authClients"
+// service "createAuthClient" endpoint HTTP response body for the "forbidden"
+// error.
+type CreateAuthClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateAuthClientBadRequestResponseBody is the type of the "authClients"
+// service "createAuthClient" endpoint HTTP response body for the "bad_request"
+// error.
+type CreateAuthClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateAuthClientNotFoundResponseBody is the type of the "authClients"
+// service "createAuthClient" endpoint HTTP response body for the "not_found"
+// error.
+type CreateAuthClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateAuthClientConflictResponseBody is the type of the "authClients"
+// service "createAuthClient" endpoint HTTP response body for the "conflict"
+// error.
+type CreateAuthClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateAuthClientUnsupportedMediaResponseBody is the type of the
+// "authClients" service "createAuthClient" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateAuthClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateAuthClientInvalidResponseBody is the type of the "authClients" service
+// "createAuthClient" endpoint HTTP response body for the "invalid" error.
+type CreateAuthClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateAuthClientInvariantViolationResponseBody is the type of the
+// "authClients" service "createAuthClient" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateAuthClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateAuthClientUnexpectedResponseBody is the type of the "authClients"
+// service "createAuthClient" endpoint HTTP response body for the "unexpected"
+// error.
+type CreateAuthClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateAuthClientGatewayErrorResponseBody is the type of the "authClients"
+// service "createAuthClient" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateAuthClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AttachAuthClientToMcpServerUnauthorizedResponseBody is the type of the
+// "authClients" service "attachAuthClientToMcpServer" endpoint HTTP response
+// body for the "unauthorized" error.
+type AttachAuthClientToMcpServerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AttachAuthClientToMcpServerForbiddenResponseBody is the type of the
+// "authClients" service "attachAuthClientToMcpServer" endpoint HTTP response
+// body for the "forbidden" error.
+type AttachAuthClientToMcpServerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AttachAuthClientToMcpServerBadRequestResponseBody is the type of the
+// "authClients" service "attachAuthClientToMcpServer" endpoint HTTP response
+// body for the "bad_request" error.
+type AttachAuthClientToMcpServerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AttachAuthClientToMcpServerNotFoundResponseBody is the type of the
+// "authClients" service "attachAuthClientToMcpServer" endpoint HTTP response
+// body for the "not_found" error.
+type AttachAuthClientToMcpServerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AttachAuthClientToMcpServerConflictResponseBody is the type of the
+// "authClients" service "attachAuthClientToMcpServer" endpoint HTTP response
+// body for the "conflict" error.
+type AttachAuthClientToMcpServerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AttachAuthClientToMcpServerUnsupportedMediaResponseBody is the type of the
+// "authClients" service "attachAuthClientToMcpServer" endpoint HTTP response
+// body for the "unsupported_media" error.
+type AttachAuthClientToMcpServerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AttachAuthClientToMcpServerInvalidResponseBody is the type of the
+// "authClients" service "attachAuthClientToMcpServer" endpoint HTTP response
+// body for the "invalid" error.
+type AttachAuthClientToMcpServerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AttachAuthClientToMcpServerInvariantViolationResponseBody is the type of the
+// "authClients" service "attachAuthClientToMcpServer" endpoint HTTP response
+// body for the "invariant_violation" error.
+type AttachAuthClientToMcpServerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AttachAuthClientToMcpServerUnexpectedResponseBody is the type of the
+// "authClients" service "attachAuthClientToMcpServer" endpoint HTTP response
+// body for the "unexpected" error.
+type AttachAuthClientToMcpServerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AttachAuthClientToMcpServerGatewayErrorResponseBody is the type of the
+// "authClients" service "attachAuthClientToMcpServer" endpoint HTTP response
+// body for the "gateway_error" error.
+type AttachAuthClientToMcpServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthClientHeadersUnauthorizedResponseBody is the type of the
+// "authClients" service "setAuthClientHeaders" endpoint HTTP response body for
+// the "unauthorized" error.
+type SetAuthClientHeadersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthClientHeadersForbiddenResponseBody is the type of the "authClients"
+// service "setAuthClientHeaders" endpoint HTTP response body for the
+// "forbidden" error.
+type SetAuthClientHeadersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthClientHeadersBadRequestResponseBody is the type of the "authClients"
+// service "setAuthClientHeaders" endpoint HTTP response body for the
+// "bad_request" error.
+type SetAuthClientHeadersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthClientHeadersNotFoundResponseBody is the type of the "authClients"
+// service "setAuthClientHeaders" endpoint HTTP response body for the
+// "not_found" error.
+type SetAuthClientHeadersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthClientHeadersConflictResponseBody is the type of the "authClients"
+// service "setAuthClientHeaders" endpoint HTTP response body for the
+// "conflict" error.
+type SetAuthClientHeadersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthClientHeadersUnsupportedMediaResponseBody is the type of the
+// "authClients" service "setAuthClientHeaders" endpoint HTTP response body for
+// the "unsupported_media" error.
+type SetAuthClientHeadersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthClientHeadersInvalidResponseBody is the type of the "authClients"
+// service "setAuthClientHeaders" endpoint HTTP response body for the "invalid"
+// error.
+type SetAuthClientHeadersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthClientHeadersInvariantViolationResponseBody is the type of the
+// "authClients" service "setAuthClientHeaders" endpoint HTTP response body for
+// the "invariant_violation" error.
+type SetAuthClientHeadersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthClientHeadersUnexpectedResponseBody is the type of the "authClients"
+// service "setAuthClientHeaders" endpoint HTTP response body for the
+// "unexpected" error.
+type SetAuthClientHeadersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthClientHeadersGatewayErrorResponseBody is the type of the
+// "authClients" service "setAuthClientHeaders" endpoint HTTP response body for
+// the "gateway_error" error.
+type SetAuthClientHeadersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DetachAuthClientFromMcpServerUnauthorizedResponseBody is the type of the
 // "authClients" service "detachAuthClientFromMcpServer" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -983,6 +1768,766 @@ type DetachAuthClientFromMcpServerUnexpectedResponseBody struct {
 // "authClients" service "detachAuthClientFromMcpServer" endpoint HTTP response
 // body for the "gateway_error" error.
 type DetachAuthClientFromMcpServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesUnauthorizedResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListMcpServerAuthClientChoicesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesForbiddenResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "forbidden" error.
+type ListMcpServerAuthClientChoicesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesBadRequestResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "bad_request" error.
+type ListMcpServerAuthClientChoicesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesNotFoundResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "not_found" error.
+type ListMcpServerAuthClientChoicesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesConflictResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "conflict" error.
+type ListMcpServerAuthClientChoicesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesUnsupportedMediaResponseBody is the type of
+// the "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListMcpServerAuthClientChoicesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesInvalidResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "invalid" error.
+type ListMcpServerAuthClientChoicesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesInvariantViolationResponseBody is the type of
+// the "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListMcpServerAuthClientChoicesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesUnexpectedResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "unexpected" error.
+type ListMcpServerAuthClientChoicesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesGatewayErrorResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListMcpServerAuthClientChoicesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIssuanceProfilesUnauthorizedResponseBody is the type of the
+// "authClients" service "listIssuanceProfiles" endpoint HTTP response body for
+// the "unauthorized" error.
+type ListIssuanceProfilesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIssuanceProfilesForbiddenResponseBody is the type of the "authClients"
+// service "listIssuanceProfiles" endpoint HTTP response body for the
+// "forbidden" error.
+type ListIssuanceProfilesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIssuanceProfilesBadRequestResponseBody is the type of the "authClients"
+// service "listIssuanceProfiles" endpoint HTTP response body for the
+// "bad_request" error.
+type ListIssuanceProfilesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIssuanceProfilesNotFoundResponseBody is the type of the "authClients"
+// service "listIssuanceProfiles" endpoint HTTP response body for the
+// "not_found" error.
+type ListIssuanceProfilesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIssuanceProfilesConflictResponseBody is the type of the "authClients"
+// service "listIssuanceProfiles" endpoint HTTP response body for the
+// "conflict" error.
+type ListIssuanceProfilesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIssuanceProfilesUnsupportedMediaResponseBody is the type of the
+// "authClients" service "listIssuanceProfiles" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListIssuanceProfilesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIssuanceProfilesInvalidResponseBody is the type of the "authClients"
+// service "listIssuanceProfiles" endpoint HTTP response body for the "invalid"
+// error.
+type ListIssuanceProfilesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIssuanceProfilesInvariantViolationResponseBody is the type of the
+// "authClients" service "listIssuanceProfiles" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListIssuanceProfilesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIssuanceProfilesUnexpectedResponseBody is the type of the "authClients"
+// service "listIssuanceProfiles" endpoint HTTP response body for the
+// "unexpected" error.
+type ListIssuanceProfilesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIssuanceProfilesGatewayErrorResponseBody is the type of the
+// "authClients" service "listIssuanceProfiles" endpoint HTTP response body for
+// the "gateway_error" error.
+type ListIssuanceProfilesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIssuanceProfileUnauthorizedResponseBody is the type of the "authClients"
+// service "setIssuanceProfile" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetIssuanceProfileUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIssuanceProfileForbiddenResponseBody is the type of the "authClients"
+// service "setIssuanceProfile" endpoint HTTP response body for the "forbidden"
+// error.
+type SetIssuanceProfileForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIssuanceProfileBadRequestResponseBody is the type of the "authClients"
+// service "setIssuanceProfile" endpoint HTTP response body for the
+// "bad_request" error.
+type SetIssuanceProfileBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIssuanceProfileNotFoundResponseBody is the type of the "authClients"
+// service "setIssuanceProfile" endpoint HTTP response body for the "not_found"
+// error.
+type SetIssuanceProfileNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIssuanceProfileConflictResponseBody is the type of the "authClients"
+// service "setIssuanceProfile" endpoint HTTP response body for the "conflict"
+// error.
+type SetIssuanceProfileConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIssuanceProfileUnsupportedMediaResponseBody is the type of the
+// "authClients" service "setIssuanceProfile" endpoint HTTP response body for
+// the "unsupported_media" error.
+type SetIssuanceProfileUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIssuanceProfileInvalidResponseBody is the type of the "authClients"
+// service "setIssuanceProfile" endpoint HTTP response body for the "invalid"
+// error.
+type SetIssuanceProfileInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIssuanceProfileInvariantViolationResponseBody is the type of the
+// "authClients" service "setIssuanceProfile" endpoint HTTP response body for
+// the "invariant_violation" error.
+type SetIssuanceProfileInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIssuanceProfileUnexpectedResponseBody is the type of the "authClients"
+// service "setIssuanceProfile" endpoint HTTP response body for the
+// "unexpected" error.
+type SetIssuanceProfileUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetIssuanceProfileGatewayErrorResponseBody is the type of the "authClients"
+// service "setIssuanceProfile" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetIssuanceProfileGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuanceProfileUnauthorizedResponseBody is the type of the
+// "authClients" service "deleteIssuanceProfile" endpoint HTTP response body
+// for the "unauthorized" error.
+type DeleteIssuanceProfileUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuanceProfileForbiddenResponseBody is the type of the "authClients"
+// service "deleteIssuanceProfile" endpoint HTTP response body for the
+// "forbidden" error.
+type DeleteIssuanceProfileForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuanceProfileBadRequestResponseBody is the type of the "authClients"
+// service "deleteIssuanceProfile" endpoint HTTP response body for the
+// "bad_request" error.
+type DeleteIssuanceProfileBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuanceProfileNotFoundResponseBody is the type of the "authClients"
+// service "deleteIssuanceProfile" endpoint HTTP response body for the
+// "not_found" error.
+type DeleteIssuanceProfileNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuanceProfileConflictResponseBody is the type of the "authClients"
+// service "deleteIssuanceProfile" endpoint HTTP response body for the
+// "conflict" error.
+type DeleteIssuanceProfileConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuanceProfileUnsupportedMediaResponseBody is the type of the
+// "authClients" service "deleteIssuanceProfile" endpoint HTTP response body
+// for the "unsupported_media" error.
+type DeleteIssuanceProfileUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuanceProfileInvalidResponseBody is the type of the "authClients"
+// service "deleteIssuanceProfile" endpoint HTTP response body for the
+// "invalid" error.
+type DeleteIssuanceProfileInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuanceProfileInvariantViolationResponseBody is the type of the
+// "authClients" service "deleteIssuanceProfile" endpoint HTTP response body
+// for the "invariant_violation" error.
+type DeleteIssuanceProfileInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuanceProfileUnexpectedResponseBody is the type of the "authClients"
+// service "deleteIssuanceProfile" endpoint HTTP response body for the
+// "unexpected" error.
+type DeleteIssuanceProfileUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteIssuanceProfileGatewayErrorResponseBody is the type of the
+// "authClients" service "deleteIssuanceProfile" endpoint HTTP response body
+// for the "gateway_error" error.
+type DeleteIssuanceProfileGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1825,6 +3370,45 @@ type AuthClientServerResponseBody struct {
 	Public bool `form:"public" json:"public" xml:"public"`
 }
 
+// AuthClientChoiceResponseBody is used to define fields on response body types.
+type AuthClientChoiceResponseBody struct {
+	// The auth client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The client's name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// How the client authenticates upstream. Only shared types are offered.
+	ClientType string `form:"client_type" json:"client_type" xml:"client_type"`
+}
+
+// IssuanceProfileResponseBody is used to define fields on response body types.
+type IssuanceProfileResponseBody struct {
+	// The profile id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The profile's name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The sign-in the caller's sessions come from.
+	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	// The OAuth client the profile applies to, for a client.
+	UserSessionClientID *string `form:"user_session_client_id,omitempty" json:"user_session_client_id,omitempty" xml:"user_session_client_id,omitempty"`
+	// The workload issuer, for a workload subject.
+	WorkloadIssuerID *string `form:"workload_issuer_id,omitempty" json:"workload_issuer_id,omitempty" xml:"workload_issuer_id,omitempty"`
+	// The workload subject, for a workload.
+	WorkloadSubject *string `form:"workload_subject,omitempty" json:"workload_subject,omitempty" xml:"workload_subject,omitempty"`
+	// The credential for each MCP server.
+	Choices []*IssuanceProfileChoiceResponseBody `form:"choices" json:"choices" xml:"choices"`
+	// When the profile last changed.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// IssuanceProfileChoiceResponseBody is used to define fields on response body
+// types.
+type IssuanceProfileChoiceResponseBody struct {
+	// The MCP server.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The auth client. Omit for a server whose upstream needs no authentication.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+}
+
 // AuthClientAudienceEntryResponseBody is used to define fields on response
 // body types.
 type AuthClientAudienceEntryResponseBody struct {
@@ -1843,6 +3427,34 @@ type AuthClientAudienceEntryResponseBody struct {
 	// For personal clients: how the rule relates to other people's connections. A
 	// grant never lets anyone use another user's connection.
 	ConnectionNote *string `form:"connection_note,omitempty" json:"connection_note,omitempty" xml:"connection_note,omitempty"`
+}
+
+// AuthClientHeaderInputRequestBody is used to define fields on request body
+// types.
+type AuthClientHeaderInputRequestBody struct {
+	// The header name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// What the header is for.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether a caller must supply the header when it is copied from the request.
+	IsRequired *bool `form:"is_required,omitempty" json:"is_required,omitempty" xml:"is_required,omitempty"`
+	// Whether the value is secret. Secret values are stored encrypted and never
+	// returned.
+	IsSecret *bool `form:"is_secret,omitempty" json:"is_secret,omitempty" xml:"is_secret,omitempty"`
+	// The value to send. Omit it on a header that already stores one, with
+	// is_secret unchanged, to keep the stored value.
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// The caller's request header to copy the value from, for pass-through headers.
+	ValueFromRequestHeader *string `form:"value_from_request_header,omitempty" json:"value_from_request_header,omitempty" xml:"value_from_request_header,omitempty"`
+}
+
+// IssuanceProfileChoiceRequestBody is used to define fields on request body
+// types.
+type IssuanceProfileChoiceRequestBody struct {
+	// The MCP server.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The auth client. Omit for a server whose upstream needs no authentication.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
 }
 
 // AuthClientAudienceRuleRequestBody is used to define fields on request body
@@ -1959,6 +3571,133 @@ func NewUpdateAuthClientResponseBody(res *types.AuthClient) *UpdateAuthClientRes
 	return body
 }
 
+// NewCreateAuthClientResponseBody builds the HTTP response body from the
+// result of the "createAuthClient" endpoint of the "authClients" service.
+func NewCreateAuthClientResponseBody(res *types.AuthClient) *CreateAuthClientResponseBody {
+	body := &CreateAuthClientResponseBody{
+		ID:                    res.ID,
+		ProjectID:             res.ProjectID,
+		ClientType:            res.ClientType,
+		Source:                string(res.Source),
+		Name:                  res.Name,
+		Enabled:               res.Enabled,
+		RemoteSessionClientID: res.RemoteSessionClientID,
+		Personal:              res.Personal,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.Headers != nil {
+		body.Headers = make([]*AuthClientHeaderResponseBody, len(res.Headers))
+		for i, val := range res.Headers {
+			if val == nil {
+				body.Headers[i] = nil
+				continue
+			}
+			body.Headers[i] = marshalTypesAuthClientHeaderToAuthClientHeaderResponseBody(val)
+		}
+	} else {
+		body.Headers = []*AuthClientHeaderResponseBody{}
+	}
+	if res.Servers != nil {
+		body.Servers = make([]*AuthClientServerResponseBody, len(res.Servers))
+		for i, val := range res.Servers {
+			if val == nil {
+				body.Servers[i] = nil
+				continue
+			}
+			body.Servers[i] = marshalTypesAuthClientServerToAuthClientServerResponseBody(val)
+		}
+	} else {
+		body.Servers = []*AuthClientServerResponseBody{}
+	}
+	return body
+}
+
+// NewAttachAuthClientToMcpServerResponseBody builds the HTTP response body
+// from the result of the "attachAuthClientToMcpServer" endpoint of the
+// "authClients" service.
+func NewAttachAuthClientToMcpServerResponseBody(res *types.AuthClient) *AttachAuthClientToMcpServerResponseBody {
+	body := &AttachAuthClientToMcpServerResponseBody{
+		ID:                    res.ID,
+		ProjectID:             res.ProjectID,
+		ClientType:            res.ClientType,
+		Source:                string(res.Source),
+		Name:                  res.Name,
+		Enabled:               res.Enabled,
+		RemoteSessionClientID: res.RemoteSessionClientID,
+		Personal:              res.Personal,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.Headers != nil {
+		body.Headers = make([]*AuthClientHeaderResponseBody, len(res.Headers))
+		for i, val := range res.Headers {
+			if val == nil {
+				body.Headers[i] = nil
+				continue
+			}
+			body.Headers[i] = marshalTypesAuthClientHeaderToAuthClientHeaderResponseBody(val)
+		}
+	} else {
+		body.Headers = []*AuthClientHeaderResponseBody{}
+	}
+	if res.Servers != nil {
+		body.Servers = make([]*AuthClientServerResponseBody, len(res.Servers))
+		for i, val := range res.Servers {
+			if val == nil {
+				body.Servers[i] = nil
+				continue
+			}
+			body.Servers[i] = marshalTypesAuthClientServerToAuthClientServerResponseBody(val)
+		}
+	} else {
+		body.Servers = []*AuthClientServerResponseBody{}
+	}
+	return body
+}
+
+// NewSetAuthClientHeadersResponseBody builds the HTTP response body from the
+// result of the "setAuthClientHeaders" endpoint of the "authClients" service.
+func NewSetAuthClientHeadersResponseBody(res *types.AuthClient) *SetAuthClientHeadersResponseBody {
+	body := &SetAuthClientHeadersResponseBody{
+		ID:                    res.ID,
+		ProjectID:             res.ProjectID,
+		ClientType:            res.ClientType,
+		Source:                string(res.Source),
+		Name:                  res.Name,
+		Enabled:               res.Enabled,
+		RemoteSessionClientID: res.RemoteSessionClientID,
+		Personal:              res.Personal,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.Headers != nil {
+		body.Headers = make([]*AuthClientHeaderResponseBody, len(res.Headers))
+		for i, val := range res.Headers {
+			if val == nil {
+				body.Headers[i] = nil
+				continue
+			}
+			body.Headers[i] = marshalTypesAuthClientHeaderToAuthClientHeaderResponseBody(val)
+		}
+	} else {
+		body.Headers = []*AuthClientHeaderResponseBody{}
+	}
+	if res.Servers != nil {
+		body.Servers = make([]*AuthClientServerResponseBody, len(res.Servers))
+		for i, val := range res.Servers {
+			if val == nil {
+				body.Servers[i] = nil
+				continue
+			}
+			body.Servers[i] = marshalTypesAuthClientServerToAuthClientServerResponseBody(val)
+		}
+	} else {
+		body.Servers = []*AuthClientServerResponseBody{}
+	}
+	return body
+}
+
 // NewDetachAuthClientFromMcpServerResponseBody builds the HTTP response body
 // from the result of the "detachAuthClientFromMcpServer" endpoint of the
 // "authClients" service.
@@ -1998,6 +3737,74 @@ func NewDetachAuthClientFromMcpServerResponseBody(res *types.AuthClient) *Detach
 		}
 	} else {
 		body.Servers = []*AuthClientServerResponseBody{}
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesResponseBody builds the HTTP response body
+// from the result of the "listMcpServerAuthClientChoices" endpoint of the
+// "authClients" service.
+func NewListMcpServerAuthClientChoicesResponseBody(res *authclients.ListMcpServerAuthClientChoicesResult) *ListMcpServerAuthClientChoicesResponseBody {
+	body := &ListMcpServerAuthClientChoicesResponseBody{
+		RequiresUpstreamAuth: res.RequiresUpstreamAuth,
+	}
+	if res.Choices != nil {
+		body.Choices = make([]*AuthClientChoiceResponseBody, len(res.Choices))
+		for i, val := range res.Choices {
+			if val == nil {
+				body.Choices[i] = nil
+				continue
+			}
+			body.Choices[i] = marshalTypesAuthClientChoiceToAuthClientChoiceResponseBody(val)
+		}
+	} else {
+		body.Choices = []*AuthClientChoiceResponseBody{}
+	}
+	return body
+}
+
+// NewListIssuanceProfilesResponseBody builds the HTTP response body from the
+// result of the "listIssuanceProfiles" endpoint of the "authClients" service.
+func NewListIssuanceProfilesResponseBody(res *authclients.ListIssuanceProfilesResult) *ListIssuanceProfilesResponseBody {
+	body := &ListIssuanceProfilesResponseBody{}
+	if res.Items != nil {
+		body.Items = make([]*IssuanceProfileResponseBody, len(res.Items))
+		for i, val := range res.Items {
+			if val == nil {
+				body.Items[i] = nil
+				continue
+			}
+			body.Items[i] = marshalTypesIssuanceProfileToIssuanceProfileResponseBody(val)
+		}
+	} else {
+		body.Items = []*IssuanceProfileResponseBody{}
+	}
+	return body
+}
+
+// NewSetIssuanceProfileResponseBody builds the HTTP response body from the
+// result of the "setIssuanceProfile" endpoint of the "authClients" service.
+func NewSetIssuanceProfileResponseBody(res *types.IssuanceProfile) *SetIssuanceProfileResponseBody {
+	body := &SetIssuanceProfileResponseBody{
+		ID:                  res.ID,
+		Name:                res.Name,
+		UserSessionIssuerID: res.UserSessionIssuerID,
+		UserSessionClientID: res.UserSessionClientID,
+		WorkloadIssuerID:    res.WorkloadIssuerID,
+		WorkloadSubject:     res.WorkloadSubject,
+		UpdatedAt:           res.UpdatedAt,
+	}
+	if res.Choices != nil {
+		body.Choices = make([]*IssuanceProfileChoiceResponseBody, len(res.Choices))
+		for i, val := range res.Choices {
+			if val == nil {
+				body.Choices[i] = nil
+				continue
+			}
+			body.Choices[i] = marshalTypesIssuanceProfileChoiceToIssuanceProfileChoiceResponseBody(val)
+		}
+	} else {
+		body.Choices = []*IssuanceProfileChoiceResponseBody{}
 	}
 	return body
 }
@@ -2542,6 +4349,450 @@ func NewUpdateAuthClientGatewayErrorResponseBody(res *goa.ServiceError) *UpdateA
 	return body
 }
 
+// NewCreateAuthClientUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createAuthClient" endpoint of the "authClients"
+// service.
+func NewCreateAuthClientUnauthorizedResponseBody(res *goa.ServiceError) *CreateAuthClientUnauthorizedResponseBody {
+	body := &CreateAuthClientUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateAuthClientForbiddenResponseBody builds the HTTP response body from
+// the result of the "createAuthClient" endpoint of the "authClients" service.
+func NewCreateAuthClientForbiddenResponseBody(res *goa.ServiceError) *CreateAuthClientForbiddenResponseBody {
+	body := &CreateAuthClientForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateAuthClientBadRequestResponseBody builds the HTTP response body from
+// the result of the "createAuthClient" endpoint of the "authClients" service.
+func NewCreateAuthClientBadRequestResponseBody(res *goa.ServiceError) *CreateAuthClientBadRequestResponseBody {
+	body := &CreateAuthClientBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateAuthClientNotFoundResponseBody builds the HTTP response body from
+// the result of the "createAuthClient" endpoint of the "authClients" service.
+func NewCreateAuthClientNotFoundResponseBody(res *goa.ServiceError) *CreateAuthClientNotFoundResponseBody {
+	body := &CreateAuthClientNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateAuthClientConflictResponseBody builds the HTTP response body from
+// the result of the "createAuthClient" endpoint of the "authClients" service.
+func NewCreateAuthClientConflictResponseBody(res *goa.ServiceError) *CreateAuthClientConflictResponseBody {
+	body := &CreateAuthClientConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateAuthClientUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createAuthClient" endpoint of the "authClients"
+// service.
+func NewCreateAuthClientUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateAuthClientUnsupportedMediaResponseBody {
+	body := &CreateAuthClientUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateAuthClientInvalidResponseBody builds the HTTP response body from
+// the result of the "createAuthClient" endpoint of the "authClients" service.
+func NewCreateAuthClientInvalidResponseBody(res *goa.ServiceError) *CreateAuthClientInvalidResponseBody {
+	body := &CreateAuthClientInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateAuthClientInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "createAuthClient" endpoint of the "authClients"
+// service.
+func NewCreateAuthClientInvariantViolationResponseBody(res *goa.ServiceError) *CreateAuthClientInvariantViolationResponseBody {
+	body := &CreateAuthClientInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateAuthClientUnexpectedResponseBody builds the HTTP response body from
+// the result of the "createAuthClient" endpoint of the "authClients" service.
+func NewCreateAuthClientUnexpectedResponseBody(res *goa.ServiceError) *CreateAuthClientUnexpectedResponseBody {
+	body := &CreateAuthClientUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateAuthClientGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createAuthClient" endpoint of the "authClients"
+// service.
+func NewCreateAuthClientGatewayErrorResponseBody(res *goa.ServiceError) *CreateAuthClientGatewayErrorResponseBody {
+	body := &CreateAuthClientGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAttachAuthClientToMcpServerUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "attachAuthClientToMcpServer" endpoint
+// of the "authClients" service.
+func NewAttachAuthClientToMcpServerUnauthorizedResponseBody(res *goa.ServiceError) *AttachAuthClientToMcpServerUnauthorizedResponseBody {
+	body := &AttachAuthClientToMcpServerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAttachAuthClientToMcpServerForbiddenResponseBody builds the HTTP response
+// body from the result of the "attachAuthClientToMcpServer" endpoint of the
+// "authClients" service.
+func NewAttachAuthClientToMcpServerForbiddenResponseBody(res *goa.ServiceError) *AttachAuthClientToMcpServerForbiddenResponseBody {
+	body := &AttachAuthClientToMcpServerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAttachAuthClientToMcpServerBadRequestResponseBody builds the HTTP
+// response body from the result of the "attachAuthClientToMcpServer" endpoint
+// of the "authClients" service.
+func NewAttachAuthClientToMcpServerBadRequestResponseBody(res *goa.ServiceError) *AttachAuthClientToMcpServerBadRequestResponseBody {
+	body := &AttachAuthClientToMcpServerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAttachAuthClientToMcpServerNotFoundResponseBody builds the HTTP response
+// body from the result of the "attachAuthClientToMcpServer" endpoint of the
+// "authClients" service.
+func NewAttachAuthClientToMcpServerNotFoundResponseBody(res *goa.ServiceError) *AttachAuthClientToMcpServerNotFoundResponseBody {
+	body := &AttachAuthClientToMcpServerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAttachAuthClientToMcpServerConflictResponseBody builds the HTTP response
+// body from the result of the "attachAuthClientToMcpServer" endpoint of the
+// "authClients" service.
+func NewAttachAuthClientToMcpServerConflictResponseBody(res *goa.ServiceError) *AttachAuthClientToMcpServerConflictResponseBody {
+	body := &AttachAuthClientToMcpServerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAttachAuthClientToMcpServerUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "attachAuthClientToMcpServer" endpoint
+// of the "authClients" service.
+func NewAttachAuthClientToMcpServerUnsupportedMediaResponseBody(res *goa.ServiceError) *AttachAuthClientToMcpServerUnsupportedMediaResponseBody {
+	body := &AttachAuthClientToMcpServerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAttachAuthClientToMcpServerInvalidResponseBody builds the HTTP response
+// body from the result of the "attachAuthClientToMcpServer" endpoint of the
+// "authClients" service.
+func NewAttachAuthClientToMcpServerInvalidResponseBody(res *goa.ServiceError) *AttachAuthClientToMcpServerInvalidResponseBody {
+	body := &AttachAuthClientToMcpServerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAttachAuthClientToMcpServerInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "attachAuthClientToMcpServer" endpoint
+// of the "authClients" service.
+func NewAttachAuthClientToMcpServerInvariantViolationResponseBody(res *goa.ServiceError) *AttachAuthClientToMcpServerInvariantViolationResponseBody {
+	body := &AttachAuthClientToMcpServerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAttachAuthClientToMcpServerUnexpectedResponseBody builds the HTTP
+// response body from the result of the "attachAuthClientToMcpServer" endpoint
+// of the "authClients" service.
+func NewAttachAuthClientToMcpServerUnexpectedResponseBody(res *goa.ServiceError) *AttachAuthClientToMcpServerUnexpectedResponseBody {
+	body := &AttachAuthClientToMcpServerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAttachAuthClientToMcpServerGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "attachAuthClientToMcpServer" endpoint
+// of the "authClients" service.
+func NewAttachAuthClientToMcpServerGatewayErrorResponseBody(res *goa.ServiceError) *AttachAuthClientToMcpServerGatewayErrorResponseBody {
+	body := &AttachAuthClientToMcpServerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthClientHeadersUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "setAuthClientHeaders" endpoint of the
+// "authClients" service.
+func NewSetAuthClientHeadersUnauthorizedResponseBody(res *goa.ServiceError) *SetAuthClientHeadersUnauthorizedResponseBody {
+	body := &SetAuthClientHeadersUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthClientHeadersForbiddenResponseBody builds the HTTP response body
+// from the result of the "setAuthClientHeaders" endpoint of the "authClients"
+// service.
+func NewSetAuthClientHeadersForbiddenResponseBody(res *goa.ServiceError) *SetAuthClientHeadersForbiddenResponseBody {
+	body := &SetAuthClientHeadersForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthClientHeadersBadRequestResponseBody builds the HTTP response body
+// from the result of the "setAuthClientHeaders" endpoint of the "authClients"
+// service.
+func NewSetAuthClientHeadersBadRequestResponseBody(res *goa.ServiceError) *SetAuthClientHeadersBadRequestResponseBody {
+	body := &SetAuthClientHeadersBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthClientHeadersNotFoundResponseBody builds the HTTP response body
+// from the result of the "setAuthClientHeaders" endpoint of the "authClients"
+// service.
+func NewSetAuthClientHeadersNotFoundResponseBody(res *goa.ServiceError) *SetAuthClientHeadersNotFoundResponseBody {
+	body := &SetAuthClientHeadersNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthClientHeadersConflictResponseBody builds the HTTP response body
+// from the result of the "setAuthClientHeaders" endpoint of the "authClients"
+// service.
+func NewSetAuthClientHeadersConflictResponseBody(res *goa.ServiceError) *SetAuthClientHeadersConflictResponseBody {
+	body := &SetAuthClientHeadersConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthClientHeadersUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "setAuthClientHeaders" endpoint of the
+// "authClients" service.
+func NewSetAuthClientHeadersUnsupportedMediaResponseBody(res *goa.ServiceError) *SetAuthClientHeadersUnsupportedMediaResponseBody {
+	body := &SetAuthClientHeadersUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthClientHeadersInvalidResponseBody builds the HTTP response body
+// from the result of the "setAuthClientHeaders" endpoint of the "authClients"
+// service.
+func NewSetAuthClientHeadersInvalidResponseBody(res *goa.ServiceError) *SetAuthClientHeadersInvalidResponseBody {
+	body := &SetAuthClientHeadersInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthClientHeadersInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "setAuthClientHeaders" endpoint of the
+// "authClients" service.
+func NewSetAuthClientHeadersInvariantViolationResponseBody(res *goa.ServiceError) *SetAuthClientHeadersInvariantViolationResponseBody {
+	body := &SetAuthClientHeadersInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthClientHeadersUnexpectedResponseBody builds the HTTP response body
+// from the result of the "setAuthClientHeaders" endpoint of the "authClients"
+// service.
+func NewSetAuthClientHeadersUnexpectedResponseBody(res *goa.ServiceError) *SetAuthClientHeadersUnexpectedResponseBody {
+	body := &SetAuthClientHeadersUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthClientHeadersGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "setAuthClientHeaders" endpoint of the
+// "authClients" service.
+func NewSetAuthClientHeadersGatewayErrorResponseBody(res *goa.ServiceError) *SetAuthClientHeadersGatewayErrorResponseBody {
+	body := &SetAuthClientHeadersGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDetachAuthClientFromMcpServerUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "detachAuthClientFromMcpServer"
 // endpoint of the "authClients" service.
@@ -2682,6 +4933,603 @@ func NewDetachAuthClientFromMcpServerUnexpectedResponseBody(res *goa.ServiceErro
 // endpoint of the "authClients" service.
 func NewDetachAuthClientFromMcpServerGatewayErrorResponseBody(res *goa.ServiceError) *DetachAuthClientFromMcpServerGatewayErrorResponseBody {
 	body := &DetachAuthClientFromMcpServerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesUnauthorizedResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesUnauthorizedResponseBody {
+	body := &ListMcpServerAuthClientChoicesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesForbiddenResponseBody builds the HTTP
+// response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesForbiddenResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesForbiddenResponseBody {
+	body := &ListMcpServerAuthClientChoicesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesBadRequestResponseBody builds the HTTP
+// response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesBadRequestResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesBadRequestResponseBody {
+	body := &ListMcpServerAuthClientChoicesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesNotFoundResponseBody builds the HTTP
+// response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesNotFoundResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesNotFoundResponseBody {
+	body := &ListMcpServerAuthClientChoicesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesConflictResponseBody builds the HTTP
+// response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesConflictResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesConflictResponseBody {
+	body := &ListMcpServerAuthClientChoicesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesUnsupportedMediaResponseBody {
+	body := &ListMcpServerAuthClientChoicesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesInvalidResponseBody builds the HTTP
+// response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesInvalidResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesInvalidResponseBody {
+	body := &ListMcpServerAuthClientChoicesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesInvariantViolationResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesInvariantViolationResponseBody {
+	body := &ListMcpServerAuthClientChoicesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesUnexpectedResponseBody builds the HTTP
+// response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesUnexpectedResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesUnexpectedResponseBody {
+	body := &ListMcpServerAuthClientChoicesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesGatewayErrorResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesGatewayErrorResponseBody {
+	body := &ListMcpServerAuthClientChoicesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIssuanceProfilesUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listIssuanceProfiles" endpoint of the
+// "authClients" service.
+func NewListIssuanceProfilesUnauthorizedResponseBody(res *goa.ServiceError) *ListIssuanceProfilesUnauthorizedResponseBody {
+	body := &ListIssuanceProfilesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIssuanceProfilesForbiddenResponseBody builds the HTTP response body
+// from the result of the "listIssuanceProfiles" endpoint of the "authClients"
+// service.
+func NewListIssuanceProfilesForbiddenResponseBody(res *goa.ServiceError) *ListIssuanceProfilesForbiddenResponseBody {
+	body := &ListIssuanceProfilesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIssuanceProfilesBadRequestResponseBody builds the HTTP response body
+// from the result of the "listIssuanceProfiles" endpoint of the "authClients"
+// service.
+func NewListIssuanceProfilesBadRequestResponseBody(res *goa.ServiceError) *ListIssuanceProfilesBadRequestResponseBody {
+	body := &ListIssuanceProfilesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIssuanceProfilesNotFoundResponseBody builds the HTTP response body
+// from the result of the "listIssuanceProfiles" endpoint of the "authClients"
+// service.
+func NewListIssuanceProfilesNotFoundResponseBody(res *goa.ServiceError) *ListIssuanceProfilesNotFoundResponseBody {
+	body := &ListIssuanceProfilesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIssuanceProfilesConflictResponseBody builds the HTTP response body
+// from the result of the "listIssuanceProfiles" endpoint of the "authClients"
+// service.
+func NewListIssuanceProfilesConflictResponseBody(res *goa.ServiceError) *ListIssuanceProfilesConflictResponseBody {
+	body := &ListIssuanceProfilesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIssuanceProfilesUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listIssuanceProfiles" endpoint of the
+// "authClients" service.
+func NewListIssuanceProfilesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListIssuanceProfilesUnsupportedMediaResponseBody {
+	body := &ListIssuanceProfilesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIssuanceProfilesInvalidResponseBody builds the HTTP response body
+// from the result of the "listIssuanceProfiles" endpoint of the "authClients"
+// service.
+func NewListIssuanceProfilesInvalidResponseBody(res *goa.ServiceError) *ListIssuanceProfilesInvalidResponseBody {
+	body := &ListIssuanceProfilesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIssuanceProfilesInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listIssuanceProfiles" endpoint of the
+// "authClients" service.
+func NewListIssuanceProfilesInvariantViolationResponseBody(res *goa.ServiceError) *ListIssuanceProfilesInvariantViolationResponseBody {
+	body := &ListIssuanceProfilesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIssuanceProfilesUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listIssuanceProfiles" endpoint of the "authClients"
+// service.
+func NewListIssuanceProfilesUnexpectedResponseBody(res *goa.ServiceError) *ListIssuanceProfilesUnexpectedResponseBody {
+	body := &ListIssuanceProfilesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIssuanceProfilesGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listIssuanceProfiles" endpoint of the
+// "authClients" service.
+func NewListIssuanceProfilesGatewayErrorResponseBody(res *goa.ServiceError) *ListIssuanceProfilesGatewayErrorResponseBody {
+	body := &ListIssuanceProfilesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIssuanceProfileUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "setIssuanceProfile" endpoint of the "authClients"
+// service.
+func NewSetIssuanceProfileUnauthorizedResponseBody(res *goa.ServiceError) *SetIssuanceProfileUnauthorizedResponseBody {
+	body := &SetIssuanceProfileUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIssuanceProfileForbiddenResponseBody builds the HTTP response body
+// from the result of the "setIssuanceProfile" endpoint of the "authClients"
+// service.
+func NewSetIssuanceProfileForbiddenResponseBody(res *goa.ServiceError) *SetIssuanceProfileForbiddenResponseBody {
+	body := &SetIssuanceProfileForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIssuanceProfileBadRequestResponseBody builds the HTTP response body
+// from the result of the "setIssuanceProfile" endpoint of the "authClients"
+// service.
+func NewSetIssuanceProfileBadRequestResponseBody(res *goa.ServiceError) *SetIssuanceProfileBadRequestResponseBody {
+	body := &SetIssuanceProfileBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIssuanceProfileNotFoundResponseBody builds the HTTP response body from
+// the result of the "setIssuanceProfile" endpoint of the "authClients" service.
+func NewSetIssuanceProfileNotFoundResponseBody(res *goa.ServiceError) *SetIssuanceProfileNotFoundResponseBody {
+	body := &SetIssuanceProfileNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIssuanceProfileConflictResponseBody builds the HTTP response body from
+// the result of the "setIssuanceProfile" endpoint of the "authClients" service.
+func NewSetIssuanceProfileConflictResponseBody(res *goa.ServiceError) *SetIssuanceProfileConflictResponseBody {
+	body := &SetIssuanceProfileConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIssuanceProfileUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "setIssuanceProfile" endpoint of the
+// "authClients" service.
+func NewSetIssuanceProfileUnsupportedMediaResponseBody(res *goa.ServiceError) *SetIssuanceProfileUnsupportedMediaResponseBody {
+	body := &SetIssuanceProfileUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIssuanceProfileInvalidResponseBody builds the HTTP response body from
+// the result of the "setIssuanceProfile" endpoint of the "authClients" service.
+func NewSetIssuanceProfileInvalidResponseBody(res *goa.ServiceError) *SetIssuanceProfileInvalidResponseBody {
+	body := &SetIssuanceProfileInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIssuanceProfileInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "setIssuanceProfile" endpoint of the
+// "authClients" service.
+func NewSetIssuanceProfileInvariantViolationResponseBody(res *goa.ServiceError) *SetIssuanceProfileInvariantViolationResponseBody {
+	body := &SetIssuanceProfileInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIssuanceProfileUnexpectedResponseBody builds the HTTP response body
+// from the result of the "setIssuanceProfile" endpoint of the "authClients"
+// service.
+func NewSetIssuanceProfileUnexpectedResponseBody(res *goa.ServiceError) *SetIssuanceProfileUnexpectedResponseBody {
+	body := &SetIssuanceProfileUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetIssuanceProfileGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "setIssuanceProfile" endpoint of the "authClients"
+// service.
+func NewSetIssuanceProfileGatewayErrorResponseBody(res *goa.ServiceError) *SetIssuanceProfileGatewayErrorResponseBody {
+	body := &SetIssuanceProfileGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuanceProfileUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "deleteIssuanceProfile" endpoint of the
+// "authClients" service.
+func NewDeleteIssuanceProfileUnauthorizedResponseBody(res *goa.ServiceError) *DeleteIssuanceProfileUnauthorizedResponseBody {
+	body := &DeleteIssuanceProfileUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuanceProfileForbiddenResponseBody builds the HTTP response body
+// from the result of the "deleteIssuanceProfile" endpoint of the "authClients"
+// service.
+func NewDeleteIssuanceProfileForbiddenResponseBody(res *goa.ServiceError) *DeleteIssuanceProfileForbiddenResponseBody {
+	body := &DeleteIssuanceProfileForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuanceProfileBadRequestResponseBody builds the HTTP response body
+// from the result of the "deleteIssuanceProfile" endpoint of the "authClients"
+// service.
+func NewDeleteIssuanceProfileBadRequestResponseBody(res *goa.ServiceError) *DeleteIssuanceProfileBadRequestResponseBody {
+	body := &DeleteIssuanceProfileBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuanceProfileNotFoundResponseBody builds the HTTP response body
+// from the result of the "deleteIssuanceProfile" endpoint of the "authClients"
+// service.
+func NewDeleteIssuanceProfileNotFoundResponseBody(res *goa.ServiceError) *DeleteIssuanceProfileNotFoundResponseBody {
+	body := &DeleteIssuanceProfileNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuanceProfileConflictResponseBody builds the HTTP response body
+// from the result of the "deleteIssuanceProfile" endpoint of the "authClients"
+// service.
+func NewDeleteIssuanceProfileConflictResponseBody(res *goa.ServiceError) *DeleteIssuanceProfileConflictResponseBody {
+	body := &DeleteIssuanceProfileConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuanceProfileUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "deleteIssuanceProfile" endpoint of the
+// "authClients" service.
+func NewDeleteIssuanceProfileUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteIssuanceProfileUnsupportedMediaResponseBody {
+	body := &DeleteIssuanceProfileUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuanceProfileInvalidResponseBody builds the HTTP response body
+// from the result of the "deleteIssuanceProfile" endpoint of the "authClients"
+// service.
+func NewDeleteIssuanceProfileInvalidResponseBody(res *goa.ServiceError) *DeleteIssuanceProfileInvalidResponseBody {
+	body := &DeleteIssuanceProfileInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuanceProfileInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "deleteIssuanceProfile" endpoint of the
+// "authClients" service.
+func NewDeleteIssuanceProfileInvariantViolationResponseBody(res *goa.ServiceError) *DeleteIssuanceProfileInvariantViolationResponseBody {
+	body := &DeleteIssuanceProfileInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuanceProfileUnexpectedResponseBody builds the HTTP response body
+// from the result of the "deleteIssuanceProfile" endpoint of the "authClients"
+// service.
+func NewDeleteIssuanceProfileUnexpectedResponseBody(res *goa.ServiceError) *DeleteIssuanceProfileUnexpectedResponseBody {
+	body := &DeleteIssuanceProfileUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteIssuanceProfileGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "deleteIssuanceProfile" endpoint of the
+// "authClients" service.
+func NewDeleteIssuanceProfileGatewayErrorResponseBody(res *goa.ServiceError) *DeleteIssuanceProfileGatewayErrorResponseBody {
+	body := &DeleteIssuanceProfileGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3331,12 +6179,135 @@ func NewUpdateAuthClientPayload(body *UpdateAuthClientRequestBody, sessionToken 
 	return v
 }
 
+// NewCreateAuthClientPayload builds a authClients service createAuthClient
+// endpoint payload.
+func NewCreateAuthClientPayload(body *CreateAuthClientRequestBody, sessionToken *string, apikeyToken *string) *authclients.CreateAuthClientPayload {
+	v := &authclients.CreateAuthClientPayload{
+		ClientType:            *body.ClientType,
+		Name:                  *body.Name,
+		ProjectID:             body.ProjectID,
+		RemoteSessionClientID: body.RemoteSessionClientID,
+	}
+	if body.Headers != nil {
+		v.Headers = make([]*authclients.AuthClientHeaderInput, len(body.Headers))
+		for i, val := range body.Headers {
+			if val == nil {
+				v.Headers[i] = nil
+				continue
+			}
+			v.Headers[i] = unmarshalAuthClientHeaderInputRequestBodyToAuthclientsAuthClientHeaderInput(val)
+		}
+	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewAttachAuthClientToMcpServerPayload builds a authClients service
+// attachAuthClientToMcpServer endpoint payload.
+func NewAttachAuthClientToMcpServerPayload(body *AttachAuthClientToMcpServerRequestBody, sessionToken *string, apikeyToken *string) *authclients.AttachAuthClientToMcpServerPayload {
+	v := &authclients.AttachAuthClientToMcpServerPayload{
+		ID:          *body.ID,
+		McpServerID: *body.McpServerID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewSetAuthClientHeadersPayload builds a authClients service
+// setAuthClientHeaders endpoint payload.
+func NewSetAuthClientHeadersPayload(body *SetAuthClientHeadersRequestBody, sessionToken *string, apikeyToken *string) *authclients.SetAuthClientHeadersPayload {
+	v := &authclients.SetAuthClientHeadersPayload{
+		ID: *body.ID,
+	}
+	v.Headers = make([]*authclients.AuthClientHeaderInput, len(body.Headers))
+	for i, val := range body.Headers {
+		if val == nil {
+			v.Headers[i] = nil
+			continue
+		}
+		v.Headers[i] = unmarshalAuthClientHeaderInputRequestBodyToAuthclientsAuthClientHeaderInput(val)
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
 // NewDetachAuthClientFromMcpServerPayload builds a authClients service
 // detachAuthClientFromMcpServer endpoint payload.
 func NewDetachAuthClientFromMcpServerPayload(body *DetachAuthClientFromMcpServerRequestBody, sessionToken *string, apikeyToken *string) *authclients.DetachAuthClientFromMcpServerPayload {
 	v := &authclients.DetachAuthClientFromMcpServerPayload{
 		ID:          *body.ID,
 		McpServerID: *body.McpServerID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesPayload builds a authClients service
+// listMcpServerAuthClientChoices endpoint payload.
+func NewListMcpServerAuthClientChoicesPayload(mcpServerID string, sessionToken *string, apikeyToken *string) *authclients.ListMcpServerAuthClientChoicesPayload {
+	v := &authclients.ListMcpServerAuthClientChoicesPayload{}
+	v.McpServerID = mcpServerID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewListIssuanceProfilesPayload builds a authClients service
+// listIssuanceProfiles endpoint payload.
+func NewListIssuanceProfilesPayload(userSessionIssuerID string, sessionToken *string, apikeyToken *string) *authclients.ListIssuanceProfilesPayload {
+	v := &authclients.ListIssuanceProfilesPayload{}
+	v.UserSessionIssuerID = userSessionIssuerID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewSetIssuanceProfilePayload builds a authClients service setIssuanceProfile
+// endpoint payload.
+func NewSetIssuanceProfilePayload(body *SetIssuanceProfileRequestBody, sessionToken *string, apikeyToken *string) *authclients.SetIssuanceProfilePayload {
+	v := &authclients.SetIssuanceProfilePayload{
+		UserSessionIssuerID: *body.UserSessionIssuerID,
+		UserSessionClientID: body.UserSessionClientID,
+		WorkloadIssuerID:    body.WorkloadIssuerID,
+		WorkloadSubject:     body.WorkloadSubject,
+		Name:                *body.Name,
+		McpServerID:         body.McpServerID,
+	}
+	v.Choices = make([]*types.IssuanceProfileChoice, len(body.Choices))
+	for i, val := range body.Choices {
+		if val == nil {
+			v.Choices[i] = nil
+			continue
+		}
+		v.Choices[i] = unmarshalIssuanceProfileChoiceRequestBodyToTypesIssuanceProfileChoice(val)
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewDeleteIssuanceProfilePayload builds a authClients service
+// deleteIssuanceProfile endpoint payload.
+func NewDeleteIssuanceProfilePayload(body *DeleteIssuanceProfileRequestBody, sessionToken *string, apikeyToken *string) *authclients.DeleteIssuanceProfilePayload {
+	v := &authclients.DeleteIssuanceProfilePayload{
+		ID: *body.ID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -3417,6 +6388,84 @@ func ValidateUpdateAuthClientRequestBody(body *UpdateAuthClientRequestBody) (err
 	return
 }
 
+// ValidateCreateAuthClientRequestBody runs the validations defined on
+// CreateAuthClientRequestBody
+func ValidateCreateAuthClientRequestBody(body *CreateAuthClientRequestBody) (err error) {
+	if body.ClientType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_type", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ClientType != nil {
+		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through"}))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.RemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_client_id", *body.RemoteSessionClientID, goa.FormatUUID))
+	}
+	for _, e := range body.Headers {
+		if e != nil {
+			if err2 := ValidateAuthClientHeaderInputRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateAttachAuthClientToMcpServerRequestBody runs the validations defined
+// on AttachAuthClientToMcpServerRequestBody
+func ValidateAttachAuthClientToMcpServerRequestBody(body *AttachAuthClientToMcpServerRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSetAuthClientHeadersRequestBody runs the validations defined on
+// SetAuthClientHeadersRequestBody
+func ValidateSetAuthClientHeadersRequestBody(body *SetAuthClientHeadersRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Headers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	for _, e := range body.Headers {
+		if e != nil {
+			if err2 := ValidateAuthClientHeaderInputRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateDetachAuthClientFromMcpServerRequestBody runs the validations
 // defined on DetachAuthClientFromMcpServerRequestBody
 func ValidateDetachAuthClientFromMcpServerRequestBody(body *DetachAuthClientFromMcpServerRequestBody) (err error) {
@@ -3431,6 +6480,70 @@ func ValidateDetachAuthClientFromMcpServerRequestBody(body *DetachAuthClientFrom
 	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSetIssuanceProfileRequestBody runs the validations defined on
+// SetIssuanceProfileRequestBody
+func ValidateSetIssuanceProfileRequestBody(body *SetIssuanceProfileRequestBody) (err error) {
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Choices == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("choices", "body"))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.UserSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_client_id", *body.UserSessionClientID, goa.FormatUUID))
+	}
+	if body.WorkloadIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.workload_issuer_id", *body.WorkloadIssuerID, goa.FormatUUID))
+	}
+	if body.WorkloadSubject != nil {
+		if utf8.RuneCountInString(*body.WorkloadSubject) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.workload_subject", *body.WorkloadSubject, utf8.RuneCountInString(*body.WorkloadSubject), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 100, false))
+		}
+	}
+	if len(body.Choices) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.choices", body.Choices, len(body.Choices), 100, false))
+	}
+	for _, e := range body.Choices {
+		if e != nil {
+			if err2 := ValidateIssuanceProfileChoiceRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateDeleteIssuanceProfileRequestBody runs the validations defined on
+// DeleteIssuanceProfileRequestBody
+func ValidateDeleteIssuanceProfileRequestBody(body *DeleteIssuanceProfileRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }
@@ -3471,6 +6584,35 @@ func ValidateSetAuthClientAudienceRequestBody(body *SetAuthClientAudienceRequest
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateAuthClientHeaderInputRequestBody runs the validations defined on
+// AuthClientHeaderInputRequestBody
+func ValidateAuthClientHeaderInputRequestBody(body *AuthClientHeaderInputRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	return
+}
+
+// ValidateIssuanceProfileChoiceRequestBody runs the validations defined on
+// IssuanceProfileChoiceRequestBody
+func ValidateIssuanceProfileChoiceRequestBody(body *IssuanceProfileChoiceRequestBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.AuthClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
 	}
 	return
 }

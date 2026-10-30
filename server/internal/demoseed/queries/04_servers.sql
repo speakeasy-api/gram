@@ -745,7 +745,7 @@ INSERT INTO mcp_auth_clients
   (id, organization_id, project_id, client_type, source, name,
    remote_session_client_id, client_attachment_scope)
 SELECT @id::uuid, @org_id::text, @project_id::uuid, @client_type::text,
-       'backfill', @name::text, c.id, c.attachment_scope
+       @source::text, @name::text, c.id, c.attachment_scope
 FROM (SELECT 1) AS one
 LEFT JOIN remote_session_clients AS c
   ON c.id = sqlc.narg(remote_session_client_id)::uuid;
@@ -758,12 +758,19 @@ VALUES
   (@id::uuid, @auth_client_id::uuid, @org_id::text, @name::text, TRUE,
    @value::text);
 
+-- name: ServersInsertAuthClientForwardedHeader :exec
+INSERT INTO mcp_auth_client_headers
+  (id, auth_client_id, organization_id, name, is_required, value_from_request_header)
+VALUES
+  (@id::uuid, @auth_client_id::uuid, @org_id::text, @name::text, TRUE,
+   @value_from_request_header::text);
+
 -- name: ServersInsertServerAuthClient :exec
 INSERT INTO mcp_server_auth_clients
   (id, project_id, organization_id, mcp_server_id, auth_client_id,
    client_attachment_scope, source)
 SELECT @id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
-       ac.id, ac.attachment_scope, 'backfill'
+       ac.id, ac.attachment_scope, ac.source
 FROM mcp_auth_clients AS ac
 WHERE ac.id = @auth_client_id::uuid;
 
@@ -786,6 +793,67 @@ FROM (VALUES
 ) AS v(id, slug, scope)
 JOIN organization_roles r
   ON r.organization_id = @org_id::text AND r.workos_slug = v.slug;
+
+-- An app that signs in to Linear without a browser, so it cannot pick a
+-- credential on the consent screen.
+-- name: ServersInsertHeadlessClient :exec
+INSERT INTO user_session_clients
+  (id, project_id, organization_id, user_session_issuer_id, client_id,
+   client_secret_hash, client_name, redirect_uris, client_id_issued_at,
+   token_endpoint_auth_method)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text, @issuer_id::uuid,
+   'gram_demo_client_nightly_report', NULL, 'Nightly report job',
+   ARRAY[]::text[], now() - interval '6 days', 'none');
+
+-- The credential the headless app's sessions use on one server.
+-- name: ServersInsertIssuanceProfile :exec
+INSERT INTO issuance_selection_profiles
+  (id, organization_id, project_id, user_session_issuer_id,
+   user_session_client_id, name)
+VALUES
+  (@id::uuid, @org_id::text, @project_id::uuid, @issuer_id::uuid,
+   @client_id::uuid, @name::text);
+
+-- name: ServersInsertIssuanceProfileChoice :exec
+INSERT INTO upstream_client_selections
+  (id, project_id, organization_id, credential_kind, credential_id,
+   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
+   auth_client_id, auth_client_attachment_scope, source)
+SELECT @id::uuid, @project_id::uuid, @org_id::text, 'issuance_profile',
+       @profile_id::uuid, @mcp_server_id::uuid, ac.remote_session_client_id,
+       NULL, FALSE, ac.id, ac.attachment_scope, 'issuance'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = @auth_client_id::uuid AND ac.organization_id = @org_id::text;
+
+-- name: ServersAttachAssistantServer :exec
+INSERT INTO assistant_mcp_servers (id, assistant_id, mcp_server_id, project_id)
+VALUES (@id::uuid, @assistant_id::uuid, @mcp_server_id::uuid, @project_id::uuid);
+
+-- The upstream credential an administrator chose for an assistant's turns
+-- under one root trigger and execution context, as version 1 of its profile.
+-- name: ServersInsertExecutionProfile :exec
+INSERT INTO execution_selection_profiles
+  (id, organization_id, project_id, assistant_id, trigger_instance_id, execution_context)
+VALUES
+  (@id::uuid, @org_id::text, @project_id::uuid, @assistant_id::uuid,
+   @trigger_instance_id::uuid, @execution_context::text);
+
+-- name: ServersInsertExecutionProfileVersion :exec
+INSERT INTO execution_selection_profile_versions
+  (id, profile_id, organization_id, project_id, version, source)
+VALUES (@id::uuid, @profile_id::uuid, @org_id::text, @project_id::uuid, 1, 'admin');
+
+-- name: ServersInsertExecutionProfileChoice :exec
+INSERT INTO upstream_client_selections
+  (id, project_id, organization_id, credential_kind, credential_id,
+   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
+   auth_client_id, auth_client_attachment_scope, source)
+SELECT @id::uuid, @project_id::uuid, @org_id::text, 'execution_profile_version',
+       @version_id::uuid, @mcp_server_id::uuid, ac.remote_session_client_id,
+       NULL, FALSE, ac.id, ac.attachment_scope, 'admin'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = @auth_client_id::uuid AND ac.organization_id = @org_id::text;
 
 -- name: ServersInsertOrganizationGatewayClient :exec
 INSERT INTO user_session_clients

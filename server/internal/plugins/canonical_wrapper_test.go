@@ -34,13 +34,13 @@ func TestPluginsService_PublishPlugins_CanonicalWrapperWinsOverOtherToolsetServe
 	})
 	require.NoError(t, err)
 	_, err = servers.CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID: toolset.ID, ProjectID: *ac.ProjectID, Name: conv.ToPGText(toolset.Name), Slug: toolset.McpSlug,
+		ID: toolset.ID, ProjectID: *ac.ProjectID, Name: conv.ToPGText(toolset.Name), Slug: conv.ToPGText(toolset.Slug),
 		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "private",
 		NetworkAccessMode: pgtype.Text{String: "private_only", Valid: true},
 	})
 	require.NoError(t, err)
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
-		ProjectID: *ac.ProjectID, McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Slug: toolset.McpSlug.String,
+		ProjectID: *ac.ProjectID, McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Slug: toolset.Slug,
 	})
 	require.NoError(t, err)
 	require.NoError(t, testrepo.New(ti.conn).InsertNetworkIngressFixture(ctx, testrepo.InsertNetworkIngressFixtureParams{
@@ -62,5 +62,5 @@ func TestPluginsService_PublishPlugins_CanonicalWrapperWinsOverOtherToolsetServe
 		} `json:"mcpServers"`
 	}
 	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"], &config))
-	require.Equal(t, "https://tail.example/mcp/"+url.PathEscape(toolset.McpSlug.String), config.MCPServers["Hosted"].URL)
+	require.Equal(t, "https://tail.example/mcp/"+url.PathEscape(toolset.Slug), config.MCPServers["Hosted"].URL)
 }

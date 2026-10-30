@@ -102,6 +102,10 @@ vi.mock("@/contexts/Sdk", () => ({
   }),
 }));
 
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org-1" }),
+}));
+
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => mocks.rbac(),
 }));
@@ -678,7 +682,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       ),
     ).toBeDefined();
     expect(
-      screen.getByRole("radio", { name: /Service Account/ }),
+      screen.getByRole("radio", { name: /Shared credential/ }),
     ).toBeDefined();
     expect(
       screen.getByRole("radio", {
@@ -1885,7 +1889,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     // visible for cleanup rather than forbidding the move.
     expect(
       screen
-        .getByRole("radio", { name: /Service Account/ })
+        .getByRole("radio", { name: /Shared credential/ })
         .getAttribute("aria-checked"),
     ).toBe("true");
     expect(
@@ -2740,7 +2744,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
   it("previews the Authorization header without revealing the credential", async () => {
     const { container } = renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Shared credential/ }));
 
     const input = screen.getByLabelText("Token");
     fireEvent.change(input, { target: { value: "bearer-secret-value" } });
@@ -2770,7 +2774,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
   it("labels Basic and Manual credential inputs without exposing their values", () => {
     const { container } = renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Shared credential/ }));
     fireEvent.click(staticFormat("Basic"));
 
     fireEvent.change(screen.getByLabelText("Username"), {
@@ -2831,7 +2835,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
   it("keeps password managers out of the credential fields", () => {
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Shared credential/ }));
     fireEvent.click(staticFormat("Basic"));
 
     // A username next to a password is exactly the shape a manager treats as a
@@ -2854,11 +2858,11 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
   it("keeps Signing Client visible but unselectable without KMS", () => {
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Shared credential/ }));
 
     expect(screen.getByText("Requires KMS")).toBeDefined();
     const signingKey = within(
-      screen.getByRole("radiogroup", { name: "OAuth credential" }),
+      screen.getByRole("radiogroup", { name: "Service account" }),
     ).getByRole("radio", { name: /^Signing Client/ }) as HTMLButtonElement;
     expect(signingKey.disabled).toBe(true);
     // Still on Bearer: the option advertises KMS signing, it does not switch.
@@ -2891,10 +2895,46 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       (
         screen.getByRole("radio", {
-          name: /Service Account/,
+          name: /Shared credential/,
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
+  });
+
+  it("leaves an organization client on an organization-wide issuer editable for an organization admin", () => {
+    mocks.hasScope.mockImplementation(
+      (scope: string, resourceId?: string) =>
+        resourceId === "mcp-server-1" ||
+        (scope === "org:admin" && resourceId === "org-1"),
+    );
+    mocks.userSessionIssuer.mockReturnValue({
+      data: { id: "user-session-issuer-1", projectId: "" },
+    });
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "org-client",
+          projectId: "",
+          remoteSessionIssuerId: "provider-1",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderIdentity();
+
+    expect(screen.queryByText(/shared by every project/i)).toBeNull();
+    expect(
+      (
+        screen.getByRole("radio", {
+          name: /Shared credential/,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
   });
 
   it("locks identity only when an organization-wide issuer holds an organization client", () => {
@@ -2929,7 +2969,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       (
         screen.getByRole("radio", {
-          name: /Service Account/,
+          name: /Shared credential/,
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -2955,7 +2995,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       (
         screen.getByRole("radio", {
-          name: /Service Account/,
+          name: /Shared credential/,
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(false);
@@ -3010,11 +3050,11 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       (
         screen.getByRole("radio", {
-          name: /Service Account/,
+          name: /Shared credential/,
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
-    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Shared credential/ }));
     expect(screen.queryByLabelText("Token")).toBeNull();
   });
 
@@ -3037,7 +3077,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       (
         screen.getByRole("radio", {
-          name: /Service Account/,
+          name: /Shared credential/,
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -3207,10 +3247,10 @@ describe("RemoteMcpIdentitySectionBody", () => {
     connectClient();
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Shared credential/ }));
     fireEvent.click(
       within(
-        screen.getByRole("radiogroup", { name: "OAuth credential" }),
+        screen.getByRole("radiogroup", { name: "Service account" }),
       ).getByRole("radio", { name: /^Client Secret/ }),
     );
     addCustomHeader("X-Team", "platform");
@@ -3267,7 +3307,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     renderIdentity();
     fireEvent.click(
       within(
-        screen.getByRole("radiogroup", { name: "OAuth credential" }),
+        screen.getByRole("radiogroup", { name: "Service account" }),
       ).getByRole("radio", { name: /^Client Secret/ }),
     );
     addCustomHeader("X-Team", "platform");
@@ -3639,7 +3679,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
 
       renderIdentity();
-      fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
+      fireEvent.click(screen.getByRole("radio", { name: /Shared credential/ }));
 
       expect(screen.queryByText("Requested at sign-in")).toBeNull();
       expect(
@@ -3839,7 +3879,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect(
         (
           screen.getByRole("radio", {
-            name: /Service Account/,
+            name: /Shared credential/,
           }) as HTMLButtonElement
         ).disabled,
       ).toBe(true);

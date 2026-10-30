@@ -151,6 +151,18 @@ const (
 	// of its stop control is unknown.
 	FlagMCPResearchKill Flag = "gram-mcp-research-kill"
 
+	// FlagSkillsOverMCP gates serving managed skills over MCP (the
+	// `io.modelcontextprotocol/skills` extension) end to end with one key:
+	// the hosted and platform toolset surfaces advertise the extension,
+	// answer `skills/list` and `skills/get`, and serve `skill://` resources
+	// only for organizations with it, and the dashboard shows the matching
+	// MCP serving hints behind the same key. Off, the extension is absent
+	// from capabilities, its methods answer method-not-found, and
+	// `skill://` reads are not found. Targeted by PostHog
+	// organization group (org slug), like FlagBudgets. A rollout gate while
+	// client support matures; removed once the extension is GA.
+	FlagSkillsOverMCP Flag = "skills-over-mcp"
+
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its
 	// PAYLOAD, not its boolean state: the flag carries a JSON payload
@@ -239,6 +251,14 @@ const (
 	// person properties, so a harness joins or leaves the treatment by editing
 	// a condition. Fails closed to the full catalogue.
 	FlagPlatformMCPDiscoveryMode Flag = "platform-mcp-discovery-mode"
+
+	// FlagPlatformMCPGatewayProxy lets a Platform MCP connection use the
+	// person's own MCP servers through list_my_servers, search_my_tools,
+	// describe_tools and execute_tool, which run the organization gateway's
+	// tools as that person, and names those servers in the connection's
+	// instructions. Evaluated server-side on every call with the organization
+	// ID as distinct ID. Off, unavailable or failing, the tools refuse.
+	FlagPlatformMCPGatewayProxy Flag = "platform-mcp-gateway-proxy"
 )
 
 // Variants of FlagPlatformMCPDiscoveryMode. Anything else — no variant, an

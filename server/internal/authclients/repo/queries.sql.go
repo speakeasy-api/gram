@@ -12,6 +12,295 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const attachAuthClientToServer = `-- name: AttachAuthClientToServer :one
+INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+SELECT ms.project_id, ac.organization_id, ms.id, ac.id, ac.attachment_scope, 'admin'
+FROM mcp_auth_clients ac
+JOIN mcp_servers ms
+  ON ms.id = $1
+ AND ms.deleted IS FALSE
+ AND (ac.project_id IS NULL OR ac.project_id = ms.project_id)
+JOIN projects p
+  ON p.id = ms.project_id
+ AND p.organization_id = ac.organization_id
+ AND p.deleted IS FALSE
+WHERE ac.id = $2
+  AND ac.organization_id = $3
+  AND ac.deleted IS FALSE
+ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO NOTHING
+RETURNING id
+`
+
+type AttachAuthClientToServerParams struct {
+	McpServerID    uuid.UUID
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+// Offers the client on the server as an administrator-owned association. An
+// existing live association is kept as it is.
+func (q *Queries) AttachAuthClientToServer(ctx context.Context, arg AttachAuthClientToServerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, attachAuthClientToServer, arg.McpServerID, arg.AuthClientID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const clearIssuanceProfileChoices = `-- name: ClearIssuanceProfileChoices :exec
+UPDATE upstream_client_selections
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE credential_kind = 'issuance_profile'
+  AND credential_id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+`
+
+type ClearIssuanceProfileChoicesParams struct {
+	ProfileID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ClearIssuanceProfileChoices(ctx context.Context, arg ClearIssuanceProfileChoicesParams) error {
+	_, err := q.db.Exec(ctx, clearIssuanceProfileChoices, arg.ProfileID, arg.OrganizationID)
+	return err
+}
+
+const clearIssuanceProfileServerChoice = `-- name: ClearIssuanceProfileServerChoice :exec
+UPDATE upstream_client_selections
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE credential_kind = 'issuance_profile'
+  AND credential_id = $1
+  AND mcp_server_id = $2
+  AND organization_id = $3
+  AND deleted IS FALSE
+`
+
+type ClearIssuanceProfileServerChoiceParams struct {
+	ProfileID      uuid.UUID
+	McpServerID    uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ClearIssuanceProfileServerChoice(ctx context.Context, arg ClearIssuanceProfileServerChoiceParams) error {
+	_, err := q.db.Exec(ctx, clearIssuanceProfileServerChoice, arg.ProfileID, arg.McpServerID, arg.OrganizationID)
+	return err
+}
+
+const createAuthClient = `-- name: CreateAuthClient :one
+INSERT INTO mcp_auth_clients (
+  organization_id,
+  project_id,
+  client_type,
+  source,
+  name,
+  created_by_user_id,
+  remote_session_client_id,
+  client_attachment_scope
+) VALUES (
+  $1,
+  $2::uuid,
+  $3,
+  'admin',
+  $4,
+  $5,
+  $6::uuid,
+  $7::text
+)
+RETURNING id, organization_id, project_id, attachment_scope, client_type, source, name, enabled, created_by_user_id, remote_session_client_id, client_attachment_scope, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateAuthClientParams struct {
+	OrganizationID        string
+	ProjectID             uuid.NullUUID
+	ClientType            string
+	Name                  string
+	CreatedByUserID       pgtype.Text
+	RemoteSessionClientID uuid.NullUUID
+	ClientAttachmentScope pgtype.Text
+}
+
+func (q *Queries) CreateAuthClient(ctx context.Context, arg CreateAuthClientParams) (McpAuthClient, error) {
+	row := q.db.QueryRow(ctx, createAuthClient,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ClientType,
+		arg.Name,
+		arg.CreatedByUserID,
+		arg.RemoteSessionClientID,
+		arg.ClientAttachmentScope,
+	)
+	var i McpAuthClient
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AttachmentScope,
+		&i.ClientType,
+		&i.Source,
+		&i.Name,
+		&i.Enabled,
+		&i.CreatedByUserID,
+		&i.RemoteSessionClientID,
+		&i.ClientAttachmentScope,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const createAuthClientHeader = `-- name: CreateAuthClientHeader :exec
+INSERT INTO mcp_auth_client_headers (
+  auth_client_id,
+  organization_id,
+  name,
+  description,
+  is_required,
+  is_secret,
+  value,
+  value_from_request_header
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7,
+  $8
+)
+`
+
+type CreateAuthClientHeaderParams struct {
+	AuthClientID           uuid.UUID
+	OrganizationID         string
+	Name                   string
+	Description            pgtype.Text
+	IsRequired             bool
+	IsSecret               bool
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+}
+
+func (q *Queries) CreateAuthClientHeader(ctx context.Context, arg CreateAuthClientHeaderParams) error {
+	_, err := q.db.Exec(ctx, createAuthClientHeader,
+		arg.AuthClientID,
+		arg.OrganizationID,
+		arg.Name,
+		arg.Description,
+		arg.IsRequired,
+		arg.IsSecret,
+		arg.Value,
+		arg.ValueFromRequestHeader,
+	)
+	return err
+}
+
+const createIssuanceProfile = `-- name: CreateIssuanceProfile :one
+INSERT INTO issuance_selection_profiles (
+  organization_id,
+  project_id,
+  user_session_issuer_id,
+  user_session_client_id,
+  workload_issuer_id,
+  workload_subject,
+  name,
+  created_by_user_id
+) VALUES (
+  $1,
+  $2::uuid,
+  $3,
+  $4::uuid,
+  $5::uuid,
+  $6::text,
+  $7,
+  $8
+)
+RETURNING id, organization_id, project_id, user_session_issuer_id, user_session_client_id, workload_issuer_id, workload_subject, name, created_by_user_id, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateIssuanceProfileParams struct {
+	OrganizationID      string
+	ProjectID           uuid.NullUUID
+	UserSessionIssuerID uuid.UUID
+	UserSessionClientID uuid.NullUUID
+	WorkloadIssuerID    uuid.NullUUID
+	WorkloadSubject     pgtype.Text
+	Name                string
+	CreatedByUserID     pgtype.Text
+}
+
+func (q *Queries) CreateIssuanceProfile(ctx context.Context, arg CreateIssuanceProfileParams) (IssuanceSelectionProfile, error) {
+	row := q.db.QueryRow(ctx, createIssuanceProfile,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.UserSessionClientID,
+		arg.WorkloadIssuerID,
+		arg.WorkloadSubject,
+		arg.Name,
+		arg.CreatedByUserID,
+	)
+	var i IssuanceSelectionProfile
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.UserSessionClientID,
+		&i.WorkloadIssuerID,
+		&i.WorkloadSubject,
+		&i.Name,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const deleteAuthClientHeaders = `-- name: DeleteAuthClientHeaders :exec
+UPDATE mcp_auth_client_headers
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE auth_client_id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+`
+
+type DeleteAuthClientHeadersParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DeleteAuthClientHeaders(ctx context.Context, arg DeleteAuthClientHeadersParams) error {
+	_, err := q.db.Exec(ctx, deleteAuthClientHeaders, arg.AuthClientID, arg.OrganizationID)
+	return err
+}
+
+const deleteIssuanceProfile = `-- name: DeleteIssuanceProfile :exec
+UPDATE issuance_selection_profiles
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+`
+
+type DeleteIssuanceProfileParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DeleteIssuanceProfile(ctx context.Context, arg DeleteIssuanceProfileParams) error {
+	_, err := q.db.Exec(ctx, deleteIssuanceProfile, arg.ID, arg.OrganizationID)
+	return err
+}
+
 const detachAuthClientFromServer = `-- name: DetachAuthClientFromServer :one
 UPDATE mcp_server_auth_clients msac
 SET deleted_at = clock_timestamp(),
@@ -96,6 +385,66 @@ func (q *Queries) GetAuthClient(ctx context.Context, arg GetAuthClientParams) (M
 	return i, err
 }
 
+const getAuthClientRegistration = `-- name: GetAuthClientRegistration :one
+SELECT c.id,
+       c.attachment_scope,
+       c.credential_owner,
+       c.project_id,
+       c.organization_id
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS rsi
+  ON rsi.id = c.remote_session_issuer_id
+ AND rsi.deleted IS FALSE
+ AND (
+   (rsi.project_id IS NOT NULL AND rsi.project_id = $1::uuid)
+   OR (rsi.project_id IS NULL AND rsi.organization_id = $2::text)
+   OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL)
+ )
+WHERE c.id = $3
+  AND c.deleted IS FALSE
+  AND (
+    (c.project_id IS NOT NULL AND c.project_id = $1::uuid)
+    OR (c.project_id IS NULL AND c.organization_id = $2::text)
+    OR (c.project_id IS NULL AND c.organization_id IS NULL)
+  )
+  AND (c.project_id IS NULL OR EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.id = c.project_id
+      AND p.organization_id = $2::text
+      AND p.deleted IS FALSE
+  ))
+`
+
+type GetAuthClientRegistrationParams struct {
+	ProjectID      uuid.NullUUID
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+type GetAuthClientRegistrationRow struct {
+	ID              uuid.UUID
+	AttachmentScope pgtype.Text
+	CredentialOwner string
+	ProjectID       uuid.NullUUID
+	OrganizationID  pgtype.Text
+}
+
+// An OAuth registration a new remote_session or service_account client may
+// the organization, or platform-global.
+func (q *Queries) GetAuthClientRegistration(ctx context.Context, arg GetAuthClientRegistrationParams) (GetAuthClientRegistrationRow, error) {
+	row := q.db.QueryRow(ctx, getAuthClientRegistration, arg.ProjectID, arg.OrganizationID, arg.ID)
+	var i GetAuthClientRegistrationRow
+	err := row.Scan(
+		&i.ID,
+		&i.AttachmentScope,
+		&i.CredentialOwner,
+		&i.ProjectID,
+		&i.OrganizationID,
+	)
+	return i, err
+}
+
 const getOrganizationMCPServer = `-- name: GetOrganizationMCPServer :one
 SELECT
   ms.id,
@@ -142,6 +491,112 @@ func (q *Queries) GetOrganizationMCPServer(ctx context.Context, arg GetOrganizat
 		&i.ToolsetID,
 	)
 	return i, err
+}
+
+const getOrganizationProject = `-- name: GetOrganizationProject :one
+SELECT p.id
+FROM projects p
+WHERE p.id = $1
+  AND p.organization_id = $2
+  AND p.deleted IS FALSE
+`
+
+type GetOrganizationProjectParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetOrganizationProject(ctx context.Context, arg GetOrganizationProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getOrganizationProject, arg.ID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const getOrganizationUserSessionIssuer = `-- name: GetOrganizationUserSessionIssuer :one
+SELECT usi.id,
+       usi.project_id
+FROM user_session_issuers AS usi
+LEFT JOIN projects AS p
+  ON p.id = usi.project_id
+WHERE usi.id = $1
+  AND usi.deleted IS FALSE
+  AND (
+    (usi.project_id IS NULL AND usi.organization_id = $2::text)
+    OR (p.organization_id = $2::text AND p.deleted IS FALSE)
+  )
+`
+
+type GetOrganizationUserSessionIssuerParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type GetOrganizationUserSessionIssuerRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+// A sign-in in the organization: an organization issuer, or one of a live
+// project's.
+func (q *Queries) GetOrganizationUserSessionIssuer(ctx context.Context, arg GetOrganizationUserSessionIssuerParams) (GetOrganizationUserSessionIssuerRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationUserSessionIssuer, arg.ID, arg.OrganizationID)
+	var i GetOrganizationUserSessionIssuerRow
+	err := row.Scan(&i.ID, &i.ProjectID)
+	return i, err
+}
+
+const isOrganizationWorkloadIssuer = `-- name: IsOrganizationWorkloadIssuer :one
+SELECT EXISTS (
+  SELECT 1
+  FROM workload_issuers AS w
+  WHERE w.id = $1
+    AND w.organization_id = $2
+    AND w.deleted IS FALSE
+)::boolean AS is_issuer
+`
+
+type IsOrganizationWorkloadIssuerParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) IsOrganizationWorkloadIssuer(ctx context.Context, arg IsOrganizationWorkloadIssuerParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isOrganizationWorkloadIssuer, arg.ID, arg.OrganizationID)
+	var is_issuer bool
+	err := row.Scan(&is_issuer)
+	return is_issuer, err
+}
+
+const isUserSessionClientOfIssuer = `-- name: IsUserSessionClientOfIssuer :one
+SELECT EXISTS (
+  SELECT 1
+  FROM user_session_clients AS c
+  LEFT JOIN projects AS p
+    ON p.id = c.project_id
+  WHERE c.id = $1
+    AND c.user_session_issuer_id = $2
+    AND c.deleted IS FALSE
+    AND (
+      (c.project_id IS NULL AND c.organization_id = $3::text)
+      OR (p.organization_id = $3::text AND p.deleted IS FALSE)
+    )
+)::boolean AS is_client
+`
+
+type IsUserSessionClientOfIssuerParams struct {
+	ID                  uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+// A live client of the issuer, in the organization: its own, or one of a
+// live project's.
+func (q *Queries) IsUserSessionClientOfIssuer(ctx context.Context, arg IsUserSessionClientOfIssuerParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isUserSessionClientOfIssuer, arg.ID, arg.UserSessionIssuerID, arg.OrganizationID)
+	var is_client bool
+	err := row.Scan(&is_client)
+	return is_client, err
 }
 
 const listAuthClientHeaders = `-- name: ListAuthClientHeaders :many
@@ -267,6 +722,49 @@ func (q *Queries) ListAuthClientServers(ctx context.Context, arg ListAuthClientS
 	return items, nil
 }
 
+const listAuthClientStoredHeaders = `-- name: ListAuthClientStoredHeaders :many
+SELECT h.name,
+       h.is_secret,
+       h.value
+FROM mcp_auth_client_headers h
+WHERE h.auth_client_id = $1
+  AND h.organization_id = $2
+  AND h.deleted IS FALSE
+`
+
+type ListAuthClientStoredHeadersParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+type ListAuthClientStoredHeadersRow struct {
+	Name     string
+	IsSecret bool
+	Value    pgtype.Text
+}
+
+// A client's live headers with their stored values, for a writer that keeps a
+// secret's stored value when no new one is given. Values stay encrypted.
+func (q *Queries) ListAuthClientStoredHeaders(ctx context.Context, arg ListAuthClientStoredHeadersParams) ([]ListAuthClientStoredHeadersRow, error) {
+	rows, err := q.db.Query(ctx, listAuthClientStoredHeaders, arg.AuthClientID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuthClientStoredHeadersRow
+	for rows.Next() {
+		var i ListAuthClientStoredHeadersRow
+		if err := rows.Scan(&i.Name, &i.IsSecret, &i.Value); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAuthClients = `-- name: ListAuthClients :many
 SELECT ac.id, ac.organization_id, ac.project_id, ac.attachment_scope, ac.client_type, ac.source, ac.name, ac.enabled, ac.created_by_user_id, ac.remote_session_client_id, ac.client_attachment_scope, ac.created_at, ac.updated_at, ac.deleted_at, ac.deleted
 FROM mcp_auth_clients ac
@@ -346,6 +844,97 @@ func (q *Queries) ListAuthClients(ctx context.Context, arg ListAuthClientsParams
 	return items, nil
 }
 
+const listIssuanceProfileChoices = `-- name: ListIssuanceProfileChoices :many
+SELECT sel.credential_id AS profile_id,
+       sel.mcp_server_id,
+       sel.auth_client_id
+FROM upstream_client_selections AS sel
+WHERE sel.credential_kind = 'issuance_profile'
+  AND sel.credential_id = ANY($1::uuid[])
+  AND sel.organization_id = $2
+  AND sel.deleted IS FALSE
+ORDER BY sel.credential_id, sel.mcp_server_id
+`
+
+type ListIssuanceProfileChoicesParams struct {
+	ProfileIds     []uuid.UUID
+	OrganizationID string
+}
+
+type ListIssuanceProfileChoicesRow struct {
+	ProfileID    uuid.UUID
+	McpServerID  uuid.UUID
+	AuthClientID uuid.NullUUID
+}
+
+func (q *Queries) ListIssuanceProfileChoices(ctx context.Context, arg ListIssuanceProfileChoicesParams) ([]ListIssuanceProfileChoicesRow, error) {
+	rows, err := q.db.Query(ctx, listIssuanceProfileChoices, arg.ProfileIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIssuanceProfileChoicesRow
+	for rows.Next() {
+		var i ListIssuanceProfileChoicesRow
+		if err := rows.Scan(&i.ProfileID, &i.McpServerID, &i.AuthClientID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIssuanceProfiles = `-- name: ListIssuanceProfiles :many
+SELECT p.id, p.organization_id, p.project_id, p.user_session_issuer_id, p.user_session_client_id, p.workload_issuer_id, p.workload_subject, p.name, p.created_by_user_id, p.created_at, p.updated_at, p.deleted_at, p.deleted
+FROM issuance_selection_profiles AS p
+WHERE p.user_session_issuer_id = $1
+  AND p.organization_id = $2
+  AND p.deleted IS FALSE
+ORDER BY p.name, p.id
+`
+
+type ListIssuanceProfilesParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+func (q *Queries) ListIssuanceProfiles(ctx context.Context, arg ListIssuanceProfilesParams) ([]IssuanceSelectionProfile, error) {
+	rows, err := q.db.Query(ctx, listIssuanceProfiles, arg.UserSessionIssuerID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []IssuanceSelectionProfile
+	for rows.Next() {
+		var i IssuanceSelectionProfile
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.UserSessionIssuerID,
+			&i.UserSessionClientID,
+			&i.WorkloadIssuerID,
+			&i.WorkloadSubject,
+			&i.Name,
+			&i.CreatedByUserID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listServerAuthClients = `-- name: ListServerAuthClients :many
 SELECT ac.id, ac.organization_id, ac.project_id, ac.attachment_scope, ac.client_type, ac.source, ac.name, ac.enabled, ac.created_by_user_id, ac.remote_session_client_id, ac.client_attachment_scope, ac.created_at, ac.updated_at, ac.deleted_at, ac.deleted
 FROM mcp_server_auth_clients msac
@@ -400,6 +989,54 @@ func (q *Queries) ListServerAuthClients(ctx context.Context, arg ListServerAuthC
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockAttachableMCPServer = `-- name: LockAttachableMCPServer :one
+SELECT
+  ms.id,
+  ms.project_id,
+  ms.name,
+  ms.requires_upstream_auth,
+  (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS proxied,
+  (ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS tunneled
+FROM mcp_servers ms
+JOIN projects p
+  ON p.id = ms.project_id
+ AND p.organization_id = $1
+ AND p.deleted IS FALSE
+WHERE ms.id = $2
+  AND ms.deleted IS FALSE
+FOR UPDATE OF ms
+`
+
+type LockAttachableMCPServerParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+type LockAttachableMCPServerRow struct {
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	Name                 pgtype.Text
+	RequiresUpstreamAuth pgtype.Bool
+	Proxied              bool
+	Tunneled             bool
+}
+
+// A proxied (remote or tunneled) MCP server in the organization, locked so an
+// attachment serializes with SetMcpServerUpstreamAuthRequirement.
+func (q *Queries) LockAttachableMCPServer(ctx context.Context, arg LockAttachableMCPServerParams) (LockAttachableMCPServerRow, error) {
+	row := q.db.QueryRow(ctx, lockAttachableMCPServer, arg.OrganizationID, arg.ID)
+	var i LockAttachableMCPServerRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.RequiresUpstreamAuth,
+		&i.Proxied,
+		&i.Tunneled,
+	)
+	return i, err
 }
 
 const lockAuthClient = `-- name: LockAuthClient :one
@@ -496,6 +1133,107 @@ func (q *Queries) LockAuthClientServerRequirements(ctx context.Context, arg Lock
 	return items, nil
 }
 
+const lockIssuanceProfile = `-- name: LockIssuanceProfile :one
+SELECT p.id, p.organization_id, p.project_id, p.user_session_issuer_id, p.user_session_client_id, p.workload_issuer_id, p.workload_subject, p.name, p.created_by_user_id, p.created_at, p.updated_at, p.deleted_at, p.deleted
+FROM issuance_selection_profiles AS p
+WHERE p.id = $1
+  AND p.organization_id = $2
+  AND p.deleted IS FALSE
+FOR UPDATE OF p
+`
+
+type LockIssuanceProfileParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockIssuanceProfile(ctx context.Context, arg LockIssuanceProfileParams) (IssuanceSelectionProfile, error) {
+	row := q.db.QueryRow(ctx, lockIssuanceProfile, arg.ID, arg.OrganizationID)
+	var i IssuanceSelectionProfile
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.UserSessionClientID,
+		&i.WorkloadIssuerID,
+		&i.WorkloadSubject,
+		&i.Name,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const lockIssuanceProfileCaller = `-- name: LockIssuanceProfileCaller :exec
+SELECT pg_advisory_xact_lock(hashtextextended('issuance_selection_profiles:' || $1::text || ':' || $2::text, 0))
+`
+
+type LockIssuanceProfileCallerParams struct {
+	UserSessionIssuerID string
+	CallerKey           string
+}
+
+// Serializes writes to one caller's profile on one sign-in, including the
+// first, which has no row to lock yet.
+func (q *Queries) LockIssuanceProfileCaller(ctx context.Context, arg LockIssuanceProfileCallerParams) error {
+	_, err := q.db.Exec(ctx, lockIssuanceProfileCaller, arg.UserSessionIssuerID, arg.CallerKey)
+	return err
+}
+
+const lockIssuanceProfileForCaller = `-- name: LockIssuanceProfileForCaller :one
+SELECT p.id, p.organization_id, p.project_id, p.user_session_issuer_id, p.user_session_client_id, p.workload_issuer_id, p.workload_subject, p.name, p.created_by_user_id, p.created_at, p.updated_at, p.deleted_at, p.deleted
+FROM issuance_selection_profiles AS p
+WHERE p.user_session_issuer_id = $1
+  AND p.organization_id = $2
+  AND p.deleted IS FALSE
+  AND (
+    ($3::uuid IS NOT NULL AND p.user_session_client_id = $3::uuid)
+    OR ($4::uuid IS NOT NULL
+        AND p.workload_issuer_id = $4::uuid
+        AND p.workload_subject = $5::text)
+  )
+FOR UPDATE OF p
+`
+
+type LockIssuanceProfileForCallerParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+	UserSessionClientID uuid.NullUUID
+	WorkloadIssuerID    uuid.NullUUID
+	WorkloadSubject     pgtype.Text
+}
+
+func (q *Queries) LockIssuanceProfileForCaller(ctx context.Context, arg LockIssuanceProfileForCallerParams) (IssuanceSelectionProfile, error) {
+	row := q.db.QueryRow(ctx, lockIssuanceProfileForCaller,
+		arg.UserSessionIssuerID,
+		arg.OrganizationID,
+		arg.UserSessionClientID,
+		arg.WorkloadIssuerID,
+		arg.WorkloadSubject,
+	)
+	var i IssuanceSelectionProfile
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.UserSessionClientID,
+		&i.WorkloadIssuerID,
+		&i.WorkloadSubject,
+		&i.Name,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const lockOrganizationMCPServer = `-- name: LockOrganizationMCPServer :one
 SELECT
   ms.id,
@@ -541,6 +1279,43 @@ func (q *Queries) LockOrganizationMCPServer(ctx context.Context, arg LockOrganiz
 		&i.Visibility,
 		&i.RequiresUpstreamAuth,
 		&i.ToolsetID,
+	)
+	return i, err
+}
+
+const renameIssuanceProfile = `-- name: RenameIssuanceProfile :one
+UPDATE issuance_selection_profiles
+SET name = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, user_session_issuer_id, user_session_client_id, workload_issuer_id, workload_subject, name, created_by_user_id, created_at, updated_at, deleted_at, deleted
+`
+
+type RenameIssuanceProfileParams struct {
+	Name           string
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) RenameIssuanceProfile(ctx context.Context, arg RenameIssuanceProfileParams) (IssuanceSelectionProfile, error) {
+	row := q.db.QueryRow(ctx, renameIssuanceProfile, arg.Name, arg.ID, arg.OrganizationID)
+	var i IssuanceSelectionProfile
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.UserSessionClientID,
+		&i.WorkloadIssuerID,
+		&i.WorkloadSubject,
+		&i.Name,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }

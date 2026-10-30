@@ -696,16 +696,9 @@ func TestOrganizationUserSessionIssuerDeletePreflight(t *testing.T) {
 		Slug:                   "preflight-toolset",
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
-	_, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           siblingID,
-	})
-	require.NoError(t, err)
+	hostToolset(t, ctx, ti, toolset, uuid.NullUUID{UUID: issuerID, Valid: true})
 
 	serverID := uuid.New()
 	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{

@@ -191,7 +191,7 @@ func (h *MCPServerHealth) Series(ctx context.Context, target MCPServerTelemetryT
 func (h *MCPServerHealth) seriesBuckets(ctx context.Context, projectID, mcpServerID, toolsetSlug, toolsetSlugServerID string, from, to time.Time, intervalSeconds int64) ([]MCPServerSeriesPoint, error) {
 	buckets, err := h.chRepo.GetTimeSeriesMetrics(ctx, repo.GetTimeSeriesMetricsParams{
 		ExcludedHookSources: nil,
-		GramProjectID:       projectID,
+		GramProjectIDs:      []string{projectID},
 		TimeStart:           from.UnixNano(),
 		TimeEnd:             to.UnixNano(),
 		IntervalSeconds:     intervalSeconds,

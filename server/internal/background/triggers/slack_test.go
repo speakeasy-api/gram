@@ -95,6 +95,193 @@ func TestSlackHandleWebhookChallenge(t *testing.T) {
 	require.Equal(t, []byte("abc123"), result.Response.Body)
 }
 
+// smuggledSlackInteractionBody is valid JSON for a url_verification handshake
+// whose challenge string also form-decodes into a block_actions `payload`
+// field, with a trailing field absorbing the JSON suffix.
+func smuggledSlackInteractionBody() []byte {
+	payload := `{"type":"block_actions","api_app_id":"A1","team":{"id":"T1"},"user":{"id":"U_IMPERSONATED"},"channel":{"id":"C1"},"message":{"ts":"1700000001.000200","thread_ts":"1700000000.000100"},"actions":[{"action_id":"approve","block_id":"b1","value":"injected turn","type":"button"}]}`
+	return []byte(`{"type":"url_verification","challenge":"x&payload=` + url.QueryEscape(payload) + `&pad="}`)
+}
+
+func TestSlackSmuggledInteractionBodyDecodesAsInteraction(t *testing.T) {
+	t.Parallel()
+
+	body := smuggledSlackInteractionBody()
+
+	var probe slackEventRequest
+	require.NoError(t, json.Unmarshal(body, &probe))
+	require.Equal(t, "url_verification", probe.Type)
+	require.NotEmpty(t, probe.Challenge)
+
+	ingest, err := handleSlackInteraction(body)
+	require.NoError(t, err)
+	require.NotNil(t, ingest.Event)
+}
+
+func TestSlackRejectsUnsignedHandshakeWithFormContentType(t *testing.T) {
+	t.Parallel()
+
+	definition, ok := GetDefinition("slack")
+	require.True(t, ok)
+
+	config, err := definition.DecodeConfig(nil)
+	require.NoError(t, err)
+
+	body := smuggledSlackInteractionBody()
+
+	cases := []struct {
+		name    string
+		headers http.Header
+		env     map[string]string
+	}{
+		{
+			name:    "unsigned without signing secret",
+			headers: http.Header{"Content-Type": []string{"application/x-www-form-urlencoded"}},
+			env:     map[string]string{},
+		},
+		{
+			name:    "unsigned with signing secret",
+			headers: http.Header{"Content-Type": []string{"application/x-www-form-urlencoded"}},
+			env:     map[string]string{"SLACK_SIGNING_SECRET": "secret"},
+		},
+		{
+			name: "signed with wrong secret",
+			headers: func() http.Header {
+				headers := signedSlackHeaders(t, body, "attacker-secret")
+				headers.Set("Content-Type", "application/x-www-form-urlencoded; charset=utf-8")
+				return headers
+			}(),
+			env: map[string]string{"SLACK_SIGNING_SECRET": "secret"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := definition.AuthenticateWebhook(t.Context(), body, tc.headers, tc.env, config)
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestSlackHandshakeWithSmuggledInteractionAnswersChallengeOnly(t *testing.T) {
+	t.Parallel()
+
+	definition, ok := GetDefinition("slack")
+	require.True(t, ok)
+
+	config, err := definition.DecodeConfig(nil)
+	require.NoError(t, err)
+
+	body := smuggledSlackInteractionBody()
+	headers := http.Header{"Content-Type": []string{"application/json"}}
+
+	require.NoError(t, definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{}, config))
+
+	var probe slackEventRequest
+	require.NoError(t, json.Unmarshal(body, &probe))
+
+	result, err := definition.HandleWebhook(body, headers, config)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Nil(t, result.Event)
+	require.Nil(t, result.Task)
+	require.NotNil(t, result.Response)
+	require.Equal(t, []byte(probe.Challenge), result.Response.Body)
+}
+
+func TestSlackHandshakeRequiresJSONContentType(t *testing.T) {
+	t.Parallel()
+
+	definition, ok := GetDefinition("slack")
+	require.True(t, ok)
+
+	config, err := definition.DecodeConfig(nil)
+	require.NoError(t, err)
+
+	body := []byte(`{"type":"url_verification","challenge":"abc123"}`)
+
+	cases := []struct {
+		name        string
+		contentType string
+	}{
+		{name: "missing", contentType: ""},
+		{name: "text plain", contentType: "text/plain"},
+		{name: "form", contentType: "application/x-www-form-urlencoded"},
+		{name: "malformed", contentType: "application/json;;"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			headers := http.Header{}
+			if tc.contentType != "" {
+				headers.Set("Content-Type", tc.contentType)
+			}
+
+			err := definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{
+				"SLACK_SIGNING_SECRET": "secret",
+			}, config)
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestSlackHandleWebhookUnsignedChallengeWithCharset(t *testing.T) {
+	t.Parallel()
+
+	definition, ok := GetDefinition("slack")
+	require.True(t, ok)
+
+	config, err := definition.DecodeConfig(nil)
+	require.NoError(t, err)
+
+	body := []byte(`{"token":"t","type":"url_verification","challenge":"abc123"}`)
+	headers := http.Header{"Content-Type": []string{"Application/JSON; charset=utf-8"}}
+
+	require.NoError(t, definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{}, config))
+
+	result, err := definition.HandleWebhook(body, headers, config)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Nil(t, result.Event)
+	require.NotNil(t, result.Response)
+	require.Equal(t, http.StatusOK, result.Response.Status)
+	require.Equal(t, []byte("abc123"), result.Response.Body)
+}
+
+func TestSlackHandleWebhookRejectsUnsupportedContentType(t *testing.T) {
+	t.Parallel()
+
+	definition, ok := GetDefinition("slack")
+	require.True(t, ok)
+
+	config, err := definition.DecodeConfig(nil)
+	require.NoError(t, err)
+
+	body := []byte(`{"type":"event_callback","event_id":"Ev1","event":{"type":"message","channel":"C1","user":"U1","ts":"1.0","text":"hi"}}`)
+
+	for _, contentType := range []string{"", "text/plain"} {
+		t.Run(contentType, func(t *testing.T) {
+			t.Parallel()
+
+			headers := signedSlackHeaders(t, body, "secret")
+			headers.Del("Content-Type")
+			if contentType != "" {
+				headers.Set("Content-Type", contentType)
+			}
+
+			require.NoError(t, definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{
+				"SLACK_SIGNING_SECRET": "secret",
+			}, config))
+
+			result, err := definition.HandleWebhook(body, headers, config)
+			require.ErrorIs(t, err, ErrBadRequest)
+			require.Nil(t, result)
+		})
+	}
+}
+
 func TestSlackFilterMatchesEventTypeAndCEL(t *testing.T) {
 	t.Parallel()
 
@@ -501,6 +688,7 @@ func signedSlackHeaders(t *testing.T, body []byte, signingSecret string) http.He
 	require.NoError(t, err)
 
 	headers := http.Header{}
+	headers.Set("Content-Type", "application/json")
 	headers.Set("X-Slack-Request-Timestamp", timestamp)
 	headers.Set("X-Slack-Signature", "v0="+hex.EncodeToString(mac.Sum(nil)))
 	return headers

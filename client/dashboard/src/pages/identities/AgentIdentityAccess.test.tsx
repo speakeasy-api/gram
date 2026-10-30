@@ -130,6 +130,51 @@ describe("Agent profile permissions", () => {
       signal: expect.any(AbortSignal),
     });
   });
+  it("shows an org permission as the whole organization unless narrowed to a project", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "grant_sync",
+        scope: "org:device_agent_sync",
+        selector: { resourceKind: "org", resourceId: "*" },
+      },
+      {
+        id: "grant_hooks",
+        scope: "org:hooks_ingest",
+        selector: {
+          resourceKind: "org",
+          resourceId: "*",
+          projectId: "project_example",
+        },
+      },
+    ]);
+    setup();
+    expect(await screen.findByText("org:device_agent_sync")).toBeTruthy();
+    expect(screen.getAllByText("Whole organization")).toHaveLength(1);
+    expect(screen.getByText("All resources")).toBeTruthy();
+    expect(screen.getByText("Project: Example project")).toBeTruthy();
+  });
+  // A wildcard project constrains nothing; an empty one still narrows.
+  it.each([
+    ["*", "Whole organization", "All resources", 0],
+    ["", "All resources", "Whole organization", 1],
+  ])(
+    "labels an org permission on project %j as %s",
+    async (projectId, shown, hidden, projectConstraints) => {
+      mocks.list.mockResolvedValue([
+        {
+          id: "grant_hooks",
+          scope: "org:hooks_ingest",
+          selector: { resourceKind: "org", resourceId: "*", projectId },
+        },
+      ]);
+      setup();
+      expect(await screen.findByText(shown)).toBeTruthy();
+      expect(screen.queryByText(hidden)).toBeNull();
+      expect(screen.queryAllByText(/^Project:/)).toHaveLength(
+        projectConstraints,
+      );
+    },
+  );
   it("updates after saving permissions in Agent Identity", async () => {
     const client = setup();
     await screen.findByText("No permissions configured for this agent.");
@@ -152,6 +197,35 @@ describe("Agent profile permissions", () => {
     ).toBeTruthy();
     expect(
       screen.queryByText("No permissions configured for this agent."),
+    ).toBeNull();
+  });
+  it("saves permissions for an agent with a credential restriction", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "project_grant",
+        scope: "project:read",
+        effect: "allow",
+        selector: { resourceKind: "project", resourceId: "*" },
+      },
+      {
+        id: "credential_restriction",
+        scope: "mcp:blocked_auth",
+        effect: "allow",
+        selector: { resourceKind: "mcp_auth_client", resourceId: "client_one" },
+      },
+    ]);
+    setup();
+    await screen.findByText("project:read");
+    expect(screen.queryByText("mcp:blocked_auth")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Edit permissions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Edit permissions" }),
+      ).toBeNull(),
+    );
+    expect(
+      screen.queryByText(/Permissions changed while you were editing/),
     ).toBeNull();
   });
   it("does not claim the agent has no permissions when loading fails", async () => {

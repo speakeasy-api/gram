@@ -16,6 +16,7 @@ const proxyRegister = vi.fn();
 const createClient = vi.fn();
 const onOpenChange = vi.fn<(open: boolean) => void>();
 const customerManagedKeys = vi.fn();
+const goToClient = vi.fn();
 
 vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => isPlatformAdmin(),
@@ -51,7 +52,7 @@ vi.mock("@/pages/org/encryption-keys/jwks/CreateJsonWebKeySetSheet", () => ({
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
-    remoteIdentityProviders: { clientDetail: { goTo: vi.fn() } },
+    remoteIdentityProviders: { clientDetail: { goTo: goToClient } },
   }),
 }));
 vi.mock("@gram/client/react-query/_context.js", () => ({
@@ -70,9 +71,13 @@ vi.mock("@/contexts/Sdk", () => ({
   }),
 }));
 
-vi.mock("@/lib/proxyRegisterUpstreamClient", () => ({
-  proxyRegisterUpstreamClient: (...args: unknown[]) => proxyRegister(...args),
-}));
+vi.mock(
+  import("@/lib/proxyRegisterUpstreamClient"),
+  async (importOriginal) => ({
+    ...(await importOriginal()),
+    proxyRegisterUpstreamClient: (...args: unknown[]) => proxyRegister(...args),
+  }),
+);
 
 vi.mock("@gram/client/react-query/organizationRemoteSessionClients.js", () => ({
   invalidateAllOrganizationRemoteSessionClients: vi.fn(() => Promise.resolve()),
@@ -111,6 +116,10 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), warning: vi.fn() },
 }));
 
+import { toast } from "sonner";
+import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
+import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
+
 import { CreateRemoteSessionClientSheet } from "./CreateRemoteSessionClientSheet";
 
 beforeEach(() => {
@@ -145,6 +154,29 @@ describe("CreateRemoteSessionClientSheet", () => {
         }),
       );
     });
+    await waitFor(() =>
+      expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false),
+    );
+    expect(createClient).toHaveBeenCalledExactlyOnceWith({
+      createOrganizationRemoteSessionClientForm: expect.objectContaining({
+        remoteSessionIssuerId: "issuer-1",
+        clientId: "registered-client",
+        clientSecret: "registered-secret",
+        tokenEndpointAuthMethod: "client_secret_basic",
+      }),
+    });
+    expect(
+      invalidateAllOrganizationRemoteSessionClients,
+    ).toHaveBeenCalledExactlyOnceWith(expect.any(QueryClient), {
+      refetchType: "all",
+    });
+    expect(
+      invalidateAllOrganizationRemoteSessionIssuers,
+    ).toHaveBeenCalledExactlyOnceWith(expect.any(QueryClient), {
+      refetchType: "all",
+    });
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith("Client created");
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("offers Manual or CIMD instead of tunneled DCR to non-platform admins", () => {
@@ -188,6 +220,12 @@ describe("CreateRemoteSessionClientSheet", () => {
         }),
       });
     });
+    await waitFor(() =>
+      expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false),
+    );
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith("Client created");
+    expect(goToClient).toHaveBeenCalledExactlyOnceWith("issuer-1", "client-1");
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
 

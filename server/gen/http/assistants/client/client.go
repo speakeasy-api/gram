@@ -57,6 +57,14 @@ type Client struct {
 	// ensureManagedAssistant endpoint.
 	EnsureManagedAssistantDoer goahttp.Doer
 
+	// ListExecutionProfiles Doer is the HTTP client used to make requests to the
+	// listExecutionProfiles endpoint.
+	ListExecutionProfilesDoer goahttp.Doer
+
+	// SetExecutionProfileChoice Doer is the HTTP client used to make requests to
+	// the setExecutionProfileChoice endpoint.
+	SetExecutionProfileChoiceDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -77,21 +85,23 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListAssistantsDoer:           doer,
-		GetAssistantDoer:             doer,
-		CreateAssistantDoer:          doer,
-		UpgradeAssistantIdentityDoer: doer,
-		UpdateAssistantDoer:          doer,
-		DeleteAssistantDoer:          doer,
-		SendMessageDoer:              doer,
-		InterruptTurnDoer:            doer,
-		GetManagedAssistantDoer:      doer,
-		EnsureManagedAssistantDoer:   doer,
-		RestoreResponseBody:          restoreBody,
-		scheme:                       scheme,
-		host:                         host,
-		decoder:                      dec,
-		encoder:                      enc,
+		ListAssistantsDoer:            doer,
+		GetAssistantDoer:              doer,
+		CreateAssistantDoer:           doer,
+		UpgradeAssistantIdentityDoer:  doer,
+		UpdateAssistantDoer:           doer,
+		DeleteAssistantDoer:           doer,
+		SendMessageDoer:               doer,
+		InterruptTurnDoer:             doer,
+		GetManagedAssistantDoer:       doer,
+		EnsureManagedAssistantDoer:    doer,
+		ListExecutionProfilesDoer:     doer,
+		SetExecutionProfileChoiceDoer: doer,
+		RestoreResponseBody:           restoreBody,
+		scheme:                        scheme,
+		host:                          host,
+		decoder:                       dec,
+		encoder:                       enc,
 	}
 }
 
@@ -330,6 +340,54 @@ func (c *Client) EnsureManagedAssistant() goa.Endpoint {
 		resp, err := c.EnsureManagedAssistantDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("assistants", "ensureManagedAssistant", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListExecutionProfiles returns an endpoint that makes HTTP requests to the
+// assistants service listExecutionProfiles server.
+func (c *Client) ListExecutionProfiles() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListExecutionProfilesRequest(c.encoder)
+		decodeResponse = DecodeListExecutionProfilesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListExecutionProfilesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListExecutionProfilesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assistants", "listExecutionProfiles", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetExecutionProfileChoice returns an endpoint that makes HTTP requests to
+// the assistants service setExecutionProfileChoice server.
+func (c *Client) SetExecutionProfileChoice() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetExecutionProfileChoiceRequest(c.encoder)
+		decodeResponse = DecodeSetExecutionProfileChoiceResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetExecutionProfileChoiceRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetExecutionProfileChoiceDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assistants", "setExecutionProfileChoice", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -30,10 +30,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -252,7 +253,7 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation").LogError(ctx, logger)
 	}
 	if hosted {
-		if err := hostingstate.FollowAlias(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServer.ID); err != nil {
+		if err := legacyalias.FollowAlias(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServer.ID); err != nil {
 			return nil, err //nolint:wrapcheck // oops errors pass through.
 		}
 	}
@@ -813,7 +814,7 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 		return oops.E(oops.CodeUnexpected, err, "delete mcp endpoint").LogError(ctx, logger)
 	}
 	if hostedServerID.Valid {
-		if err := hostingstate.FollowAlias(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, hostedServerID.UUID); err != nil {
+		if err := legacyalias.FollowAlias(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, hostedServerID.UUID); err != nil {
 			return err //nolint:wrapcheck // oops errors pass through.
 		}
 	}
@@ -920,6 +921,9 @@ func uniqueIDs(ids ...uuid.NullUUID) []uuid.UUID {
 func lockEndpointMutationScope(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext) error {
 	if tx == nil || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ProjectID == nil {
 		return fmt.Errorf("invalid MCP endpoint mutation scope")
+	}
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return fmt.Errorf("lock endpoint EMA scope: %w", err)
 	}
 	if err := networkingressrepo.New(tx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return fmt.Errorf("lock network ingress lifecycle: %w", err)

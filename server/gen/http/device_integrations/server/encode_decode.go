@@ -1795,6 +1795,7 @@ func DecodeListManagedDevicesRequest(mux goahttp.Muxer, decoder func(*http.Reque
 		var (
 			provider       *string
 			coverageBucket *string
+			policyState    *string
 			userIds        []string
 			userEmails     []string
 			cursor         *string
@@ -1815,6 +1816,15 @@ func DecodeListManagedDevicesRequest(mux goahttp.Muxer, decoder func(*http.Reque
 		if coverageBucket != nil {
 			if !(*coverageBucket == "agent_active" || *coverageBucket == "agent_stale" || *coverageBucket == "agent_other_device" || *coverageBucket == "no_agent" || *coverageBucket == "no_email" || *coverageBucket == "unresolved_email" || *coverageBucket == "missing") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("coverage_bucket", *coverageBucket, []any{"agent_active", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing"}))
+			}
+		}
+		policyStateRaw := qp.Get("policy_state")
+		if policyStateRaw != "" {
+			policyState = &policyStateRaw
+		}
+		if policyState != nil {
+			if !(*policyState == "attested" || *policyState == "outdated" || *policyState == "unreported" || *policyState == "halted") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("policy_state", *policyState, []any{"attested", "outdated", "unreported", "halted"}))
 			}
 		}
 		userIds = qp["user_ids"]
@@ -1852,7 +1862,7 @@ func DecodeListManagedDevicesRequest(mux goahttp.Muxer, decoder func(*http.Reque
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListManagedDevicesPayload(provider, coverageBucket, userIds, userEmails, cursor, limit, apikeyToken, sessionToken)
+		payload = NewListManagedDevicesPayload(provider, coverageBucket, policyState, userIds, userEmails, cursor, limit, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2346,8 +2356,89 @@ func marshalDeviceintegrationsManagedDeviceToManagedDeviceResponseBody(v *device
 		AgentLastSeenAt:  v.AgentLastSeenAt,
 		CoverageBucket:   v.CoverageBucket,
 		MissingSince:     v.MissingSince,
+		PolicyState:      v.PolicyState,
 		FirstSeenAt:      v.FirstSeenAt,
 		LastSeenAt:       v.LastSeenAt,
+	}
+	if v.AgentState != nil {
+		res.AgentState = marshalDeviceintegrationsManagedDeviceAgentStateToManagedDeviceAgentStateResponseBody(v.AgentState)
+	}
+
+	return res
+}
+
+// marshalDeviceintegrationsManagedDeviceAgentStateToManagedDeviceAgentStateResponseBody
+// builds a value of type *ManagedDeviceAgentStateResponseBody from a value of
+// type *deviceintegrations.ManagedDeviceAgentState.
+func marshalDeviceintegrationsManagedDeviceAgentStateToManagedDeviceAgentStateResponseBody(v *deviceintegrations.ManagedDeviceAgentState) *ManagedDeviceAgentStateResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ManagedDeviceAgentStateResponseBody{
+		ReportedAt:         v.ReportedAt,
+		Attestation:        v.Attestation,
+		AppliedEtag:        v.AppliedEtag,
+		AppliedAt:          v.AppliedAt,
+		EnforcementHalted:  v.EnforcementHalted,
+		CurrentBlocked:     v.CurrentBlocked,
+		SpeakeasydVersion:  v.SpeakeasydVersion,
+		SpeakeasyVersion:   v.SpeakeasyVersion,
+		SpeakeasyUIVersion: v.SpeakeasyUIVersion,
+		Os:                 v.Os,
+		Arch:               v.Arch,
+		DriftCountingSince: v.DriftCountingSince,
+		AutoUpdate:         v.AutoUpdate,
+		UpdateChannel:      v.UpdateChannel,
+		PinnedTarget:       v.PinnedTarget,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]*ManagedDeviceToolResponseBody, len(v.Tools))
+		for i, val := range v.Tools {
+			if val == nil {
+				res.Tools[i] = nil
+				continue
+			}
+			res.Tools[i] = marshalDeviceintegrationsManagedDeviceToolToManagedDeviceToolResponseBody(val)
+		}
+	} else {
+		res.Tools = []*ManagedDeviceToolResponseBody{}
+	}
+	if v.LastRollback != nil {
+		res.LastRollback = marshalDeviceintegrationsManagedDeviceRollbackToManagedDeviceRollbackResponseBody(v.LastRollback)
+	}
+
+	return res
+}
+
+// marshalDeviceintegrationsManagedDeviceToolToManagedDeviceToolResponseBody
+// builds a value of type *ManagedDeviceToolResponseBody from a value of type
+// *deviceintegrations.ManagedDeviceTool.
+func marshalDeviceintegrationsManagedDeviceToolToManagedDeviceToolResponseBody(v *deviceintegrations.ManagedDeviceTool) *ManagedDeviceToolResponseBody {
+	res := &ManagedDeviceToolResponseBody{
+		Tool:             v.Tool,
+		Layer:            v.Layer,
+		Outcome:          v.Outcome,
+		PendingReason:    v.PendingReason,
+		ErrorKind:        v.ErrorKind,
+		RestartRequired:  v.RestartRequired,
+		ActionRequired:   v.ActionRequired,
+		DriftCorrections: v.DriftCorrections,
+	}
+
+	return res
+}
+
+// marshalDeviceintegrationsManagedDeviceRollbackToManagedDeviceRollbackResponseBody
+// builds a value of type *ManagedDeviceRollbackResponseBody from a value of
+// type *deviceintegrations.ManagedDeviceRollback.
+func marshalDeviceintegrationsManagedDeviceRollbackToManagedDeviceRollbackResponseBody(v *deviceintegrations.ManagedDeviceRollback) *ManagedDeviceRollbackResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ManagedDeviceRollbackResponseBody{
+		At:   v.At,
+		From: v.From,
+		To:   v.To,
 	}
 
 	return res

@@ -139,6 +139,9 @@ vi.mock("@gram/client/react-query/registerWorkloadIssuer.js", () => ({
 vi.mock("@gram/client/react-query/admitWorkloadSubject.js", () => ({
   useAdmitWorkloadSubjectMutation: () => ({ mutateAsync: mocks.admit }),
 }));
+vi.mock("@gram/client/react-query/withdrawWorkloadSubject.js", () => ({
+  useWithdrawWorkloadSubjectMutation: () => ({ mutateAsync: vi.fn() }),
+}));
 vi.mock("@gram/client/react-query/workloadTokenEndpoints.js", () => ({
   useWorkloadTokenEndpoints: () => ({
     data: {

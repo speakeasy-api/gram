@@ -35,6 +35,20 @@ export const CoverageBucket = {
  */
 export type CoverageBucket = ClosedEnum<typeof CoverageBucket>;
 
+/**
+ * Only agent_active devices in this policy state.
+ */
+export const PolicyState = {
+  Attested: "attested",
+  Outdated: "outdated",
+  Unreported: "unreported",
+  Halted: "halted",
+} as const;
+/**
+ * Only agent_active devices in this policy state.
+ */
+export type PolicyState = ClosedEnum<typeof PolicyState>;
+
 export type ListManagedDevicesRequest = {
   /**
    * Only devices synced from this provider.
@@ -44,6 +58,10 @@ export type ListManagedDevicesRequest = {
    * Only devices in this coverage bucket.
    */
   coverageBucket?: CoverageBucket | undefined;
+  /**
+   * Only agent_active devices in this policy state.
+   */
+  policyState?: PolicyState | undefined;
   /**
    * Only devices assigned to these Speakeasy users. Combined with user_emails as an OR, because a device only carries a resolved user id when the MDM's reported email matched a member.
    */
@@ -111,9 +129,14 @@ export const CoverageBucket$outboundSchema: z.ZodMiniEnum<
 > = z.enum(CoverageBucket);
 
 /** @internal */
+export const PolicyState$outboundSchema: z.ZodMiniEnum<typeof PolicyState> = z
+  .enum(PolicyState);
+
+/** @internal */
 export type ListManagedDevicesRequest$Outbound = {
   provider?: string | undefined;
   coverage_bucket?: string | undefined;
+  policy_state?: string | undefined;
   user_ids?: Array<string> | undefined;
   user_emails?: Array<string> | undefined;
   cursor?: string | undefined;
@@ -130,6 +153,7 @@ export const ListManagedDevicesRequest$outboundSchema: z.ZodMiniType<
   z.object({
     provider: z.optional(z.string()),
     coverageBucket: z.optional(CoverageBucket$outboundSchema),
+    policyState: z.optional(PolicyState$outboundSchema),
     userIds: z.optional(z.array(z.string())),
     userEmails: z.optional(z.array(z.string())),
     cursor: z.optional(z.string()),
@@ -140,6 +164,7 @@ export const ListManagedDevicesRequest$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       coverageBucket: "coverage_bucket",
+      policyState: "policy_state",
       userIds: "user_ids",
       userEmails: "user_emails",
       gramKey: "Gram-Key",
