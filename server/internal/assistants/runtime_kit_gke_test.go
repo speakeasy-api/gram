@@ -28,9 +28,10 @@ func kitGKEInput() KitGKEProvisionInput {
 		panic(err)
 	}
 	return KitGKEProvisionInput{
-		TLSCertificate: cert, TLSPrivateKey: key,
+		KitGKEIdentityConfig: KitGKEIdentityConfig{ProjectNumber: "123456789", OrganizationID: "987654321", ClusterLocation: "us-central1", ClusterName: "test-cluster"},
+		TLSCertificate:       cert, TLSPrivateKey: key,
 		Model: "test-model", InferenceEndpoint: "https://example.invalid/inference",
-		Workload:               &KitWorkloadBinding{IssuerID: uuid.New(), Subject: "test", ServiceAccount: "kit-workload-test", Audience: "https://example.invalid/oauth"},
+		Workload:               &KitWorkloadBinding{IssuerID: uuid.New(), Subject: "spiffe://agents.global.org-987654321.system.id.goog/resources/container/projects/123456789/locations/us-central1/clusters/test-cluster/ns/kit-test/sa/kit-workload-test", ServiceAccount: "kit-workload-test", Audience: "https://example.invalid/oauth"},
 		WorkloadServiceAccount: "kit-workload-test", WorkloadAudience: "https://example.invalid/oauth",
 		CheckpointMarker: []byte("11111111-1111-4111-8111-111111111111"),
 		Identity:         KitGKEIdentity{Namespace: "kit-test", AssistantID: "assistant-test", Lineage: "lineage-one", CompatibilityGeneration: "generation-one"},
@@ -73,6 +74,9 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	require.True(t, foundBootstrap, "bootstrap volume must exist")
 	require.Equal(t, in.Identity.labels(), pod.Labels)
 	require.NotContains(t, pod.Annotations, "podsnapshot.gke.io/ps-name")
+	require.Equal(t, "spiffe://agents.global.org-987654321.system.id.goog/*", pod.Annotations["iam.gke.io/identity"])
+	require.NotContains(t, pod.Annotations, "security.cloud.google.com/inject-podcertificates")
+	require.NotContains(t, pod.Annotations, "iam.gke.io/gcp-service-account")
 	require.Equal(t, "false", pod.Annotations["cluster-autoscaler.kubernetes.io/safe-to-evict"])
 	require.False(t, *pod.Spec.AutomountServiceAccountToken)
 	require.Equal(t, in.WorkloadServiceAccount, pod.Spec.ServiceAccountName)
@@ -85,7 +89,12 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	require.Equal(t, []string{"8.8.8.8", "1.1.1.1"}, pod.Spec.DNSConfig.Nameservers)
 	require.Equal(t, map[string]string{"sandbox.gke.io/runtime": "gvisor", "workload-type": "sandbox"}, pod.Spec.NodeSelector)
 	require.Len(t, pod.Spec.Tolerations, 2)
-	require.Empty(t, pod.Spec.InitContainers)
+	require.Len(t, pod.Spec.InitContainers, 1)
+	sidecar := pod.Spec.InitContainers[0]
+	require.Equal(t, kitGKEIdentitySidecarImage, sidecar.Image)
+	serviceAccount := kitWorkloadServiceAccount(in)
+	require.Empty(t, serviceAccount.GetAnnotations())
+	require.Equal(t, false, serviceAccount.Object["automountServiceAccountToken"])
 	require.Len(t, pod.Spec.Containers, 2)
 	main := pod.Spec.Containers[0]
 	require.Equal(t, []string{"/bin/sh", "-ec"}, main.Command)
@@ -117,7 +126,8 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	require.Equal(t, secret.Name, pod.Spec.Volumes[1].Secret.SecretName)
 	require.Len(t, pod.Spec.Volumes, 5)
 	require.Equal(t, "workload", pod.Spec.Volumes[4].Name)
-	require.Equal(t, &corev1.ProjectedVolumeSource{DefaultMode: new(int32(0440)), Sources: []corev1.VolumeProjection{{ServiceAccountToken: &corev1.ServiceAccountTokenProjection{Audience: in.WorkloadAudience, ExpirationSeconds: new(int64(600)), Path: "assertion"}}}}, pod.Spec.Volumes[4].Projected)
+	require.Nil(t, pod.Spec.Volumes[4].Projected)
+	require.Equal(t, corev1.StorageMediumMemory, pod.Spec.Volumes[4].EmptyDir.Medium)
 	require.NotContains(t, secret.Data, "assertion")
 	require.NotContains(t, main.Args[0], "/var/run/secrets/speakeasy/workload")
 	require.Equal(t, "tls-tmp", pod.Spec.Volumes[2].Name)
@@ -131,7 +141,20 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	policy, found, err := unstructured.NestedMap(objects.Template.Object, "spec", "networkPolicy")
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, map[string]any{"ingress": []any{map[string]any{"from": []any{map[string]any{"ipBlock": map[string]any{"cidr": in.IngressCIDR}}}, "ports": []any{map[string]any{"protocol": "TCP", "port": int64(8080)}}}}, "egress": []any{map[string]any{"to": []any{map[string]any{"ipBlock": map[string]any{"cidr": "0.0.0.0/0", "except": []any{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16"}}}, map[string]any{"ipBlock": map[string]any{"cidr": "::/0", "except": []any{"fc00::/7", "fe80::/10"}}}}}}}, policy)
+	metadataEgress := map[string]any{
+		"to":    []any{map[string]any{"ipBlock": map[string]any{"cidr": "169.254.169.254/32"}}},
+		"ports": []any{map[string]any{"protocol": "TCP", "port": int64(80)}},
+	}
+	require.Equal(t, map[string]any{
+		"ingress": []any{map[string]any{
+			"from":  []any{map[string]any{"ipBlock": map[string]any{"cidr": in.IngressCIDR}}},
+			"ports": []any{map[string]any{"protocol": "TCP", "port": int64(8080)}},
+		}},
+		"egress": []any{map[string]any{"to": []any{
+			map[string]any{"ipBlock": map[string]any{"cidr": "0.0.0.0/0", "except": []any{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16"}}},
+			map[string]any{"ipBlock": map[string]any{"cidr": "::/0", "except": []any{"fc00::/7", "fe80::/10"}}},
+		}}, metadataEgress},
+	}, policy)
 	same, err := RenderKitGKEProvision(in)
 	require.NoError(t, err)
 	require.Equal(t, secret.Name, same.Secret.GetName())
@@ -147,7 +170,7 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 }
 func TestKitGKEEnsureCreateOrderingAndFailure(t *testing.T) {
 	t.Parallel()
-	for _, failResource := range []string{"", "serviceaccounts", "secrets", "sandboxtemplates", "sandboxclaims"} {
+	for _, failResource := range []string{"", "serviceaccounts", "secrets", "sandboxtemplates", "sandboxwarmpools", "sandboxclaims"} {
 		t.Run(failResource, func(t *testing.T) {
 			t.Parallel()
 			backend, client, record, _ := kitGKEBackendFixture(t)
@@ -155,7 +178,7 @@ func TestKitGKEEnsureCreateOrderingAndFailure(t *testing.T) {
 				client.PrependReactor("create", failResource, func(k8stesting.Action) (bool, runtime.Object, error) { return true, nil, errors.New("blocked") })
 			}
 			_, err := backend.Ensure(t.Context(), record)
-			expected := []string{"serviceaccounts", "secrets", "sandboxtemplates", "sandboxclaims"}
+			expected := []string{"serviceaccounts", "secrets", "sandboxtemplates", "sandboxwarmpools", "sandboxclaims"}
 			if failResource != "" {
 				require.Error(t, err)
 				for idx, name := range expected {
@@ -169,7 +192,7 @@ func TestKitGKEEnsureCreateOrderingAndFailure(t *testing.T) {
 			}
 			actions := make([]k8stesting.Action, 0)
 			for _, action := range client.Actions() {
-				if action.GetVerb() == "create" && action.GetResource().Resource != "configmaps" {
+				if action.GetVerb() == "create" {
 					actions = append(actions, action)
 				}
 			}
@@ -184,6 +207,8 @@ func TestKitGKEEnsureCreateOrderingAndFailure(t *testing.T) {
 func TestKitGKEProvisionValidation(t *testing.T) {
 	t.Parallel()
 	cases := map[string]func(*KitGKEProvisionInput){
+		"missing organization":             func(in *KitGKEProvisionInput) { in.OrganizationID = "" },
+		"wrong workload subject":           func(in *KitGKEProvisionInput) { in.Workload.Subject = "wrong" },
 		"missing workload service account": func(in *KitGKEProvisionInput) { in.WorkloadServiceAccount = "" },
 		"invalid workload service account": func(in *KitGKEProvisionInput) { in.WorkloadServiceAccount = "bad/name" },
 		"missing workload audience":        func(in *KitGKEProvisionInput) { in.WorkloadAudience = "" },
@@ -521,8 +546,8 @@ func TestKitGKETemplateAndClaimHaveDistinctPolicyNames(t *testing.T) {
 	objects, err := RenderKitGKEProvision(kitGKEInput())
 	require.NoError(t, err)
 	require.Equal(t, objects.Claim.GetName()+"-template", objects.Template.GetName())
-	ref, found, err := unstructured.NestedString(objects.Claim.Object, "spec", "sandboxTemplateRef", "name")
+	ref, found, err := unstructured.NestedString(objects.Claim.Object, "spec", "warmPoolRef", "name")
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, objects.Template.GetName(), ref)
+	require.Equal(t, objects.WarmPool.GetName(), ref)
 }

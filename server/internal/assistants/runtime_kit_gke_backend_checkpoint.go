@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"maps"
 	"net"
 	"net/url"
 	"reflect"
@@ -150,7 +151,7 @@ type kitGKEAuthorityHandle struct {
 // top-level metadata so ordinary metadata updates cannot recursively nest it.
 func kitGKEAuthorityMetadata(state kitGKEAuthority) (kitGKEBackendMetadata, error) {
 	m := state.Metadata
-	state.Metadata = kitGKEBackendMetadata{TemplateName: "", Workload: nil, ServiceAccountUID: "", Checkpoint: nil, TLSCertificate: nil, Provisioning: false, CheckpointMarker: "", ProxyImageDigest: "", ImageDigest: "", ContainerID: "", AuthorityUID: "", RuntimeID: uuid.Nil, AssistantID: uuid.Nil, ProjectID: uuid.Nil, Version: 0, Namespace: "", Fingerprint: "", ClaimUID: "", TemplateUID: "", SecretUID: "", SecretName: "", PodName: "", PodUID: ""}
+	state.Metadata = kitGKEBackendMetadata{WarmPoolName: "", WarmPoolUID: "", TemplateName: "", Workload: nil, ServiceAccountUID: "", Checkpoint: nil, TLSCertificate: nil, Provisioning: false, CheckpointMarker: "", ProxyImageDigest: "", ImageDigest: "", ContainerID: "", AuthorityUID: "", RuntimeID: uuid.Nil, AssistantID: uuid.Nil, ProjectID: uuid.Nil, Version: 0, Namespace: "", Fingerprint: "", ClaimUID: "", TemplateUID: "", SecretUID: "", SecretName: "", PodName: "", PodUID: ""}
 	raw, err := json.Marshal(state)
 	if err != nil {
 		return m, fmt.Errorf("marshal Kit GKE authority state: %w", err)
@@ -432,7 +433,7 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 	}
 	// Durable verified authority precedes deletion. Foreground deletion is waited
 	// through; no success is returned while the source process still exists.
-	if err = k.deleteOwned(ctx, gkeSandboxClaimGVR, kitGKEName(r), state.Metadata.ClaimUID); err != nil {
+	if err = k.deleteOwned(ctx, kitClaimGVR, kitGKEName(r), state.Metadata.ClaimUID); err != nil {
 		return err
 	}
 	if err = k.deleteOwned(ctx, gkePodGVR, state.Metadata.PodName, state.Metadata.PodUID); err != nil {
@@ -470,11 +471,14 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	if err != nil {
 		return empty, err
 	}
-	if _, err = k.config.GKE.Dynamic.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace).Get(ctx, kitGKEName(r), metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+	if _, err = k.config.GKE.Dynamic.Resource(kitClaimGVR).Namespace(k.config.GKE.Namespace).Get(ctx, kitGKEName(r), metav1.GetOptions{}); !apierrors.IsNotFound(err) {
 		if err != nil {
 			return empty, fmt.Errorf("check kit GKE source claim deletion: %w", err)
 		}
 		return empty, fmt.Errorf("kit GKE restore requires source claim deletion")
+	}
+	if _, err = k.get(ctx, r, kitWarmPoolGVR, state.Metadata.WarmPoolName, state.Metadata.WarmPoolUID); err != nil {
+		return empty, err
 	}
 	_, err = k.get(ctx, r, kitTemplateGVR, state.Metadata.templateName(r), state.Metadata.TemplateUID)
 	if err != nil {
@@ -560,9 +564,14 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	if err != nil {
 		return empty, err
 	}
-	sa := kitWorkloadServiceAccount(in)
+	sa := k.workloadServiceAccount(in)
 	sa.SetLabels(labels)
-	sa.SetAnnotations(annotations)
+	saAnnotations := sa.GetAnnotations()
+	if saAnnotations == nil {
+		saAnnotations = map[string]string{}
+	}
+	maps.Copy(saAnnotations, annotations)
+	sa.SetAnnotations(saAnnotations)
 	sa, err = k.config.GKE.Dynamic.Resource(kitServiceAccountGVR).Namespace(k.config.GKE.Namespace).Create(ctx, sa, metav1.CreateOptions{})
 	if err != nil {
 		return empty, fmt.Errorf("create restore workload service account: %w", err)
@@ -602,6 +611,9 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	}
 	// SandboxTemplate's spec is immutable. Replace it only after its exact UID
 	// has been deleted; the restoring fence prevents concurrent admission.
+	if err = k.deleteOwned(ctx, kitWarmPoolGVR, state.Metadata.WarmPoolName, state.Metadata.WarmPoolUID); err != nil {
+		return empty, err
+	}
 	if err = k.deleteOwned(ctx, kitTemplateGVR, state.Metadata.templateName(r), state.Metadata.TemplateUID); err != nil {
 		return empty, err
 	}
@@ -627,13 +639,25 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	if err != nil {
 		return empty, err
 	}
-	claim := kitObject("SandboxClaim", "extensions.agents.x-k8s.io/v1alpha1", kitGKEName(r), k.identity(r))
-	claimLabels := claim.GetLabels()
-	claimLabels["gram.ai/project-id"] = r.ProjectID.String()
-	claim.SetLabels(claimLabels)
-	claim.SetAnnotations(map[string]string{"speakeasy.com/kit-spec": k.fingerprint})
-	claim.Object["spec"] = map[string]any{"sandboxTemplateRef": map[string]any{"name": template.GetName()}, "lifecycle": map[string]any{"shutdownPolicy": "Delete"}}
-	claim, err = k.config.GKE.Dynamic.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace).Create(ctx, claim, metav1.CreateOptions{})
+	pool := objects.WarmPool
+	pool.SetLabels(labels)
+	pool.SetAnnotations(annotations)
+	pool, err = k.config.GKE.Dynamic.Resource(kitWarmPoolGVR).Namespace(k.config.GKE.Namespace).Create(ctx, pool, metav1.CreateOptions{})
+	if err != nil {
+		return empty, fmt.Errorf("create fresh restore warm pool: %w", err)
+	}
+	if pool.GetUID() == "" {
+		return empty, fmt.Errorf("fresh restore warm pool lacks UID")
+	}
+	state.Metadata.WarmPoolName, state.Metadata.WarmPoolUID = pool.GetName(), pool.GetUID()
+	obj, err = k.saveAuthority(ctx, obj, state)
+	if err != nil {
+		return empty, err
+	}
+	claim := objects.Claim
+	claim.SetLabels(labels)
+	claim.SetAnnotations(annotations)
+	claim, err = k.config.GKE.Dynamic.Resource(kitClaimGVR).Namespace(k.config.GKE.Namespace).Create(ctx, claim, metav1.CreateOptions{})
 	if err != nil {
 		return empty, fmt.Errorf("kit GKE restore: %w", err)
 	}

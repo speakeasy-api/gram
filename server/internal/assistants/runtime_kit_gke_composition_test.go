@@ -30,6 +30,7 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 	issuer, err := url.Parse("https://mcp.example/oauth/issuer")
 	require.NoError(t, err)
 	valid := KitGKECompositionConfig{
+		KitGKEIdentityConfig: testKitGKEIdentityConfig(),
 		KitLocalCompositionConfig: KitLocalCompositionConfig{
 			Environment: "production", Image: "registry.example/kit:0.2.17", Origin: origin,
 			MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: uuid.New(),
@@ -38,6 +39,9 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 		},
 		GKE: GKERuntimeConfig{Dynamic: fake.NewSimpleDynamicClient(runtime.NewScheme()), Namespace: "assistants", RunnerCIDRBlocks: []string{"10.0.0.0/16"}},
 	}
+	valid = kitGKENativeIssuerConfig(valid)
+	require.Equal(t, valid.issuer(), valid.WorkloadIssuerURL, "external issuer settings are replaced")
+	require.Equal(t, valid.issuer()+"/openid/jwks", valid.WorkloadJWKSURL)
 	require.NoError(t, validateKitGKEComposition(valid))
 	for _, tc := range []struct {
 		name   string
@@ -63,6 +67,23 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 			c := valid
 			tc.mutate(&c)
 			require.Error(t, validateKitGKEComposition(c))
+		})
+	}
+	for _, tc := range []struct {
+		name      string
+		mutate    func(*KitGKECompositionConfig)
+		wantError string
+	}{
+		{"missing project", func(c *KitGKECompositionConfig) { c.ProjectNumber = "" }, "numeric project number"},
+		{"missing organization", func(c *KitGKECompositionConfig) { c.OrganizationID = "" }, "numeric project number"},
+		{"invalid project", func(c *KitGKECompositionConfig) { c.ProjectNumber = "invalid/project" }, "numeric project number"},
+		{"invalid cluster", func(c *KitGKECompositionConfig) { c.ClusterName = "invalid/cluster" }, "valid cluster location"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := valid
+			tc.mutate(&c)
+			require.ErrorContains(t, validateKitGKEComposition(c), tc.wantError)
 		})
 	}
 	core := new(ServiceCore)

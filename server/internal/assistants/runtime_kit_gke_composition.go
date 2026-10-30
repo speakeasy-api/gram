@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/netip"
 	"net/url"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ import (
 // same issuer-bound workload registration as local Kit, never a user's token.
 type KitGKECompositionConfig struct {
 	KitLocalCompositionConfig
+	KitGKEIdentityConfig
 	GKE       GKERuntimeConfig
 	Provision KitGKEProvisionInput
 	// Snapshots optionally overrides the managed GKE driver for tests. Nil uses
@@ -29,7 +31,50 @@ type KitGKECompositionConfig struct {
 	Snapshots KitGKECheckpointDriver
 }
 
+// KitGKEIdentityConfig independently identifies the cluster's native Agent Identity.
+// OrganizationID is required: standalone project pools are not inferred.
+type KitGKEIdentityConfig struct {
+	ProjectNumber, OrganizationID, ClusterLocation, ClusterName string
+}
+
+func (c KitGKEIdentityConfig) Validate() error {
+	for _, id := range []string{c.ProjectNumber, c.OrganizationID} {
+		if !regexp.MustCompile(`^[1-9][0-9]*$`).MatchString(id) {
+			return errors.New("native Agent Identity requires numeric project number and organization ID")
+		}
+	}
+	for _, part := range []string{c.ClusterLocation, c.ClusterName} {
+		if len(part) > 63 || !regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`).MatchString(part) {
+			return errors.New("native Agent Identity requires valid cluster location and name")
+		}
+	}
+	return nil
+}
+func (c KitGKEIdentityConfig) validate() error { return c.Validate() }
+func (c KitGKEIdentityConfig) trustDomain() string {
+	return "agents.global.org-" + c.OrganizationID + ".system.id.goog"
+}
+func (c KitGKEIdentityConfig) issuer() string {
+	return "https://sts.googleapis.com/v1/organizations/" + c.OrganizationID + "/locations/global/workloadIdentityPools/" + c.trustDomain()
+}
+func (c KitGKEIdentityConfig) subject(namespace, sa string) string {
+	return "spiffe://" + c.trustDomain() + "/resources/container/projects/" + c.ProjectNumber + "/locations/" + c.ClusterLocation + "/clusters/" + c.ClusterName + "/ns/" + namespace + "/sa/" + sa
+}
+
+func kitGKENativeIssuerConfig(c KitGKECompositionConfig) KitGKECompositionConfig {
+	c.WorkloadIssuerURL = c.issuer()
+	c.WorkloadJWKSURL = c.issuer() + "/openid/jwks"
+	c.nativeIdentity = &c.KitGKEIdentityConfig
+	return c
+}
+
 func validateKitGKEComposition(c KitGKECompositionConfig) error {
+	if err := c.Validate(); err != nil {
+		return err
+	}
+	if c.WorkloadIssuerURL != c.issuer() || c.WorkloadJWKSURL != c.issuer()+"/openid/jwks" {
+		return errors.New("kit GKE requires derived native Agent Identity issuer and JWKS")
+	}
 	if c.Environment == "" || c.Environment == "local" {
 		return errors.New("kit GKE composition requires an explicit non-local environment")
 	}
@@ -57,6 +102,7 @@ func validateKitGKEComposition(c KitGKECompositionConfig) error {
 // Platform MCP parity: provisioning/checkpoint operations are internal lifecycle
 // machinery, not member operations. Existing assistant tools remain unchanged.
 func (s *ServiceCore) InstallKitGKERuntime(c KitGKECompositionConfig) error {
+	c = kitGKENativeIssuerConfig(c)
 	c.WorkloadNamespace = c.GKE.Namespace
 	if err := validateKitGKEComposition(c); err != nil {
 		return err
@@ -73,7 +119,7 @@ func (s *ServiceCore) InstallKitGKERuntime(c KitGKECompositionConfig) error {
 	c.Provision.Image = c.Image
 	c.Provision.GuestPort = int32(c.GKE.GuestPort)
 	backend, err := NewKitGKERuntimeBackend(KitGKERuntimeConfig{
-		GKE: c.GKE, Provision: c.Provision, Snapshots: c.Snapshots,
+		KitGKEIdentityConfig: c.KitGKEIdentityConfig, GKE: c.GKE, Provision: c.Provision, Snapshots: c.Snapshots,
 		AuthorityStore: NewKitGKEPostgresAuthorityStore(s.db),
 		Fence:          s.fenceKitRuntimeAlreadyLocked,
 		Lifecycle:      s.kitGKELifecycle,
