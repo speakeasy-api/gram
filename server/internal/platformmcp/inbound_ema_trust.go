@@ -134,7 +134,7 @@ type InboundEMAIssuer struct {
 
 	// TrustedIdentityProviderUnavailable reports that the issuer trusts an
 	// identity provider whose record could not be read.
-	TrustedIdentityProviderUnavailable bool `json:"trusted_identity_provider_unavailable,omitempty" jsonschema:"true when this issuer trusts an identity provider whose record could not be read, so trusted_identity_provider is absent; call get_inbound_ema_trust again, or remove the trust with untrust_inbound_ema_identity_provider"`
+	TrustedIdentityProviderUnavailable bool `json:"trusted_identity_provider_unavailable,omitempty" jsonschema:"true when this issuer trusts an identity provider whose record could not be read, so trusted_identity_provider is absent; call get_inbound_ema_trust again, or remove the trust with untrust_inbound_ema_identity_provider unless federated_browser_sign_in is true"`
 
 	// FederatedBrowserSignIn reports that interactive sign-in also goes
 	// through the trusted identity provider, so the trust cannot be removed here.
@@ -743,6 +743,9 @@ func inboundEMAReadNextStep(output GetInboundEMATrustOutput) string {
 	}
 	for _, issuer := range output.Issuers {
 		if issuer.TrustedIdentityProviderUnavailable {
+			if issuer.FederatedBrowserSignIn {
+				return "Issuer " + issuer.Slug + " trusts an identity provider whose record could not be read. Call get_inbound_ema_trust again. Interactive sign-in on this issuer uses that provider, so it cannot be removed here. To change it, change the sign-in provider in the dashboard (IDP and SSO)."
+			}
 			return "Issuer " + issuer.Slug + " trusts an identity provider whose record could not be read. Call get_inbound_ema_trust again, or remove the trust with untrust_inbound_ema_identity_provider."
 		}
 	}
