@@ -13,8 +13,8 @@ const to = new Date("2026-01-08T00:00:00Z");
 vi.mock("./useIdentityQueries", () => ({
   useIdentityWindow: () => ({ from, to }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ access: { href: () => "/org/access" } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 // Resolving actor names reads the agent and member inventories, which want a
 // query client and a session. These tests are about which audit query the

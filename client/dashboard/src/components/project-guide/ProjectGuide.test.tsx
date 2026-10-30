@@ -7,6 +7,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConfigProvider } from "@/components/ui/context/ConfigContext";
 import { ProjectGuideRun } from "./ProjectGuideRun";
@@ -59,11 +60,6 @@ vi.mock("./projectGuideStores", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => slugs.current,
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    home: { href: () => "/org/projects/project-guide-test" },
-  }),
-}));
 
 vi.mock("./useMcpGuideOperations", () => ({
   MCP_GUIDE_CLIENTS: ["claude", "codex", "cursor"],
@@ -79,7 +75,8 @@ vi.mock("./useSecretGuideOperations", () => ({
   useSecretGuideOperations: () => secretOperations.current,
 }));
 
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   Link: ({
     children,
     to,
@@ -100,9 +97,11 @@ import { ProjectGuide } from "./ProjectGuide";
 function render(ui: React.ReactNode) {
   return baseRender(ui, {
     wrapper: ({ children }) => (
-      <ConfigProvider theme="light" setTheme={() => undefined}>
-        {children}
-      </ConfigProvider>
+      <MemoryRouter>
+        <ConfigProvider theme="light" setTheme={() => undefined}>
+          {children}
+        </ConfigProvider>
+      </MemoryRouter>
     ),
   });
 }

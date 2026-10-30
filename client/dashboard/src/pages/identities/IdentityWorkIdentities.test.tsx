@@ -29,8 +29,8 @@ vi.mock("@/hooks/useRBAC", () => ({
     isLoading: mocks.loadingAccess,
   }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ identity: { href: () => "/example/identity" } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "example", projectSlug: "project" }),
 }));
 vi.mock("@/lib/dates", () => ({
   HumanizeDateTime: ({ date }: { date: Date }) => (

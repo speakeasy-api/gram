@@ -26,24 +26,10 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
   useProjectSlugForRequests: () => "example",
+  useSlugs: () => ({ orgSlug: "example", projectSlug: "example" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => mocks.orgRead }),
-}));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
-  useRoutes: () => ({
-    agents: { href: () => "/agents" },
-    identities: {
-      agents: {
-        href: () => "/identities/agents",
-        new: { href: () => "/identities/agents/new" },
-      },
-      detail: {
-        overview: { href: (urn: string) => `/identities/${urn}/overview` },
-      },
-    },
-  }),
 }));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),

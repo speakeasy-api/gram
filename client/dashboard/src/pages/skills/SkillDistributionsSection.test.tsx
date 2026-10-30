@@ -20,10 +20,8 @@ const state = vi.hoisted(() => ({
 vi.mock("@/hooks/usePluginWriteAccess", () => ({
   usePluginWriteAccess: () => true,
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    plugins: { detail: { href: (id: string) => `/plugins/${id}` } },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({}),

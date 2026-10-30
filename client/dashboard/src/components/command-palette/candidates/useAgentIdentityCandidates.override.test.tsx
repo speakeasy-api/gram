@@ -15,17 +15,7 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
   useProjectSlugForRequests: () => "project-example",
-  useSlugs: () => ({ projectSlug: "project-example" }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    identities: {
-      detail: {
-        overview: { href: () => "/overview" },
-        permissions: { href: () => "/permissions" },
-      },
-    },
-  }),
+  useSlugs: () => ({ orgSlug: "example", projectSlug: "project-example" }),
 }));
 vi.mock("@/pages/identities/identityRoster", () => ({
   fetchRegisteredAgents: (...args: unknown[]) => mocks.fetchAgents(...args),

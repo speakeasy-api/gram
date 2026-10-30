@@ -2,8 +2,9 @@ import type { InferenceSpendCap } from "@gram/client/models/components/inference
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { StripeSubscription } from "@gram/client/models/components/stripesubscription.js";
 import type { ProductTier } from "@/hooks/useProductTier";
-import { cleanup, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { cleanup, render as renderView, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -59,19 +60,8 @@ vi.mock("@gram/client/react-query/createStripePortalSession.js", () => ({
   }),
 }));
 
-// The route helper resolves the current org from the URL, which there isn't one
-// of here. The link is rendered with whatever hash it was handed so the anchor
-// it points at is what the test reads.
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    billing: {
-      Link: ({ hash, children }: { hash?: string; children: ReactNode }) => (
-        <a data-testid="cap-cta" href={`/billing${hash ? `#${hash}` : ""}`}>
-          {children}
-        </a>
-      ),
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 import {
@@ -79,6 +69,8 @@ import {
   PaygPaymentFailedBanner,
 } from "./billing-banners";
 import { inferenceCapAnchor } from "./inference-caps";
+
+const render = (ui: ReactElement) => renderView(ui, { wrapper: MemoryRouter });
 
 function subscription(
   overrides: Partial<StripeSubscription> = {},
@@ -134,7 +126,7 @@ const paymentBanner = () => screen.queryByRole("alert");
 const capBanners = () => screen.queryAllByRole("status");
 
 const capCtaHrefs = () =>
-  screen.queryAllByTestId("cap-cta").map((link) => link.getAttribute("href"));
+  screen.queryAllByRole("link").map((link) => link.getAttribute("href"));
 
 const updatePaymentButton = () =>
   screen.queryByRole("button", { name: /update payment method/i });
@@ -293,7 +285,9 @@ describe("PaygCapReachedBanners", () => {
     render(<PaygCapReachedBanners />);
 
     expect(screen.getByText(title)).toBeTruthy();
-    expect(capCtaHrefs()).toEqual([`/billing#${inferenceCapAnchor(keyType)}`]);
+    expect(capCtaHrefs()).toEqual([
+      `/org/billing#${inferenceCapAnchor(keyType)}`,
+    ]);
     expect(inferenceCapAnchor(keyType)).toContain(slug);
   });
 
@@ -340,7 +334,7 @@ describe("PaygCapReachedBanners", () => {
     expect(capBanners()).toHaveLength(1);
     expect(screen.getByText("Security inference cap reached")).toBeTruthy();
     expect(capCtaHrefs()).toEqual([
-      `/billing#${inferenceCapAnchor("internal")}`,
+      `/org/billing#${inferenceCapAnchor("internal")}`,
     ]);
   });
 
@@ -367,8 +361,8 @@ describe("PaygCapReachedBanners", () => {
     expect(banners[0]!.textContent).toMatch(/other inference cap reached/i);
     expect(banners[1]!.textContent).toMatch(/security inference cap reached/i);
     expect(capCtaHrefs()).toEqual([
-      `/billing#${inferenceCapAnchor("chat")}`,
-      `/billing#${inferenceCapAnchor("internal")}`,
+      `/org/billing#${inferenceCapAnchor("chat")}`,
+      `/org/billing#${inferenceCapAnchor("internal")}`,
     ]);
   });
 
@@ -382,7 +376,7 @@ describe("PaygCapReachedBanners", () => {
 
     expect(capBanners()).toHaveLength(1);
     expect(capCtaHrefs()).toEqual([
-      `/billing#${inferenceCapAnchor("internal")}`,
+      `/org/billing#${inferenceCapAnchor("internal")}`,
     ]);
   });
 

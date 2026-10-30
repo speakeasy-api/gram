@@ -8,6 +8,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
@@ -18,7 +19,6 @@ const mocks = vi.hoisted(() => ({
   mutateCreate: vi.fn<(variables: unknown) => Promise<{ id: string }>>(),
   mutateUpdate: vi.fn<(variables: unknown) => Promise<unknown>>(),
   setDecision: vi.fn<(variables: unknown) => Promise<unknown>>(),
-  goToDetail: vi.fn(),
   step: null as string | null,
 }));
 
@@ -30,10 +30,8 @@ vi.mock("nuqs", () => ({
   useQueryState: () => [mocks.step, vi.fn()],
 }));
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    policyCenter: { goTo: vi.fn(), detail: { goTo: mocks.goToDetail } },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 vi.mock("./use-toggle-policy-enabled", () => ({
@@ -117,13 +115,25 @@ function policy(overrides: Partial<RiskPolicy> = {}): RiskPolicy {
   } as RiskPolicy;
 }
 
+const DETAIL_PATH = "/org/projects/project/risk-policies/policy-new";
+
+function LocationDisplay() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname}</output>;
+}
+
+const currentPath = () => screen.getByTestId("location").textContent;
+
 function renderEditor(target: RiskPolicy | null) {
   return render(
-    <QueryClientProvider client={new QueryClient()}>
-      <TooltipProvider>
-        <ShadowAIPolicyEditor policy={target} />
-      </TooltipProvider>
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={new QueryClient()}>
+        <TooltipProvider>
+          <ShadowAIPolicyEditor policy={target} />
+        </TooltipProvider>
+      </QueryClientProvider>
+      <LocationDisplay />
+    </MemoryRouter>,
   );
 }
 
@@ -160,9 +170,7 @@ describe("ShadowAIPolicyEditor", () => {
     fireEvent.click(within(cursorControl()).getByText("Deny"));
     fireEvent.click(screen.getByText("Create policy"));
 
-    await waitFor(() =>
-      expect(mocks.goToDetail).toHaveBeenCalledWith("policy-new"),
-    );
+    await waitFor(() => expect(currentPath()).toBe(DETAIL_PATH));
     expect(mocks.mutateCreate).toHaveBeenCalledTimes(1);
     const created = mocks.mutateCreate.mock.calls[0]?.[0] as
       | { request: { createRiskPolicyRequestBody: unknown } }
@@ -216,9 +224,7 @@ describe("ShadowAIPolicyEditor", () => {
     resolveCreate({ id: "policy-new" });
 
     await waitFor(() => expect(mocks.setDecision).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(mocks.goToDetail).toHaveBeenCalledWith("policy-new"),
-    );
+    await waitFor(() => expect(currentPath()).toBe(DETAIL_PATH));
   });
 
   it("names the target whose decision failed and withholds the success toast", async () => {
@@ -228,9 +234,7 @@ describe("ShadowAIPolicyEditor", () => {
     fireEvent.click(within(cursorControl()).getByText("Deny"));
     fireEvent.click(screen.getByText("Create policy"));
 
-    await waitFor(() =>
-      expect(mocks.goToDetail).toHaveBeenCalledWith("policy-new"),
-    );
+    await waitFor(() => expect(currentPath()).toBe(DETAIL_PATH));
     expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
       expect.stringContaining("the decision for Cursor could not be saved"),
     );
@@ -253,7 +257,7 @@ describe("ShadowAIPolicyEditor", () => {
     fireEvent.click(within(cursorControl()).getByText("Deny"));
     fireEvent.click(screen.getByText("Create policy"));
 
-    await waitFor(() => expect(mocks.goToDetail).toHaveBeenCalled());
+    await waitFor(() => expect(currentPath()).toBe(DETAIL_PATH));
     expect(mocks.setDecision).not.toHaveBeenCalled();
   });
 
@@ -268,7 +272,7 @@ describe("ShadowAIPolicyEditor", () => {
     expect(mocks.setDecision.mock.invocationCallOrder[0]).toBeGreaterThan(
       mocks.mutateUpdate.mock.invocationCallOrder[0] ?? 0,
     );
-    expect(mocks.goToDetail).not.toHaveBeenCalled();
+    expect(currentPath()).toBe("/");
   });
 
   it("scopes the audience to MCP enforcement and names the refusal message", () => {

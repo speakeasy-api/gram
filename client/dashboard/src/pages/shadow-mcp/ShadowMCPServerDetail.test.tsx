@@ -2,13 +2,14 @@ import {
   act,
   cleanup,
   fireEvent,
-  render,
+  render as renderView,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactElement, type ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
@@ -21,7 +22,6 @@ const mocks = vi.hoisted(() => ({
   useRiskListPolicies: vi.fn(),
   useRoles: vi.fn(),
   useNavigate: vi.fn(),
-  useRoutes: vi.fn(),
   useShadowMCPInventoryServer: vi.fn(),
   useShadowMCPInventoryUsers: vi.fn(),
   useUpdateShadowMCPInventoryServerNameMutation: vi.fn(),
@@ -33,17 +33,17 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
 
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   useNavigate: mocks.useNavigate,
   useParams: () => ({
     serverSlug: "github-example-com-mcp-d8860eea",
   }),
-  Link: ({ to, children }: { to: string; children: ReactNode }) => (
-    <a href={to}>{children}</a>
-  ),
-  // The user column links to the identity page, which reads the slugs off the
-  // location to scope that link.
-  useLocation: () => ({ pathname: "/acme/projects/default/shadow-mcp" }),
+}));
+
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
+  useProjectSlugForRequests: () => "default",
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -55,11 +55,6 @@ vi.mock("@/hooks/useRBAC", () => ({
     grants: [],
     error: null,
   }),
-}));
-
-vi.mock("@/routes", () => ({
-  useRoutes: mocks.useRoutes,
-  useOrgRoutes: () => ({}),
 }));
 
 vi.mock("@/components/page-layout", () => {
@@ -389,6 +384,17 @@ function inventoryServer(
   };
 }
 
+// The user column links to the identity page, which reads the slugs off the
+// location to scope that link.
+const render = (ui: ReactElement) =>
+  renderView(ui, {
+    wrapper: ({ children }) => (
+      <MemoryRouter initialEntries={["/acme/projects/default/shadow-mcp"]}>
+        {children}
+      </MemoryRouter>
+    ),
+  });
+
 function renderDetailPage() {
   const queryClient = new QueryClient();
   return render(
@@ -437,14 +443,6 @@ describe("ShadowMCPServerDetail", () => {
       isLoading: false,
     });
     mocks.useNavigate.mockReturnValue(mocks.navigate);
-    // The user column opens the project-level identity page.
-    mocks.useRoutes.mockReturnValue({
-      identities: {
-        detail: {
-          overview: { href: (urn: string) => `/identities/${urn}/overview` },
-        },
-      },
-    });
     mocks.useShadowMCPInventoryServer.mockReturnValue({
       data: inventoryServer(),
       error: null,
@@ -535,7 +533,7 @@ describe("ShadowMCPServerDetail", () => {
     ).toBeTruthy();
     fireEvent.click(emailRow!);
     expect(mocks.navigate).toHaveBeenCalledWith(
-      "/identities/email%3Aalex%40example.com/overview",
+      "/acme/projects/default/identities/email%3Aalex%40example.com/overview",
     );
 
     const noEmailRow = screen.getByText("sam@example.com").closest("tr");

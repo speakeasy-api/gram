@@ -36,10 +36,8 @@ vi.mock("@/components/chart/useSeriesColors", () => ({
   useSeriesColors: () => ["#000", "#111"],
   useOtherSeriesColor: () => "#888",
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    explore: { href: () => "/acme/projects/default/explore" },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
 }));
 vi.mock("@gram/client/react-query/analyticsDescribe.js", () => ({
   useAnalyticsDescribe: () => ({

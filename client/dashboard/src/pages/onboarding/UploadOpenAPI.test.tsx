@@ -6,6 +6,7 @@ import {
   screen,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import UploadOpenAPI from "./UploadOpenAPI";
 
@@ -15,7 +16,6 @@ const state = vi.hoisted(() => ({
   isLoading: false,
   isError: false,
   provider: vi.fn(),
-  sourcesContinue: vi.fn(),
   pending: undefined as ((pending: boolean) => void) | undefined,
   gateway: {
     gatewayId: "gateway" as string | null,
@@ -33,8 +33,6 @@ const state = vi.hoisted(() => ({
     },
     reset: vi.fn(),
   },
-  logs: vi.fn(),
-  continue: vi.fn(),
 }));
 vi.mock("@/pages/mcp/gateway/useGatewayCreation", () => ({
   useGatewayCreation: () => state.gateway,
@@ -93,12 +91,21 @@ vi.mock("@/components/upload-asset/stepper", () => {
 vi.mock("@/components/upload-asset/stepper/use-stepper", () => ({
   useStepper: () => state.stepper,
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: { goTo: state.continue, sources: { goTo: state.sourcesContinue } },
-    deployments: { deployment: { goTo: state.logs } },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
+function LocationProbe() {
+  return <output data-testid="location">{useLocation().pathname}</output>;
+}
+function Router({ children }: { children: ReactNode }) {
+  return (
+    <MemoryRouter>
+      {children}
+      <LocationProbe />
+    </MemoryRouter>
+  );
+}
+const location = () => screen.getByTestId("location").textContent;
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
@@ -114,7 +121,7 @@ beforeEach(() => {
   state.stepper.meta.current.deployment = { id: "deployment" };
 });
 it("disables Cancel throughout creation and allows it only once writes settle", () => {
-  render(<UploadOpenAPI />);
+  render(<UploadOpenAPI />, { wrapper: Router });
   act(() => state.pending?.(true));
   const cancel = screen.getByRole("button", {
     name: "Cancel",
@@ -128,22 +135,22 @@ it("disables Cancel throughout creation and allows it only once writes settle", 
   expect(state.gateway.cancel).toHaveBeenCalledTimes(1);
 });
 it("exposes retained deployment logs in gateway mode without a destructive reset", () => {
-  render(<UploadOpenAPI />);
+  render(<UploadOpenAPI />, { wrapper: Router });
   fireEvent.click(screen.getByRole("button", { name: "View Logs" }));
-  expect(state.logs).toHaveBeenCalledWith("deployment");
+  expect(location()).toBe("/org/projects/project/deployments/deployment");
   expect(screen.queryByRole("button", { name: "Try Again" })).toBeNull();
   expect(state.stepper.reset).not.toHaveBeenCalled();
 });
 it("does not offer a reset or standalone Continue for gateway creation", () => {
   state.stepper.meta.current.deployment = null;
-  const view = render(<UploadOpenAPI />);
+  const view = render(<UploadOpenAPI />, { wrapper: Router });
   expect(screen.queryByRole("button", { name: "Try Again" })).toBeNull();
   state.stepper.state = "completed";
   view.rerender(<UploadOpenAPI />);
   expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
 });
 it("keeps attachment cancellation disabled but releases stale creation state after attachment settles", () => {
-  const view = render(<UploadOpenAPI />);
+  const view = render(<UploadOpenAPI />, { wrapper: Router });
   act(() => state.pending?.(true));
   state.gateway.createdServerId = "server";
   state.gateway.isAttaching = true;
@@ -162,9 +169,9 @@ it("keeps attachment cancellation disabled but releases stale creation state aft
 it("preserves standalone Continue", () => {
   state.gateway.gatewayId = null;
   state.stepper.state = "completed";
-  render(<UploadOpenAPI />);
+  render(<UploadOpenAPI />, { wrapper: Router });
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-  expect(state.continue).toHaveBeenCalledTimes(1);
+  expect(location()).toBe("/org/projects/project/mcp");
 });
 
 vi.mock("react-router", async (importOriginal) => ({
@@ -182,7 +189,7 @@ vi.mock("@/components/sources/source-list", () => ({
 it("retains the existing source in gateway mode after lookup succeeds", () => {
   state.search = "slug=original";
   state.sources = [{ name: "Original API", slug: "original", kind: "openapi" }];
-  render(<UploadOpenAPI />);
+  render(<UploadOpenAPI />, { wrapper: Router });
   expect(state.provider).toHaveBeenCalledWith({
     name: "Original API",
     slug: "original",
@@ -195,7 +202,7 @@ it.each(["loading", "error"])(
     state.search = "slug=original";
     state.isLoading = status === "loading";
     state.isError = status === "error";
-    render(<UploadOpenAPI />);
+    render(<UploadOpenAPI />, { wrapper: Router });
     expect(state.provider).not.toHaveBeenCalled();
   },
 );
@@ -206,8 +213,7 @@ it("returns standalone source updates to sources", () => {
     name: "Original API",
     slug: "original",
   };
-  render(<UploadOpenAPI />);
+  render(<UploadOpenAPI />, { wrapper: Router });
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-  expect(state.sourcesContinue).toHaveBeenCalledOnce();
-  expect(state.continue).not.toHaveBeenCalled();
+  expect(location()).toBe("/org/projects/project/mcp/sources");
 });

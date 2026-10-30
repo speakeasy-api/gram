@@ -38,7 +38,9 @@ vi.mock("@/hooks/useRBAC", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/useRBAC")>()),
   useRBAC: () => ({ grants: state.grants }),
 }));
-vi.mock("@/routes", () => ({ useRoutes: () => ({}) }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
 vi.mock("@/hooks/useDrainInfiniteQuery", () => ({
   useDrainInfiniteQuery: () => undefined,
 }));
