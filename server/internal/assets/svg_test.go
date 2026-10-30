@@ -10,6 +10,7 @@ import (
 )
 
 func TestSanitizeSVG(t *testing.T) {
+	t.Parallel()
 	wrap := func(s string) string {
 		return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">` + s + `</svg>`
 	}
@@ -21,6 +22,7 @@ func TestSanitizeSVG(t *testing.T) {
 		wrap(`<g transform="translate(1,2) scale(2) rotate(30 1 2) skewX(3) skewY(4) matrix(1 0 0 1 0 0)" opacity="0.5"><rect x="-1" y="2" width="3" height="4" rx="1"/><circle cx="1" cy="2" r="3"/><ellipse rx="1" ry="2"/><line x1="0" y1="0" x2="1" y2="1"/><polygon points="0,0 1,1 2,0"/><polyline points="0 0 1 1"/></g>`),
 	} {
 		t.Run(s[:min(len(s), 60)], func(t *testing.T) {
+			t.Parallel()
 			clean, err := sanitizeSVG([]byte(s))
 			require.NoError(t, err)
 			again, err := sanitizeSVG(clean)
@@ -33,7 +35,9 @@ func TestSanitizeSVG(t *testing.T) {
 					require.Contains(t, string(clean), attribute)
 				}
 			}
-			var root struct{ XMLName xml.Name }
+			var root struct {
+				XMLName xml.Name `xml:"svg"`
+			}
 			require.NoError(t, xml.Unmarshal(clean, &root))
 			require.Equal(t, "http://www.w3.org/2000/svg", root.XMLName.Space)
 		})
@@ -49,7 +53,12 @@ func TestSanitizeSVG(t *testing.T) {
 		wrap(strings.Repeat(`<g>`, 64) + strings.Repeat(`</g>`, 64)), wrap(strings.Repeat(`<path/>`, 50_000)), strings.Repeat(" ", MaxFileSizeImage+1), wrap(`<title>` + strings.Repeat(`>`, MaxFileSizeImage/2) + `</title>`),
 	}
 	for i, s := range bad {
-		t.Run(fmt.Sprintf("reject_%02d", i), func(t *testing.T) { out, err := sanitizeSVG([]byte(s)); require.Error(t, err); require.Nil(t, out) })
+		t.Run(fmt.Sprintf("reject_%02d", i), func(t *testing.T) {
+			t.Parallel()
+			out, err := sanitizeSVG([]byte(s))
+			require.Error(t, err)
+			require.Nil(t, out)
+		})
 	}
 	clean, err := sanitizeSVG([]byte(wrap(`<path fill="#8b5cf6" d="M0 0 L24 24"/>`)))
 	require.NoError(t, err)
@@ -79,6 +88,7 @@ func FuzzSanitizeSVG(f *testing.F) {
 }
 
 func TestSanitizeSVGClipping(t *testing.T) {
+	t.Parallel()
 	wrap := func(s string) string { return `<svg xmlns="http://www.w3.org/2000/svg">` + s + `</svg>` }
 	definition := `<defs><clipPath id="clip0_12_34"><rect width="12" height="8" fill="white"/></clipPath></defs>`
 	group := `<g clip-path="url(#clip0_12_34)"><path d="M0 0 L12 8"/></g>`
@@ -111,6 +121,7 @@ func TestSanitizeSVGClipping(t *testing.T) {
 	}
 	for i, body := range bad {
 		t.Run(fmt.Sprintf("reject_clip_%02d", i), func(t *testing.T) {
+			t.Parallel()
 			clean, err := sanitizeSVG([]byte(wrap(body)))
 			require.Error(t, err)
 			require.Nil(t, clean)
@@ -119,6 +130,7 @@ func TestSanitizeSVGClipping(t *testing.T) {
 }
 
 func TestCanonicalPlatformImageSVGGuidance(t *testing.T) {
+	t.Parallel()
 	_, _, err := canonicalPlatformImage([]byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>private-input</script></svg>`), "image/svg+xml")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "static SVG")

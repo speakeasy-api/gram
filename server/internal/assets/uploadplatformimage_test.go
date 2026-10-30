@@ -207,6 +207,7 @@ func TestService_UploadPlatformImage_UnsupportedContentType(t *testing.T) {
 }
 
 func TestService_UploadPlatformImage_InvalidSVGAndLengths(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestAssetsService(t)
 	svg := `<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0 L1 1"/></svg>`
 	for _, tc := range []struct {
@@ -221,6 +222,8 @@ func TestService_UploadPlatformImage_InvalidSVGAndLengths(t *testing.T) {
 		{"hostile raster MIME", `<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>`, "image/png", 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAssetsService(t)
 			if tc.size == 0 && tc.body != "" {
 				tc.size = int64(len(tc.body))
 			}
@@ -239,7 +242,7 @@ func TestService_UploadPlatformImage_InvalidSVGAndLengths(t *testing.T) {
 }
 
 func TestService_UploadPlatformImage_RejectsEncodedXMLBeforeStorage(t *testing.T) {
-	ctx, ti := newTestAssetsService(t)
+	t.Parallel()
 	hostile := `<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>`
 	for _, tc := range []struct {
 		name, bom string
@@ -257,6 +260,8 @@ func TestService_UploadPlatformImage_RejectsEncodedXMLBeforeStorage(t *testing.T
 		{"utf32 BE signature", "", 4, binary.BigEndian},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAssetsService(t)
 			for _, leading := range []string{"", " \t\r\n"} {
 				data := []byte(tc.bom)
 				for _, c := range []byte(leading + hostile) {

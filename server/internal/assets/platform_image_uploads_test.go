@@ -152,6 +152,7 @@ func TestNewPlatformImageUploads_RequiresHTTPSExceptOnLoopback(t *testing.T) {
 }
 
 func TestPlatformImageUploads_SVGCanonicalPublicResponse(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestAssetsService(t)
 	raw := `<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"><!-- removed --><path fill="#123456" d="M0 0 L1 1"/></svg>`
 	canonical := `<svg xmlns="http://www.w3.org/2000/svg"><path fill="#123456" d="M0 0 L1 1"></path></svg>`
@@ -189,8 +190,7 @@ func TestPlatformImageUploads_SVGCanonicalPublicResponse(t *testing.T) {
 }
 
 func TestPlatformImageUploads_InvalidBodies(t *testing.T) {
-	ctx, ti := newTestAssetsService(t)
-	uploads, mux := newPlatformImageUploads(t, ti)
+	t.Parallel()
 	for _, tc := range []struct {
 		name   string
 		body   []byte
@@ -204,6 +204,9 @@ func TestPlatformImageUploads_InvalidBodies(t *testing.T) {
 		{"mismatch", testPNG(t), "image/png", 1, http.StatusBadRequest},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAssetsService(t)
+			uploads, mux := newPlatformImageUploads(t, ti)
 			grant, err := uploads.Issue(ctx, "staff@example.test")
 			require.NoError(t, err)
 			req := httptest.NewRequest(http.MethodPut, grant.URL, bytes.NewReader(tc.body))
@@ -221,11 +224,15 @@ type expiredGrantCache struct{ cache.Cache }
 
 func (c expiredGrantCache) GetAndDelete(ctx context.Context, key string, value any) error {
 	if err := c.Cache.GetAndDelete(ctx, key, value); err != nil {
-		return err
+		return fmt.Errorf("consume cached grant: %w", err)
 	}
-	return json.Unmarshal([]byte(`{"operator_email":"staff@example.test","expires_at":"2000-01-01T00:00:00Z"}`), value)
+	if err := json.Unmarshal([]byte(`{"operator_email":"staff@example.test","expires_at":"2000-01-01T00:00:00Z"}`), value); err != nil {
+		return fmt.Errorf("decode expired grant: %w", err)
+	}
+	return nil
 }
 func TestPlatformImageUploads_ExpiredGrant(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestAssetsService(t)
 	uploads, mux := newPlatformImageUploadsWithCache(t, ti, expiredGrantCache{testenv.NewMemoryCache()})
 	grant, err := uploads.Issue(ctx, "staff@example.test")
@@ -234,11 +241,13 @@ func TestPlatformImageUploads_ExpiredGrant(t *testing.T) {
 }
 
 func TestServeImage_MountedRasterHeaders(t *testing.T) {
-	ctx, ti := newTestAssetsService(t)
+	t.Parallel()
 	var jpegData bytes.Buffer
 	require.NoError(t, jpeg.Encode(&jpegData, image.NewRGBA(image.Rect(0, 0, 2, 2)), nil))
 	for mime, data := range map[string][]byte{"image/png": testPNG(t), "image/jpeg": jpegData.Bytes()} {
 		t.Run(mime, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAssetsService(t)
 			uploaded, err := ti.service.UploadPlatformImage(withAdmin(t, ctx), &admingen.UploadPlatformImageForm{ContentType: mime, ContentLength: int64(len(data))}, io.NopCloser(bytes.NewReader(data)))
 			require.NoError(t, err)
 			mux := goahttp.NewMuxer()

@@ -124,9 +124,11 @@ func TestStandaloneImageRoutes_SVGPublicURLAndHeaders(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &uploaded))
 	// Independent assertions expose both regressions in the red run.
 	t.Run("canonical public URL", func(t *testing.T) {
+		t.Parallel()
 		require.Equal(t, "https://public.example.test/rpc/assets.serveImage?id="+uploaded.Asset.ID, uploaded.URL)
 	})
 	t.Run("mounted admin serving headers", func(t *testing.T) {
+		t.Parallel()
 		req := httptest.NewRequest(http.MethodGet, "https://admin.example.test/admin/assets.serveImage?id="+uploaded.Asset.ID, nil)
 		rec := httptest.NewRecorder()
 		SessionMiddleware(mux).ServeHTTP(rec, req)

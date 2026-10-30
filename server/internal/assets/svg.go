@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"regexp"
@@ -26,7 +27,7 @@ var svgElements = map[string]bool{
 
 const staticSVGGuidance = "Upload a static SVG using paths, basic shapes, and local clip paths. Remove styles, links, scripts, and embedded content."
 
-var errStaticSVG = errors.New(staticSVGGuidance)
+var errStaticSVG = errors.New("unsupported static SVG")
 var svgClipID = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`)
 var svgClipReference = regexp.MustCompile(`^url\(#[A-Za-z_][A-Za-z0-9_-]*\)$`)
 
@@ -41,7 +42,11 @@ func (b *svgBuffer) Write(p []byte) (int, error) {
 	if len(p) > MaxFileSizeImage-b.Len() {
 		return 0, errStaticSVG
 	}
-	return b.Buffer.Write(p)
+	n, err := b.Buffer.Write(p)
+	if err != nil {
+		return n, fmt.Errorf("write sanitized SVG: %w", err)
+	}
+	return n, nil
 }
 
 // sanitizeSVG accepts only self-contained static shapes; it never returns partial output.
@@ -62,7 +67,7 @@ func sanitizeSVG(data []byte) ([]byte, error) {
 	defsStartCount := 0
 	for count := 0; ; count++ {
 		token, err := decoder.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil || count >= maxSVGTokens {
@@ -105,7 +110,7 @@ func sanitizeSVG(data []byte) ([]byte, error) {
 			}
 			attrs := make([]xml.Attr, 0, len(t.Attr)+1)
 			if len(stack) == 0 {
-				attrs = append(attrs, xml.Attr{Name: xml.Name{Local: "xmlns"}, Value: svgNamespace})
+				attrs = append(attrs, xml.Attr{Name: xml.Name{Space: "", Local: "xmlns"}, Value: svgNamespace})
 			}
 			seen := map[xml.Name]bool{}
 			for _, a := range t.Attr {
@@ -136,11 +141,11 @@ func sanitizeSVG(data []byte) ([]byte, error) {
 				}
 				attrs = append(attrs, a)
 			}
-			if name == "clipPath" && !seen[xml.Name{Local: "id"}] {
+			if name == "clipPath" && !seen[xml.Name{Space: "", Local: "id"}] {
 				return nil, errStaticSVG
 			}
 			stack = append(stack, name)
-			token = xml.StartElement{Name: xml.Name{Local: name}, Attr: attrs}
+			token = xml.StartElement{Name: xml.Name{Space: "", Local: name}, Attr: attrs}
 		case xml.EndElement:
 			if len(stack) == 0 {
 				return nil, errStaticSVG
@@ -155,7 +160,7 @@ func sanitizeSVG(data []byte) ([]byte, error) {
 				return nil, errStaticSVG
 			}
 			stack = stack[:len(stack)-1]
-			token = xml.EndElement{Name: xml.Name{Local: t.Name.Local}}
+			token = xml.EndElement{Name: xml.Name{Space: "", Local: t.Name.Local}}
 		case xml.CharData:
 			if strings.Trim(string(t), " \t\r\n") != "" && (len(stack) == 0 || (stack[len(stack)-1] != "title" && stack[len(stack)-1] != "desc")) {
 				return nil, errStaticSVG
