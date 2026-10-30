@@ -339,7 +339,8 @@ func TestAdmittedAgentAuthClientUsesTheAttachedConnectionOwner(t *testing.T) {
 // An issued agent session stores the version 4 connect-only policy; admission
 // derives its project-reach mcp:auth ceiling. Without an attachment it is
 // served by its authorizer's own connection when the agent's own mcp:auth
-// names that owner; a version 5 connect-only ceiling still refuses.
+// names that owner; without that derived ceiling the connect-only policy
+// refuses.
 func TestAgentSessionAuthClientUsesItsAuthorizersConnection(t *testing.T) {
 	t.Parallel()
 
@@ -356,7 +357,7 @@ func TestAgentSessionAuthClientUsesItsAuthorizersConnection(t *testing.T) {
 	}{
 		{"an issued v4 session is served by its authorizer's connection", []authz.Grant{personal}, true, authClientResolved},
 		{"without the agent's mcp:auth it refuses", connectOnly, true, authClientNoAccess},
-		{"a v5 connect-only ceiling refuses", []authz.Grant{personal}, false, authClientNoAccess},
+		{"without the derived auth ceiling the connect-only policy refuses", []authz.Grant{personal}, false, authClientNoAccess},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -365,7 +366,7 @@ func TestAgentSessionAuthClientUsesItsAuthorizersConnection(t *testing.T) {
 			client := f.oauthClient(authClientTypeRemoteSession)
 			selector := f.choose(validUUID(client))
 			selector.userSessionIssuerID = uuid.New()
-			_ = enforcedShadowService(t, f)
+			reader := enforcedShadowService(t, f)
 			target := AgentAuthorizationTarget{Scope: authz.ScopeMCPConnect, OrganizationID: f.orgID, ProjectID: f.projectID, UserSessionIssuerID: selector.userSessionIssuerID, MCPResourceID: uuid.New()}
 			stored, err := encodeAgentSessionPolicy(target, runtimepolicy.IssuedDelegatedPolicyVersion)
 			require.NoError(t, err)
@@ -403,6 +404,15 @@ func TestAgentSessionAuthClientUsesItsAuthorizersConnection(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.outcome, res.outcome)
 			require.Equal(t, "user_owner", res.authorizerOwner, "the session's authorizer owns the connection checked")
+			want := "deny"
+			if tc.outcome == authClientResolved {
+				want = "allow"
+			}
+			outcomes := map[string]int64{}
+			for key, n := range authClientShadowOutcomes(t, reader) {
+				outcomes[strings.SplitN(key, "/", 2)[0]] += n
+			}
+			require.Equal(t, map[string]int64{want: 1}, outcomes, "the shadow decides the same check")
 			if tc.outcome != authClientResolved {
 				return
 			}
