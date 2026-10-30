@@ -117,7 +117,7 @@ func TestCreateToolsetCreatesCanonicalServerAndPlatformEndpoint(t *testing.T) {
 
 	second := createMinimalPrivateToolset(t, ctx, ti, "Canonical Second")
 	secondState := requireCanonicalMatches(t, ctx, ti, second)
-	require.Equal(t, "disabled", secondState.server.Visibility)
+	require.Equal(t, "private", secondState.server.Visibility, "later servers also start private")
 	require.NotEqual(t, firstState.endpoints[0].Slug, secondState.endpoints[0].Slug)
 
 	serverAudit, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionMcpServerCreate, second.ID)
