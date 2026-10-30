@@ -795,13 +795,6 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			var siteURL *url.URL
-			if raw := c.String("site-url"); raw != "" {
-				siteURL, err = url.Parse(raw)
-				if err != nil {
-					return fmt.Errorf("failed to parse site url: %w", err)
-				}
-			}
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
 			assistantsCore.SetWakeCanceller(triggerApp)
