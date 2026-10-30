@@ -147,6 +147,13 @@ func TestValidCrashReport(t *testing.T) {
 	rollback.Kind, rollback.Stack, rollback.Message = "rollback", nil, nil
 	rollback.Rollback = &gen.AgentCrashRollback{From: new("0.42.0"), To: new("0.41.3")}
 	require.Empty(t, validCrashReport(rollback))
+	// A binary rollback does not know the version it restored.
+	rollback.Rollback = &gen.AgentCrashRollback{From: new("0.42.0"), To: nil}
+	require.Empty(t, validCrashReport(rollback))
+	rollback.Rollback = &gen.AgentCrashRollback{From: new("0.42.0"), To: new("not a version")}
+	require.Equal(t, "rollback", validCrashReport(rollback))
+	rollback.Rollback = &gen.AgentCrashRollback{From: nil, To: new("0.41.3")}
+	require.Equal(t, "rollback", validCrashReport(rollback))
 
 	cases := map[string]func(r *gen.AgentCrashReport){
 		"id":             func(r *gen.AgentCrashReport) { r.ID = "not an id" },

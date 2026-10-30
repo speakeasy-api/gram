@@ -247,7 +247,11 @@ func validCrashReport(r *gen.AgentCrashReport) string {
 	}
 	if r.Kind == "rollback" {
 		rb := r.Rollback
-		if rb == nil || !crashVersionPattern.MatchString(conv.PtrValOr(rb.From, "")) || !crashVersionPattern.MatchString(conv.PtrValOr(rb.To, "")) {
+		if rb == nil || !crashVersionPattern.MatchString(conv.PtrValOr(rb.From, "")) {
+			return "rollback"
+		}
+		// A binary rollback does not know the version it restored.
+		if to := conv.PtrValOr(rb.To, ""); to != "" && !crashVersionPattern.MatchString(to) {
 			return "rollback"
 		}
 		return ""
