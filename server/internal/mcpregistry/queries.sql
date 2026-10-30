@@ -204,3 +204,10 @@ AND (sqlc.arg(version)::text = 'latest' OR data #>> '{server,version}' = sqlc.ar
 
 -- name: SetRegistryEntryPublishedFixture :exec
 UPDATE mcp_registry_entries SET published = @published WHERE id = @id;
+
+-- name: IsCatalogSVGAsset :one
+SELECT EXISTS (
+    SELECT 1 FROM assets
+    WHERE id = @id AND project_id IS NULL AND organization_id IS NULL
+      AND kind = 'image' AND content_type = 'image/svg+xml' AND deleted IS FALSE
+);

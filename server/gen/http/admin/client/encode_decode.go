@@ -12192,7 +12192,7 @@ func DecodeUploadPlatformImageResponse(decoder func(*http.Response) goahttp.Deco
 			if err != nil {
 				return nil, goahttp.ErrValidationError("admin", "uploadPlatformImage", err)
 			}
-			res := NewUploadPlatformImageUploadImageResultOK(&body)
+			res := NewUploadPlatformImageAdminUploadImageResultOK(&body)
 			return res, nil
 		case http.StatusServiceUnavailable:
 			var (
@@ -12441,6 +12441,8 @@ func DecodeServeImageResponse(decoder func(*http.Response) goahttp.Decoder, rest
 				lastModified              string
 				accessControlAllowOrigin  *string
 				crossOriginResourcePolicy string
+				contentSecurityPolicy     *string
+				xContentTypeOptions       *string
 				err                       error
 			)
 			contentTypeRaw := resp.Header.Get("Content-Type")
@@ -12473,10 +12475,18 @@ func DecodeServeImageResponse(decoder func(*http.Response) goahttp.Decoder, rest
 				err = goa.MergeErrors(err, goa.MissingFieldError("cross_origin_resource_policy", "header"))
 			}
 			crossOriginResourcePolicy = crossOriginResourcePolicyRaw
+			contentSecurityPolicyRaw := resp.Header.Get("Content-Security-Policy")
+			if contentSecurityPolicyRaw != "" {
+				contentSecurityPolicy = &contentSecurityPolicyRaw
+			}
+			xContentTypeOptionsRaw := resp.Header.Get("X-Content-Type-Options")
+			if xContentTypeOptionsRaw != "" {
+				xContentTypeOptions = &xContentTypeOptionsRaw
+			}
 			if err != nil {
 				return nil, goahttp.ErrValidationError("admin", "serveImage", err)
 			}
-			res := NewServeImageResultOK(contentType, contentLength, lastModified, accessControlAllowOrigin, crossOriginResourcePolicy)
+			res := NewServeImageResultOK(contentType, contentLength, lastModified, accessControlAllowOrigin, crossOriginResourcePolicy, contentSecurityPolicy, xContentTypeOptions)
 			return res, nil
 		case http.StatusServiceUnavailable:
 			var (

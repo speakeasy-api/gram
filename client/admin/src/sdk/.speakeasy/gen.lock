@@ -238,6 +238,7 @@ trackedFiles:
   src/models/components/adminstripecustomer.ts: {}
   src/models/components/adminstripesubscription.ts: {}
   src/models/components/adminstripesubscriptioncandidate.ts: {}
+  src/models/components/adminuploadimageresult.ts: {}
   src/models/components/adminupstreamauthenforcement.ts: {}
   src/models/components/adminupstreamoauthmigrationauthclientkind.ts: {}
   src/models/components/adminupstreamoauthmigrationauthclients.ts: {}
@@ -334,7 +335,6 @@ trackedFiles:
   src/models/components/updateremotesessionissuerform.ts: {}
   src/models/components/updatesignupofferrequestbody.ts: {}
   src/models/components/updatesupportmatrixrequestbody.ts: {}
-  src/models/components/uploadimageresult.ts: {}
   src/models/errors/apierror.ts: {}
   src/models/errors/gramerror.ts: {}
   src/models/errors/httpclienterrors.ts: {}
@@ -1825,7 +1825,7 @@ examples:
         application/octet-stream: "x-file: example.file"
       responses:
         "200":
-          application/json: {"asset": {"content_length": 801867, "content_type": "<value>", "created_at": "2025-06-15T00:28:30.271Z", "id": "<id>", "kind": "unknown", "sha256": "<value>", "updated_at": "2024-07-05T09:52:13.346Z"}}
+          application/json: {"asset": {"content_length": 801867, "content_type": "<value>", "created_at": "2025-06-15T00:28:30.271Z", "id": "<id>", "kind": "unknown", "sha256": "<value>", "updated_at": "2024-07-05T09:52:13.346Z"}, "url": "https://lovable-tuber.biz"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

@@ -255,6 +255,21 @@ func (q *Queries) InsertRegistryPublicationFixture(ctx context.Context) error {
 	return err
 }
 
+const isCatalogSVGAsset = `-- name: IsCatalogSVGAsset :one
+SELECT EXISTS (
+    SELECT 1 FROM assets
+    WHERE id = $1 AND project_id IS NULL AND organization_id IS NULL
+      AND kind = 'image' AND content_type = 'image/svg+xml' AND deleted IS FALSE
+)
+`
+
+func (q *Queries) IsCatalogSVGAsset(ctx context.Context, id uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, isCatalogSVGAsset, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listEntries = `-- name: ListEntries :many
 WITH candidates AS MATERIALIZED (
     SELECT
