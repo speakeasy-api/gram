@@ -55,6 +55,9 @@ const (
 
 	// SourceBackfill is a version decided by the offline backfill.
 	SourceBackfill = "backfill"
+
+	// SourceAdmin is a version an administrator changed a choice in.
+	SourceAdmin = "admin"
 )
 
 // Auth client types a decision distinguishes.
@@ -116,6 +119,11 @@ func decide(row ListProfileServersRow, execCtx Context) (decision, *Gap) {
 	}
 	choose := func(id uuid.UUID) (decision, *Gap) {
 		return decision{serverID: row.McpServerID, authClientID: id}, nil
+	}
+	// A server that needs no upstream sign-in takes no credential, matching
+	// the choices an administrator may record for it.
+	if row.RequiresUpstreamAuth.Valid && !row.RequiresUpstreamAuth.Bool {
+		return choose(uuid.Nil)
 	}
 	switch len(row.RegistrationIds) {
 	case 0:
@@ -342,6 +350,7 @@ func bindTx(ctx context.Context, q *Queries, target Target, source string) (Bind
 			ToVersionID:    versionID,
 			FromVersionID:  profile.VersionID,
 			OrganizationID: target.OrganizationID,
+			ProjectID:      target.ProjectID,
 		}); err != nil {
 			return zero, fmt.Errorf("copy execution profile choices: %w", err)
 		}

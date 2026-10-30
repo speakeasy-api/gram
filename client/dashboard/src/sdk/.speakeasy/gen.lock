@@ -110,10 +110,13 @@ trackedFiles:
   src/funcs/agentGetMyConnections.ts: {}
   src/funcs/agentGetPlugins.ts: {}
   src/funcs/agentGetSessionMeta.ts: {}
+  src/funcs/agentHideMcpServer.ts: {}
   src/funcs/agentListAiScanTargets.ts: {}
   src/funcs/agentListSyncedUsers.ts: {}
   src/funcs/agentReportAIScan.ts: {}
   src/funcs/agentReportSessionMoved.ts: {}
+  src/funcs/agentReportState.ts: {}
+  src/funcs/agentUnhideMcpServer.ts: {}
   src/funcs/agentUpdateConfiguration.ts: {}
   src/funcs/agentUpsertAiScanTarget.ts: {}
   src/funcs/agentsBlockOnConnection.ts: {}
@@ -174,18 +177,27 @@ trackedFiles:
   src/funcs/assistantsGetManaged.ts: {}
   src/funcs/assistantsInterruptTurn.ts: {}
   src/funcs/assistantsList.ts: {}
+  src/funcs/assistantsListExecutionProfiles.ts: {}
   src/funcs/assistantsSendMessage.ts: {}
+  src/funcs/assistantsSetExecutionProfileChoice.ts: {}
   src/funcs/assistantsUpdate.ts: {}
   src/funcs/assistantsUpgradeIdentity.ts: {}
   src/funcs/auditlogsList.ts: {}
   src/funcs/auditlogsListFacets.ts: {}
   src/funcs/authCallback.ts: {}
+  src/funcs/authClientsAttachToMcpServer.ts: {}
+  src/funcs/authClientsCreate.ts: {}
+  src/funcs/authClientsDeleteIssuanceProfile.ts: {}
   src/funcs/authClientsDetachFromMcpServer.ts: {}
   src/funcs/authClientsGet.ts: {}
   src/funcs/authClientsGetAudience.ts: {}
   src/funcs/authClientsGetMcpServerAuthentication.ts: {}
   src/funcs/authClientsList.ts: {}
+  src/funcs/authClientsListIssuanceProfiles.ts: {}
+  src/funcs/authClientsListMcpServerChoices.ts: {}
   src/funcs/authClientsSetAudience.ts: {}
+  src/funcs/authClientsSetHeaders.ts: {}
+  src/funcs/authClientsSetIssuanceProfile.ts: {}
   src/funcs/authClientsSetMcpServerUpstreamAuthRequirement.ts: {}
   src/funcs/authClientsUpdate.ts: {}
   src/funcs/authEnterDemo.ts: {}
@@ -691,9 +703,11 @@ trackedFiles:
   src/funcs/skillsDistribute.ts: {}
   src/funcs/skillsGet.ts: {}
   src/funcs/skillsGetShared.ts: {}
+  src/funcs/skillsLink.ts: {}
   src/funcs/skillsList.ts: {}
   src/funcs/skillsListDistributions.ts: {}
   src/funcs/skillsListFeedback.ts: {}
+  src/funcs/skillsListLinks.ts: {}
   src/funcs/skillsListSuggestionFeedback.ts: {}
   src/funcs/skillsListSuggestions.ts: {}
   src/funcs/skillsListTags.ts: {}
@@ -703,6 +717,7 @@ trackedFiles:
   src/funcs/skillsShare.ts: {}
   src/funcs/skillsTriggerSuggestion.ts: {}
   src/funcs/skillsUndistribute.ts: {}
+  src/funcs/skillsUnlink.ts: {}
   src/funcs/skillsUnshare.ts: {}
   src/funcs/skillsUpdate.ts: {}
   src/funcs/slackDirectoryConnectionsBegin.ts: {}
@@ -729,6 +744,8 @@ trackedFiles:
   src/funcs/telemetryGetMcpServerActivity.ts: {}
   src/funcs/telemetryGetMetaMcpServerUsage.ts: {}
   src/funcs/telemetryGetObservabilityOverview.ts: {}
+  src/funcs/telemetryGetOrganizationGatewayOverview.ts: {}
+  src/funcs/telemetryGetOrganizationGatewayUsage.ts: {}
   src/funcs/telemetryGetProjectMetricsSummary.ts: {}
   src/funcs/telemetryGetProjectOverview.ts: {}
   src/funcs/telemetryGetToolUsageClientToolBreakdown.ts: {}
@@ -814,6 +831,7 @@ trackedFiles:
   src/funcs/usageGetPaygBillingSummary.ts: {}
   src/funcs/usageGetPeriodUsage.ts: {}
   src/funcs/usageGetSpendBreakdown.ts: {}
+  src/funcs/usageGetStripeCheckoutStatus.ts: {}
   src/funcs/usageGetStripeSubscription.ts: {}
   src/funcs/usageGetTokensUnderManagement.ts: {}
   src/funcs/usageGetUsageTiers.ts: {}
@@ -911,6 +929,7 @@ trackedFiles:
   src/models/components/agentdelegatedpolicy.ts: {}
   src/models/components/agentexpectedpolicy.ts: {}
   src/models/components/agentidform.ts: {}
+  src/models/components/agentkeyauthclientchoice.ts: {}
   src/models/components/agentmarketplace.ts: {}
   src/models/components/agentmcpserver.ts: {}
   src/models/components/agentownerassignmentform.ts: {}
@@ -926,6 +945,12 @@ trackedFiles:
   src/models/components/agentserverconnection.ts: {}
   src/models/components/agentsession.ts: {}
   src/models/components/agentsessionmeta.ts: {}
+  src/models/components/agentstatepolicy.ts: {}
+  src/models/components/agentstaterollback.ts: {}
+  src/models/components/agentstatetool.ts: {}
+  src/models/components/agentstateupdate.ts: {}
+  src/models/components/agentstateversions.ts: {}
+  src/models/components/agentstatewithheldplugin.ts: {}
   src/models/components/agentusage.ts: {}
   src/models/components/aidetection.ts: {}
   src/models/components/aidetectionuser.ts: {}
@@ -981,11 +1006,13 @@ trackedFiles:
   src/models/components/archiveskillrequestbody.ts: {}
   src/models/components/asset.ts: {}
   src/models/components/assistant.ts: {}
+  src/models/components/assistantexecutionprofile.ts: {}
   src/models/components/assistantmcpserverref.ts: {}
   src/models/components/assistantmemory.ts: {}
   src/models/components/assistantsessionsummary.ts: {}
   src/models/components/assistantskillref.ts: {}
   src/models/components/assistanttoolsetref.ts: {}
+  src/models/components/attachauthclienttomcpserverrequestbody.ts: {}
   src/models/components/attachbindingrequestbody.ts: {}
   src/models/components/attachkeysetform.ts: {}
   src/models/components/attachusersessionissuerform.ts: {}
@@ -996,7 +1023,9 @@ trackedFiles:
   src/models/components/authclientaudience.ts: {}
   src/models/components/authclientaudienceentry.ts: {}
   src/models/components/authclientaudiencerule.ts: {}
+  src/models/components/authclientchoice.ts: {}
   src/models/components/authclientheader.ts: {}
+  src/models/components/authclientheaderinput.ts: {}
   src/models/components/authclientserver.ts: {}
   src/models/components/authorizerequestbody.ts: {}
   src/models/components/authorizeresponsebody.ts: {}
@@ -1051,6 +1080,7 @@ trackedFiles:
   src/models/components/createagentform.ts: {}
   src/models/components/createagentpolicygrantform.ts: {}
   src/models/components/createassistantform.ts: {}
+  src/models/components/createauthclientrequestbody.ts: {}
   src/models/components/createawsiamcredentialform.ts: {}
   src/models/components/createawskmskeyform.ts: {}
   src/models/components/createcimdform.ts: {}
@@ -1136,6 +1166,7 @@ trackedFiles:
   src/models/components/deleteaiscantargetresult.ts: {}
   src/models/components/deleteconfigrequestbody.ts: {}
   src/models/components/deleteglobaltoolvariationresult.ts: {}
+  src/models/components/deleteissuanceprofilerequestbody.ts: {}
   src/models/components/deleterequestbody.ts: {}
   src/models/components/deployment.ts: {}
   src/models/components/deploymentexternalmcp.ts: {}
@@ -1206,6 +1237,8 @@ trackedFiles:
   src/models/components/evolveform.ts: {}
   src/models/components/evolveresult.ts: {}
   src/models/components/exchangerequestbody.ts: {}
+  src/models/components/executionprofileoption.ts: {}
+  src/models/components/executionprofileserver.ts: {}
   src/models/components/explainedaccessdirectorysource.ts: {}
   src/models/components/explainedaccesslevel.ts: {}
   src/models/components/explainedaccessrule.ts: {}
@@ -1272,6 +1305,7 @@ trackedFiles:
   src/models/components/getmyconnectionsresult.ts: {}
   src/models/components/getobservabilityoverviewpayload.ts: {}
   src/models/components/getobservabilityoverviewresult.ts: {}
+  src/models/components/getorganizationgatewayactivitypayload.ts: {}
   src/models/components/getpluginsresult.ts: {}
   src/models/components/getprojectmetricssummarypayload.ts: {}
   src/models/components/getprojectoverviewresult.ts: {}
@@ -1282,6 +1316,7 @@ trackedFiles:
   src/models/components/getsetupdocsresponsebody.ts: {}
   src/models/components/getsignedasseturlform.ts: {}
   src/models/components/getskillresult.ts: {}
+  src/models/components/getstripecheckoutstatusresponsebody.ts: {}
   src/models/components/gettoolusageclientsresult.ts: {}
   src/models/components/gettoolusageclienttoolbreakdownresult.ts: {}
   src/models/components/gettoolusagefilteroptionspayload.ts: {}
@@ -1304,6 +1339,7 @@ trackedFiles:
   src/models/components/getusermetricssummaryresult.ts: {}
   src/models/components/globalremotesessionissuer.ts: {}
   src/models/components/hiddenmcpserver.ts: {}
+  src/models/components/hideagentmcpserverrequestbody.ts: {}
   src/models/components/hidemcpserverrequestbody.ts: {}
   src/models/components/hookdeliveryfailuredata.ts: {}
   src/models/components/hookingestdata.ts: {}
@@ -1348,6 +1384,8 @@ trackedFiles:
   src/models/components/internalsessionissuerkey.ts: {}
   src/models/components/interruptturnrequestbody.ts: {}
   src/models/components/interruptturnresult.ts: {}
+  src/models/components/issuanceprofile.ts: {}
+  src/models/components/issuanceprofilechoice.ts: {}
   src/models/components/issuerconvergencecandidate.ts: {}
   src/models/components/issuerfieldmismatch.ts: {}
   src/models/components/issuermigratepreflight.ts: {}
@@ -1391,6 +1429,7 @@ trackedFiles:
   src/models/components/launchercandidate.ts: {}
   src/models/components/launchercontext.ts: {}
   src/models/components/launcherjudgment.ts: {}
+  src/models/components/linkskillrequestbody.ts: {}
   src/models/components/listactorattributesresult.ts: {}
   src/models/components/listagentconnectionblocksresult.ts: {}
   src/models/components/listagentsresult.ts: {}
@@ -1437,6 +1476,7 @@ trackedFiles:
   src/models/components/listenvironmentsresult.ts: {}
   src/models/components/listeventlogpayload.ts: {}
   src/models/components/listeventlogresult.ts: {}
+  src/models/components/listexecutionprofilesresult.ts: {}
   src/models/components/listexternalcredentialsresult.ts: {}
   src/models/components/listexternalkeysresult.ts: {}
   src/models/components/listfilteroptionspayload.ts: {}
@@ -1450,6 +1490,7 @@ trackedFiles:
   src/models/components/listinstancesresponsebody.ts: {}
   src/models/components/listintegrationsresult.ts: {}
   src/models/components/listinvitesresult.ts: {}
+  src/models/components/listissuanceprofilesresponsebody.ts: {}
   src/models/components/listissuerconvergencecandidatesresult.ts: {}
   src/models/components/listjsonwebkeysetsresult.ts: {}
   src/models/components/listjsonwebkeysresult.ts: {}
@@ -1459,6 +1500,7 @@ trackedFiles:
   src/models/components/listmanageddevicesresult.ts: {}
   src/models/components/listmcpendpointsresult.ts: {}
   src/models/components/listmcpplatformtoolsetsresult.ts: {}
+  src/models/components/listmcpserverauthclientchoicesresponsebody.ts: {}
   src/models/components/listmcpserversresult.ts: {}
   src/models/components/listmembersresponsebody.ts: {}
   src/models/components/listmembersresult.ts: {}
@@ -1510,6 +1552,7 @@ trackedFiles:
   src/models/components/listsigintsignalsresult.ts: {}
   src/models/components/listskilldistributionsresult.ts: {}
   src/models/components/listskillfeedbackresult.ts: {}
+  src/models/components/listskilllinksresult.ts: {}
   src/models/components/listskillsresult.ts: {}
   src/models/components/listskillsuggestionfeedbackresult.ts: {}
   src/models/components/listskillsuggestionsresult.ts: {}
@@ -1556,6 +1599,9 @@ trackedFiles:
   src/models/components/logfilter.ts: {}
   src/models/components/managedagent.ts: {}
   src/models/components/manageddevice.ts: {}
+  src/models/components/manageddeviceagentstate.ts: {}
+  src/models/components/manageddevicerollback.ts: {}
+  src/models/components/manageddevicetool.ts: {}
   src/models/components/marketplacesettingsresult.ts: {}
   src/models/components/markriskresultsfalsepositiverequestbody.ts: {}
   src/models/components/mcpendpoint.ts: {}
@@ -1735,6 +1781,8 @@ trackedFiles:
   src/models/components/replaceidentityproviderconnectionclientsecretrequestbody.ts: {}
   src/models/components/reportaiscanrequestbody.ts: {}
   src/models/components/reportsessionmovedrequestbody.ts: {}
+  src/models/components/reportstaterequestbody.ts: {}
+  src/models/components/reportstateresult.ts: {}
   src/models/components/requestaccessform.ts: {}
   src/models/components/requestaccessresult.ts: {}
   src/models/components/researchpagefetchcall.ts: {}
@@ -1857,12 +1905,15 @@ trackedFiles:
   src/models/components/setaitooldecisionrequestbody.ts: {}
   src/models/components/setaitooldecisionresult.ts: {}
   src/models/components/setauthclientaudiencerequestbody.ts: {}
+  src/models/components/setauthclientheadersrequestbody.ts: {}
   src/models/components/setauthenticationhostrequestbody.ts: {}
   src/models/components/setbillingmetadatarequestbody.ts: {}
   src/models/components/setdirectoryrolemappingsform.ts: {}
   src/models/components/setemaprovidersrequestbody.ts: {}
   src/models/components/setenabledrequestbody.ts: {}
+  src/models/components/setexecutionprofilechoicerequestbody.ts: {}
   src/models/components/setidentityproviderconnectionsetupmethodrequestbody.ts: {}
+  src/models/components/setissuanceprofilerequestbody.ts: {}
   src/models/components/setkeyenabledrequestbody.ts: {}
   src/models/components/setmcpmetadatarequestbody.ts: {}
   src/models/components/setmcpserverupstreamauthrequirementrequestbody.ts: {}
@@ -1922,6 +1973,7 @@ trackedFiles:
   src/models/components/skillfeedbacktimelinepoint.ts: {}
   src/models/components/skillinsightmetrics.ts: {}
   src/models/components/skillinsightpoint.ts: {}
+  src/models/components/skilllink.ts: {}
   src/models/components/skillpromptinjectionfinding.ts: {}
   src/models/components/skillsharelink.ts: {}
   src/models/components/skillsightingtimelinepoint.ts: {}
@@ -1947,6 +1999,7 @@ trackedFiles:
   src/models/components/spendruletargetcondition.ts: {}
   src/models/components/spendruleusage.ts: {}
   src/models/components/startonboardingrequestbody.ts: {}
+  src/models/components/stripeembeddedcheckout.ts: {}
   src/models/components/stripesubscription.ts: {}
   src/models/components/submitfeedbackrequestbody.ts: {}
   src/models/components/submitidentityproviderconnectionclientidrequestbody.ts: {}
@@ -2042,9 +2095,11 @@ trackedFiles:
   src/models/components/tunnelmetricpoint.ts: {}
   src/models/components/tunnelmetrics.ts: {}
   src/models/components/undistributeskillrequestbody.ts: {}
+  src/models/components/unhideagentmcpserverrequestbody.ts: {}
   src/models/components/unhidemcpserverrequestbody.ts: {}
   src/models/components/unknownskillactivation.ts: {}
   src/models/components/unlinkemarequestbody.ts: {}
+  src/models/components/unlinkskillrequestbody.ts: {}
   src/models/components/unmarkriskresultsfalsepositiverequestbody.ts: {}
   src/models/components/unproxiedmcpserver.ts: {}
   src/models/components/unproxiedmcpserverclientusagerow.ts: {}
@@ -2210,6 +2265,7 @@ trackedFiles:
   src/models/operations/approveskillsuggestion.ts: {}
   src/models/operations/archiveskill.ts: {}
   src/models/operations/archivespendrule.ts: {}
+  src/models/operations/attachauthclienttomcpserver.ts: {}
   src/models/operations/attachbinding.ts: {}
   src/models/operations/attachorganizationremotesessionclientkeyset.ts: {}
   src/models/operations/attachremotesessionclientkeyset.ts: {}
@@ -2241,6 +2297,7 @@ trackedFiles:
   src/models/operations/createagentsessionhandoff.ts: {}
   src/models/operations/createapikey.ts: {}
   src/models/operations/createassistant.ts: {}
+  src/models/operations/createauthclient.ts: {}
   src/models/operations/createawsiamcredential.ts: {}
   src/models/operations/createawskmskey.ts: {}
   src/models/operations/createchatsession.ts: {}
@@ -2329,6 +2386,7 @@ trackedFiles:
   src/models/operations/deleteglobalremotesessionclient.ts: {}
   src/models/operations/deleteglobalremotesessionissuer.ts: {}
   src/models/operations/deleteglobalvariation.ts: {}
+  src/models/operations/deleteissuanceprofile.ts: {}
   src/models/operations/deletejsonwebkeyset.ts: {}
   src/models/operations/deletemcpendpoint.ts: {}
   src/models/operations/deletemcpserver.ts: {}
@@ -2475,6 +2533,8 @@ trackedFiles:
   src/models/operations/getonboardingstatus.ts: {}
   src/models/operations/getorganization.ts: {}
   src/models/operations/getorganizationgateway.ts: {}
+  src/models/operations/getorganizationgatewayoverview.ts: {}
+  src/models/operations/getorganizationgatewayusage.ts: {}
   src/models/operations/getorganizationremotesessionclient.ts: {}
   src/models/operations/getorganizationremotesessionclientdelegationstatus.ts: {}
   src/models/operations/getorganizationremotesessionclientdeletepreflight.ts: {}
@@ -2524,6 +2584,7 @@ trackedFiles:
   src/models/operations/getspendbreakdown.ts: {}
   src/models/operations/getspendrule.ts: {}
   src/models/operations/getspendrulesoverview.ts: {}
+  src/models/operations/getstripecheckoutstatus.ts: {}
   src/models/operations/getstripesubscription.ts: {}
   src/models/operations/gettemplate.ts: {}
   src/models/operations/gettokensundermanagement.ts: {}
@@ -2556,6 +2617,7 @@ trackedFiles:
   src/models/operations/getwidget.ts: {}
   src/models/operations/getworkloadcustomflows.ts: {}
   src/models/operations/getworkunitstrend.ts: {}
+  src/models/operations/hideagentmcpserver.ts: {}
   src/models/operations/hidemcpserver.ts: {}
   src/models/operations/hooksnumberclaude.ts: {}
   src/models/operations/hooksnumbercodex.ts: {}
@@ -2576,6 +2638,7 @@ trackedFiles:
   src/models/operations/killswitcheslistmcpservers.ts: {}
   src/models/operations/killswitchespreviewoverlaps.ts: {}
   src/models/operations/launcherjudge.ts: {}
+  src/models/operations/linkskill.ts: {}
   src/models/operations/listadminopenrouterkeys.ts: {}
   src/models/operations/listagentconnectionblocks.ts: {}
   src/models/operations/listagentdelegablegrants.ts: {}
@@ -2589,6 +2652,7 @@ trackedFiles:
   src/models/operations/listallowedorigins.ts: {}
   src/models/operations/listapikeys.ts: {}
   src/models/operations/listassets.ts: {}
+  src/models/operations/listassistantexecutionprofiles.ts: {}
   src/models/operations/listassistantmemories.ts: {}
   src/models/operations/listassistants.ts: {}
   src/models/operations/listattributekeys.ts: {}
@@ -2645,6 +2709,7 @@ trackedFiles:
   src/models/operations/listidentityproviderconnectionapplications.ts: {}
   src/models/operations/listintegrations.ts: {}
   src/models/operations/listinvites.ts: {}
+  src/models/operations/listissuanceprofiles.ts: {}
   src/models/operations/listjsonwebkeys.ts: {}
   src/models/operations/listjsonwebkeysets.ts: {}
   src/models/operations/listlitellminstances.ts: {}
@@ -2654,6 +2719,7 @@ trackedFiles:
   src/models/operations/listmcpendpoints.ts: {}
   src/models/operations/listmcpplatformtoolsets.ts: {}
   src/models/operations/listmcpregistries.ts: {}
+  src/models/operations/listmcpserverauthclientchoices.ts: {}
   src/models/operations/listmcpservers.ts: {}
   src/models/operations/listmcpserversfororg.ts: {}
   src/models/operations/listmcpservertoolfilters.ts: {}
@@ -2710,6 +2776,7 @@ trackedFiles:
   src/models/operations/listsigintsignals.ts: {}
   src/models/operations/listskilldistributions.ts: {}
   src/models/operations/listskillfeedback.ts: {}
+  src/models/operations/listskilllinks.ts: {}
   src/models/operations/listskills.ts: {}
   src/models/operations/listskillsuggestionfeedback.ts: {}
   src/models/operations/listskillsuggestions.ts: {}
@@ -2812,6 +2879,7 @@ trackedFiles:
   src/models/operations/replaceidentityproviderconnectionclientsecret.ts: {}
   src/models/operations/reportagentaiscan.ts: {}
   src/models/operations/reportagentsessionmoved.ts: {}
+  src/models/operations/reportagentstate.ts: {}
   src/models/operations/requestaccess.ts: {}
   src/models/operations/resetoktaresourceconnection.ts: {}
   src/models/operations/resolvechallenge.ts: {}
@@ -2869,7 +2937,9 @@ trackedFiles:
   src/models/operations/sessioninfo.ts: {}
   src/models/operations/setaiintegrationscheduleenabled.ts: {}
   src/models/operations/setaitooldecision.ts: {}
+  src/models/operations/setassistantexecutionprofilechoice.ts: {}
   src/models/operations/setauthclientaudience.ts: {}
+  src/models/operations/setauthclientheaders.ts: {}
   src/models/operations/setbillingemail.ts: {}
   src/models/operations/setbillingmetadata.ts: {}
   src/models/operations/setchatpinned.ts: {}
@@ -2877,6 +2947,7 @@ trackedFiles:
   src/models/operations/setdirectoryrolemappings.ts: {}
   src/models/operations/setidentityproviderconnectionsetupmethod.ts: {}
   src/models/operations/setinternalsessionissuerenabled.ts: {}
+  src/models/operations/setissuanceprofile.ts: {}
   src/models/operations/setmcpmetadata.ts: {}
   src/models/operations/setmcpservertoolmetadata.ts: {}
   src/models/operations/setmcpservertoolmetadatabatch.ts: {}
@@ -2925,8 +2996,10 @@ trackedFiles:
   src/models/operations/triggerriskanalysis.ts: {}
   src/models/operations/triggerskillsuggestion.ts: {}
   src/models/operations/undistributeskill.ts: {}
+  src/models/operations/unhideagentmcpserver.ts: {}
   src/models/operations/unhidemcpserver.ts: {}
   src/models/operations/unlinkema.ts: {}
+  src/models/operations/unlinkskill.ts: {}
   src/models/operations/unmarkriskresultsfalsepositive.ts: {}
   src/models/operations/unmaskriskresult.ts: {}
   src/models/operations/unshareskill.ts: {}
@@ -3083,6 +3156,8 @@ trackedFiles:
   src/react-query/approveAllSkillSuggestions.ts: {}
   src/react-query/approveSkillSuggestion.ts: {}
   src/react-query/archiveSkill.ts: {}
+  src/react-query/assistantExecutionProfiles.core.ts: {}
+  src/react-query/assistantExecutionProfiles.ts: {}
   src/react-query/assistantMemoriesDelete.ts: {}
   src/react-query/assistantSessionSummary.core.ts: {}
   src/react-query/assistantSessionSummary.ts: {}
@@ -3096,6 +3171,7 @@ trackedFiles:
   src/react-query/assistantsList.ts: {}
   src/react-query/assistantsUpdate.ts: {}
   src/react-query/assistantsUpgradeIdentity.ts: {}
+  src/react-query/attachAuthClientToMcpServer.ts: {}
   src/react-query/attachOrganizationRemoteSessionClientKeySet.ts: {}
   src/react-query/attachRemoteSessionClientKeySet.ts: {}
   src/react-query/attachUserSessionIssuer.ts: {}
@@ -3146,6 +3222,7 @@ trackedFiles:
   src/react-query/createAPIKey.ts: {}
   src/react-query/createAgent.ts: {}
   src/react-query/createAgentSessionHandoff.ts: {}
+  src/react-query/createAuthClient.ts: {}
   src/react-query/createAwsIamCredential.ts: {}
   src/react-query/createAwsKmsKey.ts: {}
   src/react-query/createCheckout.ts: {}
@@ -3229,6 +3306,7 @@ trackedFiles:
   src/react-query/deleteGlobalRemoteSessionClient.ts: {}
   src/react-query/deleteGlobalRemoteSessionIssuer.ts: {}
   src/react-query/deleteGlobalVariation.ts: {}
+  src/react-query/deleteIssuanceProfile.ts: {}
   src/react-query/deleteJsonWebKeySet.ts: {}
   src/react-query/deleteMcpEndpoint.ts: {}
   src/react-query/deleteMcpServer.ts: {}
@@ -3386,6 +3464,10 @@ trackedFiles:
   src/react-query/getMeterUsage.ts: {}
   src/react-query/getObservabilityOverview.core.ts: {}
   src/react-query/getObservabilityOverview.ts: {}
+  src/react-query/getOrganizationGatewayOverview.core.ts: {}
+  src/react-query/getOrganizationGatewayOverview.ts: {}
+  src/react-query/getOrganizationGatewayUsage.core.ts: {}
+  src/react-query/getOrganizationGatewayUsage.ts: {}
   src/react-query/getPaygBillingSummary.core.ts: {}
   src/react-query/getPaygBillingSummary.ts: {}
   src/react-query/getPeriodUsage.core.ts: {}
@@ -3408,6 +3490,8 @@ trackedFiles:
   src/react-query/getSourceEnvironment.ts: {}
   src/react-query/getSpendBreakdown.core.ts: {}
   src/react-query/getSpendBreakdown.ts: {}
+  src/react-query/getStripeCheckoutStatus.core.ts: {}
+  src/react-query/getStripeCheckoutStatus.ts: {}
   src/react-query/getStripeSubscription.core.ts: {}
   src/react-query/getStripeSubscription.ts: {}
   src/react-query/getTokensUnderManagement.core.ts: {}
@@ -3474,6 +3558,7 @@ trackedFiles:
   src/react-query/grants.ts: {}
   src/react-query/hiddenMcpServers.core.ts: {}
   src/react-query/hiddenMcpServers.ts: {}
+  src/react-query/hideAgentMcpServer.ts: {}
   src/react-query/hideMcpServer.ts: {}
   src/react-query/hooksHooksNumberClaude.ts: {}
   src/react-query/hooksHooksNumberCodex.ts: {}
@@ -3505,6 +3590,8 @@ trackedFiles:
   src/react-query/internalSessionIssuer.core.ts: {}
   src/react-query/internalSessionIssuer.ts: {}
   src/react-query/interruptAssistantTurn.ts: {}
+  src/react-query/issuanceProfiles.core.ts: {}
+  src/react-query/issuanceProfiles.ts: {}
   src/react-query/jsonWebKeySetDeletePreflight.core.ts: {}
   src/react-query/jsonWebKeySetDeletePreflight.ts: {}
   src/react-query/keysRotate.ts: {}
@@ -3520,6 +3607,7 @@ trackedFiles:
   src/react-query/latestDeployment.ts: {}
   src/react-query/launcherJudge.ts: {}
   src/react-query/liftKillswitch.ts: {}
+  src/react-query/linkSkill.ts: {}
   src/react-query/listAPIKeys.core.ts: {}
   src/react-query/listAPIKeys.ts: {}
   src/react-query/listAgentDelegableGrants.core.ts: {}
@@ -3638,6 +3726,8 @@ trackedFiles:
   src/react-query/mcpRegistriesClearCache.ts: {}
   src/react-query/mcpRegistriesGetServerDetails.core.ts: {}
   src/react-query/mcpRegistriesGetServerDetails.ts: {}
+  src/react-query/mcpServerAuthClientChoices.core.ts: {}
+  src/react-query/mcpServerAuthClientChoices.ts: {}
   src/react-query/mcpServerAuthentication.core.ts: {}
   src/react-query/mcpServerAuthentication.ts: {}
   src/react-query/mcpServers.core.ts: {}
@@ -3817,6 +3907,7 @@ trackedFiles:
   src/react-query/replaceIdentityProviderConnectionClientSecret.ts: {}
   src/react-query/reportAgentAIScan.ts: {}
   src/react-query/reportAgentSessionMoved.ts: {}
+  src/react-query/reportAgentState.ts: {}
   src/react-query/requestAccess.ts: {}
   src/react-query/resetOktaResourceConnection.ts: {}
   src/react-query/resolveChallenge.ts: {}
@@ -3968,13 +4059,16 @@ trackedFiles:
   src/react-query/sessionInfo.ts: {}
   src/react-query/setAIIntegrationScheduleEnabled.ts: {}
   src/react-query/setAIToolDecision.ts: {}
+  src/react-query/setAssistantExecutionProfileChoice.ts: {}
   src/react-query/setAuthClientAudience.ts: {}
+  src/react-query/setAuthClientHeaders.ts: {}
   src/react-query/setBillingEmail.ts: {}
   src/react-query/setBillingMetadata.ts: {}
   src/react-query/setDeviceIntegrationScheduleEnabled.ts: {}
   src/react-query/setDirectoryRoleMappings.ts: {}
   src/react-query/setIdentityProviderConnectionSetupMethod.ts: {}
   src/react-query/setInternalSessionIssuerEnabled.ts: {}
+  src/react-query/setIssuanceProfile.ts: {}
   src/react-query/setMcpServerToolMetadata.ts: {}
   src/react-query/setMcpServerToolMetadataBatch.ts: {}
   src/react-query/setMcpServerUpstreamAuthRequirement.ts: {}
@@ -4018,6 +4112,8 @@ trackedFiles:
   src/react-query/skillEfficacySettings.ts: {}
   src/react-query/skillFeedback.core.ts: {}
   src/react-query/skillFeedback.ts: {}
+  src/react-query/skillLinks.core.ts: {}
+  src/react-query/skillLinks.ts: {}
   src/react-query/skillSuggestionFeedback.core.ts: {}
   src/react-query/skillSuggestionFeedback.ts: {}
   src/react-query/skillSuggestions.core.ts: {}
@@ -4092,9 +4188,11 @@ trackedFiles:
   src/react-query/tunneledMcpServers.core.ts: {}
   src/react-query/tunneledMcpServers.ts: {}
   src/react-query/undistributeSkill.ts: {}
+  src/react-query/unhideAgentMcpServer.ts: {}
   src/react-query/unhideMcpServer.ts: {}
   src/react-query/unknownSkillActivations.core.ts: {}
   src/react-query/unknownSkillActivations.ts: {}
+  src/react-query/unlinkSkill.ts: {}
   src/react-query/unproxiedMcpServers.core.ts: {}
   src/react-query/unproxiedMcpServers.ts: {}
   src/react-query/unshareSkill.ts: {}
@@ -4620,6 +4718,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  attachAuthClientToMcpServer:
+    speakeasy-default-attach-auth-client-to-mcp-server:
+      requestBody:
+        application/json: {"id": "0861234e-dde5-4fdd-9fdd-b27fe7b969f9", "mcp_server_id": "01c8eceb-d65a-4fcc-ac64-102fb791415f"}
+      responses:
+        "200":
+          application/json: {"client_type": "remote_session", "created_at": "2025-09-13T02:27:33.045Z", "enabled": false, "headers": [], "id": "481312cd-938f-4cad-acce-88c08ea30b9b", "name": "<value>", "personal": false, "servers": [], "source": "backfill", "updated_at": "2026-06-17T10:18:09.292Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   attachBinding:
     speakeasy-default-attach-binding:
       requestBody:
@@ -5049,6 +5158,17 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "2024-11-06T04:22:35.666Z", "id": "406a80c5-7c29-42ee-8297-0b6685afaed8", "instructions": "<value>", "max_concurrency": 728739, "mcp_servers": [{"mcp_server_slug": "<value>"}], "model": "Model S", "name": "<value>", "project_id": "430c6bd6-bd36-4d3e-9bf9-636e791621bc", "runtime_version": 3, "skills": [{"resolved_version_id": "34406a80-c57c-4292-bee2-970b6685afae", "skill_id": "82bb430c-6bd6-4bd3-86d3-ebf9636e7916"}], "status": "active", "toolsets": [{"toolset_slug": "<value>"}], "updated_at": "2026-01-09T20:24:02.859Z", "warm_ttl_seconds": 722753}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  createAuthClient:
+    speakeasy-default-create-auth-client:
+      requestBody:
+        application/json: {"client_type": "service_account", "name": "<value>"}
+      responses:
+        "200":
+          application/json: {"client_type": "service_account", "created_at": "2026-04-20T18:05:21.430Z", "enabled": false, "headers": [], "id": "a80ae271-d169-4477-a229-138d6ad34f45", "name": "<value>", "personal": true, "servers": [{"id": "88d57c5a-d264-4be6-add7-6d21e2aba119", "project_id": "cfcf9ea8-5bef-4a10-b4e5-3963be8562c4", "public": false}], "source": "backfill", "updated_at": "2026-03-06T18:53:32.207Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -5666,9 +5786,12 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   createStripeCheckout:
     speakeasy-default-create-stripe-checkout:
+      parameters:
+        query:
+          theme: "light"
       responses:
         "200":
-          application/json: "<value>"
+          application/json: {"client_secret": "<value>", "publishable_key": "<value>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -6087,6 +6210,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  deleteIssuanceProfile:
+    speakeasy-default-delete-issuance-profile:
+      requestBody:
+        application/json: {"id": "0fbcc866-51ea-4278-9695-ae94138a6566"}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   deleteJsonWebKeySet:
     speakeasy-default-delete-json-web-key-set:
       parameters:
@@ -7367,7 +7499,7 @@ examples:
     speakeasy-default-get-device-integration-coverage:
       responses:
         "200":
-          application/json: {"active_window_minutes": 656966, "agent_active": 936181, "agent_active_device_attested": 656966, "agent_other_device": 656966, "agent_stale": 628953, "attestation": "user", "missing": 482460, "no_agent": 978251, "no_email": 639554, "organization_id": "<id>", "total_devices": 639009, "unmanaged_agent_users": 235041, "unresolved_email": 11818}
+          application/json: {"active_window_minutes": 656966, "agent_active": 936181, "agent_active_device_attested": 656966, "agent_other_device": 656966, "agent_stale": 628953, "attestation": "user", "enforcement_halted": 656966, "missing": 482460, "no_agent": 978251, "no_email": 639554, "organization_id": "<id>", "policy_attested": 936181, "policy_outdated": 628953, "policy_unreported": 482460, "total_devices": 639009, "unmanaged_agent_users": 235041, "unresolved_email": 11818}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -7852,6 +7984,28 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getOrganizationGatewayOverview:
+    speakeasy-default-get-organization-gateway-overview:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"comparison": {"avg_latency_ms": 4407.64, "avg_resolution_time_ms": 4108.28, "avg_session_duration_ms": 1005.15, "cache_creation_input_tokens": 992878, "cache_read_input_tokens": 561218, "failed_chats": 732481, "failed_tool_calls": 774298, "resolved_chats": 126008, "total_chats": 995626, "total_cost": 9437.16, "total_input_tokens": 635167, "total_output_tokens": 412118, "total_tokens": 547609, "total_tool_calls": 157554}, "interval_seconds": 886925, "summary": {"avg_latency_ms": 5963.61, "avg_resolution_time_ms": 550.45, "avg_session_duration_ms": 2517.5, "cache_creation_input_tokens": 152181, "cache_read_input_tokens": 922005, "failed_chats": 116030, "failed_tool_calls": 721187, "resolved_chats": 313129, "total_chats": 762259, "total_cost": 1775.82, "total_input_tokens": 884697, "total_output_tokens": 761650, "total_tokens": 780461, "total_tool_calls": 745274}, "time_series": [{"abandoned_chats": 355088, "avg_session_duration_ms": 2644.38, "avg_tool_latency_ms": 2801.4, "bucket_time_unix_nano": "<value>", "cache_creation_input_tokens": 878095, "cache_read_input_tokens": 31086, "failed_chats": 371397, "failed_tool_calls": 955190, "partial_chats": 357193, "resolved_chats": 141415, "total_chats": 737914, "total_cost": 6269.18, "total_input_tokens": 715306, "total_output_tokens": 432309, "total_tokens": 926093, "total_tool_calls": 332105}], "top_tools_by_count": [], "top_tools_by_failure_rate": [{"avg_latency_ms": 2689.9, "call_count": 955811, "failure_count": 111841, "failure_rate": 9006.17, "gram_urn": "<value>", "success_count": 933853}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getOrganizationGatewayUsage:
+    speakeasy-default-get-organization-gateway-usage:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"funnel": {"describe_server": 857003, "describe_tools": 512222, "execute_tool": 641796, "list_servers": 84616}, "members": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getOrganizationRemoteSessionClient:
     speakeasy-default-get-organization-remote-session-client:
       parameters:
@@ -8486,6 +8640,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getStripeCheckoutStatus:
+    speakeasy-default-get-stripe-checkout-status:
+      parameters:
+        query:
+          session_id: "<id>"
+      responses:
+        "200":
+          application/json: {"billing_ready": true, "payment_status": "unpaid", "status": "open"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getStripeSubscription:
     speakeasy-default-get-stripe-subscription:
       responses:
@@ -8865,6 +9031,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  hideAgentMcpServer:
+    speakeasy-default-hide-agent-mcp-server:
+      parameters:
+        header:
+          Gram-User-Email: "dev@acme.corp"
+      requestBody:
+        application/json: {"mcp_server_id": "f02bd748-223f-4b2c-bd2a-a761dec879cc"}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   hideMcpServer:
     speakeasy-default-hide-mcp-server:
       requestBody:
@@ -9178,6 +9356,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  linkSkill:
+    speakeasy-default-link-skill:
+      requestBody:
+        application/json: {"id": "550e8400-e29b-41d4-a716-446655440000", "mcp_server_id": "550e8400-e29b-41d4-a716-446655440001", "target_kind": "mcp_server"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-06-09T14:15:28.616Z", "id": "bdc7bf70-9ddf-4fcd-bb01-fdec0a39803a", "skill_display_name": "<value>", "skill_id": "e5a62f27-5a99-45e0-9a4d-aca6bc55bd80", "skill_name": "<value>", "target_kind": "meta_mcp_server"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listAIDetectionUsers:
     speakeasy-default-list-AI-detection-users:
       parameters:
@@ -9328,6 +9517,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listAssistantExecutionProfiles:
+    speakeasy-default-list-assistant-execution-profiles:
+      parameters:
+        query:
+          assistant_id: "7ac0789c-60b9-451d-b74e-e5324fd18e91"
+      responses:
+        "200":
+          application/json: {"profiles": [{"execution_context": "user_backed", "servers": [{"chosen": true, "mcp_server_id": "f3e824af-6009-4259-a903-642999b77617", "no_auth_allowed": true, "options": []}], "trigger_instance_id": "5cbe1a3d-44b6-4d8a-bb48-3b131fe67343", "trigger_name": "<value>", "version": 420338}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listAssistantMemories:
     speakeasy-default-list-assistant-memories:
       parameters:
@@ -9974,6 +10175,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listIssuanceProfiles:
+    speakeasy-default-list-issuance-profiles:
+      parameters:
+        query:
+          user_session_issuer_id: "ffef0364-c73e-4281-8711-8be89b029a3d"
+      responses:
+        "200":
+          application/json: {"items": [{"choices": [], "id": "13f79a81-40b8-4ccc-b717-da40bae7244f", "name": "<value>", "updated_at": "2025-04-06T07:49:15.926Z", "user_session_issuer_id": "92a472fc-bed0-43c4-abc6-92c601b1f571"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listJsonWebKeySets:
     speakeasy-default-list-json-web-key-sets:
       responses:
@@ -10062,6 +10275,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listMcpServerAuthClientChoices:
+    speakeasy-default-list-mcp-server-auth-client-choices:
+      parameters:
+        query:
+          mcp_server_id: "8810e064-7540-4440-95fd-d8ba8e7584ab"
+      responses:
+        "200":
+          application/json: {"choices": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listMcpServerToolFilters:
     speakeasy-default-list-mcp-server-tool-filters:
       responses:
@@ -10731,6 +10956,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listSkillLinks:
+    speakeasy-default-list-skill-links:
+      parameters:
+        query:
+          limit: 20
+      responses:
+        "200":
+          application/json: {"links": [{"created_at": "2025-03-04T00:39:51.405Z", "id": "e2e3c089-a782-4ece-af7f-b875c625d69c", "skill_display_name": "<value>", "skill_id": "c3a4eb13-c199-4859-b9d8-6b75e9185fca", "skill_name": "<value>", "target_kind": "organization_gateway"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listSkillSuggestionFeedback:
     speakeasy-default-list-skill-suggestion-feedback:
       parameters:
@@ -11941,6 +12178,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  reportAgentState:
+    speakeasy-default-report-agent-state:
+      requestBody:
+        application/json: {"agent": {"speakeasyd": "<value>"}, "enforcement_halted": false, "generated_at": "2026-02-24T22:25:40.361Z", "policy": {"withheld_plugins": []}, "schema_version": 382171, "tools": [{"layer": "<value>", "outcome": "<value>", "tool": "<value>"}]}
+      responses:
+        "200":
+          application/json: {"received_at": "2026-01-29T08:49:11.472Z", "stored": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   requestAccess:
     speakeasy-default-request-access:
       requestBody:
@@ -12618,6 +12866,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  setAssistantExecutionProfileChoice:
+    speakeasy-default-set-assistant-execution-profile-choice:
+      requestBody:
+        application/json: {"assistant_id": "34426c9b-7fbf-41a0-abb5-dc400354e475", "execution_context": "userless", "expected_version": 203959, "mcp_server_id": "5bf8cda6-a286-4fbc-a784-eeba9a289990", "trigger_instance_id": "b48483f7-405b-4980-ac02-9abc893f97c7"}
+      responses:
+        "200":
+          application/json: {"execution_context": "userless", "servers": [], "trigger_instance_id": "b364dde0-72fa-4470-a439-ad748a74bbbf", "trigger_name": "<value>", "version": 621886}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   setAuthClientAudience:
     speakeasy-default-set-auth-client-audience:
       requestBody:
@@ -12629,6 +12888,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  setAuthClientHeaders:
+    speakeasy-default-set-auth-client-headers:
+      requestBody:
+        application/json: {"headers": [{"is_required": false, "is_secret": false, "name": "<value>"}], "id": "d02f5ee0-7a45-4850-ac18-ac6af0fedb76"}
+      responses:
+        "200":
+          application/json: {"client_type": "ema", "created_at": "2024-09-14T09:36:47.258Z", "enabled": true, "headers": [], "id": "4a4d71d6-a31a-43ba-98ea-2c02f6dcfda1", "name": "<value>", "personal": true, "servers": [{"id": "28107750-c608-4be0-a735-da5c89b9baad", "project_id": "11a41887-1e22-4ef4-a5d4-da1f11bcf2d0", "public": true}], "source": "backfill", "updated_at": "2025-02-06T17:17:20.935Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   setBillingEmail:
     speakeasy-default-set-billing-email:
       requestBody:
@@ -12715,6 +12985,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  setIssuanceProfile:
+    speakeasy-default-set-issuance-profile:
+      requestBody:
+        application/json: {"choices": [{"mcp_server_id": "7b70e322-69f7-4715-81b6-585ab4964987"}], "name": "<value>", "user_session_issuer_id": "5d2188aa-464f-42f8-8244-11bb611bf97e"}
+      responses:
+        "200":
+          application/json: {"choices": [{"mcp_server_id": "7b70e322-69f7-4715-81b6-585ab4964987"}], "id": "0dd10d8c-0328-4f1b-bf5f-0083c2c4bdde", "name": "<value>", "updated_at": "2024-11-30T22:15:13.493Z", "user_session_issuer_id": "c83d10c2-da63-4cdf-9de3-6d87cc3e9a06"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   setMcpMetadata:
     speakeasy-default-set-mcp-metadata:
       requestBody:
@@ -13253,6 +13534,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  unhideAgentMcpServer:
+    speakeasy-default-unhide-agent-mcp-server:
+      parameters:
+        header:
+          Gram-User-Email: "dev@acme.corp"
+      requestBody:
+        application/json: {"mcp_server_id": "7c1fcb65-b6b9-4fa1-9396-981b527b1af8"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   unhideMcpServer:
     speakeasy-default-unhide-mcp-server:
       requestBody:
@@ -13269,6 +13562,15 @@ examples:
       responses:
         "200":
           application/json: {"generation": 192488, "grant_source": "<value>", "grant_types": ["<value 1>", "<value 2>", "<value 3>"], "remediation": "<value>", "resource": "<value>", "retryable": false, "scopes": ["<value 1>", "<value 2>", "<value 3>"], "stage": "eligibility", "state": "incomplete_metadata"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  unlinkSkill:
+    speakeasy-default-unlink-skill:
+      requestBody:
+        application/json: {"link_id": "550e8400-e29b-41d4-a716-446655440000"}
+      responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

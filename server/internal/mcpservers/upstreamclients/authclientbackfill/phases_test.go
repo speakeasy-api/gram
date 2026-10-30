@@ -661,7 +661,7 @@ func TestRun_EMABindingsAcrossServersAreOneClient(t *testing.T) {
 	clientID, issuerID := f.emaClient()
 	resource := "https://mcp.vendor.example.com/mcp"
 	first := f.serverAt(resource, usi)
-	second := f.serverAt(resource+"/", otherUSI)
+	second := f.serverAt(resource, otherUSI)
 	f.binding(usi, issuerID, clientID, resource, []string{"read", "write"})
 	f.binding(otherUSI, issuerID, clientID, resource, []string{"write", "read"})
 
@@ -756,20 +756,22 @@ func TestRun_EMAMixedCaseScopesAreRecorded(t *testing.T) {
 	require.Empty(t, results(rerun, KindEMA, OutcomeSkippedRace))
 }
 
-func TestRun_EMAResourceVariantsAreAmbiguous(t *testing.T) {
+func TestRun_EMAResourceVariantsStayDistinct(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	clientID, issuerID := f.emaClient()
 	resource := "https://mcp.vendor.example.com/mcp"
 	usi, otherUSI := f.userSessionIssuer(), f.userSessionIssuer()
-	f.serverAt(resource, usi)
+	server := f.serverAt(resource, usi)
+	otherServer := f.serverAt(resource+"/", otherUSI)
 	f.binding(usi, issuerID, clientID, resource, []string{})
 	f.binding(otherUSI, issuerID, clientID, resource+"/", []string{})
 
 	report := f.run(true)
-	ambiguous := results(report, KindEMA, OutcomeAmbiguous)
-	require.Len(t, ambiguous, 1)
-	require.Equal(t, ReasonResourceVariants, ambiguous[0].Reason)
+	require.Empty(t, results(report, KindEMA, OutcomeAmbiguous))
+	require.Len(t, f.live(TypeEMA), 2)
+	require.Equal(t, []uuid.UUID{EMAClientID(f.orgID, issuerID, clientID, resource)}, f.links(server))
+	require.Equal(t, []uuid.UUID{EMAClientID(f.orgID, issuerID, clientID, resource+"/")}, f.links(otherServer))
 }
 
 func TestRun_EMABindingReachingNoServerIsNotMatched(t *testing.T) {
@@ -1234,12 +1236,12 @@ func TestReconcileDerived_KeepsARacedClientsLinks(t *testing.T) {
 	want := newExpected()
 	want.race(clientID)
 	report := newReport(true)
-	require.NoError(t, reconcileDerived(t.Context(), f.q, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, &report, want, map[Kind]bool{}, startedAt))
+	require.NoError(t, reconcileDerived(t.Context(), f.q, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, &report, want, make(map[Kind]bool), startedAt))
 	require.Zero(t, report.ClientsRetired+report.LinksRetired+report.PendingRetiredLinks)
 	require.Equal(t, []uuid.UUID{clientID}, f.links(server), "a race never retires the client's links")
 
 	report = newReport(true)
-	require.NoError(t, reconcileDerived(t.Context(), f.q, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, &report, newExpected(), map[Kind]bool{}, startedAt))
+	require.NoError(t, reconcileDerived(t.Context(), f.q, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, &report, newExpected(), make(map[Kind]bool), startedAt))
 	require.Equal(t, 1, report.LinksRetired, "without the race the link is retired")
 }
 
@@ -1358,7 +1360,7 @@ func TestRun_EMAHonorsThePersistedProtectedResource(t *testing.T) {
 	require.Empty(t, f.live(TypeEMA))
 	require.Empty(t, f.links(refused))
 	require.Empty(t, f.links(renamed))
-	reasons := map[Reason]uuid.UUID{}
+	reasons := make(map[Reason]uuid.UUID)
 	for _, r := range results(report, KindEMA, OutcomeAmbiguous) {
 		reasons[r.Reason] = r.MCPServerID
 	}

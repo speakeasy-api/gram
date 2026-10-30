@@ -41,6 +41,14 @@ import {
 } from "@/components/observe/LogsFacetRail";
 import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
 import { LogsTimelineStrip } from "@/components/observe/LogsTimelineStrip";
+import {
+  SKILL_LOAD_CHANNEL_LABELS,
+  selectedLoadedVia,
+  skillLoadChannel,
+  withLoadedVia,
+  type SkillLoadChannel,
+} from "@/components/observe/skillLoadChannel";
+import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/Sheet";
 import { useToolUsagePayload } from "@/components/observe/toolUsagePayload";
 import { useSlugs } from "@/contexts/Sdk";
@@ -60,6 +68,7 @@ import {
   applyFilterAdd,
   type ActiveLogFilter,
 } from "@/pages/logs/log-filter-types";
+import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
 import { TraceLogsList } from "@/pages/logs/TraceLogsList";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
@@ -70,6 +79,7 @@ import { telemetryGetToolUsageTargetTimeSeries } from "@gram/client/funcs/teleme
 import { telemetryGetToolUsageTotals } from "@gram/client/funcs/telemetryGetToolUsageTotals";
 import { telemetryListToolUsageTraces } from "@gram/client/funcs/telemetryListToolUsageTraces";
 import type { LogFilter } from "@gram/client/models/components/logfilter.js";
+import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusageuserfilter.js";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import type { ToolUsageTargetTimeSeriesPoint } from "@gram/client/models/components/toolusagetargettimeseriespoint.js";
 import type { ToolUsageTotals } from "@gram/client/models/components/toolusagetotals.js";
@@ -115,7 +125,26 @@ function toSdkFilters(filters: ActiveLogFilter[]): LogFilter[] {
   });
 }
 
-export function LogsTools(): JSX.Element {
+/** Pins the view to one identity's calls, for embedding on its page. */
+export type LogsToolsScope = {
+  /** Never empty: an empty list would show every identity's calls. */
+  userFilters: ToolUsageUserFilter[];
+  /**
+   * The host page's account filter ("" for every account), which replaces
+   * the view's own so its rows match the page around it.
+   */
+  accountType?: string;
+};
+
+/** Facets that pick identities, which a scoped view has already chosen. */
+const IDENTITY_FACETS = new Set(["role", "user", "agent"]);
+
+export function LogsTools({
+  scope,
+}: {
+  /** Embedded on an identity's page: no page header, identity facets hidden. */
+  scope?: LogsToolsScope;
+} = {}): JSX.Element {
   const { projectSlug } = useSlugs();
   const queryClient = useQueryClient();
   const client = useGramContext();
@@ -150,12 +179,14 @@ export function LogsTools(): JSX.Element {
     handleRoleSelectionChange,
     roleEmails,
     roleFilterPending,
-    accountType,
+    accountType: pickedAccountType,
     handleAccountTypeChange,
   } = useObserveFilters<ToolUsageType>({
     defaultTypes: TOOL_USAGE_DEFAULT_TYPES,
     validTypes: TOOL_USAGE_VALID_TYPES,
   });
+  const accountType =
+    scope?.accountType !== undefined ? scope.accountType : pickedAccountType;
 
   const {
     attributeSearchInput,
@@ -210,6 +241,38 @@ export function LogsTools(): JSX.Element {
     [setSearchParams],
   );
 
+  const skillsOverMcpEnabled = useSkillsOverMcpEnabled();
+  const selectedSkillChannel = useMemo(
+    () => selectedLoadedVia(attributeFilters),
+    [attributeFilters],
+  );
+  // One URL write for both params: two functional updates in the same tick
+  // each start from the same location, so the second would drop the first.
+  // Picking a channel also narrows the type to skills, since "loaded via"
+  // means nothing for a tool call and the event-source filter alone would let
+  // hosted tool calls through as "MCP".
+  const setLoadedVia = useCallback(
+    (channel: SkillLoadChannel | null) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          const serialized = serializeFilters(
+            withLoadedVia(parseFilters(prev.get("af")), channel),
+          );
+          if (serialized) {
+            next.set("af", serialized);
+          } else {
+            next.delete("af");
+          }
+          if (channel) next.set("hookTypes", "skill");
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   const { summaryPayload, sharedQueryKey } = useToolUsagePayload({
     activeFilters,
     roleEmails,
@@ -217,6 +280,7 @@ export function LogsTools(): JSX.Element {
     accountType,
     clientKeys: selectedClientKeys,
     agentIds: selectedAgentIds,
+    scopedUserFilters: scope?.userFilters,
     from,
     to,
   });
@@ -453,6 +517,22 @@ export function LogsTools(): JSX.Element {
           selected: selectedHookTypes.includes(option.value as ToolUsageType),
         })),
       },
+      ...(skillsOverMcpEnabled
+        ? [
+            {
+              id: "loaded_via",
+              label: "Loaded via",
+              // MCP before hooks: the served path is the one this filter is
+              // here to find.
+              keepValueOrder: true,
+              values: (["mcp", "hook"] as const).map((channel) => ({
+                value: channel,
+                label: SKILL_LOAD_CHANNEL_LABELS[channel],
+                selected: selectedSkillChannel === channel,
+              })),
+            },
+          ]
+        : []),
       {
         id: "source",
         label: "Harness",
@@ -540,9 +620,11 @@ export function LogsTools(): JSX.Element {
     selectedEmails,
     selectedHookTypes,
     selectedServerValues,
+    selectedSkillChannel,
     selectedSources,
     selectedStatuses,
     serverNameMappings,
+    skillsOverMcpEnabled,
   ]);
 
   const onFacetToggle = useCallback(
@@ -578,6 +660,10 @@ export function LogsTools(): JSX.Element {
         case "account_type":
           handleAccountTypeChange(nextSelected ? value : "");
           break;
+        case "loaded_via":
+          // One channel at a time: both together is the same as neither.
+          setLoadedVia(nextSelected ? (value as SkillLoadChannel) : null);
+          break;
         case "user":
           handleUserEmailSelectionChange(next(selectedEmails));
           break;
@@ -604,6 +690,7 @@ export function LogsTools(): JSX.Element {
       selectedAgentIds,
       setAgentIds,
       setClientKeys,
+      setLoadedVia,
     ],
   );
 
@@ -631,6 +718,9 @@ export function LogsTools(): JSX.Element {
         case "account_type":
           handleAccountTypeChange("");
           break;
+        case "loaded_via":
+          setLoadedVia(null);
+          break;
         case "user":
           handleUserEmailSelectionChange([]);
           break;
@@ -640,6 +730,7 @@ export function LogsTools(): JSX.Element {
       }
     },
     [
+      setLoadedVia,
       handleAccountTypeChange,
       handleRoleSelectionChange,
       handleHookSourceSelectionChange,
@@ -846,23 +937,40 @@ export function LogsTools(): JSX.Element {
     ? new Error("Unable to load tool logs. Please try again.")
     : null;
 
+  const visibleFacetGroups = scope
+    ? facetGroups.filter(
+        (group) =>
+          !IDENTITY_FACETS.has(group.id) &&
+          !(group.id === "account_type" && scope.accountType !== undefined),
+      )
+    : facetGroups;
+
   return (
     <>
-      <InsightsConfig
-        mcpConfig={mcpConfig}
-        title="Explore Tool Logs"
-        subtitle="Ask me about your tool logs! Powered by Elements + platform MCP"
-        // Hide the docked assistant on this page — it floats over the last
-        // rows of the table, which is the primary surface here.
-        hideTrigger
-        suggestions={INSIGHTS_SUGGESTIONS["logs/tools"]}
-      />
+      {scope ? null : (
+        <InsightsConfig
+          mcpConfig={mcpConfig}
+          title="Explore Tool Logs"
+          subtitle="Ask me about your tool logs! Powered by Elements + platform MCP"
+          // Hide the docked assistant on this page — it floats over the last
+          // rows of the table, which is the primary surface here.
+          hideTrigger
+          suggestions={INSIGHTS_SUGGESTIONS["logs/tools"]}
+        />
+      )}
       {isLogsDisabled ? (
-        <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-          <LoggingPageHeader
-            title="Tool Logs"
-            description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
-          />
+        <div
+          className={cn(
+            "min-h-0 w-full flex-1 space-y-6 overflow-y-auto",
+            !scope && "p-8 pb-24",
+          )}
+        >
+          {scope ? null : (
+            <LoggingPageHeader
+              title="Tool Logs"
+              description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
+            />
+          )}
           <div className="flex-1">
             <EnableLoggingOverlay
               onEnabled={refetch}
@@ -885,7 +993,8 @@ export function LogsTools(): JSX.Element {
             totals={totalsData?.totals}
             timeSeries={timeSeriesData?.targetTimeSeries ?? []}
             timeSeriesPending={timeSeriesPending}
-            facetGroups={facetGroups}
+            facetGroups={visibleFacetGroups}
+            embedded={!!scope}
             onFacetToggle={onFacetToggle}
             onFacetClearGroup={onFacetClearGroup}
             onRangeSelect={setRangeFromBrush}
@@ -1136,6 +1245,7 @@ function LogsToolsContent({
   onRangeSelect,
   onResetRange,
   isZoomed,
+  embedded = false,
 }: {
   isLoading: boolean;
   isFetching: boolean;
@@ -1191,6 +1301,8 @@ function LogsToolsContent({
   onRangeSelect: (from: Date, to: Date) => void;
   onResetRange: () => void;
   isZoomed: boolean;
+  /** Inside another page: that page supplies the heading and the inset. */
+  embedded?: boolean;
 }) {
   const orgRoutes = useOrgRoutes();
   // Below xl the rail does not fit beside the table. It is the only filter
@@ -1219,17 +1331,29 @@ function LogsToolsContent({
       </Sheet>
 
       <div className="flex min-h-0 w-full flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8 short:gap-3 short:px-5 short:pt-4">
-          <div className="flex shrink-0 items-start justify-between gap-4">
-            <LoggingPageHeader
-              title="Tool Logs"
-              description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
-            />
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col gap-6 short:gap-3",
+            !embedded && "px-8 pt-8 short:px-5 short:pt-4",
+          )}
+        >
+          <div
+            className={cn(
+              "flex shrink-0 items-start gap-4",
+              embedded ? "justify-end" : "justify-between",
+            )}
+          >
+            {embedded ? null : (
+              <LoggingPageHeader
+                title="Tool Logs"
+                description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
+              />
+            )}
             <div className="flex items-center gap-2">
               <Button
                 variant="secondary"
                 size="sm"
-                className="xl:hidden"
+                className={embedded ? undefined : "xl:hidden"}
                 onClick={() => setFacetsOpen(true)}
               >
                 <Icon name="filter" className="size-4" />
@@ -1247,12 +1371,14 @@ function LogsToolsContent({
                 />
                 Refresh
               </Button>
-              <Button variant="secondary" size="sm" asChild>
-                <Link to={orgRoutes.logs.href()}>
-                  <Settings className="h-4 w-4" />
-                  Configure settings
-                </Link>
-              </Button>
+              {embedded ? null : (
+                <Button variant="secondary" size="sm" asChild>
+                  <Link to={orgRoutes.logs.href()}>
+                    <Settings className="h-4 w-4" />
+                    Configure settings
+                  </Link>
+                </Button>
+              )}
             </div>
           </div>
 
@@ -1403,7 +1529,12 @@ function LogsToolsContent({
 
             <div className="flex min-h-0 flex-1 overflow-hidden">
               <div
-                className="border-border bg-background relative hidden shrink-0 border-r xl:flex"
+                className={cn(
+                  "border-border bg-background relative hidden shrink-0 border-r",
+                  // Embedded, the host page's own rail already takes the
+                  // side, so filters stay behind the Filters button.
+                  !embedded && "xl:flex",
+                )}
                 style={{ width: railWidth }}
               >
                 {rail}
@@ -1794,6 +1925,8 @@ function LogsToolsTraceRow({
 
   const statusConfig = getStatusConfig(trace);
   const targetConfig = getTargetConfig(trace.targetType);
+  const skillsOverMcpEnabled = useSkillsOverMcpEnabled();
+  const skillChannel = skillsOverMcpEnabled ? skillLoadChannel(trace) : null;
   const userLabel = trace.userLabel || "—";
 
   return (
@@ -1904,7 +2037,7 @@ function LogsToolsTraceRow({
           </span>
         </div>
 
-        <div className="w-20 shrink-0">
+        <div className="flex w-20 shrink-0 items-center gap-1">
           <span
             title={targetConfig.label}
             className={cn(
@@ -1914,6 +2047,20 @@ function LogsToolsTraceRow({
           >
             {targetConfig.shortLabel}
           </span>
+          {skillChannel && (
+            // How the skill reached the agent. Uncoloured: the Skill badge
+            // beside it already carries the hue, and this only qualifies it.
+            <span
+              title={
+                skillChannel === "mcp"
+                  ? "Loaded over MCP from a server or gateway"
+                  : "Reported by an agent hook"
+              }
+              className="bg-muted text-muted-foreground inline-flex items-center px-1 py-0.5 font-mono text-[10px] tracking-wide uppercase"
+            >
+              {SKILL_LOAD_CHANNEL_LABELS[skillChannel]}
+            </span>
+          )}
         </div>
 
         {/* An agent is not a person: its own icon and its own link, never

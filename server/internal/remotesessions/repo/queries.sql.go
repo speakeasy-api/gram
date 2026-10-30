@@ -69,9 +69,8 @@ WHERE link.user_session_issuer_id = $5
   AND s.id = $6
   AND EXISTS (SELECT 1 FROM agents AS a WHERE a.id = $1 AND a.organization_id = p.organization_id AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL AND a.owner_reassignment_required_at IS NULL)
 ON CONFLICT (project_id, principal_id, user_session_issuer_id, remote_session_client_id) WHERE revoked_at IS NULL
-DO UPDATE SET updated_at = principal_remote_session_bindings.updated_at
-WHERE principal_remote_session_bindings.grant_generation = EXCLUDED.grant_generation
-  AND principal_remote_session_bindings.remote_session_id = EXCLUDED.remote_session_id
+DO UPDATE SET grant_generation = EXCLUDED.grant_generation, updated_at = clock_timestamp()
+WHERE principal_remote_session_bindings.remote_session_id = EXCLUDED.remote_session_id
   AND principal_remote_session_bindings.project_id = EXCLUDED.project_id
   AND principal_remote_session_bindings.organization_id = EXCLUDED.organization_id
   AND principal_remote_session_bindings.attached_by_subject_id = EXCLUDED.attached_by_subject_id
@@ -370,7 +369,7 @@ WITH due AS (
         )
         OR EXISTS (
           -- First-party connect need not create an inbound human session.
-          -- Only a live attachment to this exact grant can keep it alive.
+          -- Only a live attachment to this source row can keep it alive.
           SELECT 1
           FROM principal_remote_session_bindings AS b
           JOIN projects AS bp ON bp.id = b.project_id AND bp.organization_id = b.organization_id AND bp.deleted IS FALSE
@@ -379,7 +378,7 @@ WITH due AS (
           JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
             AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
           JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id AND source.deleted IS FALSE
-          WHERE b.remote_session_id = s.id AND b.grant_generation = s.grant_generation
+          WHERE b.remote_session_id = s.id
             AND b.remote_session_client_id = c.id AND b.user_session_issuer_id = usi.id
             AND b.organization_id = COALESCE(p.organization_id, usi.organization_id)
             AND b.revoked_at IS NULL
@@ -3347,7 +3346,7 @@ WHERE s.id = $1
         )
         OR EXISTS (
           -- First-party connect need not create an inbound human session.
-          -- Only a live attachment to this exact grant can keep it alive.
+          -- Only a live attachment to this source row can keep it alive.
           SELECT 1
           FROM principal_remote_session_bindings AS b
           JOIN projects AS bp ON bp.id = b.project_id AND bp.organization_id = b.organization_id AND bp.deleted IS FALSE
@@ -3356,7 +3355,7 @@ WHERE s.id = $1
           JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
             AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
           JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id AND source.deleted IS FALSE
-          WHERE b.remote_session_id = s.id AND b.grant_generation = s.grant_generation
+          WHERE b.remote_session_id = s.id
             AND b.remote_session_client_id = c.id AND b.user_session_issuer_id = usi.id
             AND b.organization_id = COALESCE(p.organization_id, usi.organization_id)
             AND b.revoked_at IS NULL
@@ -4399,7 +4398,6 @@ JOIN organization_user_relationships AS membership ON membership.organization_id
 JOIN remote_sessions AS s ON s.id = b.remote_session_id
   AND EXISTS (SELECT 1 FROM users lender JOIN organization_user_relationships lm ON lm.user_id = lender.id AND lm.organization_id = a.organization_id AND lm.deleted_at IS NULL WHERE 'user:' || lender.id = s.subject_urn AND lender.deleted_at IS NULL)
   AND b.attached_by_subject_id = s.subject_urn
-  AND s.grant_generation = b.grant_generation
   AND s.remote_session_client_id = b.remote_session_client_id
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = b.user_session_issuer_id
@@ -4432,7 +4430,7 @@ type GetPrincipalRemoteSessionBindingParams struct {
 	RemoteSessionClientID uuid.UUID
 }
 
-// Pin the exact attached row, never the owner's replacement after reconnect.
+// Read current credentials from the attached row, never a replacement after deletion.
 func (q *Queries) GetPrincipalRemoteSessionBinding(ctx context.Context, arg GetPrincipalRemoteSessionBindingParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, getPrincipalRemoteSessionBinding,
 		arg.ProjectID,
@@ -6901,17 +6899,18 @@ func (q *Queries) GetUserSessionIssuerForProject(ctx context.Context, arg GetUse
 const hasLivePrincipalRemoteSessionBindingsForClientBinding = `-- name: HasLivePrincipalRemoteSessionBindingsForClientBinding :one
 SELECT EXISTS (
   SELECT 1
-  FROM principal_remote_session_bindings
-  WHERE project_id = $1
-    AND organization_id = $2
-    AND remote_session_client_id = $3
-    AND user_session_issuer_id = $4
-    AND revoked_at IS NULL
+  FROM principal_remote_session_bindings AS b
+  JOIN projects AS bp ON bp.id = b.project_id AND bp.organization_id = b.organization_id AND bp.deleted IS FALSE
+  JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+    AND a.deleted IS FALSE AND a.revoked_at IS NULL
+  WHERE b.organization_id = $1
+    AND b.remote_session_client_id = $2
+    AND b.user_session_issuer_id = $3
+    AND b.revoked_at IS NULL
 )
 `
 
 type HasLivePrincipalRemoteSessionBindingsForClientBindingParams struct {
-	ProjectID             uuid.UUID
 	OrganizationID        string
 	RemoteSessionClientID uuid.UUID
 	UserSessionIssuerID   uuid.UUID
@@ -6919,17 +6918,11 @@ type HasLivePrincipalRemoteSessionBindingsForClientBindingParams struct {
 
 // Report whether any unrevoked agent attachment goes through a client's binding
 // to a user session issuer, which deleting that binding would cascade-delete.
-// Only the caller's project can hold them: the caller refuses an
-// organization-wide binding, and any other binding has a project-owned client
-// or user session issuer, which pins every attachment through it to that
-// project.
+// Organization-wide: an organization admin can change an organization-owned
+// client's binding to an organization-level issuer, and attachments through it
+// can live in any project.
 func (q *Queries) HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx context.Context, arg HasLivePrincipalRemoteSessionBindingsForClientBindingParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasLivePrincipalRemoteSessionBindingsForClientBinding,
-		arg.ProjectID,
-		arg.OrganizationID,
-		arg.RemoteSessionClientID,
-		arg.UserSessionIssuerID,
-	)
+	row := q.db.QueryRow(ctx, hasLivePrincipalRemoteSessionBindingsForClientBinding, arg.OrganizationID, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -7204,7 +7197,7 @@ SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_i
 WHERE project_id = $1 AND organization_id = $2
   AND user_session_issuer_id = $3
   AND ($4::uuid IS NULL OR remote_session_issuer_id = $4::uuid)
-  AND rtrim(resource, '/') = $5::text
+  AND resource = $5::text
   AND state IS DISTINCT FROM 'unlinked'
 ORDER BY id
 `
@@ -7266,7 +7259,7 @@ const listEMAChainingBindings = `-- name: ListEMAChainingBindings :many
 SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, remote_session_client_id, generation, state, grant_source, requested_scopes, claim_id, claimed_at, created_at, updated_at FROM remote_session_ema_bindings
 WHERE project_id = $1 AND organization_id = $2
   AND user_session_issuer_id = $3
-  AND rtrim(resource, '/') = $4::text
+  AND resource = $4::text
   AND ($5::uuid IS NULL OR remote_session_issuer_id = $5::uuid)
   AND ($6::uuid IS NULL OR remote_session_client_id = $6::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL
@@ -7283,9 +7276,8 @@ type ListEMAChainingBindingsParams struct {
 	RemoteSessionClientID uuid.NullUUID
 }
 
-// Ready bindings whose canonical resource names an endpoint's upstream.
-// Endpoint upstreams are recorded without a trailing slash while a binding
-// keeps the exact RFC 9728 identifier, so both compare under the routing trim.
+// Ready bindings whose exact resource names the resolved authorization resource.
+// RFC 8707 resource identity preserves trailing slashes; callers must not trim.
 // Unlinked tombstones and unfinished preparations never select or conflict.
 // A tunneled upstream passes its own derived issuer: its resource identifier is
 // operator supplied, so only a binding for that issuer may serve it. A caller
@@ -7872,7 +7864,6 @@ JOIN organization_user_relationships AS membership ON membership.organization_id
 JOIN remote_sessions AS s ON s.id = b.remote_session_id
   AND EXISTS (SELECT 1 FROM users lender JOIN organization_user_relationships lm ON lm.user_id = lender.id AND lm.organization_id = a.organization_id AND lm.deleted_at IS NULL WHERE 'user:' || lender.id = s.subject_urn AND lender.deleted_at IS NULL)
   AND b.attached_by_subject_id = s.subject_urn
-  AND s.grant_generation = b.grant_generation
   AND s.remote_session_client_id = b.remote_session_client_id
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = b.user_session_issuer_id
@@ -7903,7 +7894,7 @@ type ListEligiblePrincipalRemoteSessionBindingsParams struct {
 	UserSessionIssuerID uuid.UUID
 }
 
-// Pin the exact attached row, never the owner's replacement after reconnect.
+// Read current credentials from the attached row, never a replacement after deletion.
 func (q *Queries) ListEligiblePrincipalRemoteSessionBindings(ctx context.Context, arg ListEligiblePrincipalRemoteSessionBindingsParams) ([]RemoteSession, error) {
 	rows, err := q.db.Query(ctx, listEligiblePrincipalRemoteSessionBindings,
 		arg.ProjectID,
@@ -9313,7 +9304,7 @@ type ListPrincipalRemoteSessionBindingsRow struct {
 
 // Keep unavailable bindings discoverable for explicit detach, but return no
 // source identity. The handler adds a canonical view only for an eligible
-// candidate whose grant generation still matches this exact attachment.
+// source row that remains eligible for this exact attachment.
 func (q *Queries) ListPrincipalRemoteSessionBindings(ctx context.Context, arg ListPrincipalRemoteSessionBindingsParams) ([]ListPrincipalRemoteSessionBindingsRow, error) {
 	rows, err := q.db.Query(ctx, listPrincipalRemoteSessionBindings,
 		arg.ProjectID,
@@ -16999,7 +16990,7 @@ type UpsertRemoteSessionParams struct {
 // remote_session for a (subject, client) pair. Conflict target matches the
 // partial unique index on (subject_urn, remote_session_client_id) WHERE
 // deleted IS FALSE; on conflict advance the grant generation and overwrite tokens.
-// Attachments remain pinned to the previous grant. Token refresh uses
+// Attachments keep this source row and read its current credentials. Token refresh uses
 // UpdateRemoteSessionTokensIfUnchanged and never advances this generation. A
 // soft-deleted row falls outside the partial index, so a re-auth after
 // revocation inserts a fresh active row alongside the tombstone.

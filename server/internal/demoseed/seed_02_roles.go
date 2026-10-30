@@ -2,6 +2,8 @@ package demoseed
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
@@ -582,6 +584,12 @@ func (s *seeder) seedRolesAccountsAndDevices(ctx context.Context) error {
 	if err := s.q.RolesDeleteDeviceAgentDeviceSyncs(ctx, org); err != nil {
 		return fmt.Errorf("delete demo device agent device syncs: %w", err)
 	}
+	if err := s.q.RolesDeleteDeviceAgentStateReports(ctx, org); err != nil {
+		return fmt.Errorf("delete demo device agent state reports: %w", err)
+	}
+	// The policy every active agent was last served, and the one it replaced.
+	currentEtag := s.policyEtag("current")
+	previousEtag := s.policyEtag("previous")
 	for i, u := range demoUsers {
 		userID := s.userID(u.handle)
 		if err := s.q.RolesInsertUserAccount(ctx, repo.RolesInsertUserAccountParams{
@@ -614,13 +622,16 @@ func (s *seeder) seedRolesAccountsAndDevices(ctx context.Context) error {
 		// page.
 		if i < 4 {
 			lastSeenAgo := "6 days"
+			servedEtag := conv.ToPGTextEmpty("")
 			if i < 3 {
 				lastSeenAgo = "12 minutes"
+				servedEtag = conv.ToPGText(currentEtag)
 			}
 			if err := s.q.RolesInsertDeviceAgentSync(ctx, repo.RolesInsertDeviceAgentSyncParams{
 				OrganizationID: org,
 				Email:          s.email(u.handle),
 				LastSeenAgo:    lastSeenAgo,
+				ServedEtag:     servedEtag,
 			}); err != nil {
 				return fmt.Errorf("insert demo device agent sync %s: %w", u.handle, err)
 			}
@@ -752,5 +763,52 @@ func (s *seeder) seedRolesAccountsAndDevices(ctx context.Context) error {
 			return fmt.Errorf("insert demo device agent device sync %s: %w", d.serial, err)
 		}
 	}
+
+	// State reports, so coverage can say whether each active machine
+	// enforces the policy it was served. Amara's applied it, Jonas's is still
+	// on the previous one because Claude Code's managed settings are not
+	// writable, and Priya's runs a build that does not report. Three answers,
+	// for the same reason the heartbeats above are split.
+	reports := []struct {
+		serial, owner, hostname, reportedAgo, etag, appliedAgo, tools string
+		degraded                                                      int32
+	}{
+		{
+			"C02DEMO0001", "amara", "amara-mbp", "8 minutes", currentEtag, "2 days",
+			`[{"tool":"claude_code","layer":"managed","outcome":"armed","restart_required":false,"action_required":false,"drift_corrections":2},` +
+				`{"tool":"cursor","layer":"user","outcome":"armed","restart_required":false,"action_required":false,"drift_corrections":0},` +
+				`{"tool":"codex","layer":"off","outcome":"skipped","restart_required":false,"action_required":false}]`,
+			0,
+		},
+		{
+			"C02DEMO0002", "jonas", "jonas-mbp", "14 minutes", previousEtag, "9 days",
+			`[{"tool":"claude_code","layer":"managed","outcome":"error","error_kind":"permission_denied","restart_required":false,"action_required":true},` +
+				`{"tool":"cursor","layer":"user","outcome":"armed","restart_required":true,"action_required":false,"drift_corrections":0}]`,
+			1,
+		},
+	}
+	for _, r := range reports {
+		if err := s.q.RolesInsertDeviceAgentStateReport(ctx, repo.RolesInsertDeviceAgentStateReportParams{
+			OrganizationID:    org,
+			Email:             s.email(r.owner),
+			SerialNumber:      r.serial,
+			Hostname:          r.hostname,
+			ReportedAgo:       r.reportedAgo,
+			AppliedEtag:       r.etag,
+			AppliedAgo:        r.appliedAgo,
+			Tools:             []byte(r.tools),
+			DegradedToolCount: r.degraded,
+			SpeakeasydVersion: "0.42.0",
+		}); err != nil {
+			return fmt.Errorf("insert demo device agent state report %s: %w", r.serial, err)
+		}
+	}
 	return nil
+}
+
+// policyEtag is a device-agent policy etag in the shape GetPlugins serves: a
+// hex sha256.
+func (s *seeder) policyEtag(label string) string {
+	sum := sha256.Sum256([]byte(s.name("policy-etag-" + label)))
+	return hex.EncodeToString(sum[:])
 }

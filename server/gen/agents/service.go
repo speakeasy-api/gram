@@ -186,7 +186,13 @@ type AgentPolicySelector struct {
 }
 
 type AgentSession struct {
-	ID               string
+	ID string
+	// Who signed in: the agent itself, or a workload that federation assigns to
+	// the agent.
+	SubjectKind string
+	// The workload's subject as its platform issued it. Set only when subject_kind
+	// is workload.
+	WorkloadSubject  *string
 	ProjectID        *string
 	IssuerID         string
 	IssuerSlug       string

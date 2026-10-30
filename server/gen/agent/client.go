@@ -17,6 +17,8 @@ import (
 type Client struct {
 	GetPluginsEndpoint           goa.Endpoint
 	GetMyConnectionsEndpoint     goa.Endpoint
+	HideMcpServerEndpoint        goa.Endpoint
+	UnhideMcpServerEndpoint      goa.Endpoint
 	ListSyncedUsersEndpoint      goa.Endpoint
 	GetConfigurationEndpoint     goa.Endpoint
 	UpdateConfigurationEndpoint  goa.Endpoint
@@ -26,14 +28,17 @@ type Client struct {
 	GetSessionMetaEndpoint       goa.Endpoint
 	ReportSessionMovedEndpoint   goa.Endpoint
 	ReportAIScanEndpoint         goa.Endpoint
+	ReportStateEndpoint          goa.Endpoint
 	CreateSessionHandoffEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "agent" service client given the endpoints.
-func NewClient(getPlugins, getMyConnections, listSyncedUsers, getConfiguration, updateConfiguration, listAiScanTargets, upsertAiScanTarget, deleteAiScanTarget, getSessionMeta, reportSessionMoved, reportAIScan, createSessionHandoff goa.Endpoint) *Client {
+func NewClient(getPlugins, getMyConnections, hideMcpServer, unhideMcpServer, listSyncedUsers, getConfiguration, updateConfiguration, listAiScanTargets, upsertAiScanTarget, deleteAiScanTarget, getSessionMeta, reportSessionMoved, reportAIScan, reportState, createSessionHandoff goa.Endpoint) *Client {
 	return &Client{
 		GetPluginsEndpoint:           getPlugins,
 		GetMyConnectionsEndpoint:     getMyConnections,
+		HideMcpServerEndpoint:        hideMcpServer,
+		UnhideMcpServerEndpoint:      unhideMcpServer,
 		ListSyncedUsersEndpoint:      listSyncedUsers,
 		GetConfigurationEndpoint:     getConfiguration,
 		UpdateConfigurationEndpoint:  updateConfiguration,
@@ -43,6 +48,7 @@ func NewClient(getPlugins, getMyConnections, listSyncedUsers, getConfiguration, 
 		GetSessionMetaEndpoint:       getSessionMeta,
 		ReportSessionMovedEndpoint:   reportSessionMoved,
 		ReportAIScanEndpoint:         reportAIScan,
+		ReportStateEndpoint:          reportState,
 		CreateSessionHandoffEndpoint: createSessionHandoff,
 	}
 }
@@ -90,6 +96,42 @@ func (c *Client) GetMyConnections(ctx context.Context, p *GetMyConnectionsPayloa
 		return
 	}
 	return ires.(*GetMyConnectionsResult), nil
+}
+
+// HideMcpServer calls the "hideMcpServer" endpoint of the "agent" service.
+// HideMcpServer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) HideMcpServer(ctx context.Context, p *HideMcpServerPayload) (err error) {
+	_, err = c.HideMcpServerEndpoint(ctx, p)
+	return
+}
+
+// UnhideMcpServer calls the "unhideMcpServer" endpoint of the "agent" service.
+// UnhideMcpServer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UnhideMcpServer(ctx context.Context, p *UnhideMcpServerPayload) (err error) {
+	_, err = c.UnhideMcpServerEndpoint(ctx, p)
+	return
 }
 
 // ListSyncedUsers calls the "listSyncedUsers" endpoint of the "agent" service.
@@ -286,6 +328,28 @@ func (c *Client) ReportSessionMoved(ctx context.Context, p *ReportSessionMovedPa
 func (c *Client) ReportAIScan(ctx context.Context, p *ReportAIScanPayload) (err error) {
 	_, err = c.ReportAIScanEndpoint(ctx, p)
 	return
+}
+
+// ReportState calls the "reportState" endpoint of the "agent" service.
+// ReportState may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ReportState(ctx context.Context, p *ReportStatePayload) (res *ReportStateResult, err error) {
+	var ires any
+	ires, err = c.ReportStateEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ReportStateResult), nil
 }
 
 // CreateSessionHandoff calls the "createSessionHandoff" endpoint of the

@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -162,6 +163,9 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock EMA writer scope").LogError(ctx, logger)
+	}
 
 	txRepo := repo.New(dbtx)
 	if err := txRepo.LockOrganizationTunneledMcpLimit(ctx, authCtx.ActiveOrganizationID); err != nil {
@@ -208,6 +212,12 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "log tunneled mcp server creation").LogError(ctx, logger)
 	}
 
+	if err := authclientbackfill.SyncEMASources(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{server.ID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync tunneled EMA reach").LogError(ctx, logger)
+	}
+	if err := authclientbackfill.SyncTunneledSource(ctx, dbtx, authCtx.ActiveOrganizationID, server.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync tunneled source auth clients").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -351,6 +361,9 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock EMA writer scope").LogError(ctx, logger)
+	}
 
 	txRepo := repo.New(dbtx)
 	// Row-lock so a concurrent update cannot race the allow_public
@@ -403,6 +416,12 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "log tunneled mcp server update").LogError(ctx, logger)
 	}
 
+	if err := authclientbackfill.SyncEMASources(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{updated.ID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync tunneled EMA reach").LogError(ctx, logger)
+	}
+	if err := authclientbackfill.SyncTunneledSource(ctx, dbtx, authCtx.ActiveOrganizationID, updated.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync tunneled source auth clients").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -455,6 +474,9 @@ func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServer
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock EMA writer scope").LogError(ctx, logger)
+	}
 
 	txRepo := repo.New(dbtx)
 	existing, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
@@ -528,6 +550,9 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock EMA writer scope").LogError(ctx, logger)
+	}
 
 	txRepo := repo.New(dbtx)
 	deleted, err := txRepo.DeleteServer(ctx, repo.DeleteServerParams{
@@ -539,6 +564,17 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 			return nil
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete tunneled mcp server").LogError(ctx, logger)
+	}
+
+	// Retire the typed auth clients, server links and header copies derived
+	// from the deleted source's credential headers. Nothing else does: the
+	// headers stay on the tombstoned source, so only its liveness says they
+	// are gone.
+	if err := authclientbackfill.SyncEMASources(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{deleted.ID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync tunneled EMA reach").LogError(ctx, logger)
+	}
+	if err := authclientbackfill.SyncTunneledSource(ctx, dbtx, authCtx.ActiveOrganizationID, deleted.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync tunneled mcp server auth clients").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogTunneledMcpServerDelete(ctx, dbtx, audit.LogTunneledMcpServerDeleteEvent{

@@ -650,6 +650,23 @@ open their effective assignments; the dropdown always offers compact member sear
     - Command K: search "Python Code Gateway". It is listed under Gateways and
       opens the gateway's overview.
 
+34. **Skills served over MCP** (needs the `skills-over-mcp` flag on for the
+    organization)
+    - Open **MCP → Acme Support Tools → Skills**. It lists Support Refunds and
+      Triage Incident, each with a Latest badge and a "Last loaded over MCP"
+      value. As a writer, **Add skill** opens a picker without those two and
+      each row has a remove button.
+    - Open **MCP → Acme Agent Gateway → Skills**. It lists Triage Incident and
+      Runbook.
+    - Open **Skills → Runbook → Usage**. "Served over MCP" lists Acme Agent
+      Gateway (opens the gateway's Skills tab) and Organization gateway, and
+      there is no **Add to organization gateway** button. Support Refunds
+      lists only Acme Support Tools and offers the button to project writers.
+    - In the read-only demo org no add or remove control shows. With the flag
+      off, neither Skills tab is in the sidebar, a direct `/skills` tab URL
+      returns to the server or gateway overview, and the skill page has no
+      "Served over MCP" section.
+
 ## On failure
 
 Fix the seed (see rules in `PAGES.md`), then re-run the target that owns

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -82,7 +81,7 @@ func InspectIdentityChainingForTenant(ctx context.Context, db *pgxpool.Pool, pro
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
 	q := repo.New(tx)
-	bindings, err := q.ListEMABindingsForUpstream(ctx, repo.ListEMABindingsForUpstreamParams{ProjectID: project, OrganizationID: org, UserSessionIssuerID: userSessionIssuerID, RemoteSessionIssuerID: remoteSessionIssuerID, UpstreamResource: strings.TrimRight(upstream, "/")})
+	bindings, err := q.ListEMABindingsForUpstream(ctx, repo.ListEMABindingsForUpstreamParams{ProjectID: project, OrganizationID: org, UserSessionIssuerID: userSessionIssuerID, RemoteSessionIssuerID: remoteSessionIssuerID, UpstreamResource: upstream})
 	if err != nil {
 		return nil, fmt.Errorf("list identity chaining bindings: %w", err)
 	}

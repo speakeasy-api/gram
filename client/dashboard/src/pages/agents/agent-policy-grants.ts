@@ -120,6 +120,24 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     description: "Evaluate risk policies.",
     agentEligible: true,
   },
+  // The only safe org scopes: what a device agent running as this agent needs.
+  // Neither implies any other scope.
+  {
+    slug: "org:device_agent_sync",
+    resourceType: "org",
+    visibility: "user_visible",
+    description:
+      "Enroll devices under this agent and let their device agent fetch its plugins.",
+    agentEligible: true,
+  },
+  {
+    slug: "org:hooks_ingest",
+    resourceType: "org",
+    visibility: "user_visible",
+    description:
+      "Send AI-tool hook events and telemetry to any project in the organization.",
+    agentEligible: true,
+  },
 ];
 
 /**
@@ -150,6 +168,15 @@ export function isAgentPolicyNarrowable(resourceType: ResourceType): boolean {
 }
 
 /**
+ * What a permission on every resource of its kind applies to, as the editor and
+ * the agent's profile show it. An org grant narrowed to a project is not whole,
+ * so a caller passes no kind unless `isAgentPolicySelectorUnrestricted` holds.
+ */
+export function agentPolicyUnrestrictedLabel(kind: string | undefined): string {
+  return kind === "org" ? "Whole organization" : "All resources";
+}
+
+/**
  * The resource kind a scope's selectors must carry. Mirrors
  * `ResourceKindForScope` in server/internal/authz/selector.go, which derives it
  * from the scope; `ValidateSelector` rejects a selector that disagrees.
@@ -160,6 +187,7 @@ const RESOURCE_KIND_BY_SCOPE_FAMILY: Record<
   string,
   AgentPolicySelectorResourceKind
 > = {
+  org: "org",
   project: "project",
   mcp: "mcp",
   environment: "environment",
@@ -244,6 +272,8 @@ export function agentPolicyGrantsFromDraft(
  * The dimensions the editor's draft can hold and reproduce exactly. Narrower
  * than `ALLOWED_SELECTOR_KEYS`: the server also accepts `server_url` and
  * `server_identity`, which have no control and nowhere in the draft selector.
+ * It also accepts `project_id` on org:hooks_ingest alone, and org has no draft
+ * dimension, so a project-narrowed hooks grant is preserved and locked.
  */
 const DRAFT_DIMENSIONS: Record<string, readonly string[]> = {
   mcp: ["projectId", "disposition", "tool"],
@@ -253,20 +283,36 @@ const DRAFT_DIMENSIONS: Record<string, readonly string[]> = {
 };
 
 /**
- * The dimensions a selector actually constrains. A wildcard constrains nothing,
- * so it reads the same as an absent key — which is how `Selector.Matches` in
+ * Whether a selector value constrains its dimension. Presence, not truthiness:
+ * an empty value still does. A wildcard constrains nothing, so it reads the
+ * same as an absent key — which is how `Selector.Matches` in
  * server/internal/authz/selector.go treats it.
  */
+export function isAgentPolicyConstraint(value: unknown): value is string {
+  return typeof value === "string" && value !== ANY_RESOURCE;
+}
+
+/** The dimensions a selector actually constrains. */
 function constrainedDimensions(
   selector: AgentPolicySelector,
 ): Record<string, string> {
   const constrained: Record<string, string> = {};
   for (const [key, value] of Object.entries(selector)) {
     if (key === "resourceKind" || key === "resourceId") continue;
-    if (typeof value !== "string" || value === ANY_RESOURCE) continue;
+    if (!isAgentPolicyConstraint(value)) continue;
     constrained[key] = value;
   }
   return constrained;
+}
+
+/** Whether a selector reaches every resource of its kind, with nothing narrowing it. */
+export function isAgentPolicySelectorUnrestricted(
+  selector: AgentPolicySelector,
+): boolean {
+  return (
+    selector.resourceId === ANY_RESOURCE &&
+    Object.keys(constrainedDimensions(selector)).length === 0
+  );
 }
 
 /**
@@ -298,10 +344,7 @@ export function agentPolicyDraftFromGrants(
   const draft: AgentPolicyDraft = {};
   for (const grant of grants) {
     const { selector } = grant;
-    if (
-      selector.resourceId === ANY_RESOURCE &&
-      Object.keys(constrainedDimensions(selector)).length === 0
-    ) {
+    if (isAgentPolicySelectorUnrestricted(selector)) {
       draft[grant.scope] = null;
       continue;
     }
@@ -340,14 +383,24 @@ export interface AgentPolicyView {
 }
 
 /**
+ * Credential restrictions share the policy but are listed and edited in their
+ * own panel, so the permission editor neither shows nor rewrites them.
+ */
+export const AGENT_CREDENTIAL_BLOCK_SCOPE = "mcp:blocked_auth";
+
+/**
  * Split the stored ceiling into what the editor may rewrite and what it must
  * leave alone. A scope with even one unrepresentable grant is locked whole:
  * editing half of one would let a save drop the constrained grant and re-add a
- * broader one under the same scope.
+ * broader one under the same scope. Credential restrictions are left out of
+ * both; the fingerprint of the full ceiling still covers them.
  */
 export function agentPolicyViewFromGrants(
-  grants: AgentPolicyGrant[],
+  stored: AgentPolicyGrant[],
 ): AgentPolicyView {
+  const grants = stored.filter(
+    (grant) => grant.scope !== AGENT_CREDENTIAL_BLOCK_SCOPE,
+  );
   const locked = new Set(
     grants
       .filter((grant) => !isAgentPolicyGrantRepresentable(grant))

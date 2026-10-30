@@ -189,7 +189,7 @@ func (q *Queries) CountLivePluginServersByMCPServerIDFixture(ctx context.Context
 const createDefaultPlugin = `-- name: CreateDefaultPlugin :one
 INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
 VALUES ($1, $2, 'Default', 'default', TRUE)
-RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateDefaultPluginParams struct {
@@ -212,6 +212,7 @@ func (q *Queries) CreateDefaultPlugin(ctx context.Context, arg CreateDefaultPlug
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoSyncEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -224,7 +225,7 @@ const createPlugin = `-- name: CreatePlugin :one
 
 INSERT INTO plugins (organization_id, project_id, name, slug, description)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type CreatePluginParams struct {
@@ -255,6 +256,7 @@ func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plu
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoSyncEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -469,7 +471,7 @@ func (q *Queries) ForgetPublishedMarketplaceName(ctx context.Context, arg Forget
 }
 
 const getDefaultPlugin = `-- name: GetDefaultPlugin :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE organization_id = $1
   AND project_id = $2
@@ -497,6 +499,7 @@ func (q *Queries) GetDefaultPlugin(ctx context.Context, arg GetDefaultPluginPara
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoSyncEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -506,7 +509,7 @@ func (q *Queries) GetDefaultPlugin(ctx context.Context, arg GetDefaultPluginPara
 }
 
 const getDefaultPluginForUpdate = `-- name: GetDefaultPluginForUpdate :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE organization_id = $1
   AND project_id = $2
@@ -535,6 +538,7 @@ func (q *Queries) GetDefaultPluginForUpdate(ctx context.Context, arg GetDefaultP
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoSyncEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -752,7 +756,7 @@ func (q *Queries) GetOrganizationName(ctx context.Context, id string) (string, e
 }
 
 const getPlugin = `-- name: GetPlugin :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE id = $1
   AND organization_id = $2
@@ -778,6 +782,7 @@ func (q *Queries) GetPlugin(ctx context.Context, arg GetPluginParams) (Plugin, e
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoSyncEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -840,7 +845,7 @@ func (q *Queries) GetPluginServerByBackend(ctx context.Context, arg GetPluginSer
 
 const getPluginWithCounts = `-- name: GetPluginWithCounts :one
 SELECT
-  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.created_at, p.updated_at, p.deleted_at, p.deleted,
+  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.auto_sync_enabled, p.created_at, p.updated_at, p.deleted_at, p.deleted,
   (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
   (
     SELECT count(*)
@@ -895,6 +900,7 @@ func (q *Queries) GetPluginWithCounts(ctx context.Context, arg GetPluginWithCoun
 		&i.Plugin.Description,
 		&i.Plugin.IsDefault,
 		&i.Plugin.AutoCreated,
+		&i.Plugin.AutoSyncEnabled,
 		&i.Plugin.CreatedAt,
 		&i.Plugin.UpdatedAt,
 		&i.Plugin.DeletedAt,
@@ -939,7 +945,7 @@ func (q *Queries) GetProjectMarketplaceNameContext(ctx context.Context, projectI
 }
 
 const getProspectiveDefaultPlugin = `-- name: GetProspectiveDefaultPlugin :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE organization_id = $1
   AND project_id = $2
@@ -966,6 +972,7 @@ func (q *Queries) GetProspectiveDefaultPlugin(ctx context.Context, arg GetProspe
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoSyncEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1185,7 +1192,7 @@ func (q *Queries) IsOrganizationFeatureEnabled(ctx context.Context, arg IsOrgani
 }
 
 const listActivePluginsForProject = `-- name: ListActivePluginsForProject :many
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -1218,6 +1225,7 @@ func (q *Queries) ListActivePluginsForProject(ctx context.Context, arg ListActiv
 			&i.Description,
 			&i.IsDefault,
 			&i.AutoCreated,
+			&i.AutoSyncEnabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1274,8 +1282,8 @@ WITH intended AS (
 		SELECT 1 FROM tunneled_mcp_server_headers tmh
 		WHERE tmh.tunneled_mcp_server_id = tms.id AND tmh.deleted IS FALSE AND tmh.value_from_request_header IS NOT NULL
 	  ) THEN 'tunneled_backing_requires_user_header'
-      WHEN ps.mcp_server_id IS NOT NULL AND s.toolset_id IS NOT NULL AND (mts.id IS NULL OR mts.project_id <> p.project_id OR mts.deleted IS TRUE OR (CASE WHEN mcw.id IS NOT NULL THEN mcw.visibility = 'disabled' ELSE mts.mcp_enabled IS FALSE END)) THEN 'toolset_backing_unresolved'
-	  WHEN ps.mcp_server_id IS NOT NULL AND s.toolset_id IS NOT NULL AND s.visibility = 'public' AND (CASE WHEN mcw.id IS NOT NULL THEN mcw.visibility <> 'public' ELSE mts.mcp_is_public IS FALSE END) THEN 'toolset_backing_auth_mismatch'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.toolset_id IS NOT NULL AND (mts.id IS NULL OR mts.project_id <> p.project_id OR mts.deleted IS TRUE OR mcw.visibility = 'disabled') THEN 'toolset_backing_unresolved'
+	  WHEN ps.mcp_server_id IS NOT NULL AND s.toolset_id IS NOT NULL AND s.visibility = 'public' AND mcw.visibility <> 'public' THEN 'toolset_backing_auth_mismatch'
       -- Hosted entries read headers from the one metadata row published output uses.
       WHEN ps.mcp_server_id IS NOT NULL AND s.id = s.toolset_id AND EXISTS (
         SELECT 1
@@ -1999,7 +2007,7 @@ func (q *Queries) ListPluginSkillsForProject(ctx context.Context, arg ListPlugin
 
 const listPlugins = `-- name: ListPlugins :many
 SELECT
-  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.created_at, p.updated_at, p.deleted_at, p.deleted,
+  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.auto_sync_enabled, p.created_at, p.updated_at, p.deleted_at, p.deleted,
   (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
   (
     SELECT count(*)
@@ -2043,6 +2051,7 @@ type ListPluginsRow struct {
 	Description     pgtype.Text
 	IsDefault       pgtype.Bool
 	AutoCreated     bool
+	AutoSyncEnabled pgtype.Bool
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
@@ -2070,6 +2079,7 @@ func (q *Queries) ListPlugins(ctx context.Context, arg ListPluginsParams) ([]Lis
 			&i.Description,
 			&i.IsDefault,
 			&i.AutoCreated,
+			&i.AutoSyncEnabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -2089,7 +2099,7 @@ func (q *Queries) ListPlugins(ctx context.Context, arg ListPluginsParams) ([]Lis
 }
 
 const listPluginsForGlobalRoleDeletion = `-- name: ListPluginsForGlobalRoleDeletion :many
-SELECT p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.created_at, p.updated_at, p.deleted_at, p.deleted
+SELECT p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.auto_sync_enabled, p.created_at, p.updated_at, p.deleted_at, p.deleted
 FROM plugins p
 JOIN plugin_assignments pa ON pa.plugin_id = p.id AND pa.organization_id = p.organization_id
 WHERE pa.principal_urn = $1
@@ -2116,6 +2126,7 @@ func (q *Queries) ListPluginsForGlobalRoleDeletion(ctx context.Context, principa
 			&i.Description,
 			&i.IsDefault,
 			&i.AutoCreated,
+			&i.AutoSyncEnabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -2132,7 +2143,7 @@ func (q *Queries) ListPluginsForGlobalRoleDeletion(ctx context.Context, principa
 }
 
 const listPluginsForRoleDeletion = `-- name: ListPluginsForRoleDeletion :many
-SELECT p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.created_at, p.updated_at, p.deleted_at, p.deleted
+SELECT p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.auto_sync_enabled, p.created_at, p.updated_at, p.deleted_at, p.deleted
 FROM plugins p
 JOIN plugin_assignments pa ON pa.plugin_id = p.id AND pa.organization_id = p.organization_id
 WHERE pa.organization_id = $1
@@ -2165,6 +2176,7 @@ func (q *Queries) ListPluginsForRoleDeletion(ctx context.Context, arg ListPlugin
 			&i.Description,
 			&i.IsDefault,
 			&i.AutoCreated,
+			&i.AutoSyncEnabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -2286,6 +2298,7 @@ SELECT
   p.name AS plugin_name,
   p.slug AS plugin_slug,
   p.description AS plugin_description,
+  p.organization_id AS plugin_organization_id,
   ps.id AS server_id,
   ps.display_name AS server_display_name,
   ps.policy AS server_policy,
@@ -2296,8 +2309,8 @@ SELECT
   (s.user_session_issuer_id IS NOT NULL)::bool AS mcp_server_is_oauth,
   COALESCE(ep.slug, '')::text AS endpoint_slug,
   ep.custom_domain AS endpoint_custom_domain,
-  addr.mcp_slug AS address_slug,
-  addr_cd.domain AS address_custom_domain,
+  -- legacyalias: drop with AIM-670.
+  (s.id = s.toolset_id AND ep.slug IS NULL AND mts.id IS NOT NULL)::bool AS needs_alias,
   ump.url AS unproxied_url,
   s.network_access_mode,
   COALESCE(private_ep.slug, '') AS private_endpoint_slug,
@@ -2336,14 +2349,12 @@ LEFT JOIN unproxied_mcp_servers ump ON ump.id = s.unproxied_mcp_server_id AND um
 LEFT JOIN remote_mcp_servers rms ON rms.id = s.remote_mcp_server_id AND rms.project_id = p.project_id AND rms.deleted IS FALSE AND rms.transport_type IN ('streamable-http', 'sse')
 LEFT JOIN tunneled_mcp_servers tms ON tms.id = s.tunneled_mcp_server_id AND tms.project_id = p.project_id AND tms.deleted IS FALSE AND tms.status <> 'revoked' AND (s.visibility <> 'public' OR tms.allow_public IS TRUE)
 LEFT JOIN mcp_servers mcw ON mcw.id = s.toolset_id AND mcw.toolset_id = s.toolset_id AND mcw.project_id = p.project_id AND mcw.deleted IS FALSE
-LEFT JOIN toolsets mts ON mts.id = s.toolset_id AND mts.project_id = p.project_id AND mts.deleted IS FALSE AND (CASE WHEN mcw.id IS NOT NULL THEN mcw.visibility <> 'disabled' ELSE mts.mcp_enabled END)
-LEFT JOIN toolsets addr ON addr.id = (CASE WHEN s.id = s.toolset_id AND ep.slug IS NULL THEN mts.id END) AND addr.project_id = p.project_id AND addr.mcp_slug IS NOT NULL
-LEFT JOIN custom_domains addr_cd ON addr_cd.id = addr.custom_domain_id AND addr_cd.organization_id = p.organization_id AND addr_cd.activated IS TRUE AND addr_cd.verified IS TRUE AND addr_cd.deleted IS FALSE
+LEFT JOIN toolsets mts ON mts.id = s.toolset_id AND mts.project_id = p.project_id AND mts.deleted IS FALSE AND (mcw.id IS NULL OR mcw.visibility <> 'disabled')
 LEFT JOIN toolsets envt ON envt.id = (CASE WHEN s.id = s.toolset_id THEN mts.id END) AND envt.project_id = p.project_id
 WHERE p.project_id = $1
   AND p.deleted IS FALSE
   AND (COALESCE(cardinality($2::uuid[]), 0) = 0 OR p.id = ANY($2::uuid[]))
-  AND (ep.slug IS NOT NULL OR addr.id IS NOT NULL OR private_ep.slug IS NOT NULL OR ump.url IS NOT NULL OR s.network_access_mode IS NOT NULL)
+  AND (ep.slug IS NOT NULL OR (s.id = s.toolset_id AND mts.id IS NOT NULL) OR private_ep.slug IS NOT NULL OR ump.url IS NOT NULL OR s.network_access_mode IS NOT NULL)
   AND (
     (s.remote_mcp_server_id IS NOT NULL AND rms.id IS NOT NULL)
     OR (s.tunneled_mcp_server_id IS NOT NULL AND tms.id IS NOT NULL)
@@ -2364,6 +2375,7 @@ type ListPluginsWithMcpServersForProjectRow struct {
 	PluginName           string
 	PluginSlug           string
 	PluginDescription    pgtype.Text
+	PluginOrganizationID string
 	ServerID             uuid.UUID
 	ServerDisplayName    string
 	ServerPolicy         string
@@ -2374,8 +2386,7 @@ type ListPluginsWithMcpServersForProjectRow struct {
 	McpServerIsOauth     bool
 	EndpointSlug         string
 	EndpointCustomDomain pgtype.Text
-	AddressSlug          pgtype.Text
-	AddressCustomDomain  pgtype.Text
+	NeedsAlias           bool
 	UnproxiedUrl         pgtype.Text
 	NetworkAccessMode    pgtype.Text
 	PrivateEndpointSlug  string
@@ -2384,7 +2395,8 @@ type ListPluginsWithMcpServersForProjectRow struct {
 }
 
 // Plugin generation for mcp_server-keyed entries. A canonical wrapper with no
-// usable endpoint uses its toolset's address. Each other server resolves to
+// usable endpoint is returned with needs_alias, and the caller resolves its
+// toolset's legacy alias through legacyalias, dropping it when it has none. Each other server resolves to
 // a single usable endpoint: custom-domain endpoints win over platform
 // endpoints, then oldest created_at.
 // Resolving the host inside the selection keeps endpoint choice and URL-host
@@ -2413,6 +2425,7 @@ func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, arg L
 			&i.PluginName,
 			&i.PluginSlug,
 			&i.PluginDescription,
+			&i.PluginOrganizationID,
 			&i.ServerID,
 			&i.ServerDisplayName,
 			&i.ServerPolicy,
@@ -2423,8 +2436,7 @@ func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, arg L
 			&i.McpServerIsOauth,
 			&i.EndpointSlug,
 			&i.EndpointCustomDomain,
-			&i.AddressSlug,
-			&i.AddressCustomDomain,
+			&i.NeedsAlias,
 			&i.UnproxiedUrl,
 			&i.NetworkAccessMode,
 			&i.PrivateEndpointSlug,
@@ -2834,7 +2846,7 @@ WHERE organization_id = $1
   AND project_id = $2
   AND slug = 'default'
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type PromoteToDefaultPluginParams struct {
@@ -2859,6 +2871,7 @@ func (q *Queries) PromoteToDefaultPlugin(ctx context.Context, arg PromoteToDefau
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoSyncEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -3427,7 +3440,7 @@ WHERE id = $4
   AND organization_id = $5
   AND project_id = $6
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdatePluginParams struct {
@@ -3458,6 +3471,7 @@ func (q *Queries) UpdatePlugin(ctx context.Context, arg UpdatePluginParams) (Plu
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoSyncEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

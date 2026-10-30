@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const createAgent = `-- name: CreateAgent :one
@@ -852,7 +853,6 @@ WHERE a.organization_id = $1
     s.id IS NULL OR s.deleted
     OR NOT EXISTS (SELECT 1 FROM users lender JOIN organization_user_relationships lm ON lm.user_id = lender.id AND lm.organization_id = a.organization_id AND lm.deleted_at IS NULL WHERE 'user:' || lender.id = s.subject_urn AND lender.deleted_at IS NULL)
     OR b.attached_by_subject_id <> s.subject_urn
-    OR b.grant_generation <> s.grant_generation
     OR NOT EXISTS (
       SELECT 1
       FROM remote_session_clients c
@@ -950,29 +950,84 @@ func (q *Queries) ListConnectionBlocks(ctx context.Context, arg ListConnectionBl
 }
 
 const listManagedAgentSessions = `-- name: ListManagedAgentSessions :many
+WITH assigned AS (
+  SELECT a.workload_issuer_id, a.match_kind, a.subject
+  FROM workload_agent_assignments AS a
+  JOIN workload_issuers AS i ON i.organization_id = a.organization_id AND i.id = a.workload_issuer_id
+  WHERE a.organization_id = $1::text
+    AND a.agent_id = $3::uuid
+    AND a.deleted IS FALSE
+    AND i.deleted IS FALSE
+),
+candidates AS (
+  SELECT agent_session.id FROM user_sessions AS agent_session WHERE agent_session.subject_urn = $2::text
+  UNION
+  SELECT exact_session.id
+  FROM assigned AS a
+  JOIN user_sessions AS exact_session
+    ON a.match_kind = 'exact'
+   AND exact_session.subject_urn = 'workload:' || a.workload_issuer_id::text || ':' || a.subject
+  UNION
+  -- Wildcard stems cannot use the subject index, so the scan stays inside
+  -- the organization's own sessions.
+  SELECT wildcard_session.id
+  FROM assigned AS a
+  JOIN user_sessions AS wildcard_session
+    ON a.match_kind = 'wildcard'
+   AND a.subject LIKE '%*'
+   AND length(a.subject) > 1
+   AND wildcard_session.organization_id = $1::text
+   AND starts_with(wildcard_session.subject_urn, 'workload:' || a.workload_issuer_id::text || ':' || left(a.subject, length(a.subject) - 1))
+)
 SELECT s.id, s.project_id, s.user_session_issuer_id, iss.slug AS issuer_slug,
        c.client_name, s.authorizer_user_id, s.created_at, s.expires_at,
-       s.refresh_expires_at, s.last_used_at
-FROM user_sessions AS s
+       s.refresh_expires_at, s.last_used_at, s.subject_urn
+FROM candidates
+JOIN user_sessions AS s ON s.id = candidates.id
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
 LEFT JOIN projects AS p ON p.id = iss.project_id
 LEFT JOIN projects AS session_project ON session_project.id = s.project_id
 LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id AND c.user_session_issuer_id = iss.id
+LEFT JOIN LATERAL (
+  -- ` + "`" + `workload:` + "`" + ` is 9 characters and the issuer id a 36-character UUID, so the
+  -- issuer id starts at 10 and the external subject at 47.
+  SELECT wa.agent_id
+  FROM workload_agent_assignments AS wa
+  JOIN workload_issuers AS wi ON wi.organization_id = wa.organization_id AND wi.id = wa.workload_issuer_id
+  WHERE starts_with(s.subject_urn, 'workload:')
+    AND wa.organization_id = $1::text
+    AND wa.workload_issuer_id::text = substring(s.subject_urn FROM 10 FOR 36)
+    AND wa.deleted IS FALSE
+    AND wi.deleted IS FALSE
+    AND (
+      (wa.match_kind = 'exact' AND wa.subject = substring(s.subject_urn FROM 47))
+      OR (
+        wa.match_kind = 'wildcard'
+        AND wi.allow_wildcard_admission
+        AND wa.subject LIKE '%*'
+        AND length(wa.subject) > 1
+        AND starts_with(substring(s.subject_urn FROM 47), left(wa.subject, length(wa.subject) - 1))
+      )
+    )
+  ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
+  LIMIT 1
+) AS workload_agent ON TRUE
 WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id, session_project.organization_id) = $1::text
   AND (s.organization_id IS NULL OR s.organization_id = $1::text)
   AND (iss.organization_id IS NULL OR iss.organization_id = $1::text)
   AND (p.organization_id IS NULL OR p.organization_id = $1::text)
   AND (session_project.organization_id IS NULL OR session_project.organization_id = $1::text)
-  AND s.subject_urn = $2::text
+  AND (s.subject_urn = $2::text OR workload_agent.agent_id = $3::uuid)
   AND s.deleted IS FALSE
-  AND ($3::uuid IS NULL OR s.id < $3::uuid)
+  AND ($4::uuid IS NULL OR s.id < $4::uuid)
 ORDER BY s.id DESC
-LIMIT $4
+LIMIT $5
 `
 
 type ListManagedAgentSessionsParams struct {
 	OrganizationID string
 	AgentSubject   string
+	AgentID        uuid.UUID
 	Cursor         uuid.NullUUID
 	LimitValue     int32
 }
@@ -988,13 +1043,21 @@ type ListManagedAgentSessionsRow struct {
 	ExpiresAt           pgtype.Timestamptz
 	RefreshExpiresAt    pgtype.Timestamptz
 	LastUsedAt          pgtype.Timestamptz
+	SubjectUrn          urn.SessionSubject
 }
 
+// Sessions signed in as the agent, and sessions of workloads that sign in as
+// it through federation. A workload session's subject is the workload, not the
+// agent, so it is linked through workload_agent_assignments and resolved the
+// way ResolveWorkloadAgentAssignment resolves it: exact before wildcard, the
+// longer stem first. A workload pinned to another agent is not listed here,
+// even when one of this agent's wildcards also covers it.
 // All known tenancy sources must agree before legacy fallback.
 func (q *Queries) ListManagedAgentSessions(ctx context.Context, arg ListManagedAgentSessionsParams) ([]ListManagedAgentSessionsRow, error) {
 	rows, err := q.db.Query(ctx, listManagedAgentSessions,
 		arg.OrganizationID,
 		arg.AgentSubject,
+		arg.AgentID,
 		arg.Cursor,
 		arg.LimitValue,
 	)
@@ -1016,6 +1079,7 @@ func (q *Queries) ListManagedAgentSessions(ctx context.Context, arg ListManagedA
 			&i.ExpiresAt,
 			&i.RefreshExpiresAt,
 			&i.LastUsedAt,
+			&i.SubjectUrn,
 		); err != nil {
 			return nil, err
 		}

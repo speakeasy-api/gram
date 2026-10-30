@@ -113,6 +113,62 @@ var AuthClientAudience = Type("AuthClientAudience", func() {
 	Required("auth_client_id", "entries", "version", "public_servers")
 })
 
+func creatableClientTypeEnum() {
+	Enum("remote_session", "service_account", "static_credential", "pass_through")
+}
+
+var AuthClientHeaderInput = Type("AuthClientHeaderInput", func() {
+	Description("A header an auth client sends upstream. Exactly one of value and value_from_request_header is set, except that a header already storing a value may omit both to keep it, as long as is_secret is unchanged.")
+
+	Attribute("name", String, "The header name.", func() { MinLength(1) })
+	Attribute("description", String, "What the header is for.")
+	Attribute("is_required", Boolean, "Whether a caller must supply the header when it is copied from the request.", func() { Default(false) })
+	Attribute("is_secret", Boolean, "Whether the value is secret. Secret values are stored encrypted and never returned.", func() { Default(false) })
+	Attribute("value", String, "The value to send. Omit it on a header that already stores one, with is_secret unchanged, to keep the stored value.")
+	Attribute("value_from_request_header", String, "The caller's request header to copy the value from, for pass-through headers.")
+
+	Required("name")
+})
+
+var AuthClientChoice = Type("AuthClientChoice", func() {
+	Meta("struct:pkg:path", "types")
+	Description("A shared upstream credential a caller can choose for a credential of their own, such as an agent key.")
+
+	Attribute("id", String, "The auth client id.", func() { Format(FormatUUID) })
+	Attribute("name", String, "The client's name.")
+	Attribute("client_type", String, "How the client authenticates upstream. Only shared types are offered.", func() {
+		Enum("service_account", "static_credential", "pass_through")
+	})
+
+	Required("id", "name", "client_type")
+})
+
+var IssuanceProfileChoice = Type("IssuanceProfileChoice", func() {
+	Meta("struct:pkg:path", "types")
+	Description("The upstream credential a headless caller's sessions use on one MCP server.")
+
+	Attribute("mcp_server_id", String, "The MCP server.", func() { Format(FormatUUID) })
+	Attribute("auth_client_id", String, "The auth client. Omit for a server whose upstream needs no authentication.", func() { Format(FormatUUID) })
+
+	Required("mcp_server_id")
+})
+
+var IssuanceProfile = Type("IssuanceProfile", func() {
+	Meta("struct:pkg:path", "types")
+	Description("The upstream credentials a headless caller's sessions use: an OAuth client or a workload subject that cannot choose in a browser. Each new session gets the choices that still validate; a token request may name its own instead.")
+
+	Attribute("id", String, "The profile id.", func() { Format(FormatUUID) })
+	Attribute("name", String, "The profile's name.")
+	Attribute("user_session_issuer_id", String, "The sign-in the caller's sessions come from.", func() { Format(FormatUUID) })
+	Attribute("user_session_client_id", String, "The OAuth client the profile applies to, for a client.", func() { Format(FormatUUID) })
+	Attribute("workload_issuer_id", String, "The workload issuer, for a workload subject.", func() { Format(FormatUUID) })
+	Attribute("workload_subject", String, "The workload subject, for a workload.")
+	Attribute("choices", ArrayOf(IssuanceProfileChoice), "The credential for each MCP server.")
+	Attribute("updated_at", String, "When the profile last changed.", func() { Format(FormatDateTime) })
+
+	Required("id", "name", "user_session_issuer_id", "choices", "updated_at")
+})
+
 var AuthClientAudienceRule = Type("AuthClientAudienceRule", func() {
 	Description("A rule to store for an auth client.")
 
@@ -220,6 +276,88 @@ var _ = Service("authClients", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateAuthClient"}`)
 	})
 
+	Method("createAuthClient", func() {
+		Description("Create an auth client and, optionally, offer it on MCP servers. A remote_session or service_account client authenticates through an existing OAuth registration whose credential owner matches its type; a static_credential or pass_through client authenticates with its own headers. Creating a client gives nobody permission to use it: set its audience to decide who may. Takes effect only where typed auth client resolution is enforced. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("client_type", String, "How the client authenticates upstream.", creatableClientTypeEnum)
+			Attribute("name", String, "The client's name.", func() { MinLength(1) })
+			Attribute("project_id", String, "Confine the client to one project. Omit to share it across the organization's projects.", func() { Format(FormatUUID) })
+			Attribute("remote_session_client_id", String, "The OAuth registration behind a remote_session or service_account client.", func() { Format(FormatUUID) })
+			Attribute("headers", ArrayOf(AuthClientHeaderInput), "The headers the client sends upstream. Required for static_credential and pass_through clients. Token-generating clients produce their own Authorization header, which cannot be configured.")
+			Attribute("mcp_server_ids", ArrayOf(String, func() { Format(FormatUUID) }), "MCP servers that should offer the client.")
+			Required("client_type", "name")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(AuthClient)
+
+		HTTP(func() {
+			POST("/rpc/authClients.create")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createAuthClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateAuthClient"}`)
+	})
+
+	Method("attachAuthClientToMcpServer", func() {
+		Description("Offer an existing auth client on another MCP server instead of creating a copy. The client stays one client: changing or rotating it changes upstream behavior on every server that offers it. Offering a client grants nobody permission to use it or access to the server. Takes effect only where typed auth client resolution is enforced. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("id", String, "The auth client id.", func() { Format(FormatUUID) })
+			Attribute("mcp_server_id", String, "The MCP server id.", func() { Format(FormatUUID) })
+			Required("id", "mcp_server_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			// Named explicitly: detach takes the same body, and an unnamed copy
+			// would be merged with it in the SDK.
+			Meta("openapi:typename", "AttachAuthClientToMcpServerRequestBody")
+		})
+
+		Result(AuthClient)
+
+		HTTP(func() {
+			POST("/rpc/authClients.attachToMcpServer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "attachAuthClientToMcpServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "attachToMcpServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AttachAuthClientToMcpServer"}`)
+	})
+
+	Method("setAuthClientHeaders", func() {
+		Description("Replace the headers an auth client sends upstream. Rotating a shared client's credential changes upstream behavior on every server that offers it. Token-generating clients produce their own Authorization header, which cannot be configured. Clients created from a server's existing settings follow those settings and are edited there. Takes effect only where typed auth client resolution is enforced. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("id", String, "The auth client id.", func() { Format(FormatUUID) })
+			Attribute("headers", ArrayOf(AuthClientHeaderInput), "Every header the client should send.")
+			Required("id", "headers")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(AuthClient)
+
+		HTTP(func() {
+			POST("/rpc/authClients.setHeaders")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setAuthClientHeaders")
+		Meta("openapi:extension:x-speakeasy-name-override", "setHeaders")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetAuthClientHeaders"}`)
+	})
+
 	Method("detachAuthClientFromMcpServer", func() {
 		Description("Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.")
 
@@ -229,6 +367,9 @@ var _ = Service("authClients", func() {
 			Required("id", "mcp_server_id")
 			security.SessionPayload()
 			security.ByKeyPayload()
+			// Named explicitly: attach takes the same body, and an unnamed copy
+			// would be merged with it in the SDK.
+			Meta("openapi:typename", "DetachAuthClientFromMcpServerRequestBody")
 		})
 
 		Result(AuthClient)
@@ -243,6 +384,119 @@ var _ = Service("authClients", func() {
 		Meta("openapi:operationId", "detachAuthClientFromMcpServer")
 		Meta("openapi:extension:x-speakeasy-name-override", "detachFromMcpServer")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DetachAuthClientFromMcpServer"}`)
+	})
+
+	Method("listMcpServerAuthClientChoices", func() {
+		Description("List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Returns each choice's id, name and client_type, and whether the upstream requires authentication; no headers or credentials.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The MCP server id.", func() { Format(FormatUUID) })
+			Required("mcp_server_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(func() {
+			Attribute("requires_upstream_auth", Boolean, "Whether the upstream needs authentication. Omitted while undecided.")
+			Attribute("choices", ArrayOf(AuthClientChoice), "The enabled shared credentials the server offers.")
+			Required("choices")
+		})
+
+		HTTP(func() {
+			GET("/rpc/authClients.listMcpServerChoices")
+			Param("mcp_server_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listMcpServerAuthClientChoices")
+		Meta("openapi:extension:x-speakeasy-name-override", "listMcpServerChoices")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "McpServerAuthClientChoices"}`)
+	})
+
+	Method("listIssuanceProfiles", func() {
+		Description("List the issuance profiles for headless callers signing in through a sign-in. Requires org:read.")
+
+		Payload(func() {
+			Attribute("user_session_issuer_id", String, "The sign-in.", func() { Format(FormatUUID) })
+			Required("user_session_issuer_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(func() {
+			Attribute("items", ArrayOf(IssuanceProfile))
+			Required("items")
+		})
+
+		HTTP(func() {
+			GET("/rpc/authClients.listIssuanceProfiles")
+			Param("user_session_issuer_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listIssuanceProfiles")
+		Meta("openapi:extension:x-speakeasy-name-override", "listIssuanceProfiles")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "IssuanceProfiles"}`)
+	})
+
+	Method("setIssuanceProfile", func() {
+		Description("Create or replace the issuance profile of one headless caller signing in through a sign-in: an OAuth client, or a workload issuer and subject. Each choice names a credential the server offers, or none for a server that needs no upstream authentication. A workload subject represents no person, so its profile names shared credentials only. Choices take effect on sessions issued afterwards; existing sessions keep theirs. Choosing a credential grants nothing: each issuance checks the caller may use it. Takes effect only where typed auth client resolution is enforced. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("user_session_issuer_id", String, "The sign-in.", func() { Format(FormatUUID) })
+			Attribute("user_session_client_id", String, "The OAuth client, for a client's profile.", func() { Format(FormatUUID) })
+			Attribute("workload_issuer_id", String, "The workload issuer, for a workload's profile.", func() { Format(FormatUUID) })
+			Attribute("workload_subject", String, "The workload subject, for a workload's profile.", func() { MinLength(1) })
+			Attribute("name", String, "The profile's name.", func() {
+				MinLength(1)
+				MaxLength(100)
+			})
+			Attribute("choices", ArrayOf(IssuanceProfileChoice), "Every choice the profile should hold. With mcp_server_id, the choice for that server alone, or none to remove it.", func() { MaxLength(100) })
+			Attribute("mcp_server_id", String, "Limits the write to this MCP server: the profile's choices for other servers are kept as they are.", func() { Format(FormatUUID) })
+			Required("user_session_issuer_id", "name", "choices")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(IssuanceProfile)
+
+		HTTP(func() {
+			POST("/rpc/authClients.setIssuanceProfile")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setIssuanceProfile")
+		Meta("openapi:extension:x-speakeasy-name-override", "setIssuanceProfile")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetIssuanceProfile"}`)
+	})
+
+	Method("deleteIssuanceProfile", func() {
+		Description("Delete an issuance profile. Sessions already issued keep their choices; later sessions decide theirs without it. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("id", String, "The profile id.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			Meta("openapi:typename", "DeleteIssuanceProfileRequestBody")
+		})
+
+		HTTP(func() {
+			POST("/rpc/authClients.deleteIssuanceProfile")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "deleteIssuanceProfile")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteIssuanceProfile")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteIssuanceProfile"}`)
 	})
 
 	Method("getMcpServerAuthentication", func() {

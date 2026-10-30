@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { useEffect, useId, useState, type JSX } from "react";
+import { KeyCredentialChoice } from "./KeyCredentialChoice";
 import { WizardStepHeader } from "./WizardChrome";
 import type { InventoryServer } from "./useServerInventory";
 
@@ -18,6 +19,8 @@ import type { InventoryServer } from "./useServerInventory";
 export interface ServerSelection {
   server: InventoryServer;
   tools?: string[];
+  /** The shared credential the key uses on a server that offers several. */
+  authClientId?: string;
 }
 
 /** Why "All servers" cannot be turned on, said beside it. */
@@ -117,7 +120,7 @@ export function StepServers({
   return (
     <div className="space-y-5">
       <WizardStepHeader
-        title="MCP selection"
+        title="MCP Selection"
         description="The MCP servers this agent may call. It can reach nothing else, and never more than you can reach yourself."
       />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -256,7 +259,9 @@ export function StepServers({
                 : "No servers match the current filters."}
             </Text>
           ) : (
-            <ul className="divide-border divide-y">
+            // Capped so a long server list scrolls in place and the step's
+            // Continue button stays on screen.
+            <ul className="divide-border max-h-[50vh] divide-y overflow-y-auto">
               {matches.map((server) => {
                 const checked = isSelected(server.id);
                 const refusal = refusedServers?.get(server.id);
@@ -265,7 +270,7 @@ export function StepServers({
                   <li
                     key={server.id}
                     className={cn(
-                      "flex items-center pr-4",
+                      "flex flex-wrap items-center pr-4",
                       !locked && checked && "bg-accent/40",
                       !locked && !checked && "hover:bg-muted/40",
                     )}
@@ -286,12 +291,17 @@ export function StepServers({
                         aria-label={server.name}
                       />
                       <span className="min-w-0 flex-1">
-                        <span className="flex flex-wrap items-center gap-2">
-                          <span className="truncate">{server.name}</span>
-                        </span>
-                        <span className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                        {/* Name and URL on one line, so every row is the
+                            same height however long the URL is. */}
+                        <span className="flex min-w-0 items-baseline gap-2">
+                          <span className="min-w-0 truncate">
+                            {server.name}
+                          </span>
                           {server.upstreamUrl && (
-                            <span className="min-w-0 text-sm break-all">
+                            <span
+                              className="text-muted-foreground min-w-0 flex-1 truncate text-sm"
+                              title={server.upstreamUrl}
+                            >
                               {server.upstreamUrl}
                             </span>
                           )}
@@ -302,6 +312,31 @@ export function StepServers({
                       </span>
                     </label>
                     <ServerInfoPopover server={server} />
+                    {checked &&
+                      !allServers &&
+                      (server.kind === "Remote" ||
+                        server.kind === "Tunneled") && (
+                        <div className="w-full px-4 pb-3 pl-12">
+                          <KeyCredentialChoice
+                            serverId={server.id}
+                            serverName={server.name}
+                            value={
+                              selected.find(
+                                (entry) => entry.server.id === server.id,
+                              )?.authClientId
+                            }
+                            onChange={(authClientId) =>
+                              onChange(
+                                selected.map((entry) =>
+                                  entry.server.id === server.id
+                                    ? { ...entry, authClientId }
+                                    : entry,
+                                ),
+                              )
+                            }
+                          />
+                        </div>
+                      )}
                   </li>
                 );
               })}
