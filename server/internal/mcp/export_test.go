@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
 )
 
@@ -248,4 +249,9 @@ func (f testAuthClientPermission) Permitted(context.Context, authClientPermitReq
 // RecordConnectionPopupGrant exercises the callback's parent-state correlation.
 func (s *Service) RecordConnectionPopupGrant(ctx context.Context, grant remotesessions.RemoteGrant) error {
 	return s.recordConnectionPopupGrant(ctx, grant)
+}
+
+// SetIDJAGTrust replaces the trust lookup metadata uses to advertise the ID-JAG grant.
+func (s *Service) SetIDJAGTrust(store idjag.Store) {
+	s.idJAGTrust = store
 }

@@ -184,18 +184,20 @@ func issuerIDJAGConfigured(issuer usersessions_repo.UserSessionIssuer) bool {
 	return !issuer.ProjectID.Valid && issuer.OrganizationID.Valid && issuer.TrustedRemoteSessionIssuerID.Valid
 }
 
-// idJAGAdvertised reports whether the validator's trust lookup would accept ID-JAGs for an issuer.
-func (s *Service) idJAGAdvertised(ctx context.Context, logger *slog.Logger, organizationID string, issuerID uuid.UUID) bool {
+// idJAGAdvertised reports whether the validator's trust lookup would accept
+// ID-JAGs for an issuer. Only a missing or unusable trust link omits the
+// grant; any other lookup error is returned so metadata fails closed.
+func (s *Service) idJAGAdvertised(ctx context.Context, logger *slog.Logger, organizationID string, issuerID uuid.UUID) (bool, error) {
 	_, err := s.idJAGTrust.TrustedIssuer(ctx, organizationID, issuerID)
 	switch {
 	case err == nil:
-		return true
+		return true, nil
 	case errors.Is(err, idjag.ErrNoTrustedIssuer), errors.Is(err, idjag.ErrTrustedIssuerHasNoJWKS):
 		logger.InfoContext(ctx, "ID-JAG grant not advertised", attr.SlogError(err))
+		return false, nil
 	default:
-		logger.ErrorContext(ctx, "load ID-JAG trust link for metadata", attr.SlogError(err))
+		return false, fmt.Errorf("load ID-JAG trust link: %w", err)
 	}
-	return false
 }
 
 // sharedAuthorizationServerFor builds the shared authorization server of an
