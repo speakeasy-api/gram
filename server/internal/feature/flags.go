@@ -151,6 +151,18 @@ const (
 	// of its stop control is unknown.
 	FlagMCPResearchKill Flag = "gram-mcp-research-kill"
 
+	// FlagSkillsOverMCP gates serving managed skills over MCP (the
+	// `io.modelcontextprotocol/skills` extension) end to end with one key:
+	// the hosted and platform toolset surfaces advertise the extension,
+	// answer `skills/list` and `skills/get`, and serve `skill://` resources
+	// only for organizations with it, and the dashboard shows the matching
+	// MCP serving hints behind the same key. Off, the extension is absent
+	// from capabilities, its methods answer method-not-found, and
+	// `skill://` reads are not found. Targeted by PostHog
+	// organization group (org slug), like FlagBudgets. A rollout gate while
+	// client support matures; removed once the extension is GA.
+	FlagSkillsOverMCP Flag = "skills-over-mcp"
+
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its
 	// PAYLOAD, not its boolean state: the flag carries a JSON payload
@@ -228,6 +240,29 @@ const (
 	// and protecting existing blocks, never depend on it. Targeted the same
 	// way as FlagAuthClientResolver.
 	FlagAuthClientUpstreamSelectorWrites Flag = "auth-client-upstream-selector-writes"
+
+	// FlagPlatformMCPDiscoveryMode picks the tool surface a Platform MCP
+	// connection is served: the full flat catalogue, or a small fixed surface
+	// for hosts with a tool budget (see the PlatformMCPDiscovery variants).
+	// Evaluated server-side and locally on every Platform MCP request, with the
+	// organization ID as distinct ID and the person properties "harness" (the
+	// aivendors product ID of the connection's verified CIMD client, or
+	// "unknown") and "organization_id". Release conditions match on those
+	// person properties, so a harness joins or leaves the treatment by editing
+	// a condition. Fails closed to the full catalogue.
+	FlagPlatformMCPDiscoveryMode Flag = "platform-mcp-discovery-mode"
+)
+
+// Variants of FlagPlatformMCPDiscoveryMode. Anything else — no variant, an
+// unrecognized key, an unavailable provider, or an evaluation error — serves
+// the full flat catalogue, which is the pre-rollout behaviour.
+const (
+	// VariantPlatformMCPDiscoveryProgressive serves the search, describe and
+	// call meta-tools instead of the catalogue.
+	VariantPlatformMCPDiscoveryProgressive Variant = "progressive"
+	// VariantPlatformMCPDiscoveryCodeMode adds the execute tool to the
+	// progressive surface when the organization can use Code Mode.
+	VariantPlatformMCPDiscoveryCodeMode Variant = "code_mode"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

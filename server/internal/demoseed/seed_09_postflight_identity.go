@@ -83,14 +83,14 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		}, 2, "demo seed postflight: expected exact project/server-scoped agent grants"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDSessionAttachments(ctx, repo.PostflightIDSessionAttachmentsParams{
-				UserSessionID:   s.det("user-session-6"),
-				OrgID:           org,
-				ProjectID:       proj,
-				RemoteSessionID: s.det("attachment-session"),
+				UserSessionID:    s.det("user-session-6"),
+				OrgID:            org,
+				ProjectID:        proj,
+				RemoteSessionIds: []uuid.UUID{s.det("attachment-session"), s.det("attachment-session-expired")},
 			})
 		}, 2, "demo seed postflight: expected 2 inert reachable exact-session attachments, found %d"},
 		{byOrg(s.q.PostflightIDSessionBindings), 2, "demo seed postflight: expected 2 principal session bindings, found %d"},
-		{byProj(s.q.PostflightIDUserOwnedUpstreamSessions), 7, "demo seed postflight: expected 7 user-owned upstream sessions, found %d"},
+		{byProj(s.q.PostflightIDUserOwnedUpstreamSessions), 8, "demo seed postflight: expected 8 user-owned upstream sessions, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDInertUpstreamSessions(ctx, s.det("remote-identity-client-linear"))
 		}, 6, "demo seed postflight: expected 6 inert validated-spread upstream sessions, found %d"},
@@ -215,20 +215,24 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// sign-ins on their own server, the gateway sign-ins on both members.
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDUpstreamClientChoices(ctx, repo.PostflightIDUpstreamClientChoicesParams{
-				ProjectID:        proj,
-				LinearSessionIds: []uuid.UUID{s.det("user-session-6"), s.det("user-session-7"), s.det("user-session-10"), s.det("user-session-11")},
-				SlackSessionIds:  []uuid.UUID{s.det("user-session-8"), s.det("user-session-9"), s.det("user-session-10"), s.det("user-session-11")},
-				LinearServerID:   s.det("mcpserver-linear"),
-				SlackServerID:    s.det("mcpserver-slack"),
-				LinearClientID:   s.det("remote-identity-client-linear"),
+				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
+				OrgNoAuthServerIds: []uuid.UUID{s.det("mcpserver-github"), s.tunnelServerID()},
+				ProjectID:          proj,
+				LinearSessionIds:   []uuid.UUID{s.det("user-session-6"), s.det("user-session-7"), s.det("user-session-10"), s.det("user-session-11"), s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
+				SlackSessionIds:    []uuid.UUID{s.det("user-session-8"), s.det("user-session-9"), s.det("user-session-10"), s.det("user-session-11"), s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
+				LinearServerID:     s.det("mcpserver-linear"),
+				SlackServerID:      s.det("mcpserver-slack"),
+				LinearClientID:     s.det("remote-identity-client-linear"),
 			})
-		}, 8, "demo seed postflight: expected exactly 8 matching upstream client choices, found %d"},
+		}, 26, "demo seed postflight: expected exactly 26 matching upstream client choices, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDMisassignedUpstreamClientChoices(ctx, repo.PostflightIDMisassignedUpstreamClientChoicesParams{
-				ProjectID:      proj,
-				LinearServerID: s.det("mcpserver-linear"),
-				LinearClientID: s.det("remote-identity-client-linear"),
-				SlackServerID:  s.det("mcpserver-slack"),
+				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
+				OrgNoAuthServerIds: []uuid.UUID{s.det("mcpserver-github"), s.tunnelServerID()},
+				ProjectID:          proj,
+				LinearServerID:     s.det("mcpserver-linear"),
+				LinearClientID:     s.det("remote-identity-client-linear"),
+				SlackServerID:      s.det("mcpserver-slack"),
 			})
 		}, 0, "demo seed postflight: %d upstream client choices are not the intended Linear client or Slack no-auth choice"},
 		{func(ctx context.Context) (int64, error) {

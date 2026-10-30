@@ -17,6 +17,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -97,8 +98,6 @@ func seedPublicServerOnIssuer(t *testing.T, ctx context.Context, ti *testInstanc
 		Slug:                   slug,
 		Description:            conv.ToPGText("MCP server behind a shared authorization server"),
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 	createToolsetMcpEndpoint(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, slug, "public", uuid.NullUUID{}, issuerID)
@@ -451,7 +450,7 @@ func TestSharedAuthorizationServer_AuthorizeRendersRefusalForUnknownClient(t *te
 
 	w := sharedAuthorize(t, ctx, ti, f, pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error)
+	require.Equal(t, "invalid_target", oauthtest.RequireAuthorizationErrorPage(t, w, http.StatusBadRequest).Code)
 }
 
 // A per-endpoint authorization server stays in service for the servers of a

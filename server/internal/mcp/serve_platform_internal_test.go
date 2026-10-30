@@ -38,7 +38,7 @@ func runPlatformInitialize(t *testing.T, requested string) (string, mcpversions.
 	// resolution hands the handler the default.
 	resolution := mcpversions.Resolve("", mcpversions.SupportedPlatformToolset())
 
-	body, err := handlePlatformInitialize(t.Context(), testenv.NewLogger(t), nil, req, &resolution)
+	body, err := handlePlatformInitialize(t.Context(), testenv.NewLogger(t), nil, req, &resolution, false)
 	require.NoError(t, err)
 
 	var response struct {
@@ -104,7 +104,7 @@ func TestHandlePlatformInitialize_MalformedParamsNegotiateTheDefault(t *testing.
 	}
 	resolution := mcpversions.Resolve("", mcpversions.SupportedPlatformToolset())
 
-	body, err := handlePlatformInitialize(t.Context(), testenv.NewLogger(t), nil, req, &resolution)
+	body, err := handlePlatformInitialize(t.Context(), testenv.NewLogger(t), nil, req, &resolution, false)
 	require.NoError(t, err)
 
 	var response struct {

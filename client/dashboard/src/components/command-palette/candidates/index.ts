@@ -10,9 +10,11 @@ import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
 import { useAssistantCandidates } from "./useAssistantCandidates";
 import { useCatalogCandidates } from "./useCatalogCandidates";
 import { useDeploymentCandidates } from "./useDeploymentCandidates";
+import { useGatewayConnectionCandidates } from "./useGatewayConnectionCandidates";
 import { useEnvironmentCandidates } from "./useEnvironmentCandidates";
 import { useGatewayCandidates } from "./useGatewayCandidates";
 import { useMarketplaceCandidate } from "./useMarketplaceCandidate";
+import { useManagedDeviceCandidates } from "./useManagedDeviceCandidates";
 import { useMcpServerCandidates } from "./useMcpServerCandidates";
 import { usePersonCandidates } from "./usePersonCandidates";
 import { usePluginCandidates } from "./usePluginCandidates";
@@ -33,6 +35,11 @@ import { useSourceCandidates } from "./useSourceCandidates";
  * query's `enabled` option, so nothing fetches while the palette is closed.
  * Project-scoped sources are further gated on `inProject`, and admin-only
  * sources on RBAC, mirroring the gates the resource groups applied before.
+ *
+ * Session titles are intentionally excluded: transcripts are high-volume,
+ * sensitive history, so opening the palette must not crawl their pages. The
+ * Agent Sessions page action opens the scoped search; an agent's profile links
+ * there with its agent and time-window filters. See docs/rbac.md.
  */
 export function useLauncherCandidates({
   enabled,
@@ -61,6 +68,8 @@ export function useLauncherCandidates({
   // gate.
   const canReadApprovals = hasScope("org:admin", organization.id);
   const canReadPeople = hasAnyScope(["org:read", "org:admin"], organization.id);
+  // The Device Agent pages' own gate.
+  const canReadDevices = canReadPeople;
   // The MCP page's own gate (pages/mcp/MCP.tsx), so a member who cannot open
   // the listing never fires its (forbidden) list calls from the palette.
   // Sources are a tab of that section and their detail page gates on
@@ -87,6 +96,10 @@ export function useLauncherCandidates({
 
   const projectEnabled = enabled && inProject;
 
+  const gatewayConnections = useGatewayConnectionCandidates({
+    enabled,
+    inProject,
+  });
   const actions = useActionCandidates();
   const recents = useRecentCandidates({
     enabled,
@@ -128,6 +141,9 @@ export function useLauncherCandidates({
     enabled: projectEnabled && canReadApprovals,
   });
   const people = usePersonCandidates({ enabled: enabled && canReadPeople });
+  const devices = useManagedDeviceCandidates({
+    enabled: enabled && canReadDevices,
+  });
   // Org-scoped, so offered from both shells: at the org level picking a
   // project is the palette's main job, inside a project it is a switcher.
   const projects = useProjectCandidates({ enabled });
@@ -138,6 +154,7 @@ export function useLauncherCandidates({
       inProject && isAdmin ? list : [];
     return [
       ...actions,
+      ...gatewayConnections,
       ...recents,
       ...marketplace,
       ...(inProject && canListMcp ? mcpServers : []),
@@ -157,6 +174,7 @@ export function useLauncherCandidates({
       ...adminOnly(rules),
       ...(inProject && canReadApprovals ? accessRequests : []),
       ...(canReadPeople ? people : []),
+      ...(canReadDevices ? devices : []),
       ...projects,
     ];
   }, [
@@ -164,6 +182,7 @@ export function useLauncherCandidates({
     isAdmin,
     canReadApprovals,
     canReadPeople,
+    canReadDevices,
     canListMcp,
     canListGateways,
     canListPlugins,
@@ -174,6 +193,7 @@ export function useLauncherCandidates({
     agentIdentities,
     inferenceSetup,
     actions,
+    gatewayConnections,
     recents,
     marketplace,
     mcpServers,
@@ -188,6 +208,7 @@ export function useLauncherCandidates({
     rules,
     accessRequests,
     people,
+    devices,
     projects,
   ]);
 }

@@ -24,7 +24,9 @@ WHERE s.id = @mcp_server_id::uuid
 ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE
 DO UPDATE SET updated_at = clock_timestamp();
 
--- name: CaptureSoleConsumerAssociations :execrows
+-- name: CaptureSoleConsumerAssociations :many
+-- Returns the server of each association it adds, so the caller can record
+-- the typed auth clients those associations need.
 -- Associates every client bound to a user session issuer with the issuer's
 -- MCP server when that server is the issuer's only consumer in the
 -- organization. With one consumer the binding can only be meant for that
@@ -80,9 +82,12 @@ WHERE s.project_id = @project_id::uuid
       AND gateway.organization_id = p.organization_id
       AND gateway.deleted IS FALSE
   )
-ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING;
+ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING
+RETURNING mcp_server_id;
 
--- name: CaptureGatewayDerivedAssociations :execrows
+-- name: CaptureGatewayDerivedAssociations :many
+-- Returns the server of each association it adds, so the caller can record
+-- the typed auth clients those associations need.
 -- Associates a gateway-fronted server in the project with the one client its
 -- gateway issuer binds for the server's derived authorization server, which
 -- is how consent claims a member for a gateway client. Runs for a gateway
@@ -197,9 +202,10 @@ WHERE (f.issuer_id = ANY(@user_session_issuer_ids::uuid[]) OR s.user_session_iss
     WHERE recorded.mcp_server_id = s.id
       AND recorded.remote_session_client_id = c.id
   )
-ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING;
+ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING
+RETURNING mcp_server_id;
 
--- name: PruneUnservableAssociations :execrows
+-- name: PruneUnservableAssociations :many
 -- Removes the project's associations no issuer can serve: the server is gone,
 -- the client is deleted, or the client is bound neither to the server's own
 -- user session issuer nor to the live issuer of a gateway fronting the server
@@ -261,7 +267,8 @@ WHERE a.mcp_server_id = s.id
           )
         )
     )
-  );
+  )
+RETURNING a.mcp_server_id;
 
 -- name: PruneRemoteSessionClientAssociations :execrows
 -- The client-keyed form of PruneUnservableAssociations, for a change to one

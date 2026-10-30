@@ -140,7 +140,11 @@ export function HeadlessCallersSection({
     ...new Map(allCallers.map((c) => [callerKey(c), c])).values(),
   ];
   const callerLabels = new Map(callers.map((c) => [callerKey(c), c.label]));
-  const credentialNames = new Map(credentials.map((c) => [c.id, c.name]));
+  // A disabled credential is not offered, so a choice of one reads as such.
+  const credentialNames = new Map(
+    credentials.filter((c) => c.enabled).map((c) => [c.id, c.name]),
+  );
+  const callersFailed = clients.isError || workloads.isError;
   const configured = (profiles.data?.items ?? []).flatMap((profile) => {
     const choice = profile.choices.find((c) => c.mcpServerId === mcpServerId);
     return choice ? [{ profile, choice }] : [];
@@ -194,14 +198,19 @@ export function HeadlessCallersSection({
           label: profile.name,
         };
 
-  if (credentials.length < 2 && configured.length === 0) return null;
+  if (credentials.length < 2 && configured.length === 0 && !profiles.isError)
+    return null;
 
   return (
     <AuthRow
       label="Apps without a browser"
       hint="Clients and workloads that sign in without a browser can't choose a credential on the consent screen. Pick the one each uses here; a token request can still name its own."
     >
-      {configured.length === 0 ? (
+      {profiles.isError ? (
+        <Text small className="text-destructive block">
+          The apps' choices could not be loaded. Refresh to try again.
+        </Text>
+      ) : configured.length === 0 ? (
         <Text muted small className="block">
           None set. A caller with one ready credential uses it; with several,
           its sign-in asks it to name one.
@@ -239,6 +248,12 @@ export function HeadlessCallersSection({
           ))}
         </ul>
       )}
+      {canManage && callersFailed ? (
+        <Text small className="text-destructive mt-3 block">
+          Some apps or workloads that sign in here could not be loaded, so they
+          are missing from the list. Refresh to try again.
+        </Text>
+      ) : null}
       {canManage ? (
         <div className="mt-3">
           <Button

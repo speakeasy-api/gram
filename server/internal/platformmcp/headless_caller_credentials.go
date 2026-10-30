@@ -166,6 +166,15 @@ func (s *AccessRoleMutationService) writeHeadlessCallerChoice(ctx context.Contex
 	if err != nil {
 		return accessRoleMutationInvalid("workload_issuer_id is not a valid ID.")
 	}
+	// Checked here as well as by the write so a removal that names no caller,
+	// or two, is refused before the no-profile fast path accepts it.
+	workload := workloadIssuerID.Valid || input.WorkloadSubject != ""
+	switch {
+	case clientID.Valid == workload:
+		return accessRoleMutationInvalid("Name exactly one caller: user_session_client_id, or workload_issuer_id and workload_subject.")
+	case workload && (!workloadIssuerID.Valid || input.WorkloadSubject == ""):
+		return accessRoleMutationInvalid("A workload caller needs both workload_issuer_id and workload_subject.")
+	}
 	var authClientID *string
 	if input.AuthClientID != "" {
 		if _, err := uuid.Parse(input.AuthClientID); err != nil {

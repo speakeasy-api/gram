@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
@@ -23,6 +24,12 @@ import {
 } from "../agent-policy-grants";
 import { buildRequestedGrants } from "../agent-api-key-grants";
 import { discoverKeyServerGrants } from "../agent-key-discovery";
+import {
+  discoverUnscopedGrants,
+  HOOKS_INGEST_SCOPE,
+  hooksIngestKeyGrants,
+  hooksIngestPolicyGrant,
+} from "../agent-hook-events";
 import {
   agentGatewayURL,
   isCredentialSafe,
@@ -56,9 +63,18 @@ import { useAgents } from "@gram/client/react-query/agents.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import type { AgentPolicyGrantCheck } from "@gram/client/models/components/agentpolicygrantcheck.js";
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
-import { useCatalogEntries, valuesFromSubject } from "./workloadCatalog";
+import {
+  catalogEntryForIssuer,
+  useCatalogEntries,
+  valuesFromIssuer,
+  valuesFromSubject,
+} from "./workloadCatalog";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useServerInventory } from "./useServerInventory";
+import { useServerInventory, type InventoryServer } from "./useServerInventory";
+import { useOwnerConnections } from "./useOwnerConnections";
+import { StepAuthentication } from "./StepAuthentication";
+import { connectionSelectable } from "./ownerConnections";
+import { attachOwnerConnections } from "./ownerConnections";
 import {
   WizardFooter,
   WizardStepHeader,
@@ -80,7 +96,8 @@ import {
 /** Each step's name, and the one or two words it shrinks to in a full row. */
 const STEPS = [
   { label: "Name", short: "Name" },
-  { label: "Server selection", short: "Servers" },
+  { label: "MCP Selection", short: "MCPs" },
+  { label: "MCP Authentication", short: "Authentication" },
   { label: "Credential", short: "Credential" },
   { label: "Install", short: "Install" },
   { label: "Verify", short: "Verify" },
@@ -169,8 +186,19 @@ export function CredentialsWizard({
   // Trusting a platform and admitting a subject are both writes against the
   // organization's workload identities, so the choice is offered only to
   // someone who could carry it out.
-  const { hasAllScopes, hasAnyScope } = useRBAC();
+  const {
+    hasAllScopes,
+    hasAnyScope,
+    isLoading: rbacLoading,
+    error: rbacError,
+  } = useRBAC();
   const canFederate = hasAllScopes(["workload:write"]);
+  // A new agent sends hook events from the observability plugin when its
+  // creator may grant that. Only confirmed permissions count: a failed grants
+  // read must not add a grant that would refuse the whole creation.
+  const canGrantHookEvents =
+    !rbacError &&
+    hasAllScopes([HOOKS_INGEST_SCOPE], organization.id, project.id);
   // The catalog itself needs workload read access. Without it the request is
   // refused, so it is not made, and the step shows the API key alone rather
   // than an error. Write satisfies read on the server, so either scope counts.
@@ -243,7 +271,7 @@ export function CredentialsWizard({
   const admittedEntry =
     admitted === undefined
       ? undefined
-      : catalog.entries.find((entry) => entry.issuer.value === admitted.issuer);
+      : catalogEntryForIssuer(catalog.entries, admitted.issuer);
   const [credential, setCredential] = useState<Credential>(
     initialPlatformKey === undefined ? "api-key" : "workload",
   );
@@ -332,6 +360,14 @@ export function CredentialsWizard({
   // What provisioning produced. The secret is held only while this page is
   // open; nothing writes it to storage or to the query cache.
   const [agentID, setAgentID] = useState<string | null>(agent?.id ?? null);
+  // Whether the agent this flow created was given hook ingestion. Once it is
+  // created its policy is settled, so that choice holds even if the caller's
+  // permissions change afterwards. An agent that exists keeps the policy it
+  // has, and its keys are not asked for hook ingestion here.
+  const [createdHookEvents, setCreatedHookEvents] = useState<boolean | null>(
+    null,
+  );
+  const hookEvents = !existing && (createdHookEvents ?? canGrantHookEvents);
   const [secret, setSecret] = useState<string | null>(null);
   const [command, setCommand] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
@@ -421,7 +457,7 @@ export function CredentialsWizard({
         ? []
         : inventory.servers.filter(
             (server) =>
-              !server.issuerId &&
+              (!server.issuerId || (!editing && !existing)) &&
               !grantedIds.has(server.resourceId) &&
               (scopedProjectID === undefined ||
                 server.projectId === scopedProjectID),
@@ -429,6 +465,7 @@ export function CredentialsWizard({
     [
       writesGrants,
       existing,
+      editing,
       project.id,
       inventory.servers,
       grantedIds,
@@ -568,6 +605,16 @@ export function CredentialsWizard({
       ? reachCoversProject(allServersProjectIDs, server.projectId)
       : scopedProjectID === undefined || server.projectId === scopedProjectID,
   );
+  // New agents attach the creator's connections as part of provisioning.
+  const offersConnections = !editing && !existing;
+  const connectionServers = [
+    ...new Map(
+      [...listedServers, ...selected.map((entry) => entry.server)].map(
+        (server) => [server.id, server],
+      ),
+    ).values(),
+  ];
+  const connections = useOwnerConnections(connectionServers, true, agent?.id);
 
   const gatewayURL = agentID ? agentGatewayURL(agentID) : "";
   const platform = catalog.entries.find((entry) => entry.key === platformKey);
@@ -575,7 +622,7 @@ export function CredentialsWizard({
   // The verify step reads the key itself: a key with an access time is a
   // runtime that reached the gateway and was admitted.
   useEffect(() => {
-    if (step !== 4 || !agentID || verify === "connected") return;
+    if (step !== 5 || !agentID || verify === "connected") return;
     let cancelled = false;
     const poll = async () => {
       try {
@@ -644,6 +691,13 @@ export function CredentialsWizard({
       throw new Error("This project is still loading. Try again in a moment.");
     }
     if (refusedChoice) throw new Error(refusedChoice);
+    // Whether the agent sends hook events is read from the caller's grants,
+    // so it is not decided while they are still loading.
+    if (rbacLoading) {
+      throw new Error(
+        "Your permissions are still loading. Try again in a moment.",
+      );
+    }
     // "All servers" is one wildcard selector rather than today's inventory
     // listed out, so it covers the servers added after this is saved. Scoped
     // to the project, never the draft's bare `null`: `null` means
@@ -668,10 +722,18 @@ export function CredentialsWizard({
       createAgentForm: {
         name: name.trim(),
         projectId: projectID,
-        policyGrants: agentPolicyGrantsFromDraft(draft),
+        // Hook ingestion is bounded to the agent's project, the only one its
+        // hook events may name.
+        policyGrants: [
+          ...agentPolicyGrantsFromDraft(draft),
+          ...(hookEvents
+            ? [hooksIngestPolicyGrant(organization.id, projectID)]
+            : []),
+        ],
       },
     });
     setAgentID(created.id);
+    setCreatedHookEvents(hookEvents);
     void invalidateAgentPolicy(
       queryClient,
       organization.id,
@@ -832,6 +894,22 @@ export function CredentialsWizard({
         user.id,
         agent.id,
       );
+      if (allServers) {
+        const missing = await attachOwnerConnections(
+          sdk,
+          agent.id,
+          listedServers,
+          undefined,
+          true,
+        );
+        if (missing.length)
+          toast.warning(
+            `No connection assigned for: ${missing.join(", ")}. Connect these servers to finish setup.`,
+          );
+        await queryClient.invalidateQueries({
+          queryKey: ["owner-connections"],
+        });
+      }
       // Saving is the end of editing: what follows are the platform's own
       // settings, which this flow only describes.
       onDone();
@@ -851,33 +929,93 @@ export function CredentialsWizard({
   // click: the mark is how a glance confirms the choice landed.
   const [highlight, setHighlight] = useState<string | null>(null);
 
+  const connectionReach = (): InventoryServer[] =>
+    allServers
+      ? inventory.servers.filter((server) =>
+          reachCoversProject(allServersProjectIDs, server.projectId),
+        )
+      : selected.map((entry) => entry.server);
+
+  const attachSelectedConnections = async (
+    targetId: string,
+    reach: InventoryServer[],
+    signal?: AbortSignal,
+  ): Promise<void> => {
+    if (offersConnections) {
+      try {
+        const missing = await attachOwnerConnections(
+          sdk,
+          targetId,
+          reach,
+          signal,
+          allServers,
+        );
+        if (missing.length)
+          toast.warning(
+            `No connection assigned for: ${missing.join(", ")}. Connect these accounts to let the agent use them.`,
+          );
+      } catch (failure) {
+        const reason = failure instanceof Error ? failure.message : "";
+        throw new Error(
+          `The agent was created, but it could not use your connection. ${reason}`.trim(),
+        );
+      }
+    }
+  };
+
   const workload = useWorkloadSetup({
     entry: credential === "workload" ? platform : undefined,
     platformKey: credential === "workload" ? platformKey : null,
     agentName: name.trim(),
-    ensureAgent,
+    servers: connectionReach().flatMap((server) =>
+      server.mcpUrl
+        ? [{ id: server.id, name: server.name, mcpUrl: server.mcpUrl }]
+        : [],
+    ),
+    ensureAgent: async () => {
+      const targetId = await ensureAgent();
+      await attachSelectedConnections(targetId, connectionReach());
+      return targetId;
+    },
     onConnected: setAgentID,
-    // The rule this agent already holds: its own rule is not a duplicate of
-    // itself, and the create step has nothing left to write.
-    connectedSubject: admitted?.subject,
-    // Editing never writes a rule: the agent already holds one, and the
-    // steps after this are the platform's own settings to read.
-    settled: editing,
+    // The rule this agent already holds. Editing its values replaces it.
+    replacing: editing ? admitted : undefined,
+    // Editing without permission to manage workload identities shows the
+    // rule without letting it be changed.
+    readOnly: editing && !canFederate,
     // What the rule already says, so editing shows it rather than an empty
     // field that would write a second rule.
     initialValues:
-      admitted !== undefined && admittedEntry !== undefined
-        ? valuesFromSubject(admittedEntry, admitted.subject)
-        : undefined,
+      admitted === undefined
+        ? undefined
+        : admittedEntry !== undefined
+          ? {
+              ...valuesFromIssuer(admittedEntry, admitted.issuer),
+              ...valuesFromSubject(admittedEntry, admitted.subject),
+            }
+          : // A custom issuer: the issuer picked from the trusted list, and
+            // the subject as typed, without the `*` the match kind adds.
+            {
+              issuer_id: admitted.workloadIssuerId,
+              subject:
+                admitted.matchKind === "wildcard"
+                  ? admitted.subject.replace(/\*$/, "")
+                  : admitted.subject,
+              match_kind: admitted.matchKind,
+            },
     onValueChange: (key) =>
       setHighlight(
         key === "org_id"
           ? "Anthropic organization"
-          : key === "name"
-            ? "Platform"
-            : key === "issuer"
-              ? "Issuer"
-              : null,
+          : ["project", "location", "cluster"].includes(key)
+            ? "Cluster"
+            : ["namespace", "service_account"].includes(key)
+              ? "Service account"
+              : key === "name"
+                ? "Platform"
+                : key === "issuer"
+                  ? "Issuer"
+                  : null,
       ),
   });
   // A platform's own setup steps are steps of this wizard, not a wizard of
@@ -885,7 +1023,7 @@ export function CredentialsWizard({
   const stepNames =
     credential === "workload" && workload.steps.length > 0
       ? [
-          ...STEPS.slice(0, 3),
+          ...STEPS.slice(0, 4),
           ...workload.steps.map((entry) => ({
             label: entry.title,
             short: entry.short,
@@ -894,7 +1032,7 @@ export function CredentialsWizard({
       : STEPS;
   /** The platform setup step on screen, when one is. */
   const workloadStep =
-    credential === "workload" ? workload.steps[step - 3] : undefined;
+    credential === "workload" ? workload.steps[step - 4] : undefined;
   // How many steps there are is only known here, once the platform's own have
   // been counted, so an out-of-range link is corrected rather than refused:
   // the URL is rewritten to the last real step instead of leaving the wizard
@@ -938,15 +1076,8 @@ export function CredentialsWizard({
       // Without this the key asks for nothing: `selected` is empty under
       // "all servers", and discovery rightly answers that nothing can be
       // delegated.
-      const reach = allServers
-        ? inventory.servers
-            .filter((server) =>
-              reachCoversProject(allServersProjectIDs, server.projectId),
-            )
-            // Each of these needs an account attached to the agent before a
-            // key can call it, which this flow has no step for.
-            .filter((server) => !server.issuerId)
-        : selected.map((entry) => entry.server);
+      const reach = connectionReach();
+      await attachSelectedConnections(target.id, reach, controller.signal);
       const delegable = await discoverKeyServerGrants(
         sdk.agents,
         target.id,
@@ -1006,6 +1137,20 @@ export function CredentialsWizard({
               authClientId: entry.authClientId,
             })),
       );
+      // Hook ingestion names the organization rather than a server, so only
+      // discovery that names no server returns it. Asked for only when the
+      // agent was created with it, and bounded to the agent's project.
+      const hookGrants =
+        hookEvents && scopedProjectID
+          ? hooksIngestKeyGrants(
+              await discoverUnscopedGrants(
+                sdk.agents,
+                target.id,
+                controller.signal,
+              ),
+              scopedProjectID,
+            )
+          : [];
 
       const expiresAt = new Date(Date.now() + KEY_LIFETIME_DAYS * 86_400_000);
       const issued = await sdk.keys.create({
@@ -1017,14 +1162,14 @@ export function CredentialsWizard({
           name: `${name.trim()} key ${new Date().toISOString().replace(/[:.]/g, "-")}`,
           expiresAt,
           delegatedGrantsVersion: 2,
-          requestedGrants,
+          requestedGrants: [...requestedGrants, ...hookGrants],
           scopes: [],
           authClientChoices,
         },
       });
       keyID.current = issued.id;
       setSecret(issued.key ?? null);
-      setStep(3);
+      setStep(4);
       if (issued.key) regenerate(issued.key, agentGatewayURL(target.id));
     } catch (failure) {
       const conflict =
@@ -1048,14 +1193,26 @@ export function CredentialsWizard({
       stepCount={stepNames.length}
       name={name}
       rows={[
-        { label: "Owner", value: user.displayName || user.email },
+        {
+          label: "Owner",
+          value:
+            agent && agent.ownerUserId !== user.id
+              ? agent.ownerProfile?.displayName || "Agent owner"
+              : user.displayName || user.email,
+        },
         {
           label: "Project",
           value: scopeName,
         },
         {
           label: "Grants",
-          value: <code className="text-xs">mcp:connect</code>,
+          value: (
+            <code className="text-xs">
+              {hookEvents
+                ? `${CONNECT_SCOPE}, ${HOOKS_INGEST_SCOPE}`
+                : CONNECT_SCOPE}
+            </code>
+          ),
         },
         {
           label: "Credential",
@@ -1088,6 +1245,43 @@ export function CredentialsWizard({
               },
             ]
           : []),
+        // A GKE cluster by its name alone: the project and location are on
+        // the step that asked for them, and the rail is too narrow for all
+        // three.
+        ...(credential === "workload" &&
+        platformKey === "gke" &&
+        (workload.values["cluster"] ?? "").trim() !== ""
+          ? [
+              {
+                label: "Cluster",
+                value: (
+                  <code className="text-xs">
+                    {workload.values["cluster"]?.trim()}
+                  </code>
+                ),
+              },
+            ]
+          : []),
+        ...(credential === "workload" &&
+        platformKey === "gke" &&
+        (workload.values["service_account"] ?? "").trim() !== ""
+          ? [
+              {
+                label: "Service account",
+                value: (
+                  <span className="text-xs">
+                    <code>{workload.values["service_account"]?.trim()}</code>
+                    {(workload.values["namespace"] ?? "").trim() !== "" && (
+                      <>
+                        {" "}
+                        in <code>{workload.values["namespace"]?.trim()}</code>
+                      </>
+                    )}
+                  </span>
+                ),
+              },
+            ]
+          : []),
         ...(credential === "workload" &&
         platformKey === CUSTOM_PLATFORM_KEY &&
         (workload.values["issuer"] ?? "").trim() !== ""
@@ -1112,7 +1306,9 @@ export function CredentialsWizard({
           : selected.map((entry) => ({
               id: entry.server.id,
               name: entry.server.name,
-              detail: "all tools",
+              detail: entry.server.issuerId
+                ? "all tools, using an assigned connection"
+                : "all tools",
             }))
       }
     />
@@ -1204,6 +1400,28 @@ export function CredentialsWizard({
         );
       case 2:
         return (
+          <StepAuthentication
+            servers={
+              allServers ? listedServers : selected.map((entry) => entry.server)
+            }
+            connections={connections}
+            agent={agent}
+            allServers={allServers}
+            onRemove={(id) => {
+              if (allServers) {
+                setAllServers(false);
+                setSelected(
+                  listedServers
+                    .filter((server) => server.id !== id)
+                    .map((server) => ({ server })),
+                );
+              } else
+                setSelected(selected.filter((entry) => entry.server.id !== id));
+            }}
+          />
+        );
+      case 3:
+        return (
           <div className="space-y-6">
             <WizardStepHeader
               title="Credential"
@@ -1235,7 +1453,7 @@ export function CredentialsWizard({
             />
           </div>
         );
-      case 3:
+      case 4:
         return (
           <StepInstall
             command={command}
@@ -1268,26 +1486,30 @@ export function CredentialsWizard({
         ? "Name this agent."
         : null
       : step === 1
-        ? !allServers && selected.length === 0
+        ? !editing && !allServers && selected.length === 0
           ? "Select at least one MCP server."
           : refusedChoice
             ? refusedChoice
-            : // A key names servers one by one, and a server that authorizes
-              // each person separately is not one a key can name. So "all
-              // servers" with none of them left is a key that would reach
-              // nothing, said here rather than after the agent is created.
-              allServers &&
-                !inventory.isLoading &&
-                !inventory.isError &&
-                listedServers.every((server) => server.issuerId)
-              ? "No server here can be reached with a key yet."
-              : null
-        : null;
+            : null
+        : step === 2 &&
+            offersConnections &&
+            !allServers &&
+            selected.some(
+              (entry) =>
+                entry.server.issuerId &&
+                !connectionSelectable(
+                  connections.byServer.get(entry.server.id),
+                ),
+            )
+          ? "Connect or remove the servers that need authentication."
+          : step === 2 && !editing && !allServers && selected.length === 0
+            ? "Select at least one MCP server."
+            : null;
 
   const footer = () => {
-    // Editing writes on the second step. Past it the flow is the ordinary
+    // Editing writes after authentication. Past it the flow is the ordinary
     // one for an agent that exists: adding a credential it does not have.
-    if (editing && step < 2) {
+    if (editing && step < 3) {
       return (
         <WizardFooter
           note={
@@ -1303,11 +1525,8 @@ export function CredentialsWizard({
           }
           onBack={step === 0 ? undefined : () => setStep(step - 1)}
           primary={
-            step === 0 ? (
-              <Button
-                disabled={name.trim().length === 0}
-                onClick={() => setStep(1)}
-              >
+            step < 2 ? (
+              <Button disabled={!!blocked} onClick={() => setStep(step + 1)}>
                 Continue
               </Button>
             ) : (
@@ -1325,7 +1544,7 @@ export function CredentialsWizard({
       );
     }
     if (workloadStep !== undefined) {
-      const last = step - 3 === workload.steps.length - 1;
+      const last = step - 4 === workload.steps.length - 1;
       const ready = workload.complete(workloadStep);
       return (
         <WizardFooter
@@ -1340,8 +1559,9 @@ export function CredentialsWizard({
           primary={
             workloadStep.phase === "create" ? (
               // Already connected under this very rule: there is nothing to
-              // write, so the step is a page to read and move past.
-              workload.connected || editing ? (
+              // write, so the step is a page to read and move past. Someone
+              // who cannot manage workload identities only reads it.
+              workload.connected || (editing && !canFederate) ? (
                 <Button onClick={() => setStep(step + 1)}>Continue</Button>
               ) : (
                 <Button
@@ -1355,8 +1575,12 @@ export function CredentialsWizard({
                   }}
                 >
                   {workload.connecting
-                    ? "Connecting…"
-                    : `Connect ${platform?.displayName ?? "platform"}`}
+                    ? editing
+                      ? "Saving…"
+                      : "Connecting…"
+                    : editing
+                      ? "Save changes"
+                      : `Connect ${platform?.displayName ?? "platform"}`}
                 </Button>
               )
             ) : last ? (
@@ -1371,7 +1595,7 @@ export function CredentialsWizard({
       );
     }
     switch (step) {
-      case 2:
+      case 3:
         if (credential === "workload") {
           let note =
             "Choose the platform whose tokens this agent will present.";
@@ -1391,11 +1615,11 @@ export function CredentialsWizard({
           return (
             <WizardFooter
               note={note}
-              onBack={() => setStep(1)}
+              onBack={() => setStep(2)}
               primary={
                 <Button
                   disabled={refused || workload.steps.length === 0}
-                  onClick={() => setStep(3)}
+                  onClick={() => setStep(4)}
                 >
                   Continue
                 </Button>
@@ -1412,7 +1636,7 @@ export function CredentialsWizard({
                   ? "Reading the project this agent will belong to…"
                   : "Creating the agent is recorded in the organization audit log."
             }
-            onBack={() => setStep(1)}
+            onBack={() => setStep(2)}
             primary={
               <Button
                 // An agent belongs to the project it is made in, so there is
@@ -1431,18 +1655,18 @@ export function CredentialsWizard({
             }
           />
         );
-      case 3:
+      case 4:
         return (
           <WizardFooter
             note="The API key can be rotated or revoked from the agent page."
             primary={
-              <Button onClick={() => setStep(4)}>
+              <Button onClick={() => setStep(5)}>
                 Continue to verification
               </Button>
             }
           />
         );
-      case 4:
+      case 5:
         return (
           <WizardFooter
             note={
@@ -1450,7 +1674,7 @@ export function CredentialsWizard({
                 ? "The agent has called the gateway."
                 : "Run the setup from the previous step, then wait for the first call."
             }
-            onBack={() => setStep(3)}
+            onBack={() => setStep(4)}
             primary={
               <Button onClick={() => onDone(agentID ?? undefined)}>
                 {verify === "connected" ? "Done" : "Skip for now"}
@@ -1494,14 +1718,14 @@ export function CredentialsWizard({
         // existing agent has no such order, so every step is reachable until
         // the key is issued.
         // Editing has settled everything a credential step would ask.
-        settledFrom={editing ? 2 : undefined}
+        settledFrom={editing ? 3 : undefined}
         forward={existing && !secret}
         // Verify watches a key being used, so it has nothing to watch until
         // one is issued. Without this an existing agent could jump straight
         // to it and finish the flow having provisioned nothing.
         onJump={(next) =>
           setStep(
-            secret || credential === "workload" ? next : Math.min(next, 3),
+            secret || credential === "workload" ? next : Math.min(next, 4),
           )
         }
       />

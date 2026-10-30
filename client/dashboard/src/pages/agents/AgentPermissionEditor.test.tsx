@@ -138,6 +138,25 @@ describe("Agent permission editor", () => {
     }
     expect(mocks.remove).not.toHaveBeenCalled();
   });
+  it("grants device agent sync to the whole organization", async () => {
+    setup();
+    openPlatform();
+    fireEvent.click(screen.getByRole("button", { name: "Add permissions" }));
+    fireEvent.click(screen.getByText("org:device_agent_sync"));
+    expect(await screen.findByText("Whole organization")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
+    expect(mocks.create).toHaveBeenCalledOnce();
+    expect(mocks.create).toHaveBeenCalledWith({
+      createAgentPolicyGrantForm: {
+        agentId: agent.id,
+        scope: "org:device_agent_sync",
+        effect: "allow",
+        selector: { resourceKind: "org", resourceId: "*" },
+      },
+    });
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
   it("deletes only the chosen project's grant, preserving the other project, MCP and unsupported grants", async () => {
     const grants: AgentPolicyGrant[] = [
       inferenceGrant("project_one"),

@@ -80,7 +80,14 @@ func (s *Service) withTypedMemberRegistrations(ctx context.Context, organization
 // offer through typed auth clients to the project it is served in: the
 // endpoint's own for a direct server, each member's for a gateway. It is
 // empty where typed auth client resolution is not enforced.
-func (s *Service) typedConsentRegistrations(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) (map[uuid.UUID]uuid.UUID, error) {
+func (s *Service) typedConsentRegistrations(ctx context.Context, endpoint *ResolvedMcpEndpoint, loadMembers func() ([]metaMember, error)) (map[uuid.UUID]uuid.UUID, error) {
+	if (!endpoint.McpServerID.Valid || endpoint.ToolsetID.Valid) && !endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway() {
+		return nil, nil
+	}
+	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	if err != nil || !enforced {
+		return nil, err
+	}
 	projects := map[uuid.UUID]uuid.UUID{}
 	switch {
 	case endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid:
@@ -92,7 +99,7 @@ func (s *Service) typedConsentRegistrations(ctx context.Context, endpoint *Resol
 			projects[id] = endpoint.ProjectID
 		}
 	case endpoint.MetaMcpServerID.Valid || endpoint.IsOrganizationGateway():
-		members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
+		members, err := loadMembers()
 		if err != nil {
 			return nil, err
 		}

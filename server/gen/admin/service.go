@@ -115,6 +115,9 @@ type Service interface {
 	// Sets an organization's Stripe customer ID when it has no existing Stripe
 	// customer or subscription.
 	SetStripeCustomer(context.Context, *SetStripeCustomerPayload) (res *AdminOrganization, err error)
+	// Sets or clears the link to an organization's adoption dashboard shown on the
+	// admin overview. An empty or absent URL clears it.
+	SetAdoptionDashboardURL(context.Context, *SetAdoptionDashboardURLPayload) (res *AdminOrganization, err error)
 	// Returns the live Stripe subscription and payment state for an organization.
 	GetStripeSubscription(context.Context, *GetStripeSubscriptionPayload) (res *AdminStripeSubscription, err error)
 	// Schedules an organization's PAYG subscription to cancel at period end.
@@ -369,6 +372,10 @@ type Service interface {
 	// rollback: requests return to the upstream client choice within a minute.
 	// Safe to call when enforcement is already off.
 	DisableUpstreamAuthEnforcement(context.Context, *DisableUpstreamAuthEnforcementPayload) (res *AdminUpstreamOAuthMigrationStatus, err error)
+	// Grants unrestricted mcp:auth to every principal that holds any mcp:connect
+	// grant, in every organization. The connect grant's selectors are ignored.
+	// Safe to run more than once.
+	BackfillMcpAuthGrants(context.Context, *BackfillMcpAuthGrantsPayload) (res *AdminBackfillMCPAuthGrantsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -391,7 +398,14 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [102]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement"}
+var MethodNames = [104]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants"}
+
+// AdminBackfillMCPAuthGrantsResult is the result type of the admin service
+// backfillMcpAuthGrants method.
+type AdminBackfillMCPAuthGrantsResult struct {
+	// How many principals gained the mcp:auth grant.
+	Granted int64
+}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -1237,6 +1251,9 @@ type AdminOrganization struct {
 	TrialConvertedAt *string
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string
 	// Number of active members in the organization.
 	MemberCount int
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1426,6 +1443,15 @@ type AdminRegistryPage struct {
 	NextCursor *string
 }
 
+// Publicly advertised authentication capabilities, not a verified OAuth
+// connection.
+type AdminRegistryPromotionAuthDiscovery struct {
+	SupportsDcr  bool
+	SupportsCimd bool
+	AuthSetup    string
+	Status       string
+}
+
 // AdminRegistryPromotionCandidate is the result type of the admin service
 // getRegistryPromotionCandidate method.
 type AdminRegistryPromotionCandidate struct {
@@ -1438,6 +1464,7 @@ type AdminRegistryPromotionCandidate struct {
 	CreatedAt         string
 	CurationRevision  string
 	SuggestedMetadata *AdminRegistryPromotionSuggestions
+	AuthDiscovery     *AdminRegistryPromotionAuthDiscovery
 	SourceRevision    string
 	Eligible          bool
 	// Whether staff may explicitly accept this candidate's health evidence.
@@ -1637,6 +1664,9 @@ type AdminUpstreamOAuthMigrationAuthClients struct {
 	// agents and API keys are missing, which a run adds. Enforcement needs them,
 	// so existing callers keep their access.
 	PendingGrants *int64
+	// Agent attachments whose grants a run does not write while the organization's
+	// upstream selector writes are not allowed. While any wait, complete is false.
+	AttachmentsWaiting *int64
 	// Credential choice coverage for each credential class.
 	SelectionClasses []*AdminUpstreamOAuthMigrationSelectionClass
 	// The first live credential choices left without a usable auth client.
@@ -1919,6 +1949,12 @@ type AuditLog struct {
 	CreatedAt string
 }
 
+// BackfillMcpAuthGrantsPayload is the payload type of the admin service
+// backfillMcpAuthGrants method.
+type BackfillMcpAuthGrantsPayload struct {
+	AdminSessionToken *string
+}
+
 // BulkUpdateAccountTypePayload is the payload type of the admin service
 // bulkUpdateAccountType method.
 type BulkUpdateAccountTypePayload struct {
@@ -2114,8 +2150,15 @@ type CreateOnboardingUseCasePayload struct {
 type CreateOrganizationPayload struct {
 	AdminSessionToken *string
 	// Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes
-	// the name and verified email domain.
+	// the verified email domain.
 	URL string
+	// Organization display name. When omitted, a name is derived from the
+	// registrable company domain.
+	Name *string
+	// Preferred organization URL slug. When omitted, a unique slug is derived from
+	// the organization name. Explicit slugs use lowercase letters, numbers, and
+	// hyphens.
+	Slug *string
 	// The operator confirms that domain ownership was established outside this
 	// form.
 	OwnershipConfirmed bool
@@ -3067,6 +3110,15 @@ type ServeImageResult struct {
 	LastModified              string
 	AccessControlAllowOrigin  *string
 	CrossOriginResourcePolicy string
+}
+
+// SetAdoptionDashboardURLPayload is the payload type of the admin service
+// setAdoptionDashboardUrl method.
+type SetAdoptionDashboardURLPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	// An https URL, or empty to clear the link.
+	AdoptionDashboardURL *string
 }
 
 // SetInferenceKeyMonthlyLimitPayload is the payload type of the admin service

@@ -172,6 +172,114 @@ SET last_seen_at = clock_timestamp()
   , updated_at   = clock_timestamp()
 WHERE device_agent_syncs.last_seen_at < clock_timestamp() - interval '1 minute';
 
+-- name: RecordDeviceAgentServedEtag :exec
+-- Records the getPlugins etag just served to @email, which device
+-- attestation compares an agent's reported applied etag against. Separate
+-- from UpsertDeviceAgentSync because the etag is only known once the plugin
+-- set resolves, and that heartbeat must land even when resolving fails.
+-- Writes only on change, so the steady-state poll costs no write.
+UPDATE device_agent_syncs
+SET served_etag            = @served_etag
+  , served_etag_changed_at = clock_timestamp()
+  , updated_at             = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND email = @email
+  AND served_etag IS DISTINCT FROM @served_etag;
+
+-- name: UpsertDeviceAgentStateReport :one
+-- Replaces the latest state report for one enrolled user on one machine
+-- (serial NULL when the machine cannot read one). Infers
+-- device_agent_state_reports_org_lower_serial_lower_email_key.
+INSERT INTO device_agent_state_reports (
+    organization_id
+  , email
+  , serial_number
+  , hostname
+  , schema_version
+  , generated_at
+  , applied_etag
+  , applied_at
+  , enforcement_halted
+  , remote_config_etag
+  , remote_config_failed
+  , withheld_plugins
+  , tools
+  , degraded_tool_count
+  , drift_counting_since
+  , speakeasyd_version
+  , speakeasy_version
+  , speakeasy_ui_version
+  , os
+  , arch
+  , auto_update
+  , update_channel
+  , pinned_target
+  , current_blocked
+  , last_rollback_at
+  , last_rollback_from
+  , last_rollback_to
+)
+VALUES (
+    @organization_id
+  , @email
+  , sqlc.narg('serial_number')
+  , sqlc.narg('hostname')
+  , @schema_version
+  , @generated_at
+  , sqlc.narg('applied_etag')
+  , sqlc.narg('applied_at')
+  , @enforcement_halted
+  , sqlc.narg('remote_config_etag')
+  , @remote_config_failed
+  , @withheld_plugins
+  , @tools
+  , @degraded_tool_count
+  , sqlc.narg('drift_counting_since')
+  , sqlc.narg('speakeasyd_version')
+  , sqlc.narg('speakeasy_version')
+  , sqlc.narg('speakeasy_ui_version')
+  , sqlc.narg('os')
+  , sqlc.narg('arch')
+  , sqlc.narg('auto_update')
+  , sqlc.narg('update_channel')
+  , sqlc.narg('pinned_target')
+  , @current_blocked
+  , sqlc.narg('last_rollback_at')
+  , sqlc.narg('last_rollback_from')
+  , sqlc.narg('last_rollback_to')
+)
+ON CONFLICT (organization_id, LOWER(serial_number), LOWER(email)) DO UPDATE
+SET email                = EXCLUDED.email
+  , serial_number        = EXCLUDED.serial_number
+    -- A report without a hostname must not blank a known one.
+  , hostname             = COALESCE(EXCLUDED.hostname, device_agent_state_reports.hostname)
+  , schema_version       = EXCLUDED.schema_version
+  , generated_at         = EXCLUDED.generated_at
+  , reported_at          = clock_timestamp()
+  , applied_etag         = EXCLUDED.applied_etag
+  , applied_at           = EXCLUDED.applied_at
+  , enforcement_halted   = EXCLUDED.enforcement_halted
+  , remote_config_etag   = EXCLUDED.remote_config_etag
+  , remote_config_failed = EXCLUDED.remote_config_failed
+  , withheld_plugins     = EXCLUDED.withheld_plugins
+  , tools                = EXCLUDED.tools
+  , degraded_tool_count  = EXCLUDED.degraded_tool_count
+  , drift_counting_since = EXCLUDED.drift_counting_since
+  , speakeasyd_version   = EXCLUDED.speakeasyd_version
+  , speakeasy_version    = EXCLUDED.speakeasy_version
+  , speakeasy_ui_version = EXCLUDED.speakeasy_ui_version
+  , os                   = EXCLUDED.os
+  , arch                 = EXCLUDED.arch
+  , auto_update          = EXCLUDED.auto_update
+  , update_channel       = EXCLUDED.update_channel
+  , pinned_target        = EXCLUDED.pinned_target
+  , current_blocked      = EXCLUDED.current_blocked
+  , last_rollback_at     = EXCLUDED.last_rollback_at
+  , last_rollback_from   = EXCLUDED.last_rollback_from
+  , last_rollback_to     = EXCLUDED.last_rollback_to
+  , updated_at           = clock_timestamp()
+RETURNING applied_etag, reported_at;
+
 -- name: UpsertDeviceAgentDeviceSync :exec
 -- Best-effort record that the agent on the machine bearing @serial_number
 -- polled. Sibling of UpsertDeviceAgentSync: that one answers "does this user

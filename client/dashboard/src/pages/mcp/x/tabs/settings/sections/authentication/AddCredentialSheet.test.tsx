@@ -1,6 +1,7 @@
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -90,8 +91,9 @@ function client(overrides: Record<string, unknown>) {
 }
 
 function renderSheet(tunneled = false) {
+  const queryClient = new QueryClient();
   render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <MemoryRouter>
           <AddCredentialSheet
@@ -104,6 +106,7 @@ function renderSheet(tunneled = false) {
       </TooltipProvider>
     </QueryClientProvider>,
   );
+  return queryClient;
 }
 
 afterEach(() => {
@@ -142,6 +145,44 @@ describe("AddCredentialSheet", () => {
     expect(screen.queryByRole("option", { name: /Already here/ })).toBeNull();
     expect(screen.queryByRole("option", { name: /Other project/ })).toBeNull();
   });
+
+  it.each([false, true])(
+    "preserves a stale existing selection after refetch (other candidates: %s)",
+    async (hasOtherCandidate) => {
+      mocks.clientPages = [[client({ id: "selected" })]];
+      const queryClient = renderSheet();
+
+      fireEvent.click(await screen.findByRole("combobox"));
+      fireEvent.click(screen.getByRole("option", { name: /Shared token/ }));
+      expect(
+        screen
+          .getByRole("button", { name: "Add credential" })
+          .hasAttribute("disabled"),
+      ).toBe(false);
+
+      mocks.clientPages = hasOtherCandidate
+        ? [[client({ id: "other", name: "Other token" })]]
+        : [];
+      await act(async () => {
+        await queryClient.invalidateQueries();
+      });
+
+      expect(
+        screen
+          .getByRole("radio", { name: /Existing credential/ })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+      expect(screen.queryByLabelText("Name")).toBeNull();
+      expect(
+        await screen.findByText(/This credential is no longer available/),
+      ).toBeTruthy();
+      const submit = screen.getByRole("button", { name: "Add credential" });
+      expect(submit.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(submit);
+      expect(mocks.attach).not.toHaveBeenCalled();
+      expect(mocks.create).not.toHaveBeenCalled();
+    },
+  );
 
   it("creates a static credential offered on this server", () => {
     mocks.clientPages = [];

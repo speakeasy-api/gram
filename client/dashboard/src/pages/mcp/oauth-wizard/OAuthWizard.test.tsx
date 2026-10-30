@@ -674,7 +674,7 @@ describe("OAuthWizard — happy proxy create", () => {
     expect(mocks.linkToolsetUserSessionIssuer).toHaveBeenCalledTimes(1);
     expect(mocks.linkToolsetUserSessionIssuer).toHaveBeenCalledWith(
       expect.anything(),
-      { id: "toolset-1", slug: "mytoolset" },
+      { id: "toolset-1" },
       "usi-1",
       expect.objectContaining({ fetchOptions: expect.anything() }),
     );

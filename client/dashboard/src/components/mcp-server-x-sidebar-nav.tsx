@@ -1,6 +1,7 @@
-import { useOrganization } from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
+import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
 import {
   DetailSidebarInfoLabel,
   DetailSidebarNav,
@@ -73,6 +74,7 @@ import {
   Plug,
   Settings as SettingsIcon,
   ShieldCheck,
+  Terminal,
   Users,
   Wrench,
   Database,
@@ -310,6 +312,8 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const mcpScoped =
     useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
   const organization = useOrganization();
+  const project = useProject();
+  const skillsOverMcp = useSkillsOverMcpEnabled();
   const pluginScope = usePluginQueryScope();
   const canWritePlugins = usePluginWriteAccess();
   const canReadPlugins =
@@ -469,6 +473,12 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     !!mcpServer &&
     hasScope("org:read", organization.id) &&
     hasScope("mcp:read", grantResourceId);
+  // Same check as the Skills tab routes: skill read on this project. Only
+  // hosted and remote-backed servers have the tab.
+  const canViewSkills =
+    skillsOverMcp &&
+    (hosted || isRemoteBacked) &&
+    hasScope("skill:read", project.id, project.id);
 
   // Guardrails police traffic that passes through Speakeasy, so unproxied servers
   // (which never do) have none. Admin-only, like the policies it manages.
@@ -636,6 +646,17 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
               active: activeTab === "inspect",
             },
           ]),
+    ...(canViewSkills
+      ? [
+          {
+            key: "skills",
+            title: "Skills",
+            Icon: Terminal,
+            href: mcpServerTabHref(routes, idOrSlug, "skills"),
+            active: activeTab === "skills",
+          },
+        ]
+      : []),
     ...(canViewTeamAccess
       ? [
           {

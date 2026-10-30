@@ -61,8 +61,6 @@ func createToolsetBackedServerFixture(t *testing.T, ctx context.Context, ti *tes
 		Slug:                   "rbac-scoped-" + uuid.NewString(),
 		Description:            conv.ToPGText("scoped rbac fixture"),
 		DefaultEnvironmentSlug: conv.ToPGTextEmpty(""),
-		McpSlug:                conv.ToPGTextEmpty(""),
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 
@@ -474,8 +472,6 @@ func TestUpdateMcpServer_RBAC_TargetBackingGrantDoesNotAuthorize(t *testing.T) {
 		Slug:                   "rbac-scoped-" + uuid.NewString(),
 		Description:            conv.ToPGText("scoped rbac fixture"),
 		DefaultEnvironmentSlug: conv.ToPGTextEmpty(""),
-		McpSlug:                conv.ToPGTextEmpty(""),
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 
