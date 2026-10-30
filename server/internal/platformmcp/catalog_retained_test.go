@@ -13,19 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
-
-type retainedCatalogFlags struct {
-	feature.Provider
-	enabled bool
-}
-
-func (f *retainedCatalogFlags) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
-	return f.enabled, nil
-}
 
 type retainedCatalogRecord struct {
 	data      json.RawMessage
@@ -72,9 +62,7 @@ func TestCatalogRetainedUnpublishedIdentity(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, conn))
 			native := &retainedCatalogRecord{published: true, data: json.RawMessage(`{"server":{"name":"reviewed/mcp","description":"Native retained record","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://native.test/{region}/mcp","headers":[{"name":"Authorization","isRequired":true,"isSecret":true}],"variables":{"region":{"default":"us","isRequired":true,"choices":["us","eu"]}}}]}}`)}
-			legacy := &retainedCatalogRecord{published: true, data: json.RawMessage(`{"server":{"name":"reviewed/mcp","description":"Legacy retained record","version":"2.0.0","remotes":[{"type":"streamable-http","url":"https://legacy.example.test/mcp"}]}}`)}
-			flags := &retainedCatalogFlags{enabled: true}
-			identity := externalmcp.NewCatalogService(conn, externalmcp.NewNativeRegistryReader(legacy), externalmcp.NewNativeRegistryReader(native), flags)
+			identity := externalmcp.NewCatalogService(conn, nil, externalmcp.NewNativeRegistryReader(native))
 			nativeSource, err := identity.SelectedSource(ctx, "organization", "organization")
 			require.NoError(t, err)
 			require.Equal(t, "speakeasy", nativeSource.SourceKey)
@@ -90,19 +78,24 @@ func TestCatalogRetainedUnpublishedIdentity(t *testing.T) {
 				}
 				return []RegistryCatalogSource{{Client: reader, Descriptors: []CatalogDescriptor{BrowserCatalogDescriptor(source.Registry)}}}, nil
 			}).WithIdentityService(identity)
-			id, record := legacyID, legacy
-			if initiallyNative {
-				id, record = externalmcp.NativeCatalogRegistryID, native
+			if !initiallyNative {
+				key := "browser-catalog-registry-" + legacyID.String()
+				candidates, err := catalog.Search(ctx, "")
+				require.NoError(t, err)
+				for _, candidate := range candidates {
+					require.NotEqual(t, key, candidate.ProviderKey, "retired sources must not be discoverable")
+				}
+				_, err = catalog.Inspect(ctx, key, "reviewed/mcp")
+				require.ErrorIs(t, err, ErrCatalogRejected)
+				_, err = catalog.InspectIdentity(ctx, key, "reviewed/mcp")
+				require.ErrorIs(t, err, externalmcp.ErrCatalogSourceRetired)
+				return
 			}
-			flags.enabled = initiallyNative
-			record.published = true
-			key := "browser-catalog-registry-" + id.String()
+			record := native
+			key := "browser-catalog-registry-" + externalmcp.NativeCatalogRegistryID.String()
 			before, err := catalog.Inspect(ctx, key, "reviewed/mcp")
 			require.NoError(t, err)
 			record.published = false
-			_, err = catalog.Inspect(ctx, key, "reviewed/mcp")
-			require.ErrorIs(t, err, ErrCatalogRejected)
-			flags.enabled = !initiallyNative
 			_, err = catalog.Inspect(ctx, key, "reviewed/mcp")
 			require.ErrorIs(t, err, ErrCatalogRejected)
 			after, err := catalog.InspectIdentity(ctx, key, "reviewed/mcp")

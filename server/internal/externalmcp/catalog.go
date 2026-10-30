@@ -32,6 +32,7 @@ const (
 var (
 	errCatalogEmpty          = errors.New("catalog has no configured sources")
 	ErrCatalogSourceNotFound = errors.New("catalog source not found")
+	ErrCatalogSourceRetired  = errors.New("Pulse catalog source is retired")
 	ErrCatalogSourceDisabled = errors.New("catalog source is not enabled and certified")
 	ErrUnknownRegistrySource = errors.New("unknown registry source profile")
 )
@@ -55,25 +56,16 @@ type CatalogSource struct {
 // certified sources with a known, code-reviewed adapter/profile combination.
 type CatalogService struct {
 	repo     catalogRepository
-	features feature.Provider
 	adapters map[string]RegistryReader
 }
 
-// NewCatalogService temporarily accepts both RegistryReader implementations for
-// the organization-targeted catalog cutover. Remove the legacy reader after rollout.
+// NewCatalogService admits only the native reader.
 func NewCatalogService(db *pgxpool.Pool, legacy RegistryReader, native RegistryReader, providers ...feature.Provider) *CatalogService {
-	adapters := make(map[string]RegistryReader, 2)
-	if legacy != nil {
-		adapters[registryAdapterKey(registrySourceTypePulseV01, registryAuthProfilePulseServerCredentials)] = legacy
-	}
+	adapters := make(map[string]RegistryReader, 1)
 	if native != nil {
 		adapters[registryAdapterKey(registrySourceTypeNative, registryAuthProfileNone)] = native
 	}
-	var flags feature.Provider
-	if len(providers) > 0 {
-		flags = providers[0]
-	}
-	return &CatalogService{repo: repo.New(db), adapters: adapters, features: flags}
+	return &CatalogService{repo: repo.New(db), adapters: adapters}
 }
 
 func registryAdapterKey(sourceType, authProfile string) string {
@@ -227,13 +219,12 @@ func (s *CatalogService) sources(ctx context.Context, registryID *uuid.UUID) ([]
 	return []CatalogSource{source}, nil
 }
 
-// SelectedSource selects exactly one catalog. Flag errors/off/unknown select the legacy catalog;
-// missing or failing selected sources never fall back to the other catalog.
+// SelectedSource selects only the native catalog, independently of rollout state.
+// Missing or failing native sources never fall back to another catalog.
 func (s *CatalogService) SelectedSource(ctx context.Context, organizationID, organizationSlug string) (CatalogSource, error) {
 	if s == nil || s.repo == nil {
 		return zeroCatalogSource(), ErrCatalogSourceNotFound
 	}
-	native, _ := feature.GramMCPCatalogEnabled(ctx, s.features, organizationID, organizationSlug)
 	rows, err := s.repo.ListMCPRegistries(ctx)
 	if err != nil {
 		return zeroCatalogSource(), fmt.Errorf("list catalog sources: %w", err)
@@ -247,11 +238,7 @@ func (s *CatalogService) SelectedSource(ctx context.Context, organizationID, org
 		if !ok {
 			continue
 		}
-		matches := source.SourceType == registrySourceTypePulseV01
-		if native {
-			matches = source.SourceType == registrySourceTypeNative && source.Registry.ID == NativeCatalogRegistryID
-		}
-		if !matches {
+		if source.SourceType != registrySourceTypeNative || source.Registry.ID != NativeCatalogRegistryID {
 			continue
 		}
 		if selected != nil {
@@ -281,7 +268,7 @@ func (s *CatalogService) SelectSource(ctx context.Context, organizationID, organ
 }
 
 // IdentitySource resolves persisted/accepted work independently of rollout state.
-// It still requires a known enabled/certified source; it never switches identities.
+// Retired identities are rejected before enabled/certified admission; identities never switch.
 func (s *CatalogService) IdentitySource(ctx context.Context, id uuid.UUID) (CatalogSource, error) {
 	if s == nil || s.repo == nil {
 		return zeroCatalogSource(), ErrCatalogSourceNotFound
@@ -292,6 +279,11 @@ func (s *CatalogService) IdentitySource(ctx context.Context, id uuid.UUID) (Cata
 	}
 	if err != nil {
 		return zeroCatalogSource(), fmt.Errorf("get catalog identity: %w", err)
+	}
+	if strings.TrimRight(row.Url, "/") == "https://api.pulsemcp.com" ||
+		(row.SourceType.Valid && row.SourceType.String == registrySourceTypePulseV01) ||
+		(row.AuthProfile.Valid && row.AuthProfile.String == registryAuthProfilePulseServerCredentials) {
+		return zeroCatalogSource(), ErrCatalogSourceRetired
 	}
 	source, ok := catalogSourceFromDetailRow(row)
 	if !ok {

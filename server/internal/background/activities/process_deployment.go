@@ -130,15 +130,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		return err
 	}
 
-	err = workers.Wait()
-	if errors.Is(err, oops.ErrPermanent) {
-		return temporal.NewApplicationErrorWithOptions("openapiv3 document was not processed successfully", "openapi_doc_error", temporal.ApplicationErrorOptions{
-			NonRetryable: true,
-			Cause:        err,
-		})
-	}
-
-	if err != nil {
+	if err := deploymentProcessingError(workers.Wait()); err != nil {
 		return err
 	}
 
@@ -453,4 +445,18 @@ func (p *ProcessDeployment) doExternalMCPs(
 	}
 
 	return nil
+}
+
+func deploymentProcessingError(err error) error {
+	if errors.Is(err, externalmcp.ErrCatalogSourceRetired) {
+		return temporal.NewNonRetryableApplicationError("Pulse catalog source is retired", "retired_pulse_catalog", err)
+	}
+	if errors.Is(err, oops.ErrPermanent) {
+		return temporal.NewApplicationErrorWithOptions("openapiv3 document was not processed successfully", "openapi_doc_error", temporal.ApplicationErrorOptions{
+			NonRetryable: true,
+			Cause:        err,
+		})
+	}
+
+	return err
 }
