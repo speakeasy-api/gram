@@ -291,12 +291,14 @@ export function StepInstall({
                 />
                 <CodeBlock
                   value={[
-                    // OpenClaw sends MCP headers as written, so its config
-                    // holds the key; `mcp add` checks the server before saving.
-                    // The entry is named `speakeasy` like the one-line setup's.
+                    // Single quotes keep the key out of argv and out of the
+                    // config: OpenClaw saves the `${VAR}` reference and fills it
+                    // in from its own environment when it connects. `add`'s
+                    // pre-save check does not, hence --no-probe. The entry is
+                    // named `speakeasy` like the one-line setup's.
                     `openclaw mcp add speakeasy --url ${gatewayURL} \\`,
-                    "  --transport streamable-http \\",
-                    `  --header "Authorization=Bearer $${KEY_ENV}"`,
+                    "  --transport streamable-http --no-probe \\",
+                    `  --header 'Authorization=Bearer \${${KEY_ENV}}'`,
                   ].join("\n")}
                   label="OpenClaw"
                   language="shell"

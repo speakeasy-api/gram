@@ -31,12 +31,14 @@ it("adds the gateway to OpenClaw by hand with the key from the environment", () 
   fireEvent.click(screen.getByRole("button", { name: "Copy OpenClaw" }));
 
   const copied = writeText.mock.calls[0]?.[0] ?? "";
-  // One plain command, named like the one-line setup's entry, with the key
-  // read from the environment rather than pasted into the block.
+  // One plain command, named like the one-line setup's entry. The header is
+  // single-quoted, so the shell never expands the key into argv: OpenClaw
+  // saves the ${VAR} reference and resolves it from its environment.
   expect(copied).toContain(`openclaw mcp add speakeasy --url ${gatewayURL}`);
-  expect(copied).toContain("--transport streamable-http");
+  expect(copied).toContain("--transport streamable-http --no-probe");
   expect(copied).toContain(
-    '--header "Authorization=Bearer $SPEAKEASY_AGENT_KEY"',
+    "--header 'Authorization=Bearer ${SPEAKEASY_AGENT_KEY}'",
   );
+  expect(copied).not.toContain('"Authorization=Bearer $SPEAKEASY_AGENT_KEY"');
   expect(copied).not.toContain("gram_secret");
 });
