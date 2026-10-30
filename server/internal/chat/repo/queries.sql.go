@@ -774,7 +774,7 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT c.session_surface, c.slack_team_id, c.slack_channel_id, c.slack_channel_name, c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.inference_accepted_checkpoint, c.inference_actor_key, c.user_account_id, c.litellm_proxied, c.cwd, c.agent_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
+SELECT c.session_surface, c.slack_team_id, c.slack_channel_id, c.slack_channel_name, c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.summary_redacted, c.memory_excluded_at, c.inference_accepted_checkpoint, c.inference_actor_key, c.user_account_id, c.litellm_proxied, c.cwd, c.agent_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
   a.id AS assistant_id, a.name AS assistant_name, b.original_agent_id AS assistant_agent_id,
   -- Name of the agent principal that produced the session (chats.agent_id,
   -- selected by c.*). Resolved live so a rename shows, and NULL for a deleted
@@ -815,6 +815,8 @@ type GetChatRow struct {
 	PinnedAt                    pgtype.Timestamptz
 	Summary                     pgtype.Text
 	SummaryGeneratedAt          pgtype.Timestamptz
+	SummaryRedacted             bool
+	MemoryExcludedAt            pgtype.Timestamptz
 	InferenceAcceptedCheckpoint []byte
 	InferenceActorKey           []byte
 	UserAccountID               uuid.NullUUID
@@ -860,6 +862,8 @@ func (q *Queries) GetChat(ctx context.Context, arg GetChatParams) (GetChatRow, e
 		&i.PinnedAt,
 		&i.Summary,
 		&i.SummaryGeneratedAt,
+		&i.SummaryRedacted,
+		&i.MemoryExcludedAt,
 		&i.InferenceAcceptedCheckpoint,
 		&i.InferenceActorKey,
 		&i.UserAccountID,
