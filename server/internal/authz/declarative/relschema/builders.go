@@ -19,7 +19,7 @@ type (
 
 // NewType declares a protected object type.
 func NewType(name string, opts ...TypeOption) *Type {
-	t := &Type{Name: name, Grants: map[string]*GrantDef{}, Perms: map[string]*PermDef{}}
+	t := &Type{Name: name, Grants: map[string]*GrantDef{}, Perms: map[string]*PermDef{}, Attrs: map[string]string{}}
 	for _, o := range opts {
 		o(t)
 	}
@@ -28,6 +28,9 @@ func NewType(name string, opts ...TypeOption) *Type {
 
 // Parent names the containing type.
 func Parent(typ string) TypeOption { return func(t *Type) { t.Parent = typ } }
+
+// Attr declares an attribute naming one related object of type typ.
+func Attr(name, typ string) TypeOption { return func(t *Type) { t.Attrs[name] = typ } }
 
 // StoredKind is the resource_kind stored rows use for grants on the type.
 func StoredKind(kind string) TypeOption { return func(t *Type) { t.StoredKind = kind } }

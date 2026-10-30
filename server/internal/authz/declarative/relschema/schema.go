@@ -27,6 +27,11 @@ type Type struct {
 	StoredKind string
 	Grants     map[string]*GrantDef
 	Perms      map[string]*PermDef
+	// Attrs are the object's attributes: each names one related object of a
+	// declared type, such as a session's author or the agent that produced
+	// it. The service loads them from trusted rows; they are never stored as
+	// grants.
+	Attrs map[string]string
 
 	chain []string // resolved ancestors, nearest first
 }
@@ -76,17 +81,37 @@ type (
 	UnionExpr struct{ Items []Expr }
 	// MinusExpr allows when Base allows and Sub does not.
 	MinusExpr struct{ Base, Sub Expr }
+	// IsExpr allows when the request's subject is the object's Attr.
+	IsExpr struct{ Attr string }
+	// ViaExpr allows when Perm allows on the object the Attr names. That
+	// object must be supplied with the request; without it the answer is
+	// undetermined.
+	ViaExpr struct{ Attr, Perm string }
+	// UnlessExpr allows when Expr allows and the object has no Attr.
+	UnlessExpr struct {
+		Attr string
+		Expr Expr
+	}
 )
 
 func (RelExpr) isExpr()         {}
 func (AncestorRelExpr) isExpr() {}
 func (UnionExpr) isExpr()       {}
 func (MinusExpr) isExpr()       {}
+func (IsExpr) isExpr()          {}
+func (ViaExpr) isExpr()         {}
+func (UnlessExpr) isExpr()      {}
 
 func Rel(name string) Expr              { return RelExpr{Name: name} }
 func AncestorRel(typ, name string) Expr { return AncestorRelExpr{Type: typ, Name: name} }
 func Union(items ...Expr) Expr          { return UnionExpr{Items: items} }
 func Minus(base, sub Expr) Expr         { return MinusExpr{Base: base, Sub: sub} }
+func Is(attr string) Expr               { return IsExpr{Attr: attr} }
+func Via(attr, perm string) Expr        { return ViaExpr{Attr: attr, Perm: perm} }
+
+// Unless applies expr only to objects that have no attr, e.g. agent
+// ownership only on sessions with no human author.
+func Unless(attr string, expr Expr) Expr { return UnlessExpr{Attr: attr, Expr: expr} }
 
 // Schema is a compiled, validated set of types.
 type Schema struct {
@@ -158,6 +183,11 @@ func Compile(def Definition) (*Schema, error) {
 		}
 		if t.Name != def.Root && (len(t.chain) == 0 || t.chain[len(t.chain)-1] != def.Root) {
 			return nil, fmt.Errorf("%s: containment chain does not end at %q", t.Name, def.Root)
+		}
+		for name, typ := range t.Attrs {
+			if _, ok := s.Types[typ]; !ok {
+				return nil, fmt.Errorf("%s: attribute %q names unknown type %q", t.Name, name, typ)
+			}
 		}
 		for _, g := range t.Grants {
 			if err := s.compileGrant(t, g); err != nil {
@@ -247,6 +277,23 @@ func (s *Schema) validate(t *Type, e Expr) error {
 		if rel, ok := x.Sub.(RelExpr); ok && !t.Grants[rel.Name].Block {
 			return fmt.Errorf("exclusion %q is not a block", rel.Name)
 		}
+	case IsExpr:
+		if _, ok := t.Attrs[x.Attr]; !ok {
+			return fmt.Errorf("unknown attribute %q", x.Attr)
+		}
+	case ViaExpr:
+		typ, ok := t.Attrs[x.Attr]
+		if !ok {
+			return fmt.Errorf("unknown attribute %q", x.Attr)
+		}
+		if _, ok := s.Types[typ].Perms[x.Perm]; !ok {
+			return fmt.Errorf("%s has no permission %q", typ, x.Perm)
+		}
+	case UnlessExpr:
+		if _, ok := t.Attrs[x.Attr]; !ok {
+			return fmt.Errorf("unknown attribute %q", x.Attr)
+		}
+		return s.validate(t, x.Expr)
 	default:
 		return fmt.Errorf("unknown expression %T", e)
 	}

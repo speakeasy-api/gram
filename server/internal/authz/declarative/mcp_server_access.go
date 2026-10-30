@@ -174,23 +174,33 @@ func decideMCPServer(set authz.PolicySet, permission MCPServerPermission, server
 			{Type: typeOrganization, ID: server.OrganizationID},
 		},
 	}
-	decision.Allowed = len(set.Policies) > 0
+	allowed, policies, err := evaluatePoliciesWith(set, object, string(permission), relschema.Request{Facts: nil, Subject: relschema.ObjectRef{}, Objects: nil})
+	decision.Allowed, decision.Policies = allowed, policies
+	return decision, err
+}
+
+// evaluatePoliciesWith evaluates permission on object for every policy in
+// set, and allows only if all allow. It is the one caller of
+// mcpServerSchema.Evaluate.
+func evaluatePoliciesWith(set authz.PolicySet, object relschema.Object, permission string, request relschema.Request) (bool, []MCPServerPolicyOutcome, error) {
+	allowed := len(set.Policies) > 0
+	var outcomes []MCPServerPolicyOutcome
 	for _, policy := range set.Policies {
 		relationships, err := decodeMCPServerPolicy(set.OrganizationID, policy)
 		if err != nil {
-			return decision, err
+			return false, outcomes, err
 		}
-		result := mcpServerSchema.Evaluate(set.OrganizationID, relationships, object, string(permission), relschema.Request{Facts: nil})
-		decision.Policies = append(decision.Policies, MCPServerPolicyOutcome{
+		result := mcpServerSchema.Evaluate(set.OrganizationID, relationships, object, permission, request)
+		outcomes = append(outcomes, MCPServerPolicyOutcome{
 			Outcome: result.Outcome.String(),
 			Reason:  result.Reason,
 			Path:    result.Path,
 		})
 		if result.Outcome != relschema.Allowed {
-			decision.Allowed = false
+			allowed = false
 		}
 	}
-	return decision, nil
+	return allowed, outcomes, nil
 }
 
 // decodeMCPServerPolicy maps one policy's stored grants onto the schema. Rows

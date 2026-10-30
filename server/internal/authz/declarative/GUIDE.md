@@ -24,6 +24,7 @@ This guide grows one step at a time, in the order Tiago asks for them. Each sect
 
 1. [Scaffolding: how checks are defined, and how handlers reach the authorizer](#step-1-scaffolding)
 2. [What the anchor gives us, and five access scenarios](#step-2-anchors-and-five-access-scenarios)
+3. [Evidence gate: an agent's history after its ownership is transferred](#step-3-evidence-gate-agent-history-after-transfer)
 
 ---
 
@@ -75,7 +76,7 @@ var mcpServerSchema = mustCompileMCPServerSchema() // panics on error
 - an anchor that isn't the type or one of its ancestors;
 - a permission that names an unknown relation, or excludes something that isn't a block;
 - a stored scope mapped twice;
-- **a registered scope that is neither read by the schema nor declared out of it.** Adding a scope to `authz/scopes.go` without deciding where it belongs fails startup.
+- **a registered scope that is neither read by the schema nor declared out of it.** Adding a scope to `authz/scopes.go` without deciding where it belongs fails startup. (Until step 3 this was overstated: the out-of-schema list was derived automatically, so a new scope was silently excluded. Step 3.3 fixes that.)
 
 ### 1.2 Handlers keep the client they already have
 
@@ -571,3 +572,200 @@ Opening a connection to S2:
 - **Whether project-wide connect should be first-class** (scenario 1). It's a one-argument change, but it reverses what the RFC and plan say.
 - **A tool-call entry point** (`RequireMCPTool`, sketched), so the tool restrictions in scenarios 4 and 5 are decided by the schema rather than the legacy interceptors.
 - **Unannotated tools under a read-only row** (scenario 4). This is a behavior decision, not only code.
+
+---
+
+## Step 3: Evidence gate: agent history after transfer
+
+**Status: implemented, behind the same per-organization switch as MCP servers (off in production).** This is the relationship-heavy slice the external review asked for before committing to option D. It is a rough proof, not production code.
+
+It covers:
+- the direct session read (`LoadChat`, and every per-session read that shares its gate);
+- the session listing (`ListChats`);
+- six acceptance cases, in two tests:
+  - `declarative/chat_access_test.go` (`TestAgentHistoryAcceptance`, in memory);
+  - `chat/agent_history_schema_test.go` (`TestAgentHistorySchema`, Postgres, through the real service).
+- two review findings: new scopes (3.3) and malformed rows (3.4).
+
+**Defaults chosen for the open slice 4 questions.** These are mine, not decided:
+
+- **No session marking column.** Activation is per organization, as for MCP servers. A capture-time marker (the plan's "rules at capture") would need a migration, and is left for when the new rules diverge from today's. In this slice the read rule matches today's inline rule, so pre-activation sessions get the same answers either way.
+- **Human attribution:** `chats.user_id` counts as the session's author, as today. It is resolved from the hook payload's email, so it isn't strongly verified. That's recorded, not fixed.
+- **All three per-session read paths switch together.** The switch is in the shared gate, `authorizeChatAccess` (`chat/impl.go:1074`), so `LoadChat`, `LoadChatOverview` and the conversation path can't disagree.
+
+**What the language had to grow** (`relschema/`):
+
+| Addition | Where | Why |
+| --- | --- | --- |
+| `s.Attr(name, type)`, `Object.Attrs` | `builders.go`, `eval.go` | A session names its author and its agent; an agent names its owner |
+| `s.Is(attr)` | `eval.go:200` | "The caller is this attribute", e.g. the author or the owner |
+| `s.Via(attr, perm)`, `Request.Objects` | `eval.go:212`, `:224` | "This permission on the related object", e.g. owner of the session's agent |
+| `s.Unless(attr, expr)` | `eval.go:207` | "Only when this attribute is absent", e.g. no human author |
+| `Request.Subject` | `eval.go` | The caller as a person, which `Is` compares against |
+
+**No escape hatches were needed in the evaluator.** Two pieces of policy-adjacent Go remain outside the declarations:
+- `chatObject` (`chat_access.go:128`) sets an agent's `owner` attribute only when the agent is eligible (not latched, not deleted).
+- `PlanChatList` (`chat_access.go:90`) turns the schema into a listing filter. The SQL then applies the owner branches by hand (see 3.2).
+
+### 3.1 Scenario: agent-only history follows a transfer
+
+#### Grants
+
+The policy only holds the reviewer's and manager's rows. Ownership and attribution come from domain tables.
+
+`principal_grants`:
+
+| organization_id | principal_urn | scope | effect | selectors |
+| --- | --- | --- | --- | --- |
+| A | `user:R` | `chat:read` | NULL | `{"resource_kind": "chat", "resource_id": "*"}` |
+| A | `user:M` | `agent:read`, `agent:write`, `agent:authorize`, `agent:transfer` (four rows) | NULL | `{"resource_kind": "agent", "resource_id": "*"}` |
+
+`agents`, before and after the transfer:
+
+| id | organization_id | owner_user_id | owner_reassignment_required_at | deleted |
+| --- | --- | --- | --- | --- |
+| G | A | U1, then **U2** | NULL | false |
+
+`chats`:
+
+| id | organization_id | project_id | user_id | external_user_id | agent_id |
+| --- | --- | --- | --- | --- | --- |
+| C1 (agent-only) | A | P | NULL | NULL | G |
+| C2 (U1's own) | A | P | U1 | NULL | G |
+| C3 (no attribution) | A | P | NULL | NULL | NULL |
+| C4 (dangling) | A | P | NULL | NULL | an id with no agent row in A |
+
+#### Request
+
+The chat service keeps its transport checks (project match, external-user and chat-token owner matching, assistant exemption). Then, for reads, in `authorizeChatAccess` (`chat/impl.go:1127–1138`):
+
+```go
+if access == chatAccessRead && !isAssistantCall {
+    active, err := declarative.ChatSchemaActive(ctx, s.authz)
+    // ...
+    if active {
+        ref, agent, err := s.chatReadFacts(ctx, chat)
+        // ...
+        return declarative.RequireChatRead(ctx, s.authz, ref, agent)
+    }
+}
+```
+
+`chatReadFacts` (`chat/impl.go:1176`) builds the `ChatRef` from the tenant-scoped chat row. If the chat names an agent, it loads that agent with the **chat's** organization (`:1189`, `GetAgentByID{OrganizationID: chat.OrganizationID, ID}`). A missing row becomes "no fact".
+
+#### Rule setup
+
+`chat_schema.go:43–66`:
+
+```go
+s.NewType(typeAgent, s.Parent(org), s.Attr("owner", typeUser),
+    s.Permission("owner", s.Is("owner")),
+),
+
+s.NewType(typeChat, s.Parent(project), s.StoredKind(authz.ResourceKindChat),
+    s.Attr("author", typeUser),
+    s.Attr("external_author", typeUser),
+    s.Attr("agent", typeAgent),
+
+    s.Grant("reader", s.StoredAs(string(authz.ScopeChatRead)), s.AnchoredAt(org), ...),
+    s.Grant("writer", s.StoredAs(string(authz.ScopeChatWrite)), s.AnchoredAt(org), ...),
+
+    s.Permission(string(ChatRead), s.Union(
+        s.Is("author"),
+        s.Unless("author", s.Unless("external_author", s.Via("agent", "owner"))),
+        s.Rel("reader"),
+        s.Rel("writer"),
+        root,
+    )),
+),
+```
+
+The agent's `owner` permission is `Is("owner")` only. The `agent:*` management scopes are listed in `outOfSchemaScopes` with the reason "agent management confers nothing on sessions". So no path leads from management to transcripts.
+
+#### Walkthrough
+
+For U2 loading C1 after the transfer:
+
+1. `LoadChat` (`chat/impl.go:1281`) → `loadAuthorizedChat` → `GetChat{id, project}` → `authorizeChatAccess` (`:1074`). The transport checks pass, and the switch is on (`:1128`).
+2. `chatReadFacts`: C1 has no `user_id` and no `external_user_id`, and `agent_id` is G. `GetAgentByID{A, G}` returns owner U2, not latched, so `Eligible: true`.
+3. `RequireChatRead` (`chat_access.go:61`) gets `engine.PolicySet` (`:63`), with U2's policy (no rows) bound to A. The subject is `user:U2`, from the auth context.
+4. `decideChatRead` (`:108`) → `chatObject` (`:128`) builds:
+   - the object `chat:C1` in `project:P` in `organization:A`, with `Attrs{agent: agent:G}`;
+   - the request with `Objects{agent:G → Object{agent:G in organization:A, Attrs{owner: user:U2}}}`. The owner is set at `:143` because the fact is eligible.
+5. `evaluatePoliciesWith` (`mcp_server_access.go:185`) decodes the policy (empty) and calls `Evaluate` (`:193`). The tenant check (`eval.go:98`) passes.
+6. The union is evaluated:
+   - `Is("author")` (`eval.go:200`): C1 has no author attribute. False.
+   - `Unless("author", …)` (`:207`): no author, so it continues. `Unless("external_author", …)`: none, so it continues.
+   - `Via("agent", "owner")` (`:224`): the attribute is `agent:G`. It is found in `Request.Objects`, the type matches, and its ancestors are valid (`:230`). Its tenant is A (`:237`). `agent.owner` is `Is("owner")`, and `user:U2` is the owner. True.
+   - The path is `user:U2 is agent:G#owner`, then `via chat:C1#agent`.
+7. Allowed. `RecordDecision` logs it under the `chat:read` check and returns nil.
+
+The same request from U1 fails at step 6, because `Is("owner")` compares `user:U1` with `user:U2`. With no reader, writer or root, the result is denied: "no relationship grants chat.read".
+
+#### Cases
+
+| # | Acceptance case | Result | Where it's shown |
+| --- | --- | --- | --- |
+| 1 | The new owner gains access; the former owner loses it | U2 reads C1 after the transfer, U1 doesn't. U1 still reads C2, their own. A `chat:read` grant brings U1 back. | Both tests, before and after `TransferAgent` |
+| 2 | Agent management alone grants no transcript access | M, holding all four `agent:*` scopes (plus `org:admin` in the unit test), reads nothing | Both tests |
+| 3 | Human attribution isn't overridden by a named agent | U2 owns G but can't read C2 (member author) or an external user's session that names G. U1 reads C2. | Both tests |
+| 4 | Missing facts and cross-tenant references never allow | C4 (no agent row): **undetermined**, so denied. Agent fact for another id: denied. Agent in another organization: denied (`eval.go:237`). Latched agent: denied. A session in another organization: "object belongs to another organization". A caller who isn't a person: denied. | Unit test. C4 is also in the DB test. |
+| 5 | Listing and direct reads agree, including pagination | For every caller, before and after the transfer: the set from `LoadChat` over all four sessions equals the set from `ListChats` walked one row per page, and every page's total, including the empty page past the end, equals that count | DB test |
+| 6 | Every admitted policy is enforced | A reviewer whose second policy lacks `chat:read` is denied. **Ownership isn't capped by a second policy**, because it's a relationship of the person, not a grant. Today's code behaves the same way (owner matching skips the scope check). Whether a narrowed credential should cap it is a product decision. | Unit test |
+
+A mutation check backs the DB test. Replacing the `Unless` guards with a bare `Via("agent", "owner")` makes `TestAgentHistorySchema` fail on "new owner: direct reads". So the test runs the schema path, not the legacy one.
+
+### 3.2 Listing
+
+The listing can't evaluate every row in Go and still paginate in SQL, so it's split:
+
+1. **The schema decides "every session or not".** `PlanChatList` (`chat_access.go:90`) evaluates `read` on an imaginary session with no attribution (`:99`). Only grants (reader, writer, root) can allow that. If it's allowed, every session in the project is readable, and `chatVisibilityScope` (`chat/impl.go:986–997`) lists all of them.
+2. **Otherwise, the existing SQL applies the owner branches.** `chat/queries.sql:626` and `:771`:
+
+   ```sql
+   AND (@user_id = '' OR c.user_id = @user_id
+        OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY(@owned_agent_ids::uuid[])))
+   ```
+
+   The owned agents come from `ListOwnedAgentIDs`, which checks owner, not latched, and not deleted.
+
+The second part is a **hand-written mirror** of `Is("author") ∪ Unless(author, Unless(external_author, Via(agent, owner)))`. Acceptance case 5 is what keeps them equal, and the mutation above shows it catches drift. Generating that SQL from the declaration would be the next language step. That's **not built**, and it's the main cost this slice exposes.
+
+### 3.3 New scopes need an explicit decision
+
+The review was right. `compileMCPServerSchema` used to put every registered scope that no grant read into `OutOfSchema` automatically. `Compile`'s exhaustiveness check therefore could never fail.
+
+Now `outOfSchemaScopes` (`mcp_server_schema.go:106`) lists each excluded scope with a reason. `compileSchema` (`:163`) passes only that list, and also refuses listed scopes that aren't registered (`:171`). `TestNewScopeNeedsADecision` adds `widget:read` to the registered scopes and gets:
+
+```
+scope "widget:read" is neither mapped nor declared out of schema
+```
+
+That error comes from `relschema/schema.go:213`, at startup.
+
+### 3.4 Malformed rows
+
+**Behavior: fail closed for the whole policy.** `evaluatePoliciesWith` decodes every row in each policy before evaluating. One row in a mapped scope that the schema can't express makes **every** schema check for that caller return an error. That includes checks on resources the row doesn't name, and on other types. Rows in out-of-schema scopes are never decoded, however malformed. `TestMalformedRowIsolation` shows this:
+
+| Policy holds | connect S1 | read a session | Error names |
+| --- | --- | --- | --- |
+| a good `mcp:connect {S1}` row and a malformed `environment:read` row | allowed | — | — (out of schema) |
+| a good row and `mcp:connect {S2, region: eu}` | **error** | **error** | `role:fixture-role mcp:connect {…}: unsupported selector key "region"` |
+| a good row and `mcp:blocked_connect {resource_kind: toolset, S2}` | **error** | **error** | `… resource_kind "toolset" does not match` |
+
+The request gets a 500 (`RecordDecision` with `Err`), and the challenge log records an error outcome.
+
+**Why not skip the bad row:** silently dropping a malformed *block* would widen access. Dropping only malformed allows is possible, but it would make a typo deny without explanation.
+
+**Recovery:** `AuditGrants(organizationID, grants)` (`chat_access.go:183`) returns one error per row the schema can't read, naming the principal, scope and selector. The proposed procedure is to run it over an organization's stored rows before switching it on, and fix or delete each one. It is the same decoder the checks use, so an empty result means no check can fail this way.
+
+**Not done:** narrowing the blast radius, for example decoding per type so a bad MCP row can't fail a chat read. That's possible because rows map to one type, but it isn't built.
+
+### Not settled by this step
+
+- **The listing mirror** (3.2). Agreement is tested, not generated.
+- **Credential ceilings on ownership** (case 6). This is a product decision.
+- **The capture-time marker** and **verified human attribution** (the defaults above).
+- **Writes** (rename, feedback, delete) still use today's inline owner check and `chat:write`.
+- **One switch** now covers MCP servers and sessions together.
+- **Per-check cost.** Each read now loads the agent row and decodes the caller's rows. This isn't measured.

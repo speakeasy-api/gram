@@ -98,41 +98,84 @@ func (p MCPServerPermission) legacyScope() (authz.Scope, error) {
 	}
 }
 
-// mcpServerSchemaScopes are the stored scopes the schema reads. Every other
-// registered scope is declared out of it.
-var mcpServerSchemaScopes = []authz.Scope{
-	authz.ScopeRoot,
-	authz.ScopeMCPRead,
-	authz.ScopeMCPWrite,
-	authz.ScopeMCPConnect,
-	authz.ScopeMCPBlockedRead,
-	authz.ScopeMCPBlockedWrite,
-	authz.ScopeMCPBlockedConnect,
+// outOfSchemaScopes is every registered scope the schema deliberately does not
+// read, each with the reason. It is written out rather than derived: a scope
+// registered in authz/scopes.go appears in neither this list nor a schema
+// grant until someone decides where it belongs, and Compile refuses to start
+// until they do.
+var outOfSchemaScopes = map[authz.Scope]string{
+	authz.ScopeOrgRead:                 "organization checks stay on the legacy engine",
+	authz.ScopeOrgBlockedRead:          "organization checks stay on the legacy engine",
+	authz.ScopeOrgAdmin:                "organization checks stay on the legacy engine",
+	authz.ScopeOrgBlockedAdmin:         "organization checks stay on the legacy engine",
+	authz.ScopeProjectRead:             "project checks stay on the legacy engine",
+	authz.ScopeProjectBlockedRead:      "project checks stay on the legacy engine",
+	authz.ScopeProjectWrite:            "project checks stay on the legacy engine",
+	authz.ScopeProjectBlockedWrite:     "project checks stay on the legacy engine",
+	authz.ScopeMCPAuth:                 "auth client use is checked by the legacy engine",
+	authz.ScopeMCPBlockedAuth:          "auth client use is checked by the legacy engine",
+	authz.ScopeEnvironmentRead:         "not migrated",
+	authz.ScopeEnvironmentBlockedRead:  "not migrated",
+	authz.ScopeEnvironmentWrite:        "not migrated",
+	authz.ScopeEnvironmentBlockedWrite: "not migrated",
+	authz.ScopeSkillRead:               "not migrated",
+	authz.ScopeSkillBlockedRead:        "not migrated",
+	authz.ScopeSkillWrite:              "not migrated",
+	authz.ScopeSkillBlockedWrite:       "not migrated",
+	authz.ScopePluginWrite:             "not migrated",
+	authz.ScopePluginBlockedWrite:      "not migrated",
+	authz.ScopeAssistantRead:           "not migrated",
+	authz.ScopeAssistantBlockedRead:    "not migrated",
+	authz.ScopeAssistantWrite:          "not migrated",
+	authz.ScopeAssistantBlockedWrite:   "not migrated",
+	authz.ScopeRiskPolicyEvaluate:      "not migrated",
+	authz.ScopeRiskPolicyBypass:        "not migrated",
+	authz.ScopeRiskPolicyBlock:         "not migrated",
+	authz.ScopeInferenceExecute:        "not migrated",
+	authz.ScopeLogRead:                 "not migrated",
+	// Agent management is deliberately not a relation on sessions: managing
+	// an agent never grants its transcripts.
+	authz.ScopeAgentRead:            "agent management confers nothing on sessions",
+	authz.ScopeAgentWrite:           "agent management confers nothing on sessions",
+	authz.ScopeAgentAuthorize:       "agent management confers nothing on sessions",
+	authz.ScopeAgentTransfer:        "agent management confers nothing on sessions",
+	authz.ScopeWorkloadRead:         "not migrated",
+	authz.ScopeWorkloadBlockedRead:  "not migrated",
+	authz.ScopeWorkloadWrite:        "not migrated",
+	authz.ScopeWorkloadBlockedWrite: "not migrated",
+	authz.ScopeOrgDeviceAgentSync:   "transport scope, not a resource permission",
+	authz.ScopeOrgHooksIngest:       "transport scope, not a resource permission",
 }
 
 var mcpServerSchema = mustCompileMCPServerSchema()
 
 func mustCompileMCPServerSchema() *s.Schema {
-	sc, err := compileMCPServerSchema()
+	sc, err := compileSchema(authz.RegisteredScopes())
 	if err != nil {
-		panic(fmt.Sprintf("compile mcp server relationship schema: %v", err))
+		panic(fmt.Sprintf("compile relationship schema: %v", err))
 	}
 	return sc
 }
 
-func compileMCPServerSchema() (*s.Schema, error) {
-	registered := authz.RegisteredScopes()
+// compileSchema compiles every declared type against the registered scopes.
+// Each registered scope must be read by a grant or listed in
+// outOfSchemaScopes, and every listed scope must be registered.
+func compileSchema(registered []authz.Scope) (*s.Schema, error) {
 	known := make([]string, 0, len(registered))
-	var outOfSchema []string
 	for _, scope := range registered {
 		known = append(known, string(scope))
-		if !slices.Contains(mcpServerSchemaScopes, scope) {
-			outOfSchema = append(outOfSchema, string(scope))
-		}
 	}
+	outOfSchema := make([]string, 0, len(outOfSchemaScopes))
+	for scope := range outOfSchemaScopes {
+		if !slices.Contains(registered, scope) {
+			return nil, fmt.Errorf("out-of-schema scope %q is not registered", scope)
+		}
+		outOfSchema = append(outOfSchema, string(scope))
+	}
+	slices.Sort(outOfSchema)
 
 	sc, err := s.Compile(s.Definition{
-		Types:        mcpServerTypes(),
+		Types:        slices.Concat(mcpServerTypes(), chatTypes()),
 		AncestorKeys: map[string]string{authz.SelectorKeyProjectID: typeProject},
 		Root:         typeOrganization,
 		KnownScopes:  known,

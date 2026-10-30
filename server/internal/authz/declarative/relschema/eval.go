@@ -11,12 +11,21 @@ type Object struct {
 	Type      string
 	ID        string
 	Ancestors []ObjectRef
+	// Attrs are the object's attribute values, loaded from trusted rows. An
+	// absent attribute is no relationship, not an unknown one.
+	Attrs map[string]ObjectRef
 }
 
 // Request carries request facts that constrained relations are matched
 // against, e.g. the tool being called. A nil map is a resource-level request.
 type Request struct {
 	Facts map[string]string
+	// Subject is the caller as an object, e.g. user:U. Empty when the caller
+	// is not a person; Is then never holds.
+	Subject ObjectRef
+	// Objects are the related objects Via may traverse to, with their own
+	// ancestors and attributes, loaded by the service for this request.
+	Objects map[ObjectRef]Object
 }
 
 type Outcome uint8
@@ -59,10 +68,12 @@ const (
 )
 
 type evalCtx struct {
-	s    *Schema
-	rels []Relationship
-	req  Request
-	path []string
+	s     *Schema
+	org   string
+	depth int
+	rels  []Relationship
+	req   Request
+	path  []string
 	// withdrawn records the block that removed an allow, for the trace.
 	withdrawn []string
 }
@@ -88,7 +99,7 @@ func (s *Schema) Evaluate(organizationID string, rels []Relationship, obj Object
 		return Decision{Outcome: Denied, Reason: "object belongs to another organization"}
 	}
 
-	c := &evalCtx{s: s, rels: rels, req: req}
+	c := &evalCtx{s: s, org: organizationID, rels: rels, req: req}
 	switch c.expr(t, obj, p.Expr) {
 	case triTrue:
 		return Decision{Outcome: Allowed, Reason: "allowed", Path: c.path}
@@ -186,8 +197,53 @@ func (c *evalCtx) expr(t *Type, obj Object, e Expr) tri {
 		default:
 			return triUnknown
 		}
+	case IsExpr:
+		ref, ok := obj.Attrs[x.Attr]
+		if !ok || c.req.Subject == (ObjectRef{}) || ref != c.req.Subject {
+			return triFalse
+		}
+		c.path = append(c.path, fmt.Sprintf("%s is %s#%s", ref, obj.ref(), x.Attr))
+		return triTrue
+	case UnlessExpr:
+		if _, has := obj.Attrs[x.Attr]; has {
+			return triFalse
+		}
+		return c.expr(t, obj, x.Expr)
+	case ViaExpr:
+		return c.via(t, obj, x)
 	}
 	return triUnknown
+}
+
+// maxViaDepth bounds traversal so a cycle of attributes cannot recurse.
+const maxViaDepth = 4
+
+// via evaluates a permission on the object an attribute names. A related
+// object the request did not supply, of the wrong type, or with malformed
+// ancestors is undetermined; one in another tenant is no relationship.
+func (c *evalCtx) via(t *Type, obj Object, x ViaExpr) tri {
+	ref, ok := obj.Attrs[x.Attr]
+	if !ok {
+		return triFalse
+	}
+	target, ok := c.req.Objects[ref]
+	if !ok || ref.Type != t.Attrs[x.Attr] || target.ref() != ref || c.depth >= maxViaDepth {
+		return triUnknown
+	}
+	tt := c.s.Types[ref.Type]
+	if c.s.checkObject(tt, target) != "" {
+		return triUnknown
+	}
+	if target.tenant(c.s.Root) != c.org {
+		return triFalse
+	}
+	c.depth++
+	defer func() { c.depth-- }()
+	out := c.expr(tt, target, tt.Perms[x.Perm].Expr)
+	if out == triTrue {
+		c.path = append(c.path, fmt.Sprintf("via %s#%s", obj.ref(), x.Attr))
+	}
+	return out
 }
 
 // rel reports whether any relationship confers g on obj: anchored at obj or

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -63,6 +64,8 @@ type chatTestInstance struct {
 	projectSlug string
 	orgID       string
 	assets      assets.BlobStore
+	// schemaActive switches the organization onto the declarative schema.
+	schemaActive *atomic.Bool
 }
 
 // newTestChatService builds a chat service with RBAC enforcement.
@@ -116,19 +119,28 @@ func newTestChatServiceWithOptions(t *testing.T, completionClient openrouter.Com
 	billingClient := billing.NewStubClient(logger, tp)
 	mgr := testenv.NewTestManager(t, logger, tp, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	schemaActive := &atomic.Bool{}
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{
+		DevMode:                          false,
+		AdmitPrincipalCredential:         nil,
+		AdmitPrincipalCredentialWithDBTX: nil,
+		AdmitWorkloadSession:             nil,
+		AdmitWorkloadSessionInTx:         nil,
+		MCPServerSchemaActive:            func(context.Context, string) (bool, error) { return schemaActive.Load(), nil },
+	})
 	assetStorage := assetstest.NewTestBlobStore(t)
 	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, completionClient, nil, nil, nil, assetStorage, authzEngine, nil, billingClient, audit.NewLogger()).
 		WithRiskFindings(chatfindings.New(conn, riskchrepo.New(chConn)))
 
 	return &chatTestInstance{
-		service:     svc,
-		sessions:    mgr,
-		conn:        conn,
-		chConn:      chConn,
-		projectID:   project.ID,
-		projectSlug: project.Slug,
-		orgID:       orgID,
-		assets:      assetStorage,
+		service:      svc,
+		sessions:     mgr,
+		conn:         conn,
+		chConn:       chConn,
+		projectID:    project.ID,
+		projectSlug:  project.Slug,
+		orgID:        orgID,
+		assets:       assetStorage,
+		schemaActive: schemaActive,
 	}
 }

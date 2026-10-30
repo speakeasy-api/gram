@@ -36,6 +36,7 @@ import (
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
 	srv "github.com/speakeasy-api/gram/server/gen/http/chat/server"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -45,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authz/declarative"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -981,7 +983,19 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	// diagnostics UI and misleading admins into granting chat:read — the very
 	// coupling this path must avoid.
 	canReadAllSessions := false
-	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
+	schemaActive, err := declarative.ChatSchemaActive(ctx, s.authz)
+	if err != nil {
+		return chatVisibility{}, err
+	}
+	if schemaActive {
+		// The schema decides whether every session is readable; the owner
+		// branches below are the listing SQL's form of the same rule.
+		plan, err := declarative.PlanChatList(ctx, s.authz, authCtx.ProjectID.String(), authCtx.ActiveOrganizationID)
+		if err != nil {
+			return chatVisibility{}, err
+		}
+		canReadAllSessions = plan.All
+	} else if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
 	} else if enforce {
 		allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(authCtx.ProjectID.String()))
@@ -1110,6 +1124,20 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 	// anyone else's session requires an explicit grant, which no system role
 	// holds. The managed-assistant runtime is exempt — it consumes transcripts
 	// programmatically, not as a reviewer.
+	if access == chatAccessRead && !isAssistantCall {
+		active, err := declarative.ChatSchemaActive(ctx, s.authz)
+		if err != nil {
+			return err
+		}
+		if active {
+			ref, agent, err := s.chatReadFacts(ctx, chat)
+			if err != nil {
+				return err
+			}
+			return declarative.RequireChatRead(ctx, s.authz, ref, agent) //nolint:wrapcheck // authz errors carry their response code.
+		}
+	}
+
 	isOwner := authCtx.UserID != "" && chat.UserID.Valid && chat.UserID.String == authCtx.UserID
 	// An agent's session has no human owner, so the agent's owner stands in for
 	// one — for reading only. A session that also carries a human identity
@@ -1140,6 +1168,37 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 	}
 
 	return nil
+}
+
+// chatReadFacts builds the session's attribution and, when it names an agent,
+// that agent's current ownership, both from rows in the session's own
+// organization. A missing agent row is passed on as no fact.
+func (s *Service) chatReadFacts(ctx context.Context, chat repo.GetChatRow) (declarative.ChatRef, *declarative.AgentOwnerFact, error) {
+	ref := declarative.ChatRef{
+		ID:             chat.ID.String(),
+		ProjectID:      chat.ProjectID.String(),
+		OrganizationID: chat.OrganizationID,
+		AuthorUserID:   conv.FromPGTextOrEmpty[string](chat.UserID),
+		ExternalUserID: conv.FromPGTextOrEmpty[string](chat.ExternalUserID),
+		AgentID:        "",
+	}
+	if !chat.AgentID.Valid {
+		return ref, nil, nil
+	}
+	ref.AgentID = chat.AgentID.UUID.String()
+	agent, err := agentsrepo.New(s.db).GetAgentByID(ctx, agentsrepo.GetAgentByIDParams{OrganizationID: chat.OrganizationID, ID: chat.AgentID.UUID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return ref, nil, nil
+	case err != nil:
+		return ref, nil, oops.E(oops.CodeUnexpected, err, "load session agent").LogError(ctx, s.logger)
+	}
+	return ref, &declarative.AgentOwnerFact{
+		AgentID:        agent.ID.String(),
+		OrganizationID: agent.OrganizationID,
+		OwnerUserID:    agent.OwnerUserID,
+		Eligible:       !agent.OwnerReassignmentRequiredAt.Valid,
+	}, nil
 }
 
 // loadAuthorizedChat loads a chat by id and applies the shared access gate
