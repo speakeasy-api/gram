@@ -138,3 +138,45 @@ func TestCanonicalPlatformImageSVGGuidance(t *testing.T) {
 	require.NotContains(t, err.Error(), "private-input")
 	require.Less(t, len(err.Error()), 400)
 }
+
+func TestSVGPathGrammarAndGeometryBudget(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"M0 0", "m.5-.5 1 2z", "M0 0H1V2L3 4C1 2 3 4 5 6S1 2 3 4Q1 2 3 4T5 6Z", "M0 0a2 3 45 0110-5", "M0 0A2 3 0 1 0 4 5 2 3 0 0 1 6 7"} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			_, err := sanitizeSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg"><path d="` + path + `"/></svg>`))
+			require.NoError(t, err)
+		})
+	}
+	for _, path := range []string{"M", "M0", "M0 0L", "M0 0L1", "M0 0C1 2 3 4 5", "M0 0Q1 2 3", "M0 0Z1 2", "M0 0A1 2 3 2 0 4 5", "M0 0A-1 2 3 0 0 4 5", "M0 0A1 2 3 0 0 4", "M,0 0", "M0,,0", "M0 0,", "M0 0,L1 2", "M0 0Z,"} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			_, err := sanitizeSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg"><path d="` + path + `"/></svg>`))
+			require.Error(t, err)
+		})
+	}
+	for name, body := range map[string]string{
+		"path coordinates": `<path d="M0 0` + strings.Repeat(` 1 1`, 10000) + `"/>`,
+		"close commands":   `<path d="M0 0` + strings.Repeat(`Z`, 10000) + `"/>`,
+		"points":           `<polyline points="` + strings.Repeat(`1 1 `, 10000) + `"/>`,
+		"across paths":     strings.Repeat(`<path d="M0 0L1 1"/>`, 2000),
+		"across shapes":    strings.Repeat(`<rect width="1" height="1"/>`, 10001),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := sanitizeSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg">` + body + `</svg>`))
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestSVGPathBudgetBoundary(t *testing.T) {
+	t.Parallel()
+	for _, size := range []int{2, 3, 4} {
+		t.Run(fmt.Sprint(size), func(t *testing.T) {
+			t.Parallel()
+			budget := size
+			require.Equal(t, size >= 3, validSVGPath("M0 0", &budget))
+		})
+	}
+}

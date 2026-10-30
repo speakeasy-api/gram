@@ -16,6 +16,8 @@ const (
 	svgNamespace = "http://www.w3.org/2000/svg"
 	maxSVGDepth  = 64
 	maxSVGTokens = 100_000
+	// Bound document elements, path segments and numeric-list operands in total.
+	maxSVGGeometry = 10_000
 )
 
 var svgElements = map[string]bool{
@@ -60,6 +62,7 @@ func sanitizeSVG(data []byte) ([]byte, error) {
 	encoder := xml.NewEncoder(&output)
 	var stack []string
 	rooted := false
+	geometry := maxSVGGeometry
 	clipIDs := map[string]bool{}
 	clipReferences := map[string]bool{}
 	inClip := false
@@ -108,6 +111,10 @@ func sanitizeSVG(data []byte) ([]byte, error) {
 				inClip = true
 				clipShapes = 0
 			}
+			geometry--
+			if geometry < 0 {
+				return nil, errStaticSVG
+			}
 			attrs := make([]xml.Attr, 0, len(t.Attr)+1)
 			if len(stack) == 0 {
 				attrs = append(attrs, xml.Attr{Name: xml.Name{Space: "", Local: "xmlns"}, Value: svgNamespace})
@@ -124,7 +131,7 @@ func sanitizeSVG(data []byte) ([]byte, error) {
 					}
 					continue
 				}
-				if a.Name.Space != "" || !validSVGAttribute(name, a.Name.Local, a.Value) {
+				if a.Name.Space != "" || !validSVGAttribute(name, a.Name.Local, a.Value, &geometry) {
 					return nil, errStaticSVG
 				}
 				if a.Name.Local == "id" {
@@ -197,16 +204,12 @@ func sanitizeSVG(data []byte) ([]byte, error) {
 	return output.Bytes(), nil
 }
 
-func svgNumbers(s string, path bool) ([]float64, bool) {
+func svgNumbers(s string, budget *int) ([]float64, bool) {
 	var values []float64
 	for s != "" {
 		s = strings.TrimLeft(s, " \t\r\n,")
 		if s == "" {
 			break
-		}
-		if path && strings.ContainsRune("MmZzLlHhVvCcSsQqTtAa", rune(s[0])) {
-			s = s[1:]
-			continue
 		}
 		n := svgNumber.FindString(s)
 		if n == "" {
@@ -216,9 +219,11 @@ func svgNumbers(s string, path bool) ([]float64, bool) {
 		if err != nil || math.IsInf(v, 0) || math.IsNaN(v) {
 			return nil, false
 		}
-		if !path {
-			values = append(values, v)
+		*budget--
+		if *budget < 0 {
+			return nil, false
 		}
+		values = append(values, v)
 		s = s[len(n):]
 	}
 	return values, true
@@ -233,7 +238,7 @@ func svgStaticShape(name string) bool {
 	}
 }
 
-func validSVGAttribute(element, name, value string) bool {
+func validSVGAttribute(element, name, value string, budget *int) bool {
 	if element == "defs" {
 		return false
 	}
@@ -257,22 +262,21 @@ func validSVGAttribute(element, name, value string) bool {
 		if element != "path" || value == "" || !strings.ContainsRune("Mm", rune(value[0])) {
 			return false
 		}
-		_, ok := svgNumbers(value, true)
-		return ok
+		return validSVGPath(value, budget)
 	case "points":
 		if element != "polygon" && element != "polyline" {
 			return false
 		}
-		ns, ok := svgNumbers(value, false)
+		ns, ok := svgNumbers(value, budget)
 		return ok && len(ns) >= 2 && len(ns)%2 == 0
 	case "viewBox":
 		if element != "svg" {
 			return false
 		}
-		ns, ok := svgNumbers(value, false)
+		ns, ok := svgNumbers(value, budget)
 		return ok && len(ns) == 4 && ns[2] > 0 && ns[3] > 0
 	case "transform":
-		return validSVGTransform(value)
+		return validSVGTransform(value, budget)
 	}
 	// Geometry is element-specific; presentation lengths apply to every allowed element.
 	allowed := false
@@ -321,7 +325,7 @@ func validSVGAttribute(element, name, value string) bool {
 	}
 }
 
-func validSVGTransform(s string) bool {
+func validSVGTransform(s string, budget *int) bool {
 	if s == "" {
 		return false
 	}
@@ -336,7 +340,7 @@ func validSVGTransform(s string) bool {
 		if i < 0 {
 			return false
 		}
-		ns, ok := svgNumbers(s[:i], false)
+		ns, ok := svgNumbers(s[:i], budget)
 		if !ok {
 			return false
 		}
@@ -359,4 +363,89 @@ func validSVGTransform(s string) bool {
 		s = strings.TrimLeft(s[i+1:], " \t\r\n,")
 	}
 	return true
+}
+
+// validSVGPath checks segment arities without interpreting or rendering geometry.
+// Each repeated argument group counts as a segment, including implicit lineto.
+func validSVGPath(s string, budget *int) bool {
+	var command byte
+	first := true
+	for {
+		s = strings.TrimLeft(s, " \t\r\n")
+		if s == "" {
+			return !first
+		}
+		if strings.ContainsRune("MmZzLlHhVvCcSsQqTtAa", rune(s[0])) {
+			command = s[0]
+			s = s[1:]
+		} else if command == 0 {
+			return false
+		}
+		if first && command != 'M' && command != 'm' {
+			return false
+		}
+		first = false
+		*budget--
+		if *budget < 0 {
+			return false
+		}
+		arity := 0
+		switch command {
+		case 'Z', 'z':
+			command = 0
+			continue
+		case 'H', 'h', 'V', 'v':
+			arity = 1
+		case 'M', 'm', 'L', 'l', 'T', 't':
+			arity = 2
+		case 'S', 's', 'Q', 'q':
+			arity = 4
+		case 'C', 'c':
+			arity = 6
+		case 'A', 'a':
+			arity = 7
+		default:
+			return false
+		}
+		for i := range arity {
+			s = strings.TrimLeft(s, " \t\r\n")
+			if i > 0 && strings.HasPrefix(s, ",") {
+				s = strings.TrimLeft(s[1:], " \t\r\n")
+			}
+			n := svgNumber.FindString(s)
+			arc := command == 'A' || command == 'a'
+			if arc && (i == 3 || i == 4) {
+				// Arc flags are single digits; compact forms such as 0110 are valid.
+				if s == "" || (s[0] != '0' && s[0] != '1') {
+					return false
+				}
+				n = s[:1]
+			}
+			if n == "" {
+				return false
+			}
+			v, err := strconv.ParseFloat(n, 64)
+			if err != nil || math.IsInf(v, 0) || math.IsNaN(v) || (arc && i < 2 && v < 0) {
+				return false
+			}
+			*budget--
+			if *budget < 0 {
+				return false
+			}
+			s = s[len(n):]
+		}
+		switch command {
+		case 'M':
+			command = 'L'
+		case 'm':
+			command = 'l'
+		}
+		s = strings.TrimLeft(s, " \t\r\n")
+		if strings.HasPrefix(s, ",") {
+			s = strings.TrimLeft(s[1:], " \t\r\n")
+			if s == "" || svgNumber.FindString(s) == "" {
+				return false
+			}
+		}
+	}
 }

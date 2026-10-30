@@ -49,7 +49,7 @@ export type AdminUploadPlatformImageMutationError =
  * uploadPlatformImage admin
  *
  * @remarks
- * Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG.
+ * Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG with local clip paths. This is a direct upload, not a staged proposal: successful uploads are publicly served immediately and remain stored.
  */
 export function useAdminUploadPlatformImageMutation(
   options?: MutationHookOptions<

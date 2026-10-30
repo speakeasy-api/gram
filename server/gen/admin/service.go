@@ -190,7 +190,8 @@ type Service interface {
 	// platform admin.
 	MigrateToGlobalIssuer(context.Context, *MigrateToGlobalIssuerPayload) (res *MigrateRemoteSessionIssuerResult, err error)
 	// Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static
-	// SVG.
+	// SVG with local clip paths. This is a direct upload, not a staged proposal:
+	// successful uploads are publicly served immediately and remain stored.
 	UploadPlatformImage(context.Context, *UploadPlatformImagePayload, io.ReadCloser) (res *AdminUploadImageResult, err error)
 	// Serve a public image, preserving the existing image serving contract.
 

@@ -116,7 +116,7 @@ paths:
             x-speakeasy-name-override: serveImage
     /admin/assets.uploadImage:
         post:
-            description: Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG.
+            description: 'Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG with local clip paths. This is a direct upload, not a staged proposal: successful uploads are publicly served immediately and remain stored.'
             operationId: adminUploadPlatformImage
             parameters:
                 - allowEmptyValue: true

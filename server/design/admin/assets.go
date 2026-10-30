@@ -8,7 +8,7 @@ import (
 
 func platformAssetMethods() {
 	Method("uploadPlatformImage", func() {
-		Description("Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG.")
+		Description("Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG with local clip paths. This is a direct upload, not a staged proposal: successful uploads are publicly served immediately and remain stored.")
 		Payload(func() { security.AdminAuthPayload(); Attribute("content_type", String); Required("content_type") })
 		Result(AdminUploadImageResult)
 		declareUnavailable()

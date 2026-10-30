@@ -142,11 +142,15 @@ func TestNewPlatformImageUploads_RequiresHTTPSExceptOnLoopback(t *testing.T) {
 		require.NoError(t, err)
 		_, err = assetsvc.NewPlatformImageUploads(nil, testenv.NewMemoryCache(), parsed, site, testenv.NewLogger(t))
 		require.NoError(t, err, base)
+		_, err = assetsvc.NewPlatformImageUploads(nil, testenv.NewMemoryCache(), site, parsed, testenv.NewLogger(t))
+		require.NoError(t, err, base)
 	}
 	for _, base := range []string{"http://admin.example.test", "http://10.0.0.1:8084", "http://user:pass@localhost:8084", "ftp://admin.example.test", "admin.example.test"} {
 		parsed, err := url.Parse(base)
 		require.NoError(t, err)
 		_, err = assetsvc.NewPlatformImageUploads(nil, testenv.NewMemoryCache(), parsed, site, testenv.NewLogger(t))
+		require.Error(t, err, base)
+		_, err = assetsvc.NewPlatformImageUploads(nil, testenv.NewMemoryCache(), site, parsed, testenv.NewLogger(t))
 		require.Error(t, err, base)
 	}
 }

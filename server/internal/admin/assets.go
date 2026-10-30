@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 	"io"
 	"net/http"
 )
@@ -24,7 +25,7 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *gen.UploadPl
 	if !ok || a == nil || a.SessionID == "" || a.OIDCSubject == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if s.assets == nil || s.dashboardURL == nil || s.dashboardURL.Host == "" || (s.dashboardURL.Scheme != "https" && s.dashboardURL.Scheme != "http") {
+	if s.assets == nil || s.dashboardURL == nil || !urls.IsAbsoluteHTTPSOrLoopback(s.dashboardURL.String()) {
 		return nil, oops.C(oops.CodeUnavailable)
 	}
 	// Browsers cannot supply Content-Length. Derive it from the bounded body.

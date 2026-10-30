@@ -66,6 +66,9 @@ func NewPlatformImageUploads(images *Service, uploadCache cache.Cache, baseURL, 
 	if baseURL == nil || !urls.IsAbsoluteHTTPSOrLoopback(baseURL.String()) {
 		return nil, errors.New("platform image uploads require an HTTPS admin server URL (HTTP only on a loopback host)")
 	}
+	if siteURL == nil || !urls.IsAbsoluteHTTPSOrLoopback(siteURL.String()) {
+		return nil, errors.New("platform image uploads require an HTTPS public site URL (HTTP only on a loopback host)")
+	}
 	return &PlatformImageUploads{images: images, cache: uploadCache, siteURL: siteURL, baseURL: baseURL, logger: logger.With(attr.SlogComponent("assets")), now: time.Now}, nil
 }
 
