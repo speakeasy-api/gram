@@ -101,7 +101,8 @@ export function githubActionsSetupInstructions(
               )}
               <details className="text-sm">
                 <summary className="text-muted-foreground hover:text-foreground cursor-pointer">
-                  Repositories created or renamed since July 15, 2026
+                  Repositories created, renamed or transferred since July 15,
+                  2026
                 </summary>
                 <div className="mt-2 space-y-2">
                   <p>
@@ -132,10 +133,14 @@ export function githubActionsSetupInstructions(
                     </p>
                     <p>
                       Anyone who can push a branch to the repository can run
-                      such a job and use {agent}&apos;s access. Pull requests
-                      from forks get no GitHub token, so outside contributors
-                      cannot. To admit only one branch or environment, use a
-                      custom platform with its exact subject instead.
+                      such a job and use {agent}&apos;s access. On the{" "}
+                      <code>pull_request</code> event, pull requests from forks
+                      get no GitHub token, so outside contributors cannot. A{" "}
+                      <code>pull_request_target</code> workflow with{" "}
+                      <code>id-token: write</code> is admitted too, and if it
+                      checks out the pull request&apos;s head, code from a fork
+                      runs as {agent}. To admit only one branch or environment,
+                      use a custom platform with its exact subject instead.
                     </p>
                   </div>
                 </Alert>

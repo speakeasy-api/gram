@@ -15,10 +15,13 @@
 # That is the trade-off this entry makes on purpose. The context is chosen by
 # whoever starts the job, not by GitHub: anyone who can push a branch to the
 # repository, or open a pull request from a branch of it, can run a job that
-# receives a token and acts as the agent. Pull requests from forks get no OIDC
-# token at all, so outside contributors cannot. An operator who wants only one
-# branch or environment admits that exact subject through the custom flow
-# instead.
+# receives a token and acts as the agent. On the pull_request event, pull
+# requests from forks get no OIDC token, so outside contributors cannot. That
+# does not hold for pull_request_target: such a workflow runs in the base
+# repository with its permissions, so one that grants id-token: write is
+# admitted by this rule, and if it checks out the pull request's head, code
+# from a fork runs as the agent. An operator who wants only one branch or
+# environment admits that exact subject through the custom flow instead.
 #
 # Repositories created, renamed or transferred on github.com since 2026-07-15
 # put immutable IDs in the subject (repo:<owner>@<owner_id>/<repo>@<repo_id>:),
