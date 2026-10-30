@@ -12,6 +12,47 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getDigest = `-- name: GetDigest :one
+SELECT d.id, d.level, d.period_start, d.period_end, d.content, d.chat_ids, d.memo_ids, d.child_digest_ids
+FROM memory_digests d
+WHERE d.id = $1
+  AND d.project_id = $2
+  AND d.organization_id = $3
+`
+
+type GetDigestParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type GetDigestRow struct {
+	ID             uuid.UUID
+	Level          string
+	PeriodStart    pgtype.Date
+	PeriodEnd      pgtype.Date
+	Content        string
+	ChatIds        []uuid.UUID
+	MemoIds        []uuid.UUID
+	ChildDigestIds []uuid.UUID
+}
+
+func (q *Queries) GetDigest(ctx context.Context, arg GetDigestParams) (GetDigestRow, error) {
+	row := q.db.QueryRow(ctx, getDigest, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var i GetDigestRow
+	err := row.Scan(
+		&i.ID,
+		&i.Level,
+		&i.PeriodStart,
+		&i.PeriodEnd,
+		&i.Content,
+		&i.ChatIds,
+		&i.MemoIds,
+		&i.ChildDigestIds,
+	)
+	return i, err
+}
+
 const insertDigest = `-- name: InsertDigest :one
 INSERT INTO memory_digests (
   organization_id, project_id, level, period_start, period_end, content,
@@ -189,7 +230,7 @@ func (q *Queries) ListDayDigestCandidates(ctx context.Context, arg ListDayDigest
 }
 
 const listDayDigestChats = `-- name: ListDayDigestChats :many
-SELECT c.id, c.title, c.summary::text AS summary, c.summary_generated_at::timestamptz AS summary_generated_at
+SELECT c.id, c.summary::text AS summary, c.summary_generated_at::timestamptz AS summary_generated_at
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE c.project_id = $1
@@ -215,7 +256,6 @@ type ListDayDigestChatsParams struct {
 
 type ListDayDigestChatsRow struct {
 	ID                 uuid.UUID
-	Title              pgtype.Text
 	Summary            string
 	SummaryGeneratedAt pgtype.Timestamptz
 }
@@ -237,12 +277,7 @@ func (q *Queries) ListDayDigestChats(ctx context.Context, arg ListDayDigestChats
 	var items []ListDayDigestChatsRow
 	for rows.Next() {
 		var i ListDayDigestChatsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Title,
-			&i.Summary,
-			&i.SummaryGeneratedAt,
-		); err != nil {
+		if err := rows.Scan(&i.ID, &i.Summary, &i.SummaryGeneratedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -314,6 +349,53 @@ func (q *Queries) ListDayDigestMemos(ctx context.Context, arg ListDayDigestMemos
 	return items, nil
 }
 
+const listDigestsByID = `-- name: ListDigestsByID :many
+SELECT d.id, d.level, d.period_start, d.content
+FROM memory_digests d
+WHERE d.id = ANY($1::uuid[])
+  AND d.project_id = $2
+  AND d.organization_id = $3
+ORDER BY d.period_start
+`
+
+type ListDigestsByIDParams struct {
+	Ids            []uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type ListDigestsByIDRow struct {
+	ID          uuid.UUID
+	Level       string
+	PeriodStart pgtype.Date
+	Content     string
+}
+
+func (q *Queries) ListDigestsByID(ctx context.Context, arg ListDigestsByIDParams) ([]ListDigestsByIDRow, error) {
+	rows, err := q.db.Query(ctx, listDigestsByID, arg.Ids, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDigestsByIDRow
+	for rows.Next() {
+		var i ListDigestsByIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Level,
+			&i.PeriodStart,
+			&i.Content,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMemoryOrganizations = `-- name: ListMemoryOrganizations :many
 
 SELECT DISTINCT c.organization_id
@@ -348,6 +430,121 @@ func (q *Queries) ListMemoryOrganizations(ctx context.Context, since pgtype.Time
 			return nil, err
 		}
 		items = append(items, organization_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecallChats = `-- name: ListRecallChats :many
+SELECT c.id, c.summary::text AS summary, c.summary_generated_at::timestamptz AS summary_generated_at
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.project_id = $1
+  AND c.organization_id = $2
+  AND c.summary_redacted IS TRUE
+  AND c.summary IS NOT NULL
+  AND c.memory_excluded_at IS NULL
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+  AND c.summary_generated_at >= $3::timestamptz
+  AND NOT EXISTS (
+    SELECT 1 FROM memory_digests d
+    WHERE d.project_id = c.project_id
+      AND d.level = 'day'
+      AND d.chat_ids @> ARRAY[c.id]
+  )
+ORDER BY c.summary_generated_at DESC
+LIMIT $4
+`
+
+type ListRecallChatsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Since          pgtype.Timestamptz
+	RowLimit       int32
+}
+
+type ListRecallChatsRow struct {
+	ID                 uuid.UUID
+	Summary            string
+	SummaryGeneratedAt pgtype.Timestamptz
+}
+
+// Eligible chats summarized since @since that no day digest has folded yet,
+// newest first so @row_limit keeps the most recent.
+func (q *Queries) ListRecallChats(ctx context.Context, arg ListRecallChatsParams) ([]ListRecallChatsRow, error) {
+	rows, err := q.db.Query(ctx, listRecallChats,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Since,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecallChatsRow
+	for rows.Next() {
+		var i ListRecallChatsRow
+		if err := rows.Scan(&i.ID, &i.Summary, &i.SummaryGeneratedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecallDigests = `-- name: ListRecallDigests :many
+SELECT d.id, d.level, d.period_start, d.content, d.chat_ids, d.child_digest_ids
+FROM memory_digests d
+WHERE d.project_id = $1
+  AND d.organization_id = $2
+  AND d.period_start >= $3::date
+ORDER BY d.period_start, d.level
+`
+
+type ListRecallDigestsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Since          pgtype.Date
+}
+
+type ListRecallDigestsRow struct {
+	ID             uuid.UUID
+	Level          string
+	PeriodStart    pgtype.Date
+	Content        string
+	ChatIds        []uuid.UUID
+	ChildDigestIds []uuid.UUID
+}
+
+// Every digest of the project whose period starts at or after @since. The
+// caller drops digests a parent already folded.
+func (q *Queries) ListRecallDigests(ctx context.Context, arg ListRecallDigestsParams) ([]ListRecallDigestsRow, error) {
+	rows, err := q.db.Query(ctx, listRecallDigests, arg.ProjectID, arg.OrganizationID, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecallDigestsRow
+	for rows.Next() {
+		var i ListRecallDigestsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Level,
+			&i.PeriodStart,
+			&i.Content,
+			&i.ChatIds,
+			&i.ChildDigestIds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -408,6 +605,108 @@ func (q *Queries) ListRollupDigestCandidates(ctx context.Context, arg ListRollup
 	for rows.Next() {
 		var i ListRollupDigestCandidatesRow
 		if err := rows.Scan(&i.OrganizationID, &i.ProjectID, &i.PeriodStart); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listZoomChats = `-- name: ListZoomChats :many
+SELECT c.id, c.summary::text AS summary, c.summary_generated_at::timestamptz AS summary_generated_at
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.id = ANY($1::uuid[])
+  AND c.project_id = $2
+  AND c.organization_id = $3
+  AND c.summary_redacted IS TRUE
+  AND c.summary IS NOT NULL
+  AND c.memory_excluded_at IS NULL
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+ORDER BY c.summary_generated_at
+`
+
+type ListZoomChatsParams struct {
+	Ids            []uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type ListZoomChatsRow struct {
+	ID                 uuid.UUID
+	Summary            string
+	SummaryGeneratedAt pgtype.Timestamptz
+}
+
+// A day digest's chats that are still eligible: a chat excluded or deleted
+// since the digest was written is left out.
+func (q *Queries) ListZoomChats(ctx context.Context, arg ListZoomChatsParams) ([]ListZoomChatsRow, error) {
+	rows, err := q.db.Query(ctx, listZoomChats, arg.Ids, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListZoomChatsRow
+	for rows.Next() {
+		var i ListZoomChatsRow
+		if err := rows.Scan(&i.ID, &i.Summary, &i.SummaryGeneratedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listZoomMemos = `-- name: ListZoomMemos :many
+SELECT m.id, m.chat_id, m.content, m.created_at, COALESCE(u.display_name, '')::text AS author_name
+FROM memory_memos m
+LEFT JOIN chats c ON c.id = m.chat_id
+LEFT JOIN users u ON u.id = m.author_user_id
+WHERE m.id = ANY($1::uuid[])
+  AND m.project_id = $2
+  AND m.organization_id = $3
+  AND m.deleted IS FALSE
+  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE))
+ORDER BY m.created_at
+`
+
+type ListZoomMemosParams struct {
+	Ids            []uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type ListZoomMemosRow struct {
+	ID         uuid.UUID
+	ChatID     uuid.NullUUID
+	Content    string
+	CreatedAt  pgtype.Timestamptz
+	AuthorName string
+}
+
+func (q *Queries) ListZoomMemos(ctx context.Context, arg ListZoomMemosParams) ([]ListZoomMemosRow, error) {
+	rows, err := q.db.Query(ctx, listZoomMemos, arg.Ids, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListZoomMemosRow
+	for rows.Next() {
+		var i ListZoomMemosRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.Content,
+			&i.CreatedAt,
+			&i.AuthorName,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

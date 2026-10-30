@@ -91,7 +91,7 @@ func (p digestProject) addChat(t *testing.T, conn *pgxpool.Pool, summary string,
 
 	chatID, err := chatrepo.New(conn).UpsertChat(t.Context(), chatrepo.UpsertChatParams{
 		ID: uuid.New(), ProjectID: p.projectID, OrganizationID: p.orgID,
-		Title: pgtype.Text{String: "Chat " + summary, Valid: true},
+		Title: pgtype.Text{String: "title " + summary, Valid: true},
 	})
 	require.NoError(t, err)
 	_, err = conn.Exec(t.Context(),
@@ -171,6 +171,8 @@ func TestMemoryDigests_DayDigestFoldsOnlyEligibleSources(t *testing.T) {
 	require.Contains(t, prompts, "picked queue X")
 	require.Contains(t, prompts, "shipped retries")
 	require.Contains(t, prompts, "queue X because of ordering")
+	// Titles are not masked at rest, so they never reach the model.
+	require.NotContains(t, prompts, "title ")
 	for _, leaked := range []string{"unmasked summary", "excluded summary", "personal summary", "today summary", "other org summary"} {
 		require.NotContains(t, prompts, leaked)
 	}

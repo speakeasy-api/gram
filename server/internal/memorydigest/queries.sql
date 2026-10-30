@@ -78,7 +78,7 @@ LIMIT @row_limit;
 -- name: ListDayDigestChats :many
 -- Newest first so @row_limit keeps a busy day's latest chats; the caller
 -- restores chronological order.
-SELECT c.id, c.title, c.summary::text AS summary, c.summary_generated_at::timestamptz AS summary_generated_at
+SELECT c.id, c.summary::text AS summary, c.summary_generated_at::timestamptz AS summary_generated_at
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE c.project_id = @project_id
@@ -129,3 +129,79 @@ INSERT INTO memory_digests (
 )
 ON CONFLICT (project_id, level, period_start) DO NOTHING
 RETURNING id;
+
+-- name: ListRecallDigests :many
+-- Every digest of the project whose period starts at or after @since. The
+-- caller drops digests a parent already folded.
+SELECT d.id, d.level, d.period_start, d.content, d.chat_ids, d.child_digest_ids
+FROM memory_digests d
+WHERE d.project_id = @project_id
+  AND d.organization_id = @organization_id
+  AND d.period_start >= @since::date
+ORDER BY d.period_start, d.level;
+
+-- name: ListRecallChats :many
+-- Eligible chats summarized since @since that no day digest has folded yet,
+-- newest first so @row_limit keeps the most recent.
+SELECT c.id, c.summary::text AS summary, c.summary_generated_at::timestamptz AS summary_generated_at
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.project_id = @project_id
+  AND c.organization_id = @organization_id
+  AND c.summary_redacted IS TRUE
+  AND c.summary IS NOT NULL
+  AND c.memory_excluded_at IS NULL
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+  AND c.summary_generated_at >= @since::timestamptz
+  AND NOT EXISTS (
+    SELECT 1 FROM memory_digests d
+    WHERE d.project_id = c.project_id
+      AND d.level = 'day'
+      AND d.chat_ids @> ARRAY[c.id]
+  )
+ORDER BY c.summary_generated_at DESC
+LIMIT @row_limit;
+
+-- name: GetDigest :one
+SELECT d.id, d.level, d.period_start, d.period_end, d.content, d.chat_ids, d.memo_ids, d.child_digest_ids
+FROM memory_digests d
+WHERE d.id = @id
+  AND d.project_id = @project_id
+  AND d.organization_id = @organization_id;
+
+-- name: ListDigestsByID :many
+SELECT d.id, d.level, d.period_start, d.content
+FROM memory_digests d
+WHERE d.id = ANY(@ids::uuid[])
+  AND d.project_id = @project_id
+  AND d.organization_id = @organization_id
+ORDER BY d.period_start;
+
+-- name: ListZoomChats :many
+-- A day digest's chats that are still eligible: a chat excluded or deleted
+-- since the digest was written is left out.
+SELECT c.id, c.summary::text AS summary, c.summary_generated_at::timestamptz AS summary_generated_at
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.id = ANY(@ids::uuid[])
+  AND c.project_id = @project_id
+  AND c.organization_id = @organization_id
+  AND c.summary_redacted IS TRUE
+  AND c.summary IS NOT NULL
+  AND c.memory_excluded_at IS NULL
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+ORDER BY c.summary_generated_at;
+
+-- name: ListZoomMemos :many
+SELECT m.id, m.chat_id, m.content, m.created_at, COALESCE(u.display_name, '')::text AS author_name
+FROM memory_memos m
+LEFT JOIN chats c ON c.id = m.chat_id
+LEFT JOIN users u ON u.id = m.author_user_id
+WHERE m.id = ANY(@ids::uuid[])
+  AND m.project_id = @project_id
+  AND m.organization_id = @organization_id
+  AND m.deleted IS FALSE
+  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE))
+ORDER BY m.created_at;

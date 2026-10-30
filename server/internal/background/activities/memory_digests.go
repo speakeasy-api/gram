@@ -356,9 +356,11 @@ func (m *MemoryDigests) dayInputs(ctx context.Context, c memoryDigestCandidate, 
 	for _, ch := range chats {
 		params.ChatIds = append(params.ChatIds, ch.ID)
 		inputs = append(inputs, memorydigest.Input{
-			Kind:   memorydigest.SourceChat,
-			At:     ch.SummaryGeneratedAt.Time,
-			Title:  ch.Title.String,
+			Kind: memorydigest.SourceChat,
+			At:   ch.SummaryGeneratedAt.Time,
+			// Titles are generated from the raw transcript and are not
+			// masked at rest, so only the masked summary reaches the model.
+			Title:  "",
 			Author: "",
 			Text:   ch.Summary,
 		})
