@@ -25,6 +25,7 @@ import {
 import {
   buildRequestedGrants,
   delegableGrantKey,
+  requestNarrowsPolicy,
 } from "../agent-api-key-grants";
 import { discoverKeyServerGrants } from "../agent-key-discovery";
 import {
@@ -50,6 +51,7 @@ import { CredentialPicker } from "./CredentialPicker";
 import { StepWorkload } from "./StepWorkload";
 import { useWorkloadSetup } from "./useWorkloadSetup";
 import { platformSetup } from "./platformSetups";
+import { GITHUB_ACTIONS_KEY } from "./githubActions";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
 import {
@@ -152,18 +154,31 @@ function grantRefusal(
   grants: AgentPolicyGrantForm[],
   answers: AgentPolicyGrantCheck[],
 ): string | null {
-  const refused = grants.flatMap((grant, index) =>
-    answers[index]?.allowed === true
-      ? []
-      : [{ scope: grant.scope, limitedBy: answers[index]?.limitedBy }],
-  );
+  const refused = grants.filter((_, index) => answers[index]?.allowed !== true);
   if (refused.length === 0) return null;
   const scopes = [...new Set(refused.map((grant) => grant.scope))].join(
     " and ",
   );
-  return refused.some((grant) => grant.limitedBy === "owner")
+  return answers.some(
+    (answer) => answer.allowed !== true && answer.limitedBy === "owner",
+  )
     ? `This agent's owner does not hold ${scopes}, so the agent cannot be given it. Ask an organization administrator to give the owner that permission, or to run this setup.`
     : `You do not hold ${scopes}, so you cannot give it to this agent. Ask an organization administrator to run this setup.`;
+}
+
+/**
+ * Whether a grant the agent holds already covers one it would be given, by
+ * the rule the server's selector matching applies.
+ */
+function grantCovers(
+  held: AgentPolicyGrant,
+  wanted: AgentPolicyGrantForm,
+): boolean {
+  return (
+    held.effect === "allow" &&
+    held.scope === wanted.scope &&
+    requestNarrowsPolicy(held.selector, wanted.selector)
+  );
 }
 
 /** Grants with each one kept once, in their first order. */
@@ -667,8 +682,10 @@ export function CredentialsWizard({
         : [],
     [credential, platform, organization.id, project.id],
   );
-  // Checked up front by the rule agents.create applies, so a grant the caller
-  // or the owner could not give is named before anything is written.
+  // The platform grants the agent still lacks, each checked by the rule
+  // agents.create and agents.createPolicyGrant apply, so a grant the caller or
+  // the owner could not give is named before anything is written. A new agent
+  // lacks them all; one that exists is asked only for what it does not hold.
   const platformGrantCheck = useQuery({
     queryKey: [
       "agent-platform-grant-check",
@@ -677,33 +694,48 @@ export function CredentialsWizard({
       agent?.id ?? null,
       platformGrants,
     ],
-    queryFn: async ({ signal }) =>
-      (
-        await sdk.agents.checkPolicyGrants(
-          {
-            checkAgentPolicyGrantsForm: {
-              ...(agent?.id ? { agentId: agent.id } : {}),
-              policyGrants: platformGrants,
-            },
+    queryFn: async ({ signal }) => {
+      const held = agent
+        ? await sdk.agents.listPolicyGrants({ agentId: agent.id }, undefined, {
+            signal,
+          })
+        : [];
+      const missing = platformGrants.filter(
+        (grant) => !held.some((existing) => grantCovers(existing, grant)),
+      );
+      if (missing.length === 0) return { missing, refusal: null };
+      const { results } = await sdk.agents.checkPolicyGrants(
+        {
+          checkAgentPolicyGrantsForm: {
+            ...(agent ? { agentId: agent.id } : {}),
+            policyGrants: missing,
           },
-          undefined,
-          { signal },
-        )
-      ).results,
+        },
+        undefined,
+        { signal },
+      );
+      return { missing, refusal: grantRefusal(missing, results) };
+    },
     enabled: platformGrants.length > 0 && !editing,
     retry: false,
     throwOnError: false,
   });
-  const platformGrantRefusal = ((): string | null => {
-    if (platformGrants.length === 0 || editing) return null;
-    const answers = platformGrantCheck.data;
-    if (answers === undefined) {
-      return platformGrantCheck.isError
-        ? "Could not check that this agent can be given the permissions its platform needs. Try again."
-        : null;
+  /**
+   * The platform grants to write, once every one has been checked; throws
+   * with the reason when one would be refused or the check could not run.
+   */
+  const checkedPlatformGrants = async (): Promise<AgentPolicyGrantForm[]> => {
+    if (platformGrants.length === 0 || editing) return [];
+    const answer =
+      platformGrantCheck.data ?? (await platformGrantCheck.refetch()).data;
+    if (answer === undefined) {
+      throw new Error(
+        "Could not check that this agent can be given the permissions its platform needs. Try again.",
+      );
     }
-    return grantRefusal(platformGrants, answers);
-  })();
+    if (answer.refusal !== null) throw new Error(answer.refusal);
+    return answer.missing;
+  };
 
   // The verify step reads the key itself: a key with an access time is a
   // runtime that reached the gateway and was admitted.
@@ -835,34 +867,15 @@ export function CredentialsWizard({
   };
 
   /**
-   * Gives an agent that already exists the platform grants it lacks. One it
-   * holds already, or a broader one for the same scope, is left alone, so a
-   * second run adds nothing.
+   * Gives an agent that already exists the platform grants it lacks, already
+   * checked by checkedPlatformGrants: each is its own write, so all are
+   * checked before the first is made.
    */
-  const addPlatformGrants = async (agentId: string): Promise<void> => {
-    if (platformGrants.length === 0) return;
-    const held = await sdk.agents.listPolicyGrants({ agentId });
-    const missing = platformGrants.filter(
-      (grant) =>
-        !held.some(
-          (existing) =>
-            existing.effect === "allow" &&
-            existing.scope === grant.scope &&
-            existing.selector.resourceKind === grant.selector.resourceKind &&
-            (existing.selector.resourceId === "*" ||
-              existing.selector.resourceId === organization.id) &&
-            (existing.selector.projectId === undefined ||
-              existing.selector.projectId === grant.selector.projectId),
-        ),
-    );
+  const addPlatformGrants = async (
+    agentId: string,
+    missing: AgentPolicyGrantForm[],
+  ): Promise<void> => {
     if (missing.length === 0) return;
-    // Each grant is its own write, so every one is checked before the first
-    // is made: a refusal part-way through would leave the agent half set up.
-    const { results } = await sdk.agents.checkPolicyGrants({
-      checkAgentPolicyGrantsForm: { agentId, policyGrants: missing },
-    });
-    const refusal = grantRefusal(missing, results);
-    if (refusal !== null) throw new Error(refusal);
     for (const grant of missing) {
       await createGrant.mutateAsync({
         request: {
@@ -1112,11 +1125,12 @@ export function CredentialsWizard({
         : [],
     ),
     ensureAgent: async () => {
-      if (platformGrantRefusal !== null) throw new Error(platformGrantRefusal);
+      // Editing an agent's rule leaves its policy as it is; otherwise every
+      // grant the platform needs is checked before anything is written.
+      const missing = await checkedPlatformGrants();
       const targetId = await ensureAgent();
-      // A new agent was created with them; one that exists gets what it
-      // lacks. Editing an agent's rule leaves its policy as it is.
-      if (agent !== undefined && !editing) await addPlatformGrants(agent.id);
+      // A new agent was created with them; one that exists gets what it lacks.
+      if (agent !== undefined) await addPlatformGrants(agent.id, missing);
       await attachSelectedConnections(targetId, connectionReach());
       return targetId;
     },
@@ -1395,7 +1409,7 @@ export function CredentialsWizard({
             ]
           : []),
         ...(credential === "workload" &&
-        platformKey === "github-actions" &&
+        platformKey === GITHUB_ACTIONS_KEY &&
         (workload.values["owner"] ?? "").trim() !== "" &&
         (workload.values["repo"] ?? "").trim() !== ""
           ? [

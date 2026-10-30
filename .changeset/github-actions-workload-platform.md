@@ -8,3 +8,5 @@ GitHub Actions is now a workload platform with a guided setup. An agent's creden
 Catalog platform setups no longer treat a project's own issuer for the same URL as the organization trusting the platform, and they warn when a project's issuer would take precedence over the organization-wide rule for that project's MCP servers.
 
 The workflow step offers Claude Code and Codex. It generates the selected tool's install steps, official GitHub Action, and API-key secret instructions. Both connect to Speakeasy before running the agent; Codex shares the configuration directory populated by the device agent.
+
+The generated workflow pins every action it uses, and speakeasyd's source build, to a commit. A deployment that does not serve Speakeasy over https cannot set GitHub Actions up, because the action refuses a plain-http control plane. Command K offers "Set up GitHub Actions", and "Set up" for each other platform with a guided setup, to people who can manage workload identities.

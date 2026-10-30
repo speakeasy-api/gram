@@ -284,12 +284,12 @@ vi.mock("./useAgentIdentityCandidates", () => ({
   ),
 }));
 // Covered by its own test; here it only has to be wired in.
-vi.mock("./useGitHubActionsSetupCandidate", () => ({
-  useGitHubActionsSetupCandidate: vi.fn(({ enabled }: { enabled: boolean }) =>
+vi.mock("./usePlatformSetupCandidates", () => ({
+  usePlatformSetupCandidates: vi.fn(({ enabled }: { enabled: boolean }) =>
     enabled && mocks.includeNewResourceFixtures
       ? [
           {
-            id: "github-actions-workload-setup",
+            id: "platform-setup:github-actions",
             kind: "page",
             title: "Set up GitHub Actions",
             detail: "",
@@ -373,7 +373,7 @@ import { useLauncherCandidates } from "./index";
 import { useSkillCandidates } from "./useSkillCandidates";
 import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
 import { useManagedDeviceCandidates } from "./useManagedDeviceCandidates";
-import { useGitHubActionsSetupCandidate } from "./useGitHubActionsSetupCandidate";
+import { usePlatformSetupCandidates } from "./usePlatformSetupCandidates";
 import type { LauncherCandidate } from "./types";
 
 const REMOTE = { remoteMcpServerId: "remote-1" };
@@ -1843,12 +1843,12 @@ describe("new resource source wiring", () => {
   beforeEach(() => {
     mocks.includeNewResourceFixtures = true;
   });
-  it("offers the GitHub Actions setup, gated on the project", () => {
+  it("offers the platform setups, gated on the project", () => {
     const { result } = renderCandidates();
     expect(
-      result.current.some((c) => c.id === "github-actions-workload-setup"),
+      result.current.some((c) => c.id === "platform-setup:github-actions"),
     ).toBe(true);
-    expect(useGitHubActionsSetupCandidate).toHaveBeenLastCalledWith({
+    expect(usePlatformSetupCandidates).toHaveBeenLastCalledWith({
       enabled: true,
       inProject: mocks.inProject,
     });

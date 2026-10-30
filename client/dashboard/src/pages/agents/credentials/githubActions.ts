@@ -12,36 +12,91 @@ import type { SetupServer } from "./setupInstructions";
 const ACTION = "speakeasy-api/device-agent-action";
 export const ACTION_DOCS = `https://github.com/${ACTION}`;
 
-/**
- * The commits the generated workflow runs, pinned rather than named by branch
- * or tag: the job hands them its OIDC token, so a moved ref would run code
- * nobody reviewed with the agent's access. Bump them here, together, when the
- * action or speakeasyd changes.
- *
- * ACTION_COMMIT is the device agent action. SPEAKEASYD_SOURCE_COMMIT is the
- * device-agent commit with GitHub Actions support that the workflow builds
- * speakeasyd from, until a speakeasyd release carries it.
- */
-export const ACTION_COMMIT = "1b4e09374058ac30d700de7f8f9f9347a34eec78";
-export const SPEAKEASYD_SOURCE_COMMIT =
-  "103ae14d8f361d31f267c09c76b5741edf2d2c84";
 export const OIDC_DOCS =
   "https://docs.github.com/en/actions/reference/security/oidc";
 
+/** The catalog key of the GitHub Actions platform. */
+export const GITHUB_ACTIONS_KEY = "github-actions";
+
+/**
+ * Every action the generated workflow uses, pinned to a commit rather than a
+ * branch or tag: the job grants id-token: write, so each step can mint the
+ * job's OIDC token, and a moved ref would run code nobody reviewed with the
+ * agent's access. The tag each commit was taken from is kept beside it, so
+ * bumping one is a matter of looking that tag up again.
+ */
+const PINNED_ACTIONS = {
+  checkout: {
+    uses: "actions/checkout",
+    commit: "3d3c42e5aac5ba805825da76410c181273ba90b1",
+    tag: "v7",
+  },
+  setupGo: {
+    uses: "actions/setup-go",
+    commit: "b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+    tag: "v7",
+  },
+  deviceAgent: {
+    uses: ACTION,
+    commit: "1b4e09374058ac30d700de7f8f9f9347a34eec78",
+    tag: "main",
+  },
+  claude: {
+    uses: "anthropics/claude-code-action",
+    commit: "6d5ae526d25ce88daa2200be073e1a373167f064",
+    tag: "v1",
+  },
+  codex: {
+    uses: "openai/codex-action",
+    commit: "bdf19a4a223ec2549a3e2274a0cf61556bc07675",
+    tag: "v1",
+  },
+} as const;
+
+/**
+ * The device-agent commit with GitHub Actions support that the workflow
+ * builds speakeasyd from, until a speakeasyd release carries it.
+ */
+const SPEAKEASYD_SOURCE_COMMIT = "103ae14d8f361d31f267c09c76b5741edf2d2c84";
+
+/** A step's `uses:` value for a pinned action, naming the tag it came from. */
+function uses(action: keyof typeof PINNED_ACTIONS): string {
+  const pinned = PINNED_ACTIONS[action];
+  return `${pinned.uses}@${pinned.commit} # ${pinned.tag}`;
+}
+
 export type WorkflowAgent = "claude" | "codex";
 
+/** What the workflow needs to run each coding agent after Speakeasy syncs. */
 export const WORKFLOW_AGENTS = {
   claude: {
     name: "Claude Code",
-    action: "anthropics/claude-code-action@v1",
     secret: "ANTHROPIC_API_KEY",
     docs: "https://github.com/anthropics/claude-code-action",
+    install: [
+      "          npm install -g @anthropic-ai/claude-code",
+      '          mkdir -p "$HOME/.claude"',
+    ],
+    inputs: [
+      "          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}",
+      "          github_token: ${{ github.token }}",
+    ],
   },
   codex: {
     name: "Codex",
-    action: "openai/codex-action@v1",
     secret: "OPENAI_API_KEY",
     docs: "https://learn.chatgpt.com/docs/github-action",
+    install: [
+      "          npm install -g @openai/codex",
+      // runner.temp is not available in a job-level env, so later steps get
+      // CODEX_HOME through GITHUB_ENV.
+      '          echo "CODEX_HOME=$RUNNER_TEMP/speakeasy-codex" >> "$GITHUB_ENV"',
+      '          mkdir -p "$RUNNER_TEMP/speakeasy-codex"',
+    ],
+    inputs: [
+      "          openai-api-key: ${{ secrets.OPENAI_API_KEY }}",
+      "          codex-home: ${{ env.CODEX_HOME }}",
+    ],
   },
 } as const;
 
@@ -103,22 +158,28 @@ export function repositoryName(values: Record<string, string>): string {
   return `${name("owner", "OWNER")}/${name("repo", "REPO")}`;
 }
 
+/** The control plane URL as the workflow names it, without trailing slashes. */
+function trimmedControlPlane(controlPlaneUrl: string): string {
+  return controlPlaneUrl.replace(/\/+$/, "");
+}
+
 /**
  * Why the action cannot talk to this control plane, or null when it can. The
  * action refuses anything but https, since the job's token exchange crosses
  * the network.
  */
 export function controlPlaneProblem(controlPlaneUrl: string): string | null {
-  const controlPlane = controlPlaneUrl.replace(/\/+$/, "");
+  const controlPlane = trimmedControlPlane(controlPlaneUrl);
   if (controlPlane === "" || controlPlane.startsWith("https://")) return null;
   return `This deployment serves Speakeasy at ${controlPlane}, and the action only talks to an https control plane: the job's GitHub token would cross the network unencrypted. Serve Speakeasy over https to use GitHub Actions.`;
 }
 
 /**
- * The job's workflow, or null where the action could not reach this
- * deployment (see controlPlaneProblem). The organization ID and the hook
- * events project are filled in, and a deployment other than the action's
- * default names itself, because the token's audience is built from it.
+ * The job's workflow, or why there is none: a deployment the action cannot
+ * reach (see controlPlaneProblem) gets no workflow at all. The organization ID
+ * and the hook events project are filled in, and a deployment other than the
+ * action's default names itself, because the token's audience is built from
+ * it.
  */
 export function workflowYaml({
   agent,
@@ -133,9 +194,11 @@ export function workflowYaml({
   controlPlaneUrl: string;
   /** Builds speakeasyd from source, until a release supports GitHub Actions. */
   buildFromSource: boolean;
-}): string | null {
-  if (controlPlaneProblem(controlPlaneUrl) !== null) return null;
-  const controlPlane = controlPlaneUrl.replace(/\/+$/, "");
+}): { yaml: string; problem: null } | { yaml: null; problem: string } {
+  const problem = controlPlaneProblem(controlPlaneUrl);
+  if (problem !== null) return { yaml: null, problem };
+  const controlPlane = trimmedControlPlane(controlPlaneUrl);
+  const selected = WORKFLOW_AGENTS[agent];
   const lines = [
     "name: Speakeasy",
     "",
@@ -148,83 +211,54 @@ export function workflowYaml({
     "  agent:",
     "    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false",
     "    runs-on: ubuntu-latest",
-  ];
-  lines.push(
     "    permissions:",
     "      id-token: write # lets the job request its GitHub OIDC token",
     "      contents: read",
     "    steps:",
-    "      - uses: actions/checkout@v7",
+    `      - uses: ${uses("checkout")}`,
     "        with:",
     "          persist-credentials: false",
     "      # Install the tool and create its configuration directory before Speakeasy syncs.",
-    `      - name: Install ${WORKFLOW_AGENTS[agent].name}`,
+    `      - name: Install ${selected.name}`,
     "        run: |",
-    ...(agent === "codex"
+    ...selected.install,
+    ...(buildFromSource
       ? [
-          "          npm install -g @openai/codex",
-          // runner.temp is not available in a job-level env, so later
-          // steps get CODEX_HOME through GITHUB_ENV.
-          '          echo "CODEX_HOME=$RUNNER_TEMP/speakeasy-codex" >> "$GITHUB_ENV"',
-          '          mkdir -p "$RUNNER_TEMP/speakeasy-codex"',
+          "      # Until a speakeasyd release supports GitHub Actions, build it from source.",
+          `      - uses: ${uses("checkout")}`,
+          "        with:",
+          "          repository: speakeasy-api/device-agent",
+          `          ref: ${SPEAKEASYD_SOURCE_COMMIT}`,
+          "          path: .speakeasyd-src",
+          "          persist-credentials: false",
+          `      - uses: ${uses("setupGo")}`,
+          "        with:",
+          "          go-version-file: .speakeasyd-src/go.mod",
+          '      - run: CGO_ENABLED=0 go build -o "$RUNNER_TEMP/speakeasyd" ./cmd/speakeasyd',
+          "        working-directory: .speakeasyd-src",
         ]
-      : [
-          "          npm install -g @anthropic-ai/claude-code",
-          '          mkdir -p "$HOME/.claude"',
-        ]),
-  );
-  if (buildFromSource) {
-    lines.push(
-      "      # Until a speakeasyd release supports GitHub Actions, build it from source.",
-      "      - uses: actions/checkout@v7",
-      "        with:",
-      "          repository: speakeasy-api/device-agent",
-      `          ref: ${SPEAKEASYD_SOURCE_COMMIT}`,
-      "          path: .speakeasyd-src",
-      "          persist-credentials: false",
-      "      - uses: actions/setup-go@v7",
-      "        with:",
-      "          go-version-file: .speakeasyd-src/go.mod",
-      '      - run: CGO_ENABLED=0 go build -o "$RUNNER_TEMP/speakeasyd" ./cmd/speakeasyd',
-      "        working-directory: .speakeasyd-src",
-    );
-  }
-  lines.push(
+      : []),
     "      - name: Connect to Speakeasy",
     "        id: speakeasy",
-    `        uses: ${ACTION}@${ACTION_COMMIT}`,
+    `        uses: ${uses("deviceAgent")}`,
     "        with:",
     `          organization-id: ${organizationId || "SPEAKEASY_ORGANIZATION_ID"}`,
     `          project: ${projectSlug || "SPEAKEASY_PROJECT"} # hook events go to this project`,
-  );
-  if (controlPlane !== "" && controlPlane !== ACTION_DEFAULT_CONTROL_PLANE) {
-    lines.push(`          control-plane-url: ${controlPlane}`);
-  }
-  if (buildFromSource) {
-    lines.push("          speakeasyd-binary: ${{ runner.temp }}/speakeasyd");
-  }
-  lines.push(
+    ...(controlPlane !== "" && controlPlane !== ACTION_DEFAULT_CONTROL_PLANE
+      ? [`          control-plane-url: ${controlPlane}`]
+      : []),
+    ...(buildFromSource
+      ? ["          speakeasyd-binary: ${{ runner.temp }}/speakeasyd"]
+      : []),
     "      # Lists the agent's Speakeasy MCP servers; each one connects with a fresh token.",
-    `      - run: ${agent === "codex" ? "codex" : "claude"} mcp list`,
-    `      - name: Run ${WORKFLOW_AGENTS[agent].name}`,
-    `        uses: ${WORKFLOW_AGENTS[agent].action}`,
+    `      - run: ${agent} mcp list`,
+    `      - name: Run ${selected.name}`,
+    `        uses: ${uses(agent)}`,
     "        with:",
-  );
-  if (agent === "codex") {
-    lines.push(
-      "          openai-api-key: ${{ secrets.OPENAI_API_KEY }}",
-      "          codex-home: ${{ env.CODEX_HOME }}",
-    );
-  } else {
-    lines.push(
-      "          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}",
-      "          github_token: ${{ github.token }}",
-    );
-  }
-  lines.push(
+    ...selected.inputs,
     "          prompt: Describe this repository and list the Speakeasy MCP tools available to you. Do not modify files.",
-  );
-  return lines.join("\n");
+  ];
+  return { yaml: lines.join("\n"), problem: null };
 }
 
 /**

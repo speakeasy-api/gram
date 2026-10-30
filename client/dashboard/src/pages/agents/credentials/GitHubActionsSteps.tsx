@@ -12,7 +12,6 @@ import { CodeBlock } from "./CodeBlock";
 import {
   ACTION_DOCS,
   WORKFLOW_AGENTS,
-  controlPlaneProblem,
   pluginsForEveryAgent,
   unreachablePluginServers,
   workflowYaml,
@@ -60,18 +59,19 @@ export function PluginsStep({
     details.flatMap((query) => (query.data === undefined ? [] : [query.data])),
   );
   const unreachable = unreachablePluginServers(delivered, servers);
+  const agent = agentName || "the agent";
 
   return (
     <div className="space-y-4 text-sm">
       <p>
-        The job gets {agentName || "this agent"}&apos;s plugins: their MCP
-        servers, skills and hooks. Speakeasy also adds its observability plugin,
-        which sends the job&apos;s hook events.
+        The job gets {agent}&apos;s plugins: their MCP servers, skills and
+        hooks. Speakeasy also adds its observability plugin, which sends the
+        job&apos;s hook events.
       </p>
       <p className="text-muted-foreground">
         Below are the plugins assigned to <strong>Everyone</strong> in this
         project. The list is partial: the job also gets plugins assigned to
-        roles {agentName || "the agent"} holds, and those from other projects.
+        roles {agent} holds, and those from other projects.
       </p>
       {pending ? (
         <p className="text-muted-foreground">
@@ -90,9 +90,8 @@ export function PluginsStep({
       ) : delivered.length === 0 ? (
         <Alert variant="warning">
           <div className="text-sm">
-            No plugin in this project is assigned to Everyone, so unless{" "}
-            {agentName || "the agent"} holds a role with plugins, the job gets
-            no MCP servers. On the{" "}
+            No plugin in this project is assigned to Everyone, so unless {agent}{" "}
+            holds a role with plugins, the job gets no MCP servers. On the{" "}
             <Link className="underline" to={routes.plugins.href()}>
               Plugins page
             </Link>
@@ -119,7 +118,7 @@ export function PluginsStep({
       {unreachable.length > 0 && (
         <Alert variant="warning">
           <div className="text-sm">
-            {agentName || "This agent"} cannot use {unreachable.join(", ")}, so
+            {agentName || "The agent"} cannot use {unreachable.join(", ")}, so
             the job&apos;s tools will show{" "}
             {unreachable.length === 1 ? "it" : "them"} as needing
             authentication. Go back to MCP Selection to add{" "}
@@ -140,13 +139,11 @@ export function WorkflowStep(): JSX.Element {
   const project = useProject();
   const [agent, setAgent] = useState<WorkflowAgent>("claude");
   const selected = WORKFLOW_AGENTS[agent];
-  const controlPlaneUrl = getServerURL();
-  const unreachable = controlPlaneProblem(controlPlaneUrl);
-  const yaml = workflowYaml({
+  const workflow = workflowYaml({
     agent,
     organizationId: organization.id,
     projectSlug: project.slug,
-    controlPlaneUrl,
+    controlPlaneUrl: getServerURL(),
     buildFromSource: true,
   });
   return (
@@ -173,13 +170,13 @@ export function WorkflowStep(): JSX.Element {
         secrets for {selected.name}, then replace the example prompt with your
         task. Speakeasy access uses the job&apos;s GitHub token separately.
       </p>
-      {yaml === null ? (
+      {workflow.yaml === null ? (
         <Alert variant="error">
-          <div className="text-sm">{unreachable}</div>
+          <div className="text-sm">{workflow.problem}</div>
         </Alert>
       ) : (
         <CodeBlock
-          value={yaml}
+          value={workflow.yaml}
           label=".github/workflows/speakeasy.yml"
           language="yaml"
         />

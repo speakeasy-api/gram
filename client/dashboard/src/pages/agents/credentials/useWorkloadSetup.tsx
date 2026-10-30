@@ -462,11 +462,8 @@ export function useWorkloadSetup({
                   agent&apos;s access does not fix this: the project&apos;s
                   issuer itself has to be withdrawn, which also withdraws every
                   rule admitted under it. The dashboard has no control for that
-                  yet. An organization administrator can call{" "}
-                  <code>
-                    DELETE /rpc/workloadIdentities.withdrawIssuer?id=
-                    {shadowingIssuer.id}
-                  </code>{" "}
+                  yet. Someone who can manage workload identities can call{" "}
+                  <code>{`DELETE /rpc/workloadIdentities.withdrawIssuer?id=${shadowingIssuer.id}`}</code>{" "}
                   with <code>Gram-Project: {project.slug}</code>.
                 </div>
               </Alert>

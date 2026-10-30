@@ -1,9 +1,11 @@
 import { Alert } from "@/components/ui/Alert";
+import { getServerURL } from "@/lib/utils";
 import { HOOKS_INGEST_SCOPE } from "../agent-hook-events";
 import { CodeBlock } from "./CodeBlock";
 import {
   DEVICE_AGENT_SYNC_SCOPE,
   OIDC_DOCS,
+  controlPlaneProblem,
   githubActionsAgentGrants,
   repositoryName,
   repositoryProblem,
@@ -33,12 +35,22 @@ export function githubActionsSetupInstructions(
   const fields = ["owner", "repo"]
     .map((key) => entry.variables.find((variable) => variable.key === key))
     .filter((found): found is CatalogVariable => found !== undefined);
+  // A deployment the action cannot reach gets no rule and no grants: they
+  // would trust GitHub for the organization with nothing able to use them.
+  const unreachable = controlPlaneProblem(getServerURL());
 
   return {
     agentGrants: githubActionsAgentGrants,
+    keywords: ["GitHub", "CI", "workflow", "device agent"],
     connection: (values): Connection | null => {
       const rule = subjectRule(entry, values);
-      if (rule === null || repositoryProblem(values) !== null) return null;
+      if (
+        rule === null ||
+        repositoryProblem(values) !== null ||
+        unreachable !== null
+      ) {
+        return null;
+      }
       return {
         name: entry.displayName,
         description: entry.description,
@@ -72,6 +84,7 @@ export function githubActionsSetupInstructions(
         title: "Your repository",
         phase: "create",
         complete: ({ values }) =>
+          unreachable === null &&
           subjectRule(entry, values) !== null &&
           repositoryProblem(values) === null,
         body: ({ values, setValue, ruleConflict, agentName }) => {
@@ -81,6 +94,11 @@ export function githubActionsSetupInstructions(
           const agent = agentName || "this agent";
           return (
             <>
+              {unreachable !== null && (
+                <Alert variant="error">
+                  <div className="text-sm">{unreachable}</div>
+                </Alert>
+              )}
               <p className="text-sm">
                 The repository whose jobs act as {agent}. Enter the names with
                 the same capital letters GitHub shows: Speakeasy compares them

@@ -78,6 +78,8 @@ export type PlatformSetup = {
   steps: SetupStep[];
   /** The rows to write, or null while the values are incomplete. */
   connection: (values: Record<string, string>) => Connection | null;
+  /** Extra words Command K matches the platform's setup by. */
+  keywords?: string[];
   /**
    * Grants the agent needs beyond the servers it was given, for a platform
    * whose runtime calls more than MCP: the device agent polls for plugins and

@@ -2828,6 +2828,16 @@ const githubActions = {
 };
 
 describe("Connecting a GitHub repository", () => {
+  /** Names acme/payments-api on the repository step. */
+  function fillRepository() {
+    fireEvent.change(screen.getByLabelText("Owner"), {
+      target: { value: "acme" },
+    });
+    fireEvent.change(screen.getByLabelText("Repository"), {
+      target: { value: "payments-api" },
+    });
+  }
+
   /** Chooses GitHub Actions for a new agent and fills in the repository. */
   async function reachRepositoryStep() {
     mocks.platforms.mockReturnValue([githubActions]);
@@ -2844,12 +2854,7 @@ describe("Connecting a GitHub repository", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("heading", { name: "Your repository" });
-    fireEvent.change(screen.getByLabelText("Owner"), {
-      target: { value: "acme" },
-    });
-    fireEvent.change(screen.getByLabelText("Repository"), {
-      target: { value: "payments-api" },
-    });
+    fillRepository();
   }
 
   /** Sets up GitHub Actions for an agent that already exists. */
@@ -2884,12 +2889,7 @@ describe("Connecting a GitHub repository", () => {
     await continueFromAuthentication();
     fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
     await screen.findByRole("heading", { name: "Your repository" });
-    fireEvent.change(screen.getByLabelText("Owner"), {
-      target: { value: "acme" },
-    });
-    fireEvent.change(screen.getByLabelText("Repository"), {
-      target: { value: "payments-api" },
-    });
+    fillRepository();
   }
 
   it("checks every grant an existing agent lacks before writing any of them", async () => {
@@ -3025,7 +3025,9 @@ describe("Connecting a GitHub repository", () => {
     // The remedy is withdrawing the project's own issuer, not an agent's
     // access, which would leave the issuer shadowing the rule.
     expect(
-      screen.getByText(/withdrawIssuer\?id=\s*issuer_project/),
+      screen.getByText(
+        "DELETE /rpc/workloadIdentities.withdrawIssuer?id=issuer_project",
+      ),
     ).toBeTruthy();
     fireEvent.click(
       screen.getByRole("button", { name: "Connect GitHub Actions" }),
@@ -3136,7 +3138,9 @@ describe("Connecting a GitHub repository", () => {
     );
     expect(workflow.textContent).toContain("organization-id: org_example");
     expect(workflow.textContent).toContain("project: project-one");
-    expect(workflow.textContent).toContain("anthropics/claude-code-action@v1");
+    expect(workflow.textContent).toMatch(
+      /anthropics\/claude-code-action@[0-9a-f]{40}/,
+    );
     expect(
       screen
         .getByRole("radio", { name: "Claude Code" })
@@ -3144,7 +3148,7 @@ describe("Connecting a GitHub repository", () => {
     ).toBe("true");
 
     fireEvent.click(screen.getByRole("radio", { name: "Codex" }));
-    expect(workflow.textContent).toContain("openai/codex-action@v1");
+    expect(workflow.textContent).toMatch(/openai\/codex-action@[0-9a-f]{40}/);
     expect(workflow.textContent).toContain(
       "openai-api-key: ${{ secrets.OPENAI_API_KEY }}",
     );
@@ -3155,7 +3159,9 @@ describe("Connecting a GitHub repository", () => {
     ).toBe("https://learn.chatgpt.com/docs/github-action");
 
     fireEvent.click(screen.getByRole("radio", { name: "Claude Code" }));
-    expect(workflow.textContent).toContain("anthropics/claude-code-action@v1");
+    expect(workflow.textContent).toMatch(
+      /anthropics\/claude-code-action@[0-9a-f]{40}/,
+    );
     expect(workflow.textContent).not.toContain("openai/codex-action");
   });
 });

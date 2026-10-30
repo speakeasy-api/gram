@@ -1,9 +1,7 @@
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import { describe, expect, it } from "vitest";
 import {
-  ACTION_COMMIT,
   ACTION_DEFAULT_CONTROL_PLANE,
-  SPEAKEASYD_SOURCE_COMMIT,
   controlPlaneProblem,
   githubActionsAgentGrants,
   pluginsForEveryAgent,
@@ -134,7 +132,7 @@ describe("workflowYaml", () => {
 
   /** The workflow for these options, which must have one. */
   function workflow(options: Partial<typeof base> = {}): string {
-    const yaml = workflowYaml({ ...base, ...options });
+    const { yaml } = workflowYaml({ ...base, ...options });
     if (yaml === null) throw new Error("expected a workflow");
     return yaml;
   }
@@ -158,20 +156,26 @@ describe("workflowYaml", () => {
     expect(yaml).not.toContain("speakeasyd-binary");
   });
 
-  it("pins the device agent action and speakeasyd's source to commits", () => {
-    const yaml = workflow({ buildFromSource: true });
-    expect(ACTION_COMMIT).toMatch(/^[0-9a-f]{40}$/);
-    expect(SPEAKEASYD_SOURCE_COMMIT).toMatch(/^[0-9a-f]{40}$/);
-    expect(yaml).toContain(
-      `uses: speakeasy-api/device-agent-action@${ACTION_COMMIT}`,
+  // The job grants id-token: write, so every step can mint its OIDC token: no
+  // step may run code a moved branch or tag could swap out.
+  it("pins every action and speakeasyd's source to a commit", () => {
+    for (const yaml of variants) {
+      const used = yaml.match(/uses: \S+/g) ?? [];
+      expect(used.length).toBeGreaterThan(0);
+      for (const step of used) {
+        expect(step).toMatch(/@[0-9a-f]{40}$/);
+      }
+    }
+    expect(workflow({ buildFromSource: true })).toMatch(
+      /^ {10}ref: [0-9a-f]{40}$/m,
     );
-    expect(yaml).toContain(`ref: ${SPEAKEASYD_SOURCE_COMMIT}`);
-    expect(yaml).not.toContain("@main");
   });
 
   it("runs Claude after Speakeasy has configured its MCP servers", () => {
     const yaml = workflow();
-    expect(yaml).toContain("uses: anthropics/claude-code-action@v1");
+    expect(yaml).toMatch(
+      /uses: anthropics\/claude-code-action@[0-9a-f]{40} # v1/,
+    );
     expect(yaml).toContain(
       "anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}",
     );
@@ -196,7 +200,7 @@ describe("workflowYaml", () => {
     expect(yaml).toContain('mkdir -p "$RUNNER_TEMP/speakeasy-codex"');
     expect(yaml).toContain("npm install -g @openai/codex");
     expect(yaml).toContain("run: codex mcp list");
-    expect(yaml).toContain("uses: openai/codex-action@v1");
+    expect(yaml).toMatch(/uses: openai\/codex-action@[0-9a-f]{40} # v1/);
     expect(yaml).toContain("openai-api-key: ${{ secrets.OPENAI_API_KEY }}");
     expect(yaml).toContain("codex-home: ${{ env.CODEX_HOME }}");
     expect(yaml.indexOf("GITHUB_ENV")).toBeLessThan(
@@ -242,15 +246,12 @@ describe("workflowYaml", () => {
   });
 
   it("prints no workflow for a control plane served without https", () => {
-    expect(
-      workflowYaml({
-        ...base,
-        controlPlaneUrl: "http://speakeasy.example.com",
-      }),
-    ).toBeNull();
-    expect(controlPlaneProblem("http://speakeasy.example.com")).toContain(
-      "https",
-    );
+    const { yaml, problem } = workflowYaml({
+      ...base,
+      controlPlaneUrl: "http://speakeasy.example.com",
+    });
+    expect(yaml).toBeNull();
+    expect(problem).toContain("https");
     expect(controlPlaneProblem("https://speakeasy.example.com")).toBeNull();
   });
 
