@@ -185,8 +185,6 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		return fmt.Errorf("commit local fixtures: %w", err)
 	}
 
-	logger.InfoContext(ctx, "local fixtures applied")
-
 	warnOnStaleOverrides(ctx, logger, opts.ObservedEnv, apiKey)
 	bustLocalCaches(ctx, logger, cache, spec.OrgID, dev.ID)
 
@@ -198,6 +196,7 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 			return fmt.Errorf("seed local catalog icon: %w", err)
 		}
 	}
+	logger.InfoContext(ctx, "local fixtures applied")
 	return nil
 }
 
