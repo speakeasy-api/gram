@@ -5924,19 +5924,9 @@ CREATE TABLE IF NOT EXISTS toolsets (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
   description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 250),
   default_environment_slug TEXT CHECK (default_environment_slug <> '' AND CHAR_LENGTH(default_environment_slug) <= 60),
-  mcp_slug TEXT CHECK (
-    mcp_slug IS NULL OR (mcp_slug <> '' AND CHAR_LENGTH(mcp_slug) <= 60)
-  ),
-  mcp_is_public BOOLEAN NOT NULL DEFAULT FALSE,
-  mcp_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   tool_selection_mode TEXT NOT NULL DEFAULT 'static',
-  custom_domain_id uuid,
 
   external_oauth_server_id uuid,
-
-  -- New unified gate (spike §4.1 Toolset link). Nullable opt-in; runtime
-  -- behaviour is gated only when this is set, so legacy paths stay unchanged.
-  user_session_issuer_id uuid,
 
   -- Optionally enables a variations group for runtime filtering and
   -- modifications. Otherwise defaults to project global (source-level)
@@ -5950,9 +5940,7 @@ CREATE TABLE IF NOT EXISTS toolsets (
 
   CONSTRAINT toolsets_pkey PRIMARY KEY (id),
   CONSTRAINT toolsets_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL,
-  CONSTRAINT toolsets_custom_domain_id_fkey FOREIGN key (custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_external_oauth_server_id_fkey FOREIGN KEY (external_oauth_server_id) REFERENCES external_oauth_server_metadata (id) ON DELETE SET NULL,
-  CONSTRAINT toolsets_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL
 );
 
@@ -5963,13 +5951,8 @@ COMMENT ON COLUMN toolsets.name IS '@access: confidential';
 COMMENT ON COLUMN toolsets.slug IS '@access: confidential';
 COMMENT ON COLUMN toolsets.description IS '@access: opaque-restricted';
 COMMENT ON COLUMN toolsets.default_environment_slug IS '@access: confidential';
-COMMENT ON COLUMN toolsets.mcp_slug IS '@access: confidential';
-COMMENT ON COLUMN toolsets.mcp_is_public IS '@access: confidential';
-COMMENT ON COLUMN toolsets.mcp_enabled IS '@access: confidential';
 COMMENT ON COLUMN toolsets.tool_selection_mode IS '@access: confidential';
-COMMENT ON COLUMN toolsets.custom_domain_id IS '@access: confidential';
 COMMENT ON COLUMN toolsets.external_oauth_server_id IS '@access: confidential';
-COMMENT ON COLUMN toolsets.user_session_issuer_id IS '@access: confidential';
 COMMENT ON COLUMN toolsets.tool_variations_group_id IS '@access: confidential';
 COMMENT ON COLUMN toolsets.created_at IS '@access: confidential';
 COMMENT ON COLUMN toolsets.updated_at IS '@access: confidential';
@@ -5979,18 +5962,6 @@ COMMENT ON COLUMN toolsets.deleted IS '@access: confidential';
 CREATE UNIQUE INDEX IF NOT EXISTS toolsets_project_id_slug_key
 ON toolsets (project_id, slug)
 WHERE deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS toolsets_mcp_slug_custom_domain_id_key
-ON toolsets (mcp_slug, custom_domain_id)
-WHERE mcp_slug IS NOT NULL AND custom_domain_id IS NOT NULL AND deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS toolsets_mcp_slug_null_custom_domain_id_key
-ON toolsets (mcp_slug)
-WHERE mcp_slug IS NOT NULL AND custom_domain_id IS NULL AND deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS toolsets_user_session_issuer_id_idx
-ON toolsets (user_session_issuer_id)
-WHERE user_session_issuer_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS toolset_versions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
