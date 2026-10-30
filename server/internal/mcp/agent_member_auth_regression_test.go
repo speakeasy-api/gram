@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -223,9 +224,16 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 					q := agentsrepo.New(ti.conn)
 					grants, err := q.ListAgentPolicyGrants(ctx, agentsrepo.ListAgentPolicyGrantsParams{OrganizationID: ac.ActiveOrganizationID, AgentID: fx.agent.ID})
 					require.NoError(t, err)
+					// The fixture grants the agent other servers too; remove only
+					// the grant for the member this case calls.
 					removed := 0
 					for _, grant := range grants {
 						if grant.Scope != string(authz.ScopeMCPConnect) {
+							continue
+						}
+						var selector authz.Selector
+						require.NoError(t, json.Unmarshal(grant.Selectors, &selector))
+						if selector.ResourceID() != serverID.String() {
 							continue
 						}
 						deleted, err := q.DeleteAgentPolicyGrant(ctx, agentsrepo.DeleteAgentPolicyGrantParams{OrganizationID: ac.ActiveOrganizationID, AgentID: fx.agent.ID, GrantID: grant.ID})
