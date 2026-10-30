@@ -17,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
@@ -76,6 +77,10 @@ func (s *Service) resolveMarketplaceFreshness(
 	observabilityEnabled bool,
 ) (marketplaceFreshness, error) {
 	cfg := s.generateConfig(ctx, organizationID, organizationSlug, projectSlug, projectID, serverURL, conn.PublishedHooksConfig)
+	hooksCurrent := s.hooksPublishCurrent(ctx, organizationID, organizationSlug, conn, cfg, observabilityEnabled, infos)
+	if observabilityEnabled && hooksCurrent {
+		cfg.HooksOrgName, _ = hooksCarryPrefixes(conn.PublishedHooksConfig, cfg.OrgName)
+	}
 	published := decodeMCPFingerprints(conn.PublishedMcpFingerprints)
 	plan, pending, paused, err := s.classifyPausedPlugins(ctx, projectID, infos, published, cfg, observabilityEnabled)
 	if err != nil {
@@ -88,7 +93,6 @@ func (s *Service) resolveMarketplaceFreshness(
 	// A carried hooks subtree keeps the directory names it was published
 	// under, and the shared manifests point at them, as publishProject
 	// fingerprints them.
-	hooksCurrent := s.hooksPublishCurrent(ctx, organizationID, organizationSlug, conn, cfg, observabilityEnabled)
 	fingerprintCfg := cfg
 	if observabilityEnabled && hooksCurrent {
 		fingerprintCfg.HooksOrgName, _ = hooksCarryPrefixes(conn.PublishedHooksConfig, cfg.OrgName)
@@ -138,9 +142,13 @@ func pluginFreshness(infos []PluginInfo, paused map[string]bool, held []heldPlug
 // target, and a hook-affecting config change while gated applies by itself
 // once the rollout advances. A project that turned observability off is
 // current once no hooks subtree remains published.
-func (s *Service) hooksPublishCurrent(ctx context.Context, organizationID, organizationSlug string, conn repo.PluginGithubConnection, cfg GenerateConfig, observabilityEnabled bool) bool {
+func (s *Service) hooksPublishCurrent(ctx context.Context, organizationID, organizationSlug string, conn repo.PluginGithubConnection, cfg GenerateConfig, observabilityEnabled bool, infos []PluginInfo) bool {
 	if !observabilityEnabled {
 		return conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == ""
+	}
+	if hooksPackagesCollide(infos, cfg.OrgName) {
+		publishedName := naming.PublishedHooksOrgName(conn.PublishedHooksConfig)
+		return publishedName != "" && !hooksPackagesCollide(infos, publishedName)
 	}
 	if !s.hooksRolloutEligible(ctx, organizationID, organizationSlug) {
 		return true
@@ -197,8 +205,10 @@ func (s *Service) holdPendingPluginEntries(
 	if err != nil {
 		// Freshness degrades rather than fails: every pending plugin counts
 		// with its live state, as a publish does when it can't read their
-		// files, which can only make plugins read stale. Caching that briefly
-		// keeps a polled read from calling GitHub through an outage.
+		// files, which can only make plugins read stale. A repo GitHub reports
+		// missing or empty fails the same way, since this one was published.
+		// Caching that briefly keeps a polled read from calling GitHub through
+		// an outage.
 		s.logger.WarnContext(ctx, "read held plugin entries; comparing their live state instead",
 			attr.SlogProjectID(projectID.String()),
 			attr.SlogError(err),

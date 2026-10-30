@@ -765,3 +765,32 @@ func TestAutoSync_FreshnessSurvivesAnUnreadableRepo(t *testing.T) {
 	require.Equal(t, new(false), status.UpToDate)
 	require.True(t, publishStatusBySlug(t, status)[f.paused.Slug].AwaitingManualSync)
 }
+
+// A connection that predates fingerprinting can't say whether a plugin with
+// auto sync on is current, but one with auto sync off is not: with no recorded
+// fingerprint, an automatic publish leaves it out until someone syncs by hand.
+func TestAutoSync_EvidenceWithoutRecordedFingerprintsShowsPausedPluginWaiting(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newAutoSyncFixture(t, "unrecorded")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	off := false
+	paused, err := f.ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Unrecorded Paused", AutoSyncEnabled: &off})
+	require.NoError(t, err)
+	_, err = f.ti.conn.Exec(ctx, "UPDATE plugin_github_connections SET published_mcp_fingerprints = NULL WHERE project_id = $1", f.projectID) //nolint:glint // notestingrawsql: arrange pre-fingerprint publication without changing the last-published timestamp
+	require.NoError(t, err)
+
+	evidence, err := f.ti.service.ResolvePublicationEvidence(ctx, authCtx.ActiveOrganizationID, f.projectID, []string{f.active.Slug, paused.Slug})
+	require.NoError(t, err)
+	bySlug := make(map[string]plugins.PublicationEvidence, len(evidence))
+	for _, plugin := range evidence {
+		bySlug[plugin.PluginSlug] = plugin
+	}
+	require.Len(t, bySlug, 2)
+	require.Nil(t, bySlug[f.active.Slug].Fresh, "an auto-synced plugin's freshness is unknown without recorded fingerprints")
+	require.False(t, bySlug[f.active.Slug].AwaitingManualSync)
+	require.False(t, bySlug[f.active.Slug].NotConfigured)
+	require.Equal(t, new(false), bySlug[paused.Slug].Fresh)
+	require.True(t, bySlug[paused.Slug].AwaitingManualSync)
+}

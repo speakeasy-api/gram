@@ -3,12 +3,15 @@ package plugins_test
 import (
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
@@ -84,10 +87,9 @@ func TestPluginsService_RefusesSlugsOfTheMarketplacesOwnPackages(t *testing.T) {
 	}
 }
 
-// A project created before the check may already hold both foo and
-// foo-codex. Its publishes keep working, including an automatic one while
-// foo's auto sync is off.
-func TestPluginsService_ExistingSharedDirectoryKeepsPublishing(t *testing.T) {
+// Legacy collisions may keep publishing while auto sync is on, but cannot
+// promise to hold either package while another plugin writes the same files.
+func TestPluginsService_ExistingSharedDirectoryCannotPublishPausedChanges(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
@@ -112,13 +114,38 @@ func TestPluginsService_ExistingSharedDirectoryKeepsPublishing(t *testing.T) {
 	_, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	_, err = f.setAutoSync(ctx, seeded["foo"], false)
+	for _, plugin := range seeded {
+		_, err = f.setAutoSync(ctx, plugin, false)
+		requireFailedPrecondition(t, err, "Cannot turn off auto sync")
+	}
+
+	// Arrange a paused row saved before the collision guard existed. Even
+	// when its own files are unchanged, the active sibling must not overwrite
+	// it through the shared directory.
+	_, err = pluginsrepo.New(ti.conn).UpdatePlugin(ctx, pluginsrepo.UpdatePluginParams{
+		ID: uuid.MustParse(seeded["foo"].ID), OrganizationID: authCtx.ActiveOrganizationID, ProjectID: f.projectID,
+		Name: seeded["foo"].Name, Slug: seeded["foo"].Slug, Description: pgtype.Text{}, AutoSyncEnabled: pgtype.Bool{Bool: false, Valid: true},
+	})
+	require.NoError(t, err)
+	f.addServer(t, ctx, seeded["foo-codex"], "shared-dir-foo-codex-two", "foo-codex Two", 1)
+	mock.pushFilesCalled = false
+	_, err = ti.service.PublishProject(ctx, plugins.PublishProjectInput{ProjectID: f.projectID, CreatedByUserID: f.userID, SkipIfUnchanged: true})
+	requireFailedPrecondition(t, err, "package directories conflict")
+	require.False(t, mock.pushFilesCalled)
+	_, err = ti.service.ResolvePublicationEvidence(ctx, authCtx.ActiveOrganizationID, f.projectID, []string{"foo"})
+	require.Error(t, err, "invalid holding plans must not claim to await only a manual sync")
+	status, err := ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.Nil(t, status.UpToDate, "freshness is unknown for an invalid holding plan")
+
+	_, err = ti.conn.Exec(ctx, "UPDATE plugin_github_connections SET published_mcp_fingerprints = NULL WHERE project_id = $1", f.projectID) //nolint:glint // notestingrawsql: arrange pre-fingerprint publication without changing the last-published timestamp
+	require.NoError(t, err)
+	_, err = ti.service.ResolvePublicationEvidence(ctx, authCtx.ActiveOrganizationID, f.projectID, []string{"foo"})
+	require.Error(t, err, "connections without fingerprints must also report unavailable collision evidence")
+
+	_, err = f.setAutoSync(ctx, seeded["foo"], true)
 	require.NoError(t, err)
 	f.addServer(t, ctx, seeded["foo"], "shared-dir-foo-two", "foo Two", 1)
-	f.addServer(t, ctx, seeded["foo-codex"], "shared-dir-foo-codex-two", "foo-codex Two", 1)
-
-	// Neither plugin can be held, since both write into foo-codex/, so the
-	// paused one publishes its live state.
 	result := f.automaticPublish(t, ctx)
 	require.False(t, result.Skipped)
 	pushed := f.mock.lastPushedFiles

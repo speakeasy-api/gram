@@ -3917,3 +3917,17 @@ func marshalJSON(v any) ([]byte, error) {
 	// newline -- the render must match byte-for-byte.
 	return append(b, '\n'), nil
 }
+
+// hooksPackagesCollide reports whether an org-derived observability package
+// would overwrite a feature plugin's package, such as after an org rename.
+func hooksPackagesCollide(infos []PluginInfo, orgName string) bool {
+	hooks := allHooksSubtreePrefixes(orgName)
+	for _, info := range infos {
+		for _, dir := range pluginSubtreePrefixes(info.Slug) {
+			if slices.Contains(hooks, dir) {
+				return true
+			}
+		}
+	}
+	return false
+}

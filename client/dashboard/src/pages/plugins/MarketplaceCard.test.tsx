@@ -19,6 +19,25 @@ function renderOpenCard(publishStatus: PublishStatusResult): void {
 }
 
 describe("MarketplaceCard sync copy", () => {
+  it("keeps unavailable freshness distinct from an up-to-date marketplace", () => {
+    renderOpenCard({ configured: true, connected: true });
+    expect(screen.getByText("Sync status unavailable")).toBeTruthy();
+    expect(screen.queryByText("Up to date")).toBeNull();
+    expect(screen.queryByText("Marketplace set up")).toBeNull();
+    expect(
+      screen.getByText(
+        "Sync status is unavailable. Check again shortly or sync changes.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Sync changes" })).toBeTruthy();
+  });
+
+  it("shows up to date only for confirmed current freshness", () => {
+    renderOpenCard({ configured: true, connected: true, upToDate: true });
+    expect(screen.getByText("Up to date")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Sync changes" })).toBeNull();
+  });
+
   it("does not promise an automatic sync when only plugins with auto sync off are waiting", () => {
     renderOpenCard({
       configured: true,

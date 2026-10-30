@@ -169,7 +169,7 @@ func (s *Service) writeHostedServer(ctx context.Context, toolsetID uuid.UUID, ch
 	}
 	// A package renders an OAuth server differently from a key-authenticated one.
 	if nowEnabled && written.Before.UserSessionIssuerID.Valid != written.After.UserSessionIssuerID.Valid {
-		carried, err := toolsetCarriedByPlugin(ctx, dbtx, authCtx, updated.ID)
+		carried, err := s.toolsetCarriedByPlugin(ctx, dbtx, authCtx, updated.ID)
 		if err != nil {
 			return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "check toolset plugin membership").LogError(ctx, logger)
 		}

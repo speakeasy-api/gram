@@ -2432,7 +2432,13 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	targetHooksConfigJSON := currentHooksConfigJSON
 	targetHooksConfigHash := currentHooksConfigHash
 	hooksConfigDeferred := false
-	if !firstPublish && !s.hooksRolloutEligible(ctx, input.OrganizationID, input.OrganizationSlug) {
+	// An organization rename must not move hooks over an existing plugin's
+	// package. Keep the published hooks until those slugs no longer conflict.
+	hooksCollision := observabilityEnabled && hooksPackagesCollide(pluginInfos, cfg.OrgName)
+	if hooksCollision && (firstPublish || naming.PublishedHooksOrgName(existing.PublishedHooksConfig) == "" || hooksPackagesCollide(pluginInfos, naming.PublishedHooksOrgName(existing.PublishedHooksConfig))) {
+		return nil, oops.E(oops.CodeFailedPrecondition, nil, "Observability package directories conflict with a plugin. Resolve the plugin slug conflict before publishing.")
+	}
+	if !firstPublish && (hooksCollision || !s.hooksRolloutEligible(ctx, input.OrganizationID, input.OrganizationSlug)) {
 		targetHooksVersion = conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion)
 		targetHooksConfigJSON = existing.PublishedHooksConfig
 		targetHooksConfigHash = publishedHooksConfigHash
@@ -2465,7 +2471,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// otherwise push an uncleared version onto the org. A held-back rotation
 	// leaves the published credential in place and is reported as deferred.
 	if input.RotateHooksKey {
-		if observabilityEnabled && targetHooksVersion == hooksGeneratorVersion {
+		if observabilityEnabled && !hooksCollision && targetHooksVersion == hooksGeneratorVersion {
 			rotateHooks = true
 		} else {
 			// Publish nothing. This call exists only to carry a new credential
@@ -2491,9 +2497,19 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// their stored fingerprint, never-published ones are left out. Every
 	// decision below works from this plan, so a held plugin's pending changes
 	// neither trigger nor ride along with an automatic publish.
+	hooksChanged := firstPublish ||
+		rotateHooks ||
+		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != targetHooksVersion ||
+		publishedHooksConfigHash != targetHooksConfigHash
+	carryHooks := observabilityEnabled && !hooksChanged
+	carryHooksOrgName, hooksPrefixes := hooksCarryPrefixes(targetHooksConfigJSON, cfg.OrgName)
+	planCfg := cfg
+	if carryHooks {
+		planCfg.HooksOrgName = carryHooksOrgName
+	}
 	plan := allPluginsActive(pluginInfos)
 	if !input.IncludePausedPlugins {
-		plan, err = s.planPausedPlugins(ctx, input.ProjectID, repoOwner, repoName, pluginInfos, publishedMCPFingerprints, cfg, observabilityEnabled)
+		plan, err = s.planPausedPlugins(ctx, input.ProjectID, repoOwner, repoName, pluginInfos, publishedMCPFingerprints, planCfg, observabilityEnabled)
 		if err != nil {
 			return nil, err
 		}
@@ -2506,12 +2522,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// output-affecting config. A credential rotation is hooks-only: it never
 	// treats MCP as changed, so the consumer packages customers installed -- and
 	// the consumer key baked into them -- are carried untouched.
-	hooksChanged := firstPublish ||
-		rotateHooks ||
-		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != targetHooksVersion ||
-		publishedHooksConfigHash != targetHooksConfigHash
-	carryHooks := observabilityEnabled && !hooksChanged
-	carryHooksOrgName, hooksPrefixes := hooksCarryPrefixes(targetHooksConfigJSON, cfg.OrgName)
 
 	// A carried hooks subtree keeps the directory names it was published under,
 	// which diverge from cfg.OrgName after an org rename, and the shared
@@ -2666,6 +2676,9 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	carriedHooks := false
 	if carryHooks {
 		_, carriedHooks = carryHooksSubtree(files, existingFiles, targetHooksConfigJSON, cfg.OrgName)
+		if hooksCollision && !carriedHooks {
+			return nil, oops.E(oops.CodeFailedPrecondition, nil, "Cannot preserve observability packages during a slug conflict because their published files are unavailable. Resolve the plugin slug conflict before publishing.")
+		}
 	}
 	if observabilityEnabled && !carriedHooks {
 		if hooksCandidate == nil {

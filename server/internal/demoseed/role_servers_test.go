@@ -41,7 +41,11 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 		memberships := map[string][]string{}
 		audiences := map[string][]string{}
 		stableAudiences := map[string][]string{}
+		pausedSlugs := []string{}
 		for _, plugin := range plugins {
+			if plugin.AutoSyncEnabled.Valid && !plugin.AutoSyncEnabled.Bool {
+				pausedSlugs = append(pausedSlugs, plugin.Slug)
+			}
 			// Seeded role plugins must remain role-only, beyond the content samples below.
 			if !plugin.IsDefault.Bool {
 				assignments, err := q.ListPluginAssignments(ctx, pluginrepo.ListPluginAssignmentsParams{
@@ -79,6 +83,7 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 			slices.Sort(stableAudiences[plugin.Slug])
 
 		}
+		require.Equal(t, []string{"engineering-essentials"}, pausedSlugs, "the demo shows one paused plugin while the others keep automatic sync")
 		// Representative build and read-only audiences must receive usable content.
 		for _, slug := range []string{"engineer", "read-only-tools"} {
 			require.NotEmpty(t, memberships[slug], "role plugin %s must deliver servers", slug)

@@ -211,10 +211,10 @@ func (e *pluginSlugUnavailableError) Error() string {
 
 func (e *pluginSlugUnavailableError) Unwrap() error { return ErrPluginSlugUnavailable }
 
-// requirePluginSlugPackagesFree applies pluginSlugPackageCollision to slug for
+// RequirePluginSlugPackagesFree applies pluginSlugPackageCollision to slug for
 // pluginID (uuid.Nil for a new plugin). The caller holds the project lock, so
 // no concurrent create or rename can claim the directories in between.
-func requirePluginSlugPackagesFree(ctx context.Context, queries *repo.Queries, organizationID string, projectID, pluginID uuid.UUID, slug string) error {
+func RequirePluginSlugPackagesFree(ctx context.Context, queries *repo.Queries, organizationID string, projectID, pluginID uuid.UUID, slug string) error {
 	rows, err := queries.ListActivePluginsForProject(ctx, repo.ListActivePluginsForProjectParams{ProjectID: projectID, PluginIds: nil})
 	if err != nil {
 		return fmt.Errorf("list plugin slugs: %w", err)
@@ -274,7 +274,7 @@ func (c *PluginMetadataCore) CreateInTransaction(ctx context.Context, tx pgx.Tx,
 	}
 
 	queries := repo.New(tx)
-	if err := requirePluginSlugPackagesFree(ctx, queries, mutation.OrganizationID, mutation.ProjectID, uuid.Nil, slug); err != nil {
+	if err := RequirePluginSlugPackagesFree(ctx, queries, mutation.OrganizationID, mutation.ProjectID, uuid.Nil, slug); err != nil {
 		return PluginMetadataResult{}, err
 	}
 	plugin, err := queries.CreatePlugin(ctx, repo.CreatePluginParams{
@@ -378,7 +378,7 @@ func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx,
 		if !autoSyncAfter {
 			return PluginMetadataResult{}, ErrPluginSlugLockedWhileAutoSyncOff
 		}
-		if err := requirePluginSlugPackagesFree(ctx, queries, mutation.OrganizationID, mutation.ProjectID, mutation.PluginID, slug); err != nil {
+		if err := RequirePluginSlugPackagesFree(ctx, queries, mutation.OrganizationID, mutation.ProjectID, mutation.PluginID, slug); err != nil {
 			return PluginMetadataResult{}, err
 		}
 	}

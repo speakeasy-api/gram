@@ -9,6 +9,7 @@ import (
 	publicationv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 // PublicationRequests records refresh hints in the same transaction as the
@@ -87,12 +88,33 @@ func (r PublicationRequests) projectWithOutcome(ctx context.Context, tx pgx.Tx, 
 	return ProjectPublicationEnqueued, nil
 }
 
-func (r PublicationRequests) Organization(ctx context.Context, tx pgx.Tx, organizationID, actorID string) error {
-	if !r.Enabled {
-		return nil
-	}
+// LockOrganizationPluginPackageContent waits out an auto-sync turn-off check in
+// every project affected by an organization-wide package change. Call it after
+// all admission and plugin row locks, even when publication emission is off.
+// Projects are locked by UUID so concurrent organization changes cannot invert
+// their lock order.
+func LockOrganizationPluginPackageContent(ctx context.Context, tx pgx.Tx, organizationID string) error {
 	if organizationID == "" {
 		return fmt.Errorf("plugin publication requires an organization")
+	}
+	projects, err := projectsrepo.New(tx).ListProjectsByOrganization(ctx, organizationID)
+	if err != nil {
+		return fmt.Errorf("list organization projects for package content lock: %w", err)
+	}
+	for _, project := range projects {
+		if err := repo.New(tx).LockPluginPackageContentShared(ctx, project.ID.String()); err != nil {
+			return fmt.Errorf("lock organization plugin package content: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r PublicationRequests) Organization(ctx context.Context, tx pgx.Tx, organizationID, actorID string) error {
+	if err := LockOrganizationPluginPackageContent(ctx, tx, organizationID); err != nil {
+		return err
+	}
+	if !r.Enabled {
+		return nil
 	}
 	_, err := outbox.Publish(ctx, tx, organizationID, outbox.Message{
 		PublicID:   uuid.Nil,

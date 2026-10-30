@@ -410,9 +410,10 @@ type publicationEvidenceReader interface {
 	ResolvePublicationEvidence(context.Context, string, uuid.UUID, []string) ([]plugindelivery.PublicationEvidence, error)
 }
 
-// readPublicationEvidence projects one plugin's publication evidence, given
-// whether the plugin's auto sync is on. Callers must have checked that a reader
-// is composed.
+// readPublicationEvidence projects one plugin's publication evidence. Whether
+// it awaits a manual sync comes from the evidence itself, which derives it from
+// the plugin's auto sync setting and its package's freshness. Callers must have
+// checked that a reader is composed.
 func (s *PluginsService) readPublicationEvidence(ctx context.Context, principal Principal, projectID uuid.UUID, pluginSlug string) *PluginPublicationEvidence {
 	evidence, _ := s.readPublicationEvidenceWithOthers(ctx, principal, projectID, pluginSlug, nil)
 	return evidence
@@ -447,6 +448,20 @@ func (s *PluginsService) readPublicationEvidenceWithOthers(ctx context.Context, 
 		Packages:           packages,
 		AwaitingManualSync: evidence[target].AwaitingManualSync,
 	}, othersFresh
+}
+
+// AwaitingManualSync reports whether one plugin's change waits for a manual
+// sync, from the publication evidence get_plugin reports to administrators.
+// known is false when no evidence reader is composed or it can't answer.
+func (s *PluginsService) AwaitingManualSync(ctx context.Context, principal Principal, projectID uuid.UUID, pluginSlug string) (awaiting, known bool) {
+	if s == nil || s.publicationEvidence == nil {
+		return false, false
+	}
+	evidence := s.readPublicationEvidence(ctx, principal, projectID, pluginSlug)
+	if evidence.Unavailable {
+		return false, false
+	}
+	return evidence.AwaitingManualSync, true
 }
 
 // PluginsService answers what plugins a project has and what is inside one,

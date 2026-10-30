@@ -144,6 +144,11 @@ func CaptureSkillContent(ctx context.Context, db *pgxpool.Pool, projectID uuid.U
 	}); err != nil {
 		return nil, fmt.Errorf("backfill captured skill observations: %w", err)
 	}
+	if createdVersion && !createdSkill {
+		if err := lockPluginPackageContent(ctx, tx, projectID); err != nil {
+			return nil, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit captured skill transaction: %w", err)
 	}

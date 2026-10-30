@@ -39,13 +39,31 @@ export function MarketplaceCard({
   const description = observabilityEnabled
     ? "This repo is your team's plugin marketplace. The observability plugins are already inside, and any plugins you build in Speakeasy later will be published here too."
     : "This repo is your team's plugin marketplace. Any plugins you build in Speakeasy are published here; the observability plugins are disabled for this project.";
-  // upToDate is undefined/null when freshness can't be determined (a
-  // connection that predates fingerprinting) — only the explicit `false`
-  // case is a known, real drift worth warning about.
+  const freshnessKnown = typeof publishStatus.upToDate === "boolean";
+  const isCurrent = publishStatus.upToDate === true;
   const hasUnpublishedChanges = publishStatus.upToDate === false;
   // False when the only pending changes belong to plugins whose auto sync is
   // off: no automatic publish will send them.
   const changesSyncAutomatically = publishStatus.automaticSyncPending !== false;
+  const statusDot = isCurrent
+    ? "bg-success-default"
+    : hasUnpublishedChanges
+      ? "bg-warning-default"
+      : "bg-muted-foreground";
+  const statusTextColor = isCurrent
+    ? "text-default-success"
+    : hasUnpublishedChanges
+      ? "text-default-warning"
+      : "text-muted-foreground";
+  let statusMessage = "Marketplace set up";
+  if (!freshnessKnown) {
+    statusMessage =
+      "Sync status is unavailable. Check again shortly or sync changes.";
+  } else if (hasUnpublishedChanges) {
+    statusMessage = changesSyncAutomatically
+      ? "Not up to date yet. Changes sync automatically, or click 'Sync changes' to publish now"
+      : "Not up to date. The waiting changes belong to plugins with auto sync off, so they publish only when you click 'Sync changes'";
+  }
 
   return (
     <Collapsible
@@ -57,15 +75,23 @@ export function MarketplaceCard({
           <span className="text-muted-foreground font-mono text-xs font-medium tracking-wide uppercase">
             Your project marketplace
           </span>
-          {hasUnpublishedChanges ? (
-            <Badge variant="warning">
-              <Badge.Text>Needs syncing</Badge.Text>
-            </Badge>
-          ) : (
-            <Badge variant="success">
-              <Badge.Text>Up to date</Badge.Text>
-            </Badge>
-          )}
+          <Badge
+            variant={
+              hasUnpublishedChanges
+                ? "warning"
+                : isCurrent
+                  ? "success"
+                  : "neutral"
+            }
+          >
+            <Badge.Text>
+              {hasUnpublishedChanges
+                ? "Needs syncing"
+                : isCurrent
+                  ? "Up to date"
+                  : "Sync status unavailable"}
+            </Badge.Text>
+          </Badge>
           <CollapsibleTrigger
             aria-label="Toggle project marketplace details"
             className="text-muted-foreground hover:text-foreground focus-visible:ring-ring ml-auto flex size-8 shrink-0 items-center justify-center focus-visible:ring-2 focus-visible:outline-none [&[data-state=open]>svg]:rotate-180"
@@ -112,37 +138,21 @@ export function MarketplaceCard({
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
             <span className="text-muted-foreground inline-flex items-center gap-1.5 text-sm">
               <span className="relative flex h-2.5 w-2.5">
+                {freshnessKnown && (
+                  <span
+                    className={`absolute inline-flex h-full w-full motion-safe:animate-ping rounded-full opacity-40 ${statusDot}`}
+                  />
+                )}
                 <span
-                  className={
-                    hasUnpublishedChanges
-                      ? "absolute inline-flex h-full w-full motion-safe:animate-ping rounded-full bg-warning-default opacity-40"
-                      : "absolute inline-flex h-full w-full motion-safe:animate-ping rounded-full bg-success-default opacity-40"
-                  }
-                />
-                <span
-                  className={
-                    hasUnpublishedChanges
-                      ? "relative inline-flex h-2.5 w-2.5 rounded-full bg-warning-default"
-                      : "relative inline-flex h-2.5 w-2.5 rounded-full bg-success-default"
-                  }
+                  className={`relative inline-flex h-2.5 w-2.5 rounded-full ${statusDot}`}
                 />
               </span>
-              <span
-                className={
-                  hasUnpublishedChanges
-                    ? "font-medium text-default-warning"
-                    : "font-medium text-default-success"
-                }
-              >
-                {!hasUnpublishedChanges
-                  ? "Marketplace set up"
-                  : changesSyncAutomatically
-                    ? "Not up to date yet. Changes sync automatically, or click 'Sync changes' to publish now"
-                    : "Not up to date. The waiting changes belong to plugins with auto sync off, so they publish only when you click 'Sync changes'"}
+              <span className={`font-medium ${statusTextColor}`}>
+                {statusMessage}
               </span>
             </span>
             <div className="flex flex-wrap items-center gap-2">
-              {hasUnpublishedChanges && onSync && (
+              {!isCurrent && onSync && (
                 <button
                   type="button"
                   onClick={onSync}

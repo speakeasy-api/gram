@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -137,6 +138,9 @@ func (s *Service) classifyPausedPlugins(
 
 	plan := pausedPluginPlan{Active: make([]PluginInfo, 0, len(live)), Held: nil, Omitted: nil}
 	pending := make(map[string]PluginInfo)
+	if err := requirePausedPluginPackagesFree(live, paused, fingerprintCfg); err != nil {
+		return pausedPluginPlan{}, nil, nil, err
+	}
 	for _, info := range live {
 		if !paused[info.Slug] {
 			plan.Active = append(plan.Active, info)
@@ -162,9 +166,11 @@ func (s *Service) classifyPausedPlugins(
 
 // holdPendingPlugins finishes planPausedPlugins: it reads each pending
 // plugin's published files from the repo and holds it, or falls back to its
-// live state when its files are unreadable or it shares a directory with
-// another plugin. entriesOnly reads just the files its manifest entry comes
-// from, for a caller that never pushes the held files.
+// live state when its files are unreadable. Shared package directories refuse
+// the publish because their files cannot be held independently. entriesOnly reads just the files its manifest entry comes
+// from, for a caller that never pushes the held files; such a caller reads a
+// missing or empty repo as a failed read rather than one with nothing to hold,
+// as the repo it compares with was published.
 func (s *Service) holdPendingPlugins(
 	ctx context.Context,
 	projectID uuid.UUID,
@@ -185,6 +191,8 @@ func (s *Service) holdPendingPlugins(
 		return ok && held && (!entriesOnly || slices.Contains(heldEntryPaths(owner), filePath))
 	})
 	switch {
+	case errors.Is(err, ghclient.ErrRepoNotFound) && entriesOnly:
+		return pausedPluginPlan{}, fmt.Errorf("get published files of plugins with auto sync off: %w", err)
 	case errors.Is(err, ghclient.ErrRepoNotFound):
 		existing = nil
 	case err != nil:
@@ -193,11 +201,7 @@ func (s *Service) holdPendingPlugins(
 
 	for _, slug := range slices.Sorted(maps.Keys(pending)) {
 		if slices.ContainsFunc(pluginSubtreePrefixes(slug), func(prefix string) bool { return owners[prefix] != slug }) {
-			s.logger.WarnContext(ctx, "a plugin with auto sync off shares a package directory with another plugin; publishing its current state instead",
-				attr.SlogProjectID(projectID.String()),
-			)
-			plan.Active = append(plan.Active, pending[slug])
-			continue
+			return pausedPluginPlan{}, oops.E(oops.CodeFailedPrecondition, nil, "Plugin %s shares a package directory with another plugin. Turn on auto sync or resolve the slug conflict before publishing automatically.", slug)
 		}
 		files := make(map[string][]byte)
 		for filePath, content := range existing {
@@ -413,9 +417,17 @@ func publishMCPFingerprints(active []PluginInfo, held []heldPlugin, cfg Generate
 // fingerprint is computed with the same configuration publishProject uses.
 // It reads the plugin's live state in tx. lockContent first takes the package
 // content lock exclusively, which the check that decides must do so no change
-// commits unseen before its write; it waits only once there is something to
-// compare.
+// commits unseen before its write. Configuration and fingerprints must both
+// be read after the lock, including changes made at organization scope.
 func (s *Service) requirePluginSyncedForPause(ctx context.Context, tx pgx.Tx, plugin repo.Plugin, lockContent bool) error {
+	if lockContent {
+		if err := s.repo.WithTx(tx).LockPluginPackageContent(ctx, plugin.ProjectID.String()); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock plugin package content").LogError(ctx, s.logger)
+		}
+	}
+	if err := RequirePluginSlugPackagesFree(ctx, s.repo.WithTx(tx), plugin.OrganizationID, plugin.ProjectID, plugin.ID, plugin.Slug); err != nil {
+		return oops.E(oops.CodeFailedPrecondition, err, "Cannot turn off auto sync: %s", err)
+	}
 	conn, err := s.repo.WithTx(tx).GetGitHubConnection(ctx, plugin.ProjectID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
@@ -448,11 +460,6 @@ func (s *Service) requirePluginSyncedForPause(ctx context.Context, tx pgx.Tx, pl
 	}
 	cfg := s.generateConfig(ctx, project.ID, project.Slug, project.ProjectSlug, plugin.ProjectID, serverURL, conn.PublishedHooksConfig)
 
-	if lockContent {
-		if err := s.repo.WithTx(tx).LockPluginPackageContent(ctx, plugin.ProjectID.String()); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "lock plugin package content").LogError(ctx, s.logger)
-		}
-	}
 	infos, err := s.resolvePluginInfosInTx(ctx, tx, project.ID, plugin.ProjectID, serverURL, plugin.ID)
 	if err != nil {
 		return err
@@ -467,6 +474,25 @@ func (s *Service) requirePluginSyncedForPause(ctx context.Context, tx pgx.Tx, pl
 	}
 	if current != stored {
 		return oops.E(oops.CodeFailedPrecondition, ErrPluginHasUnsyncedChanges, "%s", pluginHasUnsyncedChangesMessage)
+	}
+	return nil
+}
+
+// requirePausedPluginPackagesFree rejects legacy directory collisions rather
+// than silently publishing changes to a plugin whose auto sync is off. Reads
+// use the same check, so invalid plans report unknown publication evidence.
+func requirePausedPluginPackagesFree(live []PluginInfo, paused map[string]bool, cfg GenerateConfig) error {
+	slugs := make([]string, 0, len(live))
+	for _, info := range live {
+		slugs = append(slugs, info.Slug)
+	}
+	for _, slug := range slugs {
+		if !paused[slug] {
+			continue
+		}
+		if err := pluginSlugPackageCollision(slug, slugs, []string{conv.Default(cfg.HooksOrgName, cfg.OrgName)}); err != nil {
+			return oops.E(oops.CodeFailedPrecondition, err, "Plugin %s cannot keep auto sync off because its package directories conflict. Turn on auto sync or resolve the slug conflict before publishing automatically.", slug)
+		}
 	}
 	return nil
 }

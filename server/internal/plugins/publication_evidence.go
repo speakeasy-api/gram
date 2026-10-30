@@ -8,11 +8,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 // PublicationEvidence contains non-secret evidence for one selected plugin
-// package. Fresh is nil when the project has no usable published fingerprint.
+// package. Fresh is nil when it is unknown: the project has no usable
+// published fingerprint and the plugin's auto sync is on.
 type PublicationEvidence struct {
 	PluginSlug    string
 	NotConfigured bool
@@ -23,6 +25,21 @@ type PublicationEvidence struct {
 	// own package has changes waiting, or was never published, so only a
 	// manual sync publishes it.
 	AwaitingManualSync bool
+}
+
+// ErrPublicationEvidenceUnavailable is why a service can't resolve publication
+// evidence: it has no authorization engine to check the caller with, as a
+// publisher built by NewPublisher does not.
+var ErrPublicationEvidenceUnavailable = errors.New("plugins service cannot authorize publication evidence")
+
+// CanResolvePublicationEvidence reports whether ResolvePublicationEvidence can
+// answer, so a composition root can refuse a service that would only ever
+// report evidence as unavailable.
+func (s *Service) CanResolvePublicationEvidence() error {
+	if s == nil || s.authz == nil {
+		return ErrPublicationEvidenceUnavailable
+	}
+	return nil
 }
 
 // PublicationPackageAddress is the resolved address used by a plugin package.
@@ -39,7 +56,7 @@ type PublicationPackageAddress struct {
 // and whose changes are held, which it reads from the repo once per published
 // state. It does not expose the marketplace bearer URL or mint credentials.
 func (s *Service) ResolvePublicationEvidence(ctx context.Context, organizationID string, projectID uuid.UUID, pluginSlugs []string) ([]PublicationEvidence, error) {
-	if s == nil || s.authz == nil || organizationID == "" {
+	if err := s.CanResolvePublicationEvidence(); err != nil || organizationID == "" {
 		return nil, fmt.Errorf("publication evidence authorization unavailable")
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}); err != nil {
@@ -87,7 +104,33 @@ func (s *Service) ResolvePublicationEvidence(ctx context.Context, organizationID
 	}
 
 	if len(conn.PublishedMcpFingerprints) == 0 {
-		return evidenceWithAddresses(selectedInfos, nil, false), nil
+		// A connection that predates fingerprinting can't say whether a
+		// plugin with auto sync on is current. One with auto sync off records
+		// no fingerprint, so an automatic publish leaves it out: it is not
+		// current, and only a manual sync publishes it.
+		pausedSlugs, err := s.repo.ListAutoSyncPausedPluginSlugs(ctx, projectID)
+		if err != nil {
+			return nil, fmt.Errorf("list plugins with auto sync off: %w", err)
+		}
+		paused := make(map[string]bool, len(pausedSlugs))
+		for _, slug := range pausedSlugs {
+			paused[slug] = true
+		}
+		cfg := s.generateConfig(ctx, project.ID, project.Slug, project.ProjectSlug, projectID, serverURL, conn.PublishedHooksConfig)
+		if publishedName := naming.PublishedHooksOrgName(conn.PublishedHooksConfig); publishedName != "" && hooksPackagesCollide(allInfos, cfg.OrgName) && !hooksPackagesCollide(allInfos, publishedName) {
+			cfg.HooksOrgName = publishedName
+		}
+		if err := requirePausedPluginPackagesFree(allInfos, paused, cfg); err != nil {
+			return nil, err
+		}
+		result := evidenceWithAddresses(selectedInfos, nil, false)
+		for i := range result {
+			if paused[result[i].PluginSlug] {
+				result[i].Fresh = new(false)
+				result[i].AwaitingManualSync = true
+			}
+		}
+		return result, nil
 	}
 	observabilityEnabled, err := s.projectObservabilityEnabled(ctx, projectID)
 	if err != nil {

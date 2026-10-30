@@ -96,7 +96,7 @@ function plugin(agentPluginsV1Compatible: boolean): Plugin {
 function renderCard(
   agentPluginsV1Compatible: boolean,
   overrides: Partial<Plugin> = {},
-  publishStatus: PublishStatusResult | undefined = undefined,
+  publishStatus?: PublishStatusResult,
 ): void {
   render(
     <MemoryRouter>
