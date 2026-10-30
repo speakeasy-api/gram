@@ -359,11 +359,7 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 		}
 		if rejection != sharedResourceAccepted {
 			s.recordSharedResourceRejection(ctx, logger, issuer.authorizationServer.issuerID, mcpmetrics.OAuthFlowStageToken, rejection, resources)
-			code := oautherr.CodeInvalidTarget
-			if rejection == sharedResourceMissing {
-				code = oautherr.CodeInvalidRequest
-			}
-			return writeTokenError(ctx, w, logger, http.StatusBadRequest, code, sharedResourceDescription(rejection))
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, sharedResourceDescription(rejection))
 		}
 	default:
 		creds := extractClientCredentials(r)

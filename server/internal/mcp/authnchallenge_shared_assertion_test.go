@@ -138,7 +138,7 @@ func TestSharedAuthorizationServer_AssertionResourceRefusalDoesNotConsumeIDJAG(t
 		resources []string
 		code      string
 	}{
-		{nil, "invalid_request"}, {[]string{resource, resource}, "invalid_target"},
+		{nil, "invalid_target"}, {[]string{resource, resource}, "invalid_target"},
 		{[]string{resource + "/"}, "invalid_target"}, {[]string{"not-a-resource"}, "invalid_target"},
 		{[]string{foreign.resource(ti, foreign.slugA)}, "invalid_target"},
 		{[]string{ti.serverURL.String() + "/mcp/unknown"}, "invalid_target"},

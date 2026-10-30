@@ -589,8 +589,8 @@ func (s *Service) handleTokenJWTBearerGrant(
 	})
 	if idjag.ReasonOf(err) == idjag.ReasonResourceNotIndicated {
 		logger.InfoContext(ctx, "oauth ID-JAG token request rejected", attr.SlogError(err))
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, oautherr.CodeInvalidRequest)
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, sharedResourceDescription(sharedResourceMissing))
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, oautherr.CodeInvalidTarget)
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, sharedResourceDescription(sharedResourceMissing))
 	}
 	if err != nil {
 		logger.InfoContext(ctx, "oauth ID-JAG token request rejected", attr.SlogError(err))
