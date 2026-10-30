@@ -22743,6 +22743,104 @@ paths:
             tags:
                 - assistants
             x-speakeasy-name-override: list
+    /rpc/assistants.listExecutionProfiles:
+        get:
+            description: List the upstream credentials an assistant's turns use on each MCP server it reaches, per root trigger and per whether the turn acts for a user. Each server shows its current choice, or why it has none, and the credentials that can be chosen. Requires assistant read access.
+            operationId: listAssistantExecutionProfiles
+            parameters:
+                - allowEmptyValue: true
+                  description: The assistant ID.
+                  in: query
+                  name: assistant_id
+                  required: true
+                  schema:
+                    description: The assistant ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListExecutionProfilesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listExecutionProfiles assistants
+            tags:
+                - assistants
+            x-speakeasy-name-override: listExecutionProfiles
+            x-speakeasy-react-hook:
+                name: AssistantExecutionProfiles
     /rpc/assistants.sendMessage:
         post:
             description: Send a message from the dashboard to an assistant as the calling user. Continue an existing conversation by passing its chat_id (from listChats), or omit chat_id to start a new conversation — the server mints and returns a fresh chat id. The reply is delivered asynchronously; poll the chat service (loadChat) to read it.
@@ -22838,6 +22936,101 @@ paths:
             x-speakeasy-name-override: sendMessage
             x-speakeasy-react-hook:
                 name: SendAssistantMessage
+    /rpc/assistants.setExecutionProfileChoice:
+        post:
+            description: 'Choose the upstream credential an assistant''s turns use on one MCP server, for one root trigger and execution context: an auth client, no upstream authentication, or back to the choice the next turn makes on its own. Turns already running keep their choice; later turns use the new one. Turns that act for nobody can use shared credentials only. Choosing grants nothing: each request checks the turn may use the credential. Requires assistant write access.'
+            operationId: setAssistantExecutionProfileChoice
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetExecutionProfileChoiceRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AssistantExecutionProfile'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: setExecutionProfileChoice assistants
+            tags:
+                - assistants
+            x-speakeasy-name-override: setExecutionProfileChoice
+            x-speakeasy-react-hook:
+                name: SetAssistantExecutionProfileChoice
     /rpc/assistants.update:
         post:
             description: Update an assistant.
@@ -99247,6 +99440,38 @@ components:
                 - status
                 - created_at
                 - updated_at
+        AssistantExecutionProfile:
+            type: object
+            properties:
+                execution_context:
+                    type: string
+                    description: Whether the turns act for the user their event identified.
+                    enum:
+                        - user_backed
+                        - userless
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExecutionProfileServer'
+                    description: Each server the turns reach.
+                trigger_instance_id:
+                    type: string
+                    description: The root trigger.
+                    format: uuid
+                trigger_name:
+                    type: string
+                    description: The root trigger's name.
+                version:
+                    type: integer
+                    description: The latest version; 0 before the first turn or change.
+                    format: int64
+            description: The upstream credentials an assistant's turns under one root trigger and execution context use.
+            required:
+                - trigger_instance_id
+                - trigger_name
+                - execution_context
+                - version
+                - servers
         AssistantMCPServerRef:
             type: object
             properties:
@@ -106451,6 +106676,69 @@ components:
                     example: dev@acme.corp
             required:
                 - email
+        ExecutionProfileOption:
+            type: object
+            properties:
+                auth_client_id:
+                    type: string
+                    description: The auth client.
+                    format: uuid
+                client_type:
+                    type: string
+                    description: The auth client's type.
+                name:
+                    type: string
+                    description: The auth client's name.
+            description: A credential a server offers that the profile's turns can use.
+            required:
+                - auth_client_id
+                - name
+                - client_type
+        ExecutionProfileServer:
+            type: object
+            properties:
+                auth_client_id:
+                    type: string
+                    description: The chosen auth client. Absent with a choice means no upstream authentication.
+                    format: uuid
+                chosen:
+                    type: boolean
+                    description: Whether the server has a choice.
+                gap_reason:
+                    type: string
+                    description: Why a server without a choice gets none on its own.
+                    enum:
+                        - selection_required
+                        - personal_requires_user
+                        - no_client
+                        - setup_incomplete
+                        - upstream_auth_undecided
+                mcp_server_id:
+                    type: string
+                    description: The MCP server.
+                    format: uuid
+                no_auth_allowed:
+                    type: boolean
+                    description: Whether the server was decided to need no upstream authentication, so no-auth can be chosen.
+                options:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExecutionProfileOption'
+                    description: The credentials that can be chosen.
+                source:
+                    enum:
+                        - admin
+                        - issuance
+                        - backfill
+                        - automatic
+                    type: string
+                    x-speakeasy-name-override: ExecutionProfileChoiceSource
+            description: One MCP server an assistant's turns reach through Speakeasy.
+            required:
+                - mcp_server_id
+                - chosen
+                - options
+                - no_auth_allowed
         ExplainResourceAccessResult:
             type: object
             properties:
@@ -112269,6 +112557,16 @@ components:
                 - events
                 - total_count
                 - total_count_capped
+        ListExecutionProfilesResult:
+            type: object
+            properties:
+                profiles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AssistantExecutionProfile'
+                    description: Each root trigger and execution context.
+            required:
+                - profiles
         ListExternalCredentialsResult:
             type: object
             properties:
@@ -124567,6 +124865,48 @@ components:
                     description: Whether Speakeasy may sign with the issuer.
             required:
                 - enabled
+        SetExecutionProfileChoiceRequestBody:
+            type: object
+            properties:
+                assistant_id:
+                    type: string
+                    description: The assistant ID.
+                    format: uuid
+                auth_client_id:
+                    type: string
+                    description: The auth client to use.
+                    format: uuid
+                automatic:
+                    type: boolean
+                    description: Remove the choice so the next turn makes it from the server's configuration.
+                execution_context:
+                    type: string
+                    description: Whether the turns act for the user their event identified.
+                    enum:
+                        - user_backed
+                        - userless
+                expected_version:
+                    type: integer
+                    description: The profile version the change was decided from, from a fresh listExecutionProfiles read. A profile that changed since is refused with a conflict.
+                    format: int64
+                    minimum: 0
+                mcp_server_id:
+                    type: string
+                    description: The MCP server.
+                    format: uuid
+                no_auth:
+                    type: boolean
+                    description: Use no upstream authentication.
+                trigger_instance_id:
+                    type: string
+                    description: The root trigger.
+                    format: uuid
+            required:
+                - assistant_id
+                - trigger_instance_id
+                - execution_context
+                - mcp_server_id
+                - expected_version
         SetIdentityProviderConnectionSetupMethodRequestBody:
             type: object
             properties:

@@ -28,6 +28,7 @@ var (
 	AwsIamCredentialV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.aws_iam_credential_event_v1", "Emitted when changes to AWS IAM external credentials are made")
 	AwsKmsKeyV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.aws_kms_key_event_v1", "Emitted when changes to AWS KMS external keys are made")
 	AssistantIdentityV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_identity_event_v1", "Emitted when workload identity is configured for an assistant")
+	AssistantExecutionProfileV1            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_execution_profile_event_v1", "Emitted when the upstream credentials an assistant's turns use are changed")
 	AssistantToolCallV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_tool_call_event_v1", "Emitted when an assistant executes a tool call")
 	AssistantWakeV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_wake_event_v1", "Emitted when an assistant wake is scheduled or canceled")
 	BillingMetadataV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.billing_metadata_event_v1", "Emitted when changes to billing metadata are made")

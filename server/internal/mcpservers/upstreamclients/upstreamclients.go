@@ -172,4 +172,7 @@ const (
 	// SelectionSourceNewMember is a choice recorded for a gateway member
 	// added after the credential was issued, the first time it was used.
 	SelectionSourceNewMember = "new_member"
+
+	// SelectionSourceAdmin is a choice an administrator made.
+	SelectionSourceAdmin = "admin"
 )

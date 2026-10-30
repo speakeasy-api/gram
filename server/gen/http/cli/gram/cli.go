@@ -131,7 +131,7 @@ func UsageCommands() []string {
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"organization-assets upload-organization-image",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
-		"assistants (list-assistants|get-assistant|create-assistant|upgrade-assistant-identity|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
+		"assistants (list-assistants|get-assistant|create-assistant|upgrade-assistant-identity|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant|list-execution-profiles|set-execution-profile-choice)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|logout-everywhere|register|info|transfer-out|transfer-in)",
 		"auth-clients (list-auth-clients|get-auth-client|update-auth-client|create-auth-client|attach-auth-client-to-mcp-server|set-auth-client-headers|detach-auth-client-from-mcp-server|list-mcp-server-auth-client-choices|list-issuance-profiles|set-issuance-profile|delete-issuance-profile|get-mcp-server-authentication|set-mcp-server-upstream-auth-requirement|get-auth-client-audience|set-auth-client-audience)",
@@ -909,6 +909,16 @@ func ParseEndpoint(
 		assistantsEnsureManagedAssistantFlags                = flag.NewFlagSet("ensure-managed-assistant", flag.ExitOnError)
 		assistantsEnsureManagedAssistantSessionTokenFlag     = assistantsEnsureManagedAssistantFlags.String("session-token", "", "")
 		assistantsEnsureManagedAssistantProjectSlugInputFlag = assistantsEnsureManagedAssistantFlags.String("project-slug-input", "", "")
+
+		assistantsListExecutionProfilesFlags                = flag.NewFlagSet("list-execution-profiles", flag.ExitOnError)
+		assistantsListExecutionProfilesAssistantIDFlag      = assistantsListExecutionProfilesFlags.String("assistant-id", "REQUIRED", "")
+		assistantsListExecutionProfilesSessionTokenFlag     = assistantsListExecutionProfilesFlags.String("session-token", "", "")
+		assistantsListExecutionProfilesProjectSlugInputFlag = assistantsListExecutionProfilesFlags.String("project-slug-input", "", "")
+
+		assistantsSetExecutionProfileChoiceFlags                = flag.NewFlagSet("set-execution-profile-choice", flag.ExitOnError)
+		assistantsSetExecutionProfileChoiceBodyFlag             = assistantsSetExecutionProfileChoiceFlags.String("body", "REQUIRED", "")
+		assistantsSetExecutionProfileChoiceSessionTokenFlag     = assistantsSetExecutionProfileChoiceFlags.String("session-token", "", "")
+		assistantsSetExecutionProfileChoiceProjectSlugInputFlag = assistantsSetExecutionProfileChoiceFlags.String("project-slug-input", "", "")
 
 		auditlogsFlags = flag.NewFlagSet("auditlogs", flag.ContinueOnError)
 
@@ -5592,6 +5602,8 @@ func ParseEndpoint(
 	assistantsInterruptTurnFlags.Usage = assistantsInterruptTurnUsage
 	assistantsGetManagedAssistantFlags.Usage = assistantsGetManagedAssistantUsage
 	assistantsEnsureManagedAssistantFlags.Usage = assistantsEnsureManagedAssistantUsage
+	assistantsListExecutionProfilesFlags.Usage = assistantsListExecutionProfilesUsage
+	assistantsSetExecutionProfileChoiceFlags.Usage = assistantsSetExecutionProfileChoiceUsage
 
 	auditlogsFlags.Usage = auditlogsUsage
 	auditlogsListFlags.Usage = auditlogsListUsage
@@ -7246,6 +7258,12 @@ func ParseEndpoint(
 
 			case "ensure-managed-assistant":
 				epf = assistantsEnsureManagedAssistantFlags
+
+			case "list-execution-profiles":
+				epf = assistantsListExecutionProfilesFlags
+
+			case "set-execution-profile-choice":
+				epf = assistantsSetExecutionProfileChoiceFlags
 
 			}
 
@@ -10539,6 +10557,12 @@ func ParseEndpoint(
 			case "ensure-managed-assistant":
 				endpoint = c.EnsureManagedAssistant()
 				data, err = assistantsc.BuildEnsureManagedAssistantPayload(*assistantsEnsureManagedAssistantSessionTokenFlag, *assistantsEnsureManagedAssistantProjectSlugInputFlag)
+			case "list-execution-profiles":
+				endpoint = c.ListExecutionProfiles()
+				data, err = assistantsc.BuildListExecutionProfilesPayload(*assistantsListExecutionProfilesAssistantIDFlag, *assistantsListExecutionProfilesSessionTokenFlag, *assistantsListExecutionProfilesProjectSlugInputFlag)
+			case "set-execution-profile-choice":
+				endpoint = c.SetExecutionProfileChoice()
+				data, err = assistantsc.BuildSetExecutionProfileChoicePayload(*assistantsSetExecutionProfileChoiceBodyFlag, *assistantsSetExecutionProfileChoiceSessionTokenFlag, *assistantsSetExecutionProfileChoiceProjectSlugInputFlag)
 			}
 		case "auditlogs":
 			c := auditlogsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -16235,6 +16259,8 @@ func assistantsUsage() {
 	fmt.Fprintln(os.Stderr, `    interrupt-turn: Stop whatever a conversation is currently generating. Cancels turns still queued on the conversation's thread and interrupts the turn in flight on the assistant runtime, so the reply stops where it is rather than finishing in the background. Idempotent and safe to call when nothing is running: `+"`"+`stopped`+"`"+` is false when the reply had already finished.`)
 	fmt.Fprintln(os.Stderr, `    get-managed-assistant: Get the project's built-in Project Assistant if it exists. Returns 404 when no managed assistant has been provisioned yet — call ensureManagedAssistant to create one.`)
 	fmt.Fprintln(os.Stderr, `    ensure-managed-assistant: Get the project's built-in Project Assistant, provisioning it on first access. Idempotent — safe to call on every sidebar open.`)
+	fmt.Fprintln(os.Stderr, `    list-execution-profiles: List the upstream credentials an assistant's turns use on each MCP server it reaches, per root trigger and per whether the turn acts for a user. Each server shows its current choice, or why it has none, and the credentials that can be chosen. Requires assistant read access.`)
+	fmt.Fprintln(os.Stderr, `    set-execution-profile-choice: Choose the upstream credential an assistant's turns use on one MCP server, for one root trigger and execution context: an auth client, no upstream authentication, or back to the choice the next turn makes on its own. Turns already running keep their choice; later turns use the new one. Turns that act for nobody can use shared credentials only. Choosing grants nothing: each request checks the turn may use the credential. Requires assistant write access.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s assistants COMMAND --help\n", os.Args[0])
@@ -16451,6 +16477,50 @@ func assistantsEnsureManagedAssistantUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants ensure-managed-assistant --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantsListExecutionProfilesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants list-execution-profiles", os.Args[0])
+	fmt.Fprint(os.Stderr, " -assistant-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the upstream credentials an assistant's turns use on each MCP server it reaches, per root trigger and per whether the turn acts for a user. Each server shows its current choice, or why it has none, and the credentials that can be chosen. Requires assistant read access.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -assistant-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants list-execution-profiles --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantsSetExecutionProfileChoiceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants set-execution-profile-choice", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Choose the upstream credential an assistant's turns use on one MCP server, for one root trigger and execution context: an auth client, no upstream authentication, or back to the choice the next turn makes on its own. Turns already running keep their choice; later turns use the new one. Turns that act for nobody can use shared credentials only. Choosing grants nothing: each request checks the turn may use the credential. Requires assistant write access.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants set-execution-profile-choice --body '{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"automatic\": false,\n      \"execution_context\": \"userless\",\n      \"expected_version\": 1,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"no_auth\": false,\n      \"trigger_instance_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // auditlogsUsage displays the usage of the auditlogs command and its

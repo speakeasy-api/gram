@@ -12,6 +12,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const serversAttachAssistantServer = `-- name: ServersAttachAssistantServer :exec
+INSERT INTO assistant_mcp_servers (id, assistant_id, mcp_server_id, project_id)
+VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid)
+`
+
+type ServersAttachAssistantServerParams struct {
+	ID          uuid.UUID
+	AssistantID uuid.UUID
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) ServersAttachAssistantServer(ctx context.Context, arg ServersAttachAssistantServerParams) error {
+	_, err := q.db.Exec(ctx, serversAttachAssistantServer,
+		arg.ID,
+		arg.AssistantID,
+		arg.McpServerID,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const serversInsertAgentConnectGrant = `-- name: ServersInsertAgentConnectGrant :exec
 INSERT INTO principal_grants
   (id, organization_id, principal_urn, scope, selectors)
@@ -701,6 +723,93 @@ func (q *Queries) ServersInsertEngineeringEssentialsServers(ctx context.Context,
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const serversInsertExecutionProfile = `-- name: ServersInsertExecutionProfile :exec
+INSERT INTO execution_selection_profiles
+  (id, organization_id, project_id, assistant_id, trigger_instance_id, execution_context)
+VALUES
+  ($1::uuid, $2::text, $3::uuid, $4::uuid,
+   $5::uuid, $6::text)
+`
+
+type ServersInsertExecutionProfileParams struct {
+	ID                uuid.UUID
+	OrgID             string
+	ProjectID         uuid.UUID
+	AssistantID       uuid.UUID
+	TriggerInstanceID uuid.UUID
+	ExecutionContext  string
+}
+
+// The upstream credential an administrator chose for an assistant's turns
+// under one root trigger and execution context, as version 1 of its profile.
+func (q *Queries) ServersInsertExecutionProfile(ctx context.Context, arg ServersInsertExecutionProfileParams) error {
+	_, err := q.db.Exec(ctx, serversInsertExecutionProfile,
+		arg.ID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.TriggerInstanceID,
+		arg.ExecutionContext,
+	)
+	return err
+}
+
+const serversInsertExecutionProfileChoice = `-- name: ServersInsertExecutionProfileChoice :exec
+INSERT INTO upstream_client_selections
+  (id, project_id, organization_id, credential_kind, credential_id,
+   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
+   auth_client_id, auth_client_attachment_scope, source)
+SELECT $1::uuid, $2::uuid, $3::text, 'execution_profile_version',
+       $4::uuid, $5::uuid, ac.remote_session_client_id,
+       NULL, FALSE, ac.id, ac.attachment_scope, 'admin'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = $6::uuid AND ac.organization_id = $3::text
+`
+
+type ServersInsertExecutionProfileChoiceParams struct {
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	OrgID        string
+	VersionID    uuid.UUID
+	McpServerID  uuid.UUID
+	AuthClientID uuid.UUID
+}
+
+func (q *Queries) ServersInsertExecutionProfileChoice(ctx context.Context, arg ServersInsertExecutionProfileChoiceParams) error {
+	_, err := q.db.Exec(ctx, serversInsertExecutionProfileChoice,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.VersionID,
+		arg.McpServerID,
+		arg.AuthClientID,
+	)
+	return err
+}
+
+const serversInsertExecutionProfileVersion = `-- name: ServersInsertExecutionProfileVersion :exec
+INSERT INTO execution_selection_profile_versions
+  (id, profile_id, organization_id, project_id, version, source)
+VALUES ($1::uuid, $2::uuid, $3::text, $4::uuid, 1, 'admin')
+`
+
+type ServersInsertExecutionProfileVersionParams struct {
+	ID        uuid.UUID
+	ProfileID uuid.UUID
+	OrgID     string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ServersInsertExecutionProfileVersion(ctx context.Context, arg ServersInsertExecutionProfileVersionParams) error {
+	_, err := q.db.Exec(ctx, serversInsertExecutionProfileVersion,
+		arg.ID,
+		arg.ProfileID,
+		arg.OrgID,
+		arg.ProjectID,
+	)
+	return err
 }
 
 const serversInsertGatewayEndpoints = `-- name: ServersInsertGatewayEndpoints :exec
