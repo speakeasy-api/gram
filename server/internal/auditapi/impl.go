@@ -99,6 +99,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 			Valid: false,
 		},
 		ActorID:                conv.PtrToPGTextEmpty(payload.ActorID),
+		ActorType:              pgtype.Text{String: "", Valid: false},
 		Action:                 conv.PtrToPGTextEmpty(payload.Action),
 		SubjectType:            conv.PtrToPGTextEmpty(payload.SubjectType),
 		SubjectID:              conv.PtrToPGTextEmpty(payload.SubjectID),
@@ -132,6 +133,10 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit logs").LogError(ctx, s.logger)
 	}
 
+	return s.customerPage(ctx, authCtx.ActiveOrganizationID, rows)
+}
+
+func (s *Service) customerPage(ctx context.Context, organizationID string, rows []repo.ListAuditLogsRow) (*gen.ListAuditLogsResult, error) {
 	logs := make([]*gen.AuditLog, 0, min(len(rows), listAuditLogsPageSize))
 	for _, row := range rows[:min(len(rows), listAuditLogsPageSize)] {
 		log, err := toAuditLog(row)
@@ -154,7 +159,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 			actorIDs = append(actorIDs, log.ActorID)
 		}
 	}
-	speakeasyActors, err := s.speakeasyActorIDs(ctx, authCtx.ActiveOrganizationID, actorIDs)
+	speakeasyActors, err := s.speakeasyActorIDs(ctx, organizationID, actorIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving audit actor identities").LogError(ctx, s.logger)
 	}

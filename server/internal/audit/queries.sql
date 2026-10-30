@@ -65,6 +65,13 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) AS latest ON TRUE;
 
+-- name: AuditProjectBelongsToOrganization :one
+-- Historical audit targeting includes soft-deleted projects.
+SELECT EXISTS (
+  SELECT 1 FROM projects
+  WHERE id = @project_id AND organization_id = @organization_id
+);
+
 -- name: ListAuditLogs :many
 -- When no subject_type filter is given, assistant activity events (one per
 -- assistant tool call) are excluded so they don't drown out the platform
@@ -103,6 +110,10 @@ WHERE a.organization_id = @organization_id
   AND (
     sqlc.narg(actor_id)::text IS NULL
     OR a.actor_id = sqlc.narg(actor_id)::text
+  )
+  AND (
+    sqlc.narg(actor_type)::text IS NULL
+    OR a.actor_type = sqlc.narg(actor_type)::text
   )
   AND (
     sqlc.narg(action)::text IS NULL
