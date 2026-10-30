@@ -3602,6 +3602,75 @@ func (q *Queries) ListDemoSeedAgentsFixture(ctx context.Context, organizationID 
 	return items, nil
 }
 
+const listDemoSeedAuthGrantsFixture = `-- name: ListDemoSeedAuthGrantsFixture :many
+SELECT g.principal_urn,
+       coalesce(a.name, '')::text AS agent_name,
+       coalesce(r.workos_slug, '')::text AS role_slug,
+       g.scope,
+       coalesce(ac.name, g.selectors->>'resource_id', '')::text AS auth_client,
+       coalesce(g.selectors->>'client_type', '')::text AS client_type,
+       coalesce(g.selectors->>'connection_owner', '')::text AS connection_owner,
+       coalesce(g.selectors->>'upstream_client', '')::text AS upstream_client,
+       coalesce(p.kind, '')::text AS provision_kind
+FROM principal_grants g
+LEFT JOIN agents a
+  ON a.organization_id = g.organization_id AND g.principal_urn = 'agent:' || a.id::text
+LEFT JOIN organization_roles r
+  ON r.organization_id = g.organization_id AND g.principal_urn = 'role:organization:' || r.id
+LEFT JOIN mcp_auth_clients ac
+  ON ac.organization_id = g.organization_id AND ac.id::text = g.selectors->>'resource_id'
+LEFT JOIN auth_permission_provisions p
+  ON p.organization_id = g.organization_id AND p.principal_urn = g.principal_urn
+ AND p.scope = g.scope AND p.selectors = g.selectors
+WHERE g.organization_id = $1
+  AND g.scope IN ('mcp:auth', 'mcp:blocked_auth')
+`
+
+type ListDemoSeedAuthGrantsFixtureRow struct {
+	PrincipalUrn    urn.Principal
+	AgentName       string
+	RoleSlug        string
+	Scope           string
+	AuthClient      string
+	ClientType      string
+	ConnectionOwner string
+	UpstreamClient  string
+	ProvisionKind   string
+}
+
+// Every mcp:auth and mcp:blocked_auth grant in the organization, with the
+// names that identify its principal and auth client across seed runs, and
+// the default auth permission ledger kind that provisioned it, if any.
+func (q *Queries) ListDemoSeedAuthGrantsFixture(ctx context.Context, organizationID string) ([]ListDemoSeedAuthGrantsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listDemoSeedAuthGrantsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDemoSeedAuthGrantsFixtureRow
+	for rows.Next() {
+		var i ListDemoSeedAuthGrantsFixtureRow
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.AgentName,
+			&i.RoleSlug,
+			&i.Scope,
+			&i.AuthClient,
+			&i.ClientType,
+			&i.ConnectionOwner,
+			&i.UpstreamClient,
+			&i.ProvisionKind,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDeploymentFunctionsResources = `-- name: ListDeploymentFunctionsResources :many
 SELECT id, resource_urn, project_id, deployment_id, function_id, runtime, name, description, uri, title, mime_type, variables, meta, created_at, updated_at, deleted_at, deleted
 FROM function_resource_definitions

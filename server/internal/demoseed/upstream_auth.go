@@ -31,8 +31,9 @@ import (
 // migration runs, in the same order, so the seeded organization is exactly a
 // migrated organization and cannot drift from what the resolver and the
 // readiness checks expect. The project delete at the start of every run
-// cascades all of these rows away, which is why a reseed of an organization
-// staff had migrated used to read as incomplete until it was migrated again.
+// cascades all of these rows away, so every run records them again. Agent
+// attachment grants name upstream_client selectors, whose writes the seed
+// treats as rolled out for the seeded organization.
 //
 // It runs after the Postgres transaction commits, because the backfills take
 // their own organization lock and transactions. Both backfills are scoped to
@@ -40,6 +41,7 @@ import (
 // fails the seed run: the data stays in place, and the next run, or a manual
 // migration run, completes it.
 func migrateUpstreamAuth(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string) error {
+	ctx = authz.WithUpstreamSelectorWriteGate(ctx, seededSelectorWrites(organizationID))
 	if err := checkLegacyUpstreamAuth(ctx, db, organizationID); err != nil {
 		return err
 	}
@@ -112,13 +114,8 @@ func checkLegacyUpstreamAuth(ctx context.Context, db *pgxpool.Pool, organization
 // attachments and assistant execution profiles. Each check is a dry run of
 // the backfill the status itself dry-runs, so a seeded organization that
 // passes reads as migrated and ready for enforcement there.
-//
-// The one wait it tolerates is agent attachment grants held back by the
-// upstream_client selector write gate (authz.UpstreamSelectorWritesAllowed):
-// the backfill never writes them while the gate refuses the organization, in
-// the seed's process as in the server's, so they are logged rather than
-// failed. Once the gate admits the organization, any still missing fail.
 func upstreamAuthReadiness(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string) error {
+	ctx = authz.WithUpstreamSelectorWriteGate(ctx, seededSelectorWrites(organizationID))
 	if err := checkLegacyUpstreamAuth(ctx, db, organizationID); err != nil {
 		return err
 	}
@@ -145,11 +142,7 @@ func upstreamAuthReadiness(ctx context.Context, logger *slog.Logger, db *pgxpool
 	pending("servers to mark as requiring upstream auth", clients.PendingMarkedServers)
 	pending("credential choices to map onto auth clients", clients.PendingSelectionMappings)
 	pending("default auth permission grants to write", clients.PendingGrants)
-	if clients.AttachmentsWaiting > 0 && !authz.UpstreamSelectorWritesAllowed(ctx, organizationID) {
-		logger.WarnContext(ctx, fmt.Sprintf("demo seed: %d agent attachment grants wait for the upstream_client selector write gate", clients.AttachmentsWaiting), attr.SlogOrganizationID(organizationID))
-	} else {
-		pending("agent attachment grants to write", clients.AttachmentsWaiting)
-	}
+	pending("agent attachment grants to write", clients.AttachmentsWaiting)
 	for _, class := range slices.Sorted(maps.Keys(clients.Selections)) {
 		pending(fmt.Sprintf("%s credential choices without a usable auth client", class), clients.Selections[class].Gaps())
 	}
@@ -172,6 +165,15 @@ func upstreamAuthReadiness(ctx context.Context, logger *slog.Logger, db *pgxpool
 		return errors.New("demo seed left typed upstream auth incomplete: " + strings.Join(problems, "; "))
 	}
 	return nil
+}
+
+// seededSelectorWrites admits the seeded organization's upstream_client
+// selector writes, so the seed's backfills write agent attachment grants as
+// though the selector write rollout covered it.
+func seededSelectorWrites(organizationID string) authz.UpstreamSelectorWriteGate {
+	return func(_ context.Context, id string) (bool, error) {
+		return id == organizationID, nil
+	}
 }
 
 func phaseErrors(errs map[string]string) string {
