@@ -6,7 +6,7 @@ import { usePlatformSetupCandidates } from "./usePlatformSetupCandidates";
 const mocks = vi.hoisted(() => ({
   workloadWrite: true,
   orgSlug: "example",
-  projectId: "project_one",
+  inProject: true,
   impersonatorEmail: "",
   scopeOverride: null as string | null,
   githubEnabled: true,
@@ -14,8 +14,10 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
 
+// The palette is mounted above the project's provider, so it never sees a
+// project id: the hook must not depend on one.
 vi.mock("@/contexts/Auth", () => ({
-  useProject: () => ({ id: mocks.projectId }),
+  useProject: () => ({ id: "" }),
   useOrganization: () => ({ id: "org_one", slug: mocks.orgSlug }),
   useSession: () => ({
     organizationOverride: false,
@@ -74,7 +76,7 @@ afterEach(cleanup);
 beforeEach(() => {
   mocks.workloadWrite = true;
   mocks.orgSlug = "example";
-  mocks.projectId = "project_one";
+  mocks.inProject = true;
   mocks.impersonatorEmail = "";
   mocks.scopeOverride = null;
   mocks.githubEnabled = true;
@@ -128,7 +130,7 @@ it.each([
   [
     "outside a project",
     () => {
-      mocks.projectId = "";
+      mocks.inProject = false;
     },
   ],
   [
@@ -152,7 +154,7 @@ it.each([
 ])("offers nothing %s", (_, arrange) => {
   arrange();
   const { result } = renderHook(() =>
-    usePlatformSetupCandidates({ enabled: true }),
+    usePlatformSetupCandidates({ enabled: true, inProject: mocks.inProject }),
   );
   expect(result.current).toEqual([]);
   expect(mocks.catalogEnabled.every((enabled) => !enabled)).toBe(true);

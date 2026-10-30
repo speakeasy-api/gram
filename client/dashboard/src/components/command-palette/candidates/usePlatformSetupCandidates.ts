@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router";
-import { useOrganization, useProject, useSession } from "@/contexts/Auth";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRBACScopeOverride } from "@/hooks/useRBACScopeOverride";
@@ -19,6 +19,10 @@ import type { LauncherCandidate } from "./types";
  * ones the wizard's credential step offers as tiles, so the two cannot
  * disagree. Offered in a project to someone who can manage workload
  * identities, since setting one up trusts the platform for the organization.
+ *
+ * "In a project" is the palette's own inProject, read from the URL: the
+ * palette is mounted above the project's provider, so useProject() there is
+ * always the empty project and its id cannot gate anything.
  */
 export function usePlatformSetupCandidates({
   enabled,
@@ -27,7 +31,6 @@ export function usePlatformSetupCandidates({
   enabled: boolean;
   inProject?: boolean;
 }): LauncherCandidate[] {
-  const project = useProject();
   const organization = useOrganization();
   const session = useSession();
   const scopeOverride = useRBACScopeOverride();
@@ -37,7 +40,6 @@ export function usePlatformSetupCandidates({
   const allowed =
     enabled &&
     inProject &&
-    !!project.id &&
     organization.slug !== DEMO_ORG_SLUG &&
     !session.organizationOverride &&
     !session.impersonatorEmail &&
