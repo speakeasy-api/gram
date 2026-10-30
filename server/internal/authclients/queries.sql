@@ -165,10 +165,14 @@ SELECT
         FROM mcp_server_remote_session_clients AS pend_assoc
         JOIN remote_session_clients AS pend_client
           ON pend_client.id = pend_assoc.remote_session_client_id
+         AND pend_client.attachment_scope = pend_assoc.client_attachment_scope
          AND pend_client.deleted IS FALSE
         JOIN remote_session_issuers AS pend_issuer
           ON pend_issuer.id = pend_client.remote_session_issuer_id
          AND pend_issuer.deleted IS FALSE
+         AND (pend_issuer.project_id = pend_assoc.project_id
+              OR (pend_issuer.project_id IS NULL AND pend_issuer.organization_id = pend_assoc.organization_id)
+              OR (pend_issuer.project_id IS NULL AND pend_issuer.organization_id IS NULL))
         WHERE pend_assoc.mcp_server_id = ms.id
           AND pend_assoc.project_id = ms.project_id
           AND pend_assoc.organization_id = p.organization_id

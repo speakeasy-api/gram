@@ -54,12 +54,6 @@ func (s *Service) ListMcpServerAuthClientChoices(ctx context.Context, payload *g
 			choices = append(choices, &types.AuthClientChoice{ID: row.AuthClientID.UUID.String(), Name: row.AuthClientName.String, ClientType: row.ClientType.String})
 		}
 	}
-	status := StatusNoAuthRequired
-	switch {
-	case len(rows) > 0 && rows[0].RequiresUpstreamAuth:
-		status = StatusConfigured
-	case len(rows) > 0 && rows[0].UpstreamAuthPending:
-		status = StatusSetupIncomplete
-	}
+	status := upstreamAuthStatus(len(rows) > 0 && rows[0].RequiresUpstreamAuth, len(rows) > 0 && rows[0].UpstreamAuthPending)
 	return &gen.ListMcpServerAuthClientChoicesResult{RequiresUpstreamAuth: status == StatusConfigured, Status: status, Choices: choices}, nil
 }
