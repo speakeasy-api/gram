@@ -349,7 +349,7 @@ export function AgentSessionsSection({
         </div>
       ) : isError ? (
         <div role="alert" className="space-y-3">
-          <Text>Unable to load agent sessions.</Text>
+          <Text>Unable to load this agent's connections.</Text>
           <Button variant="secondary" onClick={onRetry}>
             Try again
           </Button>

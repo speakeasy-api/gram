@@ -141,7 +141,7 @@ describe("Agent-scoped session integration", () => {
     mocks.listSessions.mockResolvedValue({ result: { items: [] } });
     setup();
     expect(
-      await screen.findByText("Unable to load agent sessions."),
+      await screen.findByText("Unable to load this agent's connections."),
     ).toBeTruthy();
     expect(screen.queryByText("No sessions yet")).toBeNull();
     const before = mocks.listSessions.mock.calls.length;
