@@ -86973,6 +86973,15 @@ components:
         refresh_expires_at:
           type: string
           format: date-time
+        subject_kind:
+          type: string
+          description: 'Who signed in: the agent itself, or a workload that federation assigns to the agent.'
+          enum:
+            - agent
+            - workload
+        workload_subject:
+          type: string
+          description: The workload's subject as its platform issued it. Set only when subject_kind is workload.
       required:
         - id
         - issuer_id
@@ -86980,6 +86989,7 @@ components:
         - created_at
         - expires_at
         - refresh_expires_at
+        - subject_kind
     AgentSessionMeta:
       type: object
       properties:

@@ -1,17 +1,24 @@
+import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
+import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import { useMembers } from "@gram/client/react-query/members.js";
-import { AgentSessionsSection } from "./AgentSessions";
+import { AgentSessionsSection, type AgentSessionRow } from "./AgentSessions";
 import { useAgentSessionList } from "./useAgentSessionList";
+
+const security = { sessionHeaderGramSession: "" };
 
 export function ManagedAgentSessions({
   agent,
   variant = "section",
   limit,
+  credentialsHref,
 }: {
   agent: ManagedAgent;
+  /** Where the agent's keys and federated access are managed. */
+  credentialsHref?: string;
   /**
    * "bare" drops the section chrome for a caller that supplies its own.
    * "panel" also drops the table's frame, inside a bordered panel.
@@ -36,21 +43,55 @@ export function ManagedAgentSessions({
     enabled: canManage,
     throwOnError: false,
   });
+  // A key authenticates each request on its own and opens no session, so an
+  // agent that only ever uses its key would otherwise look unconnected. Same
+  // options as the credentials panel, so both read one cached list.
+  const keys = useListAPIKeys({ agentId: agent.id }, security, {
+    queryKeyHashFn: (key) => JSON.stringify([organization.id, key]),
+    enabled: canManage,
+    retry: false,
+    throwOnError: false,
+  });
+  // A key that was never used is a credential, not a connection: it stays on
+  // the credentials tab only.
+  const keyRows = useMemo<AgentSessionRow[]>(
+    () =>
+      (keys.data?.keys ?? [])
+        .filter((key) => key.lastAccessedAt !== undefined)
+        .sort(
+          (a, b) =>
+            (b.lastAccessedAt?.getTime() ?? 0) -
+            (a.lastAccessedAt?.getTime() ?? 0),
+        )
+        .map((key) => ({
+          id: key.id,
+          subjectKind: "api-key",
+          clientName: key.name,
+          keyPrefix: key.keyPrefix,
+          createdAt: key.createdAt,
+          expiresAt: key.expiresAt ?? key.createdAt,
+          refreshExpiresAt: key.expiresAt,
+          lastUsedAt: key.lastAccessedAt,
+        })),
+    [keys.data],
+  );
+  const rows = [...keyRows, ...sessions.sessions];
 
   return (
     <AgentSessionsSection
       key={`${organization.id}-${agent.id}`}
       variant={variant}
-      sessions={
-        limit === undefined
-          ? sessions.sessions
-          : sessions.sessions.slice(0, limit)
+      sessions={limit === undefined ? rows : rows.slice(0, limit)}
+      // Keys and sessions are read apart, so either one is enough to show:
+      // a refused key list must not hide the sessions, or the other way round.
+      isLoading={sessions.isLoading || (keys.isLoading && rows.length === 0)}
+      isError={
+        sessions.isError && !sessions.isFetchNextPageError && rows.length === 0
       }
-      isLoading={sessions.isLoading}
-      isError={sessions.isError && !sessions.isFetchNextPageError}
       canRead={canManage}
       canRevoke={canManage}
       onRetry={sessions.refetch}
+      credentialsHref={credentialsHref}
       authorizerName={(userId) =>
         members.data?.members.find((member) => member.id === userId)?.name
       }

@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { ManagedAgentSessions } from "./ManagedAgentSessions";
@@ -14,6 +15,13 @@ const mocks = vi.hoisted(() => ({
   organizationId: "org_example",
   listSessions: vi.fn(),
   revokeSession: vi.fn(),
+  keys: [] as Array<Record<string, unknown>>,
+}));
+vi.mock("@gram/client/react-query/listAPIKeys", () => ({
+  useListAPIKeys: () => ({
+    data: { keys: mocks.keys },
+    isLoading: false,
+  }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: mocks.organizationId }),
@@ -56,6 +64,7 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.organizationId = "org_example";
+  mocks.keys = [];
   mocks.listSessions.mockResolvedValue({ result: { items: [session] } });
   mocks.revokeSession.mockResolvedValue(undefined);
 });
@@ -146,5 +155,62 @@ describe("Agent-scoped session integration", () => {
       }),
     );
     expect(await screen.findByText("No sessions yet")).toBeTruthy();
+  });
+  // A key and a workload sign in without a session this table can revoke, so
+  // their rows say how they signed in and link to where they are managed.
+  it("lists used keys and workload sign-ins beside sessions", async () => {
+    mocks.keys = [
+      {
+        id: "key_used",
+        name: "Runtime key",
+        keyPrefix: "gram_live_abc",
+        createdAt: new Date("2026-01-02T00:00:00Z"),
+        lastAccessedAt: new Date("2026-01-03T00:00:00Z"),
+      },
+      {
+        id: "key_unused",
+        name: "Spare key",
+        keyPrefix: "gram_live_def",
+        createdAt: new Date("2026-01-02T00:00:00Z"),
+      },
+    ];
+    mocks.listSessions.mockResolvedValue({
+      result: {
+        items: [
+          {
+            ...session,
+            id: "session_workload",
+            clientName: undefined,
+            subjectKind: "workload",
+            workloadSubject: "repo:example/app:ref:refs/heads/main",
+          },
+        ],
+      },
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <ManagedAgentSessions
+            agent={agent}
+            credentialsHref="/identities/agent/credentials"
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText("repo:example/app:ref:refs/heads/main"),
+    ).toBeTruthy();
+    expect(screen.getByText("Runtime key")).toBeTruthy();
+    expect(screen.getByText("API key")).toBeTruthy();
+    expect(screen.getByText("Workload identity")).toBeTruthy();
+    expect(screen.queryByText("Spare key")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Revoke session" })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "Manage key" }).getAttribute("href"),
+    ).toBe("/identities/agent/credentials");
+    expect(screen.getByRole("link", { name: "Manage access" })).toBeTruthy();
   });
 });
