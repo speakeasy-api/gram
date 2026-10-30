@@ -20,8 +20,6 @@ function server(
     registrySpecifier,
     version: "1.0.0",
     meta: {},
-    toolCount: 0,
-    isReadOnly: false,
     supportsDcr,
   };
 }

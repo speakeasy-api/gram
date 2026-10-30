@@ -30,13 +30,7 @@ const VALID_SORT_OPTIONS: readonly SortOption[] = [
 
 const VALID_CATEGORIES: readonly Category[] = ["all"];
 
-const VALID_AUTH_TYPES: readonly AuthType[] = [
-  "none",
-  "apikey",
-  "oauth",
-  "other",
-  "unknown",
-];
+const VALID_AUTH_TYPES: readonly AuthType[] = ["none", "oauth", "unknown"];
 const VALID_UPDATED_RANGES: readonly UpdatedRange[] = [
   "any",
   "week",

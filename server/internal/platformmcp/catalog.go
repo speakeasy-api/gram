@@ -294,7 +294,9 @@ func projectCatalogDetails(descriptor CatalogDescriptor, catalogRef string, deta
 		}
 	}
 	sort.Strings(toolNames)
-	if details.Tools != nil {
+	// An incomplete declaration list cannot establish a total. A genuinely
+	// empty list still establishes zero; nil means no declarations are known.
+	if details.Tools != nil && len(toolNames) == len(details.Tools) {
 		toolCount = new(len(toolNames))
 	}
 	configuration := catalogConfiguration(details.Headers, details.Variables)

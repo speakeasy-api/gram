@@ -331,3 +331,9 @@ it("carries the catalog's OAuth registration support to the install dialog", () 
     suggestionToCatalogServer(suggestion({ supportsDcr: true })).supportsDcr,
   ).toBe(true);
 });
+
+it("does not invent tool counts or read-only evidence for suggestions", () => {
+  const server = suggestionToCatalogServer(suggestion());
+  expect(server.toolCount).toBeUndefined();
+  expect(server.isReadOnly).toBeUndefined();
+});

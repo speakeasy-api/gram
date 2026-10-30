@@ -50,7 +50,7 @@ import (
 // Version is the shape version of the document this package assembles. It is
 // stored alongside every gather and copied onto every decision's frozen
 // snapshot, so bump it when the document's shape changes.
-const Version = 1
+const Version = 2
 
 // Document is one gather of everything known about a requested server.
 type Document struct {
@@ -812,7 +812,11 @@ func capabilityStrings(values []capability.Capability) []string {
 // here so a frozen version-1 snapshot stays decodable after the shape moves
 // on.
 func DecodeDocument(raw []byte, version int) (Document, error) {
-	if version != Version {
+	// Version 1 used omitempty booleans for is_latest: an absent value cannot
+	// establish false, so decode it as unknown. Shared fields retain their JSON
+	// representation; retired official/visitor claims are intentionally ignored
+	// in the current view, without rewriting the stored snapshot.
+	if version != 1 && version != Version {
 		return Document{}, fmt.Errorf("unsupported evidence version %d", version)
 	}
 

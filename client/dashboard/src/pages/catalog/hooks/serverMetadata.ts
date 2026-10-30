@@ -50,7 +50,7 @@ export function requiresManualSetup(server: CatalogServer): boolean {
   return serverSetupType(server) === "manual";
 }
 
-export type CatalogAuthType = "none" | "apikey" | "oauth" | "other" | "unknown";
+export type CatalogAuthType = "none" | "oauth" | "unknown";
 
 export function extractAuthType(server: CatalogServer): CatalogAuthType {
   if (authSetup(server) === "none") return "none";
@@ -76,9 +76,7 @@ export function parseServerMetadata(
     authType,
     authTypeDisplay: {
       none: "No Auth",
-      apikey: "API Key",
       oauth: "OAuth",
-      other: "Other",
       unknown: "Unknown",
     }[authType],
     setupType: serverSetupType(server),

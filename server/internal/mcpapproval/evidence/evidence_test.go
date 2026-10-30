@@ -958,3 +958,33 @@ func TestAssembleCatalogReceivesResearchProjectWithoutAuthContext(t *testing.T) 
 	require.NoError(t, err)
 	require.Equal(t, projectID, probe.projectID)
 }
+
+func TestDecodeDocument_LegacyProvenance(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, 2, evidence.Version)
+	for _, tc := range []struct {
+		name, provenance string
+		latest           *bool
+	}{
+		{"omitted legacy false is unknown", `{"registry":"historical","catalogued":true,"official":true,"visitors_total":123}`, nil},
+		{"recorded latest survives", `{"catalogued":true,"status":"active","is_latest":true}`, new(true)},
+		{"explicit false survives", `{"catalogued":true,"is_latest":false}`, new(false)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			document, err := evidence.DecodeDocument([]byte(`{"identity":{"kind":"remote","artifact_ref":"https://example.com/mcp"},"provenance":`+tc.provenance+`}`), 1)
+			require.NoError(t, err)
+			require.Equal(t, "https://example.com/mcp", document.Identity.ArtifactRef)
+			require.NotNil(t, document.Provenance)
+			require.True(t, document.Provenance.Catalogued)
+			require.Equal(t, tc.latest, document.Provenance.IsLatest)
+			raw, err := json.Marshal(document.Provenance)
+			require.NoError(t, err)
+			require.NotContains(t, string(raw), "official")
+			require.NotContains(t, string(raw), "visitors")
+		})
+	}
+	_, err := evidence.DecodeDocument([]byte(`{`), 1)
+	require.ErrorContains(t, err, "decode evidence document")
+	_, err = evidence.DecodeDocument([]byte(`{}`), 0)
+	require.ErrorContains(t, err, "unsupported evidence version")
+}

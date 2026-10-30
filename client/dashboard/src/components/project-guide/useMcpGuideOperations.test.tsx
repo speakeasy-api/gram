@@ -102,7 +102,7 @@ function catalogServer(overrides: Partial<CatalogServer> = {}): CatalogServer {
   return {
     description: "Read-only test server",
     registryId: "registry",
-    registrySpecifier: "example/read-only",
+    registrySpecifier: "app.linear/mcp",
     version: "1.0.0",
     title: "Linear",
     meta: {},
@@ -295,6 +295,27 @@ describe("useMcpGuideOperations", () => {
     );
   });
 
+  it("rejects preferred display-title lookalikes with unapproved registry identifiers", () => {
+    queryHooks.catalog.mockReturnValue(
+      queryResult({
+        servers: [
+          catalogServer({
+            registrySpecifier: "example/linear",
+            title: "Linear",
+          }),
+          catalogServer({
+            registrySpecifier: "app.linear/mcp",
+            title: "Renamed Linear",
+          }),
+        ],
+      }),
+    );
+    const { result } = renderHook(() => useMcpGuideOperations());
+    expect(
+      result.current.catalogServers?.map((server) => server.registrySpecifier),
+    ).toEqual(["app.linear/mcp"]);
+  });
+
   it("excludes curated servers that require user-supplied credentials", () => {
     const apiKeyServer = catalogServer({
       title: "Notion",
@@ -330,6 +351,7 @@ describe("useMcpGuideOperations", () => {
     });
     const notPreferred = catalogServer({
       title: "Other service",
+      registrySpecifier: "example/other",
       authSetup: "none",
     });
     queryHooks.catalog.mockReturnValue(
@@ -365,6 +387,7 @@ describe("useMcpGuideOperations", () => {
   it("reports OAuth setup in the activity output", async () => {
     const oauthServer = catalogServer({
       title: "Notion",
+      supportsDcr: false,
       authSetup: "dcr",
     });
     queryHooks.catalog.mockReturnValue(queryResult({ servers: [oauthServer] }));

@@ -24,9 +24,7 @@ export const CATALOG_FILTERS = defineFilters([
 export const CATALOG_FILTER_OPTIONS: OptionsById = {
   auth: [
     { value: "none", label: "No Auth" },
-    { value: "apikey", label: "API Key" },
     { value: "oauth", label: "OAuth" },
-    { value: "other", label: "Other" },
     { value: "unknown", label: "Unknown" },
   ],
   setup: [
@@ -44,13 +42,7 @@ export const CATALOG_FILTER_OPTIONS: OptionsById = {
 // Allowed values per dimension. The unified filter state reads raw URL params,
 // so we sanitize to these before casting — an arbitrary `?auth=bogus` would
 // otherwise filter out every result.
-const VALID_AUTH_TYPES: readonly AuthType[] = [
-  "none",
-  "apikey",
-  "oauth",
-  "other",
-  "unknown",
-];
+const VALID_AUTH_TYPES: readonly AuthType[] = ["none", "oauth", "unknown"];
 const VALID_SETUP_TYPES: readonly SetupType[] = ["auto", "manual", "unknown"];
 const VALID_UPDATED: readonly UpdatedRange[] = ["week", "month", "year"];
 

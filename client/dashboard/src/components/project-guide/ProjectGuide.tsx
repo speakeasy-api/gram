@@ -1027,9 +1027,11 @@ function McpCatalogSelection({
             >
               <span aria-hidden="true" className="bg-foreground size-1.5" />
               <span className="text-sm">{name}</span>
-              <span className="text-muted-foreground ml-auto font-mono text-xs">
-                {server.toolCount} tools
-              </span>
+              {typeof server.toolCount === "number" && (
+                <span className="text-muted-foreground ml-auto font-mono text-xs">
+                  {server.toolCount} tools
+                </span>
+              )}
             </button>
           );
         })}

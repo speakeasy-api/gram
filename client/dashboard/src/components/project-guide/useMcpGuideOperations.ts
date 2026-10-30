@@ -7,7 +7,7 @@ import {
   findMcpServerActivity,
   hasDefaultPluginServer,
 } from "@/components/project-guide/journeyStatus";
-import { AUTOMATIC_CATALOG_SERVER_NAMES } from "@/components/project-guide/journeys";
+import { AUTOMATIC_CATALOG_SERVER_SPECIFIERS } from "@/components/project-guide/journeys";
 import type {
   ProjectGuideEventCard,
   ProjectGuideOperationReport,
@@ -84,8 +84,8 @@ function compareCatalogServers(
   right: CatalogServer,
 ): number {
   const rank = (server: CatalogServer): number => {
-    const index = AUTOMATIC_CATALOG_SERVER_NAMES.indexOf(
-      serverName(server) as (typeof AUTOMATIC_CATALOG_SERVER_NAMES)[number],
+    const index = AUTOMATIC_CATALOG_SERVER_SPECIFIERS.indexOf(
+      server.registrySpecifier as (typeof AUTOMATIC_CATALOG_SERVER_SPECIFIERS)[number],
     );
     return index === -1 ? Number.POSITIVE_INFINITY : index;
   };
@@ -111,8 +111,8 @@ function curateCatalogServers(
     .filter(isCatalogServer)
     .filter(canConfigureWithoutUserCredentials)
     .filter((server) =>
-      AUTOMATIC_CATALOG_SERVER_NAMES.includes(
-        serverName(server) as (typeof AUTOMATIC_CATALOG_SERVER_NAMES)[number],
+      AUTOMATIC_CATALOG_SERVER_SPECIFIERS.includes(
+        server.registrySpecifier as (typeof AUTOMATIC_CATALOG_SERVER_SPECIFIERS)[number],
       ),
     )
     .sort(compareCatalogServers);

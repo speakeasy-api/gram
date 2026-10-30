@@ -203,3 +203,25 @@ func TestCatalogCandidatePreservesKnownZeroToolCount(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(raw), `"tool_count":0`)
 }
+
+func TestCatalogDetailsToolCountRequiresCompleteNames(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, tools string
+		count       *int
+	}{
+		{"unknown", `null`, nil},
+		{"known empty", `[]`, new(0)},
+		{"unnamed", `[{}]`, nil},
+		{"partially named", `[{"Name":"read"},{}]`, nil},
+		{"known", `[{"Name":"read"}]`, new(1)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var details externalmcp.ServerDetails
+			require.NoError(t, json.Unmarshal([]byte(`{"RemoteURL":"https://example.test/mcp","TransportType":"streamable-http","Tools":`+tc.tools+`}`), &details))
+			got, err := projectCatalogDetails(CatalogDescriptor{}, "test/server", &details)
+			require.NoError(t, err)
+			require.Equal(t, tc.count, got.ToolCount)
+		})
+	}
+}
