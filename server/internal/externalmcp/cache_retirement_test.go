@@ -10,6 +10,7 @@ import (
 )
 
 func TestServiceClearRegistryCacheWithoutLegacyClient(t *testing.T) {
+	t.Parallel()
 	ctx := t.Context()
 	storage := newRegistryTestCache()
 	registryURL := "https://registry.example.test"

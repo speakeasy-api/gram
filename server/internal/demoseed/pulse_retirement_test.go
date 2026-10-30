@@ -7,6 +7,7 @@ import (
 )
 
 func TestLocalFixturesDoNotInsertRetiredCatalog(t *testing.T) {
+	t.Parallel()
 	source, err := os.ReadFile("local.go")
 	if err != nil {
 		t.Fatal(err)

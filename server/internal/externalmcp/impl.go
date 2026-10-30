@@ -302,10 +302,9 @@ type serverDetailsResult struct {
 
 // clearRegistryCache preserves invalidation of both generic registry cache namespaces.
 func (s *Service) clearRegistryCache(ctx context.Context, registryURL string) error {
-	client := &RegistryClient{
-		listCache:    cache.NewTypedObjectCache[CachedListServers](s.logger, s.cacheImpl, cache.SuffixNone),
-		detailsCache: cache.NewTypedObjectCache[CachedServerDetailsResponse](s.logger, s.cacheImpl, cache.SuffixNone),
-	}
+	var client RegistryClient
+	client.listCache = cache.NewTypedObjectCache[CachedListServers](s.logger, s.cacheImpl, cache.SuffixNone)
+	client.detailsCache = cache.NewTypedObjectCache[CachedServerDetailsResponse](s.logger, s.cacheImpl, cache.SuffixNone)
 	return client.ClearCache(ctx, registryURL)
 }
 

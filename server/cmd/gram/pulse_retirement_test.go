@@ -6,6 +6,7 @@ import (
 )
 
 func TestServiceCommandsDoNotRequirePulseCredentials(t *testing.T) {
+	t.Parallel()
 	for _, command := range []*cli.Command{newStartCommand(), newWorkerCommand()} {
 		for _, f := range command.Flags {
 			for _, name := range f.Names() {
