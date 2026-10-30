@@ -285,21 +285,22 @@ vi.mock("./useAgentIdentityCandidates", () => ({
 }));
 // Covered by its own test; here it only has to be wired in.
 vi.mock("./usePlatformSetupCandidates", () => ({
-  usePlatformSetupCandidates: vi.fn(({ enabled }: { enabled: boolean }) =>
-    enabled && mocks.includeNewResourceFixtures
-      ? [
-          {
-            id: "platform-setup:github-actions",
-            kind: "page",
-            title: "Set up GitHub Actions",
-            detail: "",
-            keywords: [],
-            verbs: ["open"],
-            group: "Identities",
-            run: () => {},
-          },
-        ]
-      : [],
+  usePlatformSetupCandidates: vi.fn(
+    ({ enabled, inProject }: { enabled: boolean; inProject?: boolean }) =>
+      enabled && inProject !== false && mocks.includeNewResourceFixtures
+        ? [
+            {
+              id: "platform-setup:github-actions",
+              kind: "page",
+              title: "Set up GitHub Actions",
+              detail: "",
+              keywords: [],
+              verbs: ["open"],
+              group: "Identities",
+              run: () => {},
+            },
+          ]
+        : [],
   ),
 }));
 vi.mock("./useManagedDeviceCandidates", () => ({
@@ -1850,7 +1851,18 @@ describe("new resource source wiring", () => {
     ).toBe(true);
     expect(usePlatformSetupCandidates).toHaveBeenLastCalledWith({
       enabled: true,
-      inProject: mocks.inProject,
+      inProject: true,
+    });
+  });
+
+  it("offers no platform setup from the organization shell", () => {
+    const { result } = renderCandidates({ inProject: false });
+    expect(
+      result.current.some((c) => c.id === "platform-setup:github-actions"),
+    ).toBe(false);
+    expect(usePlatformSetupCandidates).toHaveBeenLastCalledWith({
+      enabled: true,
+      inProject: false,
     });
   });
   it("includes skills only with project skill:read access", () => {

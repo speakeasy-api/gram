@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   orgSlug: "example",
   inProject: true,
   impersonatorEmail: "",
+  organizationOverride: false,
   scopeOverride: null as string | null,
   githubEnabled: true,
   catalogEnabled: [] as boolean[],
@@ -20,7 +21,7 @@ vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "" }),
   useOrganization: () => ({ id: "org_one", slug: mocks.orgSlug }),
   useSession: () => ({
-    organizationOverride: false,
+    organizationOverride: mocks.organizationOverride,
     impersonatorEmail: mocks.impersonatorEmail,
   }),
 }));
@@ -78,6 +79,7 @@ beforeEach(() => {
   mocks.orgSlug = "example";
   mocks.inProject = true;
   mocks.impersonatorEmail = "";
+  mocks.organizationOverride = false;
   mocks.scopeOverride = null;
   mocks.githubEnabled = true;
   mocks.catalogEnabled = [];
@@ -137,6 +139,12 @@ it.each([
     "in the demo org",
     () => {
       mocks.orgSlug = DEMO_ORG_SLUG;
+    },
+  ],
+  [
+    "while viewing another organization",
+    () => {
+      mocks.organizationOverride = true;
     },
   ],
   [
