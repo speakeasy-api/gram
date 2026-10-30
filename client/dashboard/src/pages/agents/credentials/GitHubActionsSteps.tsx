@@ -1,9 +1,11 @@
 import { Alert } from "@/components/ui/Alert";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
+import type { Plugin } from "@gram/client/models/components/plugin.js";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
 import { useQueries } from "@tanstack/react-query";
 import { useState, type JSX } from "react";
@@ -12,13 +14,19 @@ import { CodeBlock } from "./CodeBlock";
 import {
   ACTION_DOCS,
   WORKFLOW_AGENTS,
+  WORKFLOW_AGENT_KEYS,
+  isWorkflowAgent,
+  pluginGateways,
   pluginsForEveryAgent,
   unreachablePluginServers,
   workflowYaml,
   type WorkflowAgent,
 } from "./githubActions";
-import { Links } from "./SetupFields";
+import { Links, SetupError } from "./SetupFields";
 import type { SetupServer } from "./setupInstructions";
+
+/** How long a plugin read for this step is reused before it is read again. */
+const PLUGIN_STALE_TIME_MS = 30_000;
 
 export function PluginsStep({
   agentName,
@@ -28,7 +36,6 @@ export function PluginsStep({
   servers: SetupServer[];
 }): JSX.Element {
   const project = useProject();
-  const routes = useRoutes();
   const sdk = useSdkClient();
   const plugins = usePlugins({ gramProject: project.slug }, undefined, {
     enabled: project.slug !== "",
@@ -50,7 +57,7 @@ export function PluginsStep({
         ),
       retry: false,
       throwOnError: false,
-      staleTime: 30_000,
+      staleTime: PLUGIN_STALE_TIME_MS,
     })),
   });
   const pending = plugins.isPending || details.some((query) => query.isPending);
@@ -59,7 +66,9 @@ export function PluginsStep({
     details.flatMap((query) => (query.data === undefined ? [] : [query.data])),
   );
   const unreachable = unreachablePluginServers(delivered, servers);
+  const gateways = pluginGateways(delivered);
   const agent = agentName || "the agent";
+  const them = unreachable.length === 1 ? "it" : "them";
 
   return (
     <div className="space-y-4 text-sm">
@@ -73,56 +82,24 @@ export function PluginsStep({
         project. The list is partial: the job also gets plugins assigned to
         roles {agent} holds, and those from other projects.
       </p>
-      {pending ? (
+      <DeliveredPlugins
+        pending={pending}
+        failed={failed}
+        delivered={delivered}
+        agent={agent}
+      />
+      {gateways.length > 0 && (
         <p className="text-muted-foreground">
-          Reading this project&apos;s plugins…
+          The job skips {gateways.join(", ")}: gateways do not accept agents
+          yet.
         </p>
-      ) : failed ? (
-        <Alert variant="warning">
-          <div className="text-sm">
-            This project&apos;s plugins could not be read. Check them on the{" "}
-            <Link className="underline" to={routes.plugins.href()}>
-              Plugins page
-            </Link>
-            .
-          </div>
-        </Alert>
-      ) : delivered.length === 0 ? (
-        <Alert variant="warning">
-          <div className="text-sm">
-            No plugin in this project is assigned to Everyone, so unless {agent}{" "}
-            holds a role with plugins, the job gets no MCP servers. On the{" "}
-            <Link className="underline" to={routes.plugins.href()}>
-              Plugins page
-            </Link>
-            , assign a plugin to <strong>Everyone</strong>, or to a role and
-            give the agent that role.
-          </div>
-        </Alert>
-      ) : (
-        <ul className="border-border divide-border divide-y border">
-          {delivered.map((plugin) => (
-            <li key={plugin.id} className="px-3 py-2.5">
-              <p className="font-medium">{plugin.name}</p>
-              <p className="text-muted-foreground">
-                {(plugin.servers ?? []).length === 0
-                  ? "No MCP servers"
-                  : (plugin.servers ?? [])
-                      .map((server) => server.displayName)
-                      .join(", ")}
-              </p>
-            </li>
-          ))}
-        </ul>
       )}
       {unreachable.length > 0 && (
         <Alert variant="warning">
           <div className="text-sm">
             {agentName || "The agent"} cannot use {unreachable.join(", ")}, so
-            the job&apos;s tools will show{" "}
-            {unreachable.length === 1 ? "it" : "them"} as needing
-            authentication. Go back to MCP Selection to add{" "}
-            {unreachable.length === 1 ? "it" : "them"}.
+            the job&apos;s tools will show {them} as needing authentication. Go
+            back to MCP Selection to add {them}.
           </div>
         </Alert>
       )}
@@ -131,6 +108,79 @@ export function PluginsStep({
         nobody to sign in.
       </p>
     </div>
+  );
+}
+
+/**
+ * The plugins assigned to Everyone, or why there are none to show. Reading is
+ * shown in the list's own shape, so the step does not jump once it loads.
+ */
+function DeliveredPlugins({
+  pending,
+  failed,
+  delivered,
+  agent,
+}: {
+  pending: boolean;
+  failed: boolean;
+  delivered: Plugin[];
+  agent: string;
+}): JSX.Element {
+  const routes = useRoutes();
+  const pluginsPage = (
+    <Link className="underline" to={routes.plugins.href()}>
+      Plugins page
+    </Link>
+  );
+  if (pending) {
+    return (
+      <div
+        className="border-border space-y-2 border px-3 py-2.5"
+        aria-label="Reading this project's plugins"
+      >
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-4 w-56" />
+      </div>
+    );
+  }
+  if (failed) {
+    return (
+      <Alert variant="warning">
+        <div className="text-sm">
+          This project&apos;s plugins could not be read. Check them on the{" "}
+          {pluginsPage}.
+        </div>
+      </Alert>
+    );
+  }
+  if (delivered.length === 0) {
+    return (
+      <Alert variant="warning">
+        <div className="text-sm">
+          No plugin in this project is assigned to Everyone, so unless {agent}{" "}
+          holds a role with plugins, the job gets no MCP servers. On the{" "}
+          {pluginsPage}, assign a plugin to <strong>Everyone</strong>, or to a
+          role and give the agent that role.
+        </div>
+      </Alert>
+    );
+  }
+  return (
+    <ul className="border-border divide-border divide-y border">
+      {delivered.map((plugin) => {
+        const servers = (plugin.servers ?? []).map(
+          (server) => server.displayName,
+        );
+        return (
+          <li key={plugin.id} className="px-3 py-2.5">
+            <p className="font-medium">{plugin.name}</p>
+            <p className="text-muted-foreground">
+              {servers.length === 0 ? "No MCP servers" : servers.join(", ")}
+            </p>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -157,13 +207,14 @@ export function WorkflowStep(): JSX.Element {
         aria-label="Workflow agent"
         value={agent}
         onValueChange={(value) => {
-          if (value === "claude" || value === "codex") setAgent(value);
+          if (isWorkflowAgent(value)) setAgent(value);
         }}
         orientation="horizontal"
         size="sm"
       >
-        <RadioCard value="claude" title="Claude Code" />
-        <RadioCard value="codex" title="Codex" />
+        {WORKFLOW_AGENT_KEYS.map((key) => (
+          <RadioCard key={key} value={key} title={WORKFLOW_AGENTS[key].name} />
+        ))}
       </RadioCardGroup>
       <p>
         Add <code>{selected.secret}</code> to your repository&apos;s Actions
@@ -171,9 +222,7 @@ export function WorkflowStep(): JSX.Element {
         task. Speakeasy access uses the job&apos;s GitHub token separately.
       </p>
       {workflow.yaml === null ? (
-        <Alert variant="error">
-          <div className="text-sm">{workflow.problem}</div>
-        </Alert>
+        <SetupError>{workflow.problem}</SetupError>
       ) : (
         <CodeBlock
           value={workflow.yaml}

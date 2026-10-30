@@ -1,6 +1,5 @@
 import { Alert } from "@/components/ui/Alert";
 import { getServerURL } from "@/lib/utils";
-import { HOOKS_INGEST_SCOPE } from "../agent-hook-events";
 import { CodeBlock } from "./CodeBlock";
 import {
   DEVICE_AGENT_SYNC_SCOPE,
@@ -11,7 +10,7 @@ import {
   repositoryProblem,
 } from "./githubActions";
 import { PluginsStep, WorkflowStep } from "./GitHubActionsSteps";
-import { Links, VariableField } from "./SetupFields";
+import { Links, SetupError, VariableField } from "./SetupFields";
 import type { Connection, PlatformSetup } from "./setupInstructions";
 import {
   subjectRule,
@@ -68,11 +67,10 @@ export function githubActionsSetupInstructions(
         </p>
         <p>
           <strong>
-            <code>{DEVICE_AGENT_SYNC_SCOPE}</code> and{" "}
-            <code>{HOOKS_INGEST_SCOPE}</code>
+            Permission to sync device agents and to send hook events
           </strong>{" "}
-          yourself, so you can give them to the agent. Organization
-          administrators have both.
+          yourself, so you can give both to the agent. Organization
+          administrators have them.
         </p>
         <Links links={[{ href: OIDC_DOCS, label: "GitHub OIDC tokens" }]} />
       </div>
@@ -94,11 +92,7 @@ export function githubActionsSetupInstructions(
           const agent = agentName || "this agent";
           return (
             <>
-              {unreachable !== null && (
-                <Alert variant="error">
-                  <div className="text-sm">{unreachable}</div>
-                </Alert>
-              )}
+              {unreachable !== null && <SetupError>{unreachable}</SetupError>}
               <p className="text-sm">
                 The repository whose jobs act as {agent}. Enter the names with
                 the same capital letters GitHub shows: Speakeasy compares them
@@ -112,11 +106,7 @@ export function githubActionsSetupInstructions(
                   onChange={(next) => setValue(field.key, next)}
                 />
               ))}
-              {problem !== null && (
-                <Alert variant="error">
-                  <div className="text-sm">{problem}</div>
-                </Alert>
-              )}
+              {problem !== null && <SetupError>{problem}</SetupError>}
               <details className="text-sm">
                 <summary className="text-muted-foreground hover:text-foreground cursor-pointer">
                   Repositories created, renamed or transferred since July 15,
@@ -164,16 +154,10 @@ export function githubActionsSetupInstructions(
                 </Alert>
               )}
               <p className="text-muted-foreground text-sm">
-                Connecting also gives {agent}{" "}
-                <code>{DEVICE_AGENT_SYNC_SCOPE}</code>, so the job can fetch its
-                plugins, and <code>{HOOKS_INGEST_SCOPE}</code> for this project,
-                so it can send hook events.
+                Connecting also lets {agent} fetch its plugins and send hook
+                events to this project.
               </p>
-              {ruleConflict !== null && (
-                <Alert variant="error">
-                  <div className="text-sm">{ruleConflict}</div>
-                </Alert>
-              )}
+              {ruleConflict !== null && <SetupError>{ruleConflict}</SetupError>}
             </>
           );
         },
@@ -215,8 +199,11 @@ export function githubActionsSetupInstructions(
                 including capital letters and IDs.
               </li>
               <li>
-                <strong>An error naming {DEVICE_AGENT_SYNC_SCOPE}</strong>: the
-                agent, or its owner, lacks that permission.
+                <strong>
+                  An error naming <code>{DEVICE_AGENT_SYNC_SCOPE}</code>
+                </strong>
+                : the agent, or its owner, lacks permission to sync device
+                agents.
               </li>
               <li>
                 <strong>A server shows as needing authentication</strong>: give

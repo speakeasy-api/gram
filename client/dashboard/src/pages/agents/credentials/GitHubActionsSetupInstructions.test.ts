@@ -4,6 +4,7 @@ import {
   ACTION_DEFAULT_CONTROL_PLANE,
   controlPlaneProblem,
   githubActionsAgentGrants,
+  pluginGateways,
   pluginsForEveryAgent,
   repositoryProblem,
   unreachablePluginServers,
@@ -158,12 +159,17 @@ describe("workflowYaml", () => {
 
   // The job grants id-token: write, so every step can mint its OIDC token: no
   // step may run code a moved branch or tag could swap out.
-  it("pins every action and speakeasyd's source to a commit", () => {
+  it("pins every action, CLI and speakeasyd's source", () => {
     for (const yaml of variants) {
       const used = yaml.match(/uses: \S+/g) ?? [];
       expect(used.length).toBeGreaterThan(0);
       for (const step of used) {
         expect(step).toMatch(/@[0-9a-f]{40}$/);
+      }
+      const installed = yaml.match(/npm install -g \S+/g) ?? [];
+      expect(installed).toHaveLength(1);
+      for (const install of installed) {
+        expect(install).toMatch(/@\d+\.\d+\.\d+$/);
       }
     }
     expect(workflow({ buildFromSource: true })).toMatch(
@@ -260,6 +266,14 @@ describe("workflowYaml", () => {
     expect(yaml).toContain("repository: speakeasy-api/device-agent");
     expect(yaml).toContain('go build -o "$RUNNER_TEMP/speakeasyd"');
     expect(yaml).toContain("speakeasyd-binary: ${{ runner.temp }}/speakeasyd");
+    // The source is gone before the agent runs, so it describes only the
+    // repository's own files.
+    expect(yaml.indexOf("rm -rf .speakeasyd-src")).toBeGreaterThan(
+      yaml.indexOf("go build"),
+    );
+    expect(yaml.indexOf("rm -rf .speakeasyd-src")).toBeLessThan(
+      yaml.indexOf("- name: Connect to Speakeasy"),
+    );
   });
 
   it("shows placeholders while the organization or project is unknown", () => {
@@ -368,5 +382,10 @@ describe("plugins a job receives", () => {
         ],
       ),
     ).toEqual([]);
+  });
+
+  it("set gateways apart, since a job skips them", () => {
+    expect(pluginGateways([everyone])).toEqual(["Gateway"]);
+    expect(unreachablePluginServers([everyone], [])).not.toContain("Gateway");
   });
 });

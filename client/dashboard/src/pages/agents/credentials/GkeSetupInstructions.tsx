@@ -1,8 +1,7 @@
-import { Alert } from "@/components/ui/Alert";
 import { CodeBlock } from "./CodeBlock";
 import { ConsoleRow } from "./ConsoleRow";
 import { ExchangeValues } from "./GkeExchange";
-import { Links, PendingValues, VariableField } from "./SetupFields";
+import { Links, PendingValues, SetupError, VariableField } from "./SetupFields";
 import type { Connection, PlatformSetup } from "./setupInstructions";
 import {
   platformEndpoints,
@@ -178,11 +177,7 @@ export function gkeSetupInstructions(entry: CatalogEntry): PlatformSetup {
                 onChange={(next) => setValue(field.key, next)}
               />
             ))}
-            {ruleConflict !== null && (
-              <Alert variant="error">
-                <div className="text-sm">{ruleConflict}</div>
-              </Alert>
-            )}
+            {ruleConflict !== null && <SetupError>{ruleConflict}</SetupError>}
           </>
         ),
       },

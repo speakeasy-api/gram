@@ -22,34 +22,34 @@ export const GITHUB_ACTIONS_KEY = "github-actions";
  * Every action the generated workflow uses, pinned to a commit rather than a
  * branch or tag: the job grants id-token: write, so each step can mint the
  * job's OIDC token, and a moved ref would run code nobody reviewed with the
- * agent's access. The tag each commit was taken from is kept beside it, so
- * bumping one is a matter of looking that tag up again.
+ * agent's access. The tag or branch each commit was taken from is kept
+ * beside it, so bumping one is a matter of looking that ref up again.
  */
 const PINNED_ACTIONS = {
   checkout: {
     uses: "actions/checkout",
     commit: "3d3c42e5aac5ba805825da76410c181273ba90b1",
-    tag: "v7",
+    ref: "v7",
   },
   setupGo: {
     uses: "actions/setup-go",
     commit: "b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
-    tag: "v7",
+    ref: "v7",
   },
   deviceAgent: {
     uses: ACTION,
     commit: "1b4e09374058ac30d700de7f8f9f9347a34eec78",
-    tag: "main",
+    ref: "main",
   },
   claude: {
     uses: "anthropics/claude-code-action",
     commit: "6d5ae526d25ce88daa2200be073e1a373167f064",
-    tag: "v1",
+    ref: "v1",
   },
   codex: {
     uses: "openai/codex-action",
     commit: "bdf19a4a223ec2549a3e2274a0cf61556bc07675",
-    tag: "v1",
+    ref: "v1",
   },
 } as const;
 
@@ -59,13 +59,32 @@ const PINNED_ACTIONS = {
  */
 const SPEAKEASYD_SOURCE_COMMIT = "103ae14d8f361d31f267c09c76b5741edf2d2c84";
 
-/** A step's `uses:` value for a pinned action, naming the tag it came from. */
+/** A step's `uses:` value for a pinned action, naming the ref it came from. */
 function uses(action: keyof typeof PINNED_ACTIONS): string {
   const pinned = PINNED_ACTIONS[action];
-  return `${pinned.uses}@${pinned.commit} # ${pinned.tag}`;
+  return `${pinned.uses}@${pinned.commit} # ${pinned.ref}`;
 }
 
+/**
+ * The coding agents' CLIs, pinned to a version for the same reason as the
+ * actions: they are installed in a job that can mint its OIDC token.
+ */
+const PINNED_PACKAGES = {
+  claude: "@anthropic-ai/claude-code@2.1.314",
+  codex: "@openai/codex@0.166.0",
+} as const;
+
 export type WorkflowAgent = "claude" | "codex";
+
+/** The coding agents a workflow can run, in the order they are offered. */
+export const WORKFLOW_AGENT_KEYS: readonly WorkflowAgent[] = [
+  "claude",
+  "codex",
+];
+
+export function isWorkflowAgent(value: string): value is WorkflowAgent {
+  return (WORKFLOW_AGENT_KEYS as readonly string[]).includes(value);
+}
 
 /** What the workflow needs to run each coding agent after Speakeasy syncs. */
 export const WORKFLOW_AGENTS = {
@@ -74,7 +93,7 @@ export const WORKFLOW_AGENTS = {
     secret: "ANTHROPIC_API_KEY",
     docs: "https://github.com/anthropics/claude-code-action",
     install: [
-      "          npm install -g @anthropic-ai/claude-code",
+      `          npm install -g ${PINNED_PACKAGES.claude}`,
       '          mkdir -p "$HOME/.claude"',
     ],
     inputs: [
@@ -87,7 +106,7 @@ export const WORKFLOW_AGENTS = {
     secret: "OPENAI_API_KEY",
     docs: "https://learn.chatgpt.com/docs/github-action",
     install: [
-      "          npm install -g @openai/codex",
+      `          npm install -g ${PINNED_PACKAGES.codex}`,
       // runner.temp is not available in a job-level env, so later steps get
       // CODEX_HOME through GITHUB_ENV.
       '          echo "CODEX_HOME=$RUNNER_TEMP/speakeasy-codex" >> "$GITHUB_ENV"',
@@ -234,8 +253,11 @@ export function workflowYaml({
           `      - uses: ${uses("setupGo")}`,
           "        with:",
           "          go-version-file: .speakeasyd-src/go.mod",
-          '      - run: CGO_ENABLED=0 go build -o "$RUNNER_TEMP/speakeasyd" ./cmd/speakeasyd',
-          "        working-directory: .speakeasyd-src",
+          // Removed once built, so the agent's later steps see only the
+          // repository's own files.
+          "      - run: |",
+          '          (cd .speakeasyd-src && CGO_ENABLED=0 go build -o "$RUNNER_TEMP/speakeasyd" ./cmd/speakeasyd)',
+          "          rm -rf .speakeasyd-src",
         ]
       : []),
     "      - name: Connect to Speakeasy",
@@ -277,6 +299,32 @@ export function pluginsForEveryAgent(plugins: Plugin[]): Plugin[] {
   );
 }
 
+type PluginServer = NonNullable<Plugin["servers"]>[number];
+
+/**
+ * The IDs a plugin server can be granted by. A gateway has neither: it is not
+ * a server an agent is given.
+ */
+function grantableIds(server: PluginServer): string[] {
+  return [server.toolsetId, server.mcpServerId].filter(
+    (id): id is string => id !== undefined && id !== "",
+  );
+}
+
+/** The plugin servers matching `keep`, by name, once each and sorted. */
+function serverNames(
+  plugins: Plugin[],
+  keep: (server: PluginServer) => boolean,
+): string[] {
+  const names = new Set(
+    plugins
+      .flatMap((plugin) => plugin.servers ?? [])
+      .filter(keep)
+      .map((server) => server.displayName),
+  );
+  return [...names].sort();
+}
+
 /**
  * The servers in these plugins the agent was not given. The job is told
  * about them and cannot get a token for them, so its tools show them as
@@ -287,16 +335,16 @@ export function unreachablePluginServers(
   servers: SetupServer[],
 ): string[] {
   const reachable = new Set(servers.flatMap((s) => [s.id, s.resourceId]));
-  const names = new Set<string>();
-  for (const plugin of plugins) {
-    for (const server of plugin.servers ?? []) {
-      const ids = [server.toolsetId, server.mcpServerId].filter(
-        (id): id is string => id !== undefined && id !== "",
-      );
-      // Gateways do not accept agents yet, so a job skips them either way.
-      if (ids.length === 0) continue;
-      if (!ids.some((id) => reachable.has(id))) names.add(server.displayName);
-    }
-  }
-  return [...names].sort();
+  return serverNames(plugins, (server) => {
+    const ids = grantableIds(server);
+    return ids.length > 0 && !ids.some((id) => reachable.has(id));
+  });
+}
+
+/**
+ * The gateways in these plugins. Gateways do not accept agents yet, so a job
+ * skips them: they are listed but give it no tools.
+ */
+export function pluginGateways(plugins: Plugin[]): string[] {
+  return serverNames(plugins, (server) => grantableIds(server).length === 0);
 }
