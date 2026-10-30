@@ -2343,6 +2343,9 @@ func EncodeServeChatAttachmentResponse(encoder func(context.Context, http.Respon
 			w.Header().Set("Content-Length", contentLengths)
 		}
 		w.Header().Set("Last-Modified", res.LastModified)
+		w.Header().Set("Content-Disposition", res.ContentDisposition)
+		w.Header().Set("Content-Security-Policy", res.ContentSecurityPolicy)
+		w.Header().Set("X-Content-Type-Options", res.XContentTypeOptions)
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}
@@ -2832,6 +2835,9 @@ func EncodeServeChatAttachmentSignedResponse(encoder func(context.Context, http.
 		if res.AccessControlAllowOrigin != nil {
 			w.Header().Set("Access-Control-Allow-Origin", *res.AccessControlAllowOrigin)
 		}
+		w.Header().Set("Content-Disposition", res.ContentDisposition)
+		w.Header().Set("Content-Security-Policy", res.ContentSecurityPolicy)
+		w.Header().Set("X-Content-Type-Options", res.XContentTypeOptions)
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}

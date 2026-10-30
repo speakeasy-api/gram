@@ -269,7 +269,7 @@ func (q *Queries) GetAssetsByID(ctx context.Context, arg GetAssetsByIDParams) ([
 }
 
 const getChatAttachmentAssetURL = `-- name: GetChatAttachmentAssetURL :one
-SELECT url, content_type, content_length, updated_at
+SELECT name, url, content_type, content_length, updated_at
 FROM assets
 WHERE
   id = $1 AND kind = 'chat_attachment'
@@ -283,6 +283,7 @@ type GetChatAttachmentAssetURLParams struct {
 }
 
 type GetChatAttachmentAssetURLRow struct {
+	Name          string
 	Url           string
 	ContentType   string
 	ContentLength int64
@@ -293,6 +294,7 @@ func (q *Queries) GetChatAttachmentAssetURL(ctx context.Context, arg GetChatAtta
 	row := q.db.QueryRow(ctx, getChatAttachmentAssetURL, arg.ID, arg.ProjectID)
 	var i GetChatAttachmentAssetURLRow
 	err := row.Scan(
+		&i.Name,
 		&i.Url,
 		&i.ContentType,
 		&i.ContentLength,
