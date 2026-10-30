@@ -1204,6 +1204,10 @@ type Chat struct {
 	// @access: confidential
 	SummaryGeneratedAt pgtype.Timestamptz
 	// @access: confidential
+	SummaryRedacted bool
+	// @access: confidential
+	MemoryExcludedAt pgtype.Timestamptz
+	// @access: confidential
 	InferenceAcceptedCheckpoint []byte
 	// @access: confidential-pii
 	InferenceActorKey []byte
@@ -3568,6 +3572,74 @@ type MdmDevice struct {
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
+}
+
+type MemoryDigest struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Level string
+	// @access: confidential
+	PeriodStart pgtype.Date
+	// @access: confidential
+	PeriodEnd pgtype.Date
+	// Model-written digest built only from redacted summaries, memos and child digests.
+	// @access: opaque-restricted
+	Content string
+	// @access: confidential
+	ChatIds []uuid.UUID
+	// @access: confidential
+	MemoIds []uuid.UUID
+	// @access: confidential
+	ChildDigestIds []uuid.UUID
+	// @access: confidential
+	Model pgtype.Text
+	// @access: confidential
+	InputTokens pgtype.Int4
+	// @access: confidential
+	OutputTokens pgtype.Int4
+	// Full-text index of content.
+	// @access: opaque-restricted
+	SearchVector interface{}
+	// @access: confidential
+	GeneratedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type MemoryMemo struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	ChatID uuid.NullUUID
+	// @access: confidential
+	AuthorUserID pgtype.Text
+	// @access: confidential
+	AuthorAgentID uuid.NullUUID
+	// Risk-redacted fact text supplied by an agent.
+	// @access: opaque-restricted
+	Content string
+	// Full-text index of content.
+	// @access: opaque-restricted
+	SearchVector interface{}
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type MetaMcpServer struct {
