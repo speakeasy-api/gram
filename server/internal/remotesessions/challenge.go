@@ -1632,6 +1632,12 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnexpected, err, "load remote session client").LogError(ctx, logger)
 	}
 	client := clientRow.RemoteSessionClient
+	// Retain provider metadata before the exchange. An administrative change
+	// while the token endpoint responds must not reinterpret its granted scopes.
+	exchangeIssuer, err := queries.GetRemoteSessionClientWithIssuerByID(ctx, client.ID)
+	if err != nil {
+		return none, oops.E(oops.CodeUnexpected, err, "load token exchange issuer").LogError(ctx, logger)
+	}
 
 	var clientSecret string
 	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
@@ -1660,13 +1666,8 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	assertionIssuer := state.AssertionIssuer
 	if authMethod == TokenEndpointAuthMethodPrivateKeyJWT && assertionIssuer == "" {
 		// Rolling-deploy compatibility: the prior binary could mint a login state
-		// without AssertionIssuer. The scoped client read above established
-		// authority; this id-only joined read only recovers its issuer metadata.
-		joined, jerr := queries.GetRemoteSessionClientWithIssuerByID(ctx, client.ID)
-		if jerr != nil {
-			return none, oops.E(oops.CodeUnexpected, jerr, "load the remote session client's assertion issuer").LogError(ctx, logger)
-		}
-		assertionIssuer = clientAssertionIssuer(joined.IssuerMetadata, joined.IssuerUrl)
+		// without AssertionIssuer. Use the pre-exchange issuer metadata.
+		assertionIssuer = clientAssertionIssuer(exchangeIssuer.IssuerMetadata, exchangeIssuer.IssuerUrl)
 	}
 	assertionAudience, err := ResolveTokenEndpointAuthAudience(client.TokenEndpointAuthAudienceFormat.String, assertionIssuer, state.TokenEndpoint)
 	if err != nil && authMethod == TokenEndpointAuthMethodPrivateKeyJWT {
@@ -1759,7 +1760,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 
 	// RFC 6749 §5.1: a response that omits scope granted exactly what was
 	// requested, so the requested set is what the session records.
-	scopes := tok.Scopes()
+	scopes := tok.scopesForIssuer(exchangeIssuer.IssuerUrl)
 	if !tok.ScopeReported() {
 		if jwtAccess.ok() && jwtAccess.scopePresent {
 			scopes = jwtAccess.scopes

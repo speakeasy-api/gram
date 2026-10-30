@@ -14,6 +14,7 @@ import { remoteSessionsList } from "../funcs/remoteSessionsList.js";
 import { remoteSessionsListBindings } from "../funcs/remoteSessionsListBindings.js";
 import { remoteSessionsListServerClientAssociations } from "../funcs/remoteSessionsListServerClientAssociations.js";
 import { remoteSessionsRevoke } from "../funcs/remoteSessionsRevoke.js";
+import { remoteSessionsTestServerConnection } from "../funcs/remoteSessionsTestServerConnection.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { BindingRefreshAttempt } from "../models/components/bindingrefreshattempt.js";
 import { BindingRefreshResult } from "../models/components/bindingrefreshresult.js";
@@ -22,6 +23,7 @@ import { CountRemoteSessionsResult } from "../models/components/countremotesessi
 import { ListBindingsResponseBody } from "../models/components/listbindingsresponsebody.js";
 import { ListServerClientAssociationsResult } from "../models/components/listserverclientassociationsresult.js";
 import { PrincipalRemoteSessionBinding } from "../models/components/principalremotesessionbinding.js";
+import { ServerConnectionTestResult } from "../models/components/serverconnectiontestresult.js";
 import { ServerIdentityImpactResult } from "../models/components/serveridentityimpactresult.js";
 import {
   AttachBindingRequest,
@@ -72,6 +74,10 @@ import {
   RevokeRemoteSessionRequest,
   RevokeRemoteSessionSecurity,
 } from "../models/operations/revokeremotesession.js";
+import {
+  TestServerConnectionRequest,
+  TestServerConnectionSecurity,
+} from "../models/operations/testserverconnection.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -297,6 +303,25 @@ export class RemoteSessions extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(remoteSessionsRevoke(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * testServerConnection remoteSessions
+   *
+   * @remarks
+   * Initialize a directly Remote MCP-backed server and discover all tools using the signed-in user's saved authorization. Never executes tools. A provider tab returning is not evidence of authorization. Requires an ordinary dashboard session and mcp:connect on the exact server; API keys are refused.
+   */
+  async testServerConnection(
+    request: TestServerConnectionRequest,
+    security?: TestServerConnectionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ServerConnectionTestResult> {
+    return unwrapAsync(remoteSessionsTestServerConnection(
       this,
       request,
       security,

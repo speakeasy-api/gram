@@ -1199,6 +1199,245 @@ func DecodeDetachBindingResponse(decoder func(*http.Response) goahttp.Decoder, r
 	}
 }
 
+// BuildTestServerConnectionRequest instantiates a HTTP request object with
+// method and path set to call the "remoteSessions" service
+// "testServerConnection" endpoint
+func (c *Client) BuildTestServerConnectionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: TestServerConnectionRemoteSessionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessions", "testServerConnection", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeTestServerConnectionRequest returns an encoder for requests sent to
+// the remoteSessions testServerConnection server.
+func EncodeTestServerConnectionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessions.TestServerConnectionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessions", "testServerConnection", "*remotesessions.TestServerConnectionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewTestServerConnectionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteSessions", "testServerConnection", err)
+		}
+		return nil
+	}
+}
+
+// DecodeTestServerConnectionResponse returns a decoder for responses returned
+// by the remoteSessions testServerConnection endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeTestServerConnectionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeTestServerConnectionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body TestServerConnectionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "testServerConnection", err)
+			}
+			err = ValidateTestServerConnectionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "testServerConnection", err)
+			}
+			res := NewTestServerConnectionServerConnectionTestResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body TestServerConnectionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "testServerConnection", err)
+			}
+			err = ValidateTestServerConnectionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "testServerConnection", err)
+			}
+			return nil, NewTestServerConnectionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body TestServerConnectionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "testServerConnection", err)
+			}
+			err = ValidateTestServerConnectionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "testServerConnection", err)
+			}
+			return nil, NewTestServerConnectionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body TestServerConnectionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "testServerConnection", err)
+			}
+			err = ValidateTestServerConnectionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "testServerConnection", err)
+			}
+			return nil, NewTestServerConnectionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body TestServerConnectionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "testServerConnection", err)
+			}
+			err = ValidateTestServerConnectionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "testServerConnection", err)
+			}
+			return nil, NewTestServerConnectionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body TestServerConnectionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "testServerConnection", err)
+			}
+			err = ValidateTestServerConnectionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "testServerConnection", err)
+			}
+			return nil, NewTestServerConnectionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body TestServerConnectionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "testServerConnection", err)
+			}
+			err = ValidateTestServerConnectionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "testServerConnection", err)
+			}
+			return nil, NewTestServerConnectionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body TestServerConnectionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "testServerConnection", err)
+			}
+			err = ValidateTestServerConnectionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "testServerConnection", err)
+			}
+			return nil, NewTestServerConnectionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body TestServerConnectionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessions", "testServerConnection", err)
+				}
+				err = ValidateTestServerConnectionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessions", "testServerConnection", err)
+				}
+				return nil, NewTestServerConnectionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body TestServerConnectionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessions", "testServerConnection", err)
+				}
+				err = ValidateTestServerConnectionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessions", "testServerConnection", err)
+				}
+				return nil, NewTestServerConnectionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessions", "testServerConnection", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body TestServerConnectionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "testServerConnection", err)
+			}
+			err = ValidateTestServerConnectionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "testServerConnection", err)
+			}
+			return nil, NewTestServerConnectionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessions", "testServerConnection", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCommitServerIdentityConfigurationRequest instantiates a HTTP request
 // object with method and path set to call the "remoteSessions" service
 // "commitServerIdentityConfiguration" endpoint

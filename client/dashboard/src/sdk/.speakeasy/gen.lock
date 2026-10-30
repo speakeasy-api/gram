@@ -623,6 +623,7 @@ trackedFiles:
   src/funcs/remoteSessionsListBindings.ts: {}
   src/funcs/remoteSessionsListServerClientAssociations.ts: {}
   src/funcs/remoteSessionsRevoke.ts: {}
+  src/funcs/remoteSessionsTestServerConnection.ts: {}
   src/funcs/resourcesList.ts: {}
   src/funcs/riskApprovalsDecide.ts: {}
   src/funcs/riskApprovalsGet.ts: {}
@@ -1892,6 +1893,7 @@ trackedFiles:
   src/models/components/sendmessagerequestbody.ts: {}
   src/models/components/sendmessageresult.ts: {}
   src/models/components/serverclientassociation.ts: {}
+  src/models/components/serverconnectiontestresult.ts: {}
   src/models/components/serveridentityclientconfiguration.ts: {}
   src/models/components/serveridentityimpactresult.ts: {}
   src/models/components/serveridentityimpactserver.ts: {}
@@ -2025,6 +2027,7 @@ trackedFiles:
   src/models/components/testdetectionrulematch.ts: {}
   src/models/components/testdetectionrulerequestbody.ts: {}
   src/models/components/testdetectionruleresult.ts: {}
+  src/models/components/testserverconnectionrequestbody.ts: {}
   src/models/components/tierlimits.ts: {}
   src/models/components/timeseriesbucket.ts: {}
   src/models/components/tokenresult.ts: {}
@@ -2990,6 +2993,7 @@ trackedFiles:
   src/models/operations/syncslackdirectory.ts: {}
   src/models/operations/testdetectionrule.ts: {}
   src/models/operations/testdeviceintegrationconnection.ts: {}
+  src/models/operations/testserverconnection.ts: {}
   src/models/operations/tokenexchange.ts: {}
   src/models/operations/transferagent.ts: {}
   src/models/operations/triggerchatanalysis.ts: {}
@@ -4169,6 +4173,7 @@ trackedFiles:
   src/react-query/templates.core.ts: {}
   src/react-query/templates.ts: {}
   src/react-query/testDeviceIntegrationConnection.ts: {}
+  src/react-query/testServerConnection.ts: {}
   src/react-query/tokenExchangeExchange.ts: {}
   src/react-query/toolVariationGroups.core.ts: {}
   src/react-query/toolVariationGroups.ts: {}
@@ -13456,6 +13461,17 @@ examples:
       responses:
         "200":
           application/json: {"ok": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  testServerConnection:
+    speakeasy-default-test-server-connection:
+      requestBody:
+        application/json: {"mcp_server_id": "a8736deb-7c38-4cc9-8cc5-70df06de4b14"}
+      responses:
+        "200":
+          application/json: {"code": "<value>", "message": "<value>", "status": "authorization_required"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

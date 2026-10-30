@@ -1119,7 +1119,7 @@ func (s *RefreshService) refreshSessionTokens(
 	if lifetime, reported := tok.AuthorizationLifetimeSeconds(); reported {
 		authorizationExpires = conv.PtrToPGTimestamptz(expirationDeadline(now, lifetime, true))
 	}
-	scopes := tok.Scopes()
+	scopes := tok.scopesForIssuer(client.IssuerUrl)
 	if !tok.ScopeReported() {
 		// RFC 6749 §6: an omitted scope means the refreshed token retains the
 		// original grant's scope.
