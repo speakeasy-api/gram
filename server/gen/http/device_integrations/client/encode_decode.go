@@ -2517,6 +2517,7 @@ func unmarshalManagedDeviceAgentStateResponseBodyToDeviceintegrationsManagedDevi
 	}
 	res := &deviceintegrations.ManagedDeviceAgentState{
 		ReportedAt:         *v.ReportedAt,
+		Attestation:        *v.Attestation,
 		AppliedEtag:        v.AppliedEtag,
 		AppliedAt:          v.AppliedAt,
 		EnforcementHalted:  *v.EnforcementHalted,

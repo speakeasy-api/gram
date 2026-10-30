@@ -212,6 +212,24 @@ type GetMetaMcpServerUsageRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 }
 
+// GetOrganizationGatewayOverviewRequestBody is the type of the "telemetry"
+// service "getOrganizationGatewayOverview" endpoint HTTP request body.
+type GetOrganizationGatewayOverviewRequestBody struct {
+	// Start time in ISO 8601 format
+	From string `form:"from" json:"from" xml:"from"`
+	// End time in ISO 8601 format
+	To string `form:"to" json:"to" xml:"to"`
+}
+
+// GetOrganizationGatewayUsageRequestBody is the type of the "telemetry"
+// service "getOrganizationGatewayUsage" endpoint HTTP request body.
+type GetOrganizationGatewayUsageRequestBody struct {
+	// Start time in ISO 8601 format
+	From string `form:"from" json:"from" xml:"from"`
+	// End time in ISO 8601 format
+	To string `form:"to" json:"to" xml:"to"`
+}
+
 // GetProjectOverviewRequestBody is the type of the "telemetry" service
 // "getProjectOverview" endpoint HTTP request body.
 type GetProjectOverviewRequestBody struct {
@@ -1018,6 +1036,31 @@ type GetMcpNetworkTrafficResponseBody struct {
 // GetMetaMcpServerUsageResponseBody is the type of the "telemetry" service
 // "getMetaMcpServerUsage" endpoint HTTP response body.
 type GetMetaMcpServerUsageResponseBody struct {
+	Funnel *MetaMcpDiscoveryFunnelResponseBody `form:"funnel,omitempty" json:"funnel,omitempty" xml:"funnel,omitempty"`
+	// Per-member execution breakdown, most active first
+	Members []*MetaMcpMemberUsageResponseBody `form:"members,omitempty" json:"members,omitempty" xml:"members,omitempty"`
+}
+
+// GetOrganizationGatewayOverviewResponseBody is the type of the "telemetry"
+// service "getOrganizationGatewayOverview" endpoint HTTP response body.
+type GetOrganizationGatewayOverviewResponseBody struct {
+	// Current period summary metrics
+	Summary *ObservabilitySummaryResponseBody `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// Previous period summary metrics for trend calculation
+	Comparison *ObservabilitySummaryResponseBody `form:"comparison,omitempty" json:"comparison,omitempty" xml:"comparison,omitempty"`
+	// Time series data points
+	TimeSeries []*TimeSeriesBucketResponseBody `form:"time_series,omitempty" json:"time_series,omitempty" xml:"time_series,omitempty"`
+	// Top tools by call count
+	TopToolsByCount []*ToolMetricResponseBody `form:"top_tools_by_count,omitempty" json:"top_tools_by_count,omitempty" xml:"top_tools_by_count,omitempty"`
+	// Top tools by failure rate
+	TopToolsByFailureRate []*ToolMetricResponseBody `form:"top_tools_by_failure_rate,omitempty" json:"top_tools_by_failure_rate,omitempty" xml:"top_tools_by_failure_rate,omitempty"`
+	// The time bucket interval in seconds used for the time series data
+	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
+}
+
+// GetOrganizationGatewayUsageResponseBody is the type of the "telemetry"
+// service "getOrganizationGatewayUsage" endpoint HTTP response body.
+type GetOrganizationGatewayUsageResponseBody struct {
 	Funnel *MetaMcpDiscoveryFunnelResponseBody `form:"funnel,omitempty" json:"funnel,omitempty" xml:"funnel,omitempty"`
 	// Per-member execution breakdown, most active first
 	Members []*MetaMcpMemberUsageResponseBody `form:"members,omitempty" json:"members,omitempty" xml:"members,omitempty"`
@@ -3305,6 +3348,386 @@ type GetMetaMcpServerUsageUnexpectedResponseBody struct {
 // service "getMetaMcpServerUsage" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetMetaMcpServerUsageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayOverviewUnauthorizedResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
+// body for the "unauthorized" error.
+type GetOrganizationGatewayOverviewUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayOverviewForbiddenResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
+// body for the "forbidden" error.
+type GetOrganizationGatewayOverviewForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayOverviewBadRequestResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
+// body for the "bad_request" error.
+type GetOrganizationGatewayOverviewBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayOverviewNotFoundResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
+// body for the "not_found" error.
+type GetOrganizationGatewayOverviewNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayOverviewConflictResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
+// body for the "conflict" error.
+type GetOrganizationGatewayOverviewConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayOverviewUnsupportedMediaResponseBody is the type of
+// the "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP
+// response body for the "unsupported_media" error.
+type GetOrganizationGatewayOverviewUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayOverviewInvalidResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
+// body for the "invalid" error.
+type GetOrganizationGatewayOverviewInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayOverviewInvariantViolationResponseBody is the type of
+// the "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP
+// response body for the "invariant_violation" error.
+type GetOrganizationGatewayOverviewInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayOverviewUnexpectedResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
+// body for the "unexpected" error.
+type GetOrganizationGatewayOverviewUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayOverviewGatewayErrorResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
+// body for the "gateway_error" error.
+type GetOrganizationGatewayOverviewGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayUsageUnauthorizedResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "unauthorized" error.
+type GetOrganizationGatewayUsageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayUsageForbiddenResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "forbidden" error.
+type GetOrganizationGatewayUsageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayUsageBadRequestResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "bad_request" error.
+type GetOrganizationGatewayUsageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayUsageNotFoundResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "not_found" error.
+type GetOrganizationGatewayUsageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayUsageConflictResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "conflict" error.
+type GetOrganizationGatewayUsageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayUsageUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "unsupported_media" error.
+type GetOrganizationGatewayUsageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayUsageInvalidResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "invalid" error.
+type GetOrganizationGatewayUsageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayUsageInvariantViolationResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "invariant_violation" error.
+type GetOrganizationGatewayUsageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayUsageUnexpectedResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "unexpected" error.
+type GetOrganizationGatewayUsageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationGatewayUsageGatewayErrorResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "gateway_error" error.
+type GetOrganizationGatewayUsageGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -8539,6 +8962,9 @@ type MetaMcpMemberUsageResponseBody struct {
 	ErrorCount *int64 `form:"error_count,omitempty" json:"error_count,omitempty" xml:"error_count,omitempty"`
 	// ISO 8601 timestamp of the most recent call
 	LastCalledAt *string `form:"last_called_at,omitempty" json:"last_called_at,omitempty" xml:"last_called_at,omitempty"`
+	// Display name of the server. Set for Organization Gateway usage, whose
+	// servers span projects the caller may not have loaded.
+	McpServerName *string `form:"mcp_server_name,omitempty" json:"mcp_server_name,omitempty" xml:"mcp_server_name,omitempty"`
 }
 
 // ProjectOverviewSummaryResponseBody is used to define fields on response body
@@ -9529,6 +9955,28 @@ func NewGetMetaMcpServerUsageRequestBody(p *telemetry.GetMetaMcpServerUsagePaylo
 		MetaMcpServerID: p.MetaMcpServerID,
 		From:            p.From,
 		To:              p.To,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayOverviewRequestBody builds the HTTP request body
+// from the payload of the "getOrganizationGatewayOverview" endpoint of the
+// "telemetry" service.
+func NewGetOrganizationGatewayOverviewRequestBody(p *telemetry.GetOrganizationGatewayOverviewPayload) *GetOrganizationGatewayOverviewRequestBody {
+	body := &GetOrganizationGatewayOverviewRequestBody{
+		From: p.From,
+		To:   p.To,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayUsageRequestBody builds the HTTP request body from
+// the payload of the "getOrganizationGatewayUsage" endpoint of the "telemetry"
+// service.
+func NewGetOrganizationGatewayUsageRequestBody(p *telemetry.GetOrganizationGatewayUsagePayload) *GetOrganizationGatewayUsageRequestBody {
+	body := &GetOrganizationGatewayUsageRequestBody{
+		From: p.From,
+		To:   p.To,
 	}
 	return body
 }
@@ -12713,6 +13161,361 @@ func NewGetMetaMcpServerUsageUnexpected(body *GetMetaMcpServerUsageUnexpectedRes
 // NewGetMetaMcpServerUsageGatewayError builds a telemetry service
 // getMetaMcpServerUsage endpoint gateway_error error.
 func NewGetMetaMcpServerUsageGatewayError(body *GetMetaMcpServerUsageGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayOverviewGetObservabilityOverviewResultOK builds a
+// "telemetry" service "getOrganizationGatewayOverview" endpoint result from a
+// HTTP "OK" response.
+func NewGetOrganizationGatewayOverviewGetObservabilityOverviewResultOK(body *GetOrganizationGatewayOverviewResponseBody) *telemetry.GetObservabilityOverviewResult {
+	v := &telemetry.GetObservabilityOverviewResult{
+		IntervalSeconds: *body.IntervalSeconds,
+	}
+	v.Summary = unmarshalObservabilitySummaryResponseBodyToTelemetryObservabilitySummary(body.Summary)
+	v.Comparison = unmarshalObservabilitySummaryResponseBodyToTelemetryObservabilitySummary(body.Comparison)
+	v.TimeSeries = make([]*telemetry.TimeSeriesBucket, len(body.TimeSeries))
+	for i, val := range body.TimeSeries {
+		if val == nil {
+			v.TimeSeries[i] = nil
+			continue
+		}
+		v.TimeSeries[i] = unmarshalTimeSeriesBucketResponseBodyToTelemetryTimeSeriesBucket(val)
+	}
+	v.TopToolsByCount = make([]*telemetry.ToolMetric, len(body.TopToolsByCount))
+	for i, val := range body.TopToolsByCount {
+		if val == nil {
+			v.TopToolsByCount[i] = nil
+			continue
+		}
+		v.TopToolsByCount[i] = unmarshalToolMetricResponseBodyToTelemetryToolMetric(val)
+	}
+	v.TopToolsByFailureRate = make([]*telemetry.ToolMetric, len(body.TopToolsByFailureRate))
+	for i, val := range body.TopToolsByFailureRate {
+		if val == nil {
+			v.TopToolsByFailureRate[i] = nil
+			continue
+		}
+		v.TopToolsByFailureRate[i] = unmarshalToolMetricResponseBodyToTelemetryToolMetric(val)
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayOverviewUnauthorized builds a telemetry service
+// getOrganizationGatewayOverview endpoint unauthorized error.
+func NewGetOrganizationGatewayOverviewUnauthorized(body *GetOrganizationGatewayOverviewUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayOverviewForbidden builds a telemetry service
+// getOrganizationGatewayOverview endpoint forbidden error.
+func NewGetOrganizationGatewayOverviewForbidden(body *GetOrganizationGatewayOverviewForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayOverviewBadRequest builds a telemetry service
+// getOrganizationGatewayOverview endpoint bad_request error.
+func NewGetOrganizationGatewayOverviewBadRequest(body *GetOrganizationGatewayOverviewBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayOverviewNotFound builds a telemetry service
+// getOrganizationGatewayOverview endpoint not_found error.
+func NewGetOrganizationGatewayOverviewNotFound(body *GetOrganizationGatewayOverviewNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayOverviewConflict builds a telemetry service
+// getOrganizationGatewayOverview endpoint conflict error.
+func NewGetOrganizationGatewayOverviewConflict(body *GetOrganizationGatewayOverviewConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayOverviewUnsupportedMedia builds a telemetry service
+// getOrganizationGatewayOverview endpoint unsupported_media error.
+func NewGetOrganizationGatewayOverviewUnsupportedMedia(body *GetOrganizationGatewayOverviewUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayOverviewInvalid builds a telemetry service
+// getOrganizationGatewayOverview endpoint invalid error.
+func NewGetOrganizationGatewayOverviewInvalid(body *GetOrganizationGatewayOverviewInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayOverviewInvariantViolation builds a telemetry
+// service getOrganizationGatewayOverview endpoint invariant_violation error.
+func NewGetOrganizationGatewayOverviewInvariantViolation(body *GetOrganizationGatewayOverviewInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayOverviewUnexpected builds a telemetry service
+// getOrganizationGatewayOverview endpoint unexpected error.
+func NewGetOrganizationGatewayOverviewUnexpected(body *GetOrganizationGatewayOverviewUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayOverviewGatewayError builds a telemetry service
+// getOrganizationGatewayOverview endpoint gateway_error error.
+func NewGetOrganizationGatewayOverviewGatewayError(body *GetOrganizationGatewayOverviewGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayUsageGetMetaMcpServerUsageResultOK builds a
+// "telemetry" service "getOrganizationGatewayUsage" endpoint result from a
+// HTTP "OK" response.
+func NewGetOrganizationGatewayUsageGetMetaMcpServerUsageResultOK(body *GetOrganizationGatewayUsageResponseBody) *telemetry.GetMetaMcpServerUsageResult {
+	v := &telemetry.GetMetaMcpServerUsageResult{}
+	v.Funnel = unmarshalMetaMcpDiscoveryFunnelResponseBodyToTelemetryMetaMcpDiscoveryFunnel(body.Funnel)
+	v.Members = make([]*telemetry.MetaMcpMemberUsage, len(body.Members))
+	for i, val := range body.Members {
+		if val == nil {
+			v.Members[i] = nil
+			continue
+		}
+		v.Members[i] = unmarshalMetaMcpMemberUsageResponseBodyToTelemetryMetaMcpMemberUsage(val)
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayUsageUnauthorized builds a telemetry service
+// getOrganizationGatewayUsage endpoint unauthorized error.
+func NewGetOrganizationGatewayUsageUnauthorized(body *GetOrganizationGatewayUsageUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayUsageForbidden builds a telemetry service
+// getOrganizationGatewayUsage endpoint forbidden error.
+func NewGetOrganizationGatewayUsageForbidden(body *GetOrganizationGatewayUsageForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayUsageBadRequest builds a telemetry service
+// getOrganizationGatewayUsage endpoint bad_request error.
+func NewGetOrganizationGatewayUsageBadRequest(body *GetOrganizationGatewayUsageBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayUsageNotFound builds a telemetry service
+// getOrganizationGatewayUsage endpoint not_found error.
+func NewGetOrganizationGatewayUsageNotFound(body *GetOrganizationGatewayUsageNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayUsageConflict builds a telemetry service
+// getOrganizationGatewayUsage endpoint conflict error.
+func NewGetOrganizationGatewayUsageConflict(body *GetOrganizationGatewayUsageConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayUsageUnsupportedMedia builds a telemetry service
+// getOrganizationGatewayUsage endpoint unsupported_media error.
+func NewGetOrganizationGatewayUsageUnsupportedMedia(body *GetOrganizationGatewayUsageUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayUsageInvalid builds a telemetry service
+// getOrganizationGatewayUsage endpoint invalid error.
+func NewGetOrganizationGatewayUsageInvalid(body *GetOrganizationGatewayUsageInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayUsageInvariantViolation builds a telemetry service
+// getOrganizationGatewayUsage endpoint invariant_violation error.
+func NewGetOrganizationGatewayUsageInvariantViolation(body *GetOrganizationGatewayUsageInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayUsageUnexpected builds a telemetry service
+// getOrganizationGatewayUsage endpoint unexpected error.
+func NewGetOrganizationGatewayUsageUnexpected(body *GetOrganizationGatewayUsageUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationGatewayUsageGatewayError builds a telemetry service
+// getOrganizationGatewayUsage endpoint gateway_error error.
+func NewGetOrganizationGatewayUsageGatewayError(body *GetOrganizationGatewayUsageGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -17280,6 +18083,85 @@ func ValidateGetMetaMcpServerUsageResponseBody(body *GetMetaMcpServerUsageRespon
 	return
 }
 
+// ValidateGetOrganizationGatewayOverviewResponseBody runs the validations
+// defined on GetOrganizationGatewayOverviewResponseBody
+func ValidateGetOrganizationGatewayOverviewResponseBody(body *GetOrganizationGatewayOverviewResponseBody) (err error) {
+	if body.Summary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("summary", "body"))
+	}
+	if body.Comparison == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("comparison", "body"))
+	}
+	if body.TimeSeries == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("time_series", "body"))
+	}
+	if body.TopToolsByCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_tools_by_count", "body"))
+	}
+	if body.TopToolsByFailureRate == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_tools_by_failure_rate", "body"))
+	}
+	if body.IntervalSeconds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("interval_seconds", "body"))
+	}
+	if body.Summary != nil {
+		if err2 := ValidateObservabilitySummaryResponseBody(body.Summary); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Comparison != nil {
+		if err2 := ValidateObservabilitySummaryResponseBody(body.Comparison); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.TimeSeries {
+		if e != nil {
+			if err2 := ValidateTimeSeriesBucketResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.TopToolsByCount {
+		if e != nil {
+			if err2 := ValidateToolMetricResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.TopToolsByFailureRate {
+		if e != nil {
+			if err2 := ValidateToolMetricResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayUsageResponseBody runs the validations defined
+// on GetOrganizationGatewayUsageResponseBody
+func ValidateGetOrganizationGatewayUsageResponseBody(body *GetOrganizationGatewayUsageResponseBody) (err error) {
+	if body.Funnel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("funnel", "body"))
+	}
+	if body.Members == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("members", "body"))
+	}
+	if body.Funnel != nil {
+		if err2 := ValidateMetaMcpDiscoveryFunnelResponseBody(body.Funnel); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Members {
+		if e != nil {
+			if err2 := ValidateMetaMcpMemberUsageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateGetProjectOverviewResponseBody runs the validations defined on
 // GetProjectOverviewResponseBody
 func ValidateGetProjectOverviewResponseBody(body *GetProjectOverviewResponseBody) (err error) {
@@ -20538,6 +21420,495 @@ func ValidateGetMetaMcpServerUsageUnexpectedResponseBody(body *GetMetaMcpServerU
 // ValidateGetMetaMcpServerUsageGatewayErrorResponseBody runs the validations
 // defined on getMetaMcpServerUsage_gateway_error_response_body
 func ValidateGetMetaMcpServerUsageGatewayErrorResponseBody(body *GetMetaMcpServerUsageGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayOverviewUnauthorizedResponseBody runs the
+// validations defined on
+// getOrganizationGatewayOverview_unauthorized_response_body
+func ValidateGetOrganizationGatewayOverviewUnauthorizedResponseBody(body *GetOrganizationGatewayOverviewUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayOverviewForbiddenResponseBody runs the
+// validations defined on getOrganizationGatewayOverview_forbidden_response_body
+func ValidateGetOrganizationGatewayOverviewForbiddenResponseBody(body *GetOrganizationGatewayOverviewForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayOverviewBadRequestResponseBody runs the
+// validations defined on
+// getOrganizationGatewayOverview_bad_request_response_body
+func ValidateGetOrganizationGatewayOverviewBadRequestResponseBody(body *GetOrganizationGatewayOverviewBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayOverviewNotFoundResponseBody runs the
+// validations defined on getOrganizationGatewayOverview_not_found_response_body
+func ValidateGetOrganizationGatewayOverviewNotFoundResponseBody(body *GetOrganizationGatewayOverviewNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayOverviewConflictResponseBody runs the
+// validations defined on getOrganizationGatewayOverview_conflict_response_body
+func ValidateGetOrganizationGatewayOverviewConflictResponseBody(body *GetOrganizationGatewayOverviewConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayOverviewUnsupportedMediaResponseBody runs the
+// validations defined on
+// getOrganizationGatewayOverview_unsupported_media_response_body
+func ValidateGetOrganizationGatewayOverviewUnsupportedMediaResponseBody(body *GetOrganizationGatewayOverviewUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayOverviewInvalidResponseBody runs the
+// validations defined on getOrganizationGatewayOverview_invalid_response_body
+func ValidateGetOrganizationGatewayOverviewInvalidResponseBody(body *GetOrganizationGatewayOverviewInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayOverviewInvariantViolationResponseBody runs
+// the validations defined on
+// getOrganizationGatewayOverview_invariant_violation_response_body
+func ValidateGetOrganizationGatewayOverviewInvariantViolationResponseBody(body *GetOrganizationGatewayOverviewInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayOverviewUnexpectedResponseBody runs the
+// validations defined on
+// getOrganizationGatewayOverview_unexpected_response_body
+func ValidateGetOrganizationGatewayOverviewUnexpectedResponseBody(body *GetOrganizationGatewayOverviewUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayOverviewGatewayErrorResponseBody runs the
+// validations defined on
+// getOrganizationGatewayOverview_gateway_error_response_body
+func ValidateGetOrganizationGatewayOverviewGatewayErrorResponseBody(body *GetOrganizationGatewayOverviewGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayUsageUnauthorizedResponseBody runs the
+// validations defined on getOrganizationGatewayUsage_unauthorized_response_body
+func ValidateGetOrganizationGatewayUsageUnauthorizedResponseBody(body *GetOrganizationGatewayUsageUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayUsageForbiddenResponseBody runs the
+// validations defined on getOrganizationGatewayUsage_forbidden_response_body
+func ValidateGetOrganizationGatewayUsageForbiddenResponseBody(body *GetOrganizationGatewayUsageForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayUsageBadRequestResponseBody runs the
+// validations defined on getOrganizationGatewayUsage_bad_request_response_body
+func ValidateGetOrganizationGatewayUsageBadRequestResponseBody(body *GetOrganizationGatewayUsageBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayUsageNotFoundResponseBody runs the validations
+// defined on getOrganizationGatewayUsage_not_found_response_body
+func ValidateGetOrganizationGatewayUsageNotFoundResponseBody(body *GetOrganizationGatewayUsageNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayUsageConflictResponseBody runs the validations
+// defined on getOrganizationGatewayUsage_conflict_response_body
+func ValidateGetOrganizationGatewayUsageConflictResponseBody(body *GetOrganizationGatewayUsageConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayUsageUnsupportedMediaResponseBody runs the
+// validations defined on
+// getOrganizationGatewayUsage_unsupported_media_response_body
+func ValidateGetOrganizationGatewayUsageUnsupportedMediaResponseBody(body *GetOrganizationGatewayUsageUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayUsageInvalidResponseBody runs the validations
+// defined on getOrganizationGatewayUsage_invalid_response_body
+func ValidateGetOrganizationGatewayUsageInvalidResponseBody(body *GetOrganizationGatewayUsageInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayUsageInvariantViolationResponseBody runs the
+// validations defined on
+// getOrganizationGatewayUsage_invariant_violation_response_body
+func ValidateGetOrganizationGatewayUsageInvariantViolationResponseBody(body *GetOrganizationGatewayUsageInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayUsageUnexpectedResponseBody runs the
+// validations defined on getOrganizationGatewayUsage_unexpected_response_body
+func ValidateGetOrganizationGatewayUsageUnexpectedResponseBody(body *GetOrganizationGatewayUsageUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayUsageGatewayErrorResponseBody runs the
+// validations defined on
+// getOrganizationGatewayUsage_gateway_error_response_body
+func ValidateGetOrganizationGatewayUsageGatewayErrorResponseBody(body *GetOrganizationGatewayUsageGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

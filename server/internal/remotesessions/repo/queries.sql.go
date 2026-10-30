@@ -6899,17 +6899,18 @@ func (q *Queries) GetUserSessionIssuerForProject(ctx context.Context, arg GetUse
 const hasLivePrincipalRemoteSessionBindingsForClientBinding = `-- name: HasLivePrincipalRemoteSessionBindingsForClientBinding :one
 SELECT EXISTS (
   SELECT 1
-  FROM principal_remote_session_bindings
-  WHERE project_id = $1
-    AND organization_id = $2
-    AND remote_session_client_id = $3
-    AND user_session_issuer_id = $4
-    AND revoked_at IS NULL
+  FROM principal_remote_session_bindings AS b
+  JOIN projects AS bp ON bp.id = b.project_id AND bp.organization_id = b.organization_id AND bp.deleted IS FALSE
+  JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+    AND a.deleted IS FALSE AND a.revoked_at IS NULL
+  WHERE b.organization_id = $1
+    AND b.remote_session_client_id = $2
+    AND b.user_session_issuer_id = $3
+    AND b.revoked_at IS NULL
 )
 `
 
 type HasLivePrincipalRemoteSessionBindingsForClientBindingParams struct {
-	ProjectID             uuid.UUID
 	OrganizationID        string
 	RemoteSessionClientID uuid.UUID
 	UserSessionIssuerID   uuid.UUID
@@ -6917,17 +6918,11 @@ type HasLivePrincipalRemoteSessionBindingsForClientBindingParams struct {
 
 // Report whether any unrevoked agent attachment goes through a client's binding
 // to a user session issuer, which deleting that binding would cascade-delete.
-// Only the caller's project can hold them: the caller refuses an
-// organization-wide binding, and any other binding has a project-owned client
-// or user session issuer, which pins every attachment through it to that
-// project.
+// Organization-wide: an organization admin can change an organization-owned
+// client's binding to an organization-level issuer, and attachments through it
+// can live in any project.
 func (q *Queries) HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx context.Context, arg HasLivePrincipalRemoteSessionBindingsForClientBindingParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasLivePrincipalRemoteSessionBindingsForClientBinding,
-		arg.ProjectID,
-		arg.OrganizationID,
-		arg.RemoteSessionClientID,
-		arg.UserSessionIssuerID,
-	)
+	row := q.db.QueryRow(ctx, hasLivePrincipalRemoteSessionBindingsForClientBinding, arg.OrganizationID, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -7202,7 +7197,7 @@ SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_i
 WHERE project_id = $1 AND organization_id = $2
   AND user_session_issuer_id = $3
   AND ($4::uuid IS NULL OR remote_session_issuer_id = $4::uuid)
-  AND rtrim(resource, '/') = $5::text
+  AND resource = $5::text
   AND state IS DISTINCT FROM 'unlinked'
 ORDER BY id
 `
@@ -7264,7 +7259,7 @@ const listEMAChainingBindings = `-- name: ListEMAChainingBindings :many
 SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, remote_session_client_id, generation, state, grant_source, requested_scopes, claim_id, claimed_at, created_at, updated_at FROM remote_session_ema_bindings
 WHERE project_id = $1 AND organization_id = $2
   AND user_session_issuer_id = $3
-  AND rtrim(resource, '/') = $4::text
+  AND resource = $4::text
   AND ($5::uuid IS NULL OR remote_session_issuer_id = $5::uuid)
   AND ($6::uuid IS NULL OR remote_session_client_id = $6::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL
@@ -7281,9 +7276,8 @@ type ListEMAChainingBindingsParams struct {
 	RemoteSessionClientID uuid.NullUUID
 }
 
-// Ready bindings whose canonical resource names an endpoint's upstream.
-// Endpoint upstreams are recorded without a trailing slash while a binding
-// keeps the exact RFC 9728 identifier, so both compare under the routing trim.
+// Ready bindings whose exact resource names the resolved authorization resource.
+// RFC 8707 resource identity preserves trailing slashes; callers must not trim.
 // Unlinked tombstones and unfinished preparations never select or conflict.
 // A tunneled upstream passes its own derived issuer: its resource identifier is
 // operator supplied, so only a binding for that issuer may serve it. A caller

@@ -26,12 +26,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -98,6 +100,25 @@ func (u *upstreamSelector) credentialKindOrDefault() string {
 	return u.credentialKind
 }
 
+// connectionSubject is whose stored connection a typed auth client serves for
+// the caller in ctx. A principal credential admitted to act for a user
+// resolves that user's own connection, never its agent's or the agent
+// owner's; admission binds the same user as the represented user, so the
+// auth client check matches the connection's owner against them. Every other
+// caller resolves its own.
+func connectionSubject(ctx context.Context, subject urn.SessionSubject) urn.SessionSubject {
+	if authenticated, ok := principalcredential.FromContext(ctx); ok {
+		if authenticated.Credential.AuthorizerUserID == "" {
+			return subject
+		}
+		return urn.NewUserSubject(authenticated.Credential.AuthorizerUserID)
+	}
+	// An agent API key keeps its agent subject: its exact attachment serves
+	// first, and only without one does its authorizer's own connection
+	// (authClientConnection, tokenSubject).
+	return subject
+}
+
 // profileSelectorFor returns the selector for a principal credential that
 // binds an execution-selection profile version in the endpoint's organization
 // and project, or nil for any other credential. Its choices are read only by
@@ -124,6 +145,35 @@ func (s *Service) profileSelector(credential principalcredential.Credential, end
 		credentialKind:      upstreamclients.CredentialKindExecutionProfileVersion,
 		credentialID:        credential.SelectionProfileVersionID.UUID,
 	}
+}
+
+// agentKeySelectorFor returns the selector for an agent API key that was set
+// up with a credential for the endpoint's server, or nil for any other caller
+// and for a server the key has no choice for, which keeps the issuer-derived
+// path.
+func (s *Service) agentKeySelectorFor(ctx context.Context, endpoint *ResolvedMcpEndpoint) (*upstreamSelector, error) {
+	mode, byKey := contextvalues.APIKeyAuthorization(ctx)
+	actor, hasActor := contextvalues.AuthenticatedActor(ctx)
+	authCtx, hasAuth := contextvalues.GetAuthContext(ctx)
+	if !byKey || mode != contextvalues.APIKeyAuthorizationModePrincipal || !hasActor || actor.Type != urn.PrincipalTypeAgent ||
+		!hasAuth || authCtx == nil || authCtx.ActiveOrganizationID != endpoint.OrganizationID || !endpoint.McpServerID.Valid {
+		return nil, nil
+	}
+	keyID, err := uuid.Parse(authCtx.APIKeyID)
+	if err != nil {
+		return nil, nil
+	}
+	has, err := upstreamclientsrepo.New(s.db).HasCredentialChoice(ctx, upstreamclientsrepo.HasCredentialChoiceParams{
+		CredentialKind: upstreamclients.CredentialKindAPIKey, CredentialID: keyID,
+		McpServerID: endpoint.McpServerID.UUID, OrganizationID: endpoint.OrganizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("check agent key credential choice: %w", err)
+	}
+	if !has {
+		return nil, nil
+	}
+	return &upstreamSelector{service: s, organizationID: endpoint.OrganizationID, userSessionIssuerID: endpoint.UserSessionIssuerID, credentialKind: upstreamclients.CredentialKindAPIKey, credentialID: keyID}, nil
 }
 
 // upstreamSelectorFor returns the selector for the credential in ctx, or nil
@@ -302,6 +352,18 @@ func (s *Service) directPrincipalChoice(ctx context.Context, w http.ResponseWrit
 	if mode != feature.AuthClientResolverEnforced {
 		return none, false, nil
 	}
+	if selector, err := s.agentKeySelectorFor(ctx, authentication.endpoint); err != nil {
+		return none, true, oops.E(oops.CodeUnexpected, err, "load agent key credential choice").LogError(ctx, s.logger)
+	} else if selector != nil {
+		choice, handled, err := s.enforceAuthClient(ctx, w, authentication, selector)
+		if handled || err != nil {
+			return choice, true, err
+		}
+		// A key's choice is served only through the typed resolver, never by
+		// the issuer's credentials.
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent key choice unusable", issuerGateReasonUpstreamSelectionUnavailable)
+		return none, true, writeRemoteSessionReconnectChallenge(w, authentication)
+	}
 	authenticated, ok := principalcredential.FromContext(ctx)
 	if !ok {
 		return none, false, nil
@@ -347,7 +409,7 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 			ProjectID:           endpoint.ProjectID,
 			OrganizationID:      endpoint.OrganizationID,
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
-			Subject:             authentication.subject,
+			Subject:             tokenSubject(ctx, authentication.subject, authentication.authorizerOwner),
 			RegistrationID:      authentication.chosenClient.UUID,
 			SkipUnusable:        skipUnusable,
 		})
@@ -357,7 +419,7 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 		return tokens, nil
 	}
 	if authentication.chosenClient.Valid {
-		tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, authentication.chosenClient.UUID, skipUnusable)
+		tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, handbackSubject(authentication.subject, authentication.authorizerOwner), authentication.chosenClient.UUID, skipUnusable)
 		if err != nil {
 			return nil, fmt.Errorf("resolve chosen client: %w", err)
 		}
@@ -393,6 +455,18 @@ type memberChoices struct {
 	// profile reports that selector reads an execution-selection profile,
 	// which has no upstream client choice to fall back to.
 	profile bool
+
+	// metaServerID is the gateway the members belong to; invalid for the
+	// organization gateway, which has no member list.
+	metaServerID uuid.NullUUID
+
+	// onlyChosen serves only the members the credential has a choice for;
+	// the rest keep the issuer-derived path. An agent key is set up with
+	// choices for some servers at most.
+	onlyChosen bool
+
+	// chosen are the members apply found a choice for, when onlyChosen.
+	chosen map[uuid.UUID]bool
 
 	mu       sync.Mutex
 	byServer map[uuid.UUID]*memberTokens
@@ -431,10 +505,13 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 		selector, profile = s.profileSelector(authenticated.Credential, endpoint), true
 	}
 	return &memberChoices{
-		selector: selector,
-		enforced: enforced,
-		subject:  authentication.subject,
-		profile:  profile,
+		selector:     selector,
+		enforced:     enforced,
+		subject:      connectionSubject(ctx, authentication.subject),
+		profile:      profile,
+		metaServerID: endpoint.MetaMcpServerID,
+		onlyChosen:   false,
+		chosen:       nil,
 		resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 			return s.resolveChosenMemberTokens(ctx, endpoint, authentication.subject, enforced, member)
 		},
@@ -450,16 +527,16 @@ func (s *Service) resolveChosenMemberTokens(ctx context.Context, endpoint *Resol
 	// for binds its tokens, typed or handed back to the upstream
 	// client choice. Without its token the member fails: an empty
 	// resolution would dial anonymously or chain another identity.
-	pinned := uuid.Nil
+	pinned, authorizerOwner := uuid.Nil, ""
 	if enforced && member.authClient != nil {
-		pinned = member.authClient.attachedSession
+		pinned, authorizerOwner = member.authClient.attachedSession, member.authClient.authorizerOwner
 	}
 	if member.typedAuthClient {
 		tokens, err := s.upstreamTokenSource().ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
 			ProjectID:           member.projectID,
 			OrganizationID:      endpoint.OrganizationID,
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
-			Subject:             subject,
+			Subject:             tokenSubject(ctx, subject, authorizerOwner),
 			RegistrationID:      member.chosenClientID.UUID,
 			SkipUnusable:        true,
 		})
@@ -468,7 +545,7 @@ func (s *Service) resolveChosenMemberTokens(ctx context.Context, endpoint *Resol
 		}
 		return pinAttachedSession(tokens, pinned, false)
 	}
-	tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.chosenClientID.UUID, true)
+	tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, handbackSubject(subject, authorizerOwner), member.chosenClientID.UUID, true)
 	switch {
 	case errors.Is(err, remotesessions.ErrChosenClientUnbound):
 		return nil, fmt.Errorf("resolve chosen client: %w", err)
@@ -512,18 +589,22 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	var err error
 	if typed {
 		resolved, err = c.selector.resolveAuthClients(ctx, ids)
+		if err == nil && c.enforced && !c.profile && c.recordNewMemberChoices(ctx, logger, members, resolved) {
+			resolved, err = c.selector.resolveAuthClients(ctx, ids)
+		}
 		ids = ids[:0]
 		for id, res := range resolved {
 			if res.outcome != authClientLegacy {
 				continue
 			}
 			// An enforced choice that names no auth client is never served
-			// by the upstream client choice; a profile has none.
-			if (c.profile || c.enforced) && res.clientID == uuid.Nil {
+			// by the upstream client choice; a profile and an agent key have
+			// none.
+			if (c.profile || c.onlyChosen || c.enforced) && res.clientID == uuid.Nil {
 				resolved[id] = withoutLegacyFallback(res)
 				continue
 			}
-			if c.profile {
+			if c.profile || c.onlyChosen {
 				res.outcome = authClientGap
 				resolved[id] = res
 				continue
@@ -542,10 +623,19 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	var headerIDs []uuid.UUID
 	if typed && err == nil {
 		for id, res := range resolved {
+			issuerID := c.selector.userSessionIssuerID
+			if c.onlyChosen {
+				var issuerErr error
+				issuerID, issuerErr = c.selector.service.agentKeyMemberIssuer(ctx, id, projects[id])
+				if issuerErr != nil {
+					memberErrors[id] = issuerErr
+					continue
+				}
+			}
 			prepared, prepareErr := c.selector.service.checkAuthClientPermission(ctx, authClientPermitRequest{
 				OrganizationID: c.selector.organizationID, ProjectID: projects[id], ServerID: id, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
 				CredentialKind: c.selector.credentialKindOrDefault(), CredentialID: c.selector.credentialID, Subject: c.subject,
-				UserSessionIssuerID: c.selector.userSessionIssuerID, ConnectionOwner: "",
+				UserSessionIssuerID: issuerID, ConnectionOwner: "",
 			}, res, nil)
 			resolved[id] = prepared
 			memberErrors[id] = prepareErr
@@ -559,6 +649,16 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 		member := &members[i]
 		if member.backend != metaMemberBackendProxied {
 			continue
+		}
+		if c.onlyChosen {
+			// A failed read degrades every member rather than letting one the
+			// key has a choice for fall back to the issuer's credentials.
+			if _, ok := resolved[member.serverID]; !ok && err == nil {
+				continue
+			}
+			c.mu.Lock()
+			c.chosen[member.serverID] = true
+			c.mu.Unlock()
 		}
 		res := gapResolution(authClientReasonMissingChoice)
 		memberErr := err
@@ -615,6 +715,17 @@ func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember,
 	member.chosenClientID = res.choice.clientID
 	member.remoteSessionIssuerID = res.choice.remoteSessionIssuerID
 	member.upstreamNoAuth = res.outcome == authClientNoAuth || res.headersOnly() || (res.outcome == authClientLegacy && res.choice.noAuth())
+}
+
+// serves reports whether member routes through the credential's choices
+// rather than the issuer-derived path.
+func (c *memberChoices) serves(member metaMember) bool {
+	if !c.onlyChosen {
+		return true
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.chosen[member.serverID]
 }
 
 // tokens is the token map a chosen member routes from: empty for no-auth,
@@ -734,4 +845,87 @@ func memberNeedsSignIn(member metaMember) bool {
 		return true
 	}
 	return member.remoteSessionIssuerID.Valid
+}
+
+// agentKeyMemberChoices serves the agent gateway members an agent key was set
+// up with a credential for through that credential, where typed auth client
+// resolution is enforced. It is nil for any other caller, before enforcement,
+// and for a key with no choices, so the gateway keeps its path.
+func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID string, agentID uuid.UUID) (*memberChoices, error) {
+	mode, byKey := contextvalues.APIKeyAuthorization(ctx)
+	authCtx, hasAuth := contextvalues.GetAuthContext(ctx)
+	if !byKey || mode != contextvalues.APIKeyAuthorizationModePrincipal || !hasAuth || authCtx == nil || authCtx.ActiveOrganizationID != organizationID {
+		return nil, nil
+	}
+	keyID, err := uuid.Parse(authCtx.APIKeyID)
+	if err != nil {
+		return nil, nil //nolint:nilerr // a key id that does not parse is no agent key, which keeps the gateway's path
+	}
+	enforcement, err := s.authClientMode(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	if enforcement != feature.AuthClientResolverEnforced {
+		return nil, nil
+	}
+	subject := urn.NewAgentSubject(agentID)
+	return &memberChoices{
+		selector:     &upstreamSelector{service: s, organizationID: organizationID, userSessionIssuerID: uuid.Nil, credentialKind: upstreamclients.CredentialKindAPIKey, credentialID: keyID},
+		subject:      subject,
+		enforced:     true,
+		profile:      false,
+		metaServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		onlyChosen:   true,
+		chosen:       map[uuid.UUID]bool{},
+		resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+			issuerID, err := s.agentKeyMemberIssuer(ctx, member.serverID, member.projectID)
+			if err != nil {
+				return nil, err
+			}
+			endpoint := &ResolvedMcpEndpoint{
+				AudienceURN:               "",
+				CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
+				CustomDomainID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				IsPublic:                  false,
+				idJAGConfigured:           false,
+				issuerStamped:             false,
+				McpServerID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				MetaMcpServerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				sharedAuthorizationServer: nil,
+				sharedResource:            nil,
+				RouteBase:                 "",
+				Slug:                      "",
+				ToolsetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				useAuthenticationHost:     false,
+				UpstreamResource:          "",
+				ProjectID:                 member.projectID,
+				OrganizationID:            organizationID,
+				UserSessionIssuerID:       issuerID,
+			}
+			tokens, err := s.resolveChosenMemberTokens(ctx, endpoint, subject, true, member)
+			if err != nil {
+				return nil, err
+			}
+			if len(tokens) == 0 {
+				return nil, remotesessions.ErrNoValidToken
+			}
+			return tokens, nil
+		},
+		mu:       sync.Mutex{},
+		byServer: map[uuid.UUID]*memberTokens{},
+	}, nil
+}
+
+// agentKeyMemberIssuer supplies the same member sign-in scope to permission
+// and token resolution. A missing issuer stays empty: personal attachments
+// require it, but service-account credentials do not.
+func (s *Service) agentKeyMemberIssuer(ctx context.Context, serverID, projectID uuid.UUID) (uuid.UUID, error) {
+	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("load agent member issuer: %w", err)
+	}
+	if !server.UserSessionIssuerID.Valid {
+		return uuid.Nil, nil
+	}
+	return server.UserSessionIssuerID.UUID, nil
 }

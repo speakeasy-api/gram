@@ -37,6 +37,12 @@ type CreateKeyRequestBody struct {
 	// mcp:blocked_connect and mcp:blocked_auth blocks, that its server and auth
 	// client access is evaluated against. Not yet enforced. Requires org admin.
 	PolicyGrants []*APIKeyPolicyGrantRequestBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
+	// For an agent key: the upstream credential the key uses on each MCP server it
+	// names. Where typed upstream authentication is enforced, the key is served on
+	// a server with the credential chosen here, checked again on every request.
+	// Shared credentials only: an agent reaches a person's own connection when it
+	// acts for them.
+	AuthClientChoices []*AgentKeyAuthClientChoiceRequestBody `form:"auth_client_choices,omitempty" json:"auth_client_choices,omitempty" xml:"auth_client_choices,omitempty"`
 }
 
 // RotateKeyRequestBody is the type of the "keys" service "rotateKey" endpoint
@@ -1336,6 +1342,16 @@ type APIKeyPolicySelectorRequestBody struct {
 	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
 }
 
+// AgentKeyAuthClientChoiceRequestBody is used to define fields on request body
+// types.
+type AgentKeyAuthClientChoiceRequestBody struct {
+	// The MCP server.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The auth client the key uses there. Omit for a server whose upstream needs
+	// no authentication.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+}
+
 // AgentDelegatedPolicyResponseBody is used to define fields on response body
 // types.
 type AgentDelegatedPolicyResponseBody struct {
@@ -1494,6 +1510,16 @@ func NewCreateKeyRequestBody(p *keys.CreateKeyPayload) *CreateKeyRequestBody {
 				continue
 			}
 			body.PolicyGrants[i] = marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantRequestBody(val)
+		}
+	}
+	if p.AuthClientChoices != nil {
+		body.AuthClientChoices = make([]*AgentKeyAuthClientChoiceRequestBody, len(p.AuthClientChoices))
+		for i, val := range p.AuthClientChoices {
+			if val == nil {
+				body.AuthClientChoices[i] = nil
+				continue
+			}
+			body.AuthClientChoices[i] = marshalKeysAgentKeyAuthClientChoiceToAgentKeyAuthClientChoiceRequestBody(val)
 		}
 	}
 	return body
@@ -4309,6 +4335,16 @@ func ValidateAPIKeyPolicySelectorRequestBody(body *APIKeyPolicySelectorRequestBo
 		if !(*body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "*") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"service_account", "static_credential", "pass_through", "ema", "*"}))
 		}
+	}
+	return
+}
+
+// ValidateAgentKeyAuthClientChoiceRequestBody runs the validations defined on
+// AgentKeyAuthClientChoiceRequestBody
+func ValidateAgentKeyAuthClientChoiceRequestBody(body *AgentKeyAuthClientChoiceRequestBody) (err error) {
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+	if body.AuthClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
 	}
 	return
 }

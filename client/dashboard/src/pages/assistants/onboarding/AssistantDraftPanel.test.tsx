@@ -36,6 +36,9 @@ vi.mock("./useAssistantDraft", () => ({
 vi.mock("./AssistantIdentitySettings", () => ({
   AssistantIdentitySettings: () => <div>Identity settings content</div>,
 }));
+vi.mock("./AssistantUpstreamCredentials", () => ({
+  AssistantUpstreamCredentials: () => null,
+}));
 vi.mock("./AssistantOverviewSettings", () => ({
   AssistantOverviewSettings: () => null,
 }));

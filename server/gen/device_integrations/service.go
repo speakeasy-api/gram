@@ -121,14 +121,14 @@ type DeviceIntegrationCoverage struct {
 	// set as a whole supports only the weaker claim that assigned users ran the
 	// agent somewhere.
 	Attestation string
-	// Devices with an agent heartbeat within the window. What that attests depends
-	// on the matching mode and, per device, on whether the match was by serial or
-	// by email — compare against agent_active_device_attested.
+	// Devices with an agent heartbeat or state report within the window. What that
+	// attests depends on the matching mode and, per device, on whether the match
+	// was by serial or by email — compare against agent_active_device_attested.
 	AgentActive int64
-	// How many of agent_active are backed by that machine's OWN heartbeat (serial
-	// match). Under user-level matching this is 0; under device-level matching a
-	// value below agent_active means some devices fell back to the assigned-user
-	// email, which is the weaker claim.
+	// How many of agent_active are backed by that machine's OWN heartbeat or state
+	// report (serial match). Under user-level matching this is 0; under
+	// device-level matching a value below agent_active means some devices fell
+	// back to the assigned-user email, which is the weaker claim.
 	AgentActiveDeviceAttested int64
 	// Devices with a known agent that went quiet — the drift/disable case.
 	AgentStale int64
@@ -157,8 +157,9 @@ type DeviceIntegrationCoverage struct {
 	// agent_active devices with no state report within the window, typically an
 	// agent that predates reporting.
 	PolicyUnreported int64
-	// agent_active devices whose agent build is blocked, so the kill switch has
-	// halted enforcement.
+	// agent_active devices whose latest state report says the kill switch halted
+	// enforcement, because the reporting agent's build was blocked when it
+	// reported.
 	EnforcementHalted int64
 }
 
@@ -365,12 +366,13 @@ type ManagedDevice struct {
 	CoverageBucket string
 	// When the device went absent from the MDM inventory. Omitted while present.
 	MissingSince *string
-	// Whether an agent_active device verifiably applies its policy. attested: its
-	// latest report applies the policy last served to the reporting user.
-	// outdated: it reports a different or no policy. unreported: no report within
-	// the window, from an agent that predates reporting or has stopped sending.
-	// halted: the kill switch stopped enforcement on a blocked agent build.
-	// Omitted for every other bucket.
+	// Whether the agent that answers for an agent_active device verifiably applies
+	// its policy; agent_state.attestation says whether that agent runs on this
+	// machine. attested: its latest report applies the policy last served to the
+	// reporting user. outdated: it reports a different policy, or none.
+	// unreported: no report within the window, from an agent that predates
+	// reporting or has stopped sending. halted: the reporting agent's kill switch
+	// stopped enforcement on a blocked build. Omitted for every other bucket.
 	PolicyState *string
 	// The latest state report that classified this device. Omitted when its agent
 	// has never reported.
@@ -384,6 +386,10 @@ type ManagedDevice struct {
 type ManagedDeviceAgentState struct {
 	// When the control plane received the report.
 	ReportedAt string
+	// device when this machine's own agent sent the report, matched by serial.
+	// user when the assigned user's agent sent it, which may run on another
+	// machine.
+	Attestation string
 	// Etag of the policy the agent last applied.
 	AppliedEtag *string
 	// When the agent first applied that etag.

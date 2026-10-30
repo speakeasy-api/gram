@@ -225,6 +225,7 @@ WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 WITH live AS (
   SELECT * FROM upstream_client_selections
   WHERE project_id = @project_id::uuid AND deleted IS FALSE
+    AND credential_kind = 'user_session'
 )
 SELECT count(*) FROM live
 WHERE (SELECT count(*) FROM live) = 26
@@ -267,6 +268,7 @@ WHERE (SELECT count(*) FROM live) = 26
 SELECT count(*)
 FROM upstream_client_selections u
 WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
+  AND u.credential_kind = 'user_session'
   AND NOT (
     EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE)
     AND (
@@ -281,6 +283,55 @@ WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
                         AND a.deleted IS FALSE))
     )
   );
+
+-- The headless app's one profile, choosing the shared token on Linear,
+-- which is still enabled and offered there.
+-- name: PostflightIDIssuanceProfileChoices :one
+SELECT count(*)
+FROM upstream_client_selections u
+JOIN issuance_selection_profiles p
+  ON p.id = u.credential_id AND p.organization_id = u.organization_id
+ AND p.deleted IS FALSE
+JOIN mcp_auth_clients ac
+  ON ac.id = u.auth_client_id AND ac.organization_id = u.organization_id
+ AND ac.deleted IS FALSE AND ac.enabled
+JOIN mcp_server_auth_clients l
+  ON l.auth_client_id = ac.id AND l.mcp_server_id = u.mcp_server_id
+ AND l.project_id = @project_id::uuid AND l.deleted IS FALSE
+WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
+  AND u.credential_kind = 'issuance_profile'
+  AND p.user_session_client_id = @client_id::uuid
+  AND u.mcp_server_id = @linear_server_id::uuid
+  AND u.auth_client_id = @auth_client_id::uuid;
+
+-- The identity-bound assistant's person-backed and userless turns use the
+-- shared token on Linear, by an administrator's choice in each profile's
+-- latest version, and the token is still enabled and offered there.
+-- name: PostflightIDExecutionProfileChoices :one
+SELECT count(*)
+FROM upstream_client_selections u
+JOIN execution_selection_profile_versions v
+  ON v.id = u.credential_id
+ AND v.version = (
+   SELECT max(latest.version)
+   FROM execution_selection_profile_versions latest
+   WHERE latest.profile_id = v.profile_id
+ )
+JOIN execution_selection_profiles p
+  ON p.id = v.profile_id AND p.deleted IS FALSE
+JOIN mcp_auth_clients ac
+  ON ac.id = u.auth_client_id AND ac.organization_id = u.organization_id
+ AND ac.deleted IS FALSE AND ac.enabled
+JOIN mcp_server_auth_clients l
+  ON l.auth_client_id = ac.id AND l.mcp_server_id = u.mcp_server_id
+ AND l.project_id = @project_id::uuid AND l.deleted IS FALSE
+WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
+  AND u.credential_kind = 'execution_profile_version'
+  AND u.source = 'admin'
+  AND p.assistant_id = @assistant_id::uuid
+  AND p.execution_context IN ('user_backed', 'userless')
+  AND u.mcp_server_id = @linear_server_id::uuid
+  AND u.auth_client_id = @auth_client_id::uuid;
 
 -- name: PostflightIDServiceAccountHeaders :one
 SELECT count(*)

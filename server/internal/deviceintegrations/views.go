@@ -238,6 +238,7 @@ func agentStateView(ctx context.Context, logger *slog.Logger, row repo.ListManag
 	}
 	return &gen.ManagedDeviceAgentState{
 		ReportedAt:         row.ReportReportedAt.Time.UTC().Format(time.RFC3339),
+		Attestation:        reportAttestation(row.ReportBySerial),
 		AppliedEtag:        pgTextPtr(row.ReportAppliedEtag),
 		AppliedAt:          conv.PtrEmpty(conv.FromPGTimestamptz(row.ReportAppliedAt)),
 		EnforcementHalted:  row.ReportEnforcementHalted,
@@ -254,6 +255,15 @@ func agentStateView(ctx context.Context, logger *slog.Logger, row repo.ListManag
 		PinnedTarget:       pgTextPtr(row.ReportPinnedTarget),
 		LastRollback:       rollbackView(row),
 	}
+}
+
+// reportAttestation says whose agent sent the report: this machine's, or the
+// assigned user's, which may run elsewhere.
+func reportAttestation(bySerial bool) string {
+	if bySerial {
+		return "device"
+	}
+	return "user"
 }
 
 // rollbackView is nil until the agent has rolled itself back.

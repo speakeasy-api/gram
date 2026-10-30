@@ -179,7 +179,7 @@ func (s *Service) UpdateAuthClient(ctx context.Context, payload *gen.UpdateAuthC
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
-	existing, err := queries.LockAuthClient(ctx, repo.LockAuthClientParams{ID: clientID, OrganizationID: authCtx.ActiveOrganizationID})
+	existing, servers, err := lockAuthClientForUpdate(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "auth client not found").LogError(ctx, logger)
@@ -199,16 +199,8 @@ func (s *Service) UpdateAuthClient(ctx context.Context, payload *gen.UpdateAuthC
 	}
 
 	if enabled && !existing.Enabled {
-		// Locking the offering servers serializes with
-		// SetMcpServerUpstreamAuthRequirement, which locks the server before
-		// checking for enabled clients.
-		servers, err := queries.LockAuthClientServerRequirements(ctx, repo.LockAuthClientServerRequirementsParams{
-			AuthClientID:   clientID,
-			OrganizationID: authCtx.ActiveOrganizationID,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "lock auth client servers").LogError(ctx, logger)
-		}
+		// Offering servers were locked before the client, matching preparation
+		// and upstream requirement writers. Their requirements remain stable.
 		for _, srv := range servers {
 			if srv.RequiresUpstreamAuth.Valid && !srv.RequiresUpstreamAuth.Bool {
 				return nil, oops.E(oops.CodeConflict, nil, "a server that offers this auth client declares that its upstream needs no authentication; change that declaration or detach the client before enabling it").LogError(ctx, logger)

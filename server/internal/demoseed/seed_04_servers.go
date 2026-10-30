@@ -633,7 +633,8 @@ func (s *seeder) seedServers(ctx context.Context) error {
 // seedAuthClients records Linear's personal client as the upstream OAuth
 // migration derives it, and two clients an administrator created: a token
 // shared by two servers and a pass-through of the caller's own GitHub token,
-// with who may use the shared token.
+// with who may use the shared token, and the token chosen for an app that
+// signs in to Linear without a browser.
 func (s *seeder) seedAuthClients(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
@@ -685,6 +686,58 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 		UseID: s.det("auth-client-github-token-use"), BlockID: s.det("auth-client-github-token-block"),
 	}); err != nil {
 		return fmt.Errorf("insert demo auth client role grants: %w", err)
+	}
+
+	// Linear offers two credentials, so the app that signs in without a
+	// browser has its choice made by an administrator.
+	if err := s.q.ServersInsertHeadlessClient(ctx, repo.ServersInsertHeadlessClientParams{
+		ID: s.det("usc-nightly-report"), ProjectID: proj, OrgID: org, IssuerID: s.det("issuer-linear"),
+	}); err != nil {
+		return fmt.Errorf("insert demo headless client: %w", err)
+	}
+	if err := s.q.ServersInsertIssuanceProfile(ctx, repo.ServersInsertIssuanceProfileParams{
+		ID: s.det("issuance-profile-nightly-report"), OrgID: org, ProjectID: proj, IssuerID: s.det("issuer-linear"),
+		ClientID: s.det("usc-nightly-report"), Name: "Nightly report job",
+	}); err != nil {
+		return fmt.Errorf("insert demo issuance profile: %w", err)
+	}
+	if err := s.q.ServersInsertIssuanceProfileChoice(ctx, repo.ServersInsertIssuanceProfileChoiceParams{
+		ID: s.det("issuance-profile-nightly-report-linear"), ProjectID: proj, OrgID: org,
+		ProfileID: s.det("issuance-profile-nightly-report"), McpServerID: s.det("mcpserver-linear"), AuthClientID: s.det("auth-client-github-token"),
+	}); err != nil {
+		return fmt.Errorf("insert demo issuance profile choice: %w", err)
+	}
+
+	// The identity-bound assistant reaches Linear, which offers a person's own
+	// account and the shared token, so its turns need a choice in each context
+	// they run in: person-backed dashboard turns, and userless ones, which can
+	// only use a shared credential.
+	if err := s.q.ServersAttachAssistantServer(ctx, repo.ServersAttachAssistantServerParams{
+		ID: s.det("assistant-bound-linear"), AssistantID: s.det("assistant-bound"), McpServerID: s.det("mcpserver-linear"), ProjectID: proj,
+	}); err != nil {
+		return fmt.Errorf("attach demo assistant server: %w", err)
+	}
+	for _, profile := range []struct{ key, context string }{
+		{key: "execution-profile-bound", context: "user_backed"},
+		{key: "execution-profile-bound-userless", context: "userless"},
+	} {
+		if err := s.q.ServersInsertExecutionProfile(ctx, repo.ServersInsertExecutionProfileParams{
+			ID: s.det(profile.key), OrgID: org, ProjectID: proj, AssistantID: s.det("assistant-bound"),
+			TriggerInstanceID: s.det("assistant-dashboard-bound"), ExecutionContext: profile.context,
+		}); err != nil {
+			return fmt.Errorf("insert demo %s execution profile: %w", profile.context, err)
+		}
+		if err := s.q.ServersInsertExecutionProfileVersion(ctx, repo.ServersInsertExecutionProfileVersionParams{
+			ID: s.det(profile.key + "-v1"), ProfileID: s.det(profile.key), OrgID: org, ProjectID: proj,
+		}); err != nil {
+			return fmt.Errorf("insert demo %s execution profile version: %w", profile.context, err)
+		}
+		if err := s.q.ServersInsertExecutionProfileChoice(ctx, repo.ServersInsertExecutionProfileChoiceParams{
+			ID: s.det(profile.key + "-v1-linear"), ProjectID: proj, OrgID: org, VersionID: s.det(profile.key + "-v1"),
+			McpServerID: s.det("mcpserver-linear"), AuthClientID: s.det("auth-client-github-token"),
+		}); err != nil {
+			return fmt.Errorf("insert demo %s execution profile choice: %w", profile.context, err)
+		}
 	}
 	return nil
 }

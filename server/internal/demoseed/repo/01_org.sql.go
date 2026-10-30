@@ -88,6 +88,23 @@ func (q *Queries) OrgDeleteAssistantMCPServers(ctx context.Context, orgID string
 	return err
 }
 
+const orgDeleteAuthPermissionProvisions = `-- name: OrgDeleteAuthPermissionProvisions :exec
+DELETE FROM auth_permission_provisions
+WHERE organization_id = $1::text
+  AND (principal_urn LIKE 'agent:%' OR principal_urn LIKE 'role:organization:%')
+`
+
+// The default auth permission ledger keeps every grant the backfill ever
+// provisioned, so it never re-grants one an admin removed. The seed deletes
+// and recreates agent and custom role grants, so it resets their ledger rows
+// with them; otherwise a reseed would leave the recreated principals without
+// their default mcp:auth grants. Human grants survive a reseed, and so do
+// their ledger rows.
+func (q *Queries) OrgDeleteAuthPermissionProvisions(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteAuthPermissionProvisions, orgID)
+	return err
+}
+
 const orgDeleteBusinessMemories = `-- name: OrgDeleteBusinessMemories :exec
 DELETE FROM business_memories WHERE organization_id = $1::text
 `
@@ -763,7 +780,7 @@ VALUES
    'Support triage', now() - interval '2 days', NULL),
   ($6::uuid, $2::text, $7::text,
    'Retired documentation bot', NULL, now() - interval '5 days'),
-  ($8::uuid, $2::text, $3::text,
+  ($8::uuid, $2::text, $5::text,
    'Release notes assistant', NULL, NULL)
 `
 

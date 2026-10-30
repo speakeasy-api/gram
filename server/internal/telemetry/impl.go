@@ -2076,7 +2076,7 @@ func (s *Service) GetMetaMcpServerUsage(ctx context.Context, payload *telem_gen.
 	}
 
 	usage, err := s.chRepo.GetMetaMCPServerUsage(ctx, repo.GetMetaMCPServerUsageParams{
-		GramProjectID:   authCtx.ProjectID.String(),
+		GramProjectIDs:  []string{authCtx.ProjectID.String()},
 		MetaMCPServerID: metaMCPServerID.String(),
 		TimeStart:       timeStart,
 		TimeEnd:         timeEnd,
@@ -2093,27 +2093,35 @@ func (s *Service) GetMetaMcpServerUsage(ctx context.Context, payload *telem_gen.
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing meta mcp members")
 	}
-	currentMemberIDs := make(map[string]struct{}, len(currentMembers))
+	currentMemberIDs := make(map[string]string, len(currentMembers))
 	for _, member := range currentMembers {
-		currentMemberIDs[member.McpServerID.String()] = struct{}{}
+		currentMemberIDs[member.McpServerID.String()] = ""
 	}
 
-	members := make([]*telem_gen.MetaMcpMemberUsage, 0, len(usage.Members))
+	return metaMCPUsageResult(usage, currentMemberIDs), nil
+}
+
+// metaMCPUsageResult converts a gateway's usage, keeping only the servers in
+// members. A non-empty name in members is reported as the server's name.
+func metaMCPUsageResult(usage repo.MetaMCPUsage, members map[string]string) *telem_gen.GetMetaMcpServerUsageResult {
+	rows := make([]*telem_gen.MetaMcpMemberUsage, 0, len(usage.Members))
 	for _, row := range usage.Members {
-		if _, ok := currentMemberIDs[row.McpServerID]; !ok {
+		name, ok := members[row.McpServerID]
+		if !ok {
 			continue
 		}
 		entry := &telem_gen.MetaMcpMemberUsage{
-			McpServerID:  row.McpServerID,
-			ToolCalls:    uint64ToInt64(row.ToolCalls),
-			ErrorCount:   uint64ToInt64(row.ErrorCount),
-			LastCalledAt: nil,
+			McpServerID:   row.McpServerID,
+			ToolCalls:     uint64ToInt64(row.ToolCalls),
+			ErrorCount:    uint64ToInt64(row.ErrorCount),
+			LastCalledAt:  nil,
+			McpServerName: conv.PtrEmpty(name),
 		}
 		if row.LastCalledUnixNano > 0 {
 			ts := time.Unix(0, row.LastCalledUnixNano).UTC().Format(time.RFC3339)
 			entry.LastCalledAt = &ts
 		}
-		members = append(members, entry)
+		rows = append(rows, entry)
 	}
 
 	return &telem_gen.GetMetaMcpServerUsageResult{
@@ -2123,8 +2131,8 @@ func (s *Service) GetMetaMcpServerUsage(ctx context.Context, payload *telem_gen.
 			DescribeTools:  uint64ToInt64(usage.Funnel.DescribeTools),
 			ExecuteTool:    uint64ToInt64(usage.Funnel.ExecuteTool),
 		},
-		Members: members,
-	}, nil
+		Members: rows,
+	}
 }
 
 // GetObservabilityOverview retrieves aggregated observability metrics for the overview dashboard.
@@ -2196,18 +2204,9 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		excludedHookSources = billing.GramHostedHookSourceNames()
 	}
 
-	// Auto-calculate interval based on time range
-	intervalSeconds := calculateInterval(timeStart, timeEnd)
-
-	// Calculate comparison period (same duration, immediately before)
-	duration := timeEnd - timeStart
-	comparisonStart := timeStart - duration
-	comparisonEnd := timeStart
-
-	// Fetch all data sequentially to avoid ClickHouse concurrent query limits
-	summary, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
+	return s.observabilityOverview(ctx, repo.GetOverviewSummaryParams{
 		ExcludedHookSources: excludedHookSources,
-		GramProjectID:       projectID,
+		GramProjectIDs:      []string{projectID},
 		TimeStart:           timeStart,
 		TimeEnd:             timeEnd,
 		User:                user,
@@ -2223,112 +2222,89 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		HookSource:          hookSource,
 		AccountType:         accountType,
 		ExternalOrgID:       externalOrgID,
-	})
+	}, payload.IncludeTimeSeries)
+}
+
+// observabilityOverview reads the overview for one scope: its summary, the
+// same summary for the period immediately before, and the tool breakdowns.
+func (s *Service) observabilityOverview(ctx context.Context, scope repo.GetOverviewSummaryParams, includeTimeSeries bool) (*telem_gen.GetObservabilityOverviewResult, error) {
+	timeStart, timeEnd := scope.TimeStart, scope.TimeEnd
+	intervalSeconds := calculateInterval(timeStart, timeEnd)
+
+	// Fetch all data sequentially to avoid ClickHouse concurrent query limits
+	summary, err := s.chRepo.GetOverviewSummary(ctx, scope)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
 	}
 
-	comparison, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
-		ExcludedHookSources: excludedHookSources,
-		GramProjectID:       projectID,
-		TimeStart:           comparisonStart,
-		TimeEnd:             comparisonEnd,
-		User:                user,
-		CanonicalUser:       canonicalUser,
-		ExternalUserID:      externalUserID,
-		APIKeyID:            apiKeyID,
-		ToolsetSlug:         toolsetSlug,
-		ToolsetSlugServerID: toolsetSlugServerID,
-		RemoteMCPServerID:   remoteMCPServerID,
-		MCPServerID:         mcpServerID,
-		MetaMCPServerID:     metaMCPServerID,
-		EventSource:         eventSource,
-		HookSource:          hookSource,
-		AccountType:         accountType,
-		ExternalOrgID:       externalOrgID,
-	})
+	// Same duration, immediately before.
+	comparisonScope := scope
+	comparisonScope.TimeStart = timeStart - (timeEnd - timeStart)
+	comparisonScope.TimeEnd = timeStart
+	comparison, err := s.chRepo.GetOverviewSummary(ctx, comparisonScope)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
 	}
 
 	var timeSeries []repo.TimeSeriesBucket
-	if payload.IncludeTimeSeries {
+	if includeTimeSeries {
 		timeSeries, err = s.chRepo.GetTimeSeriesMetrics(ctx, repo.GetTimeSeriesMetricsParams{
-			ExcludedHookSources: excludedHookSources,
-			GramProjectID:       projectID,
+			ExcludedHookSources: scope.ExcludedHookSources,
+			GramProjectIDs:      scope.GramProjectIDs,
 			TimeStart:           timeStart,
 			TimeEnd:             timeEnd,
 			IntervalSeconds:     intervalSeconds,
-			User:                user,
-			CanonicalUser:       canonicalUser,
-			ExternalUserID:      externalUserID,
-			APIKeyID:            apiKeyID,
-			ToolsetSlug:         toolsetSlug,
-			ToolsetSlugServerID: toolsetSlugServerID,
-			RemoteMCPServerID:   remoteMCPServerID,
-			MCPServerID:         mcpServerID,
-			MetaMCPServerID:     metaMCPServerID,
-			EventSource:         eventSource,
-			HookSource:          hookSource,
-			AccountType:         accountType,
-			ExternalOrgID:       externalOrgID,
+			User:                scope.User,
+			CanonicalUser:       scope.CanonicalUser,
+			ExternalUserID:      scope.ExternalUserID,
+			APIKeyID:            scope.APIKeyID,
+			ToolsetSlug:         scope.ToolsetSlug,
+			ToolsetSlugServerID: scope.ToolsetSlugServerID,
+			RemoteMCPServerID:   scope.RemoteMCPServerID,
+			MCPServerID:         scope.MCPServerID,
+			MetaMCPServerID:     scope.MetaMCPServerID,
+			EventSource:         scope.EventSource,
+			HookSource:          scope.HookSource,
+			AccountType:         scope.AccountType,
+			ExternalOrgID:       scope.ExternalOrgID,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving time series")
 		}
 	}
 
-	toolsByCount, err := s.chRepo.GetToolMetricsBreakdown(ctx, repo.GetToolMetricsBreakdownParams{
-		ExcludedHookSources: excludedHookSources,
-		GramProjectID:       projectID,
-		TimeStart:           timeStart,
-		TimeEnd:             timeEnd,
-		User:                user,
-		CanonicalUser:       canonicalUser,
-		ExternalUserID:      externalUserID,
-		APIKeyID:            apiKeyID,
-		ToolsetSlug:         toolsetSlug,
-		ToolsetSlugServerID: toolsetSlugServerID,
-		RemoteMCPServerID:   remoteMCPServerID,
-		MCPServerID:         mcpServerID,
-		MetaMCPServerID:     metaMCPServerID,
-		EventSource:         eventSource,
-		HookSource:          hookSource,
-		AccountType:         accountType,
-		ExternalOrgID:       externalOrgID,
-		Limit:               10,
-		SortBy:              "count",
-	})
+	breakdown := func(sortBy string) ([]repo.ToolMetric, error) {
+		return s.chRepo.GetToolMetricsBreakdown(ctx, repo.GetToolMetricsBreakdownParams{
+			ExcludedHookSources: scope.ExcludedHookSources,
+			GramProjectIDs:      scope.GramProjectIDs,
+			TimeStart:           timeStart,
+			TimeEnd:             timeEnd,
+			User:                scope.User,
+			CanonicalUser:       scope.CanonicalUser,
+			ExternalUserID:      scope.ExternalUserID,
+			APIKeyID:            scope.APIKeyID,
+			ToolsetSlug:         scope.ToolsetSlug,
+			ToolsetSlugServerID: scope.ToolsetSlugServerID,
+			RemoteMCPServerID:   scope.RemoteMCPServerID,
+			MCPServerID:         scope.MCPServerID,
+			MetaMCPServerID:     scope.MetaMCPServerID,
+			EventSource:         scope.EventSource,
+			HookSource:          scope.HookSource,
+			AccountType:         scope.AccountType,
+			ExternalOrgID:       scope.ExternalOrgID,
+			Limit:               10,
+			SortBy:              sortBy,
+		})
+	}
+	toolsByCount, err := breakdown("count")
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by count")
 	}
-
-	toolsByFailure, err := s.chRepo.GetToolMetricsBreakdown(ctx, repo.GetToolMetricsBreakdownParams{
-		ExcludedHookSources: excludedHookSources,
-		GramProjectID:       projectID,
-		TimeStart:           timeStart,
-		TimeEnd:             timeEnd,
-		User:                user,
-		CanonicalUser:       canonicalUser,
-		ExternalUserID:      externalUserID,
-		APIKeyID:            apiKeyID,
-		ToolsetSlug:         toolsetSlug,
-		ToolsetSlugServerID: toolsetSlugServerID,
-		RemoteMCPServerID:   remoteMCPServerID,
-		MCPServerID:         mcpServerID,
-		MetaMCPServerID:     metaMCPServerID,
-		EventSource:         eventSource,
-		HookSource:          hookSource,
-		AccountType:         accountType,
-		ExternalOrgID:       externalOrgID,
-		Limit:               10,
-		SortBy:              "failure_rate",
-	})
+	toolsByFailure, err := breakdown("failure_rate")
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by failure rate")
 	}
 
-	// Convert to API types
 	return &telem_gen.GetObservabilityOverviewResult{
 		Summary:               toObservabilitySummary(summary),
 		Comparison:            toObservabilitySummary(comparison),
