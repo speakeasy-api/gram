@@ -584,8 +584,14 @@ func (s *Service) handleTokenJWTBearerGrant(
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		Audience:            assertionAudience,
 		Resource:            canonicalResource,
+		ResourceIndicated:   len(req.Resources) > 0,
 		ClientID:            clientRow.ClientID,
 	})
+	if idjag.ReasonOf(err) == idjag.ReasonResourceNotIndicated {
+		logger.InfoContext(ctx, "oauth ID-JAG token request rejected", attr.SlogError(err))
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, oautherr.CodeInvalidTarget)
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, sharedResourceDescription(sharedResourceMissing))
+	}
 	if err != nil {
 		logger.InfoContext(ctx, "oauth ID-JAG token request rejected", attr.SlogError(err))
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_grant")
@@ -612,6 +618,11 @@ func (s *Service) handleTokenJWTBearerGrant(
 	}
 	if err != nil {
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {
+			// The assertion is already spent; without a resource claim the request alone chose this server.
+			if result.Claims.Resource == "" {
+				logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, oautherr.CodeInvalidTarget)
+				return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, "resource is not available to this user")
+			}
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "subject_not_authorized")
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "assertion is invalid")
 		}

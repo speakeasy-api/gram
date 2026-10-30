@@ -96,7 +96,15 @@ func (s *Service) HandleSharedAuthorizationServerMetadata(w http.ResponseWriter,
 		grantTypes = append(grantTypes, "client_credentials")
 	}
 	var grantProfiles []string
+	idJAGAdvertised := false
 	if issuer.idJAGConfigured {
+		// Fails closed for the same reason as the workload grant below.
+		idJAGAdvertised, err = s.idJAGAdvertised(ctx, issuer.logger, issuer.organizationID, issuer.authorizationServer.issuerID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load shared authorization server capabilities").LogError(ctx, issuer.logger)
+		}
+	}
+	if idJAGAdvertised {
 		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
 		grantProfiles = []string{oauthwire.GrantProfileIDJAG}
 	} else if s.workloadGrant != nil {
@@ -351,11 +359,7 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 		}
 		if rejection != sharedResourceAccepted {
 			s.recordSharedResourceRejection(ctx, logger, issuer.authorizationServer.issuerID, mcpmetrics.OAuthFlowStageToken, rejection, resources)
-			code := oautherr.CodeInvalidTarget
-			if rejection == sharedResourceMissing {
-				code = oautherr.CodeInvalidRequest
-			}
-			return writeTokenError(ctx, w, logger, http.StatusBadRequest, code, sharedResourceDescription(rejection))
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, sharedResourceDescription(rejection))
 		}
 	default:
 		creds := extractClientCredentials(r)
