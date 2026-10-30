@@ -28,6 +28,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -140,6 +142,10 @@ type sharedResource struct {
 	// origin is the request authority the request-origin middleware would stamp
 	// on a request to the resource's own host.
 	origin requestorigin.Origin
+
+	// organizationGatewayDefault is set when an ID-JAG exchange naming no
+	// resource was sent to the organization gateway.
+	organizationGatewayDefault bool
 }
 
 // servingSharedAuthorizationServer returns the shared authorization server
@@ -412,8 +418,65 @@ func (s *Service) resolveSharedResource(ctx context.Context, logger *slog.Logger
 	if resource != canonical {
 		return nil, sharedResourceMalformed, nil
 	}
-	endpoint.sharedResource = &sharedResource{origin: origin}
+	endpoint.sharedResource = &sharedResource{origin: origin, organizationGatewayDefault: false}
 	return endpoint, sharedResourceAccepted, nil
+}
+
+// idJAGResourceSourceOrganizationGateway is the logged resource source of an
+// ID-JAG exchange sent to the organization gateway because nothing named a
+// resource.
+const idJAGResourceSourceOrganizationGateway = "organization_gateway_default"
+
+// sharedOrganizationGatewayResource resolves the organization gateway that an
+// ID-JAG exchange naming no resource, in neither the request nor the
+// assertion, is sent to. That is the gateway served for the issuer's
+// organization when it signs users in through this shared authorization
+// server, at the URL the organization's members are given. It returns a nil
+// endpoint when there is none.
+func (s *Service) sharedOrganizationGatewayResource(ctx context.Context, logger *slog.Logger, issuer *sharedIssuer) (*ResolvedMcpEndpoint, string, error) {
+	organization, err := s.orgsRepo.GetOrganizationMetadata(ctx, issuer.organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, "", nil
+	case err != nil:
+		return nil, "", fmt.Errorf("load organization for gateway default: %w", err)
+	}
+	gatewayIssuerID, unavailable, err := orggateway.Availability(ctx, s.db, organization)
+	if err != nil {
+		return nil, "", fmt.Errorf("resolve organization gateway default: %w", err)
+	}
+	if unavailable != orggateway.UnavailabilityNone || gatewayIssuerID != issuer.authorizationServer.issuerID {
+		return nil, "", nil
+	}
+
+	requestBaseURL := strings.TrimSuffix(s.serverURL.String(), "/")
+	if !OnAuthenticationHost(ctx) {
+		requestBaseURL = requestorigin.PlatformHostBaseURL(ctx, requestBaseURL, requestBaseURL)
+	}
+	fallback, err := url.Parse(requestBaseURL)
+	if err != nil {
+		return nil, "", fmt.Errorf("parse organization gateway base URL: %w", err)
+	}
+	hosts := orghost.New(orghost.Config{
+		ServerURL:                  s.serverURL,
+		SiteURL:                    nil,
+		PlatformHosts:              s.platformHosts,
+		LegacyDefaultHost:          nil,
+		NewOrganizationDefaultHost: nil,
+	})
+	baseURL, _ := hosts.StoredPlatformBaseURLsOr(organization.DefaultHost, fallback, nil)
+	resource := orggateway.URL(baseURL, organization.Slug)
+
+	endpoint, rejection, err := s.resolveSharedResource(ctx, logger, issuer.authorizationServer, resource)
+	if err != nil {
+		return nil, "", err
+	}
+	if rejection != sharedResourceAccepted {
+		logger.InfoContext(ctx, "organization gateway default not resolvable", attr.SlogOAuthFailureReason(string(rejection)))
+		return nil, "", nil
+	}
+	endpoint.sharedResource.organizationGatewayDefault = true
+	return endpoint, resource, nil
 }
 
 // sharedResourceContext derives the request context a request to the

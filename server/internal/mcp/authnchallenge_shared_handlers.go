@@ -305,7 +305,8 @@ func (s *Service) sharedChallengeEndpoint(ctx context.Context, issuer *sharedIss
 // Assertion grants naming exactly one resource dispatch to that resource's
 // client-authenticated ID-JAG or clientless workload handler. A clientless
 // workload grant naming no resource is served for all of the issuer's MCP
-// servers; an ID-JAG exchange naming none is routed by its resource claim.
+// servers; an ID-JAG exchange naming none is routed by its resource claim, or
+// without one to the organization gateway that signs in through this issuer.
 func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	issuer, err := s.sharedIssuerForRequest(r)
@@ -368,9 +369,19 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 				if claimErr != nil {
 					rejection = sharedResourceMalformed
 				}
+			} else {
+				var gatewayResource string
+				endpoint, gatewayResource, err = s.sharedOrganizationGatewayResource(ctx, logger, issuer)
+				if err != nil {
+					return oops.E(oops.CodeUnexpected, err, "resolve organization gateway for ID-JAG").LogError(ctx, logger)
+				}
+				if endpoint != nil {
+					// Indicated, so the gateway is bound exactly as if the request had named it.
+					r.PostForm[oauthwire.ParamResource] = []string{gatewayResource}
+				}
 			}
 		}
-		if rejection == sharedResourceAccepted {
+		if rejection == sharedResourceAccepted && endpoint == nil {
 			endpoint, rejection, err = s.resolveSharedResourceIndicators(ctx, logger, issuer.authorizationServer, resources)
 			if err != nil {
 				return err

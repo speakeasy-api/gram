@@ -551,6 +551,9 @@ const (
 	// OAuthIDJAGRejectionReasonKey is the bounded reason an ID-JAG token exchange was rejected.
 	OAuthIDJAGRejectionReasonKey = attribute.Key("gram.oauth.id_jag.rejection_reason")
 
+	// OAuthIDJAGResourceSourceKey is where a shared token endpoint took an ID-JAG exchange's target MCP server from when neither the request nor the assertion named it.
+	OAuthIDJAGResourceSourceKey = attribute.Key("gram.oauth.id_jag.resource_source")
+
 	// OAuthAssertionAudienceKey records which accepted audience form a verified client assertion carried.
 	OAuthAssertionAudienceKey = attribute.Key("gram.oauth.assertion_audience")
 
@@ -2392,6 +2395,13 @@ func OAuthIDJAGRejectionReason[V ~string](v V) attribute.KeyValue {
 
 func SlogOAuthIDJAGRejectionReason[V ~string](v V) slog.Attr {
 	return slog.String(string(OAuthIDJAGRejectionReasonKey), string(v))
+}
+
+func OAuthIDJAGResourceSource(v string) attribute.KeyValue {
+	return OAuthIDJAGResourceSourceKey.String(v)
+}
+func SlogOAuthIDJAGResourceSource(v string) slog.Attr {
+	return slog.String(string(OAuthIDJAGResourceSourceKey), v)
 }
 
 func OAuthGrant(v string) attribute.KeyValue { return OAuthGrantKey.String(v) }

@@ -30,6 +30,9 @@ type idJAGExchange struct {
 func (s *Service) startIDJAGExchange(endpoint *ResolvedMcpEndpoint, logger *slog.Logger) (*idJAGExchange, *slog.Logger) {
 	issuerID := endpoint.UserSessionIssuerID.String()
 	logger = logger.With(attr.SlogUserSessionIssuerID(issuerID))
+	if endpoint.sharedResource != nil && endpoint.sharedResource.organizationGatewayDefault {
+		logger = logger.With(attr.SlogOAuthIDJAGResourceSource(idJAGResourceSourceOrganizationGateway))
+	}
 	return &idJAGExchange{metrics: s.metrics, logger: logger, issuerID: issuerID, outcome: mcpmetrics.IDJAGExchangeError, reason: mcpmetrics.IDJAGRejectionNone}, logger
 }
 
