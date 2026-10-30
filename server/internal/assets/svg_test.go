@@ -180,3 +180,30 @@ func TestSVGPathBudgetBoundary(t *testing.T) {
 		})
 	}
 }
+
+func TestSVGNumericSeparators(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, element, attribute string
+		valid, invalid           []string
+	}{
+		{"viewBox", "svg", "viewBox", []string{"0 0 24 24", " 0, 0 ,24,24 ", "0\t0\r\n2.4e1 +24"}, []string{"0,,0,24,24", ",0 0 24 24", "0 0 24 24,", "0, ,0 24 24", "0-0 24 24", "0 0 24.5.5"}},
+		{"points", "polyline", "points", []string{"0,0 24,24", "0\t0\n24 24", "1e-2-2,3,-4", "0 , 0 , 24 , 24"}, []string{",0 0", "0 0,", "0,,0", "0, ,0", "0+0", "0.5.5", "0 0-24 24"}},
+		{"transform arguments", "g", "transform", []string{"translate(1,2)", "translate( 1 , -2 )", "translate(1e-2\t+2)", "matrix(1,0,0,1,0,0)"}, []string{"translate(,1)", "translate(1,)", "translate(1,,2)", "translate(1, ,2)", "translate(1-2)", "translate(.5.5)"}},
+		{"transform list", "g", "transform", []string{"translate(1) scale(2)", "translate(1),scale(2)", "translate(1), ,scale(2)"}, []string{",translate(1)", "translate(1),", "translate(1), ", "translate(1)scale(2)"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			for _, value := range tc.valid {
+				budget := maxSVGGeometry
+				require.True(t, validSVGAttribute(tc.element, tc.attribute, value, &budget), "valid: %q", value)
+			}
+			for _, value := range tc.invalid {
+				budget := maxSVGGeometry
+				require.False(t, validSVGAttribute(tc.element, tc.attribute, value, &budget), "invalid: %q", value)
+			}
+		})
+	}
+	budget := maxSVGGeometry
+	require.True(t, validSVGPath("M0-1L.5.5 1e-2-3", &budget))
+}

@@ -204,13 +204,10 @@ func sanitizeSVG(data []byte) ([]byte, error) {
 	return output.Bytes(), nil
 }
 
-func svgNumbers(s string, budget *int) ([]float64, bool) {
+func svgNumbers(s string, points bool, budget *int) ([]float64, bool) {
 	var values []float64
+	s = strings.TrimLeft(s, " \t\r\n")
 	for s != "" {
-		s = strings.TrimLeft(s, " \t\r\n,")
-		if s == "" {
-			break
-		}
 		n := svgNumber.FindString(s)
 		if n == "" {
 			return nil, false
@@ -224,7 +221,21 @@ func svgNumbers(s string, budget *int) ([]float64, bool) {
 			return nil, false
 		}
 		values = append(values, v)
-		s = s[len(n):]
+		rest := s[len(n):]
+		s = strings.TrimLeft(rest, " \t\r\n")
+		if s == "" {
+			break
+		}
+		if strings.HasPrefix(s, ",") {
+			s = strings.TrimLeft(s[1:], " \t\r\n")
+			if s == "" {
+				return nil, false
+			}
+		} else if len(s) == len(rest) && (!points || len(values)%2 != 1 || s[0] != '-') {
+			// Only points allow an unseparated negative second coordinate.
+			// Path data has its own, more permissive number grammar.
+			return nil, false
+		}
 	}
 	return values, true
 }
@@ -267,13 +278,13 @@ func validSVGAttribute(element, name, value string, budget *int) bool {
 		if element != "polygon" && element != "polyline" {
 			return false
 		}
-		ns, ok := svgNumbers(value, budget)
+		ns, ok := svgNumbers(value, true, budget)
 		return ok && len(ns) >= 2 && len(ns)%2 == 0
 	case "viewBox":
 		if element != "svg" {
 			return false
 		}
-		ns, ok := svgNumbers(value, budget)
+		ns, ok := svgNumbers(value, false, budget)
 		return ok && len(ns) == 4 && ns[2] > 0 && ns[3] > 0
 	case "transform":
 		return validSVGTransform(value, budget)
@@ -340,7 +351,7 @@ func validSVGTransform(s string, budget *int) bool {
 		if i < 0 {
 			return false
 		}
-		ns, ok := svgNumbers(s[:i], budget)
+		ns, ok := svgNumbers(s[:i], false, budget)
 		if !ok {
 			return false
 		}
@@ -360,7 +371,13 @@ func validSVGTransform(s string, budget *int) bool {
 		if !ok {
 			return false
 		}
-		s = strings.TrimLeft(s[i+1:], " \t\r\n,")
+		rest := s[i+1:]
+		s = strings.TrimLeft(rest, " \t\r\n,")
+		// Transform lists use comma-wsp+ (unlike numeric lists), but
+		// separators must be between transforms, never after the last one.
+		if (s != "" && len(s) == len(rest)) || (s == "" && strings.Contains(rest, ",")) {
+			return false
+		}
 	}
 	return true
 }
