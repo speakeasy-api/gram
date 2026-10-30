@@ -43,6 +43,22 @@ func remoteSessionCallerPrincipal(ctx context.Context, subject urn.SessionSubjec
 	return uuid.Nil, false, nil
 }
 
+// principalAPIKeyAuthorizer reports the validated authorizer of a
+// principal-backed API key when caller is exactly that user's subject, the
+// owner the typed auth client check named. Any other caller keeps the
+// key's own principal.
+func principalAPIKeyAuthorizer(ctx context.Context, caller urn.SessionSubject) (string, bool) {
+	mode, ok := contextvalues.APIKeyAuthorization(ctx)
+	if !ok || mode != contextvalues.APIKeyAuthorizationModePrincipal || caller.Kind != urn.SessionSubjectKindUser {
+		return "", false
+	}
+	credential, ok := contextvalues.PrincipalCredentialAuthorization(ctx)
+	if !ok || credential.AuthorizerUserID == "" || credential.AuthorizerUserID != caller.ID {
+		return "", false
+	}
+	return credential.AuthorizerUserID, true
+}
+
 // resolveCallerUpstreamToken separates admission identity from credential
 // source. Only scoped callers can use attachments; a missing or revoked
 // attachment never falls back to the agent's, owner's, or authorizer's grant.
@@ -57,6 +73,12 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, looku
 	}
 	if credential, ok := principalcredential.FromContext(ctx); ok {
 		return m.resolveAuthorizerUpstreamToken(ctx, lookup, projectID, organizationID, userSessionIssuerID, clientID, resource, credential.Credential.AuthorizerUserID)
+	}
+	// A typed auth client already checked the agent's own mcp:auth against
+	// the authorizer as the connection's owner; the key then reads exactly
+	// that user's connection, never an attachment or the agent's own.
+	if authorizer, ok := principalAPIKeyAuthorizer(ctx, caller); ok && lookup == lookupAuthClient {
+		return m.resolveAuthorizerUpstreamToken(ctx, lookup, projectID, organizationID, userSessionIssuerID, clientID, resource, authorizer)
 	}
 	principalID, attached, err := remoteSessionCallerPrincipal(ctx, caller)
 	if err != nil {

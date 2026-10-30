@@ -105,15 +105,25 @@ func (u *upstreamSelector) credentialKindOrDefault() string {
 // resolves that user's own connection, never its agent's or the agent
 // owner's; admission binds the same user as the represented user, so the
 // auth client check matches the connection's owner against them. Every other
-// caller resolves its own: an agent API key or agent session reaches its
-// authorizer's personal connection only through the exact connection
-// attached to the agent, whose owner the agent's mcp:auth check names.
+// caller resolves its own; an agent session reaches a personal connection
+// only through the exact connection attached to the agent.
 func connectionSubject(ctx context.Context, subject urn.SessionSubject) urn.SessionSubject {
-	authenticated, ok := principalcredential.FromContext(ctx)
-	if !ok || authenticated.Credential.AuthorizerUserID == "" {
-		return subject
+	if authenticated, ok := principalcredential.FromContext(ctx); ok {
+		if authenticated.Credential.AuthorizerUserID == "" {
+			return subject
+		}
+		return urn.NewUserSubject(authenticated.Credential.AuthorizerUserID)
 	}
-	return urn.NewUserSubject(authenticated.Credential.AuthorizerUserID)
+	// A principal-backed API key names its validated authorizer as the owner
+	// of the personal connection it uses. The mandatory mcp:auth check still
+	// decides with the agent's own grants and ceilings, never the
+	// authorizer's permissions, against that owner.
+	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
+		if credential, ok := contextvalues.PrincipalCredentialAuthorization(ctx); ok && credential.AuthorizerUserID != "" {
+			return urn.NewUserSubject(credential.AuthorizerUserID)
+		}
+	}
+	return subject
 }
 
 // profileSelectorFor returns the selector for a principal credential that

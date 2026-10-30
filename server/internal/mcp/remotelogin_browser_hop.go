@@ -91,14 +91,15 @@ func (s *Service) startRemoteLogin(ctx context.Context, challengeState AuthnChal
 		return "", false, fmt.Errorf("build remote login confirm URL: %w", err)
 	}
 	state := remoteLoginHop{
-		ID:                uuid.NewString(),
-		Phase:             remoteLoginHopBind,
-		ParentChallengeID: challengeState.ID,
-		CookieID:          parent.BrowserCookieID,
-		Browser:           browser,
-		ConfirmURL:        confirmURL,
-		AuthorizationURL:  authorizationURL,
-		CreatedAt:         time.Now(),
+		ConnectionRecovery: false,
+		ID:                 uuid.NewString(),
+		Phase:              remoteLoginHopBind,
+		ParentChallengeID:  challengeState.ID,
+		CookieID:           parent.BrowserCookieID,
+		Browser:            browser,
+		ConfirmURL:         confirmURL,
+		AuthorizationURL:   authorizationURL,
+		CreatedAt:          time.Now(),
 	}
 	if err := s.remoteLoginHopCache.Store(ctx, state); err != nil {
 		return "", false, fmt.Errorf("store remote login browser hop: %w", err)

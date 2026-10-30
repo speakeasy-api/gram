@@ -7,10 +7,12 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -19,10 +21,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -61,11 +65,7 @@ func newConnectionRecoveryFixtureWithCallback(t *testing.T, callbackBase string)
 	}
 	slug := "recovery-" + uuid.NewString()[:6]
 	f.asBase = "https://" + slug + "-as.example.com"
-	registration := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, "", nil)
-	if callbackBase != "" {
-		_, err := ti.conn.Exec(ctx, "UPDATE remote_session_clients SET callback_base_url = $1 WHERE id = $2", callbackBase, registration)
-		require.NoError(t, err)
-	}
+	registration := createRecoveryRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, f.asBase, callbackBase)
 	f.fixtures = authclientfixtures.New(ti.conn)
 	remoteID, serverID := uuid.New(), uuid.New()
 	require.NoError(t, f.fixtures.SeedRemoteMCPServerFixture(ctx, authclientfixtures.SeedRemoteMCPServerFixtureParams{ID: remoteID, ProjectID: *authCtx.ProjectID, Url: "https://mcp.example.com/" + remoteID.String()[:8]}))
@@ -87,6 +87,36 @@ func newConnectionRecoveryFixtureWithCallback(t *testing.T, callbackBase string)
 	f.router.Get(mcp.ConnectionRecoveryRoute, oops.BrowserErrHandle(ti.logger, ti.service.HandleConnectionRecovery).ServeHTTP)
 	f.router.Get(mcp.RemoteLoginBindPath, oops.BrowserErrHandle(ti.logger, ti.service.HandleRemoteLoginBind).ServeHTTP)
 	return f
+}
+
+// createRecoveryRemoteClient creates a personal registration whose callback
+// lands on callbackBase, or on the default origin when it is empty.
+func createRecoveryRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID, slug, asBase, callbackBase string) uuid.UUID {
+	t.Helper()
+	q := remotesessions_repo.New(conn)
+	rsi, err := q.CreateRemoteSessionIssuer(ctx, remotesessions_repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{UUID: projectID, Valid: true},
+		Slug:                              slug + "-rsi",
+		Issuer:                            asBase,
+		AuthorizationEndpoint:             conv.ToPGText(asBase + "/authorize"),
+		TokenEndpoint:                     conv.ToPGText(asBase + "/token"),
+		ScopesSupported:                   []string{},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
+	})
+	require.NoError(t, err)
+	rsc, err := q.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        conv.ToPGTextEmpty(organizationID),
+		RemoteSessionIssuerID: rsi.ID,
+		ClientID:              slug + "-external-client",
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		CallbackBaseUrl:       conv.ToPGTextEmpty(callbackBase),
+	})
+	require.NoError(t, err)
+	return rsc.ID
 }
 
 // open requests path signed in as userID, or signed out when it is empty.
@@ -118,7 +148,7 @@ func (f *connectionRecoveryFixture) start(t *testing.T, path, userID string) (*u
 	t.Helper()
 	res := f.open(t, path, userID)
 	var cookies []*http.Cookie
-	for {
+	for range 4 {
 		require.Equal(t, http.StatusFound, res.Code, res.Body.String())
 		cookies = append(cookies, res.Result().Cookies()...)
 		location, err := url.Parse(res.Header().Get("Location"))
@@ -128,6 +158,8 @@ func (f *connectionRecoveryFixture) start(t *testing.T, path, userID string) (*u
 		}
 		res = f.request(t, location.RequestURI(), userID, cookies)
 	}
+	require.FailNow(t, "the link's login took too many browser hops")
+	return nil, nil
 }
 
 // callback is a remote login callback from a browser signed in as userID, or
@@ -346,11 +378,11 @@ func TestPersonBackedTurnsUseTheirPersonsOwnConnection(t *testing.T) {
 	workloadSubject := urn.NewWorkloadSubject(workloadIssuer, workloadExternal)
 	require.Equal(t, workloadSubject, mcp.ConnectionSubject(mint(workload, ""), workloadSubject), "a turn acting for nobody resolves no person's connection")
 
-	// An agent API key reaches its creator's personal connection through the
-	// exact connection attached to the agent, checked by the agent's mcp:auth
-	// against that connection's owner
-	// (TestAdmittedAgentAuthClientUsesTheAttachedConnectionOwner), so its
-	// subject is not replaced here, which would bypass that attachment.
+	// An agent API key names its validated authorizer as the owner of the
+	// personal connection it uses; the agent's own mcp:auth then decides
+	// (TestAgentKeyAuthClientUsesItsAuthorizersConnection).
 	agentKey := contextvalues.WithPrincipalAPIKeyAuthorization(ctx, ac, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), contextvalues.PrincipalCredential{AuthorizerUserID: owner, DelegatedGrants: []byte("[]"), DelegatedGrantsVersion: 1, DerivesPolicyAtAdmission: false})
-	require.Equal(t, agentSubject, mcp.ConnectionSubject(agentKey, agentSubject), "an agent key resolves through its exact attachment")
+	require.Equal(t, urn.NewUserSubject(owner), mcp.ConnectionSubject(agentKey, agentSubject), "an agent key names its authorizer as the connection owner")
+	agentSession := contextvalues.WithPrincipalCredentialAuthorization(ctx, ac, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), contextvalues.PrincipalCredential{AuthorizerUserID: owner, DelegatedGrants: []byte("[]"), DelegatedGrantsVersion: 1, DerivesPolicyAtAdmission: false})
+	require.Equal(t, agentSubject, mcp.ConnectionSubject(agentSession, agentSubject), "an agent session keeps its exact attachment")
 }

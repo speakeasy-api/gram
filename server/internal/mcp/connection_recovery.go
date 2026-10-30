@@ -115,6 +115,7 @@ func (s *Service) connectionRecoveryError(ctx context.Context, authentication *i
 		ID: token, OrganizationID: endpoint.OrganizationID, UserID: userID, ProjectID: endpoint.ProjectID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID, McpServerID: endpoint.McpServerID.UUID, McpSlug: endpoint.Slug,
 		ServerName: res.serverName, AuthClientID: res.clientID, RegistrationID: authentication.chosenClient.UUID, CreatedAt: time.Now(),
+		BrowserCookieID: "", BrowserHash: "", BrowserHop: false,
 	}
 	if err := s.connectionRecoveryCache.Store(ctx, recovery); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "store connection link").LogError(ctx, s.logger), true
@@ -274,11 +275,11 @@ func (s *Service) validateConnectionRecoveryHopOwner(r *http.Request, state remo
 	ctx := r.Context()
 	login, err := s.connectionRecoveryCache.Get(ctx, "connectionRecovery:"+state.ParentChallengeID)
 	if err != nil || login.expired() || login.ID != state.ParentChallengeID || !login.BrowserHop || login.BrowserCookieID == "" || login.BrowserCookieID != state.CookieID {
-		return oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "connection login expired"), oauthui.ReasonExpired)
+		return fmt.Errorf("check connection login: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "connection login expired"), oauthui.ReasonExpired))
 	}
 	if _, err := s.verifyConnectionRecoveryUser(ctx, r, login); err != nil {
 		if errors.Is(err, errRecoveryNotSignedIn) || errors.Is(err, errRecoveryOtherUser) || errors.Is(err, errRecoveryNoAccess) || errors.Is(err, errRecoveryUnavailable) {
-			return oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "connection login browser is not its person's"), oauthui.ReasonSessionChanged)
+			return fmt.Errorf("check connection login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "connection login browser is not its person's"), oauthui.ReasonSessionChanged))
 		}
 		return fmt.Errorf("check connection login browser: %w", err)
 	}
