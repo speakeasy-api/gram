@@ -37,10 +37,10 @@ File references are `file:line` on each option's branch, under `server/internal/
 | New storage | None. Reads `principal_grants` unchanged | None. Reads `principal_grants` unchanged |
 | Project blocks vs a direct user grant | Today's rule kept: the direct grant wins (`BlockWins: false`) | The block always wins |
 | Agents (R ∩ A ∩ O) | Unchanged engine loop over the three policies | `evaluatePolicies` requires every policy to allow |
-| Relationship rules (agent owner reads history) | Sketched: hand-written `Relations` enum on a definition | Sketched: `Is`, `Via`, `SoleAttribution` in the schema language |
+| Relationship rules (agent owner reads history) | Sketched: hand-written `Relations` enum on a definition | **Implemented** at `93da99dc4`: `Attr`, `Is`, `Via`, `Unless` in the schema language, behind the per-org switch |
 | Time-bound grants | Unsupported; sketched | Unsupported; sketched |
 | Tool-level checks | Still in the engine, outside the catalogue (`MCPToolCall` builder sketched) | Evaluator implemented and tested; tool-call entry point (`RequireMCPTool`) sketched |
-| Safety net at startup | `mustValidate` panics on a bad definition; a test keeps the engine's tables equal to the catalogue | `relschema.Compile` panics on a bad schema, including any registered scope the schema neither reads nor excludes |
+| Safety net at startup | `mustValidate` panics on a bad definition; a test keeps the engine's tables equal to the catalogue | `relschema.Compile` panics on a bad schema. Since `93da99dc4` an unmapped registered scope fails startup unless it's listed in `outOfSchemaScopes` with a reason. Before that, the wiring excluded such scopes automatically, so the check couldn't fail |
 
 ---
 
@@ -597,7 +597,7 @@ These cases go beyond the five MCP scenarios. The status for each option is mark
 | 6 | Role A reads every project and writes project PA | Implemented on a parked commit | Implemented in a parked patch |
 | 7 | Role B blocks project PO, but U also has a direct grant on it | Implemented on a parked commit. **The direct grant wins** | Implemented in a parked patch. **The block wins** |
 | 8 | An agent connects to a server within its owner's authority | Works through the unchanged engine. Not in B's scenario tests | Works through `evaluatePolicies`. Not in D's scenario tests |
-| 9 | An agent's history follows it when it is transferred | Sketched (slice 4 plan, paused). Today's rule is inline in the chat service | Sketched (slice 4 plan, paused). Same |
+| 9 | An agent's history follows it when it is transferred | Sketched (slice 4 plan, paused). Today's rule is inline in the chat service | **Implemented** as the evidence gate at `93da99dc4`, including listing. Off in production |
 | 10 | An admin gives a user access for a limited time | **Unsupported.** Sketched | **Unsupported.** Sketched |
 | 11 | A request for a resource in another organization | Implemented | Implemented |
 
@@ -858,6 +858,16 @@ No new rule in either option. Each evaluates its normal `mcp:connect` rule once 
 
 ### Scenario 9. An agent's history follows it when it is transferred
 
+> **Update (2026-10-30, D at [`93da99dc4`](https://github.com/speakeasy-api/gram/commit/93da99dc4)).** D built this scenario as the evidence gate the external review asked for. The D column below is the original sketch. The built version differs in these ways:
+>
+> - **Language added to `relschema`:** `s.Attr` with `Object.Attrs`, `s.Is(attr)`, `s.Via(attr, perm)` with `Request.Objects`, `s.Unless(attr, expr)` (replacing the sketched `SoleAttribution`), and `Request.Subject`. No escape hatches were needed in the evaluator.
+> - **Rule** (`chat_schema.go:43–66`): `read = Is(author) ∪ Unless(author, Unless(external_author, Via(agent, owner))) ∪ reader ∪ writer ∪ root`. `agent.owner = Is(owner)`. All `agent:*` management scopes are declared out of schema, so management never reaches transcripts.
+> - **Wiring:** the switch sits in the shared gate `authorizeChatAccess` (`chat/impl.go:1074`), so `LoadChat`, `LoadChatOverview` and the conversation path change together. `chatReadFacts` loads the agent with the chat's organization; a missing row becomes "no fact", which is undetermined.
+> - **Listing:** `PlanChatList` asks the schema only "every session or not?". The owner and author branches are a **hand-written SQL mirror** (`chat/queries.sql:626`, `:771`), kept equal by an agreement test across pages. Generating that SQL from the schema isn't built. This is the main cost the slice exposed.
+> - **All six acceptance cases pass**, in memory (`TestAgentHistoryAcceptance`) and against Postgres through the real service (`TestAgentHistorySchema`). A mutation check confirms the DB test runs the schema path.
+> - **Defaults that are D's choices, not decisions:** no capture-time marker column (activation is per organization); `chats.user_id` counts as the author, as today, though it's resolved from a hook payload email; ownership isn't capped by a second admitted policy, as today.
+> - **Policy-adjacent Go outside the schema:** `chatObject` sets the owner attribute only for an eligible agent (not latched, not deleted), and `PlanChatList`.
+
 **Status.** **Sketched in both.** This was slice 4, which is paused after Stage A. Each option has a plan: `/mnt/project-files/rbac-eval/option-b/slice4-stage-a.md` (B) and `/mnt/project-files/rbac-option-d/slice4-stage-a.md` (D). **Today's behavior is already implemented**, inline in the chat service (PR #8110). U1, the current owner of an agent, can read that agent's agent-only sessions. Ownership is resolved at read time, so a transfer moves access, and the former owner loses it at once.
 
 #### Data (same for B and D)
@@ -1100,7 +1110,7 @@ Behavior that changes from today's production in both options (B engine-wide on 
 - **Unannotated tools under a read-only row** (scenario 4). A tool with no annotations has disposition `""`, which neither option treats as a mismatch. In B the engine skips the key; in D the missing-fact branch passes for non-strict rows. Deciding whether an unannotated tool should count as not read-only is a behavior decision, not only code. B sketches `missing_fact` in `prepare`; D could mark tool-limited rows strict.
 - **Tool calls are not yet decided by the new model.** In B they stay in the engine interceptors (`MCPToolCall` builder sketched). In D the evaluator handles tool facts and is tested, but no request path calls it (`RequireMCPTool` sketched). Today, in both branches, the live tool-call path is the legacy interceptor.
 - **Coverage of endpoints.** Only some MCP server endpoints go through the new path. B covers the remote server's scope settings and the private endpoint proxy; other management endpoints in `remotemcp/impl.go` still check `mcp:write` on the project. D covers the MCP servers service's read and edit and the private endpoint proxy. In both, most of the code base still calls `authz.Engine.Require` with hand-built checks.
-- **Listing.** Neither option answers "which of these can I see?" yet. B's `ListProjects` still calls `s.authz.Filter`; the catalogue has no filter operation. D doesn't cover listing; slice 4's plan proposes an agreement test between the SQL list and the direct read instead of migrating the list.
+- **Listing.** B's `ListProjects` still calls `s.authz.Filter`; the catalogue has no filter operation. D now lists sessions (`93da99dc4`), with the schema deciding "all or not" and a hand-written SQL mirror for the owner branches, held equal by a test. D doesn't list projects or MCP servers.
 - **Time-bound access** (scenario 10). No expiry anywhere in the grant model. The shared sketch is a nullable `expires_at` filtered at load.
 - **Agents in the new model's tests** (scenario 8). Both options inherit the three-policy rule from the engine, but neither scenario suite asserts it. D's `PolicySet` also doesn't carry the `$represented_user` binding.
 
@@ -1113,4 +1123,4 @@ Behavior that changes from today's production in both options (B engine-wide on 
 | One exception to the client-as-field pattern: the `mcp` service builds the client at the call because tests construct it as a struct literal | One compiled schema for all types, or one per area, is open; with one schema every row in a policy must decode for every check |
 | Whether project-wide connect is first-class (scenario 1) | Same question |
 | The catalogue can't express "a read block also blocks write"; it lives only in the engine's table (scenario 7) | One activation switch (`MCPServerSchemaActive`) now covers projects too; a per-type switch needs a second option, and the name is too narrow |
-| Relationship rules (scenario 9) need a new `Relations` field and a backend lookup per relation | Relationship rules need attributes and traversal added to the interpreter |
+| Relationship rules (scenario 9) need a new `Relations` field and a backend lookup per relation | Attributes and traversal were added (`93da99dc4`); listing still needs a hand-written SQL mirror. A malformed row in a mapped scope fails every schema check for that caller (fail closed, 500); `AuditGrants` finds such rows before activation |
