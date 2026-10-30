@@ -105544,6 +105544,10 @@ components:
         url:
           type: string
           description: The gateway's MCP URL. Set only when available.
+        user_session_issuer_id:
+          type: string
+          description: The organization-level user session issuer the gateway signs people in through. A server that signs in upstream is offered on the gateway only when its sign-in client is attached to this issuer. Set only when available.
+          format: uuid
       description: The active organization's gateway, or why it is not served.
       required:
         - available

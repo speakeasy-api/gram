@@ -66,6 +66,7 @@ import {
   type IdentityMode,
 } from "@/lib/remote-identity";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
+import { OrganizationGatewayAccessPanel } from "./OrganizationGatewayAccessPanel";
 import { useUpstreamProbe } from "@/lib/remote-identity";
 import { UserIdentityRow } from "@/lib/remote-identity";
 import { useUserIdentityDraft } from "@/lib/remote-identity";
@@ -998,6 +999,24 @@ export function RemoteMcpIdentitySectionBody({
           </SettingsSection.Footer>
         ) : null}
       </SettingsSection.Panel>
+
+      {identityResolved &&
+      actualMode === "user" &&
+      target.userSessionIssuerId ? (
+        <OrganizationGatewayAccessPanel
+          serverUserSessionIssuerId={target.userSessionIssuerId}
+          clients={subjectClients.map((linked) => ({
+            client: linked,
+            otherServers:
+              (associationsQuery.data?.associations.find(
+                (association) =>
+                  association.remoteSessionClientId === linked.id,
+              )?.serverCount ?? 1) - 1,
+          }))}
+          preferredClientId={userDraft.connectedClientId ?? null}
+          canWrite={canWrite}
+        />
+      ) : null}
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <Dialog.Content className="max-w-md">
