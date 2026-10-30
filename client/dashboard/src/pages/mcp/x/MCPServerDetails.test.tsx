@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   server: undefined as unknown,
   error: null as unknown,
+  canWrite: true,
   toolSource: {
     status: "ready",
     tools: [
@@ -24,6 +25,24 @@ const mocks = vi.hoisted(() => ({
   hostedToolset: undefined as unknown,
 }));
 
+vi.mock("./setup/ProviderSetupPage", () => ({
+  ProviderSetupPage: ({ mcpServer }: { mcpServer: { id: string } }) => (
+    <output data-testid="setup-page">{mcpServer.id}</output>
+  ),
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: (scope: string) => scope !== "mcp:write" || mocks.canWrite,
+    hasAnyScope: (scopes: string[]) =>
+      scopes.some((scope) => scope !== "mcp:write" || mocks.canWrite),
+    hasAllScopes: (scopes: string[]) =>
+      scopes.every((scope) => scope !== "mcp:write" || mocks.canWrite),
+    isLoading: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/requestAccess.js", () => ({
+  useRequestAccessMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
 vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
   useGetMcpServer: () => ({
     data: mocks.server,
@@ -81,14 +100,6 @@ vi.mock("@/pages/access/useServerTools", () => ({
     mocks.readTools(entry);
     return mocks.toolSource;
   },
-}));
-vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasAnyScope: () => true }),
-}));
-vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
 }));
 vi.mock("@/components/insights-context", () => ({
   useHideInsightsDock: vi.fn(),
@@ -170,6 +181,7 @@ const REMOTE_SERVER = {
 };
 
 beforeEach(() => {
+  mocks.canWrite = true;
   mocks.server = REMOTE_SERVER;
   mocks.error = null;
   mocks.readTools.mockClear();
@@ -376,5 +388,20 @@ describe("Team access unavailable tool picker states", () => {
     expect(
       screen.queryByRole("button", { name: "Connect to load tools" }),
     ).toBeNull();
+  });
+});
+
+describe("MCPServerDetails setup authorization", () => {
+  it("hands the exact server to setup for a writer", () => {
+    visit("/acme/projects/default/mcp/my-server/setup");
+    expect(screen.getByTestId("setup-page").textContent).toBe("server-1");
+  });
+  it("refuses setup without mcp:write", () => {
+    mocks.canWrite = false;
+    visit("/acme/projects/default/mcp/my-server/setup");
+    expect(screen.queryByTestId("setup-page")).toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "Access restricted" }),
+    ).toBeDefined();
   });
 });

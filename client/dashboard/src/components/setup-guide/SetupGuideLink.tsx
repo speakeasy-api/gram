@@ -32,9 +32,13 @@ export function SetupGuideAction({
     return (
       <Button variant="secondary" size="xs" className={className} asChild>
         <a href={docsUrl(guide.only)} target="_blank" rel="noopener noreferrer">
-          <BookOpen className="mr-2 size-4" aria-hidden />
-          Read the guide
-          <ExternalLink className="ml-2 size-3" aria-hidden />
+          <Button.LeftIcon>
+            <BookOpen />
+          </Button.LeftIcon>
+          <Button.Text>Read the guide</Button.Text>
+          <Button.RightIcon>
+            <ExternalLink />
+          </Button.RightIcon>
         </a>
       </Button>
     );

@@ -40,7 +40,7 @@ export function providerSetupInstallTarget(
   if (
     servers.length !== 1 ||
     statuses.length !== 1 ||
-    !servers[0]?.remotes?.some((remote) => setupProviderForUrl(remote.url))
+    !setupProviderForUrl(statuses[0]?.remoteUrl)
   )
     return null;
   const result = statuses[0];

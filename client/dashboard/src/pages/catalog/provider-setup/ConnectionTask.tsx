@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { useMock } from "./use-mock";
+import { useSetup } from "./setup-context";
 import { Fragment, type ReactNode } from "react";
 import { SquareCheck, SquareDashed } from "lucide-react";
 import { Alert } from "@/components/ui/Alert";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { names, ready } from "./state";
 import { Correction } from "./shared";
 function LiveConnectionError() {
-  const { live, dispatch } = useMock();
+  const { live, dispatch } = useSetup();
   return (
     <>
       <p>{live?.error}</p>
@@ -23,6 +23,9 @@ function LiveConnectionError() {
       {live?.recovery === "credentials" && (
         <Correction step="credentials">Review credentials</Correction>
       )}
+      {live?.recovery === "permissions" && (
+        <Correction step="app">Review Slack permissions</Correction>
+      )}
       {live?.recovery === "settings" && (
         <Link to={live.settingsHref ?? "../settings#authentication"}>
           Open identity settings
@@ -33,7 +36,7 @@ function LiveConnectionError() {
 }
 
 export function ConnectionTask(): JSX.Element {
-  const { s, dispatch, live } = useMock();
+  const { s, dispatch, live } = useSetup();
   const available = ready(s);
   type Row = {
     label: string;
@@ -106,12 +109,12 @@ export function ConnectionTask(): JSX.Element {
                     <div className="flex min-h-9 items-center gap-2.5 py-1.5 text-base">
                       <Icon
                         aria-hidden
-                        className={`size-6 shrink-0 ${row.done ? "text-[#5a8250]" : "text-[#767676]"}`}
+                        className={`size-6 shrink-0 ${row.done ? "text-default-success" : "text-muted-foreground"}`}
                       />
                       <span>{row.label}</span>
                     </div>
                     {!row.done && !row.available && (
-                      <p className="text-[13px] text-[#767676] lg:ml-[34px]">
+                      <p className="text-[13px] text-muted-foreground lg:ml-[34px]">
                         {row.hint}
                       </p>
                     )}
@@ -120,7 +123,7 @@ export function ConnectionTask(): JSX.Element {
                     className={`py-8 text-right align-top ${index === 0 ? "pt-0" : ""} ${index === rows.length - 1 && !row.error ? "pb-0" : ""}`}
                   >
                     {row.done ? (
-                      <span className="flex h-9 items-center justify-end text-[13px] leading-none text-[#5a8250]">
+                      <span className="flex h-9 items-center justify-end text-[13px] leading-none text-default-success">
                         {row.status}
                       </span>
                     ) : (

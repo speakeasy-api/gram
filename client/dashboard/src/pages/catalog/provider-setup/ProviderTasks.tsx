@@ -1,19 +1,19 @@
-import { useMock } from "./use-mock";
+import { useSetup } from "./setup-context";
 import { scopesFor } from "./provider-data";
 import { Eye, Link, Settings2 } from "lucide-react";
 import {
   AppChoice,
   Choices,
   CopyValue,
+  CopyAction,
   ExternalAction,
   InProvider,
-  MockField,
+  SetupField,
   Note,
   Section,
 } from "./shared";
 import { useNewRemoteSessionClientCallbackUrl } from "@gram/client/react-query/newRemoteSessionClientCallbackUrl.js";
 import { Alert } from "@/components/ui/Alert";
-import { CopyButton } from "@/components/ui/CopyButton";
 import { slackAppManifest, slackAppCreationUrl } from "./slack";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -54,7 +54,7 @@ function Plan() {
   );
 }
 function Credentials() {
-  const { s, dispatch, live } = useMock();
+  const { s, dispatch, live } = useSetup();
   const saved = !!live && s.saved;
   return (
     <>
@@ -70,14 +70,14 @@ function Credentials() {
           </>,
         ]}
       />
-      <MockField
+      <SetupField
         field="clientId"
         label="Client ID"
         disabled={saved}
         value={saved ? (live?.savedClientId ?? "") : undefined}
         placeholder="Paste Client ID"
       />
-      <MockField
+      <SetupField
         field="clientSecret"
         label="Client Secret"
         disabled={saved}
@@ -111,14 +111,16 @@ function Credentials() {
   );
 }
 function SlackTask({ serverName }: { serverName: string }) {
-  const { s, live } = useMock(),
+  const { s, live } = useSetup(),
     existing = s.values.appChoice === "existing" || s.returnToTest;
   const callbackQuery = useNewRemoteSessionClientCallbackUrl(
     undefined,
     undefined,
     { throwOnError: false },
   );
-  const redirectUrl = live?.callbackUrl ?? callbackQuery.data?.callbackUrl;
+  const redirectUrl = s.saved
+    ? live?.callbackUrl
+    : callbackQuery.data?.callbackUrl;
   const scopes = scopesFor(s);
   const appManifest = redirectUrl
     ? slackAppManifest(scopes, redirectUrl, serverName)
@@ -159,7 +161,7 @@ function SlackTask({ serverName }: { serverName: string }) {
         </summary>
         <div className="mt-4 flex flex-wrap gap-2">
           {scopes.map((scope) => (
-            <code className="bg-[#fafafa] px-2 py-1 text-xs" key={scope}>
+            <code className="bg-muted px-2 py-1 text-xs" key={scope}>
               {scope}
             </code>
           ))}
@@ -264,10 +266,10 @@ function SlackTask({ serverName }: { serverName: string }) {
           />
           {manifest && (
             <>
-              <pre className="my-4 border bg-[#fafafa] p-4 font-mono text-[13px] whitespace-pre-wrap wrap-anywhere">
+              <pre className="my-4 border bg-muted p-4 font-mono text-[13px] whitespace-pre-wrap wrap-anywhere">
                 {manifest}
               </pre>
-              <CopyButton text={manifest} tooltip="Copy app JSON" />
+              <CopyAction value={manifest} label="Copy app JSON" />
             </>
           )}
         </details>
@@ -281,7 +283,7 @@ export function ProviderTask({
 }: {
   serverName: string;
 }): JSX.Element {
-  const { s } = useMock();
+  const { s } = useSetup();
   if (s.step === "begin") return <Plan />;
   if (s.step === "credentials") return <Credentials />;
   return <SlackTask serverName={serverName} />;

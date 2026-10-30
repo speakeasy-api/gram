@@ -16,7 +16,10 @@ import { useRoutes } from "@/routes";
 import { mcpServerRouteParam } from "@/lib/sources";
 import type { McpServer } from "@gram/client/models/components/mcpserver";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer";
-import { MockContext, useMock } from "@/pages/catalog/provider-setup/use-mock";
+import {
+  SetupContext,
+  useSetup,
+} from "@/pages/catalog/provider-setup/setup-context";
 import {
   names,
   reduce,
@@ -173,15 +176,15 @@ function LiveSetupConnection({
     routes.mcp.details.settings.href(mcpServerRouteParam(mcpServer)) +
     "#authentication";
   return (
-    <MockContext
+    <SetupContext
       value={{ s, dispatch: live.dispatch, live: { ...live, settingsHref } }}
     >
       <SetupBody serverUrl={serverUrl} serverName={serverName} />
-    </MockContext>
+    </SetupContext>
   );
 }
 function StepRail(): JSX.Element {
-  const { s, dispatch } = useMock();
+  const { s, dispatch } = useSetup();
   return (
     <nav
       aria-label={`${names[s.provider]} setup steps`}
@@ -251,7 +254,7 @@ function SetupBody({
   serverUrl: string;
   serverName: string;
 }): JSX.Element {
-  const { s, dispatch, live } = useMock();
+  const { s, dispatch, live } = useSetup();
   const name = names[s.provider];
   const complete = ready(s) && s.authorized && s.tested;
   let content = <ProviderTask serverName={serverName} />;
@@ -333,7 +336,12 @@ function SetupBody({
                   {s.step === "test" ? (
                     <Button
                       variant="primary"
-                      disabled={!complete || !!live?.pending}
+                      disabled={
+                        !complete ||
+                        !!live?.pending ||
+                        !!live?.loading ||
+                        !!live?.error
+                      }
                       onClick={() => dispatch({ type: "complete" })}
                     >
                       <Button.Text>Complete setup</Button.Text>

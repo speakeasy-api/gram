@@ -11,7 +11,12 @@ export function slackAppManifest(
   serverName: string,
 ): SlackAppManifest {
   return {
-    display_information: { name: `Speakeasy · ${serverName}` },
+    display_information: {
+      name: Array.from(`Speakeasy · ${serverName}`)
+        .slice(0, 35)
+        .join("")
+        .trimEnd(),
+    },
     oauth_config: {
       redirect_urls: [callbackUrl],
       scopes: { user: [...scopes] },

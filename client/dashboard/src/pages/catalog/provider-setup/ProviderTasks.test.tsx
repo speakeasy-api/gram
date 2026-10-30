@@ -1,11 +1,20 @@
 import { useReducer } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { initialState, reduce } from "./state";
-import { MockContext } from "./use-mock";
+import { SetupContext } from "./setup-context";
 import { ProviderTask } from "./ProviderTasks";
 
+vi.mock(
+  "@gram/client/react-query/newRemoteSessionClientCallbackUrl.js",
+  () => ({
+    useNewRemoteSessionClientCallbackUrl: () => ({
+      data: { callbackUrl: "https://current.example/callback" },
+      isError: false,
+    }),
+  }),
+);
 afterEach(cleanup);
 function SavedCredentials({ provider }: { provider: "slack" }) {
   const [s, dispatch] = useReducer(reduce, {
@@ -16,7 +25,7 @@ function SavedCredentials({ provider }: { provider: "slack" }) {
     tested: true,
   });
   return (
-    <MockContext
+    <SetupContext
       value={{
         s,
         dispatch,
@@ -31,7 +40,7 @@ function SavedCredentials({ provider }: { provider: "slack" }) {
       }}
     >
       <ProviderTask serverName="Demo" />
-    </MockContext>
+    </SetupContext>
   );
 }
 describe("saved credentials", () => {
@@ -60,3 +69,38 @@ describe("saved credentials", () => {
     },
   );
 });
+
+it.each([false, true])(
+  "uses the callback for the actual retained/replacement client (saved=%s)",
+  (saved) => {
+    const initial = initialState("slack");
+    render(
+      <SetupContext
+        value={{
+          s: {
+            ...initial,
+            step: "app",
+            saved,
+            values: { ...initial.values, appChoice: "existing" },
+          },
+          dispatch: vi.fn<() => void>(),
+          live: {
+            pending: null,
+            error: null,
+            errorStep: "save",
+            toolCount: null,
+            loading: false,
+            callbackUrl: "https://previous.example/callback",
+          },
+        }}
+      >
+        <ProviderTask serverName="Slack" />
+      </SetupContext>,
+    );
+    expect(screen.getByLabelText("Redirect URL").getAttribute("value")).toBe(
+      saved
+        ? "https://previous.example/callback"
+        : "https://current.example/callback",
+    );
+  },
+);

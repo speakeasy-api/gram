@@ -1,5 +1,5 @@
-import { useMock } from "./use-mock";
-import { type ReactNode, type ComponentType } from "react";
+import { useSetup } from "./setup-context";
+import { useState, type ReactNode, type ComponentType } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Field, FieldError, FieldLabel } from "@/components/ui/Field";
@@ -23,10 +23,10 @@ export function Section({
   );
 }
 export function InProvider({ actions }: { actions: ReactNode[] }): JSX.Element {
-  const { s } = useMock();
+  const { s } = useSetup();
   return (
-    <div className="mt-[18px] border-l-2 border-[#2873d7] bg-[#f4f8ff] px-5 py-4 first:mt-0">
-      <p className="mb-1.5 text-[13px] text-[#2873d7]">
+    <div className="mt-[18px] border-l-2 border-information-default bg-information-softest px-5 py-4 first:mt-0">
+      <p className="mb-1.5 text-[13px] text-default-information">
         In {names[s.provider]}
       </p>
       {actions.length === 1 ? (
@@ -55,7 +55,7 @@ export function ExternalAction({
   disabled?: boolean;
 }): JSX.Element {
   return (
-    <div className="mt-6 flex flex-col items-start justify-between gap-6 bg-[#fff8f3] p-[22px] shadow-[inset_2px_0_#fb873f] first:mt-0 @min-[650px]/task:flex-row">
+    <div className="mt-6 flex flex-col items-start justify-between gap-6 bg-warning-softest p-[22px] border-l-2 border-warning-default first:mt-0 @min-[650px]/task:flex-row">
       <div className="min-w-0 flex-1">
         {title && (
           <h4 className="mb-2 pt-1.5 text-base font-semibold">{title}</h4>
@@ -88,7 +88,7 @@ export function ExternalAction({
     </div>
   );
 }
-export function MockField({
+export function SetupField({
   field,
   label,
   placeholder,
@@ -105,8 +105,8 @@ export function MockField({
   value?: string;
   type?: string;
 }): JSX.Element {
-  const { s, dispatch } = useMock();
-  const id = `mock-${s.provider}-${field}`,
+  const { s, dispatch } = useSetup();
+  const id = `setup-${s.provider}-${field}`,
     error = s.errors[field];
   const secret = field === "clientSecret";
   return (
@@ -119,7 +119,6 @@ export function MockField({
             size="xs"
             className="-mr-2 h-auto py-0 font-sans text-[13px]"
             aria-controls={id}
-            aria-pressed={s.showSecret}
             onClick={() => dispatch({ type: "secret" })}
           >
             {s.showSecret ? "Hide" : "Show"}
@@ -177,7 +176,7 @@ export function Choices({
   options: ChoiceOption[];
   className?: string;
 }): JSX.Element {
-  const { s, dispatch } = useMock();
+  const { s, dispatch } = useSetup();
   return (
     <fieldset className={cn("mb-7 min-w-0 border-0 p-0", className)}>
       {visibleLabel && (
@@ -200,7 +199,7 @@ export function Choices({
               </span>
             }
             leading={<Icon className="mt-0 size-6 shrink-0" />}
-            className="gap-3 p-6 text-[#767676] has-data-[state=checked]:bg-[#fafafa] has-data-[state=checked]:text-[#101010]"
+            className="gap-3 p-6 text-muted-foreground has-data-[state=checked]:bg-muted has-data-[state=checked]:text-foreground"
           >
             {description && (
               <span className="mt-2 block text-[13px] leading-normal">
@@ -240,6 +239,46 @@ export function AppChoice({
     />
   );
 }
+export function CopyAction({
+  value,
+  label = "Copy",
+}: {
+  value: string;
+  label?: string;
+}): JSX.Element {
+  const [copiedValue, setCopiedValue] = useState<string | null>(null);
+  const [failedValue, setFailedValue] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const copy = async () => {
+    setPending(true);
+    setFailedValue(null);
+    setCopiedValue(null);
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedValue(value);
+    } catch {
+      setFailedValue(value);
+    } finally {
+      setPending(false);
+    }
+  };
+  return (
+    <div>
+      <Button
+        variant="secondary"
+        disabled={pending}
+        onClick={() => void copy()}
+      >
+        <Button.Text>{copiedValue === value ? "Copied" : label}</Button.Text>
+      </Button>
+      {failedValue === value && (
+        <FieldError>
+          Couldn’t copy. Select the value and copy it manually.
+        </FieldError>
+      )}
+    </div>
+  );
+}
 export function CopyValue({
   label,
   value,
@@ -249,7 +288,6 @@ export function CopyValue({
   value: string;
   hideLabel?: boolean;
 }): JSX.Element {
-  const { s, dispatch } = useMock();
   return (
     <div className="mt-4">
       <label
@@ -266,15 +304,7 @@ export function CopyValue({
             value={value}
           />
         </div>
-        <Button
-          variant="secondary"
-          onClick={() => {
-            void navigator.clipboard.writeText(value);
-            dispatch({ type: "copy", key: label });
-          }}
-        >
-          {s.copied === label ? "Copied" : "Copy"}
-        </Button>
+        <CopyAction value={value} />
       </div>
     </div>
   );
@@ -286,7 +316,7 @@ export function Correction({
   step: string;
   children: ReactNode;
 }): JSX.Element {
-  const { dispatch } = useMock();
+  const { dispatch } = useSetup();
   return (
     <button
       type="button"
@@ -299,7 +329,7 @@ export function Correction({
 }
 export function Note({ children }: { children: ReactNode }): JSX.Element {
   return (
-    <div className="mt-6 border-l-2 bg-[#fafafa] px-5 py-4" role="status">
+    <div className="mt-6 border-l-2 bg-muted px-5 py-4" role="status">
       {children}
     </div>
   );

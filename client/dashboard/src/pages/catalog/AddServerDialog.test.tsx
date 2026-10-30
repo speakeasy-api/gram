@@ -450,6 +450,7 @@ describe.each([["Slack", "https://mcp.slack.com/mcp"]])(
             key: provider.toLowerCase(),
             name: provider,
             identityMode: "user",
+            remoteUrl: url,
             status: "completed",
             mcpServerId: "example-id",
             mcpServerParam: `${provider.toLowerCase()}-installed`,
@@ -477,7 +478,7 @@ describe.each([["Slack", "https://mcp.slack.com/mcp"]])(
       expect(mocks.navigate).toHaveBeenCalledTimes(1);
       expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
     });
-    it("does not redirect gateway/plugin/headless callers without catalog opt-in", async () => {
+    it("does not redirect when catalog setup opt-in is absent", async () => {
       mocks.workflow.mockReturnValue({
         phase: "complete",
         statuses: [
@@ -485,6 +486,7 @@ describe.each([["Slack", "https://mcp.slack.com/mcp"]])(
             key: provider.toLowerCase(),
             name: provider,
             identityMode: "user",
+            remoteUrl: url,
             status: "completed",
             mcpServerId: "example-id",
             mcpServerParam: `${provider.toLowerCase()}-installed`,
@@ -508,5 +510,51 @@ describe.each([["Slack", "https://mcp.slack.com/mcp"]])(
       });
       expect(mocks.navigate).not.toHaveBeenCalled();
     });
+  },
+);
+
+it.each([{ headless: true }, { autoStartInstall: true }])(
+  "does not redirect automatic/headless callers even with catalog opt-in: %j",
+  async (props) => {
+    mocks.workflow.mockReturnValue({
+      phase: "complete",
+      statuses: [
+        {
+          key: "slack",
+          name: "Slack",
+          identityMode: "user",
+          remoteUrl: "https://mcp.slack.com/mcp",
+          status: "completed",
+          mcpServerId: "id",
+          mcpServerParam: "slack-installed",
+        },
+      ],
+      reset: mocks.reset,
+    });
+    render(
+      <TooltipProvider>
+        <AddServerDialog
+          servers={[
+            {
+              ...server,
+              remotes: [
+                {
+                  url: "https://mcp.slack.com/mcp",
+                  transportType: "streamable-http",
+                },
+              ],
+            },
+          ]}
+          open
+          openProviderSetup
+          onOpenChange={(open) => {
+            mocks.onOpenChange(open);
+          }}
+          {...props}
+        />
+      </TooltipProvider>,
+    );
+    await waitFor(() => expect(mocks.workflow).toHaveBeenCalled());
+    expect(mocks.navigate).not.toHaveBeenCalled();
   },
 );
