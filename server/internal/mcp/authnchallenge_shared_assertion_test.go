@@ -406,7 +406,7 @@ func TestSharedAuthorizationServer_IDJAGResourceClaimRefusalDoesNotConsumeIDJAG(
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 }
 
-func TestSharedAuthorizationServer_IDJAGWithoutResourceOrClaimIsInvalidRequest(t *testing.T) {
+func TestSharedAuthorizationServer_IDJAGWithoutResourceOrClaimIsInvalidTarget(t *testing.T) {
 	t.Parallel()
 	ctx, ti, signer, f := sharedIDJAGFixture(t)
 	form := url.Values{
@@ -415,7 +415,7 @@ func TestSharedAuthorizationServer_IDJAGWithoutResourceOrClaimIsInvalidRequest(t
 	}
 	w := sharedToken(t, ctx, ti, f.issuer.ID.String(), form)
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	require.Equal(t, "invalid_request", decodeSharedTokenResponse(t, w).Error)
+	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error)
 
 	form[oauthwire.ParamResource] = []string{f.resource(ti, f.slugA)}
 	w = sharedToken(t, ctx, ti, f.issuer.ID.String(), form)

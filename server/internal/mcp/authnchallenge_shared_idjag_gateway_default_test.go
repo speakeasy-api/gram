@@ -91,7 +91,7 @@ func TestSharedAuthorizationServer_IDJAGWithoutResourceOrClaimNeedsUsableGateway
 			form := claimlessIDJAGForm(t, signer, f, f.issuerURL, uuid.NewString())
 			w := sharedToken(t, ctx, ti, f.issuer.ID.String(), form)
 			require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-			require.Equal(t, "invalid_request", decodeSharedTokenResponse(t, w).Error)
+			require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error)
 
 			form[oauthwire.ParamResource] = []string{f.resource(ti, f.slugA)}
 			w = sharedToken(t, ctx, ti, f.issuer.ID.String(), form)
