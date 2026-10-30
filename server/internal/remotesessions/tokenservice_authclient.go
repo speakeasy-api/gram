@@ -198,7 +198,9 @@ type AttachedConnection struct {
 // it returns no token, and the caller still decides permission for the owner
 // it names. attached is false for a caller that is not served by attachments
 // (a user, a principal credential, a workload) and for an attached caller with
-// no usable binding; the caller's own subject still governs those.
+// no usable binding. For the latter, conn.Bound tells a revoked or stale
+// binding, which keeps governing and must fail closed, from no binding at all:
+// a caller that falls back when nothing is attached must check Bound first.
 func (m *ChallengeManager) AuthClientAttachedConnection(ctx context.Context, req AuthClientTokenRequest) (conn AttachedConnection, attached bool, err error) {
 	var zero AttachedConnection
 	if req.Subject.IsZero() {

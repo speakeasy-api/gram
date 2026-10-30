@@ -44,10 +44,11 @@ import (
 
 // Direct repository fixtures, not browser consent or assistant-turn issuance.
 // This finite catalog drives HTTP handlers and a real upstream HTTP server.
-// A missing or revoked attachment deliberately denies rather than choosing
-// another user's valid connection, and neither is bypassed by the authorizer.
-// Under enforcement an agent key that was never attached falls back only to
-// its validated authorizer's own connection, under the agent's own mcp:auth. Same-source reconnect follows the current
+// A missing, revoked or replaced attachment never chooses another user's
+// valid connection. A revoked or stale binding keeps denying and is never
+// bypassed by the authorizer; under enforcement an agent key that was never
+// attached falls back only to its validated authorizer's own connection,
+// under the agent's own mcp:auth. Same-source reconnect follows the current
 // credentials by design. No request-time migration runs.
 // Auth permissions and the credential ceiling are explicitly approved through
 // management APIs, scoped to this member and its configured auth clients.
