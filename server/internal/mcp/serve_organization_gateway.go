@@ -28,15 +28,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // OrganizationGatewayRoute is the organization gateway's path, addressed by
@@ -53,16 +56,6 @@ const OrganizationGatewayRoute = "/" + string(mcproute.OrganizationGateway) + "/
 
 // ProjectGatewayRoute restricts the derived gateway to one project.
 const ProjectGatewayRoute = OrganizationGatewayRoute + "/projects/{projectSlug}"
-
-// organizationGatewayNamespace derives the synthetic meta-server id an
-// organization gateway reports. There is no meta_mcp_servers row behind it,
-// so it must never be used to read one back; it exists so telemetry, session
-// records, and cached challenges group per organization.
-var organizationGatewayNamespace = uuid.MustParse("a6e17a1e-0000-4000-8000-000000000002")
-
-func organizationGatewayID(organizationID string) uuid.UUID {
-	return uuid.NewSHA1(organizationGatewayNamespace, []byte(organizationID))
-}
 
 // IsOrganizationGateway reports whether the endpoint is a derived organization
 // or project gateway rather than a stored server or gateway.
@@ -104,15 +97,12 @@ func (s *Service) ServeOrganizationGateway(w http.ResponseWriter, r *http.Reques
 // route segment shadows.
 const shadowedEndpointSlug = "gateway"
 
-// shadowedEndpointHandler serves POST /mcp/gateway/{name} for one of an
-// endpoint's own POST routes. It is the endpoint's own route when an endpoint
-// whose slug is "gateway" resolves on this host, and otherwise the
-// organization gateway of the organization named name. Each answers with its
-// own error shape: OAuth errors for the endpoint's routes, JSON-RPC errors
-// for the gateway.
-func (s *Service) shadowedEndpointHandler(name string, serve func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
-	endpointRoute := oauthRouteHandler(s.logger, http.MethodPost, "/"+name, serve)
-	gatewayRoute := oops.MCPErrHandle(s.logger, s.ServeOrganizationGateway)
+// shadowedEndpointHandler serves a request at /mcp/gateway/{name} for one of
+// an endpoint's own routes one segment below its slug. It is the endpoint's
+// own route when an endpoint whose slug is "gateway" resolves on this host,
+// and otherwise the organization gateway route of the organization named
+// name. Each answers with its own error shape.
+func (s *Service) shadowedEndpointHandler(name string, endpointRoute, gatewayRoute http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		rctx := chi.RouteContext(r.Context())
 		if rctx == nil {
@@ -126,6 +116,22 @@ func (s *Service) shadowedEndpointHandler(name string, serve func(http.ResponseW
 		}
 		rctx.URLParams.Add("mcpSlug", name)
 		gatewayRoute.ServeHTTP(w, r)
+	}
+}
+
+// handleOrganizationGatewayGet answers GET at an organization gateway's URL.
+// A browser gets the gateway's landing page. Anything else gets the answer a
+// stored gateway gives, since the gateway serves Streamable HTTP over POST
+// only and opens no standalone stream.
+func (s *Service) handleOrganizationGatewayGet(metadataService *mcpmetadata.Service) func(http.ResponseWriter, *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		if wantsHTML, _ := getServerAccept(r.Header.Get("Accept")); wantsHTML {
+			if err := metadataService.ServeOrganizationGatewayPage(w, r, chi.URLParam(r, "mcpSlug")); err != nil {
+				return fmt.Errorf("serve organization gateway page: %w", err)
+			}
+			return nil
+		}
+		return oops.E(oops.CodeMethodNotAllowed, nil, getServerMethodNotAllowedMessage)
 	}
 }
 
@@ -164,21 +170,36 @@ func (s *Service) organizationGatewayOAuthRoutes() []organizationGatewayOAuthRou
 	return routes
 }
 
-// shadowedEndpointRoute is one of an endpoint's own POST routes one segment
-// below its slug. For an endpoint whose slug is "gateway", chi would otherwise
-// match the organization gateway's route first, with the route name in the
-// slug position.
+// shadowedEndpointRoute is one of an endpoint's own routes one segment below
+// its slug. For an endpoint whose slug is "gateway", chi would otherwise match
+// the organization gateway's route first, with the route name in the slug
+// position.
 type shadowedEndpointRoute struct {
-	name  string
-	serve func(http.ResponseWriter, *http.Request) error
+	name    string
+	handler http.Handler
 }
 
-func (s *Service) shadowedEndpointRoutes() []shadowedEndpointRoute {
+// shadowedEndpointPostRoutes are shadowed by POST at the organization
+// gateway's URL, on the public listener and the authentication host.
+func (s *Service) shadowedEndpointPostRoutes() []shadowedEndpointRoute {
 	return []shadowedEndpointRoute{
-		{"register", s.HandleRegister},
-		{"token", s.HandleToken},
-		{"revoke", s.HandleRevoke},
-		{"connect", s.HandleConsent},
+		{"register", oauthRouteHandler(s.logger, http.MethodPost, "/register", s.HandleRegister)},
+		{"token", oauthRouteHandler(s.logger, http.MethodPost, "/token", s.HandleToken)},
+		{"revoke", oauthRouteHandler(s.logger, http.MethodPost, "/revoke", s.HandleRevoke)},
+		{"connect", oauthRouteHandler(s.logger, http.MethodPost, "/connect", s.HandleConsent)},
+	}
+}
+
+// shadowedEndpointGetRoutes are shadowed by GET at the organization gateway's
+// URL, which only the public listener serves. Each keeps the error handler
+// Attach mounts it with.
+func (s *Service) shadowedEndpointGetRoutes(metadataService *mcpmetadata.Service) []shadowedEndpointRoute {
+	return []shadowedEndpointRoute{
+		{"install", oops.ErrHandle(s.logger, metadataService.ServeInstallPage)},
+		{"authorize", oops.BrowserErrHandle(s.logger, s.HandleAuthorize)},
+		{"idp_callback", oops.BrowserErrHandle(s.logger, s.HandleIDPCallback)},
+		{"connect", oops.BrowserErrHandle(s.logger, s.HandleConsent)},
+		{"remote_login_callback", oops.BrowserErrHandle(s.logger, s.HandleRemoteLoginCallback)},
 	}
 }
 
@@ -186,11 +207,17 @@ func (s *Service) shadowedEndpointRoutes() []shadowedEndpointRoute {
 // surface under it on the public listener. Each OAuth route resolves the
 // gateway first and hands it to the handler stored endpoints use, so the two
 // cannot drift apart in what they serve.
-func attachOrganizationGateway(mux goahttp.Muxer, service *Service) {
-	o11y.AttachHandler(mux, http.MethodPost, ProjectGatewayRoute, oops.MCPErrHandle(service.logger, service.ServeOrganizationGateway).ServeHTTP)
-	o11y.AttachHandler(mux, http.MethodPost, OrganizationGatewayRoute, oops.MCPErrHandle(service.logger, service.ServeOrganizationGateway).ServeHTTP)
-	for _, route := range service.shadowedEndpointRoutes() {
-		o11y.AttachHandler(mux, http.MethodPost, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.serve))
+func attachOrganizationGateway(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
+	gatewayPost := oops.MCPErrHandle(service.logger, service.ServeOrganizationGateway)
+	gatewayGet := oops.MCPErrHandle(service.logger, service.handleOrganizationGatewayGet(metadataService))
+	o11y.AttachHandler(mux, http.MethodPost, ProjectGatewayRoute, gatewayPost.ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodPost, OrganizationGatewayRoute, gatewayPost.ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, OrganizationGatewayRoute, gatewayGet.ServeHTTP)
+	for _, route := range service.shadowedEndpointPostRoutes() {
+		o11y.AttachHandler(mux, http.MethodPost, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.handler, gatewayPost))
+	}
+	for _, route := range service.shadowedEndpointGetRoutes(metadataService) {
+		o11y.AttachHandler(mux, http.MethodGet, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.handler, gatewayGet))
 	}
 	for _, route := range service.organizationGatewayOAuthRoutes() {
 		o11y.AttachHandler(mux, route.method, route.path, oauthRouteHandler(service.logger, route.method, route.path, service.withOrganizationGateway(route.serve, isOAuthTokenRoute(route.method, route.path))).ServeHTTP)
@@ -202,8 +229,9 @@ func attachOrganizationGateway(mux goahttp.Muxer, service *Service) {
 // organization issuer that opts in to it announces as the gateway's
 // authorization server.
 func attachOrganizationGatewayAuthenticationHost(host *AuthenticationHost, service *Service) {
-	for _, route := range service.shadowedEndpointRoutes() {
-		host.Handle(http.MethodPost, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.serve))
+	gatewayPost := oops.MCPErrHandle(service.logger, service.ServeOrganizationGateway)
+	for _, route := range service.shadowedEndpointPostRoutes() {
+		host.Handle(http.MethodPost, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.handler, gatewayPost))
 	}
 	for _, route := range service.organizationGatewayOAuthRoutes() {
 		if route.onAuthenticationHost {
@@ -268,7 +296,7 @@ func (s *Service) loadOrganizationGateway(ctx context.Context, gatewaySlug strin
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(organization.ID))
 
-	issuerID, unavailable, err := orggateway.Availability(ctx, s.db, organization)
+	metaServer, endpoint, unavailable, err := s.organizationGatewayRows(ctx, organization, orggateway.Availability)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization gateway issuer").LogError(ctx, logger)
 	}
@@ -277,10 +305,43 @@ func (s *Service) loadOrganizationGateway(ctx context.Context, gatewaySlug strin
 		return nil, oops.C(oops.CodeNotFound)
 	}
 
+	if scoped {
+		project, err := projectsrepo.New(s.db).GetProjectBySlug(ctx, projectsrepo.GetProjectBySlugParams{Slug: projectSlug, OrganizationID: organization.ID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load gateway project").LogError(ctx, logger)
+		}
+		metaServer.ID = orggateway.ProjectGatewayID(organization.ID, project.ID)
+		metaServer.ProjectID = project.ID
+		metaServer.Name = project.Name
+		endpoint.ProjectID = project.ID
+		endpoint.Slug = gatewaySlug
+	}
+	resolved := NewResolvedMcpEndpointFromMetaMcpServer(endpoint, metaServer, organization.ID, mcproute.OrganizationGateway)
+	if err := s.RequireUserSessionIssuer(ctx, resolved); err != nil {
+		return nil, err
+	}
+
+	return &organizationGateway{metaServer: metaServer, endpoint: endpoint, resolved: resolved}, nil
+}
+
+// organizationGatewayRows builds the synthetic rows an organization's gateway
+// is shaped around, or reports why availability serves the organization none.
+func (s *Service) organizationGatewayRows(ctx context.Context, organization orgsrepo.OrganizationMetadatum, availability gatewayAvailability) (*metamcprepo.MetaMcpServer, *mcpendpointsrepo.McpEndpoint, orggateway.Unavailability, error) {
+	issuerID, unavailable, err := availability(ctx, s.db, organization)
+	if err != nil {
+		return nil, nil, unavailable, fmt.Errorf("resolve organization gateway availability: %w", err)
+	}
+	if unavailable != orggateway.UnavailabilityNone {
+		return nil, nil, unavailable, nil
+	}
+
 	// Synthetic, never persisted: only the fields the meta runtime reads are
 	// meaningful; the rest are zeroed rather than invented.
 	metaServer := &metamcprepo.MetaMcpServer{
-		ID:                  organizationGatewayID(organization.ID),
+		ID:                  orggateway.GatewayID(organization.ID),
 		OrganizationID:      organization.ID,
 		ProjectID:           uuid.Nil,
 		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
@@ -299,28 +360,11 @@ func (s *Service) loadOrganizationGateway(ctx context.Context, gatewaySlug strin
 		ProjectID: uuid.Nil,
 		Slug:      organization.Slug,
 	}
-
-	if scoped {
-		project, err := projectsrepo.New(s.db).GetProjectBySlug(ctx, projectsrepo.GetProjectBySlugParams{Slug: projectSlug, OrganizationID: organization.ID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.C(oops.CodeNotFound)
-		}
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "load gateway project").LogError(ctx, logger)
-		}
-		metaServer.ID = uuid.NewSHA1(organizationGatewayNamespace, []byte(organization.ID+"/projects/"+project.ID.String()))
-		metaServer.ProjectID = project.ID
-		metaServer.Name = project.Name
-		endpoint.ProjectID = project.ID
-		endpoint.Slug = gatewaySlug
-	}
-	resolved := NewResolvedMcpEndpointFromMetaMcpServer(endpoint, metaServer, organization.ID, mcproute.OrganizationGateway)
-	if err := s.RequireUserSessionIssuer(ctx, resolved); err != nil {
-		return nil, err
-	}
-
-	return &organizationGateway{metaServer: metaServer, endpoint: endpoint, resolved: resolved}, nil
+	return metaServer, endpoint, orggateway.UnavailabilityNone, nil
 }
+
+// gatewayAvailability is orggateway.Availability or one of its variants.
+type gatewayAvailability func(context.Context, usersessionsrepo.DBTX, orgsrepo.OrganizationMetadatum) (uuid.UUID, orggateway.Unavailability, error)
 
 // projectTokenCache resolves a derived gateway's upstream credentials one
 // member project at a time, on first use, and keeps them for the rest of the

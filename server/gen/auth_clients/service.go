@@ -66,6 +66,21 @@ type Service interface {
 	// to connect to the server. Returns each choice's id, name and client_type,
 	// and whether the upstream requires authentication; no headers or credentials.
 	ListMcpServerAuthClientChoices(context.Context, *ListMcpServerAuthClientChoicesPayload) (res *ListMcpServerAuthClientChoicesResult, err error)
+	// List the issuance profiles for headless callers signing in through a
+	// sign-in. Requires org:read.
+	ListIssuanceProfiles(context.Context, *ListIssuanceProfilesPayload) (res *ListIssuanceProfilesResult, err error)
+	// Create or replace the issuance profile of one headless caller signing in
+	// through a sign-in: an OAuth client, or a workload issuer and subject. Each
+	// choice names a credential the server offers, or none for a server that needs
+	// no upstream authentication. A workload subject represents no person, so its
+	// profile names shared credentials only. Choices take effect on sessions
+	// issued afterwards; existing sessions keep theirs. Choosing a credential
+	// grants nothing: each issuance checks the caller may use it. Takes effect
+	// only where typed auth client resolution is enforced. Requires org:admin.
+	SetIssuanceProfile(context.Context, *SetIssuanceProfilePayload) (res *types.IssuanceProfile, err error)
+	// Delete an issuance profile. Sessions already issued keep their choices;
+	// later sessions decide theirs without it. Requires org:admin.
+	DeleteIssuanceProfile(context.Context, *DeleteIssuanceProfilePayload) (err error)
 	// Get how an MCP server authenticates to its upstream: whether authentication
 	// is required and which auth clients it offers. Requires org:read.
 	GetMcpServerAuthentication(context.Context, *GetMcpServerAuthenticationPayload) (res *types.McpServerAuthentication, err error)
@@ -106,7 +121,7 @@ const ServiceName = "authClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"listAuthClients", "getAuthClient", "updateAuthClient", "createAuthClient", "attachAuthClientToMcpServer", "setAuthClientHeaders", "detachAuthClientFromMcpServer", "listMcpServerAuthClientChoices", "getMcpServerAuthentication", "setMcpServerUpstreamAuthRequirement", "getAuthClientAudience", "setAuthClientAudience"}
+var MethodNames = [15]string{"listAuthClients", "getAuthClient", "updateAuthClient", "createAuthClient", "attachAuthClientToMcpServer", "setAuthClientHeaders", "detachAuthClientFromMcpServer", "listMcpServerAuthClientChoices", "listIssuanceProfiles", "setIssuanceProfile", "deleteIssuanceProfile", "getMcpServerAuthentication", "setMcpServerUpstreamAuthRequirement", "getAuthClientAudience", "setAuthClientAudience"}
 
 // AttachAuthClientToMcpServerPayload is the payload type of the authClients
 // service attachAuthClientToMcpServer method.
@@ -165,6 +180,15 @@ type CreateAuthClientPayload struct {
 	Headers []*AuthClientHeaderInput
 	// MCP servers that should offer the client.
 	McpServerIds []string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
+// DeleteIssuanceProfilePayload is the payload type of the authClients service
+// deleteIssuanceProfile method.
+type DeleteIssuanceProfilePayload struct {
+	// The profile id.
+	ID           string
 	SessionToken *string
 	ApikeyToken  *string
 }
@@ -229,6 +253,21 @@ type ListAuthClientsResult struct {
 	NextCursor *string
 }
 
+// ListIssuanceProfilesPayload is the payload type of the authClients service
+// listIssuanceProfiles method.
+type ListIssuanceProfilesPayload struct {
+	// The sign-in.
+	UserSessionIssuerID string
+	SessionToken        *string
+	ApikeyToken         *string
+}
+
+// ListIssuanceProfilesResult is the result type of the authClients service
+// listIssuanceProfiles method.
+type ListIssuanceProfilesResult struct {
+	Items []*types.IssuanceProfile
+}
+
 // ListMcpServerAuthClientChoicesPayload is the payload type of the authClients
 // service listMcpServerAuthClientChoices method.
 type ListMcpServerAuthClientChoicesPayload struct {
@@ -267,6 +306,29 @@ type SetAuthClientHeadersPayload struct {
 	ID string
 	// Every header the client should send.
 	Headers      []*AuthClientHeaderInput
+	SessionToken *string
+	ApikeyToken  *string
+}
+
+// SetIssuanceProfilePayload is the payload type of the authClients service
+// setIssuanceProfile method.
+type SetIssuanceProfilePayload struct {
+	// The sign-in.
+	UserSessionIssuerID string
+	// The OAuth client, for a client's profile.
+	UserSessionClientID *string
+	// The workload issuer, for a workload's profile.
+	WorkloadIssuerID *string
+	// The workload subject, for a workload's profile.
+	WorkloadSubject *string
+	// The profile's name.
+	Name string
+	// Every choice the profile should hold. With mcp_server_id, the choice for
+	// that server alone, or none to remove it.
+	Choices []*types.IssuanceProfileChoice
+	// Limits the write to this MCP server: the profile's choices for other servers
+	// are kept as they are.
+	McpServerID  *string
 	SessionToken *string
 	ApikeyToken  *string
 }

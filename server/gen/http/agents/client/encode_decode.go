@@ -4929,6 +4929,8 @@ func DecodeDeleteResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 func unmarshalAgentSessionResponseBodyToAgentsAgentSession(v *AgentSessionResponseBody) *agents.AgentSession {
 	res := &agents.AgentSession{
 		ID:               *v.ID,
+		SubjectKind:      *v.SubjectKind,
+		WorkloadSubject:  v.WorkloadSubject,
 		ProjectID:        v.ProjectID,
 		IssuerID:         *v.IssuerID,
 		IssuerSlug:       *v.IssuerSlug,

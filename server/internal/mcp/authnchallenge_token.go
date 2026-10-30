@@ -618,6 +618,21 @@ func (s *Service) handleTokenJWTBearerGrant(
 		return oops.E(oops.CodeUnexpected, err, "authorize ID-JAG subject").LogError(ctx, logger)
 	}
 
+	// Inbound EMA establishes who the session is for, never which upstream
+	// credential it uses: that is decided like any headless caller's.
+	requested, err := parseRequestedAuthClients(r.PostForm[tokenParamUpstreamAuthClient])
+	if err != nil {
+		return err
+	}
+	upstreamPicks, authClientPicks, err := s.headlessAuthClientPicks(authorizationCtx, endpoint, result.Subject, headlessCaller{clientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true}, workloadIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadSubject: ""}, requested)
+	if err != nil {
+		if _, ok := errors.AsType[*oops.OAuthError](err); ok {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "upstream_credential_choice")
+			return err
+		}
+		return oops.E(oops.CodeUnexpected, err, "decide upstream credentials").LogError(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin ID-JAG session transaction").LogError(ctx, logger)
@@ -638,8 +653,8 @@ func (s *Service) handleTokenJWTBearerGrant(
 		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Subject:                result.Subject,
 		ToolSelection:          nil,
-		UpstreamClientPicks:    nil,
-		AuthClientPicks:        nil,
+		UpstreamClientPicks:    upstreamPicks,
+		AuthClientPicks:        authClientPicks,
 		Catalog:                nil,
 	}, logger)
 	if err != nil {

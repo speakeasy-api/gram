@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -271,6 +272,7 @@ func TestMatchesTargetNameRefusesPartialMatches(t *testing.T) {
 		want   bool
 	}{
 		{name: "id", wanted: id, want: true},
+		{name: "id case insensitive", wanted: strings.ToUpper(id), want: true},
 		{name: "slug", wanted: "marketing", want: true},
 		{name: "slug case insensitive", wanted: "MARKETING", want: true},
 		{name: "exact name", wanted: "Marketing Tools", want: true},

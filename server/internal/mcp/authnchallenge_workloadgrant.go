@@ -462,13 +462,19 @@ func (s *Service) handleWorkloadAssertionGrant(
 		return oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
 	}
 
+	requested, err := parseRequestedAuthClients(r.PostForm[tokenParamUpstreamAuthClient])
+	if err != nil {
+		return err
+	}
 	projectID := endpoint.ProjectID
 	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{
 		client: nil, beforeCommit: nil,
-		presented:  presented,
-		credential: credential,
-		projectID:  &projectID,
-		endpoint:   endpoint,
+		presented:            presented,
+		credential:           credential,
+		projectID:            &projectID,
+		endpoint:             endpoint,
+		choosesUpstream:      true,
+		requestedAuthClients: requested,
 		session: workloadSessionIssuance(workloadSessionTarget{
 			userSessionIssuerID: endpoint.UserSessionIssuerID,
 			projectID:           endpoint.ProjectID,
@@ -517,6 +523,14 @@ type workloadGrantIssuance struct {
 
 	// session is the session issueSession mints.
 	session sessionIssuance
+
+	// choosesUpstream decides the session's upstream credential choices for
+	// endpoint before minting, from requestedAuthClients and the workload's
+	// issuance profile. Assistant workloads bind execution profiles instead.
+	choosesUpstream bool
+
+	// requestedAuthClients are the token request's per-server choices.
+	requestedAuthClients map[uuid.UUID]headlessChoice
 }
 
 // workloadSessionTarget is where a workload session is minted.
@@ -688,6 +702,21 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 		return nil, refuseWorkloadGrant("agent_admission_denied", err)
 	case err != nil:
 		return nil, workloadGrantStageUnavailable("agent_admission_unavailable", err)
+	}
+
+	if grant.choosesUpstream && grant.endpoint != nil {
+		caller := headlessCaller{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadIssuerID: uuid.NullUUID{UUID: grant.presented.issuerID, Valid: true}, workloadSubject: grant.presented.subject}
+		upstreamPicks, authClientPicks, err := s.headlessAuthClientPicks(authorizationCtx, grant.endpoint, subject, caller, grant.requestedAuthClients)
+		if err != nil {
+			if _, ok := errors.AsType[*oops.OAuthError](err); ok {
+				// The workload was admitted, so naming why its choice failed
+				// tells it nothing about its own identity.
+				return nil, err
+			}
+			return nil, workloadGrantStageUnavailable("upstream_choice_unavailable", err)
+		}
+		grant.session.UpstreamClientPicks = upstreamPicks
+		grant.session.AuthClientPicks = authClientPicks
 	}
 
 	// A database that cannot start or commit the transaction is an outage,

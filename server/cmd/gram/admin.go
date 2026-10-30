@@ -55,6 +55,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
@@ -347,8 +348,8 @@ func newAdminCommand() *cli.Command {
 		Flags: flags,
 		Action: func(c *cli.Context) error {
 			siteURL, err := url.Parse(c.String("site-url"))
-			if err != nil || siteURL.Host == "" || (siteURL.Scheme != "http" && siteURL.Scheme != "https") {
-				return fmt.Errorf("invalid site-url: must be an absolute HTTP(S) URL")
+			if err != nil || !urls.IsAbsoluteHTTPSOrLoopback(siteURL.String()) {
+				return fmt.Errorf("invalid site-url: HTTPS is required (HTTP only on a loopback host)")
 			}
 			if c.String("environment") == "prod" && siteURL.Scheme != "https" {
 				return fmt.Errorf("invalid site-url: HTTPS is required in production")

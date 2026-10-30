@@ -199,9 +199,9 @@ export function StepInstall({
                   </span>
                   <ol className="space-y-1 text-sm">
                     {[
-                      "Exchanges the single-use setup code for this agent's API key.",
+                      "Exchanges the setup code for this agent's API key.",
                       `Configures the MCP clients it finds on PATH with the agent's gateway (${reachPhrase}).`,
-                      "Leaves the key out of your shell history: the code dies on first use.",
+                      "Leaves the key out of your shell history: the code expires after 15 minutes.",
                       "Reports what it configured, and exits non-zero if it found no client.",
                     ].map((line, index) => (
                       <li key={line} className="flex gap-3">
@@ -219,7 +219,7 @@ export function StepInstall({
                   broken rather than as unavailable. */}
                 {secret && (
                   <Text muted small>
-                    The setup link is single-use and expires in 15 minutes.{" "}
+                    The setup link expires in 15 minutes.{" "}
                     <button
                       type="button"
                       className="underline disabled:no-underline disabled:opacity-60"
@@ -233,8 +233,8 @@ export function StepInstall({
                 {command && (
                   <Text muted small>
                     Piping to a shell runs whatever this deployment returns. To
-                    read it first, fetch it to a file and run that instead — the
-                    code is spent by the fetch, so regenerate afterwards. The
+                    read it first, fetch it to a file and run that instead. The
+                    code stays valid for 15 minutes, so you can rerun it. The
                     saved file carries the key: delete it once you have run it.
                   </Text>
                 )}

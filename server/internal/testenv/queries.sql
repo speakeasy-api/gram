@@ -1143,8 +1143,36 @@ WHERE organization_id = @organization_id
   AND id = (@grant_json::jsonb->>'id')::uuid;
 
 -- name: CountDemoSeedAgentGrantsFixture :one
-SELECT count(*) FROM principal_grants
+SELECT count(*) FILTER (WHERE scope = 'mcp:auth') AS auth_grants,
+       count(*) FILTER (WHERE scope <> 'mcp:auth') AS policy_grants
+FROM principal_grants
 WHERE organization_id = @organization_id AND principal_urn LIKE 'agent:%';
+
+-- name: ListDemoSeedAuthGrantsFixture :many
+-- Every mcp:auth and mcp:blocked_auth grant in the organization, with the
+-- names that identify its principal and auth client across seed runs, and
+-- the default auth permission ledger kind that provisioned it, if any.
+SELECT g.principal_urn,
+       coalesce(a.name, '')::text AS agent_name,
+       coalesce(r.workos_slug, '')::text AS role_slug,
+       g.scope,
+       coalesce(ac.name, g.selectors->>'resource_id', '')::text AS auth_client,
+       coalesce(g.selectors->>'client_type', '')::text AS client_type,
+       coalesce(g.selectors->>'connection_owner', '')::text AS connection_owner,
+       coalesce(g.selectors->>'upstream_client', '')::text AS upstream_client,
+       coalesce(p.kind, '')::text AS provision_kind
+FROM principal_grants g
+LEFT JOIN agents a
+  ON a.organization_id = g.organization_id AND g.principal_urn = 'agent:' || a.id::text
+LEFT JOIN organization_roles r
+  ON r.organization_id = g.organization_id AND g.principal_urn = 'role:organization:' || r.id
+LEFT JOIN mcp_auth_clients ac
+  ON ac.organization_id = g.organization_id AND ac.id::text = g.selectors->>'resource_id'
+LEFT JOIN auth_permission_provisions p
+  ON p.organization_id = g.organization_id AND p.principal_urn = g.principal_urn
+ AND p.scope = g.scope AND p.selectors = g.selectors
+WHERE g.organization_id = @organization_id
+  AND g.scope IN ('mcp:auth', 'mcp:blocked_auth');
 
 -- name: CountDemoSeedAPIKeysFixture :one
 SELECT count(*) FROM api_keys WHERE organization_id = @organization_id;
@@ -2365,3 +2393,8 @@ SET resource = sqlc.narg('resource'), created_at = @created_at,
     last_used_at = sqlc.narg('last_used_at'), refresh_expires_at = @refresh_expires_at,
     deleted_at = sqlc.narg('deleted_at')
 WHERE id = @id AND organization_id = @organization_id;
+
+-- name: ClearOrganizationFeatureSettingFixture :execrows
+-- Returns a feature setting to never configured, removing even the
+-- soft-deleted row that records an explicit opt-in.
+DELETE FROM organization_features WHERE organization_id = @organization_id AND feature_name = @feature_name;

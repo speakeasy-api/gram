@@ -2690,6 +2690,477 @@ func DecodeGetMetaMcpServerUsageResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildGetOrganizationGatewayOverviewRequest instantiates a HTTP request
+// object with method and path set to call the "telemetry" service
+// "getOrganizationGatewayOverview" endpoint
+func (c *Client) BuildGetOrganizationGatewayOverviewRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetOrganizationGatewayOverviewTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "getOrganizationGatewayOverview", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetOrganizationGatewayOverviewRequest returns an encoder for requests
+// sent to the telemetry getOrganizationGatewayOverview server.
+func EncodeGetOrganizationGatewayOverviewRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.GetOrganizationGatewayOverviewPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "getOrganizationGatewayOverview", "*telemetry.GetOrganizationGatewayOverviewPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewGetOrganizationGatewayOverviewRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "getOrganizationGatewayOverview", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGetOrganizationGatewayOverviewResponse returns a decoder for responses
+// returned by the telemetry getOrganizationGatewayOverview endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeGetOrganizationGatewayOverviewResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetOrganizationGatewayOverviewResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetOrganizationGatewayOverviewResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			err = ValidateGetOrganizationGatewayOverviewResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			res := NewGetOrganizationGatewayOverviewGetObservabilityOverviewResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetOrganizationGatewayOverviewUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			err = ValidateGetOrganizationGatewayOverviewUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			return nil, NewGetOrganizationGatewayOverviewUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetOrganizationGatewayOverviewForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			err = ValidateGetOrganizationGatewayOverviewForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			return nil, NewGetOrganizationGatewayOverviewForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetOrganizationGatewayOverviewBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			err = ValidateGetOrganizationGatewayOverviewBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			return nil, NewGetOrganizationGatewayOverviewBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetOrganizationGatewayOverviewNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			err = ValidateGetOrganizationGatewayOverviewNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			return nil, NewGetOrganizationGatewayOverviewNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetOrganizationGatewayOverviewConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			err = ValidateGetOrganizationGatewayOverviewConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			return nil, NewGetOrganizationGatewayOverviewConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetOrganizationGatewayOverviewUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			err = ValidateGetOrganizationGatewayOverviewUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			return nil, NewGetOrganizationGatewayOverviewUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetOrganizationGatewayOverviewInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			err = ValidateGetOrganizationGatewayOverviewInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			return nil, NewGetOrganizationGatewayOverviewInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetOrganizationGatewayOverviewInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayOverview", err)
+				}
+				err = ValidateGetOrganizationGatewayOverviewInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayOverview", err)
+				}
+				return nil, NewGetOrganizationGatewayOverviewInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetOrganizationGatewayOverviewUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayOverview", err)
+				}
+				err = ValidateGetOrganizationGatewayOverviewUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayOverview", err)
+				}
+				return nil, NewGetOrganizationGatewayOverviewUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "getOrganizationGatewayOverview", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetOrganizationGatewayOverviewGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			err = ValidateGetOrganizationGatewayOverviewGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayOverview", err)
+			}
+			return nil, NewGetOrganizationGatewayOverviewGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "getOrganizationGatewayOverview", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetOrganizationGatewayUsageRequest instantiates a HTTP request object
+// with method and path set to call the "telemetry" service
+// "getOrganizationGatewayUsage" endpoint
+func (c *Client) BuildGetOrganizationGatewayUsageRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetOrganizationGatewayUsageTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "getOrganizationGatewayUsage", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetOrganizationGatewayUsageRequest returns an encoder for requests
+// sent to the telemetry getOrganizationGatewayUsage server.
+func EncodeGetOrganizationGatewayUsageRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.GetOrganizationGatewayUsagePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "getOrganizationGatewayUsage", "*telemetry.GetOrganizationGatewayUsagePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewGetOrganizationGatewayUsageRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "getOrganizationGatewayUsage", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGetOrganizationGatewayUsageResponse returns a decoder for responses
+// returned by the telemetry getOrganizationGatewayUsage endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetOrganizationGatewayUsageResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetOrganizationGatewayUsageResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetOrganizationGatewayUsageResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			err = ValidateGetOrganizationGatewayUsageResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			res := NewGetOrganizationGatewayUsageGetMetaMcpServerUsageResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetOrganizationGatewayUsageUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			err = ValidateGetOrganizationGatewayUsageUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			return nil, NewGetOrganizationGatewayUsageUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetOrganizationGatewayUsageForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			err = ValidateGetOrganizationGatewayUsageForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			return nil, NewGetOrganizationGatewayUsageForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetOrganizationGatewayUsageBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			err = ValidateGetOrganizationGatewayUsageBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			return nil, NewGetOrganizationGatewayUsageBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetOrganizationGatewayUsageNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			err = ValidateGetOrganizationGatewayUsageNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			return nil, NewGetOrganizationGatewayUsageNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetOrganizationGatewayUsageConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			err = ValidateGetOrganizationGatewayUsageConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			return nil, NewGetOrganizationGatewayUsageConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetOrganizationGatewayUsageUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			err = ValidateGetOrganizationGatewayUsageUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			return nil, NewGetOrganizationGatewayUsageUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetOrganizationGatewayUsageInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			err = ValidateGetOrganizationGatewayUsageInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			return nil, NewGetOrganizationGatewayUsageInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetOrganizationGatewayUsageInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayUsage", err)
+				}
+				err = ValidateGetOrganizationGatewayUsageInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayUsage", err)
+				}
+				return nil, NewGetOrganizationGatewayUsageInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetOrganizationGatewayUsageUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayUsage", err)
+				}
+				err = ValidateGetOrganizationGatewayUsageUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayUsage", err)
+				}
+				return nil, NewGetOrganizationGatewayUsageUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "getOrganizationGatewayUsage", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetOrganizationGatewayUsageGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			err = ValidateGetOrganizationGatewayUsageGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrganizationGatewayUsage", err)
+			}
+			return nil, NewGetOrganizationGatewayUsageGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "getOrganizationGatewayUsage", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetProjectOverviewRequest instantiates a HTTP request object with
 // method and path set to call the "telemetry" service "getProjectOverview"
 // endpoint
@@ -9366,10 +9837,11 @@ func unmarshalMetaMcpDiscoveryFunnelResponseBodyToTelemetryMetaMcpDiscoveryFunne
 // *MetaMcpMemberUsageResponseBody.
 func unmarshalMetaMcpMemberUsageResponseBodyToTelemetryMetaMcpMemberUsage(v *MetaMcpMemberUsageResponseBody) *telemetry.MetaMcpMemberUsage {
 	res := &telemetry.MetaMcpMemberUsage{
-		McpServerID:  *v.McpServerID,
-		ToolCalls:    *v.ToolCalls,
-		ErrorCount:   *v.ErrorCount,
-		LastCalledAt: v.LastCalledAt,
+		McpServerID:   *v.McpServerID,
+		ToolCalls:     *v.ToolCalls,
+		ErrorCount:    *v.ErrorCount,
+		LastCalledAt:  v.LastCalledAt,
+		McpServerName: v.McpServerName,
 	}
 
 	return res

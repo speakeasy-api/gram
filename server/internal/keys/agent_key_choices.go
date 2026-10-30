@@ -76,8 +76,16 @@ func recordAgentKeyAuthClientChoices(ctx context.Context, tx pgx.Tx, human agent
 		if len(offered) == 0 {
 			return oops.E(oops.CodeNotFound, nil, "mcp server not found")
 		}
-		if err := checkAgentKeyChoice(offered, clientID); err != nil {
-			return err
+		if err := upstreamclients.CheckConfiguredChoice(offered, clientID, true); err != nil {
+			if errors.Is(err, upstreamclients.ErrChoicePersonal) {
+				return oops.E(oops.CodeBadRequest, err, "agent keys use shared credentials; an agent reaches a person's own connection only when it acts for them")
+			}
+			return oops.E(oops.CodeBadRequest, err, "%s", err.Error())
+		}
+		for _, row := range offered {
+			if row.AuthClientID == clientID && clientID.Valid && !authz.IsAgentKeyAuthClientType(row.ClientType.String) {
+				return oops.E(oops.CodeBadRequest, nil, "agent keys cannot use a pass-through credential; the agent gateway does not forward the caller's headers to its servers")
+			}
 		}
 
 		recorded, err := queries.RecordAuthClientChoice(ctx, upstreamclientsrepo.RecordAuthClientChoiceParams{
@@ -96,31 +104,4 @@ func recordAgentKeyAuthClientChoices(ctx context.Context, tx pgx.Tx, human agent
 		}
 	}
 	return nil
-}
-
-// checkAgentKeyChoice refuses a choice the server does not offer to agent
-// keys. offered is the server's enabled clients, one row with no client when
-// it offers none.
-func checkAgentKeyChoice(offered []upstreamclientsrepo.ListServerConsentAuthClientsRow, clientID uuid.NullUUID) error {
-	requires := offered[0].RequiresUpstreamAuth
-	if !clientID.Valid {
-		hasClients := offered[0].AuthClientID.Valid
-		if (requires.Valid && requires.Bool) || (!requires.Valid && hasClients) {
-			return oops.E(oops.CodeBadRequest, nil, "this server needs upstream credentials; choose one")
-		}
-		return nil
-	}
-	for _, row := range offered {
-		if row.AuthClientID != clientID {
-			continue
-		}
-		switch {
-		case authz.IsAgentKeyAuthClientType(row.ClientType.String):
-			return nil
-		case row.ClientType.String == authz.AuthClientTypePassThrough:
-			return oops.E(oops.CodeBadRequest, nil, "agent keys cannot use a pass-through credential; the agent gateway does not forward the caller's headers to its servers")
-		}
-		return oops.E(oops.CodeBadRequest, nil, "agent keys use shared credentials; an agent reaches a person's own connection only when it acts for them")
-	}
-	return oops.E(oops.CodeBadRequest, nil, "the server does not offer that credential")
 }

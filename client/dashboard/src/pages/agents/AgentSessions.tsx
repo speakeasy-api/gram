@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { SettingsSection } from "@/components/page-templates";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Badge } from "@/components/ui/Badge";
@@ -10,9 +11,23 @@ import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime, dateTimeFormatters } from "@/lib/dates";
 import { IdentityLink } from "@/components/identity-link";
 
-/** Presentation model, populated only by the agent-scoped sessions endpoint. */
+/**
+ * Presentation model for one way in: a session from the agent-scoped sessions
+ * endpoint, or one of the agent's API keys that has been used.
+ */
 export type AgentSessionRow = {
   id: string;
+  /**
+   * How it signed in. "agent" is an MCP sign-in that chose this agent;
+   * "workload" a platform that federates as it; "api-key" one of its keys,
+   * which opens no session. Absent reads as "agent". A string, not a union:
+   * the SDK passes through kinds a newer server adds.
+   */
+  subjectKind?: string;
+  /** The workload's subject as its platform issued it. */
+  workloadSubject?: string;
+  /** For a key, the visible start of it, so two keys can be told apart. */
+  keyPrefix?: string;
   clientName?: string;
   /**
    * The person whose authority this session acts under, when a person
@@ -52,7 +67,18 @@ export type AgentSessionsSectionProps = {
   isLoadingMore?: boolean;
   loadMoreError?: boolean;
   onLoadMore?: () => void;
+  /**
+   * Where a key or workload row is managed. Neither is revoked here: a key is
+   * revoked with the agent's credentials, and a workload session is
+   * short-lived and ends when its platform stops signing in.
+   */
+  credentialsHref?: string;
 };
+
+/** Whether a row is a session this table can revoke. */
+function isRevocableSession(session: AgentSessionRow): boolean {
+  return (session.subjectKind ?? "agent") === "agent";
+}
 
 /** The day, with the exact moment on hover — the shape credential tables on
  * the agent page share. */
@@ -82,6 +108,7 @@ export function AgentSessionsSection({
   loadMoreError = false,
   onLoadMore,
   authorizerName,
+  credentialsHref,
 }: AgentSessionsSectionProps): JSX.Element {
   const [selected, setSelected] = useState<AgentSessionRow | null>(null);
   const [pending, setPending] = useState(false);
@@ -153,8 +180,39 @@ export function AgentSessionsSection({
   const columns: Column<AgentSessionRow>[] = [
     {
       key: "clientName",
-      header: "Client name (unverified)",
-      render: (session) => session.clientName || "Unknown client",
+      header: "Client",
+      render: (session) => {
+        if (session.subjectKind === "api-key") {
+          return (
+            <span className="min-w-0 truncate" title={session.clientName}>
+              {session.clientName || "Unnamed key"}
+              {session.keyPrefix && (
+                <span className="text-muted-foreground font-mono text-xs">
+                  {" "}
+                  {session.keyPrefix}
+                </span>
+              )}
+            </span>
+          );
+        }
+        if (session.subjectKind === "workload") {
+          return (
+            <span
+              className="min-w-0 truncate font-mono text-xs"
+              title={session.workloadSubject}
+            >
+              {session.workloadSubject || "Unknown workload"}
+            </span>
+          );
+        }
+        // An MCP client names itself when it registers, so the name is a
+        // claim, not a fact.
+        return (
+          <span title="The name the client gave itself. Not verified.">
+            {session.clientName || "Unknown client"}
+          </span>
+        );
+      },
     },
     {
       key: "authorizerUserId",
@@ -174,15 +232,20 @@ export function AgentSessionsSection({
     },
     {
       key: "issuerSlug",
-      header: "Issuer",
+      header: "Signed in with",
       // Issuer slugs are long and hyphenated; an auto column wrapped them
       // down three lines and left the row taller than every other one.
       width: "200px",
-      render: (session) => (
-        <span className="min-w-0 truncate" title={session.issuerSlug}>
-          {session.issuerSlug || "Unknown issuer"}
-        </span>
-      ),
+      render: (session) =>
+        session.subjectKind === "api-key" ? (
+          "API key"
+        ) : session.subjectKind === "workload" ? (
+          "Workload identity"
+        ) : (
+          <span className="min-w-0 truncate" title={session.issuerSlug}>
+            {session.issuerSlug || "Unknown issuer"}
+          </span>
+        ),
     },
     {
       key: "createdAt",
@@ -214,6 +277,8 @@ export function AgentSessionsSection({
       render: (session) =>
         session.refreshExpiresAt ? (
           <SessionDate date={session.refreshExpiresAt} />
+        ) : session.subjectKind === "api-key" ? (
+          "Never"
         ) : (
           "Unknown"
         ),
@@ -244,8 +309,19 @@ export function AgentSessionsSection({
     {
       key: "actions",
       header: "",
-      render: (session) =>
-        !session.revokedAt && canRevoke ? (
+      render: (session) => {
+        if (!isRevocableSession(session)) {
+          return credentialsHref ? (
+            <Button asChild size="sm" variant="secondary">
+              <Link to={credentialsHref}>
+                {session.subjectKind === "api-key"
+                  ? "Manage key"
+                  : "Manage access"}
+              </Link>
+            </Button>
+          ) : null;
+        }
+        return !session.revokedAt && canRevoke ? (
           <Button
             size="sm"
             variant="destructive-secondary"
@@ -256,7 +332,8 @@ export function AgentSessionsSection({
           >
             Revoke session
           </Button>
-        ) : null,
+        ) : null;
+      },
     },
   ];
 
@@ -272,7 +349,7 @@ export function AgentSessionsSection({
         </div>
       ) : isError ? (
         <div role="alert" className="space-y-3">
-          <Text>Unable to load agent sessions.</Text>
+          <Text>Unable to load this agent's connections.</Text>
           <Button variant="secondary" onClick={onRetry}>
             Try again
           </Button>
@@ -281,7 +358,7 @@ export function AgentSessionsSection({
         <InlineEmptyState
           icon="key-round"
           heading="No sessions yet"
-          description="Choose this agent when authorizing an MCP connection to create a session."
+          description="Connections appear here once this agent's API key is used, a platform signs in as it, or someone picks it when authorizing an MCP connection."
           className={frameless}
         />
       ) : (

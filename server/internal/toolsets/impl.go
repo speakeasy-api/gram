@@ -191,9 +191,9 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving toolset").LogError(ctx, logger)
 	}
 
-	// Only an MCP-enabled toolset reaches the Default plugin, so a plain
-	// toolset must not enqueue a publish.
-	s.triggerPluginPublish(ctx, authCtx, created.McpEnabled, created.PluginCreated)
+	// Only a toolset that joined the Default plugin changed generated plugin
+	// output, so every other creation must not enqueue a publish.
+	s.triggerPluginPublish(ctx, authCtx, created.AddedToDefaultPlugin, created.PluginCreated)
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(createdToolset.Slug), &s.toolsetCache, nil)
 	if err != nil {
