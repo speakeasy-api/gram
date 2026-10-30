@@ -27,6 +27,10 @@ const (
 	describeToolsName = "describe_tools"
 	executeToolName   = "execute_tool"
 
+	// myServersUnknownNote replaces the gateway's unchecked-status note, which
+	// names connection_status, a tool this connection does not offer.
+	myServersUnknownNote = `Status "unknown" means not checked: this list does not contact remote servers. A call to one that needs sign-in returns a link to connect it; relay that link as written.`
+
 	// gatewaySearchTool is the bridge's cross-server search, which the
 	// gateway itself does not serve.
 	gatewaySearchTool = "search_tools"
@@ -224,7 +228,10 @@ func (s *GatewayProxyService) ListMyServers(ctx context.Context, principal Princ
 	if err != nil {
 		return ListMyServersOutput{}, err
 	}
-	output := ListMyServersOutput{Servers: make([]MyServer, 0, len(listed.Servers)), ConnectURL: listed.ConnectURL, Note: listed.Note}
+	// The gateway points its own callers at connection_status, which this
+	// connection does not expose; here a call reports a missing sign-in itself.
+	note := strings.ReplaceAll(listed.Note, metamcp.UnknownNote, myServersUnknownNote)
+	output := ListMyServersOutput{Servers: make([]MyServer, 0, len(listed.Servers)), ConnectURL: listed.ConnectURL, Note: note}
 	for _, server := range listed.Servers {
 		output.Servers = append(output.Servers, MyServer{Slug: server.Slug, Name: server.Name, Status: server.Status})
 	}
