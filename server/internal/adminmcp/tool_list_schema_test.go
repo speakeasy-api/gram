@@ -144,7 +144,7 @@ func TestToolListSatisfiesMCPToolSchema(t *testing.T) {
 		names[tool.Name] = true
 	}
 	// Every write tool is present, including those past the first page.
-	for _, name := range []string{"execute_admin_proposal", "get_admin_proposal_status", "prepare_set_organization_feature", "prepare_create_registry_entry", "prepare_update_support_matrix", "create_image_upload_url"} {
+	for _, name := range []string{"execute_admin_proposal", "get_admin_proposal_status", "prepare_set_organization_feature", "prepare_create_registry_entry", "prepare_set_registry_icons", "prepare_update_support_matrix", "create_image_upload_url"} {
 		require.True(t, names[name], "%s missing from tools/list", name)
 	}
 }

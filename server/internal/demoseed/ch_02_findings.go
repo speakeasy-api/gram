@@ -10,6 +10,8 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
 )
 
 // chDetectionsAndFindings: Shadow MCP inventory, AI detections and scans, authz challenges, risk findings, skill versions and efficacy, billing meter readings.
@@ -24,6 +26,7 @@ func (s *seeder) chDetectionsAndFindings(ctx context.Context, ch driver.Conn) er
 		s.chfSkillEfficacyScores,
 		s.chfGatewayDiscovery,
 		s.chfGatewayMemberCalls,
+		s.chfOrganizationGatewayCalls,
 		s.chfGatewayGoneCalls,
 		s.chfGatewayHooks,
 		s.chfBillingMeterReadings,
@@ -861,29 +864,44 @@ var (
 // Activity section, and the MCP listing marker alike, so call totals never
 // double. Ops carries most of the failures.
 func (s *seeder) chfGatewayMemberCalls(ctx context.Context, ch driver.Conn) error {
-	gateway := s.det("metamcp-1").String()
-	rows := make([]chfTelemetryRow, 0, 240)
-	for n := range 240 {
+	rows := s.chfDispatchedCalls(s.det("metamcp-1").String(), "gw", 240)
+	return s.chfInsertTelemetry(ctx, ch, "gateway member call telemetry", rows)
+}
+
+// chfOrganizationGatewayCalls: calls dispatched through the organization
+// gateway, which stamps the id derived from the organization. Only the
+// dispatches are seeded: its discovery rows carry no project, and the
+// project id is the boundary every demo telemetry delete is scoped to.
+func (s *seeder) chfOrganizationGatewayCalls(ctx context.Context, ch driver.Conn) error {
+	rows := s.chfDispatchedCalls(orggateway.GatewayID(s.orgID()).String(), "ogw", 120)
+	return s.chfInsertTelemetry(ctx, ch, "organization gateway call telemetry", rows)
+}
+
+// chfDispatchedCalls builds count member calls dispatched through gateway.
+// salt varies the draws per gateway and keeps trace ids distinct.
+func (s *seeder) chfDispatchedCalls(gateway, salt string, count int) []chfTelemetryRow {
+	rows := make([]chfTelemetryRow, 0, count)
+	for n := range count {
 		i := n + 1
-		mkey := chfGatewayMembers[hash64("gwmem", n)%10]
+		mkey := chfGatewayMembers[hash64(salt+"mem", n)%10]
 		member := s.det("mcpserver-" + mkey).String()
 		remote := s.det("remotemcp-" + mkey).String()
 		toolsetSlug := chfGatewayToolsets[mkey]
 		tools := chfGatewayTools[mkey]
-		tool := tools[hash64("gwt", n)%uint64(len(tools))]
+		tool := tools[hash64(salt+"t", n)%uint64(len(tools))]
 		toolURNStr := "tools:externalmcp:" + remote + ":" + tool
 		if toolsetSlug != "" {
 			toolURNStr = toolURN(tool)
 		}
 		status := 200
-		if (mkey == "ops" && hash64("gwerr", n)%5 == 0) || hash64("gwbg", n)%40 == 0 {
+		if (mkey == "ops" && hash64(salt+"err", n)%5 == 0) || hash64(salt+"bg", n)%40 == 0 {
 			status = 500
 		}
 		// Gateway endpoints see more kinds of client than a hosted server
 		// does: agent harnesses plus the MCP Inspector someone left open.
 		// Keyed on the person so a caller presents the same client here as in
 		// discovery.
-		email := s.email(demoUsers[hash64("gwu2", n)%6].handle)
+		email := s.email(demoUsers[hash64(salt+"u2", n)%6].handle)
 		var sb strings.Builder
 		sb.WriteString(`{"gram.tool.urn":"` + toolURNStr + `"`)
 		sb.WriteString(`,"gram.tool.name":"` + tool + `"`)
@@ -901,26 +919,26 @@ func (s *seeder) chfGatewayMemberCalls(ctx context.Context, ch driver.Conn) erro
 		}
 		sb.WriteString(`,"gram.meta_mcp_server.id":"` + gateway + `"`)
 		sb.WriteString(`,"http.response.status_code":` + strconv.Itoa(status))
-		sb.WriteString(`,"http.server.request.duration":` + chfRound3(0.05+float64(hash64("gwc", i)%300)/100))
+		sb.WriteString(`,"http.server.request.duration":` + chfRound3(0.05+float64(hash64(salt+"c", i)%300)/100))
 		sb.WriteString(`,"gram.project.id":"` + s.projectID().String() + `"`)
 		sb.WriteString(`,"user.email":"` + email + `"`)
 		sb.WriteString(`,"gram.external_user.id":"` + email + `"`)
 		sb.WriteString(chfEmailClient(email))
 		sb.WriteString(`,"gram.hook.source":"claude-code"}`)
 		ts := s.chfNoFuture(s.chfDay(n % 12).
-			Add(time.Duration(8+hash64("gwh2", n)%11) * time.Hour).
-			Add(time.Duration(hash64("gwm2", n)%60) * time.Minute))
+			Add(time.Duration(8+hash64(salt+"h2", n)%11) * time.Hour).
+			Add(time.Duration(hash64(salt+"m2", n)%60) * time.Minute))
 		rows = append(rows, chfTelemetryRow{
 			ts:      ts,
 			body:    "Tool call: " + tool,
-			traceID: md5Hex(s.name("gwcall-" + strconv.Itoa(i))),
+			traceID: md5Hex(s.name(salt + "call-" + strconv.Itoa(i))),
 			attrs:   sb.String(),
 			urn:     toolURNStr,
 			service: "gram-mcp-gateway",
 			chatID:  nil,
 		})
 	}
-	return s.chfInsertTelemetry(ctx, ch, "gateway member call telemetry", rows)
+	return rows
 }
 
 // chfGatewayGoneCalls: dispatches to GitHub from before it left the gateway

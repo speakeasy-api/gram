@@ -156,7 +156,8 @@ func (s *MCPToolExposureService) createMCPFromFunctions(ctx context.Context, pri
 	// and writes nothing. The slugs are never described in prose anywhere, so
 	// what the user confirms is what gets created.
 	if !input.Confirmed {
-		// The same count the toolset core uses to decide the auto-enable.
+		// The same count the toolset core uses to decide the Default plugin
+		// attachment.
 		enabled, err := usagerepo.New(s.db).GetEnabledServerCount(ctx, principal.OrganizationID)
 		if err != nil {
 			return CreateMCPFromFunctionsOutput{}, mcpFromFunctionsUnavailable(err)

@@ -687,6 +687,68 @@ func BuildGetMetaMcpServerUsagePayload(telemetryGetMetaMcpServerUsageBody string
 	return v, nil
 }
 
+// BuildGetOrganizationGatewayOverviewPayload builds the payload for the
+// telemetry getOrganizationGatewayOverview endpoint from CLI flags.
+func BuildGetOrganizationGatewayOverviewPayload(telemetryGetOrganizationGatewayOverviewBody string, telemetryGetOrganizationGatewayOverviewSessionToken string) (*telemetry.GetOrganizationGatewayOverviewPayload, error) {
+	var err error
+	var body GetOrganizationGatewayOverviewRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetOrganizationGatewayOverviewBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetOrganizationGatewayOverviewSessionToken != "" {
+			sessionToken = &telemetryGetOrganizationGatewayOverviewSessionToken
+		}
+	}
+	v := &telemetry.GetOrganizationGatewayOverviewPayload{
+		From: body.From,
+		To:   body.To,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetOrganizationGatewayUsagePayload builds the payload for the telemetry
+// getOrganizationGatewayUsage endpoint from CLI flags.
+func BuildGetOrganizationGatewayUsagePayload(telemetryGetOrganizationGatewayUsageBody string, telemetryGetOrganizationGatewayUsageSessionToken string) (*telemetry.GetOrganizationGatewayUsagePayload, error) {
+	var err error
+	var body GetOrganizationGatewayUsageRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetOrganizationGatewayUsageBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetOrganizationGatewayUsageSessionToken != "" {
+			sessionToken = &telemetryGetOrganizationGatewayUsageSessionToken
+		}
+	}
+	v := &telemetry.GetOrganizationGatewayUsagePayload{
+		From: body.From,
+		To:   body.To,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildGetProjectOverviewPayload builds the payload for the telemetry
 // getProjectOverview endpoint from CLI flags.
 func BuildGetProjectOverviewPayload(telemetryGetProjectOverviewBody string, telemetryGetProjectOverviewApikeyToken string, telemetryGetProjectOverviewSessionToken string, telemetryGetProjectOverviewProjectSlugInput string) (*telemetry.GetProjectOverviewPayload, error) {

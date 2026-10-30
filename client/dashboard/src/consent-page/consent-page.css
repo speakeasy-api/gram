@@ -1,7 +1,9 @@
 /* Stylesheet for the server-rendered authorization pages: the MCP consent
    page (server/internal/mcp/consent_template.html), the Platform MCP OAuth
-   page (server/internal/platformmcp/oauth_page.html) and the shared
-   authorization error page (server/internal/oauthui/authorization_error.html).
+   page (server/internal/platformmcp/oauth_page.html), the shared
+   authorization error page (server/internal/oauthui/authorization_error.html)
+   and the organization gateway landing page
+   (server/internal/mcpmetadata/organization_gateway_page.html).
 
    The page is Go-templated HTML served from the binary, not part of the
    dashboard bundle, but it is a first-party Speakeasy surface and has to look
@@ -34,6 +36,7 @@
 @source "../../../../server/internal/platformmcp/oauth_page.html";
 @source "../../../../server/internal/oauthui/authorization_error.html";
 @source "../../../../server/internal/oauthui/authorization_error_fallback.html";
+@source "../../../../server/internal/mcpmetadata/organization_gateway_page.html";
 @source "../../../../server/internal/mcp/consent_script.js";
 
 @import "../components/ui/styles/base.css";

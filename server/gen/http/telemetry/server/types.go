@@ -212,6 +212,24 @@ type GetMetaMcpServerUsageRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 }
 
+// GetOrganizationGatewayOverviewRequestBody is the type of the "telemetry"
+// service "getOrganizationGatewayOverview" endpoint HTTP request body.
+type GetOrganizationGatewayOverviewRequestBody struct {
+	// Start time in ISO 8601 format
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+}
+
+// GetOrganizationGatewayUsageRequestBody is the type of the "telemetry"
+// service "getOrganizationGatewayUsage" endpoint HTTP request body.
+type GetOrganizationGatewayUsageRequestBody struct {
+	// Start time in ISO 8601 format
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+}
+
 // GetProjectOverviewRequestBody is the type of the "telemetry" service
 // "getProjectOverview" endpoint HTTP request body.
 type GetProjectOverviewRequestBody struct {
@@ -1018,6 +1036,31 @@ type GetMcpNetworkTrafficResponseBody struct {
 // GetMetaMcpServerUsageResponseBody is the type of the "telemetry" service
 // "getMetaMcpServerUsage" endpoint HTTP response body.
 type GetMetaMcpServerUsageResponseBody struct {
+	Funnel *MetaMcpDiscoveryFunnelResponseBody `form:"funnel" json:"funnel" xml:"funnel"`
+	// Per-member execution breakdown, most active first
+	Members []*MetaMcpMemberUsageResponseBody `form:"members" json:"members" xml:"members"`
+}
+
+// GetOrganizationGatewayOverviewResponseBody is the type of the "telemetry"
+// service "getOrganizationGatewayOverview" endpoint HTTP response body.
+type GetOrganizationGatewayOverviewResponseBody struct {
+	// Current period summary metrics
+	Summary *ObservabilitySummaryResponseBody `form:"summary" json:"summary" xml:"summary"`
+	// Previous period summary metrics for trend calculation
+	Comparison *ObservabilitySummaryResponseBody `form:"comparison" json:"comparison" xml:"comparison"`
+	// Time series data points
+	TimeSeries []*TimeSeriesBucketResponseBody `form:"time_series" json:"time_series" xml:"time_series"`
+	// Top tools by call count
+	TopToolsByCount []*ToolMetricResponseBody `form:"top_tools_by_count" json:"top_tools_by_count" xml:"top_tools_by_count"`
+	// Top tools by failure rate
+	TopToolsByFailureRate []*ToolMetricResponseBody `form:"top_tools_by_failure_rate" json:"top_tools_by_failure_rate" xml:"top_tools_by_failure_rate"`
+	// The time bucket interval in seconds used for the time series data
+	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
+}
+
+// GetOrganizationGatewayUsageResponseBody is the type of the "telemetry"
+// service "getOrganizationGatewayUsage" endpoint HTTP response body.
+type GetOrganizationGatewayUsageResponseBody struct {
 	Funnel *MetaMcpDiscoveryFunnelResponseBody `form:"funnel" json:"funnel" xml:"funnel"`
 	// Per-member execution breakdown, most active first
 	Members []*MetaMcpMemberUsageResponseBody `form:"members" json:"members" xml:"members"`
@@ -3305,6 +3348,386 @@ type GetMetaMcpServerUsageUnexpectedResponseBody struct {
 // service "getMetaMcpServerUsage" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetMetaMcpServerUsageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayOverviewUnauthorizedResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
+// body for the "unauthorized" error.
+type GetOrganizationGatewayOverviewUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayOverviewForbiddenResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
+// body for the "forbidden" error.
+type GetOrganizationGatewayOverviewForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayOverviewBadRequestResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
+// body for the "bad_request" error.
+type GetOrganizationGatewayOverviewBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayOverviewNotFoundResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
+// body for the "not_found" error.
+type GetOrganizationGatewayOverviewNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayOverviewConflictResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
+// body for the "conflict" error.
+type GetOrganizationGatewayOverviewConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayOverviewUnsupportedMediaResponseBody is the type of
+// the "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP
+// response body for the "unsupported_media" error.
+type GetOrganizationGatewayOverviewUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayOverviewInvalidResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
+// body for the "invalid" error.
+type GetOrganizationGatewayOverviewInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayOverviewInvariantViolationResponseBody is the type of
+// the "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP
+// response body for the "invariant_violation" error.
+type GetOrganizationGatewayOverviewInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayOverviewUnexpectedResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
+// body for the "unexpected" error.
+type GetOrganizationGatewayOverviewUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayOverviewGatewayErrorResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayOverview" endpoint HTTP response
+// body for the "gateway_error" error.
+type GetOrganizationGatewayOverviewGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayUsageUnauthorizedResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "unauthorized" error.
+type GetOrganizationGatewayUsageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayUsageForbiddenResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "forbidden" error.
+type GetOrganizationGatewayUsageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayUsageBadRequestResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "bad_request" error.
+type GetOrganizationGatewayUsageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayUsageNotFoundResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "not_found" error.
+type GetOrganizationGatewayUsageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayUsageConflictResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "conflict" error.
+type GetOrganizationGatewayUsageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayUsageUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "unsupported_media" error.
+type GetOrganizationGatewayUsageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayUsageInvalidResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "invalid" error.
+type GetOrganizationGatewayUsageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayUsageInvariantViolationResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "invariant_violation" error.
+type GetOrganizationGatewayUsageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayUsageUnexpectedResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "unexpected" error.
+type GetOrganizationGatewayUsageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationGatewayUsageGatewayErrorResponseBody is the type of the
+// "telemetry" service "getOrganizationGatewayUsage" endpoint HTTP response
+// body for the "gateway_error" error.
+type GetOrganizationGatewayUsageGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -8434,6 +8857,9 @@ type MetaMcpMemberUsageResponseBody struct {
 	ErrorCount int64 `form:"error_count" json:"error_count" xml:"error_count"`
 	// ISO 8601 timestamp of the most recent call
 	LastCalledAt *string `form:"last_called_at,omitempty" json:"last_called_at,omitempty" xml:"last_called_at,omitempty"`
+	// Display name of the server. Set for Organization Gateway usage, whose
+	// servers span projects the caller may not have loaded.
+	McpServerName *string `form:"mcp_server_name,omitempty" json:"mcp_server_name,omitempty" xml:"mcp_server_name,omitempty"`
 }
 
 // ProjectOverviewSummaryResponseBody is used to define fields on response body
@@ -9520,6 +9946,81 @@ func NewGetMcpNetworkTrafficResponseBody(res *telemetry.GetMcpNetworkTrafficResu
 // result of the "getMetaMcpServerUsage" endpoint of the "telemetry" service.
 func NewGetMetaMcpServerUsageResponseBody(res *telemetry.GetMetaMcpServerUsageResult) *GetMetaMcpServerUsageResponseBody {
 	body := &GetMetaMcpServerUsageResponseBody{}
+	if res.Funnel != nil {
+		body.Funnel = marshalTelemetryMetaMcpDiscoveryFunnelToMetaMcpDiscoveryFunnelResponseBody(res.Funnel)
+	}
+	if res.Members != nil {
+		body.Members = make([]*MetaMcpMemberUsageResponseBody, len(res.Members))
+		for i, val := range res.Members {
+			if val == nil {
+				body.Members[i] = nil
+				continue
+			}
+			body.Members[i] = marshalTelemetryMetaMcpMemberUsageToMetaMcpMemberUsageResponseBody(val)
+		}
+	} else {
+		body.Members = []*MetaMcpMemberUsageResponseBody{}
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayOverviewResponseBody builds the HTTP response body
+// from the result of the "getOrganizationGatewayOverview" endpoint of the
+// "telemetry" service.
+func NewGetOrganizationGatewayOverviewResponseBody(res *telemetry.GetObservabilityOverviewResult) *GetOrganizationGatewayOverviewResponseBody {
+	body := &GetOrganizationGatewayOverviewResponseBody{
+		IntervalSeconds: res.IntervalSeconds,
+	}
+	if res.Summary != nil {
+		body.Summary = marshalTelemetryObservabilitySummaryToObservabilitySummaryResponseBody(res.Summary)
+	}
+	if res.Comparison != nil {
+		body.Comparison = marshalTelemetryObservabilitySummaryToObservabilitySummaryResponseBody(res.Comparison)
+	}
+	if res.TimeSeries != nil {
+		body.TimeSeries = make([]*TimeSeriesBucketResponseBody, len(res.TimeSeries))
+		for i, val := range res.TimeSeries {
+			if val == nil {
+				body.TimeSeries[i] = nil
+				continue
+			}
+			body.TimeSeries[i] = marshalTelemetryTimeSeriesBucketToTimeSeriesBucketResponseBody(val)
+		}
+	} else {
+		body.TimeSeries = []*TimeSeriesBucketResponseBody{}
+	}
+	if res.TopToolsByCount != nil {
+		body.TopToolsByCount = make([]*ToolMetricResponseBody, len(res.TopToolsByCount))
+		for i, val := range res.TopToolsByCount {
+			if val == nil {
+				body.TopToolsByCount[i] = nil
+				continue
+			}
+			body.TopToolsByCount[i] = marshalTelemetryToolMetricToToolMetricResponseBody(val)
+		}
+	} else {
+		body.TopToolsByCount = []*ToolMetricResponseBody{}
+	}
+	if res.TopToolsByFailureRate != nil {
+		body.TopToolsByFailureRate = make([]*ToolMetricResponseBody, len(res.TopToolsByFailureRate))
+		for i, val := range res.TopToolsByFailureRate {
+			if val == nil {
+				body.TopToolsByFailureRate[i] = nil
+				continue
+			}
+			body.TopToolsByFailureRate[i] = marshalTelemetryToolMetricToToolMetricResponseBody(val)
+		}
+	} else {
+		body.TopToolsByFailureRate = []*ToolMetricResponseBody{}
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayUsageResponseBody builds the HTTP response body
+// from the result of the "getOrganizationGatewayUsage" endpoint of the
+// "telemetry" service.
+func NewGetOrganizationGatewayUsageResponseBody(res *telemetry.GetMetaMcpServerUsageResult) *GetOrganizationGatewayUsageResponseBody {
+	body := &GetOrganizationGatewayUsageResponseBody{}
 	if res.Funnel != nil {
 		body.Funnel = marshalTelemetryMetaMcpDiscoveryFunnelToMetaMcpDiscoveryFunnelResponseBody(res.Funnel)
 	}
@@ -11854,6 +12355,306 @@ func NewGetMetaMcpServerUsageUnexpectedResponseBody(res *goa.ServiceError) *GetM
 // "telemetry" service.
 func NewGetMetaMcpServerUsageGatewayErrorResponseBody(res *goa.ServiceError) *GetMetaMcpServerUsageGatewayErrorResponseBody {
 	body := &GetMetaMcpServerUsageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayOverviewUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGatewayOverview"
+// endpoint of the "telemetry" service.
+func NewGetOrganizationGatewayOverviewUnauthorizedResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewUnauthorizedResponseBody {
+	body := &GetOrganizationGatewayOverviewUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayOverviewForbiddenResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGatewayOverview"
+// endpoint of the "telemetry" service.
+func NewGetOrganizationGatewayOverviewForbiddenResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewForbiddenResponseBody {
+	body := &GetOrganizationGatewayOverviewForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayOverviewBadRequestResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGatewayOverview"
+// endpoint of the "telemetry" service.
+func NewGetOrganizationGatewayOverviewBadRequestResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewBadRequestResponseBody {
+	body := &GetOrganizationGatewayOverviewBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayOverviewNotFoundResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGatewayOverview"
+// endpoint of the "telemetry" service.
+func NewGetOrganizationGatewayOverviewNotFoundResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewNotFoundResponseBody {
+	body := &GetOrganizationGatewayOverviewNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayOverviewConflictResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGatewayOverview"
+// endpoint of the "telemetry" service.
+func NewGetOrganizationGatewayOverviewConflictResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewConflictResponseBody {
+	body := &GetOrganizationGatewayOverviewConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayOverviewUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "getOrganizationGatewayOverview"
+// endpoint of the "telemetry" service.
+func NewGetOrganizationGatewayOverviewUnsupportedMediaResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewUnsupportedMediaResponseBody {
+	body := &GetOrganizationGatewayOverviewUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayOverviewInvalidResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGatewayOverview"
+// endpoint of the "telemetry" service.
+func NewGetOrganizationGatewayOverviewInvalidResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewInvalidResponseBody {
+	body := &GetOrganizationGatewayOverviewInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayOverviewInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "getOrganizationGatewayOverview"
+// endpoint of the "telemetry" service.
+func NewGetOrganizationGatewayOverviewInvariantViolationResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewInvariantViolationResponseBody {
+	body := &GetOrganizationGatewayOverviewInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayOverviewUnexpectedResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGatewayOverview"
+// endpoint of the "telemetry" service.
+func NewGetOrganizationGatewayOverviewUnexpectedResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewUnexpectedResponseBody {
+	body := &GetOrganizationGatewayOverviewUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayOverviewGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGatewayOverview"
+// endpoint of the "telemetry" service.
+func NewGetOrganizationGatewayOverviewGatewayErrorResponseBody(res *goa.ServiceError) *GetOrganizationGatewayOverviewGatewayErrorResponseBody {
+	body := &GetOrganizationGatewayOverviewGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayUsageUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGatewayUsage" endpoint
+// of the "telemetry" service.
+func NewGetOrganizationGatewayUsageUnauthorizedResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageUnauthorizedResponseBody {
+	body := &GetOrganizationGatewayUsageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayUsageForbiddenResponseBody builds the HTTP response
+// body from the result of the "getOrganizationGatewayUsage" endpoint of the
+// "telemetry" service.
+func NewGetOrganizationGatewayUsageForbiddenResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageForbiddenResponseBody {
+	body := &GetOrganizationGatewayUsageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayUsageBadRequestResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGatewayUsage" endpoint
+// of the "telemetry" service.
+func NewGetOrganizationGatewayUsageBadRequestResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageBadRequestResponseBody {
+	body := &GetOrganizationGatewayUsageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayUsageNotFoundResponseBody builds the HTTP response
+// body from the result of the "getOrganizationGatewayUsage" endpoint of the
+// "telemetry" service.
+func NewGetOrganizationGatewayUsageNotFoundResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageNotFoundResponseBody {
+	body := &GetOrganizationGatewayUsageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayUsageConflictResponseBody builds the HTTP response
+// body from the result of the "getOrganizationGatewayUsage" endpoint of the
+// "telemetry" service.
+func NewGetOrganizationGatewayUsageConflictResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageConflictResponseBody {
+	body := &GetOrganizationGatewayUsageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayUsageUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGatewayUsage" endpoint
+// of the "telemetry" service.
+func NewGetOrganizationGatewayUsageUnsupportedMediaResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageUnsupportedMediaResponseBody {
+	body := &GetOrganizationGatewayUsageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayUsageInvalidResponseBody builds the HTTP response
+// body from the result of the "getOrganizationGatewayUsage" endpoint of the
+// "telemetry" service.
+func NewGetOrganizationGatewayUsageInvalidResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageInvalidResponseBody {
+	body := &GetOrganizationGatewayUsageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayUsageInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGatewayUsage" endpoint
+// of the "telemetry" service.
+func NewGetOrganizationGatewayUsageInvariantViolationResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageInvariantViolationResponseBody {
+	body := &GetOrganizationGatewayUsageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayUsageUnexpectedResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGatewayUsage" endpoint
+// of the "telemetry" service.
+func NewGetOrganizationGatewayUsageUnexpectedResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageUnexpectedResponseBody {
+	body := &GetOrganizationGatewayUsageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationGatewayUsageGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getOrganizationGatewayUsage" endpoint
+// of the "telemetry" service.
+func NewGetOrganizationGatewayUsageGatewayErrorResponseBody(res *goa.ServiceError) *GetOrganizationGatewayUsageGatewayErrorResponseBody {
+	body := &GetOrganizationGatewayUsageGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -15821,6 +16622,30 @@ func NewGetMetaMcpServerUsagePayload(body *GetMetaMcpServerUsageRequestBody, api
 	return v
 }
 
+// NewGetOrganizationGatewayOverviewPayload builds a telemetry service
+// getOrganizationGatewayOverview endpoint payload.
+func NewGetOrganizationGatewayOverviewPayload(body *GetOrganizationGatewayOverviewRequestBody, sessionToken *string) *telemetry.GetOrganizationGatewayOverviewPayload {
+	v := &telemetry.GetOrganizationGatewayOverviewPayload{
+		From: *body.From,
+		To:   *body.To,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewGetOrganizationGatewayUsagePayload builds a telemetry service
+// getOrganizationGatewayUsage endpoint payload.
+func NewGetOrganizationGatewayUsagePayload(body *GetOrganizationGatewayUsageRequestBody, sessionToken *string) *telemetry.GetOrganizationGatewayUsagePayload {
+	v := &telemetry.GetOrganizationGatewayUsagePayload{
+		From: *body.From,
+		To:   *body.To,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewGetProjectOverviewPayload builds a telemetry service getProjectOverview
 // endpoint payload.
 func NewGetProjectOverviewPayload(body *GetProjectOverviewRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetProjectOverviewPayload {
@@ -17501,6 +18326,42 @@ func ValidateGetMetaMcpServerUsageRequestBody(body *GetMetaMcpServerUsageRequest
 	}
 	if body.MetaMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayOverviewRequestBody runs the validations
+// defined on GetOrganizationGatewayOverviewRequestBody
+func ValidateGetOrganizationGatewayOverviewRequestBody(body *GetOrganizationGatewayOverviewRequestBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetOrganizationGatewayUsageRequestBody runs the validations defined
+// on GetOrganizationGatewayUsageRequestBody
+func ValidateGetOrganizationGatewayUsageRequestBody(body *GetOrganizationGatewayUsageRequestBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
 	}
 	if body.From != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))

@@ -2810,6 +2810,35 @@ type InternalSessionIssuer struct {
 	Deleted bool
 }
 
+type IssuanceSelectionProfile struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	UserSessionIssuerID uuid.UUID
+	// @access: confidential
+	UserSessionClientID uuid.NullUUID
+	// @access: confidential
+	WorkloadIssuerID uuid.NullUUID
+	// @access: restricted
+	WorkloadSubject pgtype.Text
+	// @access: opaque-confidential
+	Name string
+	// @access: confidential
+	CreatedByUserID pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type JsonWebKey struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -6224,6 +6253,47 @@ type RiskResult struct {
 	FalsePositiveAt pgtype.Timestamptz
 	// @access: opaque-restricted
 	FalsePositiveReason pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+}
+
+type SecurityAuditLog struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Seq int64
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: restricted
+	ActorID string
+	// @access: confidential
+	ActorType string
+	// @access: confidential-pii
+	ActorDisplayName pgtype.Text
+	// @access: confidential-pii
+	ActorSlug pgtype.Text
+	// @access: confidential
+	Action string
+	// @access: confidential
+	SubjectID string
+	// @access: confidential
+	SubjectType string
+	// @access: opaque-restricted
+	SubjectDisplayName pgtype.Text
+	// @access: confidential-pii
+	SubjectSlug pgtype.Text
+	// @access: opaque-restricted
+	BeforeSnapshot []byte
+	// @access: opaque-restricted
+	AfterSnapshot []byte
+	// @access: opaque-restricted
+	Metadata []byte
+	// @access: confidential
+	ActingSurface pgtype.Text
+	// @access: confidential
+	ActingClientID pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 }

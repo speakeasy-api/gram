@@ -336,6 +336,61 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMetaMcpServerUsage", "type": "query"}`)
 	})
 
+	Method("getOrganizationGatewayOverview", func() {
+		Description("Observability overview metrics for calls dispatched through the caller's Organization Gateway, across every project in the organization.")
+
+		// Org-scoped: the Organization Gateway spans every project in the
+		// caller's organization, so it is read without a project scope.
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(GetOrganizationGatewayActivityPayload)
+			security.SessionPayload()
+			// Named explicitly: structurally it matches other time-range
+			// payloads and would otherwise be hoisted under one of their names.
+			Meta("openapi:typename", "GetOrganizationGatewayActivityPayload")
+		})
+
+		Result(GetObservabilityOverviewResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getOrganizationGatewayOverview")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOrganizationGatewayOverview")
+		Meta("openapi:extension:x-speakeasy-name-override", "getOrganizationGatewayOverview")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetOrganizationGatewayOverview", "type": "query"}`)
+	})
+
+	Method("getOrganizationGatewayUsage", func() {
+		Description("Discovery funnel and per-server execution breakdown for the caller's Organization Gateway, across every project in the organization.")
+
+		// Org-scoped, like getOrganizationGatewayOverview.
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(GetOrganizationGatewayActivityPayload)
+			security.SessionPayload()
+			// Named explicitly: structurally it matches other time-range
+			// payloads and would otherwise be hoisted under one of their names.
+			Meta("openapi:typename", "GetOrganizationGatewayActivityPayload")
+		})
+
+		Result(GetMetaMcpServerUsageResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getOrganizationGatewayUsage")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOrganizationGatewayUsage")
+		Meta("openapi:extension:x-speakeasy-name-override", "getOrganizationGatewayUsage")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetOrganizationGatewayUsage", "type": "query"}`)
+	})
+
 	Method("getProjectOverview", func() {
 		Description("Get project-level overview including total chats, tool calls, active servers/users, and top lists")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -3062,6 +3117,20 @@ var GetMetaMcpServerUsagePayload = Type("GetMetaMcpServerUsagePayload", func() {
 	Required("meta_mcp_server_id", "from", "to")
 })
 
+var GetOrganizationGatewayActivityPayload = Type("GetOrganizationGatewayActivityPayload", func() {
+	Description("Time range for the caller's Organization Gateway activity")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Required("from", "to")
+})
+
 var MetaMcpDiscoveryFunnel = Type("MetaMcpDiscoveryFunnel", func() {
 	Description("Counts of each gateway drill-down stage in the window. Discovery stages come from meta_discovery events; executions from gateway-attributed tool calls.")
 
@@ -3084,6 +3153,7 @@ var MetaMcpMemberUsage = Type("MetaMcpMemberUsage", func() {
 	Attribute("last_called_at", String, "ISO 8601 timestamp of the most recent call", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("mcp_server_name", String, "Display name of the server. Set for Organization Gateway usage, whose servers span projects the caller may not have loaded.")
 
 	Required("mcp_server_id", "tool_calls", "error_count")
 })

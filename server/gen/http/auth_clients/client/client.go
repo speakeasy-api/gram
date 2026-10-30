@@ -45,6 +45,22 @@ type Client struct {
 	// to the detachAuthClientFromMcpServer endpoint.
 	DetachAuthClientFromMcpServerDoer goahttp.Doer
 
+	// ListMcpServerAuthClientChoices Doer is the HTTP client used to make requests
+	// to the listMcpServerAuthClientChoices endpoint.
+	ListMcpServerAuthClientChoicesDoer goahttp.Doer
+
+	// ListIssuanceProfiles Doer is the HTTP client used to make requests to the
+	// listIssuanceProfiles endpoint.
+	ListIssuanceProfilesDoer goahttp.Doer
+
+	// SetIssuanceProfile Doer is the HTTP client used to make requests to the
+	// setIssuanceProfile endpoint.
+	SetIssuanceProfileDoer goahttp.Doer
+
+	// DeleteIssuanceProfile Doer is the HTTP client used to make requests to the
+	// deleteIssuanceProfile endpoint.
+	DeleteIssuanceProfileDoer goahttp.Doer
+
 	// GetMcpServerAuthentication Doer is the HTTP client used to make requests to
 	// the getMcpServerAuthentication endpoint.
 	GetMcpServerAuthenticationDoer goahttp.Doer
@@ -88,6 +104,10 @@ func NewClient(
 		AttachAuthClientToMcpServerDoer:         doer,
 		SetAuthClientHeadersDoer:                doer,
 		DetachAuthClientFromMcpServerDoer:       doer,
+		ListMcpServerAuthClientChoicesDoer:      doer,
+		ListIssuanceProfilesDoer:                doer,
+		SetIssuanceProfileDoer:                  doer,
+		DeleteIssuanceProfileDoer:               doer,
 		GetMcpServerAuthenticationDoer:          doer,
 		SetMcpServerUpstreamAuthRequirementDoer: doer,
 		GetAuthClientAudienceDoer:               doer,
@@ -263,6 +283,102 @@ func (c *Client) DetachAuthClientFromMcpServer() goa.Endpoint {
 		resp, err := c.DetachAuthClientFromMcpServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("authClients", "detachAuthClientFromMcpServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListMcpServerAuthClientChoices returns an endpoint that makes HTTP requests
+// to the authClients service listMcpServerAuthClientChoices server.
+func (c *Client) ListMcpServerAuthClientChoices() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListMcpServerAuthClientChoicesRequest(c.encoder)
+		decodeResponse = DecodeListMcpServerAuthClientChoicesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListMcpServerAuthClientChoicesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListMcpServerAuthClientChoicesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("authClients", "listMcpServerAuthClientChoices", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListIssuanceProfiles returns an endpoint that makes HTTP requests to the
+// authClients service listIssuanceProfiles server.
+func (c *Client) ListIssuanceProfiles() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListIssuanceProfilesRequest(c.encoder)
+		decodeResponse = DecodeListIssuanceProfilesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListIssuanceProfilesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListIssuanceProfilesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("authClients", "listIssuanceProfiles", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetIssuanceProfile returns an endpoint that makes HTTP requests to the
+// authClients service setIssuanceProfile server.
+func (c *Client) SetIssuanceProfile() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetIssuanceProfileRequest(c.encoder)
+		decodeResponse = DecodeSetIssuanceProfileResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetIssuanceProfileRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetIssuanceProfileDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("authClients", "setIssuanceProfile", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteIssuanceProfile returns an endpoint that makes HTTP requests to the
+// authClients service deleteIssuanceProfile server.
+func (c *Client) DeleteIssuanceProfile() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteIssuanceProfileRequest(c.encoder)
+		decodeResponse = DecodeDeleteIssuanceProfileResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteIssuanceProfileRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteIssuanceProfileDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("authClients", "deleteIssuanceProfile", err)
 		}
 		return decodeResponse(resp)
 	}

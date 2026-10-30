@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/tombstone"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	networkingressRepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
@@ -96,6 +97,9 @@ func (s *Service) writeHostedServer(ctx context.Context, toolsetID uuid.UUID, ch
 		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "lock hosted association writer scope").LogError(ctx, logger)
+	}
 
 	if private {
 		if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
@@ -196,6 +200,10 @@ func (s *Service) writeHostedServer(ctx context.Context, toolsetID uuid.UUID, ch
 		ToolsetSnapshotAfter:  afterView,
 	}); err != nil {
 		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "log hosted toolset update").LogError(ctx, logger)
+	}
+
+	if err := authclientbackfill.SyncEMAServers(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{written.After.ID}); err != nil {
+		return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "sync hosted server EMA reach").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

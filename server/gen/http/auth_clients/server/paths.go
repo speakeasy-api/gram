@@ -42,6 +42,26 @@ func DetachAuthClientFromMcpServerAuthClientsPath() string {
 	return "/rpc/authClients.detachFromMcpServer"
 }
 
+// ListMcpServerAuthClientChoicesAuthClientsPath returns the URL path to the authClients service listMcpServerAuthClientChoices HTTP endpoint.
+func ListMcpServerAuthClientChoicesAuthClientsPath() string {
+	return "/rpc/authClients.listMcpServerChoices"
+}
+
+// ListIssuanceProfilesAuthClientsPath returns the URL path to the authClients service listIssuanceProfiles HTTP endpoint.
+func ListIssuanceProfilesAuthClientsPath() string {
+	return "/rpc/authClients.listIssuanceProfiles"
+}
+
+// SetIssuanceProfileAuthClientsPath returns the URL path to the authClients service setIssuanceProfile HTTP endpoint.
+func SetIssuanceProfileAuthClientsPath() string {
+	return "/rpc/authClients.setIssuanceProfile"
+}
+
+// DeleteIssuanceProfileAuthClientsPath returns the URL path to the authClients service deleteIssuanceProfile HTTP endpoint.
+func DeleteIssuanceProfileAuthClientsPath() string {
+	return "/rpc/authClients.deleteIssuanceProfile"
+}
+
 // GetMcpServerAuthenticationAuthClientsPath returns the URL path to the authClients service getMcpServerAuthentication HTTP endpoint.
 func GetMcpServerAuthenticationAuthClientsPath() string {
 	return "/rpc/authClients.getMcpServerAuthentication"
