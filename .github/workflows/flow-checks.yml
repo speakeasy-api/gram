@@ -1,0 +1,152 @@
+# Dashboard flow checks: can a user still finish each core product flow?
+# See e2e/flows/README.md.
+#
+# Replays every e2e/flows/*/flow.spec.ts against a freshly booted stack. When a
+# flow fails, a Claude Code agent re-walks that flow's story and says whether
+# the UI only moved (healed), the flow broke, or the PR changed it on purpose.
+# The verdicts go into one PR comment. This check never blocks a merge yet.
+name: Flow checks
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - client/dashboard/**
+      - e2e/flows/**
+      - e2e/flows.config.ts
+      - .mise-tasks/test/flows.sh
+      - .mise-tasks/flows/**
+      - .github/workflows/flow-checks.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flow-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flow-checks:
+    name: flow-checks
+    # Booting the stack needs ATLAS_TOKEN and healing needs ANTHROPIC_API_KEY;
+    # a fork PR gets neither.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: write # posts the verdict comment
+    env:
+      GOMAXPROCS: 8
+      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+        with:
+          # The heal agent reads `git diff origin/main...HEAD` to tell an
+          # intended flow change from a broken one.
+          fetch-depth: 0
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
+
+      # Same answers as wake-stack-e2e.yml: zero must not prompt on a runner.
+      - name: Answer zero's questions before it asks them
+        run: |
+          cat > mise.local.toml <<'TOML'
+          [env]
+          CLICKHOUSE_MIGRATION_ENGINE = "golang-migrate"
+          TOML
+
+      - name: Give the seed someone to be
+        run: |
+          git config user.email "flow-checks@example.com"
+          git config user.name "Flow Checks"
+
+      - name: Boot the stack
+        run: ./zero --agent
+
+      - name: Replay flows
+        id: replay
+        continue-on-error: true
+        run: mise run test:flows
+
+      - name: Install Claude Code
+        if: steps.replay.outcome == 'failure'
+        run: curl -fsSL https://claude.ai/install.sh | bash
+
+      # One agent per failing flow. Each writes e2e/.flows/<flow>-verdict.json.
+      - name: Heal failing flows
+        if: steps.replay.outcome == 'failure'
+        continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          failed=$(jq -r '[.. | objects | select(.specs?) | .specs[]
+            | select(.ok == false) | .file | split("/")[0]] | unique[]' \
+            e2e/.flows/results.json)
+          for flow in $failed; do
+            PATH="$HOME/.local/bin:$PATH" mise run flows:heal "$flow" &
+          done
+          wait
+
+      - name: Post verdicts
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPLAY: ${{ steps.replay.outcome }}
+        run: |
+          marker='<!-- flow-checks -->'
+          {
+            echo "$marker"
+            echo "### Flow checks"
+            if [ "$REPLAY" = success ]; then
+              echo "Every flow replayed cleanly."
+            else
+              echo "| Flow | Verdict | Step | Summary |"
+              echo "| --- | --- | --- | --- |"
+              for f in e2e/.flows/*-verdict.json; do
+                [ -f "$f" ] || continue
+                jq -r '"| \(.flow) | **\(.verdict)** | \(.step // "-") | \(.summary) |"' "$f" ||
+                  echo "| $(basename "$f" -verdict.json) | unknown | - | the agent did not return a verdict |"
+              done
+              echo
+              echo "_healed_: UI moved, flow still works; the new script is in the run artifacts."
+              echo "_broken_: a user can no longer finish the flow."
+              echo "_changed_: this PR changes the flow on purpose; update its story.md."
+            fi
+            echo
+            echo "[Run, traces and screenshots]($RUN_URL). This check does not block merging."
+          } > comment.md
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n 1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@comment.md
+          else
+            gh pr comment "$PR" --body-file comment.md
+          fi
+
+      # Healed scripts, transcripts, traces and screenshots.
+      - name: Upload flow artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: flow-checks
+          path: |
+            e2e/.flows
+            e2e/flows/*/flow.spec.ts
+          retention-days: 7
+          if-no-files-found: ignore

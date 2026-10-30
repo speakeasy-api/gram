@@ -1,0 +1,96 @@
+# Magellan: a nightly agent that explores the dashboard and files the bugs it
+# can prove as Linear Triage issues. See e2e/magellan/README.md.
+name: Magellan
+
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: Focus on dashboard changes merged since (git date)
+        default: 24 hours ago
+      file:
+        description: File Linear issues (otherwise dry run)
+        type: boolean
+        default: true
+  schedule:
+    # Weeknights, after the day's merges.
+    - cron: "0 3 * * 2-6"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: magellan
+  cancel-in-progress: false
+
+jobs:
+  magellan:
+    name: magellan
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 90
+    env:
+      GOMAXPROCS: 8
+      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
+
+      # Same answers as wake-stack-e2e.yml: zero must not prompt on a runner.
+      - name: Answer zero's questions before it asks them
+        run: |
+          cat > mise.local.toml <<'TOML'
+          [env]
+          CLICKHOUSE_MIGRATION_ENGINE = "golang-migrate"
+          TOML
+
+      - name: Give the seed someone to be
+        run: |
+          git config user.email "magellan@example.com"
+          git config user.name "Magellan"
+
+      - name: Boot the stack
+        run: ./zero --agent
+
+      - name: Install Claude Code
+        run: curl -fsSL https://claude.ai/install.sh | bash
+
+      - name: Explore
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SINCE: ${{ inputs.since || '24 hours ago' }}
+        run: PATH="$HOME/.local/bin:$PATH" mise run magellan:explore --since "$SINCE"
+
+      - name: File findings
+        env:
+          LINEAR_API_KEY: ${{ secrets.MAGELLAN_LINEAR_API_KEY }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          FILE: ${{ github.event_name == 'schedule' || inputs.file }}
+        run: |
+          if [ "$FILE" = true ]; then
+            mise run magellan:file --file --run-url "$RUN_URL"
+          else
+            mise run magellan:file --run-url "$RUN_URL"
+          fi
+
+      - name: Upload run
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: magellan
+          path: e2e/.magellan
+          retention-days: 30
+          if-no-files-found: ignore
