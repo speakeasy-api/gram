@@ -23,7 +23,7 @@ func TestToolExtractorRetiredPulse(t *testing.T) {
 	db, err := pgxpool.New(t.Context(), "postgres://localhost/unused")
 	require.NoError(t, err)
 	db.Close()
-	legacy, native := &failedCatalogReader{}, &failedCatalogReader{}
+	native := &failedCatalogReader{}
 	catalog := NewCatalogService(nil, nil, native)
 	registryID := uuid.New()
 	catalog.repo = routingRepo{rows: []repo.ListMCPRegistriesRow{{ID: registryID, Url: "https://api.pulsemcp.com"}}}
@@ -32,7 +32,6 @@ func TestToolExtractorRetiredPulse(t *testing.T) {
 	task := ToolExtractorTask{ProjectID: uuid.New(), DeploymentID: uuid.New(), OrgSlug: "test-org", ProjectSlug: "test-project", MCP: ToolExtractorTaskMCPServer{AttachmentID: uuid.New(), RegistryID: uuid.NullUUID{UUID: registryID, Valid: true}, Name: "retired", Slug: "retired", RegistryServerSpecifier: "example/server", SelectedRemotes: []string{remote.URL}}}
 	err = NewToolExtractor(logger, nil, db, catalog).Do(t.Context(), task)
 	require.ErrorIs(t, err, ErrCatalogSourceRetired)
-	require.Zero(t, legacy.calls, "catalog reader must not be called")
 	require.Zero(t, native.calls, "must not fall back")
 	require.Zero(t, remoteCalls.Load(), "remote discovery must not start")
 	found := false

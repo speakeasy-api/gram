@@ -106,10 +106,11 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 
 	serverDetails, err := te.catalog.IdentityDetails(ctx, task.MCP.RegistryID.UUID, task.MCP.RegistryServerSpecifier, task.MCP.SelectedRemotes)
 	if err != nil {
+		var attrs []slog.Attr
 		if errors.Is(err, ErrCatalogSourceRetired) {
-			logger = logger.With(slog.String("gram.external_mcp.failure_reason", "retired_pulse_catalog"))
+			attrs = append(attrs, attr.SlogExternalMCPFailureReason(RetiredPulseCatalogFailureReason))
 		}
-		return oops.E(oops.CodeUnexpected, err, "[%s] error fetching server details from registry", task.MCP.Name).LogError(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "[%s] error fetching server details from registry", task.MCP.Name).LogError(ctx, logger, attrs...)
 	}
 
 	var requiresOAuth bool

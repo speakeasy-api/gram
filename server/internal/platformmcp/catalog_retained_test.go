@@ -47,93 +47,97 @@ func (s *deniedCatalogReceiptStore) FindReceipt(context.Context, Principal, Reso
 	return OperationReceipt{}, false, s.receiptErr
 }
 
+func newRetainedCatalogFixture(t *testing.T) (*DynamicRegistryCatalog, *retainedCatalogRecord, uuid.UUID) {
+	t.Helper()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_retained_catalog")
+	require.NoError(t, err)
+	ctx := t.Context()
+	err = testrepo.New(conn).DeleteRetainedCatalogSourcesFixture(ctx)
+	require.NoError(t, err)
+	legacyID := uuid.New()
+	err = testrepo.New(conn).InsertRetainedLegacyCatalogSourceFixture(ctx, legacyID)
+	require.NoError(t, err)
+	require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, conn))
+	native := &retainedCatalogRecord{published: true, data: json.RawMessage(`{"server":{"name":"reviewed/mcp","description":"Native retained record","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://native.test/{region}/mcp","headers":[{"name":"Authorization","isRequired":true,"isSecret":true}],"variables":{"region":{"default":"us","isRequired":true,"choices":["us","eu"]}}}]}}`)}
+	identity := externalmcp.NewCatalogService(conn, nil, externalmcp.NewNativeRegistryReader(native))
+	nativeSource, err := identity.SelectedSource(ctx, "organization", "organization")
+	require.NoError(t, err)
+	require.Equal(t, "speakeasy", nativeSource.SourceKey)
+	require.Equal(t, "Speakeasy", nativeSource.Name)
+	catalog := NewDynamicRegistryCatalogSources(func(ctx context.Context) ([]RegistryCatalogSource, error) {
+		source, err := identity.SelectedSource(ctx, "organization", "organization")
+		if err != nil {
+			return nil, fmt.Errorf("select catalog source: %w", err)
+		}
+		reader, err := identity.ReaderFor(source)
+		if err != nil {
+			return nil, fmt.Errorf("resolve catalog reader: %w", err)
+		}
+		return []RegistryCatalogSource{{Client: reader, Descriptors: []CatalogDescriptor{BrowserCatalogDescriptor(source.Registry)}}}, nil
+	}).WithIdentityService(identity)
+	return catalog, native, legacyID
+}
+
+func TestCatalogRetiredSourceRejected(t *testing.T) {
+	t.Parallel()
+	catalog, _, legacyID := newRetainedCatalogFixture(t)
+	ctx := t.Context()
+	key := "browser-catalog-registry-" + legacyID.String()
+	candidates, err := catalog.Search(ctx, "")
+	require.NoError(t, err)
+	for _, candidate := range candidates {
+		require.NotEqual(t, key, candidate.ProviderKey, "retired sources must not be discoverable")
+	}
+	_, err = catalog.Inspect(ctx, key, "reviewed/mcp")
+	require.ErrorIs(t, err, ErrCatalogRejected)
+	_, err = catalog.InspectIdentity(ctx, key, "reviewed/mcp")
+	require.ErrorIs(t, err, externalmcp.ErrCatalogSourceRetired)
+}
+
 func TestCatalogRetainedUnpublishedIdentity(t *testing.T) {
 	t.Parallel()
-	for _, initiallyNative := range []bool{true, false} {
-		t.Run(fmt.Sprintf("initially_native_%t", initiallyNative), func(t *testing.T) {
-			t.Parallel()
-			conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_retained_catalog")
-			require.NoError(t, err)
-			ctx := t.Context()
-			err = testrepo.New(conn).DeleteRetainedCatalogSourcesFixture(ctx)
-			require.NoError(t, err)
-			legacyID := uuid.New()
-			err = testrepo.New(conn).InsertRetainedLegacyCatalogSourceFixture(ctx, legacyID)
-			require.NoError(t, err)
-			require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, conn))
-			native := &retainedCatalogRecord{published: true, data: json.RawMessage(`{"server":{"name":"reviewed/mcp","description":"Native retained record","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://native.test/{region}/mcp","headers":[{"name":"Authorization","isRequired":true,"isSecret":true}],"variables":{"region":{"default":"us","isRequired":true,"choices":["us","eu"]}}}]}}`)}
-			identity := externalmcp.NewCatalogService(conn, nil, externalmcp.NewNativeRegistryReader(native))
-			nativeSource, err := identity.SelectedSource(ctx, "organization", "organization")
-			require.NoError(t, err)
-			require.Equal(t, "speakeasy", nativeSource.SourceKey)
-			require.Equal(t, "Speakeasy", nativeSource.Name)
-			catalog := NewDynamicRegistryCatalogSources(func(ctx context.Context) ([]RegistryCatalogSource, error) {
-				source, err := identity.SelectedSource(ctx, "organization", "organization")
-				if err != nil {
-					return nil, fmt.Errorf("select catalog source: %w", err)
-				}
-				reader, err := identity.ReaderFor(source)
-				if err != nil {
-					return nil, fmt.Errorf("resolve catalog reader: %w", err)
-				}
-				return []RegistryCatalogSource{{Client: reader, Descriptors: []CatalogDescriptor{BrowserCatalogDescriptor(source.Registry)}}}, nil
-			}).WithIdentityService(identity)
-			if !initiallyNative {
-				key := "browser-catalog-registry-" + legacyID.String()
-				candidates, err := catalog.Search(ctx, "")
-				require.NoError(t, err)
-				for _, candidate := range candidates {
-					require.NotEqual(t, key, candidate.ProviderKey, "retired sources must not be discoverable")
-				}
-				_, err = catalog.Inspect(ctx, key, "reviewed/mcp")
-				require.ErrorIs(t, err, ErrCatalogRejected)
-				_, err = catalog.InspectIdentity(ctx, key, "reviewed/mcp")
-				require.ErrorIs(t, err, externalmcp.ErrCatalogSourceRetired)
-				return
-			}
-			record := native
-			key := "browser-catalog-registry-" + externalmcp.NativeCatalogRegistryID.String()
-			before, err := catalog.Inspect(ctx, key, "reviewed/mcp")
-			require.NoError(t, err)
-			record.published = false
-			_, err = catalog.Inspect(ctx, key, "reviewed/mcp")
-			require.ErrorIs(t, err, ErrCatalogRejected)
-			after, err := catalog.InspectIdentity(ctx, key, "reviewed/mcp")
-			require.NoError(t, err)
-			require.Equal(t, before, after, "retained details must preserve source, configuration, and metadata")
-			_, err = catalog.InspectIdentity(ctx, key, "missing/mcp")
-			require.Error(t, err)
-			denied := &deniedCatalogReceiptStore{recordingRegistrationStore: recordingRegistrationStore{project: ResolvedProject{ID: uuid.New(), Slug: "project"}}, receiptErr: errors.New("receipt authorization denied")}
-			deniedService := newRegistrationService(catalog, &testRegistrationGate{enabled: true}, denied)
-			readsBeforeDenial := record.reads
-			_, err = deniedService.RegisterCatalogMCP(ctx, registrationServicePrincipal(), RegisterCatalogMCPInput{ProjectSlug: "project", ProviderKey: key, CatalogRef: "reviewed/mcp", IdempotencyKey: "denied"})
-			require.ErrorIs(t, err, denied.receiptErr)
-			require.Equal(t, readsBeforeDenial, record.reads, "receipt authorization must precede retained lookup")
-			require.Zero(t, denied.beginCalls)
-			for _, status := range []string{receiptStatusPending, receiptStatusSucceeded} {
-				receipt := OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, Status: status, Replayed: true}
-				store := &retainedReceiptStore{recordingRegistrationStore: recordingRegistrationStore{project: ResolvedProject{ID: uuid.New(), Slug: "project"}, converged: receipt, completed: receipt}, receipt: receipt}
-				service := newRegistrationService(catalog, &testRegistrationGate{enabled: true}, store)
-				result, err := service.RegisterCatalogMCP(ctx, registrationServicePrincipal(), RegisterCatalogMCPInput{ProjectSlug: "project", ProviderKey: key, CatalogRef: "reviewed/mcp", IdempotencyKey: "accepted"})
-				require.NoError(t, err)
-				require.Equal(t, key, result.ProviderKey)
-				require.Zero(t, store.beginCalls)
-			}
-			store := &recordingRegistrationStore{project: ResolvedProject{ID: uuid.New(), Slug: "project"}, candidate: before.CatalogCandidate}
-			service := newRegistrationService(catalog, &testRegistrationGate{enabled: true}, store).WithDashboardURL(&url.URL{Scheme: "https", Host: "dashboard.test"})
-			input := IssueSetupHandoffInput{ProjectSlug: "project", RegistrationID: uuid.NewString(), ProviderKey: key, CatalogRef: "reviewed/mcp"}
-			setup, err := service.DashboardSetupURL(ctx, registrationServicePrincipal(), input)
-			require.NoError(t, err)
-			require.Contains(t, setup, "/settings#authentication")
-			reads := record.reads
-			store.candidate.CatalogRef = "different/mcp"
-			_, err = service.DashboardSetupURL(ctx, registrationServicePrincipal(), input)
-			require.ErrorIs(t, err, ErrCatalogRejected)
-			require.Equal(t, reads, record.reads, "persisted identity must match before retained lookup")
-			_, err = service.RegisterCatalogMCP(ctx, registrationServicePrincipal(), RegisterCatalogMCPInput{ProjectSlug: "project", ProviderKey: key, CatalogRef: "reviewed/mcp", IdempotencyKey: "new-request"})
-			require.ErrorIs(t, err, ErrCatalogRejected)
-			require.Zero(t, store.beginCalls)
-			require.Equal(t, reads, record.reads, "new admission must not use retained lookup")
-		})
+	catalog, native, _ := newRetainedCatalogFixture(t)
+	ctx := t.Context()
+	key := "browser-catalog-registry-" + externalmcp.NativeCatalogRegistryID.String()
+	before, err := catalog.Inspect(ctx, key, "reviewed/mcp")
+	require.NoError(t, err)
+	native.published = false
+	_, err = catalog.Inspect(ctx, key, "reviewed/mcp")
+	require.ErrorIs(t, err, ErrCatalogRejected)
+	after, err := catalog.InspectIdentity(ctx, key, "reviewed/mcp")
+	require.NoError(t, err)
+	require.Equal(t, before, after, "retained details must preserve source, configuration, and metadata")
+	_, err = catalog.InspectIdentity(ctx, key, "missing/mcp")
+	require.Error(t, err)
+	denied := &deniedCatalogReceiptStore{recordingRegistrationStore: recordingRegistrationStore{project: ResolvedProject{ID: uuid.New(), Slug: "project"}}, receiptErr: errors.New("receipt authorization denied")}
+	deniedService := newRegistrationService(catalog, &testRegistrationGate{enabled: true}, denied)
+	readsBeforeDenial := native.reads
+	_, err = deniedService.RegisterCatalogMCP(ctx, registrationServicePrincipal(), RegisterCatalogMCPInput{ProjectSlug: "project", ProviderKey: key, CatalogRef: "reviewed/mcp", IdempotencyKey: "denied"})
+	require.ErrorIs(t, err, denied.receiptErr)
+	require.Equal(t, readsBeforeDenial, native.reads, "receipt authorization must precede retained lookup")
+	require.Zero(t, denied.beginCalls)
+	for _, status := range []string{receiptStatusPending, receiptStatusSucceeded} {
+		receipt := OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, Status: status, Replayed: true}
+		store := &retainedReceiptStore{recordingRegistrationStore: recordingRegistrationStore{project: ResolvedProject{ID: uuid.New(), Slug: "project"}, converged: receipt, completed: receipt}, receipt: receipt}
+		service := newRegistrationService(catalog, &testRegistrationGate{enabled: true}, store)
+		result, err := service.RegisterCatalogMCP(ctx, registrationServicePrincipal(), RegisterCatalogMCPInput{ProjectSlug: "project", ProviderKey: key, CatalogRef: "reviewed/mcp", IdempotencyKey: "accepted"})
+		require.NoError(t, err)
+		require.Equal(t, key, result.ProviderKey)
+		require.Zero(t, store.beginCalls)
 	}
+	store := &recordingRegistrationStore{project: ResolvedProject{ID: uuid.New(), Slug: "project"}, candidate: before.CatalogCandidate}
+	service := newRegistrationService(catalog, &testRegistrationGate{enabled: true}, store).WithDashboardURL(&url.URL{Scheme: "https", Host: "dashboard.test"})
+	input := IssueSetupHandoffInput{ProjectSlug: "project", RegistrationID: uuid.NewString(), ProviderKey: key, CatalogRef: "reviewed/mcp"}
+	setup, err := service.DashboardSetupURL(ctx, registrationServicePrincipal(), input)
+	require.NoError(t, err)
+	require.Contains(t, setup, "/settings#authentication")
+	reads := native.reads
+	store.candidate.CatalogRef = "different/mcp"
+	_, err = service.DashboardSetupURL(ctx, registrationServicePrincipal(), input)
+	require.ErrorIs(t, err, ErrCatalogRejected)
+	require.Equal(t, reads, native.reads, "persisted identity must match before retained lookup")
+	_, err = service.RegisterCatalogMCP(ctx, registrationServicePrincipal(), RegisterCatalogMCPInput{ProjectSlug: "project", ProviderKey: key, CatalogRef: "reviewed/mcp", IdempotencyKey: "new-request"})
+	require.ErrorIs(t, err, ErrCatalogRejected)
+	require.Zero(t, store.beginCalls)
+	require.Equal(t, reads, native.reads, "new admission must not use retained lookup")
 }

@@ -108,8 +108,10 @@ func TestProcessGuardedDeploymentWorkflowRetriesDuringRollingRegistration(t *tes
 }
 
 func TestProcessDeploymentWorkflowRetiredPulseFailsWithoutRetry(t *testing.T) {
+	t.Parallel()
 	for _, guarded := range []bool{false, true} {
 		t.Run(fmt.Sprintf("guarded=%t", guarded), func(t *testing.T) {
+			t.Parallel()
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
 			env.RegisterWorkflow(ProcessDeploymentWorkflow)

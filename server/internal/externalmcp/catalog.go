@@ -19,6 +19,9 @@ import (
 )
 
 const (
+	// RetiredPulseCatalogFailureReason identifies terminal retirement failures in logs and workflows.
+	RetiredPulseCatalogFailureReason = "retired_pulse_catalog"
+
 	registrySourceTypeNative      = "native_v1"
 	registrySourceTypePulseV01    = "pulse_v0_1"
 	registrySourceTypeOfficialV01 = "official_v0_1"
