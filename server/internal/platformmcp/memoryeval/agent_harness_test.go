@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -36,7 +37,7 @@ type scriptedModel struct {
 func (m scriptedModel) GetCompletion(_ context.Context, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
 	encoded, err := json.Marshal(request.Messages)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("encode messages: %w", err)
 	}
 	transcript := string(encoded)
 	if strings.Contains(transcript, "You grade answers") {
@@ -44,10 +45,14 @@ func (m scriptedModel) GetCompletion(_ context.Context, request openrouter.Compl
 			Content string `json:"content"`
 		}
 		if err := json.Unmarshal(encoded, &prompt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("decode judge prompt: %w", err)
 		}
-		key := scriptedAnswerKey.FindStringSubmatch(prompt[0].Content)[1]
-		candidate := scriptedCandidate.FindStringSubmatch(prompt[0].Content)[1]
+		keyMatch := scriptedAnswerKey.FindStringSubmatch(prompt[0].Content)
+		candidateMatch := scriptedCandidate.FindStringSubmatch(prompt[0].Content)
+		if keyMatch == nil || candidateMatch == nil {
+			return nil, errors.New("scripted judge: answer key or candidate not found in prompt")
+		}
+		key, candidate := keyMatch[1], candidateMatch[1]
 		correct := candidate == "Not found"
 		if key != memoryeval.NotFound {
 			correct = !correct && strings.Contains(candidate, scriptedKeyWord.FindString(key))
@@ -58,10 +63,13 @@ func (m scriptedModel) GetCompletion(_ context.Context, request openrouter.Compl
 		return &openrouter.CompletionResponse{Content: "Not found"}, nil
 	}
 	if !strings.Contains(transcript, `"role":"tool"`) {
-		project := scriptedProjectID.FindStringSubmatch(transcript)[1]
-		args, err := json.Marshal(map[string]string{"project_id": project, "from": m.searchFrom, "to": m.searchTo, "query": "PgCat"})
+		match := scriptedProjectID.FindStringSubmatch(transcript)
+		if match == nil {
+			return nil, errors.New("scripted model: project_id not found in prompt")
+		}
+		args, err := json.Marshal(map[string]string{"project_id": match[1], "from": m.searchFrom, "to": m.searchTo, "query": "PgCat"})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("encode search arguments: %w", err)
 		}
 		return &openrouter.CompletionResponse{ToolCalls: []openrouter.ToolCall{{ID: "call-1", Type: "function", Function: openrouter.ToolCallFunction{Name: "search_chats", Arguments: string(args)}}}}, nil
 	}
@@ -97,7 +105,9 @@ func TestJudgedEvalHarnessScoresScriptedAnswers(t *testing.T) {
 
 	answers, verdicts := runEval(ctx, t, model, "scripted-answer", "scripted-judge", corpus, arms, 1, 4)
 	stats := summarize(corpus, 1, arms, answers, verdicts)
-	t.Log("\n" + renderReport(corpus, "scripted-answer", "scripted-judge", 1, arms, stats))
+	report := buildReport(corpus, "scripted-answer", "scripted-judge", 1, arms, answers, verdicts)
+	t.Log("\n" + report)
+	require.Contains(t, report, "| B: search_chats | 2% (2–2%)")
 
 	none, search := stats[noMemory.name], stats[searchArm.name]
 	require.InDelta(t, 10.0/40, none.accuracyByRun[0], 1e-9, "no memory answers Not found, which is right for the 10 negative and isolation questions")
@@ -109,4 +119,24 @@ func TestJudgedEvalHarnessScoresScriptedAnswers(t *testing.T) {
 	require.Empty(t, search.isolation)
 	require.Positive(t, search.toolTokens)
 	require.Zero(t, none.toolTokens)
+}
+
+// TestSummarizeLeavesErrorsOutOfAccuracy checks that an answer that failed
+// for API reasons counts as an error, not as a wrong answer.
+func TestSummarizeLeavesErrorsOutOfAccuracy(t *testing.T) {
+	t.Parallel()
+	corpus := memoryeval.Build(corpusNow)
+	a := arm{name: "A: no memory", search: nil, sweep: nil, tools: nil, call: nil, instructions: ""}
+	answers := []answer{
+		{arm: a.name, run: 0, question: corpus.Questions[0], text: "right", citations: nil, toolOutput: "", err: nil},
+		{arm: a.name, run: 0, question: corpus.Questions[1], text: "", citations: nil, toolOutput: "", err: errors.New("rate limited")},
+	}
+	verdicts := []verdict{
+		{Correct: true, Miss: "", Reason: "ok"},
+		judge(t.Context(), scriptedModel{searchFrom: "", searchTo: ""}, "scripted-judge", answers[1]),
+	}
+
+	s := summarize(corpus, 1, []arm{a}, answers, verdicts)[a.name]
+	require.InDelta(t, 1.0, s.accuracyByRun[0], 1e-9)
+	require.Equal(t, 1, s.errors)
 }

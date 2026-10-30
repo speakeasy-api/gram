@@ -7,8 +7,11 @@ Synthetic corpus, questions and checks for team chat memory in the Platform MCP.
   sessions) plus a 12-chat second project. Chat IDs are derived from chat keys.
 - **Questions**: 40, each with an answer key, source chats and evidence terms.
 - **Mechanical checks** (CI, every PR): `TestSearchChatsBaselineMechanical`
-  loads the corpus into Postgres and scores each arm for secret leaks,
-  isolation violations, retrieval of source chats and tool output size.
+  loads the corpus into Postgres and probes the `search_chats` baseline. It
+  asserts no credential leaks, no other-project results and full retrieval of
+  source chats, and logs the remaining leaks, private-session hits and
+  estimated tool tokens. Arms C and D add their own probes and the recall
+  size assertion.
 - **Judged accuracy** (on demand, costs LLM calls): `mise run eval:memory`
   answers every question with each arm's tools, grades answers with a judge
   model that differs from the answering model, and prints a report. Set

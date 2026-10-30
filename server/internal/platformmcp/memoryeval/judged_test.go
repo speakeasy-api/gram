@@ -33,8 +33,10 @@ const (
 	defaultConcurrency = 8
 )
 
+// envOr returns the variable's value, or fallback when it is empty or holds
+// the "unset" placeholder mise.toml uses for missing keys.
 func envOr(name, fallback string) string {
-	if value := os.Getenv(name); value != "" {
+	if value := os.Getenv(name); value != "" && value != "unset" {
 		return value
 	}
 	return fallback

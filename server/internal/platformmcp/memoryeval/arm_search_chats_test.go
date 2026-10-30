@@ -159,7 +159,7 @@ func searchChatsArm(t *testing.T, loaded loadedCorpus) (context.Context, arm) {
 			return "", fmt.Errorf("unknown tool %q", tool)
 		}
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("%s: %w", tool, err)
 		}
 		encoded, err := json.Marshal(out)
 		if err != nil {

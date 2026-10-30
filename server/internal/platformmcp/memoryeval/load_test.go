@@ -38,7 +38,7 @@ func (l loadedCorpus) userID(handle string) string {
 func loadCorpus(t *testing.T, name string, corpus *memoryeval.Corpus) loadedCorpus {
 	t.Helper()
 	ctx := t.Context()
-	db, err := infra.CloneTestDatabase(t, name)
+	db, err := testInfra(t).CloneTestDatabase(t, name)
 	require.NoError(t, err)
 
 	organizationID := "org_memoryeval_" + uuid.NewString()

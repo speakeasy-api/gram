@@ -29,6 +29,9 @@ const (
 	// questionTimeout bounds one question's whole agent loop.
 	questionTimeout = 3 * time.Minute
 
+	// judgeTimeout bounds one grading call.
+	judgeTimeout = time.Minute
+
 	// evalOrgID labels completion requests; the dev key pays for them.
 	evalOrgID = "memoryeval"
 )
@@ -144,6 +147,9 @@ func ask(ctx context.Context, client openrouter.CompletionClient, model string, 
 			result.text = response.Content
 			break
 		}
+		if turn == maxAgentTurns-1 {
+			result.err = fmt.Errorf("answer %s: no final answer after %d tool rounds", q.ID, maxAgentTurns)
+		}
 		messages = append(messages, assistantToolCallMessage(response))
 		for _, call := range response.ToolCalls {
 			output, err := a.call(ctx, call.Function.Name, call.Function.Arguments)
@@ -240,12 +246,14 @@ Grade the answer against the answer key.
 Reply with JSON only: {"correct": true|false, "miss": "retrieval"|"reasoning"|"", "reason": "<one sentence>"}.
 Use "retrieval" when the answer lacks facts it should have found, "reasoning" when it had the facts but concluded wrongly, and "" when correct.`
 
-// judge grades one answer. An answer that errored is graded incorrect
-// without a call.
+// judge grades one answer. An answer that errored gets an error verdict
+// without a call, which summarize leaves out of accuracy.
 func judge(ctx context.Context, client openrouter.CompletionClient, model string, ans answer) verdict {
 	if ans.err != nil {
 		return verdict{Correct: false, Miss: "error", Reason: ans.err.Error()}
 	}
+	ctx, cancel := context.WithTimeout(ctx, judgeTimeout)
+	defer cancel()
 	temperature := 0.0
 	prompt := fmt.Sprintf(judgePrompt, ans.question.Text, ans.question.Answer, ans.text)
 	response, err := client.GetCompletion(ctx, completionRequest(model, []or.ChatMessages{openrouter.CreateMessageUser(prompt)}, nil, &temperature))
@@ -263,7 +271,12 @@ func judge(ctx context.Context, client openrouter.CompletionClient, model string
 
 // armStats aggregates one arm across runs.
 type armStats struct {
+	// accuracyByRun is correct over graded answers per run. Errored answers
+	// and judge failures are not graded, so API trouble shows up in the
+	// error count instead of lowering accuracy.
 	accuracyByRun   []float64
+	correctByRun    []int
+	gradedByRun     []int
 	correctByKind   map[memoryeval.QuestionKind]int
 	totalByKind     map[memoryeval.QuestionKind]int
 	citedAnswers    int
@@ -290,20 +303,25 @@ func summarize(corpus *memoryeval.Corpus, runs int, arms []arm, answers []answer
 	for _, a := range arms {
 		stats[a.name] = &armStats{
 			accuracyByRun: make([]float64, runs),
+			correctByRun:  make([]int, runs),
+			gradedByRun:   make([]int, runs),
 			correctByKind: make(map[memoryeval.QuestionKind]int),
 			totalByKind:   make(map[memoryeval.QuestionKind]int),
 			leaks:         map[string]bool{},
 			isolation:     map[string]bool{},
 		}
 	}
-	questions := float64(len(corpus.Questions))
 	for i, ans := range answers {
 		s, v := stats[ans.arm], verdicts[i]
 		s.answers++
-		s.totalByKind[ans.question.Kind]++
 		s.toolTokens += memoryeval.EstimateTokens(ans.toolOutput)
-		if v.Correct {
-			s.accuracyByRun[ans.run] += 1 / questions
+		graded := v.Miss != "error"
+		if graded {
+			s.gradedByRun[ans.run]++
+			s.totalByKind[ans.question.Kind]++
+		}
+		if graded && v.Correct {
+			s.correctByRun[ans.run]++
 			s.correctByKind[ans.question.Kind]++
 		}
 		switch v.Miss {
@@ -320,7 +338,7 @@ func summarize(corpus *memoryeval.Corpus, runs int, arms []arm, answers []answer
 		for _, canary := range corpus.IsolationViolations(ans.toolOutput + "\n" + ans.text) {
 			s.isolation[canary] = true
 		}
-		if ans.question.Kind == memoryeval.QuestionNegative {
+		if graded && ans.question.Kind == memoryeval.QuestionNegative {
 			s.negatives++
 			if v.Correct {
 				s.notFound++
@@ -340,7 +358,11 @@ func summarize(corpus *memoryeval.Corpus, runs int, arms []arm, answers []answer
 			}
 		}
 	}
-
+	for _, s := range stats {
+		for run := range runs {
+			s.accuracyByRun[run] = float64(s.correctByRun[run]) / float64(max(s.gradedByRun[run], 1))
+		}
+	}
 	return stats
 }
 

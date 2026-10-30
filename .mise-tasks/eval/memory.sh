@@ -15,7 +15,14 @@ fi
 
 export MEMORYEVAL_RUNS="${usage_runs:-${MEMORYEVAL_RUNS:-3}}"
 if [ -n "${usage_out:-}" ]; then
-  export MEMORYEVAL_OUT="$(cd "$(dirname "$usage_out")" && pwd)/$(basename "$usage_out")"
+  out_dir="$(dirname "$usage_out")"
+  if [ ! -d "$out_dir" ]; then
+    echo "--out directory does not exist: $out_dir" >&2
+    exit 1
+  fi
+  export MEMORYEVAL_OUT="$(cd "$out_dir" && pwd)/$(basename "$usage_out")"
 fi
 
-exec mise run test:server -tags=memoryeval -run "^TestMemoryEvalJudged\$" -count=1 -timeout=60m -v ./internal/platformmcp/memoryeval/
+# No overall test timeout: every answer and judge call has its own timeout,
+# and the total grows with runs and arms.
+exec mise run test:server -tags=memoryeval -run "^TestMemoryEvalJudged\$" -count=1 -timeout=0 -v ./internal/platformmcp/memoryeval/

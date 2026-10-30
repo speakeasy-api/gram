@@ -124,5 +124,5 @@ func TestSearchChatsBaselineMechanical(t *testing.T) {
 
 	require.Empty(t, card.leaks[memoryeval.SecretCategoryCredential], "search_chats masks credentials with secret scanning")
 	require.Empty(t, card.otherProjectCanaries, "search_chats is scoped to one project")
-	require.Equal(t, card.answerable, card.retrieved, "every answerable question's sources contain its evidence terms verbatim")
+	require.Equal(t, card.answerable, card.retrieved, "every answerable question's source chats are returned by a keyword search for their evidence terms")
 }
