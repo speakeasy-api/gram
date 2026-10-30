@@ -1278,6 +1278,7 @@ function ChatDetailPanel({
       !!capturedChat?.originatingClient?.startsWith("claude-code"));
   const isClaudeTag =
     capturedSource === "claude-tag" || (claudeSource && tagMetadata.detected);
+  const openClawSession = capturedSource === "openclaw";
   const chat = useMemo(() => {
     if (!capturedChat || !isClaudeTag) return capturedChat;
     const title =
@@ -1673,6 +1674,7 @@ function ChatDetailPanel({
       userLabel: chat?.externalUserId,
       userLabelOverride,
       ownerIdentifier: readableTag ? null : ownerIdentifier,
+      openClawSession,
     }),
     [
       riskResultsByMessage,
@@ -1686,6 +1688,7 @@ function ChatDetailPanel({
       userLabelOverride,
       ownerIdentifier,
       readableTag,
+      openClawSession,
     ],
   );
 
@@ -1926,6 +1929,7 @@ function ChatDetailPanel({
                 claudeTurnByPromptId={claudeTurnByPromptId}
                 userLabel={chat?.externalUserId}
                 userLabelOverride={userLabelOverride}
+                openClawSession={openClawSession}
                 isLoading={chatLoading || loadingAllMessages}
               />
             </div>

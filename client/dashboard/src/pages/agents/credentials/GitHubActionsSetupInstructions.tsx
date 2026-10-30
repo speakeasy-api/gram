@@ -1,8 +1,8 @@
 import { Alert } from "@/components/ui/Alert";
+import { HOOKS_INGEST_SCOPE } from "../agent-hook-events";
 import { CodeBlock } from "./CodeBlock";
 import {
   DEVICE_AGENT_SYNC_SCOPE,
-  HOOKS_INGEST_SCOPE,
   OIDC_DOCS,
   githubActionsAgentGrants,
   repositoryName,

@@ -66,7 +66,7 @@ export function useChallengeRowColumns(
       {
         key: "avatar",
         header: "",
-        width: "40px",
+        width: "64px", // 32px cell padding + 32px avatar
         render: (row: ChallengeBucket) => {
           if (isChild(row)) return null;
           const isApiKey = row.principalType === "api_key";

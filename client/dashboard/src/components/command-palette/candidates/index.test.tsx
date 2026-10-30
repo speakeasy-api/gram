@@ -283,6 +283,25 @@ vi.mock("./useAgentIdentityCandidates", () => ({
       : [],
   ),
 }));
+vi.mock("./useManagedDeviceCandidates", () => ({
+  useManagedDeviceCandidates: vi.fn(({ enabled }: { enabled: boolean }) =>
+    enabled && mocks.includeNewResourceFixtures
+      ? [
+          {
+            id: "managed-device:test",
+            kind: "page",
+            title: "Test device",
+            detail: "Device",
+            keywords: [],
+            verbs: ["open"],
+            fuzzyOnly: true,
+            group: "Devices",
+            run: () => {},
+          },
+        ]
+      : [],
+  ),
+}));
 vi.mock("@/contexts/CommandPalette", () => ({
   useCommandPalette: () => ({ actions: mocks.actions }),
 }));
@@ -334,6 +353,7 @@ vi.mock("@/routes", () => ({
 import { useLauncherCandidates } from "./index";
 import { useSkillCandidates } from "./useSkillCandidates";
 import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
+import { useManagedDeviceCandidates } from "./useManagedDeviceCandidates";
 import type { LauncherCandidate } from "./types";
 
 const REMOTE = { remoteMcpServerId: "remote-1" };
@@ -1818,6 +1838,35 @@ describe("new resource source wiring", () => {
     });
   });
 
+  it.each([false, true])(
+    "includes devices with organization read access (in a project: %s)",
+    (inProject) => {
+      mocks.scopes = ["org:read"];
+      const { result } = renderCandidates({ inProject });
+      expect(result.current.some((c) => c.id === "managed-device:test")).toBe(
+        true,
+      );
+      expect(useManagedDeviceCandidates).toHaveBeenLastCalledWith({
+        enabled: true,
+      });
+      expect(mocks.rbacCalls).toContainEqual({
+        fn: "hasAnyScope",
+        scopes: ["org:read", "org:admin"],
+        resourceId: "org-acme",
+      });
+    },
+  );
+
+  it("does not request devices without organization read access", () => {
+    const { result } = renderCandidates();
+    expect(result.current.some((c) => c.id === "managed-device:test")).toBe(
+      false,
+    );
+    expect(useManagedDeviceCandidates).toHaveBeenLastCalledWith({
+      enabled: false,
+    });
+  });
+
   it("does not request skills without read access", () => {
     const { result } = renderCandidates();
     expect(result.current.some((c) => c.id === "skill:test")).toBe(false);
@@ -1837,11 +1886,14 @@ describe("new resource source wiring", () => {
     });
   });
 
-  it("disables both new sources while the palette is closed", () => {
-    mocks.scopes = ["skill:read"];
+  it("disables the new sources while the palette is closed", () => {
+    mocks.scopes = ["skill:read", "org:read"];
     renderCandidates({ enabled: false });
     expect(useSkillCandidates).toHaveBeenLastCalledWith({ enabled: false });
     expect(useAgentIdentityCandidates).toHaveBeenLastCalledWith({
+      enabled: false,
+    });
+    expect(useManagedDeviceCandidates).toHaveBeenLastCalledWith({
       enabled: false,
     });
   });

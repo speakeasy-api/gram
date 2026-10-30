@@ -60,6 +60,14 @@ const (
 // base URL to run a real code exchange against it.
 func createConsentRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID, slug, asBase string, userSessionIssuerIDs []uuid.UUID) uuid.UUID {
 	t.Helper()
+	return createConsentRemoteClientWithCallback(t, ctx, conn, projectID, organizationID, slug, asBase, userSessionIssuerIDs, "")
+}
+
+// createConsentRemoteClientWithCallback is createConsentRemoteClient with the
+// registration's callback landing on callbackBase, or on the default origin
+// when it is empty.
+func createConsentRemoteClientWithCallback(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID, slug, asBase string, userSessionIssuerIDs []uuid.UUID, callbackBase string) uuid.UUID {
+	t.Helper()
 	if asBase == "" {
 		asBase = "https://" + slug + "-as.example.com"
 	}
@@ -84,6 +92,7 @@ func createConsentRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.
 		RemoteSessionIssuerID: rsi.ID,
 		ClientID:              slug + "-external-client",
 		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		CallbackBaseUrl:       conv.ToPGTextEmpty(callbackBase),
 	})
 	require.NoError(t, err)
 	for _, usi := range userSessionIssuerIDs {

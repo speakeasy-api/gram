@@ -1,8 +1,11 @@
 package mcpservers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -37,6 +40,12 @@ func credentialSourcesOf(remote, tunneled []uuid.NullUUID) []credentialSource {
 			out = append(out, source)
 		}
 	}
+	slices.SortFunc(out, func(a, b credentialSource) int {
+		if n := strings.Compare(a.kind, b.kind); n != 0 {
+			return n
+		}
+		return bytes.Compare(a.id[:], b.id[:])
+	})
 	return out
 }
 

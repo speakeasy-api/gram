@@ -97,10 +97,10 @@ describe("GitHub Actions setup", () => {
 
   it("gives the agent device sync and hooks for one project", () => {
     const setup = githubActionsSetupInstructions(github);
-    expect(setup.agentGrants?.("project-1")).toEqual(
-      githubActionsAgentGrants("project-1"),
+    expect(setup.agentGrants?.("org-1", "project-1")).toEqual(
+      githubActionsAgentGrants("org-1", "project-1"),
     );
-    expect(githubActionsAgentGrants("project-1")).toEqual([
+    expect(githubActionsAgentGrants("org-1", "project-1")).toEqual([
       {
         effect: "allow",
         scope: "org:device_agent_sync",
@@ -111,7 +111,7 @@ describe("GitHub Actions setup", () => {
         scope: "org:hooks_ingest",
         selector: {
           resourceKind: "org",
-          resourceId: "*",
+          resourceId: "org-1",
           projectId: "project-1",
         },
       },

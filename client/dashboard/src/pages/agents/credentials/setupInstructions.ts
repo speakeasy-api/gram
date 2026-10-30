@@ -84,5 +84,8 @@ export type PlatformSetup = {
    * sends hook events. Written onto the agent when it is created, and added to
    * an existing agent that lacks them, in the project the setup runs in.
    */
-  agentGrants?: (projectId: string) => AgentPolicyGrantForm[];
+  agentGrants?: (
+    organizationId: string,
+    projectId: string,
+  ) => AgentPolicyGrantForm[];
 };

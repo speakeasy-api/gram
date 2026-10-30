@@ -830,10 +830,6 @@ export function useRemoteMcpInstallWorkflow({
           target.identityMode === "agent"
             ? (target.serviceAccountClient ?? undefined)
             : undefined,
-        // Organization issuers are administered at the organization level;
-        // setup must not attach this project's upstream client to one.
-        organizationOwnedUserSessionIssuer:
-          defaultOrganizationIssuerId !== undefined,
         options: reqOpts,
       });
       const configuredMcpServer =

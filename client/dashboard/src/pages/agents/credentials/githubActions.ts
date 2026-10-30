@@ -1,4 +1,5 @@
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
+import { hooksIngestPolicyGrant } from "../agent-hook-events";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { SetupServer } from "./setupInstructions";
 
@@ -46,15 +47,16 @@ const SPEAKEASYD_SOURCE_REF =
 
 /** What the device agent needs from the agent, beyond its MCP servers. */
 export const DEVICE_AGENT_SYNC_SCOPE = "org:device_agent_sync";
-export const HOOKS_INGEST_SCOPE = "org:hooks_ingest";
 
 /**
  * The grants a job's device agent needs: polling for the agent's plugins
  * organization-wide, and hook events for the one project the workflow names.
- * Narrower than the agent permission editor's organization-wide hooks grant,
- * so a workflow edited to name another project is refused there.
+ * The hook grant is the one every new agent is created with when its creator
+ * may give it, so the two collapse into one; a job needs it either way, and
+ * a workflow edited to name another project is refused.
  */
 export function githubActionsAgentGrants(
+  organizationId: string,
   projectId: string,
 ): AgentPolicyGrantForm[] {
   return [
@@ -63,11 +65,7 @@ export function githubActionsAgentGrants(
       scope: DEVICE_AGENT_SYNC_SCOPE,
       selector: { resourceKind: "org", resourceId: "*" },
     },
-    {
-      effect: "allow",
-      scope: HOOKS_INGEST_SCOPE,
-      selector: { resourceKind: "org", resourceId: "*", projectId },
-    },
+    hooksIngestPolicyGrant(organizationId, projectId),
   ];
 }
 

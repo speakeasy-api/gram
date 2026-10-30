@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
@@ -457,7 +458,7 @@ func (s *Service) placeRemoteSessionRecheck(ctx context.Context, logger *slog.Lo
 		// Addressed by organization slug; the synthetic id is what the
 		// resolver checks the ref against.
 		ref.RouteBase = mcproute.OrganizationGateway
-		ref.MetaMcpServerID = uuid.NullUUID{UUID: organizationGatewayID(organizationID), Valid: true}
+		ref.MetaMcpServerID = uuid.NullUUID{UUID: orggateway.GatewayID(organizationID), Valid: true}
 	}
 	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, ref)
 	if errors.Is(err, mcpendpoints.ErrPolicyDenied) {

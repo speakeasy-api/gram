@@ -167,7 +167,7 @@ function LockedCapField({ cap }: { cap: InferenceSpendCap }): JSX.Element {
         />
       </Stack>
       <Button type="button" disabled>
-        {`SAVE ${label.toUpperCase()}`}
+        {`Save ${label.toLowerCase()}`}
       </Button>
     </Stack>
   );
@@ -363,7 +363,7 @@ function CapForm({
         </Stack>
         <Stack direction="horizontal" align="center" gap={3}>
           <Button type="submit" disabled={mutation.isPending || locked}>
-            {mutation.isPending ? "SAVING..." : `SAVE ${label.toUpperCase()}`}
+            {mutation.isPending ? "Saving..." : `Save ${label.toLowerCase()}`}
           </Button>
           <CapFormFeedback
             label={label}

@@ -2376,6 +2376,7 @@ func marshalDeviceintegrationsManagedDeviceAgentStateToManagedDeviceAgentStateRe
 	}
 	res := &ManagedDeviceAgentStateResponseBody{
 		ReportedAt:         v.ReportedAt,
+		Attestation:        v.Attestation,
 		AppliedEtag:        v.AppliedEtag,
 		AppliedAt:          v.AppliedAt,
 		EnforcementHalted:  v.EnforcementHalted,

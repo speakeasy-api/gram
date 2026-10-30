@@ -299,7 +299,12 @@ type UserSessionGrant struct {
 	// the consent page for each MCP server offering several, keyed by server.
 	// The credential this grant mints records it as its choice.
 	UpstreamClientPicks map[uuid.UUID]uuid.UUID `json:"upstream_client_picks,omitempty"`
-	CreatedAt           time.Time               `json:"created_at"`
+	// AuthClientPicks is the typed auth client the subject picked on the
+	// consent page for each MCP server, keyed by server, where typed auth
+	// client resolution is enforced. The credential this grant mints records
+	// it as its choice, with the client's registration in UpstreamClientPicks.
+	AuthClientPicks map[uuid.UUID]uuid.UUID `json:"auth_client_picks,omitempty"`
+	CreatedAt       time.Time               `json:"created_at"`
 }
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)
@@ -1040,6 +1045,10 @@ type issuerGateAuthentication struct {
 	// selects how the request is served, so a compatibility handback to the
 	// upstream client choice still serves only that connection.
 	attachedSession uuid.UUID
+
+	// authorizerOwner is the validated authorizer whose own connection an
+	// unattached agent key's permit was decided for, typed or handed back.
+	authorizerOwner string
 }
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
@@ -1177,6 +1186,7 @@ func (s *Service) authenticateIssuerGate(
 		authClient:             nil,
 		chainingAuthClient:     nil,
 		attachedSession:        uuid.Nil,
+		authorizerOwner:        "",
 	}, toolSelection, nil
 }
 
@@ -1223,6 +1233,9 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 	case errors.Is(err, remotesessions.ErrChosenClientUnbound):
 		// The credential's chosen client is no longer bound to its issuer, the
 		// same unusable choice the selection read reports.
+		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication); ok {
+			return recoveryErr
+		}
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable)
 		return writeRemoteSessionReconnectChallenge(w, authentication)
 	case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
@@ -1245,6 +1258,11 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 		header := bearerErrorChallengeHeader(authentication.protectedResourceURL, "", remoteSessionMisconfiguredDescription)
 		return writeChallenge(w, header, remoteSessionMisconfiguredDescription)
 	case errors.Is(err, remotesessions.ErrNoValidToken):
+		// A turn acting for a person cannot reauthorize on their behalf; the
+		// person gets a link to connect their own account instead.
+		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication); ok {
+			return recoveryErr
+		}
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session missing or unusable", issuerGateReasonInvalidRemoteSession)
 		if authentication.directWorkloadHandoff && authentication.subject.Kind == urn.SessionSubjectKindWorkload {
 			return errWorkloadReconnectRequired

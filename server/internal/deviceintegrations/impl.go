@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -81,10 +80,11 @@ type Service struct {
 	guardian    *guardian.Policy
 	syncTrigger SyncTrigger
 	features    feature.Provider
+	reader      *Reader
 }
 
 // deviceLevelCoverage reports whether an org matches coverage on hardware
-// serials rather than assigned-user emails. Shared by the management API and
+// serials rather than assigned-user emails. Shared by the coverage reads and
 // the sync runner so a pushed snapshot and the dashboard an admin is looking
 // at can never disagree about the mode.
 //
@@ -125,10 +125,6 @@ func deviceLevelCoverage(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		return false
 	}
 	return enabled
-}
-
-func (s *Service) deviceLevelCoverage(ctx context.Context, orgID string) bool {
-	return deviceLevelCoverage(ctx, s.logger, s.db, s.features, orgID)
 }
 
 // coverageAttestation names the strongest claim that holds for EVERY active
@@ -176,6 +172,7 @@ func NewService(
 		guardian:    guardianPolicy,
 		syncTrigger: syncTrigger,
 		features:    features,
+		reader:      NewReader(logger, db, features),
 	}
 }
 
@@ -714,53 +711,25 @@ func (s *Service) ListManagedDevices(ctx context.Context, payload *gen.ListManag
 		return nil, err
 	}
 
-	// The design supplies Default(50) and bounds [1,200]; Goa materializes
-	// the default when the client omits the parameter.
-	limit := payload.Limit
-
-	cursor := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if payload.Cursor != nil && *payload.Cursor != "" {
-		parsed, err := uuid.Parse(*payload.Cursor)
-		if err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid cursor")
-		}
-		cursor = uuid.NullUUID{UUID: parsed, Valid: true}
-	}
-
-	// Blank entries would leave a non-empty array that matches no device, so a
-	// filter of only empty values has to read as no filter at all.
-	userIDs := nonBlank(payload.UserIds)
-	userEmails := nonBlank(payload.UserEmails)
-
-	rows, err := s.repo.ListManagedDevices(ctx, repo.ListManagedDevicesParams{
-		ActiveCutoff:   conv.ToPGTimestamptz(time.Now().UTC().Add(-activeWindow)),
-		DeviceLevel:    s.deviceLevelCoverage(ctx, authCtx.ActiveOrganizationID),
+	result, err := s.reader.ManagedDevices(ctx, ManagedDevicesQuery{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		Provider:       conv.PtrToPGTextEmpty(payload.Provider),
-		CursorID:       cursor,
-		Bucket:         conv.PtrToPGTextEmpty(payload.CoverageBucket),
-		PolicyState:    conv.PtrToPGTextEmpty(payload.PolicyState),
-		UserIds:        userIDs,
-		UserEmails:     userEmails,
-		PageLimit:      int32(limit), //nolint:gosec // design bounds limit to [1,200]
+		Provider:       conv.PtrValOr(payload.Provider, ""),
+		CoverageBucket: conv.PtrValOr(payload.CoverageBucket, ""),
+		PolicyState:    conv.PtrValOr(payload.PolicyState, ""),
+		UserIDs:        payload.UserIds,
+		UserEmails:     payload.UserEmails,
+		Cursor:         conv.PtrValOr(payload.Cursor, ""),
+		// The design supplies Default(50) and bounds [1,200]; Goa materializes
+		// the default when the client omits the parameter.
+		Limit: payload.Limit,
 	})
-	if err != nil {
+	switch {
+	case errors.Is(err, ErrInvalidCursor):
+		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor")
+	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "list managed devices")
 	}
-
-	devices := make([]*gen.ManagedDevice, 0, len(rows))
-	for _, row := range rows {
-		devices = append(devices, deviceView(ctx, s.logger, row))
-	}
-	var nextCursor *string
-	if len(rows) == limit {
-		last := rows[len(rows)-1].ID.String()
-		nextCursor = &last
-	}
-	return &gen.ListManagedDevicesResult{
-		Devices:    devices,
-		NextCursor: nextCursor,
-	}, nil
+	return result, nil
 }
 
 func (s *Service) GetCoverage(ctx context.Context, payload *gen.GetCoveragePayload) (*gen.DeviceIntegrationCoverage, error) {
@@ -772,48 +741,11 @@ func (s *Service) GetCoverage(ctx context.Context, payload *gen.GetCoveragePaylo
 		return nil, err
 	}
 
-	// Resolved once and shared: the bucket counts and the unmanaged-users tile
-	// sit side by side on the same page, so evaluating the flag twice could
-	// render a device as covered next to a tile calling its user unmanaged.
-	deviceLevel := s.deviceLevelCoverage(ctx, authCtx.ActiveOrganizationID)
-
-	counts, err := s.repo.GetCoverageCounts(ctx, repo.GetCoverageCountsParams{
-		ActiveCutoff:   conv.ToPGTimestamptz(time.Now().UTC().Add(-activeWindow)),
-		DeviceLevel:    deviceLevel,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Provider:       conv.PtrToPGTextEmpty(payload.Provider),
-	})
+	coverage, err := s.reader.Coverage(ctx, authCtx.ActiveOrganizationID, conv.PtrValOr(payload.Provider, ""))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "compute device integration coverage")
 	}
-	unmanaged, err := s.repo.CountUnmanagedAgentUsers(ctx, repo.CountUnmanagedAgentUsersParams{
-		DeviceLevel:    deviceLevel,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Provider:       conv.PtrToPGTextEmpty(payload.Provider),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count unmanaged agent users")
-	}
-
-	return &gen.DeviceIntegrationCoverage{
-		OrganizationID:            authCtx.ActiveOrganizationID,
-		ActiveWindowMinutes:       int(activeWindow / time.Minute),
-		Attestation:               coverageAttestation(deviceLevel, counts.AgentActive, counts.AgentActiveDeviceAttested),
-		AgentActive:               counts.AgentActive,
-		AgentActiveDeviceAttested: counts.AgentActiveDeviceAttested,
-		AgentStale:                counts.AgentStale,
-		AgentOtherDevice:          counts.AgentOtherDevice,
-		NoAgent:                   counts.NoAgent,
-		NoEmail:                   counts.NoEmail,
-		UnresolvedEmail:           counts.UnresolvedEmail,
-		Missing:                   counts.Missing,
-		TotalDevices:              counts.Total,
-		UnmanagedAgentUsers:       unmanaged,
-		PolicyAttested:            counts.PolicyAttested,
-		PolicyOutdated:            counts.PolicyOutdated,
-		PolicyUnreported:          counts.PolicyUnreported,
-		EnforcementHalted:         counts.EnforcementHalted,
-	}, nil
+	return coverage, nil
 }
 
 func snapshotFromConfig(cfg Config) audit.DeviceIntegrationSnapshot {

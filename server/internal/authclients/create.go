@@ -351,6 +351,13 @@ func AttachToServer(ctx context.Context, db *pgxpool.Pool, auditLogger *audit.Lo
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
+	// Match enable and reconciliation writers: server first, then a fresh
+	// client read under its row lock. attachTx rereads the locked server.
+	if _, err := queries.LockAttachableMCPServer(ctx, repo.LockAttachableMCPServerParams{ID: serverID, OrganizationID: organizationID}); errors.Is(err, pgx.ErrNoRows) {
+		return nil, &AttachRefusedError{Code: AttachNotFound, Message: "mcp server not found"}
+	} else if err != nil {
+		return nil, fmt.Errorf("lock mcp server: %w", err)
+	}
 	client, err := queries.LockAuthClient(ctx, repo.LockAuthClientParams{ID: clientID, OrganizationID: organizationID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, &AttachRefusedError{Code: AttachNotFound, Message: "auth client not found"}
