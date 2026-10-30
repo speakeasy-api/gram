@@ -68,10 +68,8 @@ func lockSource(ctx context.Context, tx pgx.Tx, organizationID, kind string, sou
 //     static_credential or pass_through client under the stable id, carrying
 //     all its credential headers as copies and offered by each live server on
 //     the source, unless an administrator detached it from that server.
-//   - A source without an Authorization header keeps a client the backfill
-//     already recorded for it, with its copies kept current; creating one
-//     depends on the organization's upstream OAuth and EMA clients, so it is
-//     left to the backfill.
+//   - A source without an Authorization header gets a standalone client only
+//     for servers whose direct route has no upstream OAuth or EMA owner.
 //   - Every other client derived from the source's headers is retired with its
 //     copies and backfilled links, as are backfilled links from servers no
 //     longer on the source.
@@ -109,21 +107,13 @@ func SyncTunneledSource(ctx context.Context, tx pgx.Tx, organizationID string, s
 // backend or been deleted still names its clients, so the copies of the source
 // it left are retired.
 //
-// It locks only the header copy rows it writes: no source, server, link or
-// upstream client row. Callers must still run it after their own writes to
-// those, which every caller does, so the copy rows are the last locks any
-// transaction takes and none of them can be waited on by a transaction
-// holding something this one needs.
-//
-// Consistency under a concurrent source or header write comes from the writes
-// themselves rather than from a lock. A copy added or updated repeats the
-// ownership rule it was decided from, so a change that invalidates the
-// decision makes the write affect no row instead of writing a credential the
-// configuration no longer yields. A copy retired is unconditional, so the
-// decision to stop sending a credential always lands and is never lost to a
-// race; one retired by a racing writer is restored by the next source write or
-// backfill run.
+// EMA copies lock their upstream registration and reload its live servers
+// before deciding source ownership. Conditional copy failures abort the caller
+// transaction rather than leaving partially synchronized credentials. Writers
+// changing reach acquire the complete project/source/server scope before their
+// first mutation, then registrations, typed clients, and links in that order.
 func SyncServerDerivedCopies(ctx context.Context, tx pgx.Tx, organizationID string, serverIDs ...uuid.UUID) error {
+	ctx = withAtomicHeaderSync(ctx)
 	if organizationID == "" {
 		return errors.New("sync server derived copies: no tenant scope")
 	}
@@ -133,6 +123,7 @@ func SyncServerDerivedCopies(ctx context.Context, tx pgx.Tx, organizationID stri
 }
 
 func syncSource(ctx context.Context, tx pgx.Tx, organizationID, kind string, sourceID uuid.UUID) error {
+	ctx = withAtomicHeaderSync(ctx)
 	if err := lockSource(ctx, tx, organizationID, kind, sourceID); err != nil {
 		return err
 	}
@@ -287,73 +278,35 @@ func retireClientCopies(ctx context.Context, tx pgx.Tx, q *Queries, opts Options
 // syncSourceClient decides the one client this source's credential headers
 // yield, and records it with its copies and server links.
 func syncSourceClient(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, row ListCredentialSourcesRow, report *Report, want *expected) error {
-	// With an Authorization header the decision does not depend on the
-	// organization's upstream OAuth or EMA clients, so the backfill's own
-	// derivation decides it with no EMA plan.
-	if row.AuthorizationHeaders == 1 {
-		return decideSource(ctx, tx, q, opts, row, report, want, nil)
-	}
-	// Without one, which servers get the client depends on their upstream
-	// OAuth and EMA clients, which this sync does not read. An existing client
-	// keeps its copies and links current; recording a new one waits for the
-	// backfill. Every other shape — several Authorization headers, names
-	// differing only in letter case, a header forwarded from a refused request
-	// header, or a mix of stored and forwarded values — yields no client here
-	// just as it yields none in the backfill.
-	if row.AuthorizationHeaders != 0 || row.HasDuplicateNames || refusesASource(row.ForwardedSources) {
-		return nil
-	}
-	clientType := TypePassThrough
-	switch {
-	case row.AllStatic:
-		clientType = TypeStaticCredential
-	case !row.AllForwarded:
-		return nil
-	}
-	id := SourceClientID(opts.OrganizationID, row.SourceKind, row.SourceID, clientType)
-	_, live, err := clientState(ctx, q, opts.OrganizationID, id, clientType)
-	if err != nil {
-		return err
-	}
-	if !live {
-		return nil
-	}
-	// With no live server left on the source, no client is recorded, so an
-	// earlier one is retired, exactly as the backfill decides it.
-	servers, err := sourceServers(ctx, q, opts.OrganizationID, row.SourceKind, row.SourceID)
-	if err != nil {
-		return err
-	}
-	if len(servers) == 0 {
-		return nil
-	}
-	want.clients[id] = true
-	noAnchor := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	_, raced, err := syncHeaders(ctx, tx, q, opts, report, KindHeader, id, true, noAnchor, noAnchor, row.SourceKind, row.HeaderIds)
-	if err != nil {
-		return err
-	}
-	if raced {
-		want.race(id)
-		return nil
-	}
-	// Which of the source's servers offer it depends on their upstream OAuth
-	// and EMA clients, so the backfill's choice among them stands. A server no
-	// longer on the source is not one of them, and keeping its link would go
-	// on sending the source's credential headers from it.
-	onSource := make(map[uuid.UUID]bool, len(servers))
-	for _, server := range servers {
-		onSource[server.id] = true
-	}
-	links, err := q.ListBackfillLinksOfClients(ctx, ListBackfillLinksOfClientsParams{OrganizationID: opts.OrganizationID, AuthClientIds: []uuid.UUID{id}})
-	if err != nil {
-		return fmt.Errorf("list links of auth client %s: %w", id, err)
-	}
-	for _, link := range links {
-		if !onSource[link.McpServerID] {
-			continue
+	plan := newEMAPlan()
+	if row.AuthorizationHeaders == 0 {
+		// Read ownership before deriving a standalone client, including ready
+		// bindings with no typed catalog entry. A conflicting scope set or
+		// refused issuer must not expose its secrets as a standalone option.
+		bindings, err := q.ListEMABackfillBindings(ctx, ListEMABackfillBindingsParams{
+			OrganizationID: opts.OrganizationID,
+			OnlyProjectID:  uuid.NullUUID{UUID: row.ProjectID, Valid: true},
+			OnlyBindingID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		})
+		if err != nil {
+			return fmt.Errorf("read source EMA ownership: %w", err)
 		}
-		want.links[linkKey{serverID: link.McpServerID, clientID: id}] = true
+		servers, err := reachedServers(ctx, q, opts.OrganizationID, bindings)
+		if err != nil {
+			return err
+		}
+		for _, server := range servers {
+			if server.direct {
+				plan.served[server.id], plan.direct[server.id] = true, true
+			}
+		}
+	}
+	before := report.Outcomes[OutcomeSkippedRace]
+	if err := decideSource(ctx, tx, q, opts, row, report, want, plan); err != nil {
+		return err
+	}
+	if report.Outcomes[OutcomeSkippedRace] > before {
+		return errors.New("source ownership changed concurrently; retry transaction")
 	}
 	return nil
 }

@@ -51,7 +51,8 @@ export interface MemberUsageRow {
 }
 
 // Usage rows keyed by the member's mcp_servers id, labeled from the gateway's
-// member list; the id fallback covers a member list that has not loaded yet.
+// member list, else the server name the usage carries; the id fallback covers
+// a member list that has not loaded yet.
 export function memberUsageRows(
   usage: MetaMcpMemberUsage[],
   members: MemberRow[],
@@ -69,7 +70,8 @@ export function memberUsageRows(
   }
   return usage.map((entry) => ({
     mcpServerId: entry.mcpServerId,
-    label: labels.get(entry.mcpServerId) ?? entry.mcpServerId,
+    label:
+      labels.get(entry.mcpServerId) ?? entry.mcpServerName ?? entry.mcpServerId,
     toolCalls: entry.toolCalls,
     errorCount: entry.errorCount,
     errorRate:

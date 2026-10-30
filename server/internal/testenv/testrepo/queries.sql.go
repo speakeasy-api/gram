@@ -146,6 +146,25 @@ func (q *Queries) ClearMCPServerRemoteSessionClientsFixture(ctx context.Context,
 	return err
 }
 
+const clearOrganizationFeatureSettingFixture = `-- name: ClearOrganizationFeatureSettingFixture :execrows
+DELETE FROM organization_features WHERE organization_id = $1 AND feature_name = $2
+`
+
+type ClearOrganizationFeatureSettingFixtureParams struct {
+	OrganizationID string
+	FeatureName    string
+}
+
+// Returns a feature setting to never configured, removing even the
+// soft-deleted row that records an explicit opt-in.
+func (q *Queries) ClearOrganizationFeatureSettingFixture(ctx context.Context, arg ClearOrganizationFeatureSettingFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearOrganizationFeatureSettingFixture, arg.OrganizationID, arg.FeatureName)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearPreparationFixtureState = `-- name: ClearPreparationFixtureState :exec
 UPDATE remote_session_ema_bindings SET state = NULL, grant_source = NULL
 WHERE id = $1 AND project_id = $2 AND organization_id = $3
@@ -363,15 +382,22 @@ func (q *Queries) CountDemoSeedAPIKeysFixture(ctx context.Context, organizationI
 }
 
 const countDemoSeedAgentGrantsFixture = `-- name: CountDemoSeedAgentGrantsFixture :one
-SELECT count(*) FROM principal_grants
+SELECT count(*) FILTER (WHERE scope = 'mcp:auth') AS auth_grants,
+       count(*) FILTER (WHERE scope <> 'mcp:auth') AS policy_grants
+FROM principal_grants
 WHERE organization_id = $1 AND principal_urn LIKE 'agent:%'
 `
 
-func (q *Queries) CountDemoSeedAgentGrantsFixture(ctx context.Context, organizationID string) (int64, error) {
+type CountDemoSeedAgentGrantsFixtureRow struct {
+	AuthGrants   int64
+	PolicyGrants int64
+}
+
+func (q *Queries) CountDemoSeedAgentGrantsFixture(ctx context.Context, organizationID string) (CountDemoSeedAgentGrantsFixtureRow, error) {
 	row := q.db.QueryRow(ctx, countDemoSeedAgentGrantsFixture, organizationID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+	var i CountDemoSeedAgentGrantsFixtureRow
+	err := row.Scan(&i.AuthGrants, &i.PolicyGrants)
+	return i, err
 }
 
 const countFunctionsAccess = `-- name: CountFunctionsAccess :one
@@ -3566,6 +3592,75 @@ func (q *Queries) ListDemoSeedAgentsFixture(ctx context.Context, organizationID 
 	for rows.Next() {
 		var i ListDemoSeedAgentsFixtureRow
 		if err := rows.Scan(&i.ID, &i.OwnerUserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDemoSeedAuthGrantsFixture = `-- name: ListDemoSeedAuthGrantsFixture :many
+SELECT g.principal_urn,
+       coalesce(a.name, '')::text AS agent_name,
+       coalesce(r.workos_slug, '')::text AS role_slug,
+       g.scope,
+       coalesce(ac.name, g.selectors->>'resource_id', '')::text AS auth_client,
+       coalesce(g.selectors->>'client_type', '')::text AS client_type,
+       coalesce(g.selectors->>'connection_owner', '')::text AS connection_owner,
+       coalesce(g.selectors->>'upstream_client', '')::text AS upstream_client,
+       coalesce(p.kind, '')::text AS provision_kind
+FROM principal_grants g
+LEFT JOIN agents a
+  ON a.organization_id = g.organization_id AND g.principal_urn = 'agent:' || a.id::text
+LEFT JOIN organization_roles r
+  ON r.organization_id = g.organization_id AND g.principal_urn = 'role:organization:' || r.id
+LEFT JOIN mcp_auth_clients ac
+  ON ac.organization_id = g.organization_id AND ac.id::text = g.selectors->>'resource_id'
+LEFT JOIN auth_permission_provisions p
+  ON p.organization_id = g.organization_id AND p.principal_urn = g.principal_urn
+ AND p.scope = g.scope AND p.selectors = g.selectors
+WHERE g.organization_id = $1
+  AND g.scope IN ('mcp:auth', 'mcp:blocked_auth')
+`
+
+type ListDemoSeedAuthGrantsFixtureRow struct {
+	PrincipalUrn    urn.Principal
+	AgentName       string
+	RoleSlug        string
+	Scope           string
+	AuthClient      string
+	ClientType      string
+	ConnectionOwner string
+	UpstreamClient  string
+	ProvisionKind   string
+}
+
+// Every mcp:auth and mcp:blocked_auth grant in the organization, with the
+// names that identify its principal and auth client across seed runs, and
+// the default auth permission ledger kind that provisioned it, if any.
+func (q *Queries) ListDemoSeedAuthGrantsFixture(ctx context.Context, organizationID string) ([]ListDemoSeedAuthGrantsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listDemoSeedAuthGrantsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDemoSeedAuthGrantsFixtureRow
+	for rows.Next() {
+		var i ListDemoSeedAuthGrantsFixtureRow
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.AgentName,
+			&i.RoleSlug,
+			&i.Scope,
+			&i.AuthClient,
+			&i.ClientType,
+			&i.ConnectionOwner,
+			&i.UpstreamClient,
+			&i.ProvisionKind,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

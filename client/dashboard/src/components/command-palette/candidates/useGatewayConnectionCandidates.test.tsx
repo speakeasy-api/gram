@@ -121,10 +121,11 @@ it("finds a cached registration and opens its canonical gateway with private mat
   );
   expect(result.current.map((candidate) => candidate.title)).toEqual([
     "Organization Gateway Connections",
+    "Organization Gateway Activity",
     "Example gateway",
     "Example desktop",
   ]);
-  const registration = result.current[2]!;
+  const registration = result.current[3]!;
   expect(registration.keywords).toContain("public-client");
   expect(isSendable(registration)).toBe(false);
   void registration.run("open");
@@ -133,6 +134,8 @@ it("finds a cached registration and opens its canonical gateway with private mat
   );
   void result.current[0]!.run("open");
   expect(state.navigate).toHaveBeenCalledWith("/org/gateway?tab=connections");
+  void result.current[1]!.run("open");
+  expect(state.navigate).toHaveBeenCalledWith("/org/gateway?tab=activity");
 });
 it("does not fetch or return cached resources while closed or unauthorized", () => {
   state.next = true;
@@ -183,6 +186,7 @@ it("keys both inventories by organization and project and offers org navigation 
   rerender({ inProject: false });
   expect(result.current.map((c) => c.title)).toEqual([
     "Organization Gateway Connections",
+    "Organization Gateway Activity",
   ]);
   expect(state.queryCalls.at(-1)?.enabled).toBe(false);
   expect(state.queryCalls.at(-1)?.queryKey).toEqual([

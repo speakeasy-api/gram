@@ -148,6 +148,8 @@ func TestBindDecidesOnlyWhatConfigurationDecides(t *testing.T) {
 	headers := f.server(undecided)
 	headerClient := f.authClient(headers, typeStaticCredential, uuid.Nil)
 	open := f.server(pgtype.Bool{Bool: false, Valid: true})
+	openWithHeaders := f.server(pgtype.Bool{Bool: false, Valid: true})
+	f.authClient(openWithHeaders, typeStaticCredential, uuid.Nil)
 	incomplete := f.server(pgtype.Bool{Bool: true, Valid: true})
 	several := f.server(undecided)
 	f.registration(several)
@@ -161,6 +163,8 @@ func TestBindDecidesOnlyWhatConfigurationDecides(t *testing.T) {
 		shared:   sharedClient,
 		headers:  headerClient,
 		open:     uuid.Nil,
+		// A server that needs no sign-in takes no credential even if one is linked.
+		openWithHeaders: uuid.Nil,
 	}, f.choices(binding.VersionID))
 	require.ElementsMatch(t, []Gap{
 		{MCPServerID: incomplete, Reason: GapSetupIncomplete},

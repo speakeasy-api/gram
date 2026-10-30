@@ -214,6 +214,9 @@ type Service struct {
 	// idJAGValidator authenticates enterprise identity grants, enforces replay
 	// protection, and resolves their subjects to provisioned Speakeasy users.
 	idJAGValidator *idjag.Validator
+
+	// idJAGTrust is the validator's trust lookup, reused by metadata.
+	idJAGTrust idjag.Store
 	// aiToolBlockReads are the database reads behind the Shadow AI gateway
 	// block check, held as values so a test can make one of them fail.
 	aiToolBlockReads  aiToolBlockReads
@@ -244,13 +247,19 @@ type Service struct {
 	platformFeatureChecker platformtools.FeatureChecker
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
-	// Short-lived, single-use install codes. Holds a live agent key, so it is
+	// Short-lived install codes. Holds a live agent key, so it is
 	// cache-only and never written to the database.
 	agentInstallCache cache.TypedCacheObject[agentInstallCode]
 	remoteLoginCache  cache.TypedCacheObject[remotesessions.RemoteLoginState]
 	// remoteLoginHopCache holds the single-use stops of the remote login
 	// browser hop onto a remote client's different callback host.
-	remoteLoginHopCache   cache.TypedCacheObject[remoteLoginHop]
+	remoteLoginHopCache cache.TypedCacheObject[remoteLoginHop]
+	// connectionRecoveryCache holds connection links and the logins they
+	// start.
+	connectionRecoveryCache cache.TypedCacheObject[connectionRecovery]
+	// browserSession authenticates a browser's Speakeasy session token; nil
+	// uses sessions.
+	browserSession        func(context.Context, string) (context.Context, error)
 	userSessionGrantCache cache.TypedCacheObject[UserSessionGrant]
 	// userSessionRefreshReplayCache retains the encrypted rotation outcome.
 	userSessionRefreshReplayCache cache.TypedCacheObject[userSessionRefreshReplay]
@@ -551,7 +560,11 @@ func NewService(
 	if err != nil {
 		return nil, fmt.Errorf("initialize hosted MCP kill-switch checkpoint: %w", err)
 	}
-	idJAGValidator, err := newIDJAGValidator(db, redisClient, guardianPolicy, meterProvider, logger)
+	idJAGTrust, err := idjag.NewPostgresStore(db)
+	if err != nil {
+		return nil, fmt.Errorf("initialize ID-JAG store: %w", err)
+	}
+	idJAGValidator, err := newIDJAGValidator(db, redisClient, guardianPolicy, meterProvider, logger, idJAGTrust)
 	if err != nil {
 		return nil, fmt.Errorf("initialize ID-JAG validator: %w", err)
 	}
@@ -619,6 +632,7 @@ func NewService(
 		clientAssertionVerifier:   newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),
 		workloadGrant:             newWorkloadGrant(db, redisClient, guardianPolicy, meterProvider, logger),
 		idJAGValidator:            idJAGValidator,
+		idJAGTrust:                idJAGTrust,
 		aiToolBlockReads:          defaultAIToolBlockReads(),
 		toolProxy: gateway.NewToolProxy(
 			logger,
@@ -660,8 +674,10 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		remoteLoginCache:    cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger.With(attr.SlogCacheNamespace("remote_login")), cacheImpl, cache.SuffixNone),
-		remoteLoginHopCache: cache.NewTypedObjectCache[remoteLoginHop](logger.With(attr.SlogCacheNamespace("remote_login_hop")), cacheImpl, cache.SuffixNone),
+		remoteLoginCache:        cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger.With(attr.SlogCacheNamespace("remote_login")), cacheImpl, cache.SuffixNone),
+		remoteLoginHopCache:     cache.NewTypedObjectCache[remoteLoginHop](logger.With(attr.SlogCacheNamespace("remote_login_hop")), cacheImpl, cache.SuffixNone),
+		connectionRecoveryCache: cache.NewTypedObjectCache[connectionRecovery](logger.With(attr.SlogCacheNamespace("connection_recovery")), cacheImpl, cache.SuffixNone),
+		browserSession:          nil,
 		userSessionGrantCache: cache.NewTypedObjectCache[UserSessionGrant](
 			logger.With(attr.SlogCacheNamespace("user_session_grant")),
 			cacheImpl,
@@ -738,23 +754,27 @@ func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverN
 		return ""
 	}
 
-	// Link to the platform host the request arrived on: session cookies are
-	// host-only, so a user on an extra platform host would otherwise land on
-	// the canonical host logged out.
-	dashboardURL := s.siteURL
-	if s.serverURL != nil {
-		if base := requestorigin.PlatformHostBaseURL(ctx, s.serverURL.String(), ""); base != "" {
-			if u, err := url.Parse(base); err == nil {
-				dashboardURL = u
-			}
-		}
-	}
-
-	return mcpaccess.RequestAccessURL(dashboardURL, authCtx.OrganizationSlug, mcpaccess.RequestAccessURLParams{
+	return mcpaccess.RequestAccessURL(s.platformBaseURL(ctx), authCtx.OrganizationSlug, mcpaccess.RequestAccessURLParams{
 		Scope:        "mcp:connect",
 		ResourceID:   serverID,
 		ResourceName: serverName,
 	})
+}
+
+// platformBaseURL is the dashboard origin to link a person to: the platform
+// host the request arrived on, since session cookies are host-only and a user
+// on an extra platform host would otherwise land on the canonical host logged
+// out.
+func (s *Service) platformBaseURL(ctx context.Context) *url.URL {
+	base := *s.siteURL
+	if s.serverURL != nil {
+		if platform := requestorigin.PlatformHostBaseURL(ctx, s.serverURL.String(), ""); platform != "" {
+			if u, err := url.Parse(platform); err == nil {
+				base = *u
+			}
+		}
+	}
+	return &base
 }
 
 // PublicServerRoute is the chi route pattern for the public MCP endpoint: the
@@ -846,6 +866,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.BrowserErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback/{clientID}", oops.BrowserErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.BrowserErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", connectionRecoveryRoute, oops.BrowserErrHandle(service.logger, service.HandleConnectionRecovery).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", connectionRecoveryDonePath, oops.BrowserErrHandle(service.logger, service.HandleConnectionRecoveryDone).ServeHTTP)
 	// Both stops of the remote login browser hop: the bind stop on a remote
 	// client's callback host, and the confirm stop on the IdP callback host.
 	o11y.AttachHandler(mux, "GET", remoteLoginBindPath, oops.BrowserErrHandle(service.logger, service.HandleRemoteLoginBind).ServeHTTP)
@@ -897,7 +919,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/remote_login_callback", oops.BrowserErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
 
 	attachSharedAuthorizationServers(mux, service)
-	attachOrganizationGateway(mux, service)
+	attachOrganizationGateway(mux, service, metadataService)
 }
 
 // HandleRemoteLoginCallback is the chi handler at
@@ -1035,8 +1057,12 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 		}
 	}
 
-	return oops.E(oops.CodeMethodNotAllowed, nil, "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.")
+	return oops.E(oops.CodeMethodNotAllowed, nil, getServerMethodNotAllowedMessage)
 }
+
+// getServerMethodNotAllowedMessage answers a GET that opens no standalone
+// Streamable HTTP stream.
+const getServerMethodNotAllowedMessage = "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication."
 
 // ServesInstallPage reports whether HandleGetServer answers r with the HTML
 // install page. HTML takes precedence over SSE there, so such a request can
@@ -2221,10 +2247,25 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 	// Strategy 4: Try Chat Sessions Token authentication
 	ctx, err = s.chatSessionsManager.Authorize(ctx, token)
 	if err == nil {
-		return s.identityValidator.StampChatSession(ctx), nil
+		return s.identityValidator.StampChatSession(ctx, chatSessionMinterUserID(ctx)), nil
 	}
 
 	return ctx, oops.E(oops.CodeUnauthorized, errors.New("failed to authorize token using any strategy"), "failed to authorize").LogWarn(ctx, s.logger, attr.SlogToolsetID(oauthResourceID.String()))
+}
+
+// chatSessionMinterUserID returns the dashboard user a chat-session token
+// was minted from, read from the auth context the chat-session validator
+// has just built from the token's verified claims. chatSessions.create copies
+// the user and dashboard session ids from a signed-in dashboard session; a
+// key-minted token carries the key id instead and, for a legacy key, its
+// creator's user id, which names the key's owner rather than who minted the
+// session. The embedder-supplied external user id is never consulted.
+func chatSessionMinterUserID(ctx context.Context) string {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.APIKeyID != "" || authCtx.SessionID == nil || *authCtx.SessionID == "" {
+		return ""
+	}
+	return authCtx.UserID
 }
 
 // HandleToolsList executes tools/list RPC for internal clients (e.g., agent workflows).

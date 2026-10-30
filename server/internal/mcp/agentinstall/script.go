@@ -1,4 +1,4 @@
-// Package agentinstall renders the single-use shell script behind an agent's
+// Package agentinstall renders the shell script behind an agent's
 // install command. The script connects the MCP clients it finds on a machine
 // to the agent's gateway and, for OpenClaw, also installs the Speakeasy
 // observability plugin so the agent's sessions are recorded under its name.
@@ -183,7 +183,7 @@ const scriptHeader = `#!/bin/sh
 # Connects this machine's MCP clients to a Speakeasy agent gateway. On
 # OpenClaw it also installs Speakeasy observability hooks, so the agent's
 # sessions are recorded under its name.
-# Generated for one use. The key below is live: treat this file as a secret.
+# Generated for this agent. The key below is live: treat this file as a secret.
 #
 # Every step is a function and the last line runs them, so a download cut
 # short defines a few functions and runs nothing.
@@ -395,8 +395,7 @@ check_openclaw_hooks() {
   case "$reason" in
     *"permission denied"* | *[Ff]orbidden* | *"HTTP 403"*)
       echo "This agent's key may not send hooks yet. It needs org:hooks_ingest on the"
-      echo "agent's project, and project:read. Ask an admin to grant both, then run a"
-      echo "new install command."
+      echo "agent's project. Ask an admin to grant it, then run a new install command."
       ;;
     *"unauthorized"* | *"HTTP 401"*)
       echo "Speakeasy did not accept this agent's key. It may be revoked or expired:"

@@ -73,6 +73,34 @@ type DetachAuthClientFromMcpServerRequestBody struct {
 	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
 }
 
+// SetIssuanceProfileRequestBody is the type of the "authClients" service
+// "setIssuanceProfile" endpoint HTTP request body.
+type SetIssuanceProfileRequestBody struct {
+	// The sign-in.
+	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	// The OAuth client, for a client's profile.
+	UserSessionClientID *string `form:"user_session_client_id,omitempty" json:"user_session_client_id,omitempty" xml:"user_session_client_id,omitempty"`
+	// The workload issuer, for a workload's profile.
+	WorkloadIssuerID *string `form:"workload_issuer_id,omitempty" json:"workload_issuer_id,omitempty" xml:"workload_issuer_id,omitempty"`
+	// The workload subject, for a workload's profile.
+	WorkloadSubject *string `form:"workload_subject,omitempty" json:"workload_subject,omitempty" xml:"workload_subject,omitempty"`
+	// The profile's name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Every choice the profile should hold. With mcp_server_id, the choice for
+	// that server alone, or none to remove it.
+	Choices []*IssuanceProfileChoiceRequestBody `form:"choices" json:"choices" xml:"choices"`
+	// Limits the write to this MCP server: the profile's choices for other servers
+	// are kept as they are.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+}
+
+// DeleteIssuanceProfileRequestBody is the type of the "authClients" service
+// "deleteIssuanceProfile" endpoint HTTP request body.
+type DeleteIssuanceProfileRequestBody struct {
+	// The profile id.
+	ID string `form:"id" json:"id" xml:"id"`
+}
+
 // SetMcpServerUpstreamAuthRequirementRequestBody is the type of the
 // "authClients" service "setMcpServerUpstreamAuthRequirement" endpoint HTTP
 // request body.
@@ -326,6 +354,42 @@ type DetachAuthClientFromMcpServerResponseBody struct {
 	// When the client was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the client was last updated.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesResponseBody is the type of the "authClients"
+// service "listMcpServerAuthClientChoices" endpoint HTTP response body.
+type ListMcpServerAuthClientChoicesResponseBody struct {
+	// Whether the upstream needs authentication. Omitted while undecided.
+	RequiresUpstreamAuth *bool `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
+	// The enabled shared credentials the server offers.
+	Choices []*AuthClientChoiceResponseBody `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
+}
+
+// ListIssuanceProfilesResponseBody is the type of the "authClients" service
+// "listIssuanceProfiles" endpoint HTTP response body.
+type ListIssuanceProfilesResponseBody struct {
+	Items []*IssuanceProfileResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
+}
+
+// SetIssuanceProfileResponseBody is the type of the "authClients" service
+// "setIssuanceProfile" endpoint HTTP response body.
+type SetIssuanceProfileResponseBody struct {
+	// The profile id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The profile's name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The sign-in the caller's sessions come from.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The OAuth client the profile applies to, for a client.
+	UserSessionClientID *string `form:"user_session_client_id,omitempty" json:"user_session_client_id,omitempty" xml:"user_session_client_id,omitempty"`
+	// The workload issuer, for a workload subject.
+	WorkloadIssuerID *string `form:"workload_issuer_id,omitempty" json:"workload_issuer_id,omitempty" xml:"workload_issuer_id,omitempty"`
+	// The workload subject, for a workload.
+	WorkloadSubject *string `form:"workload_subject,omitempty" json:"workload_subject,omitempty" xml:"workload_subject,omitempty"`
+	// The credential for each MCP server.
+	Choices []*IssuanceProfileChoiceResponseBody `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
+	// When the profile last changed.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
@@ -1719,6 +1783,766 @@ type DetachAuthClientFromMcpServerGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListMcpServerAuthClientChoicesUnauthorizedResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListMcpServerAuthClientChoicesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesForbiddenResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "forbidden" error.
+type ListMcpServerAuthClientChoicesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesBadRequestResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "bad_request" error.
+type ListMcpServerAuthClientChoicesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesNotFoundResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "not_found" error.
+type ListMcpServerAuthClientChoicesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesConflictResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "conflict" error.
+type ListMcpServerAuthClientChoicesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesUnsupportedMediaResponseBody is the type of
+// the "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListMcpServerAuthClientChoicesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesInvalidResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "invalid" error.
+type ListMcpServerAuthClientChoicesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesInvariantViolationResponseBody is the type of
+// the "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListMcpServerAuthClientChoicesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesUnexpectedResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "unexpected" error.
+type ListMcpServerAuthClientChoicesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesGatewayErrorResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListMcpServerAuthClientChoicesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListIssuanceProfilesUnauthorizedResponseBody is the type of the
+// "authClients" service "listIssuanceProfiles" endpoint HTTP response body for
+// the "unauthorized" error.
+type ListIssuanceProfilesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListIssuanceProfilesForbiddenResponseBody is the type of the "authClients"
+// service "listIssuanceProfiles" endpoint HTTP response body for the
+// "forbidden" error.
+type ListIssuanceProfilesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListIssuanceProfilesBadRequestResponseBody is the type of the "authClients"
+// service "listIssuanceProfiles" endpoint HTTP response body for the
+// "bad_request" error.
+type ListIssuanceProfilesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListIssuanceProfilesNotFoundResponseBody is the type of the "authClients"
+// service "listIssuanceProfiles" endpoint HTTP response body for the
+// "not_found" error.
+type ListIssuanceProfilesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListIssuanceProfilesConflictResponseBody is the type of the "authClients"
+// service "listIssuanceProfiles" endpoint HTTP response body for the
+// "conflict" error.
+type ListIssuanceProfilesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListIssuanceProfilesUnsupportedMediaResponseBody is the type of the
+// "authClients" service "listIssuanceProfiles" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListIssuanceProfilesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListIssuanceProfilesInvalidResponseBody is the type of the "authClients"
+// service "listIssuanceProfiles" endpoint HTTP response body for the "invalid"
+// error.
+type ListIssuanceProfilesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListIssuanceProfilesInvariantViolationResponseBody is the type of the
+// "authClients" service "listIssuanceProfiles" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListIssuanceProfilesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListIssuanceProfilesUnexpectedResponseBody is the type of the "authClients"
+// service "listIssuanceProfiles" endpoint HTTP response body for the
+// "unexpected" error.
+type ListIssuanceProfilesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListIssuanceProfilesGatewayErrorResponseBody is the type of the
+// "authClients" service "listIssuanceProfiles" endpoint HTTP response body for
+// the "gateway_error" error.
+type ListIssuanceProfilesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetIssuanceProfileUnauthorizedResponseBody is the type of the "authClients"
+// service "setIssuanceProfile" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetIssuanceProfileUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetIssuanceProfileForbiddenResponseBody is the type of the "authClients"
+// service "setIssuanceProfile" endpoint HTTP response body for the "forbidden"
+// error.
+type SetIssuanceProfileForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetIssuanceProfileBadRequestResponseBody is the type of the "authClients"
+// service "setIssuanceProfile" endpoint HTTP response body for the
+// "bad_request" error.
+type SetIssuanceProfileBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetIssuanceProfileNotFoundResponseBody is the type of the "authClients"
+// service "setIssuanceProfile" endpoint HTTP response body for the "not_found"
+// error.
+type SetIssuanceProfileNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetIssuanceProfileConflictResponseBody is the type of the "authClients"
+// service "setIssuanceProfile" endpoint HTTP response body for the "conflict"
+// error.
+type SetIssuanceProfileConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetIssuanceProfileUnsupportedMediaResponseBody is the type of the
+// "authClients" service "setIssuanceProfile" endpoint HTTP response body for
+// the "unsupported_media" error.
+type SetIssuanceProfileUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetIssuanceProfileInvalidResponseBody is the type of the "authClients"
+// service "setIssuanceProfile" endpoint HTTP response body for the "invalid"
+// error.
+type SetIssuanceProfileInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetIssuanceProfileInvariantViolationResponseBody is the type of the
+// "authClients" service "setIssuanceProfile" endpoint HTTP response body for
+// the "invariant_violation" error.
+type SetIssuanceProfileInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetIssuanceProfileUnexpectedResponseBody is the type of the "authClients"
+// service "setIssuanceProfile" endpoint HTTP response body for the
+// "unexpected" error.
+type SetIssuanceProfileUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetIssuanceProfileGatewayErrorResponseBody is the type of the "authClients"
+// service "setIssuanceProfile" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetIssuanceProfileGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuanceProfileUnauthorizedResponseBody is the type of the
+// "authClients" service "deleteIssuanceProfile" endpoint HTTP response body
+// for the "unauthorized" error.
+type DeleteIssuanceProfileUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuanceProfileForbiddenResponseBody is the type of the "authClients"
+// service "deleteIssuanceProfile" endpoint HTTP response body for the
+// "forbidden" error.
+type DeleteIssuanceProfileForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuanceProfileBadRequestResponseBody is the type of the "authClients"
+// service "deleteIssuanceProfile" endpoint HTTP response body for the
+// "bad_request" error.
+type DeleteIssuanceProfileBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuanceProfileNotFoundResponseBody is the type of the "authClients"
+// service "deleteIssuanceProfile" endpoint HTTP response body for the
+// "not_found" error.
+type DeleteIssuanceProfileNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuanceProfileConflictResponseBody is the type of the "authClients"
+// service "deleteIssuanceProfile" endpoint HTTP response body for the
+// "conflict" error.
+type DeleteIssuanceProfileConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuanceProfileUnsupportedMediaResponseBody is the type of the
+// "authClients" service "deleteIssuanceProfile" endpoint HTTP response body
+// for the "unsupported_media" error.
+type DeleteIssuanceProfileUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuanceProfileInvalidResponseBody is the type of the "authClients"
+// service "deleteIssuanceProfile" endpoint HTTP response body for the
+// "invalid" error.
+type DeleteIssuanceProfileInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuanceProfileInvariantViolationResponseBody is the type of the
+// "authClients" service "deleteIssuanceProfile" endpoint HTTP response body
+// for the "invariant_violation" error.
+type DeleteIssuanceProfileInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuanceProfileUnexpectedResponseBody is the type of the "authClients"
+// service "deleteIssuanceProfile" endpoint HTTP response body for the
+// "unexpected" error.
+type DeleteIssuanceProfileUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteIssuanceProfileGatewayErrorResponseBody is the type of the
+// "authClients" service "deleteIssuanceProfile" endpoint HTTP response body
+// for the "gateway_error" error.
+type DeleteIssuanceProfileGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetMcpServerAuthenticationUnauthorizedResponseBody is the type of the
 // "authClients" service "getMcpServerAuthentication" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -2565,6 +3389,54 @@ type AuthClientHeaderInputRequestBody struct {
 	ValueFromRequestHeader *string `form:"value_from_request_header,omitempty" json:"value_from_request_header,omitempty" xml:"value_from_request_header,omitempty"`
 }
 
+// AuthClientChoiceResponseBody is used to define fields on response body types.
+type AuthClientChoiceResponseBody struct {
+	// The auth client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The client's name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// How the client authenticates upstream. Only shared types are offered.
+	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
+}
+
+// IssuanceProfileResponseBody is used to define fields on response body types.
+type IssuanceProfileResponseBody struct {
+	// The profile id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The profile's name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The sign-in the caller's sessions come from.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The OAuth client the profile applies to, for a client.
+	UserSessionClientID *string `form:"user_session_client_id,omitempty" json:"user_session_client_id,omitempty" xml:"user_session_client_id,omitempty"`
+	// The workload issuer, for a workload subject.
+	WorkloadIssuerID *string `form:"workload_issuer_id,omitempty" json:"workload_issuer_id,omitempty" xml:"workload_issuer_id,omitempty"`
+	// The workload subject, for a workload.
+	WorkloadSubject *string `form:"workload_subject,omitempty" json:"workload_subject,omitempty" xml:"workload_subject,omitempty"`
+	// The credential for each MCP server.
+	Choices []*IssuanceProfileChoiceResponseBody `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
+	// When the profile last changed.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// IssuanceProfileChoiceResponseBody is used to define fields on response body
+// types.
+type IssuanceProfileChoiceResponseBody struct {
+	// The MCP server.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The auth client. Omit for a server whose upstream needs no authentication.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+}
+
+// IssuanceProfileChoiceRequestBody is used to define fields on request body
+// types.
+type IssuanceProfileChoiceRequestBody struct {
+	// The MCP server.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The auth client. Omit for a server whose upstream needs no authentication.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+}
+
 // AuthClientAudienceEntryResponseBody is used to define fields on response
 // body types.
 type AuthClientAudienceEntryResponseBody struct {
@@ -2672,6 +3544,41 @@ func NewDetachAuthClientFromMcpServerRequestBody(p *authclients.DetachAuthClient
 	body := &DetachAuthClientFromMcpServerRequestBody{
 		ID:          p.ID,
 		McpServerID: p.McpServerID,
+	}
+	return body
+}
+
+// NewSetIssuanceProfileRequestBody builds the HTTP request body from the
+// payload of the "setIssuanceProfile" endpoint of the "authClients" service.
+func NewSetIssuanceProfileRequestBody(p *authclients.SetIssuanceProfilePayload) *SetIssuanceProfileRequestBody {
+	body := &SetIssuanceProfileRequestBody{
+		UserSessionIssuerID: p.UserSessionIssuerID,
+		UserSessionClientID: p.UserSessionClientID,
+		WorkloadIssuerID:    p.WorkloadIssuerID,
+		WorkloadSubject:     p.WorkloadSubject,
+		Name:                p.Name,
+		McpServerID:         p.McpServerID,
+	}
+	if p.Choices != nil {
+		body.Choices = make([]*IssuanceProfileChoiceRequestBody, len(p.Choices))
+		for i, val := range p.Choices {
+			if val == nil {
+				body.Choices[i] = nil
+				continue
+			}
+			body.Choices[i] = marshalTypesIssuanceProfileChoiceToIssuanceProfileChoiceRequestBody(val)
+		}
+	} else {
+		body.Choices = []*IssuanceProfileChoiceRequestBody{}
+	}
+	return body
+}
+
+// NewDeleteIssuanceProfileRequestBody builds the HTTP request body from the
+// payload of the "deleteIssuanceProfile" endpoint of the "authClients" service.
+func NewDeleteIssuanceProfileRequestBody(p *authclients.DeleteIssuanceProfilePayload) *DeleteIssuanceProfileRequestBody {
+	body := &DeleteIssuanceProfileRequestBody{
+		ID: p.ID,
 	}
 	return body
 }
@@ -3987,6 +4894,664 @@ func NewDetachAuthClientFromMcpServerGatewayError(body *DetachAuthClientFromMcpS
 	return v
 }
 
+// NewListMcpServerAuthClientChoicesResultOK builds a "authClients" service
+// "listMcpServerAuthClientChoices" endpoint result from a HTTP "OK" response.
+func NewListMcpServerAuthClientChoicesResultOK(body *ListMcpServerAuthClientChoicesResponseBody) *authclients.ListMcpServerAuthClientChoicesResult {
+	v := &authclients.ListMcpServerAuthClientChoicesResult{
+		RequiresUpstreamAuth: body.RequiresUpstreamAuth,
+	}
+	v.Choices = make([]*types.AuthClientChoice, len(body.Choices))
+	for i, val := range body.Choices {
+		if val == nil {
+			v.Choices[i] = nil
+			continue
+		}
+		v.Choices[i] = unmarshalAuthClientChoiceResponseBodyToTypesAuthClientChoice(val)
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesUnauthorized builds a authClients service
+// listMcpServerAuthClientChoices endpoint unauthorized error.
+func NewListMcpServerAuthClientChoicesUnauthorized(body *ListMcpServerAuthClientChoicesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesForbidden builds a authClients service
+// listMcpServerAuthClientChoices endpoint forbidden error.
+func NewListMcpServerAuthClientChoicesForbidden(body *ListMcpServerAuthClientChoicesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesBadRequest builds a authClients service
+// listMcpServerAuthClientChoices endpoint bad_request error.
+func NewListMcpServerAuthClientChoicesBadRequest(body *ListMcpServerAuthClientChoicesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesNotFound builds a authClients service
+// listMcpServerAuthClientChoices endpoint not_found error.
+func NewListMcpServerAuthClientChoicesNotFound(body *ListMcpServerAuthClientChoicesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesConflict builds a authClients service
+// listMcpServerAuthClientChoices endpoint conflict error.
+func NewListMcpServerAuthClientChoicesConflict(body *ListMcpServerAuthClientChoicesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesUnsupportedMedia builds a authClients
+// service listMcpServerAuthClientChoices endpoint unsupported_media error.
+func NewListMcpServerAuthClientChoicesUnsupportedMedia(body *ListMcpServerAuthClientChoicesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesInvalid builds a authClients service
+// listMcpServerAuthClientChoices endpoint invalid error.
+func NewListMcpServerAuthClientChoicesInvalid(body *ListMcpServerAuthClientChoicesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesInvariantViolation builds a authClients
+// service listMcpServerAuthClientChoices endpoint invariant_violation error.
+func NewListMcpServerAuthClientChoicesInvariantViolation(body *ListMcpServerAuthClientChoicesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesUnexpected builds a authClients service
+// listMcpServerAuthClientChoices endpoint unexpected error.
+func NewListMcpServerAuthClientChoicesUnexpected(body *ListMcpServerAuthClientChoicesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesGatewayError builds a authClients service
+// listMcpServerAuthClientChoices endpoint gateway_error error.
+func NewListMcpServerAuthClientChoicesGatewayError(body *ListMcpServerAuthClientChoicesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListIssuanceProfilesResultOK builds a "authClients" service
+// "listIssuanceProfiles" endpoint result from a HTTP "OK" response.
+func NewListIssuanceProfilesResultOK(body *ListIssuanceProfilesResponseBody) *authclients.ListIssuanceProfilesResult {
+	v := &authclients.ListIssuanceProfilesResult{}
+	v.Items = make([]*types.IssuanceProfile, len(body.Items))
+	for i, val := range body.Items {
+		if val == nil {
+			v.Items[i] = nil
+			continue
+		}
+		v.Items[i] = unmarshalIssuanceProfileResponseBodyToTypesIssuanceProfile(val)
+	}
+
+	return v
+}
+
+// NewListIssuanceProfilesUnauthorized builds a authClients service
+// listIssuanceProfiles endpoint unauthorized error.
+func NewListIssuanceProfilesUnauthorized(body *ListIssuanceProfilesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListIssuanceProfilesForbidden builds a authClients service
+// listIssuanceProfiles endpoint forbidden error.
+func NewListIssuanceProfilesForbidden(body *ListIssuanceProfilesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListIssuanceProfilesBadRequest builds a authClients service
+// listIssuanceProfiles endpoint bad_request error.
+func NewListIssuanceProfilesBadRequest(body *ListIssuanceProfilesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListIssuanceProfilesNotFound builds a authClients service
+// listIssuanceProfiles endpoint not_found error.
+func NewListIssuanceProfilesNotFound(body *ListIssuanceProfilesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListIssuanceProfilesConflict builds a authClients service
+// listIssuanceProfiles endpoint conflict error.
+func NewListIssuanceProfilesConflict(body *ListIssuanceProfilesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListIssuanceProfilesUnsupportedMedia builds a authClients service
+// listIssuanceProfiles endpoint unsupported_media error.
+func NewListIssuanceProfilesUnsupportedMedia(body *ListIssuanceProfilesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListIssuanceProfilesInvalid builds a authClients service
+// listIssuanceProfiles endpoint invalid error.
+func NewListIssuanceProfilesInvalid(body *ListIssuanceProfilesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListIssuanceProfilesInvariantViolation builds a authClients service
+// listIssuanceProfiles endpoint invariant_violation error.
+func NewListIssuanceProfilesInvariantViolation(body *ListIssuanceProfilesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListIssuanceProfilesUnexpected builds a authClients service
+// listIssuanceProfiles endpoint unexpected error.
+func NewListIssuanceProfilesUnexpected(body *ListIssuanceProfilesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListIssuanceProfilesGatewayError builds a authClients service
+// listIssuanceProfiles endpoint gateway_error error.
+func NewListIssuanceProfilesGatewayError(body *ListIssuanceProfilesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetIssuanceProfileIssuanceProfileOK builds a "authClients" service
+// "setIssuanceProfile" endpoint result from a HTTP "OK" response.
+func NewSetIssuanceProfileIssuanceProfileOK(body *SetIssuanceProfileResponseBody) *types.IssuanceProfile {
+	v := &types.IssuanceProfile{
+		ID:                  *body.ID,
+		Name:                *body.Name,
+		UserSessionIssuerID: *body.UserSessionIssuerID,
+		UserSessionClientID: body.UserSessionClientID,
+		WorkloadIssuerID:    body.WorkloadIssuerID,
+		WorkloadSubject:     body.WorkloadSubject,
+		UpdatedAt:           *body.UpdatedAt,
+	}
+	v.Choices = make([]*types.IssuanceProfileChoice, len(body.Choices))
+	for i, val := range body.Choices {
+		if val == nil {
+			v.Choices[i] = nil
+			continue
+		}
+		v.Choices[i] = unmarshalIssuanceProfileChoiceResponseBodyToTypesIssuanceProfileChoice(val)
+	}
+
+	return v
+}
+
+// NewSetIssuanceProfileUnauthorized builds a authClients service
+// setIssuanceProfile endpoint unauthorized error.
+func NewSetIssuanceProfileUnauthorized(body *SetIssuanceProfileUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetIssuanceProfileForbidden builds a authClients service
+// setIssuanceProfile endpoint forbidden error.
+func NewSetIssuanceProfileForbidden(body *SetIssuanceProfileForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetIssuanceProfileBadRequest builds a authClients service
+// setIssuanceProfile endpoint bad_request error.
+func NewSetIssuanceProfileBadRequest(body *SetIssuanceProfileBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetIssuanceProfileNotFound builds a authClients service
+// setIssuanceProfile endpoint not_found error.
+func NewSetIssuanceProfileNotFound(body *SetIssuanceProfileNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetIssuanceProfileConflict builds a authClients service
+// setIssuanceProfile endpoint conflict error.
+func NewSetIssuanceProfileConflict(body *SetIssuanceProfileConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetIssuanceProfileUnsupportedMedia builds a authClients service
+// setIssuanceProfile endpoint unsupported_media error.
+func NewSetIssuanceProfileUnsupportedMedia(body *SetIssuanceProfileUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetIssuanceProfileInvalid builds a authClients service setIssuanceProfile
+// endpoint invalid error.
+func NewSetIssuanceProfileInvalid(body *SetIssuanceProfileInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetIssuanceProfileInvariantViolation builds a authClients service
+// setIssuanceProfile endpoint invariant_violation error.
+func NewSetIssuanceProfileInvariantViolation(body *SetIssuanceProfileInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetIssuanceProfileUnexpected builds a authClients service
+// setIssuanceProfile endpoint unexpected error.
+func NewSetIssuanceProfileUnexpected(body *SetIssuanceProfileUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetIssuanceProfileGatewayError builds a authClients service
+// setIssuanceProfile endpoint gateway_error error.
+func NewSetIssuanceProfileGatewayError(body *SetIssuanceProfileGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuanceProfileUnauthorized builds a authClients service
+// deleteIssuanceProfile endpoint unauthorized error.
+func NewDeleteIssuanceProfileUnauthorized(body *DeleteIssuanceProfileUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuanceProfileForbidden builds a authClients service
+// deleteIssuanceProfile endpoint forbidden error.
+func NewDeleteIssuanceProfileForbidden(body *DeleteIssuanceProfileForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuanceProfileBadRequest builds a authClients service
+// deleteIssuanceProfile endpoint bad_request error.
+func NewDeleteIssuanceProfileBadRequest(body *DeleteIssuanceProfileBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuanceProfileNotFound builds a authClients service
+// deleteIssuanceProfile endpoint not_found error.
+func NewDeleteIssuanceProfileNotFound(body *DeleteIssuanceProfileNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuanceProfileConflict builds a authClients service
+// deleteIssuanceProfile endpoint conflict error.
+func NewDeleteIssuanceProfileConflict(body *DeleteIssuanceProfileConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuanceProfileUnsupportedMedia builds a authClients service
+// deleteIssuanceProfile endpoint unsupported_media error.
+func NewDeleteIssuanceProfileUnsupportedMedia(body *DeleteIssuanceProfileUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuanceProfileInvalid builds a authClients service
+// deleteIssuanceProfile endpoint invalid error.
+func NewDeleteIssuanceProfileInvalid(body *DeleteIssuanceProfileInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuanceProfileInvariantViolation builds a authClients service
+// deleteIssuanceProfile endpoint invariant_violation error.
+func NewDeleteIssuanceProfileInvariantViolation(body *DeleteIssuanceProfileInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuanceProfileUnexpected builds a authClients service
+// deleteIssuanceProfile endpoint unexpected error.
+func NewDeleteIssuanceProfileUnexpected(body *DeleteIssuanceProfileUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteIssuanceProfileGatewayError builds a authClients service
+// deleteIssuanceProfile endpoint gateway_error error.
+func NewDeleteIssuanceProfileGatewayError(body *DeleteIssuanceProfileGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetMcpServerAuthenticationMcpServerAuthenticationOK builds a
 // "authClients" service "getMcpServerAuthentication" endpoint result from a
 // HTTP "OK" response.
@@ -5139,6 +6704,81 @@ func ValidateDetachAuthClientFromMcpServerResponseBody(body *DetachAuthClientFro
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesResponseBody runs the validations
+// defined on ListMcpServerAuthClientChoicesResponseBody
+func ValidateListMcpServerAuthClientChoicesResponseBody(body *ListMcpServerAuthClientChoicesResponseBody) (err error) {
+	if body.Choices == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("choices", "body"))
+	}
+	for _, e := range body.Choices {
+		if e != nil {
+			if err2 := ValidateAuthClientChoiceResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateListIssuanceProfilesResponseBody runs the validations defined on
+// ListIssuanceProfilesResponseBody
+func ValidateListIssuanceProfilesResponseBody(body *ListIssuanceProfilesResponseBody) (err error) {
+	if body.Items == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
+	}
+	for _, e := range body.Items {
+		if e != nil {
+			if err2 := ValidateIssuanceProfileResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateSetIssuanceProfileResponseBody runs the validations defined on
+// SetIssuanceProfileResponseBody
+func ValidateSetIssuanceProfileResponseBody(body *SetIssuanceProfileResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.Choices == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("choices", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.UserSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_client_id", *body.UserSessionClientID, goa.FormatUUID))
+	}
+	if body.WorkloadIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.workload_issuer_id", *body.WorkloadIssuerID, goa.FormatUUID))
+	}
+	for _, e := range body.Choices {
+		if e != nil {
+			if err2 := ValidateIssuanceProfileChoiceResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
@@ -6968,6 +8608,973 @@ func ValidateDetachAuthClientFromMcpServerGatewayErrorResponseBody(body *DetachA
 	return
 }
 
+// ValidateListMcpServerAuthClientChoicesUnauthorizedResponseBody runs the
+// validations defined on
+// listMcpServerAuthClientChoices_unauthorized_response_body
+func ValidateListMcpServerAuthClientChoicesUnauthorizedResponseBody(body *ListMcpServerAuthClientChoicesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesForbiddenResponseBody runs the
+// validations defined on listMcpServerAuthClientChoices_forbidden_response_body
+func ValidateListMcpServerAuthClientChoicesForbiddenResponseBody(body *ListMcpServerAuthClientChoicesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesBadRequestResponseBody runs the
+// validations defined on
+// listMcpServerAuthClientChoices_bad_request_response_body
+func ValidateListMcpServerAuthClientChoicesBadRequestResponseBody(body *ListMcpServerAuthClientChoicesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesNotFoundResponseBody runs the
+// validations defined on listMcpServerAuthClientChoices_not_found_response_body
+func ValidateListMcpServerAuthClientChoicesNotFoundResponseBody(body *ListMcpServerAuthClientChoicesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesConflictResponseBody runs the
+// validations defined on listMcpServerAuthClientChoices_conflict_response_body
+func ValidateListMcpServerAuthClientChoicesConflictResponseBody(body *ListMcpServerAuthClientChoicesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesUnsupportedMediaResponseBody runs the
+// validations defined on
+// listMcpServerAuthClientChoices_unsupported_media_response_body
+func ValidateListMcpServerAuthClientChoicesUnsupportedMediaResponseBody(body *ListMcpServerAuthClientChoicesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesInvalidResponseBody runs the
+// validations defined on listMcpServerAuthClientChoices_invalid_response_body
+func ValidateListMcpServerAuthClientChoicesInvalidResponseBody(body *ListMcpServerAuthClientChoicesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesInvariantViolationResponseBody runs
+// the validations defined on
+// listMcpServerAuthClientChoices_invariant_violation_response_body
+func ValidateListMcpServerAuthClientChoicesInvariantViolationResponseBody(body *ListMcpServerAuthClientChoicesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesUnexpectedResponseBody runs the
+// validations defined on
+// listMcpServerAuthClientChoices_unexpected_response_body
+func ValidateListMcpServerAuthClientChoicesUnexpectedResponseBody(body *ListMcpServerAuthClientChoicesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesGatewayErrorResponseBody runs the
+// validations defined on
+// listMcpServerAuthClientChoices_gateway_error_response_body
+func ValidateListMcpServerAuthClientChoicesGatewayErrorResponseBody(body *ListMcpServerAuthClientChoicesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuanceProfilesUnauthorizedResponseBody runs the validations
+// defined on listIssuanceProfiles_unauthorized_response_body
+func ValidateListIssuanceProfilesUnauthorizedResponseBody(body *ListIssuanceProfilesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuanceProfilesForbiddenResponseBody runs the validations
+// defined on listIssuanceProfiles_forbidden_response_body
+func ValidateListIssuanceProfilesForbiddenResponseBody(body *ListIssuanceProfilesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuanceProfilesBadRequestResponseBody runs the validations
+// defined on listIssuanceProfiles_bad_request_response_body
+func ValidateListIssuanceProfilesBadRequestResponseBody(body *ListIssuanceProfilesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuanceProfilesNotFoundResponseBody runs the validations
+// defined on listIssuanceProfiles_not_found_response_body
+func ValidateListIssuanceProfilesNotFoundResponseBody(body *ListIssuanceProfilesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuanceProfilesConflictResponseBody runs the validations
+// defined on listIssuanceProfiles_conflict_response_body
+func ValidateListIssuanceProfilesConflictResponseBody(body *ListIssuanceProfilesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuanceProfilesUnsupportedMediaResponseBody runs the
+// validations defined on listIssuanceProfiles_unsupported_media_response_body
+func ValidateListIssuanceProfilesUnsupportedMediaResponseBody(body *ListIssuanceProfilesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuanceProfilesInvalidResponseBody runs the validations defined
+// on listIssuanceProfiles_invalid_response_body
+func ValidateListIssuanceProfilesInvalidResponseBody(body *ListIssuanceProfilesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuanceProfilesInvariantViolationResponseBody runs the
+// validations defined on listIssuanceProfiles_invariant_violation_response_body
+func ValidateListIssuanceProfilesInvariantViolationResponseBody(body *ListIssuanceProfilesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuanceProfilesUnexpectedResponseBody runs the validations
+// defined on listIssuanceProfiles_unexpected_response_body
+func ValidateListIssuanceProfilesUnexpectedResponseBody(body *ListIssuanceProfilesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListIssuanceProfilesGatewayErrorResponseBody runs the validations
+// defined on listIssuanceProfiles_gateway_error_response_body
+func ValidateListIssuanceProfilesGatewayErrorResponseBody(body *ListIssuanceProfilesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetIssuanceProfileUnauthorizedResponseBody runs the validations
+// defined on setIssuanceProfile_unauthorized_response_body
+func ValidateSetIssuanceProfileUnauthorizedResponseBody(body *SetIssuanceProfileUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetIssuanceProfileForbiddenResponseBody runs the validations defined
+// on setIssuanceProfile_forbidden_response_body
+func ValidateSetIssuanceProfileForbiddenResponseBody(body *SetIssuanceProfileForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetIssuanceProfileBadRequestResponseBody runs the validations
+// defined on setIssuanceProfile_bad_request_response_body
+func ValidateSetIssuanceProfileBadRequestResponseBody(body *SetIssuanceProfileBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetIssuanceProfileNotFoundResponseBody runs the validations defined
+// on setIssuanceProfile_not_found_response_body
+func ValidateSetIssuanceProfileNotFoundResponseBody(body *SetIssuanceProfileNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetIssuanceProfileConflictResponseBody runs the validations defined
+// on setIssuanceProfile_conflict_response_body
+func ValidateSetIssuanceProfileConflictResponseBody(body *SetIssuanceProfileConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetIssuanceProfileUnsupportedMediaResponseBody runs the validations
+// defined on setIssuanceProfile_unsupported_media_response_body
+func ValidateSetIssuanceProfileUnsupportedMediaResponseBody(body *SetIssuanceProfileUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetIssuanceProfileInvalidResponseBody runs the validations defined
+// on setIssuanceProfile_invalid_response_body
+func ValidateSetIssuanceProfileInvalidResponseBody(body *SetIssuanceProfileInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetIssuanceProfileInvariantViolationResponseBody runs the
+// validations defined on setIssuanceProfile_invariant_violation_response_body
+func ValidateSetIssuanceProfileInvariantViolationResponseBody(body *SetIssuanceProfileInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetIssuanceProfileUnexpectedResponseBody runs the validations
+// defined on setIssuanceProfile_unexpected_response_body
+func ValidateSetIssuanceProfileUnexpectedResponseBody(body *SetIssuanceProfileUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetIssuanceProfileGatewayErrorResponseBody runs the validations
+// defined on setIssuanceProfile_gateway_error_response_body
+func ValidateSetIssuanceProfileGatewayErrorResponseBody(body *SetIssuanceProfileGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuanceProfileUnauthorizedResponseBody runs the validations
+// defined on deleteIssuanceProfile_unauthorized_response_body
+func ValidateDeleteIssuanceProfileUnauthorizedResponseBody(body *DeleteIssuanceProfileUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuanceProfileForbiddenResponseBody runs the validations
+// defined on deleteIssuanceProfile_forbidden_response_body
+func ValidateDeleteIssuanceProfileForbiddenResponseBody(body *DeleteIssuanceProfileForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuanceProfileBadRequestResponseBody runs the validations
+// defined on deleteIssuanceProfile_bad_request_response_body
+func ValidateDeleteIssuanceProfileBadRequestResponseBody(body *DeleteIssuanceProfileBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuanceProfileNotFoundResponseBody runs the validations
+// defined on deleteIssuanceProfile_not_found_response_body
+func ValidateDeleteIssuanceProfileNotFoundResponseBody(body *DeleteIssuanceProfileNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuanceProfileConflictResponseBody runs the validations
+// defined on deleteIssuanceProfile_conflict_response_body
+func ValidateDeleteIssuanceProfileConflictResponseBody(body *DeleteIssuanceProfileConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuanceProfileUnsupportedMediaResponseBody runs the
+// validations defined on deleteIssuanceProfile_unsupported_media_response_body
+func ValidateDeleteIssuanceProfileUnsupportedMediaResponseBody(body *DeleteIssuanceProfileUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuanceProfileInvalidResponseBody runs the validations
+// defined on deleteIssuanceProfile_invalid_response_body
+func ValidateDeleteIssuanceProfileInvalidResponseBody(body *DeleteIssuanceProfileInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuanceProfileInvariantViolationResponseBody runs the
+// validations defined on
+// deleteIssuanceProfile_invariant_violation_response_body
+func ValidateDeleteIssuanceProfileInvariantViolationResponseBody(body *DeleteIssuanceProfileInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuanceProfileUnexpectedResponseBody runs the validations
+// defined on deleteIssuanceProfile_unexpected_response_body
+func ValidateDeleteIssuanceProfileUnexpectedResponseBody(body *DeleteIssuanceProfileUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteIssuanceProfileGatewayErrorResponseBody runs the validations
+// defined on deleteIssuanceProfile_gateway_error_response_body
+func ValidateDeleteIssuanceProfileGatewayErrorResponseBody(body *DeleteIssuanceProfileGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetMcpServerAuthenticationUnauthorizedResponseBody runs the
 // validations defined on getMcpServerAuthentication_unauthorized_response_body
 func ValidateGetMcpServerAuthenticationUnauthorizedResponseBody(body *GetMcpServerAuthenticationUnauthorizedResponseBody) (err error) {
@@ -8061,6 +10668,97 @@ func ValidateAuthClientServerResponseBody(body *AuthClientServerResponseBody) (e
 func ValidateAuthClientHeaderInputRequestBody(body *AuthClientHeaderInputRequestBody) (err error) {
 	if utf8.RuneCountInString(body.Name) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+	}
+	return
+}
+
+// ValidateAuthClientChoiceResponseBody runs the validations defined on
+// AuthClientChoiceResponseBody
+func ValidateAuthClientChoiceResponseBody(body *AuthClientChoiceResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ClientType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_type", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ClientType != nil {
+		if !(*body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"service_account", "static_credential", "pass_through"}))
+		}
+	}
+	return
+}
+
+// ValidateIssuanceProfileResponseBody runs the validations defined on
+// IssuanceProfileResponseBody
+func ValidateIssuanceProfileResponseBody(body *IssuanceProfileResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.Choices == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("choices", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.UserSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_client_id", *body.UserSessionClientID, goa.FormatUUID))
+	}
+	if body.WorkloadIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.workload_issuer_id", *body.WorkloadIssuerID, goa.FormatUUID))
+	}
+	for _, e := range body.Choices {
+		if e != nil {
+			if err2 := ValidateIssuanceProfileChoiceResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateIssuanceProfileChoiceResponseBody runs the validations defined on
+// IssuanceProfileChoiceResponseBody
+func ValidateIssuanceProfileChoiceResponseBody(body *IssuanceProfileChoiceResponseBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.AuthClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateIssuanceProfileChoiceRequestBody runs the validations defined on
+// IssuanceProfileChoiceRequestBody
+func ValidateIssuanceProfileChoiceRequestBody(body *IssuanceProfileChoiceRequestBody) (err error) {
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+	if body.AuthClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
 	}
 	return
 }

@@ -56,3 +56,13 @@ func GetManagedAssistantAssistantsPath() string {
 func EnsureManagedAssistantAssistantsPath() string {
 	return "/rpc/assistants.ensureManagedAssistant"
 }
+
+// ListExecutionProfilesAssistantsPath returns the URL path to the assistants service listExecutionProfiles HTTP endpoint.
+func ListExecutionProfilesAssistantsPath() string {
+	return "/rpc/assistants.listExecutionProfiles"
+}
+
+// SetExecutionProfileChoiceAssistantsPath returns the URL path to the assistants service setExecutionProfileChoice HTTP endpoint.
+func SetExecutionProfileChoiceAssistantsPath() string {
+	return "/rpc/assistants.setExecutionProfileChoice"
+}

@@ -708,7 +708,7 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
-    queries: ../internal/mcpservers/upstreamclients/authclientbackfill/queries.sql
+    queries: ../internal/mcpservers/upstreamclients/authclientbackfill
     engine: postgresql
     gen:
       go:
@@ -748,7 +748,10 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
-    queries: ../internal/remotesessions/queries.sql
+    queries:
+      - ../internal/remotesessions/queries.sql
+      - ../internal/remotesessions/preparation_fixture_queries.sql
+      - ../internal/remotesessions/locking_fixture_queries.sql
     engine: postgresql
     gen:
       go:
@@ -1185,6 +1188,16 @@ sql:
       go:
         package: "fixturerepo"
         out: "../internal/localaccounts/fixtures/fixturerepo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/mcp/fixtures/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "fixturerepo"
+        out: "../internal/mcp/fixtures/fixturerepo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

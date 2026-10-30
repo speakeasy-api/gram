@@ -8,8 +8,12 @@ const mocks = vi.hoisted(() => ({
   openBookingCalendar: vi.fn(),
 }));
 
-vi.mock("@/contexts/Auth", () => ({
+vi.mock("@/contexts/Auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/contexts/Auth")>()),
   useSessionData: mocks.session,
+}));
+vi.mock("@/components/billing/payg-checkout-access", () => ({
+  usePaygCheckoutAccess: () => ({ eligible: true }),
 }));
 
 vi.mock("@/hooks/useTrialNow", () => ({
@@ -58,6 +62,30 @@ it("redirects when the session has no expired trial", () => {
   );
 
   expect(screen.getByText("Workspace")).toBeDefined();
+});
+
+it("leaves the gate for billing once the organization is whitelisted", () => {
+  mocks.session.mockReturnValue({
+    session: {
+      whitelisted: true,
+      organization: { slug: "example" },
+      trial: {
+        startedAt: new Date("2026-08-01T00:00:00.000Z"),
+        endsAt: new Date("2026-08-15T00:00:00.000Z"),
+      },
+    },
+  });
+
+  render(
+    <MemoryRouter initialEntries={["/trial-ended"]}>
+      <Routes>
+        <Route path="/example/billing" element={<div>Billing</div>} />
+        <Route path="/trial-ended" element={<TrialEnded />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+
+  expect(screen.getByText("Billing")).toBeDefined();
 });
 
 it("opens sales with expired-trial context", () => {
