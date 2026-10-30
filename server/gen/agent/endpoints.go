@@ -30,6 +30,7 @@ type Endpoints struct {
 	ReportSessionMoved   goa.Endpoint
 	ReportAIScan         goa.Endpoint
 	ReportState          goa.Endpoint
+	ReportCrash          goa.Endpoint
 	CreateSessionHandoff goa.Endpoint
 }
 
@@ -52,6 +53,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ReportSessionMoved:   NewReportSessionMovedEndpoint(s, a.APIKeyAuth),
 		ReportAIScan:         NewReportAIScanEndpoint(s, a.APIKeyAuth),
 		ReportState:          NewReportStateEndpoint(s, a.APIKeyAuth),
+		ReportCrash:          NewReportCrashEndpoint(s, a.JWTAuth, a.APIKeyAuth),
 		CreateSessionHandoff: NewCreateSessionHandoffEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -72,6 +74,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ReportSessionMoved = m(e.ReportSessionMoved)
 	e.ReportAIScan = m(e.ReportAIScan)
 	e.ReportState = m(e.ReportState)
+	e.ReportCrash = m(e.ReportCrash)
 	e.CreateSessionHandoff = m(e.CreateSessionHandoff)
 }
 
@@ -406,6 +409,41 @@ func NewReportStateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 			return nil, err
 		}
 		return s.ReportState(ctx, p)
+	}
+}
+
+// NewReportCrashEndpoint returns an endpoint function that calls the method
+// "reportCrash" of service "agent".
+func NewReportCrashEndpoint(s Service, authJWTFn security.AuthJWTFunc, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ReportCrashPayload)
+		var err error
+		sc := security.JWTScheme{
+			Name:           "device_agent_token",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var token string
+		if p.DeviceAgentToken != nil {
+			token = *p.DeviceAgentToken
+		}
+		ctx, err = authJWTFn(ctx, token, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"agent_user"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ReportCrash(ctx, p)
 	}
 }
 

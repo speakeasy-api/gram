@@ -2979,6 +2979,246 @@ func EncodeReportStateError(encoder func(context.Context, http.ResponseWriter) g
 	}
 }
 
+// EncodeReportCrashResponse returns an encoder for responses returned by the
+// agent reportCrash endpoint.
+func EncodeReportCrashResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*agent.ReportCrashResult)
+		enc := encoder(ctx, w)
+		body := NewReportCrashResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeReportCrashRequest returns a decoder for requests sent to the agent
+// reportCrash endpoint.
+func DecodeReportCrashRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agent.ReportCrashPayload, error) {
+	return func(r *http.Request) (*agent.ReportCrashPayload, error) {
+		var payload *agent.ReportCrashPayload
+		var (
+			body ReportCrashRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateReportCrashRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			deviceAgentToken *string
+			apikeyToken      *string
+			email            *string
+			serialNumber     *string
+			environment      *string
+		)
+		deviceAgentTokenRaw := r.Header.Get("Authorization")
+		if deviceAgentTokenRaw != "" {
+			deviceAgentToken = &deviceAgentTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		emailRaw := r.Header.Get("Gram-User-Email")
+		if emailRaw != "" {
+			email = &emailRaw
+		}
+		serialNumberRaw := r.Header.Get("Gram-Device-Serial")
+		if serialNumberRaw != "" {
+			serialNumber = &serialNumberRaw
+		}
+		environmentRaw := r.Header.Get("Gram-Device-Environment")
+		if environmentRaw != "" {
+			environment = &environmentRaw
+		}
+		payload = NewReportCrashPayload(&body, deviceAgentToken, apikeyToken, email, serialNumber, environment)
+		if payload.DeviceAgentToken != nil {
+			if strings.Contains(*payload.DeviceAgentToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.DeviceAgentToken, " ", 2)[1]
+				payload.DeviceAgentToken = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeReportCrashError returns an encoder for errors returned by the
+// reportCrash agent endpoint.
+func EncodeReportCrashError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewReportCrashGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeCreateSessionHandoffResponse returns an encoder for responses returned
 // by the agent createSessionHandoff endpoint.
 func EncodeCreateSessionHandoffResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -3631,6 +3871,83 @@ func unmarshalAgentStateRollbackRequestBodyToAgentAgentStateRollback(v *AgentSta
 	}
 	res := &agent.AgentStateRollback{
 		At:   *v.At,
+		From: v.From,
+		To:   v.To,
+	}
+
+	return res
+}
+
+// unmarshalAgentCrashReportRequestBodyToAgentAgentCrashReport builds a value
+// of type *agent.AgentCrashReport from a value of type
+// *AgentCrashReportRequestBody.
+func unmarshalAgentCrashReportRequestBodyToAgentAgentCrashReport(v *AgentCrashReportRequestBody) *agent.AgentCrashReport {
+	res := &agent.AgentCrashReport{
+		SchemaVersion:   *v.SchemaVersion,
+		ID:              *v.ID,
+		Kind:            *v.Kind,
+		Component:       *v.Component,
+		OccurredAt:      *v.OccurredAt,
+		Count:           *v.Count,
+		Message:         v.Message,
+		PanicType:       v.PanicType,
+		OtherGoroutines: v.OtherGoroutines,
+	}
+	res.Build = unmarshalAgentCrashBuildRequestBodyToAgentAgentCrashBuild(v.Build)
+	if v.Stack != nil {
+		res.Stack = make([]*agent.AgentCrashFrame, len(v.Stack))
+		for i, val := range v.Stack {
+			if val == nil {
+				res.Stack[i] = nil
+				continue
+			}
+			res.Stack[i] = unmarshalAgentCrashFrameRequestBodyToAgentAgentCrashFrame(val)
+		}
+	}
+	if v.Rollback != nil {
+		res.Rollback = unmarshalAgentCrashRollbackRequestBodyToAgentAgentCrashRollback(v.Rollback)
+	}
+
+	return res
+}
+
+// unmarshalAgentCrashBuildRequestBodyToAgentAgentCrashBuild builds a value of
+// type *agent.AgentCrashBuild from a value of type *AgentCrashBuildRequestBody.
+func unmarshalAgentCrashBuildRequestBodyToAgentAgentCrashBuild(v *AgentCrashBuildRequestBody) *agent.AgentCrashBuild {
+	res := &agent.AgentCrashBuild{
+		Binary:  *v.Binary,
+		Version: *v.Version,
+		Channel: v.Channel,
+		Os:      v.Os,
+		Arch:    v.Arch,
+	}
+
+	return res
+}
+
+// unmarshalAgentCrashFrameRequestBodyToAgentAgentCrashFrame builds a value of
+// type *agent.AgentCrashFrame from a value of type *AgentCrashFrameRequestBody.
+func unmarshalAgentCrashFrameRequestBodyToAgentAgentCrashFrame(v *AgentCrashFrameRequestBody) *agent.AgentCrashFrame {
+	if v == nil {
+		return nil
+	}
+	res := &agent.AgentCrashFrame{
+		Function: *v.Function,
+		File:     v.File,
+		Line:     v.Line,
+	}
+
+	return res
+}
+
+// unmarshalAgentCrashRollbackRequestBodyToAgentAgentCrashRollback builds a
+// value of type *agent.AgentCrashRollback from a value of type
+// *AgentCrashRollbackRequestBody.
+func unmarshalAgentCrashRollbackRequestBodyToAgentAgentCrashRollback(v *AgentCrashRollbackRequestBody) *agent.AgentCrashRollback {
+	if v == nil {
+		return nil
+	}
+	res := &agent.AgentCrashRollback{
 		From: v.From,
 		To:   v.To,
 	}

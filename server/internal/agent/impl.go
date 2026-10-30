@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
@@ -99,6 +100,16 @@ type Service struct {
 	// stateReportLimiter bounds reportState writes per device. Nil leaves it
 	// unlimited.
 	stateReportLimiter *ratelimit.Limiter
+
+	// crashReportLimiter bounds reportCrash batches per device. Nil leaves it
+	// unlimited.
+	crashReportLimiter *ratelimit.Limiter
+	// crashReportCredentialLimiter bounds reportCrash batches per credential.
+	// Nil leaves it unlimited.
+	crashReportCredentialLimiter *ratelimit.Limiter
+
+	// crashReports counts forwarded crash reports. Nil only logs them.
+	crashReports metric.Int64Counter
 }
 
 // WorkloadTokenTargets resolves where a workload exchanges an identity
@@ -130,25 +141,28 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
-		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
-		logger:             logger,
-		db:                 db,
-		repo:               repo.New(db),
-		auth:               auth.New(logger, db, sessions, authzEngine),
-		authz:              authzEngine,
-		audit:              auditLogger,
-		productFeatures:    productFeatures,
-		serverURL:          serverURL,
-		orgHosts:           orgHosts,
-		blobStore:          blobStore,
-		telemetry:          telemetryLogger,
-		growth:             growthEmitter,
-		workloadTokens:     nil,
-		deviceAgentTokens:  deviceAgentTokens,
-		agentVersions:      nil,
-		connectionStatuses: nil,
-		connectionsLimiter: nil,
-		stateReportLimiter: nil,
+		tracer:                       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
+		logger:                       logger,
+		db:                           db,
+		repo:                         repo.New(db),
+		auth:                         auth.New(logger, db, sessions, authzEngine),
+		authz:                        authzEngine,
+		audit:                        auditLogger,
+		productFeatures:              productFeatures,
+		serverURL:                    serverURL,
+		orgHosts:                     orgHosts,
+		blobStore:                    blobStore,
+		telemetry:                    telemetryLogger,
+		growth:                       growthEmitter,
+		workloadTokens:               nil,
+		deviceAgentTokens:            deviceAgentTokens,
+		agentVersions:                nil,
+		connectionStatuses:           nil,
+		connectionsLimiter:           nil,
+		crashReportLimiter:           nil,
+		crashReports:                 nil,
+		crashReportCredentialLimiter: nil,
+		stateReportLimiter:           nil,
 	}
 }
 
@@ -164,14 +178,20 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
-	// Only getPlugins accepts device-agent tokens.
+	// Only the agentPrincipalMethods accept device-agent tokens.
 	server.GetPlugins = deviceagenttoken.BearerChallenge(server.GetPlugins)
+	server.ReportCrash = deviceagenttoken.BearerChallenge(limitCrashReportBody(server.ReportCrash))
 	server.ReportState = limitStateReportBody(server.ReportState)
 	srv.Mount(mux, server)
 	// Public capability-URL route for minted session handoffs (see
 	// handoffs.go): unauthenticated by design, the token is the credential.
 	o11y.AttachHandler(mux, http.MethodGet, "/shared/handoffs/{token}", oops.ErrHandle(service.logger, service.ServeSessionHandoff).ServeHTTP)
 }
+
+// agentPrincipalMethods are the only methods agent-principal keys and
+// device-agent tokens may call: polling plugins, and reporting crashes, which
+// on a server or CI box are our bugs as much as on a laptop.
+var agentPrincipalMethods = []string{"getPlugins", "reportCrash"}
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	// A refused device-agent token is the better answer than a missing key
@@ -189,8 +209,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 		return ctx, nil
 	}
 
-	// Agent-principal keys may only poll plugins, and only with an explicit grant.
-	if method, _ := ctx.Value(goa.MethodKey).(string); method != "getPlugins" {
+	// Agent-principal keys may only call agentPrincipalMethods, and only with
+	// an explicit grant.
+	if method, _ := ctx.Value(goa.MethodKey).(string); !slices.Contains(agentPrincipalMethods, method) {
 		return ctx, oops.C(oops.CodeForbidden)
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -219,7 +240,7 @@ func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTSche
 		refusal := oops.E(oops.CodeUnauthorized, nil, "this deployment does not accept device-agent tokens")
 		return deviceagenttoken.WithAuthFailure(ctx, refusal), refusal
 	}
-	if method, _ := ctx.Value(goa.MethodKey).(string); method != "getPlugins" {
+	if method, _ := ctx.Value(goa.MethodKey).(string); !slices.Contains(agentPrincipalMethods, method) {
 		return ctx, oops.C(oops.CodeForbidden)
 	}
 

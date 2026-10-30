@@ -131,6 +131,13 @@ type ReportStateRequestBody struct {
 	Update *AgentStateUpdateRequestBody `form:"update,omitempty" json:"update,omitempty" xml:"update,omitempty"`
 }
 
+// ReportCrashRequestBody is the type of the "agent" service "reportCrash"
+// endpoint HTTP request body.
+type ReportCrashRequestBody struct {
+	// Queued crash reports, oldest first.
+	Reports []*AgentCrashReportRequestBody `form:"reports,omitempty" json:"reports,omitempty" xml:"reports,omitempty"`
+}
+
 // CreateSessionHandoffRequestBody is the type of the "agent" service
 // "createSessionHandoff" endpoint HTTP request body.
 type CreateSessionHandoffRequestBody struct {
@@ -284,6 +291,14 @@ type ReportStateResponseBody struct {
 	AppliedEtag *string `form:"applied_etag,omitempty" json:"applied_etag,omitempty" xml:"applied_etag,omitempty"`
 	// When the server received the report.
 	ReceivedAt string `form:"received_at" json:"received_at" xml:"received_at"`
+}
+
+// ReportCrashResponseBody is the type of the "agent" service "reportCrash"
+// endpoint HTTP response body.
+type ReportCrashResponseBody struct {
+	// Reports accepted. A report not shaped like a device agent crash is dropped
+	// and not counted. The agent removes every report in the batch on success.
+	Accepted int `form:"accepted" json:"accepted" xml:"accepted"`
 }
 
 // CreateSessionHandoffResponseBody is the type of the "agent" service
@@ -2851,6 +2866,187 @@ type ReportStateGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ReportCrashUnauthorizedResponseBody is the type of the "agent" service
+// "reportCrash" endpoint HTTP response body for the "unauthorized" error.
+type ReportCrashUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportCrashForbiddenResponseBody is the type of the "agent" service
+// "reportCrash" endpoint HTTP response body for the "forbidden" error.
+type ReportCrashForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportCrashBadRequestResponseBody is the type of the "agent" service
+// "reportCrash" endpoint HTTP response body for the "bad_request" error.
+type ReportCrashBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportCrashNotFoundResponseBody is the type of the "agent" service
+// "reportCrash" endpoint HTTP response body for the "not_found" error.
+type ReportCrashNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportCrashConflictResponseBody is the type of the "agent" service
+// "reportCrash" endpoint HTTP response body for the "conflict" error.
+type ReportCrashConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportCrashUnsupportedMediaResponseBody is the type of the "agent" service
+// "reportCrash" endpoint HTTP response body for the "unsupported_media" error.
+type ReportCrashUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportCrashInvalidResponseBody is the type of the "agent" service
+// "reportCrash" endpoint HTTP response body for the "invalid" error.
+type ReportCrashInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportCrashInvariantViolationResponseBody is the type of the "agent" service
+// "reportCrash" endpoint HTTP response body for the "invariant_violation"
+// error.
+type ReportCrashInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportCrashUnexpectedResponseBody is the type of the "agent" service
+// "reportCrash" endpoint HTTP response body for the "unexpected" error.
+type ReportCrashUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReportCrashGatewayErrorResponseBody is the type of the "agent" service
+// "reportCrash" endpoint HTTP response body for the "gateway_error" error.
+type ReportCrashGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // CreateSessionHandoffUnauthorizedResponseBody is the type of the "agent"
 // service "createSessionHandoff" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -3430,6 +3626,65 @@ type AgentStateRollbackRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 }
 
+// AgentCrashReportRequestBody is used to define fields on request body types.
+type AgentCrashReportRequestBody struct {
+	// Report schema version.
+	SchemaVersion *int `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
+	// Random report id; repeats of the same id are one report.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// fatal, recovered or rollback.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// Where it happened: ipc, policy_scheduler, update_scheduler, aiscan,
+	// sessions, ui or runtime.
+	Component *string `form:"component,omitempty" json:"component,omitempty" xml:"component,omitempty"`
+	// When it happened, by the device clock.
+	OccurredAt *string `form:"occurred_at,omitempty" json:"occurred_at,omitempty" xml:"occurred_at,omitempty"`
+	// Times this crash recurred in one process before it was reported.
+	Count *int `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
+	// The build that crashed, which is not always the build that reports it.
+	Build *AgentCrashBuildRequestBody `form:"build,omitempty" json:"build,omitempty" xml:"build,omitempty"`
+	// Go runtime error text, when the panic was one. Other panics send panic_type
+	// instead.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Go type of a non-runtime panic value.
+	PanicType *string `form:"panic_type,omitempty" json:"panic_type,omitempty" xml:"panic_type,omitempty"`
+	// Frames of the crashing goroutine, innermost first.
+	Stack []*AgentCrashFrameRequestBody `form:"stack,omitempty" json:"stack,omitempty" xml:"stack,omitempty"`
+	// Goroutines in a fatal dump besides the crashing one. Their stacks are not
+	// sent.
+	OtherGoroutines *int `form:"other_goroutines,omitempty" json:"other_goroutines,omitempty" xml:"other_goroutines,omitempty"`
+	// For a rollback: the version that failed and the one restored.
+	Rollback *AgentCrashRollbackRequestBody `form:"rollback,omitempty" json:"rollback,omitempty" xml:"rollback,omitempty"`
+}
+
+// AgentCrashBuildRequestBody is used to define fields on request body types.
+type AgentCrashBuildRequestBody struct {
+	// speakeasyd or speakeasy-ui.
+	Binary  *string `form:"binary,omitempty" json:"binary,omitempty" xml:"binary,omitempty"`
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Release channel.
+	Channel *string `form:"channel,omitempty" json:"channel,omitempty" xml:"channel,omitempty"`
+	Os      *string `form:"os,omitempty" json:"os,omitempty" xml:"os,omitempty"`
+	Arch    *string `form:"arch,omitempty" json:"arch,omitempty" xml:"arch,omitempty"`
+}
+
+// AgentCrashFrameRequestBody is used to define fields on request body types.
+type AgentCrashFrameRequestBody struct {
+	// Fully qualified function name.
+	Function *string `form:"function,omitempty" json:"function,omitempty" xml:"function,omitempty"`
+	// Module-relative source file.
+	File *string `form:"file,omitempty" json:"file,omitempty" xml:"file,omitempty"`
+	Line *int    `form:"line,omitempty" json:"line,omitempty" xml:"line,omitempty"`
+}
+
+// AgentCrashRollbackRequestBody is used to define fields on request body types.
+type AgentCrashRollbackRequestBody struct {
+	// Version that failed to stabilize.
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// Version restored.
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+}
+
 // NewGetPluginsResponseBody builds the HTTP response body from the result of
 // the "getPlugins" endpoint of the "agent" service.
 func NewGetPluginsResponseBody(res *agent.GetPluginsResult) *GetPluginsResponseBody {
@@ -3629,6 +3884,15 @@ func NewReportStateResponseBody(res *agent.ReportStateResult) *ReportStateRespon
 		Stored:      res.Stored,
 		AppliedEtag: res.AppliedEtag,
 		ReceivedAt:  res.ReceivedAt,
+	}
+	return body
+}
+
+// NewReportCrashResponseBody builds the HTTP response body from the result of
+// the "reportCrash" endpoint of the "agent" service.
+func NewReportCrashResponseBody(res *agent.ReportCrashResult) *ReportCrashResponseBody {
+	body := &ReportCrashResponseBody{
+		Accepted: res.Accepted,
 	}
 	return body
 }
@@ -5619,6 +5883,146 @@ func NewReportStateGatewayErrorResponseBody(res *goa.ServiceError) *ReportStateG
 	return body
 }
 
+// NewReportCrashUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "reportCrash" endpoint of the "agent" service.
+func NewReportCrashUnauthorizedResponseBody(res *goa.ServiceError) *ReportCrashUnauthorizedResponseBody {
+	body := &ReportCrashUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportCrashForbiddenResponseBody builds the HTTP response body from the
+// result of the "reportCrash" endpoint of the "agent" service.
+func NewReportCrashForbiddenResponseBody(res *goa.ServiceError) *ReportCrashForbiddenResponseBody {
+	body := &ReportCrashForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportCrashBadRequestResponseBody builds the HTTP response body from the
+// result of the "reportCrash" endpoint of the "agent" service.
+func NewReportCrashBadRequestResponseBody(res *goa.ServiceError) *ReportCrashBadRequestResponseBody {
+	body := &ReportCrashBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportCrashNotFoundResponseBody builds the HTTP response body from the
+// result of the "reportCrash" endpoint of the "agent" service.
+func NewReportCrashNotFoundResponseBody(res *goa.ServiceError) *ReportCrashNotFoundResponseBody {
+	body := &ReportCrashNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportCrashConflictResponseBody builds the HTTP response body from the
+// result of the "reportCrash" endpoint of the "agent" service.
+func NewReportCrashConflictResponseBody(res *goa.ServiceError) *ReportCrashConflictResponseBody {
+	body := &ReportCrashConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportCrashUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "reportCrash" endpoint of the "agent" service.
+func NewReportCrashUnsupportedMediaResponseBody(res *goa.ServiceError) *ReportCrashUnsupportedMediaResponseBody {
+	body := &ReportCrashUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportCrashInvalidResponseBody builds the HTTP response body from the
+// result of the "reportCrash" endpoint of the "agent" service.
+func NewReportCrashInvalidResponseBody(res *goa.ServiceError) *ReportCrashInvalidResponseBody {
+	body := &ReportCrashInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportCrashInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "reportCrash" endpoint of the "agent" service.
+func NewReportCrashInvariantViolationResponseBody(res *goa.ServiceError) *ReportCrashInvariantViolationResponseBody {
+	body := &ReportCrashInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportCrashUnexpectedResponseBody builds the HTTP response body from the
+// result of the "reportCrash" endpoint of the "agent" service.
+func NewReportCrashUnexpectedResponseBody(res *goa.ServiceError) *ReportCrashUnexpectedResponseBody {
+	body := &ReportCrashUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReportCrashGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "reportCrash" endpoint of the "agent" service.
+func NewReportCrashGatewayErrorResponseBody(res *goa.ServiceError) *ReportCrashGatewayErrorResponseBody {
+	body := &ReportCrashGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateSessionHandoffUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "createSessionHandoff" endpoint of the "agent"
 // service.
@@ -5968,6 +6372,26 @@ func NewReportStatePayload(body *ReportStateRequestBody, apikeyToken *string, em
 	return v
 }
 
+// NewReportCrashPayload builds a agent service reportCrash endpoint payload.
+func NewReportCrashPayload(body *ReportCrashRequestBody, deviceAgentToken *string, apikeyToken *string, email *string, serialNumber *string, environment *string) *agent.ReportCrashPayload {
+	v := &agent.ReportCrashPayload{}
+	v.Reports = make([]*agent.AgentCrashReport, len(body.Reports))
+	for i, val := range body.Reports {
+		if val == nil {
+			v.Reports[i] = nil
+			continue
+		}
+		v.Reports[i] = unmarshalAgentCrashReportRequestBodyToAgentAgentCrashReport(val)
+	}
+	v.DeviceAgentToken = deviceAgentToken
+	v.ApikeyToken = apikeyToken
+	v.Email = email
+	v.SerialNumber = serialNumber
+	v.Environment = environment
+
+	return v
+}
+
 // NewCreateSessionHandoffPayload builds a agent service createSessionHandoff
 // endpoint payload.
 func NewCreateSessionHandoffPayload(body *CreateSessionHandoffRequestBody, apikeyToken *string, serialNumber *string, hostname *string) *agent.CreateSessionHandoffPayload {
@@ -6214,6 +6638,28 @@ func ValidateReportStateRequestBody(body *ReportStateRequestBody) (err error) {
 	if body.Update != nil {
 		if err2 := ValidateAgentStateUpdateRequestBody(body.Update); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateReportCrashRequestBody runs the validations defined on
+// ReportCrashRequestBody
+func ValidateReportCrashRequestBody(body *ReportCrashRequestBody) (err error) {
+	if body.Reports == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reports", "body"))
+	}
+	if len(body.Reports) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.reports", body.Reports, len(body.Reports), 1, true))
+	}
+	if len(body.Reports) > 10 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.reports", body.Reports, len(body.Reports), 10, false))
+	}
+	for _, e := range body.Reports {
+		if e != nil {
+			if err2 := ValidateAgentCrashReportRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -6560,6 +7006,193 @@ func ValidateAgentStateRollbackRequestBody(body *AgentStateRollbackRequestBody) 
 	if body.At != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.at", *body.At, goa.FormatDateTime))
 	}
+	if body.From != nil {
+		if utf8.RuneCountInString(*body.From) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.from", *body.From, utf8.RuneCountInString(*body.From), 64, false))
+		}
+	}
+	if body.To != nil {
+		if utf8.RuneCountInString(*body.To) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.to", *body.To, utf8.RuneCountInString(*body.To), 64, false))
+		}
+	}
+	return
+}
+
+// ValidateAgentCrashReportRequestBody runs the validations defined on
+// AgentCrashReportRequestBody
+func ValidateAgentCrashReportRequestBody(body *AgentCrashReportRequestBody) (err error) {
+	if body.SchemaVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schema_version", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Component == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("component", "body"))
+	}
+	if body.OccurredAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("occurred_at", "body"))
+	}
+	if body.Count == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
+	}
+	if body.Build == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("build", "body"))
+	}
+	if body.SchemaVersion != nil {
+		if *body.SchemaVersion < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.schema_version", *body.SchemaVersion, 1, true))
+		}
+	}
+	if body.ID != nil {
+		if utf8.RuneCountInString(*body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", *body.ID, utf8.RuneCountInString(*body.ID), 1, true))
+		}
+	}
+	if body.ID != nil {
+		if utf8.RuneCountInString(*body.ID) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", *body.ID, utf8.RuneCountInString(*body.ID), 64, false))
+		}
+	}
+	if body.Kind != nil {
+		if utf8.RuneCountInString(*body.Kind) > 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.kind", *body.Kind, utf8.RuneCountInString(*body.Kind), 32, false))
+		}
+	}
+	if body.Component != nil {
+		if utf8.RuneCountInString(*body.Component) > 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.component", *body.Component, utf8.RuneCountInString(*body.Component), 32, false))
+		}
+	}
+	if body.OccurredAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.occurred_at", *body.OccurredAt, goa.FormatDateTime))
+	}
+	if body.Count != nil {
+		if *body.Count < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.count", *body.Count, 1, true))
+		}
+	}
+	if body.Count != nil {
+		if *body.Count > 1e+06 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.count", *body.Count, 1e+06, false))
+		}
+	}
+	if body.Build != nil {
+		if err2 := ValidateAgentCrashBuildRequestBody(body.Build); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Message != nil {
+		if utf8.RuneCountInString(*body.Message) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.message", *body.Message, utf8.RuneCountInString(*body.Message), 512, false))
+		}
+	}
+	if body.PanicType != nil {
+		if utf8.RuneCountInString(*body.PanicType) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.panic_type", *body.PanicType, utf8.RuneCountInString(*body.PanicType), 256, false))
+		}
+	}
+	if len(body.Stack) > 50 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.stack", body.Stack, len(body.Stack), 50, false))
+	}
+	for _, e := range body.Stack {
+		if e != nil {
+			if err2 := ValidateAgentCrashFrameRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.OtherGoroutines != nil {
+		if *body.OtherGoroutines < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.other_goroutines", *body.OtherGoroutines, 0, true))
+		}
+	}
+	if body.OtherGoroutines != nil {
+		if *body.OtherGoroutines > 1e+06 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.other_goroutines", *body.OtherGoroutines, 1e+06, false))
+		}
+	}
+	if body.Rollback != nil {
+		if err2 := ValidateAgentCrashRollbackRequestBody(body.Rollback); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateAgentCrashBuildRequestBody runs the validations defined on
+// AgentCrashBuildRequestBody
+func ValidateAgentCrashBuildRequestBody(body *AgentCrashBuildRequestBody) (err error) {
+	if body.Binary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("binary", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Binary != nil {
+		if utf8.RuneCountInString(*body.Binary) > 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.binary", *body.Binary, utf8.RuneCountInString(*body.Binary), 32, false))
+		}
+	}
+	if body.Version != nil {
+		if utf8.RuneCountInString(*body.Version) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", *body.Version, utf8.RuneCountInString(*body.Version), 64, false))
+		}
+	}
+	if body.Channel != nil {
+		if utf8.RuneCountInString(*body.Channel) > 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.channel", *body.Channel, utf8.RuneCountInString(*body.Channel), 32, false))
+		}
+	}
+	if body.Os != nil {
+		if utf8.RuneCountInString(*body.Os) > 16 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.os", *body.Os, utf8.RuneCountInString(*body.Os), 16, false))
+		}
+	}
+	if body.Arch != nil {
+		if utf8.RuneCountInString(*body.Arch) > 16 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.arch", *body.Arch, utf8.RuneCountInString(*body.Arch), 16, false))
+		}
+	}
+	return
+}
+
+// ValidateAgentCrashFrameRequestBody runs the validations defined on
+// AgentCrashFrameRequestBody
+func ValidateAgentCrashFrameRequestBody(body *AgentCrashFrameRequestBody) (err error) {
+	if body.Function == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("function", "body"))
+	}
+	if body.Function != nil {
+		if utf8.RuneCountInString(*body.Function) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.function", *body.Function, utf8.RuneCountInString(*body.Function), 512, false))
+		}
+	}
+	if body.File != nil {
+		if utf8.RuneCountInString(*body.File) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.file", *body.File, utf8.RuneCountInString(*body.File), 512, false))
+		}
+	}
+	if body.Line != nil {
+		if *body.Line < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.line", *body.Line, 0, true))
+		}
+	}
+	if body.Line != nil {
+		if *body.Line > 1e+07 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.line", *body.Line, 1e+07, false))
+		}
+	}
+	return
+}
+
+// ValidateAgentCrashRollbackRequestBody runs the validations defined on
+// AgentCrashRollbackRequestBody
+func ValidateAgentCrashRollbackRequestBody(body *AgentCrashRollbackRequestBody) (err error) {
 	if body.From != nil {
 		if utf8.RuneCountInString(*body.From) > 64 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.from", *body.From, utf8.RuneCountInString(*body.From), 64, false))

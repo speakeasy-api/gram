@@ -7959,6 +7959,116 @@ paths:
       x-speakeasy-name-override: reportAIScan
       x-speakeasy-react-hook:
         name: ReportAgentAIScan
+  /rpc/agent.reportCrash:
+    post:
+      description: 'Report device agent crashes: fatal crashes, recovered panics and self-rollbacks (device-agent ADR-0030). Forwarded to Speakeasy''s monitoring and not stored. Accepts the credentials getPlugins accepts: the per-user key, the org install key (with a vouched email), and, with the device-sync grant, agent keys and device-agent tokens. The agent scrubs every report before sending it; the server accepts only reports shaped like a Go crash and scrubs them again.'
+      operationId: reportAgentCrash
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Email of the enrolled user, sent in the Gram-User-Email header. Authoritative when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+          in: header
+          name: Gram-User-Email
+          schema:
+            description: Email of the enrolled user, sent in the Gram-User-Email header. Authoritative when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+            type: string
+        - allowEmptyValue: true
+          description: Hardware serial number of the machine that crashed, when the agent can read it.
+          in: header
+          name: Gram-Device-Serial
+          schema:
+            description: Hardware serial number of the machine that crashed, when the agent can read it.
+            type: string
+        - allowEmptyValue: true
+          description: Kind of machine the agent runs on (endpoint, server or ephemeral), sent in the Gram-Device-Environment header.
+          in: header
+          name: Gram-Device-Environment
+          schema:
+            description: Kind of machine the agent runs on (endpoint, server or ephemeral), sent in the Gram-Device-Environment header.
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportCrashRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportCrashResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - device_agent_token_header_Authorization: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: reportCrash agent
+      tags:
+        - agent
+      x-speakeasy-name-override: reportCrash
+      x-speakeasy-react-hook:
+        name: ReportAgentCrash
   /rpc/agent.reportSessionMoved:
     post:
       description: 'Record that a captured agent session was moved to another harness on a device (session portability). Carries no session content — only the session identity, the target harness, and device attribution — and lands as a chat_session:move audit event so organizations retain governance visibility over local-first moves. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report moves. Fire-and-forget from the agent''s perspective: the daemon must never fail a move because this call failed.'
@@ -86964,6 +87074,122 @@ components:
           format: uuid
       required:
         - block_id
+    AgentCrashBuild:
+      type: object
+      properties:
+        arch:
+          type: string
+          maxLength: 16
+        binary:
+          type: string
+          description: speakeasyd or speakeasy-ui.
+          maxLength: 32
+        channel:
+          type: string
+          description: Release channel.
+          maxLength: 32
+        os:
+          type: string
+          maxLength: 16
+        version:
+          type: string
+          maxLength: 64
+      required:
+        - binary
+        - version
+    AgentCrashFrame:
+      type: object
+      properties:
+        file:
+          type: string
+          description: Module-relative source file.
+          maxLength: 512
+        function:
+          type: string
+          description: Fully qualified function name.
+          maxLength: 512
+        line:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 1e+07
+      required:
+        - function
+    AgentCrashReport:
+      type: object
+      properties:
+        build:
+          $ref: '#/components/schemas/AgentCrashBuild'
+        component:
+          type: string
+          description: 'Where it happened: ipc, policy_scheduler, update_scheduler, aiscan, sessions, ui or runtime.'
+          maxLength: 32
+        count:
+          type: integer
+          description: Times this crash recurred in one process before it was reported.
+          format: int64
+          minimum: 1
+          maximum: 1e+06
+        id:
+          type: string
+          description: Random report id; repeats of the same id are one report.
+          minLength: 1
+          maxLength: 64
+        kind:
+          type: string
+          description: fatal, recovered or rollback.
+          maxLength: 32
+        message:
+          type: string
+          description: Go runtime error text, when the panic was one. Other panics send panic_type instead.
+          maxLength: 512
+        occurred_at:
+          type: string
+          description: When it happened, by the device clock.
+          format: date-time
+        other_goroutines:
+          type: integer
+          description: Goroutines in a fatal dump besides the crashing one. Their stacks are not sent.
+          format: int64
+          minimum: 0
+          maximum: 1e+06
+        panic_type:
+          type: string
+          description: Go type of a non-runtime panic value.
+          maxLength: 256
+        rollback:
+          $ref: '#/components/schemas/AgentCrashRollback'
+        schema_version:
+          type: integer
+          description: Report schema version.
+          format: int64
+          minimum: 1
+        stack:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentCrashFrame'
+          description: Frames of the crashing goroutine, innermost first.
+          maxItems: 50
+      description: 'One device agent crash: a fatal crash, a recovered panic, or a self-rollback.'
+      required:
+        - schema_version
+        - id
+        - kind
+        - component
+        - occurred_at
+        - count
+        - build
+    AgentCrashRollback:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Version that failed to stabilize.
+          maxLength: 64
+        to:
+          type: string
+          description: Version restored.
+          maxLength: 64
     AgentDelegatedGrant:
       type: object
       properties:
@@ -108988,6 +109214,27 @@ components:
         - scan_completed_at
         - target_list_version
         - matches
+    ReportCrashRequestBody:
+      type: object
+      properties:
+        reports:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentCrashReport'
+          description: Queued crash reports, oldest first.
+          minItems: 1
+          maxItems: 10
+      required:
+        - reports
+    ReportCrashResult:
+      type: object
+      properties:
+        accepted:
+          type: integer
+          description: Reports accepted. A report not shaped like a device agent crash is dropped and not counted. The agent removes every report in the batch on success.
+          format: int64
+      required:
+        - accepted
     ReportSessionMovedRequestBody:
       type: object
       properties:

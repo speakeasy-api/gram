@@ -114,6 +114,7 @@ trackedFiles:
   src/funcs/agentListAiScanTargets.ts: {}
   src/funcs/agentListSyncedUsers.ts: {}
   src/funcs/agentReportAIScan.ts: {}
+  src/funcs/agentReportCrash.ts: {}
   src/funcs/agentReportSessionMoved.ts: {}
   src/funcs/agentReportState.ts: {}
   src/funcs/agentUnhideMcpServer.ts: {}
@@ -925,6 +926,10 @@ trackedFiles:
   src/models/components/admitworkloadsubjectform.ts: {}
   src/models/components/agentconnectionblock.ts: {}
   src/models/components/agentconnectionblockidform.ts: {}
+  src/models/components/agentcrashbuild.ts: {}
+  src/models/components/agentcrashframe.ts: {}
+  src/models/components/agentcrashreport.ts: {}
+  src/models/components/agentcrashrollback.ts: {}
   src/models/components/agentdelegatedgrant.ts: {}
   src/models/components/agentdelegatedpolicy.ts: {}
   src/models/components/agentexpectedpolicy.ts: {}
@@ -1780,6 +1785,8 @@ trackedFiles:
   src/models/components/rendertemplateresult.ts: {}
   src/models/components/replaceidentityproviderconnectionclientsecretrequestbody.ts: {}
   src/models/components/reportaiscanrequestbody.ts: {}
+  src/models/components/reportcrashrequestbody.ts: {}
+  src/models/components/reportcrashresult.ts: {}
   src/models/components/reportsessionmovedrequestbody.ts: {}
   src/models/components/reportstaterequestbody.ts: {}
   src/models/components/reportstateresult.ts: {}
@@ -2878,6 +2885,7 @@ trackedFiles:
   src/models/operations/repairplatformmcponboardingpublication.ts: {}
   src/models/operations/replaceidentityproviderconnectionclientsecret.ts: {}
   src/models/operations/reportagentaiscan.ts: {}
+  src/models/operations/reportagentcrash.ts: {}
   src/models/operations/reportagentsessionmoved.ts: {}
   src/models/operations/reportagentstate.ts: {}
   src/models/operations/requestaccess.ts: {}
@@ -3906,6 +3914,7 @@ trackedFiles:
   src/react-query/repairPlatformMCPOnboardingPublication.ts: {}
   src/react-query/replaceIdentityProviderConnectionClientSecret.ts: {}
   src/react-query/reportAgentAIScan.ts: {}
+  src/react-query/reportAgentCrash.ts: {}
   src/react-query/reportAgentSessionMoved.ts: {}
   src/react-query/reportAgentState.ts: {}
   src/react-query/requestAccess.ts: {}
@@ -12169,6 +12178,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  reportAgentCrash:
+    speakeasy-default-report-agent-crash:
+      requestBody:
+        application/json: {"reports": [{"build": {"binary": "<value>", "version": "<value>"}, "component": "<value>", "count": 637573, "id": "<id>", "kind": "<value>", "occurred_at": "2025-09-20T09:51:38.764Z", "schema_version": 104481}]}
+      responses:
+        "200":
+          application/json: {"accepted": 571289}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   reportAgentSessionMoved:
     speakeasy-default-report-agent-session-moved:
       requestBody:
