@@ -104,3 +104,20 @@ func TestNewUsesGitleaks(t *testing.T) {
 	require.True(t, changed)
 	require.NotContains(t, safe, key)
 }
+
+func TestTextMasksURLPasswords(t *testing.T) {
+	t.Parallel()
+	r := chatredact.NewWithScanner(wordScanner{word: "zzz-unused"})
+
+	pw := "s3cr" + "et-pw"
+	safe, changed, err := r.Text(t.Context(), "connect to postgres://app:"+pw+"@db.internal:5432/main and https://example.com/a@b")
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.NotContains(t, safe, pw)
+	require.Contains(t, safe, "postgres://app:[REDACTED]@db.internal:5432/main")
+	require.Contains(t, safe, "https://example.com/a@b")
+
+	jsonSafe, _, err := r.Text(t.Context(), `{"dsn":"mysql://root:`+pw+`@localhost/x"}`)
+	require.NoError(t, err)
+	require.NotContains(t, jsonSafe, pw)
+}
