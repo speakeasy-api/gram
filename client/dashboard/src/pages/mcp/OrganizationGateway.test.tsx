@@ -36,6 +36,20 @@ vi.mock("@/components/sessions/ClientsAndSessionsTab", () => ({
     );
   },
 }));
+vi.mock("./gateway/GatewayActivitySection", () => ({
+  GatewayActivitySection: ({
+    scope,
+  }: {
+    scope: { kind: string; organizationId?: string };
+  }) => (
+    <div>
+      Organization gateway activity
+      <output aria-label="Activity scope">
+        {scope.kind}:{scope.organizationId}
+      </output>
+    </div>
+  ),
+}));
 vi.mock("@/components/page-templates", () => ({
   SettingsPage: ({
     children,
@@ -305,4 +319,22 @@ it("restores a shared Connections URL while the gateway is disabled", () => {
       .getByRole("tab", { name: "Connections" })
       .getAttribute("aria-selected"),
   ).toBe("true");
+});
+
+it("shows organization-wide activity to non-admins", async () => {
+  state.admin = false;
+  render(<OrganizationGateway />);
+  await userEvent.click(screen.getByRole("tab", { name: "Activity" }));
+  expect(screen.getByText("Organization gateway activity")).toBeTruthy();
+  expect(screen.getByLabelText("Activity scope").textContent).toBe(
+    "organization:test-org",
+  );
+});
+
+it("restores a shared Activity URL", () => {
+  render(<OrganizationGateway />, "/?tab=activity&range=7d");
+  expect(
+    screen.getByRole("tab", { name: "Activity" }).getAttribute("aria-selected"),
+  ).toBe("true");
+  expect(screen.getByText("Organization gateway activity")).toBeTruthy();
 });

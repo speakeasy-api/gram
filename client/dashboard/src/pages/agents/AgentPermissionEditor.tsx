@@ -20,6 +20,7 @@ import {
   agentPolicyViewFromGrants,
   agentPolicyGrantsFromDraft,
   agentPolicyFingerprint,
+  agentPolicyUnrestrictedLabel,
   diffAgentPolicyGrants,
   invalidateAgentPolicy,
   isAgentPolicyNarrowable,
@@ -239,7 +240,7 @@ export function AgentPermissionEditor({
             if (!resource || !isAgentPolicyNarrowable(resource.resourceType))
               return (
                 <Text small muted>
-                  All resources
+                  {agentPolicyUnrestrictedLabel(resource?.resourceType)}
                 </Text>
               );
             return (

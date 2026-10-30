@@ -7,12 +7,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -43,7 +43,7 @@ func (m *Migrator) requestPublication(ctx context.Context, tx pgx.Tx, organizati
 // cleans up results of risk policies bound to the deleted server, after its
 // transaction commits. This path does neither, so it refuses a toolset that
 // needs either; delete that one from the dashboard instead.
-func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, toolset toolsetsrepo.Toolset, outcome *Outcome) error {
+func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, toolset toolsetsrepo.Toolset, alias pgtype.Text, outcome *Outcome) error {
 	principal := urn.NewPrincipal(urn.PrincipalTypeUser, actor.UserID)
 
 	// Only an MCP-enabled toolset is in a generated package, so only its
@@ -89,7 +89,7 @@ func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, tools
 	if len(hosted.DeletedRiskPolicies) > 0 {
 		return fail("risk policies are bound to its server; delete it from the dashboard instead")
 	}
-	if alias := hostingstate.LegacyAlias(toolset).Slug; ownServer && alias.Valid && alias.String != "" {
+	if ownServer && alias.Valid && alias.String != "" {
 		outcome.Actions = append(outcome.Actions, fmt.Sprintf("Delete the server at /mcp/%s with its addresses and plugin entries", alias.String))
 	}
 

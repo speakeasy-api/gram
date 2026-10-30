@@ -22,9 +22,44 @@ func UpdateAuthClientAuthClientsPath() string {
 	return "/rpc/authClients.update"
 }
 
+// CreateAuthClientAuthClientsPath returns the URL path to the authClients service createAuthClient HTTP endpoint.
+func CreateAuthClientAuthClientsPath() string {
+	return "/rpc/authClients.create"
+}
+
+// AttachAuthClientToMcpServerAuthClientsPath returns the URL path to the authClients service attachAuthClientToMcpServer HTTP endpoint.
+func AttachAuthClientToMcpServerAuthClientsPath() string {
+	return "/rpc/authClients.attachToMcpServer"
+}
+
+// SetAuthClientHeadersAuthClientsPath returns the URL path to the authClients service setAuthClientHeaders HTTP endpoint.
+func SetAuthClientHeadersAuthClientsPath() string {
+	return "/rpc/authClients.setHeaders"
+}
+
 // DetachAuthClientFromMcpServerAuthClientsPath returns the URL path to the authClients service detachAuthClientFromMcpServer HTTP endpoint.
 func DetachAuthClientFromMcpServerAuthClientsPath() string {
 	return "/rpc/authClients.detachFromMcpServer"
+}
+
+// ListMcpServerAuthClientChoicesAuthClientsPath returns the URL path to the authClients service listMcpServerAuthClientChoices HTTP endpoint.
+func ListMcpServerAuthClientChoicesAuthClientsPath() string {
+	return "/rpc/authClients.listMcpServerChoices"
+}
+
+// ListIssuanceProfilesAuthClientsPath returns the URL path to the authClients service listIssuanceProfiles HTTP endpoint.
+func ListIssuanceProfilesAuthClientsPath() string {
+	return "/rpc/authClients.listIssuanceProfiles"
+}
+
+// SetIssuanceProfileAuthClientsPath returns the URL path to the authClients service setIssuanceProfile HTTP endpoint.
+func SetIssuanceProfileAuthClientsPath() string {
+	return "/rpc/authClients.setIssuanceProfile"
+}
+
+// DeleteIssuanceProfileAuthClientsPath returns the URL path to the authClients service deleteIssuanceProfile HTTP endpoint.
+func DeleteIssuanceProfileAuthClientsPath() string {
+	return "/rpc/authClients.deleteIssuanceProfile"
 }
 
 // GetMcpServerAuthenticationAuthClientsPath returns the URL path to the authClients service getMcpServerAuthentication HTTP endpoint.

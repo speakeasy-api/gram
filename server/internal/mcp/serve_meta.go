@@ -85,6 +85,8 @@ type metaGateContext struct {
 	chainUpstream func(ctx context.Context, member metaMember, upstreamResource string) (string, error)
 	// catalog is the immutable consent record; nil for connections without materialized approval.
 	catalog *connectionCatalog
+	// consentDiagnostics is shared only within one Code Mode execution.
+	consentDiagnostics *consentDiagnostics
 	// catalogRef is the authenticated consent reference and discovery mode.
 	catalogRef *toolfilter.CatalogReference
 	// authentication retains validated endpoint identity for lazy catalogue loading.
@@ -305,7 +307,7 @@ func (s *Service) handleMetaMCPRequest(
 		}()
 	}
 
-	if !methodAvailable(req, gate.protocolVersion, mcpversions.SupportedMetaServer()) {
+	if !methodAvailable(req, gate.protocolVersion, mcpversions.SupportedMetaServer(), nil) {
 		return nil, unavailableMethod(req)
 	}
 
@@ -679,6 +681,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
 	var gateProjectTokens *projectTokenCache
 	var gateMemberChoices *memberChoices
+	agentKeyChoicesRead := false
 	var gatePolicy *toolfilter.SessionPolicy
 	var gateAuthentication *issuerGateAuthentication
 	switch {
@@ -715,6 +718,15 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
 		}
+		if gateMemberChoices == nil && membership.agentID != uuid.Nil {
+			// Decided before the token path, so members the key has a choice
+			// for resolve lazily like any other chosen member.
+			agentKeyChoicesRead = true
+			gateMemberChoices, err = s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, membership.agentID)
+			if err != nil {
+				return ctx, nil, oops.E(oops.CodeUnexpected, err, "load agent key credential choices").LogError(ctx, logger)
+			}
+		}
 		if gateMemberChoices != nil || (toolSelection != nil && toolSelection.Catalog != nil) {
 			// Proxied members resolve only their chosen clients, so the
 			// issuer's other clients resolve lazily, for hosted members that
@@ -729,6 +741,13 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		}
 		gatePolicy = toolSelection
 		gateAuthentication = authentication
+	}
+	if gateMemberChoices == nil && membership.agentID != uuid.Nil && !agentKeyChoicesRead {
+		agentKeyChoices, err := s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, membership.agentID)
+		if err != nil {
+			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load agent key credential choices").LogError(ctx, logger)
+		}
+		gateMemberChoices = agentKeyChoices
 	}
 	connectURL, connectRoot := "", ""
 	if metaServer.UserSessionIssuerID.Valid && resolvedEndpoint != nil {
@@ -758,6 +777,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		connectRoot:         connectRoot,
 		chainUpstream:       nil,
 		catalog:             nil,
+		consentDiagnostics:  nil,
 		catalogRef:          nil,
 		authentication:      gateAuthentication,
 		unapprovedMembers:   nil,

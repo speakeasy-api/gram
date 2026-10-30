@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -36,6 +37,8 @@ import (
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -136,15 +139,18 @@ type catalogConnection struct {
 func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		kind  string
-		mode  toolfilter.CatalogMode
-		oauth string
+		kind   string
+		mode   toolfilter.CatalogMode
+		oauth  string
+		source string
 	}{
-		{"remote_session", toolfilter.CatalogModeCached, ""}, {"static_credential", toolfilter.CatalogModeCached, ""},
-		{"remote_session", toolfilter.CatalogModeLive, ""}, {"static_credential", toolfilter.CatalogModeLive, ""},
-		{"static_credential", toolfilter.CatalogModeCached, "bound"}, {"static_credential", toolfilter.CatalogModeCached, "unbound"},
+		{"remote_session", toolfilter.CatalogModeCached, "", "backfill"}, {"static_credential", toolfilter.CatalogModeCached, "", "backfill"},
+		{"remote_session", toolfilter.CatalogModeLive, "", "backfill"}, {"static_credential", toolfilter.CatalogModeLive, "", "backfill"},
+		{"static_credential", toolfilter.CatalogModeCached, "bound", "backfill"}, {"static_credential", toolfilter.CatalogModeCached, "unbound", "backfill"},
+		{"remote_session", toolfilter.CatalogModeCached, "", "admin"}, {"static_credential", toolfilter.CatalogModeCached, "", "admin"},
+		{"remote_session", toolfilter.CatalogModeCached, "", "admin-unlinked"},
 	} {
-		t.Run(tc.kind+"/"+string(tc.mode)+"/"+tc.oauth, func(t *testing.T) {
+		t.Run(tc.kind+"/"+string(tc.mode)+"/"+tc.oauth+"/"+tc.source, func(t *testing.T) {
 			kind := tc.kind
 			t.Parallel()
 			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
@@ -156,9 +162,18 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 			serverID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
 			registration := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 			if kind == "remote_session" {
-				registration = uuid.NullUUID{UUID: createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "typed-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID}), Valid: true}
-				_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: serverID, RemoteSessionClientID: registration.UUID})
-				require.NoError(t, err)
+				// An administrator's client is offered without the association
+				// a backfilled one mirrors, and need not be linked to the
+				// gateway's sign-in.
+				linked := []uuid.UUID{issuer.ID}
+				if tc.source == "admin-unlinked" {
+					linked = nil
+				}
+				registration = uuid.NullUUID{UUID: createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "typed-"+uuid.NewString()[:8], "", linked), Valid: true}
+				if tc.source == "backfill" {
+					_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: serverID, RemoteSessionClientID: registration.UUID})
+					require.NoError(t, err)
+				}
 				insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, registration.UUID, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", upstream.url)
 			}
 			if tc.oauth != "" {
@@ -171,7 +186,8 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 				require.NoError(t, err)
 			}
 			fixtures := authclientfixtures.New(ti.conn)
-			authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: kind, Source: "admin", RemoteSessionClientID: registration})
+			source := strings.TrimSuffix(tc.source, "-unlinked")
+			authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: kind, Source: source, RemoteSessionClientID: registration})
 			require.NoError(t, err)
 			if kind == "static_credential" {
 				server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: *auth.ProjectID})
@@ -180,7 +196,14 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, fixtures.SeedAuthClientHeaderFixture(ctx, authclientfixtures.SeedAuthClientHeaderFixtureParams{AuthClientID: authClientID, OrganizationID: auth.ActiveOrganizationID, Name: "X-Fixture-Key", Value: pgtype.Text{String: "fixture-key", Valid: true}}))
 			}
-			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: authClientID}))
+			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: authClientID, Source: source}))
+			if kind == "remote_session" && strings.HasPrefix(tc.source, "admin") {
+				// Only enforced typed resolution serves a client offered
+				// without the association a backfilled one mirrors.
+				_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+				require.NoError(t, err)
+			}
+			callers := ti.service.RecordAuthClientPermitCallers()
 			ti.service.manual = true
 			connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, tc.mode, metamcp.DiscoveryModeDirect, nil)
 			claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(issuer.ID).String())
@@ -193,6 +216,10 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 			require.Equal(t, uuid.NullUUID{UUID: authClientID, Valid: true}, selected[0].AuthClientID)
 			require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), "executed live")
 			require.EqualValues(t, 1, upstream.calls.Load())
+			require.NotEmpty(t, callers())
+			for _, user := range callers() {
+				require.Equal(t, mockidp.MockUserID, user, "credential permission is judged for the consenting person")
+			}
 		})
 	}
 }
@@ -225,11 +252,13 @@ func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) 
 				require.NoError(t, err)
 				insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", upstream.url)
 				fixtures := authclientfixtures.New(ti.conn)
-				seedClient := func(value string) uuid.UUID {
-					id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
+				// A backfilled client carries copies of the server's headers,
+				// which go stale when the server's headers change.
+				seedClient := func(value, origin string) uuid.UUID {
+					id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: "remote_session", Source: origin, RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
 					require.NoError(t, err)
 					require.NoError(t, fixtures.SeedAuthClientHeaderFixture(ctx, authclientfixtures.SeedAuthClientHeaderFixtureParams{AuthClientID: id, OrganizationID: auth.ActiveOrganizationID, Name: "X-Typed-Key", Value: pgtype.Text{String: value, Valid: true}}))
-					require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id}))
+					require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id, Source: origin}))
 					return id
 				}
 				source, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: *auth.ProjectID})
@@ -240,7 +269,7 @@ func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) 
 				if staleHeaders {
 					copiedValue = "stale-key"
 				}
-				original := seedClient(copiedValue)
+				original := seedClient(copiedValue, "backfill")
 				var permitted atomic.Bool
 				permitted.Store(true)
 				ti.service.SetAuthClientPermission(permitted.Load)
@@ -264,7 +293,7 @@ func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) 
 				require.Contains(t, call(), "don't have access")
 				require.Equal(t, before, upstream.requests.Load(), "revocation must refuse before any upstream request")
 				permitted.Store(true)
-				replacement := seedClient("replacement-key")
+				replacement := seedClient("replacement-key", "admin")
 				require.NotEqual(t, original, replacement)
 				claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(issuer.ID).String())
 				require.NoError(t, err)
@@ -295,7 +324,7 @@ func TestGatewayConsentAmbiguousTypedClientRequiresSetup(t *testing.T) {
 	for range 2 {
 		id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
 		require.NoError(t, err)
-		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id}))
+		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id, Source: "admin"}))
 	}
 	ti.service.manual = true
 	stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
@@ -320,7 +349,9 @@ func approveGatewayCatalog(t *testing.T, ctx context.Context, ti *testInstance, 
 		form.Set("tool_filtering", "on")
 		form["tools"] = tools
 	}
-	request := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
+	// The approval arrives from the person's browser, which carries no
+	// Speakeasy request authentication; the challenge names the person.
+	request := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode())).WithContext(t.Context())
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
 	require.NoError(t, ti.service.ServeConsent(response, request, endpoint))
@@ -906,7 +937,8 @@ func TestConnectionCatalogProgressiveListsOnlySelectedServers(t *testing.T) {
 
 func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	logs := &syncBuffer{}
+	ctx, ti := newTestMCPServiceWithLogger(t, slog.New(slog.NewJSONHandler(logs, nil)))
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	slug := "catalog-config-" + uuid.NewString()
@@ -915,9 +947,9 @@ func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T)
 	memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
 	// Code Mode helpers name the changed member as needing a new consent
 	// instead of silently dropping it.
+	enableCodeMode(t, ctx, ti)
 	var codeChecked atomic.Bool
 	mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil, run: func(ctx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
-		enableCodeMode(t, ctx, ti)
 		servers, err := host.Servers(ctx, codemode.PageArgs{})
 		require.NoError(t, err)
 		require.Equal(t, []codemode.Server{{Slug: "source", Name: "Source"}}, servers.Items)
@@ -953,7 +985,11 @@ func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T)
 	status, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "connection_status", "arguments": map[string]any{}}), progressive.token, nil)
 	require.NoError(t, err)
 	require.Contains(t, status.Body.String(), "configuration changed")
+	beforeCode := strings.Count(logs.String(), "gateway consent validation failed")
 	require.NotContains(t, callGatewayTool(t, ti, slug, code.token, "execute", map[string]any{"code": "discover"}), `"isError":true`)
+	require.Equal(t, beforeCode+1, strings.Count(logs.String(), "gateway consent validation failed"), "all helpers share one diagnostic per stale member")
+	require.NotContains(t, callGatewayTool(t, ti, slug, code.token, "execute", map[string]any{"code": "discover"}), `"isError":true`)
+	require.Equal(t, beforeCode+2, strings.Count(logs.String(), "gateway consent validation failed"), "a new execution has its own diagnostic scope")
 	require.True(t, codeChecked.Load())
 	require.Zero(t, replacement.calls.Load())
 }

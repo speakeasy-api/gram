@@ -391,3 +391,21 @@ func TestConsentTemplate_GatewayListLinksNotSetUpServer(t *testing.T) {
 	require.Contains(t, page, `server=eng.jira" class="text-muted-foreground interact:text-foreground shrink-0 text-xs" data-gateway-server-page >View`)
 	require.NotContains(t, page, "server=docs")
 }
+
+func TestConsentTemplateGatewayAuthPickerAndVisibility(t *testing.T) {
+	t.Parallel()
+	member := gatewayTestMember("source", "Source", uuid.Nil, uuid.New())
+	member.serverID = uuid.New()
+	view := gatewayServersView([]metaMember{member}, nil)
+	view.CanHide = true
+	view.Servers[0].Auth = &consentServerAuth{Status: consentAuthChoose, Options: []consentAuthClientOption{
+		{ID: uuid.New(), Name: "Personal", Type: authClientTypeRemoteSession, State: consentClientReady},
+		{ID: uuid.New(), Name: "Shared", Type: authClientTypeStaticCredential, State: consentClientReady},
+	}}
+	page := renderGatewayConsent(t, gatewayTemplateData(view, nil))
+	require.Contains(t, page, `id="gateway-auth-form"`)
+	require.Contains(t, page, `name="auth_client.source" form="gateway-auth-form"`)
+	require.Contains(t, page, `aria-label="Sign in to Source as"`)
+	require.Contains(t, page, `value="hide_server"`)
+	require.Contains(t, page, `name="server_id" value="`+member.serverID.String()+`"`)
+}

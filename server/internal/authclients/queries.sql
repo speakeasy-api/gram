@@ -201,3 +201,289 @@ WHERE msac.mcp_server_id = @mcp_server_id
   AND msac.organization_id = @organization_id
   AND msac.deleted IS FALSE
 ORDER BY ac.name, ac.id;
+
+-- name: GetAuthClientRegistration :one
+-- An OAuth registration a new remote_session or service_account client may
+-- name: live, with a live issuer, and in the client's project, shared across
+-- the organization, or platform-global.
+SELECT c.id,
+       c.attachment_scope,
+       c.credential_owner,
+       c.project_id,
+       c.organization_id
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS rsi
+  ON rsi.id = c.remote_session_issuer_id
+ AND rsi.deleted IS FALSE
+ AND (
+   (rsi.project_id IS NOT NULL AND rsi.project_id = sqlc.narg(project_id)::uuid)
+   OR (rsi.project_id IS NULL AND rsi.organization_id = @organization_id::text)
+   OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL)
+ )
+WHERE c.id = @id
+  AND c.deleted IS FALSE
+  AND (
+    (c.project_id IS NOT NULL AND c.project_id = sqlc.narg(project_id)::uuid)
+    OR (c.project_id IS NULL AND c.organization_id = @organization_id::text)
+    OR (c.project_id IS NULL AND c.organization_id IS NULL)
+  )
+  AND (c.project_id IS NULL OR EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.id = c.project_id
+      AND p.organization_id = @organization_id::text
+      AND p.deleted IS FALSE
+  ));
+
+-- name: GetOrganizationProject :one
+SELECT p.id
+FROM projects p
+WHERE p.id = @id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE;
+
+-- name: CreateAuthClient :one
+INSERT INTO mcp_auth_clients (
+  organization_id,
+  project_id,
+  client_type,
+  source,
+  name,
+  created_by_user_id,
+  remote_session_client_id,
+  client_attachment_scope
+) VALUES (
+  @organization_id,
+  sqlc.narg(project_id)::uuid,
+  @client_type,
+  'admin',
+  @name,
+  @created_by_user_id,
+  sqlc.narg(remote_session_client_id)::uuid,
+  sqlc.narg(client_attachment_scope)::text
+)
+RETURNING *;
+
+-- name: LockAttachableMCPServer :one
+-- A proxied (remote or tunneled) MCP server in the organization, locked so an
+-- attachment serializes with SetMcpServerUpstreamAuthRequirement.
+SELECT
+  ms.id,
+  ms.project_id,
+  ms.name,
+  ms.requires_upstream_auth,
+  (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS proxied,
+  (ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS tunneled
+FROM mcp_servers ms
+JOIN projects p
+  ON p.id = ms.project_id
+ AND p.organization_id = @organization_id
+ AND p.deleted IS FALSE
+WHERE ms.id = @id
+  AND ms.deleted IS FALSE
+FOR UPDATE OF ms;
+
+-- name: AttachAuthClientToServer :one
+-- Offers the client on the server as an administrator-owned association. An
+-- existing live association is kept as it is.
+INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+SELECT ms.project_id, ac.organization_id, ms.id, ac.id, ac.attachment_scope, 'admin'
+FROM mcp_auth_clients ac
+JOIN mcp_servers ms
+  ON ms.id = @mcp_server_id
+ AND ms.deleted IS FALSE
+ AND (ac.project_id IS NULL OR ac.project_id = ms.project_id)
+JOIN projects p
+  ON p.id = ms.project_id
+ AND p.organization_id = ac.organization_id
+ AND p.deleted IS FALSE
+WHERE ac.id = @auth_client_id
+  AND ac.organization_id = @organization_id
+  AND ac.deleted IS FALSE
+ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO NOTHING
+RETURNING id;
+
+-- name: ListAuthClientStoredHeaders :many
+-- A client's live headers with their stored values, for a writer that keeps a
+-- secret's stored value when no new one is given. Values stay encrypted.
+SELECT h.name,
+       h.is_secret,
+       h.value
+FROM mcp_auth_client_headers h
+WHERE h.auth_client_id = @auth_client_id
+  AND h.organization_id = @organization_id
+  AND h.deleted IS FALSE;
+
+-- name: DeleteAuthClientHeaders :exec
+UPDATE mcp_auth_client_headers
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE auth_client_id = @auth_client_id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;
+
+-- name: CreateAuthClientHeader :exec
+INSERT INTO mcp_auth_client_headers (
+  auth_client_id,
+  organization_id,
+  name,
+  description,
+  is_required,
+  is_secret,
+  value,
+  value_from_request_header
+) VALUES (
+  @auth_client_id,
+  @organization_id,
+  @name,
+  @description,
+  @is_required,
+  @is_secret,
+  @value,
+  @value_from_request_header
+);
+
+-- name: GetOrganizationUserSessionIssuer :one
+-- A sign-in in the organization: an organization issuer, or one of a live
+-- project's.
+SELECT usi.id,
+       usi.project_id
+FROM user_session_issuers AS usi
+LEFT JOIN projects AS p
+  ON p.id = usi.project_id
+WHERE usi.id = @id
+  AND usi.deleted IS FALSE
+  AND (
+    (usi.project_id IS NULL AND usi.organization_id = @organization_id::text)
+    OR (p.organization_id = @organization_id::text AND p.deleted IS FALSE)
+  );
+
+-- name: IsUserSessionClientOfIssuer :one
+-- A live client of the issuer, in the organization: its own, or one of a
+-- live project's.
+SELECT EXISTS (
+  SELECT 1
+  FROM user_session_clients AS c
+  LEFT JOIN projects AS p
+    ON p.id = c.project_id
+  WHERE c.id = @id
+    AND c.user_session_issuer_id = @user_session_issuer_id
+    AND c.deleted IS FALSE
+    AND (
+      (c.project_id IS NULL AND c.organization_id = @organization_id::text)
+      OR (p.organization_id = @organization_id::text AND p.deleted IS FALSE)
+    )
+)::boolean AS is_client;
+
+-- name: LockIssuanceProfileCaller :exec
+-- Serializes writes to one caller's profile on one sign-in, including the
+-- first, which has no row to lock yet.
+SELECT pg_advisory_xact_lock(hashtextextended('issuance_selection_profiles:' || @user_session_issuer_id::text || ':' || @caller_key::text, 0));
+
+-- name: IsOrganizationWorkloadIssuer :one
+SELECT EXISTS (
+  SELECT 1
+  FROM workload_issuers AS w
+  WHERE w.id = @id
+    AND w.organization_id = @organization_id
+    AND w.deleted IS FALSE
+)::boolean AS is_issuer;
+
+-- name: LockIssuanceProfileForCaller :one
+SELECT p.*
+FROM issuance_selection_profiles AS p
+WHERE p.user_session_issuer_id = @user_session_issuer_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+  AND (
+    (sqlc.narg('user_session_client_id')::uuid IS NOT NULL AND p.user_session_client_id = sqlc.narg('user_session_client_id')::uuid)
+    OR (sqlc.narg('workload_issuer_id')::uuid IS NOT NULL
+        AND p.workload_issuer_id = sqlc.narg('workload_issuer_id')::uuid
+        AND p.workload_subject = sqlc.narg('workload_subject')::text)
+  )
+FOR UPDATE OF p;
+
+-- name: CreateIssuanceProfile :one
+INSERT INTO issuance_selection_profiles (
+  organization_id,
+  project_id,
+  user_session_issuer_id,
+  user_session_client_id,
+  workload_issuer_id,
+  workload_subject,
+  name,
+  created_by_user_id
+) VALUES (
+  @organization_id,
+  sqlc.narg('project_id')::uuid,
+  @user_session_issuer_id,
+  sqlc.narg('user_session_client_id')::uuid,
+  sqlc.narg('workload_issuer_id')::uuid,
+  sqlc.narg('workload_subject')::text,
+  @name,
+  @created_by_user_id
+)
+RETURNING *;
+
+-- name: RenameIssuanceProfile :one
+UPDATE issuance_selection_profiles
+SET name = @name,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: LockIssuanceProfile :one
+SELECT p.*
+FROM issuance_selection_profiles AS p
+WHERE p.id = @id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+FOR UPDATE OF p;
+
+-- name: DeleteIssuanceProfile :exec
+UPDATE issuance_selection_profiles
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;
+
+-- name: ListIssuanceProfiles :many
+SELECT p.*
+FROM issuance_selection_profiles AS p
+WHERE p.user_session_issuer_id = @user_session_issuer_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+ORDER BY p.name, p.id;
+
+-- name: ListIssuanceProfileChoices :many
+SELECT sel.credential_id AS profile_id,
+       sel.mcp_server_id,
+       sel.auth_client_id
+FROM upstream_client_selections AS sel
+WHERE sel.credential_kind = 'issuance_profile'
+  AND sel.credential_id = ANY(@profile_ids::uuid[])
+  AND sel.organization_id = @organization_id
+  AND sel.deleted IS FALSE
+ORDER BY sel.credential_id, sel.mcp_server_id;
+
+-- name: ClearIssuanceProfileChoices :exec
+UPDATE upstream_client_selections
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE credential_kind = 'issuance_profile'
+  AND credential_id = @profile_id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;
+
+-- name: ClearIssuanceProfileServerChoice :exec
+UPDATE upstream_client_selections
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE credential_kind = 'issuance_profile'
+  AND credential_id = @profile_id
+  AND mcp_server_id = @mcp_server_id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -74,6 +75,8 @@ func newMetaCodeBackend(ctx context.Context, service *Service, gate *metaGateCon
 		surface = networkaccess.SurfacePrivate
 	}
 	backend := &metaCodeBackend{service: service, gate: *gate, admitted: admitted, meta: meta, boundary: boundary, refresh: refresh, endpoint: endpoint, issuer: issuer, surface: surface, revoked: atomic.Bool{}, sessions: nil}
+	backend.gate.consentDiagnostics = &consentDiagnostics{seen: sync.Map{}}
+
 	recheck := func(ctx context.Context, slug string) (context.Context, *metaGateContext, metaMember, error) {
 		ctx, gate, members, err := backend.current(ctx, true)
 		if err != nil {
@@ -175,6 +178,7 @@ func (b *metaCodeBackend) current(ctx context.Context, execute bool) (context.Co
 		return ctx, nil, nil, b.revoke()
 	}
 	gate.catalog = b.gate.catalog
+	gate.consentDiagnostics = b.gate.consentDiagnostics
 	gate.execute = execute
 	ctx = b.boundary.Apply(ctx)
 	freshCtx, err = b.service.authz.RefreshContext(ctx)

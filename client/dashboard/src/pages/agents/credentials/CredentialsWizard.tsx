@@ -25,6 +25,12 @@ import {
 import { buildRequestedGrants } from "../agent-api-key-grants";
 import { discoverKeyServerGrants } from "../agent-key-discovery";
 import {
+  discoverUnscopedGrants,
+  HOOKS_INGEST_SCOPE,
+  hooksIngestKeyGrants,
+  hooksIngestPolicyGrant,
+} from "../agent-hook-events";
+import {
   agentGatewayURL,
   isCredentialSafe,
   mintInstallCommand,
@@ -35,6 +41,7 @@ import {
   type AllServersRefusal,
   type ServerSelection,
 } from "./StepServers";
+import { keyCredentialChoices } from "./keyCredentialChoices";
 import { StepVerify, type VerifyState } from "./StepVerify";
 import { CredentialPicker } from "./CredentialPicker";
 import { StepWorkload } from "./StepWorkload";
@@ -89,8 +96,8 @@ import {
 /** Each step's name, and the one or two words it shrinks to in a full row. */
 const STEPS = [
   { label: "Name", short: "Name" },
-  { label: "MCP selection", short: "MCPs" },
-  { label: "MCP authentication", short: "Authentication" },
+  { label: "MCP Selection", short: "MCPs" },
+  { label: "MCP Authentication", short: "Authentication" },
   { label: "Credential", short: "Credential" },
   { label: "Install", short: "Install" },
   { label: "Verify", short: "Verify" },
@@ -179,8 +186,19 @@ export function CredentialsWizard({
   // Trusting a platform and admitting a subject are both writes against the
   // organization's workload identities, so the choice is offered only to
   // someone who could carry it out.
-  const { hasAllScopes, hasAnyScope } = useRBAC();
+  const {
+    hasAllScopes,
+    hasAnyScope,
+    isLoading: rbacLoading,
+    error: rbacError,
+  } = useRBAC();
   const canFederate = hasAllScopes(["workload:write"]);
+  // A new agent sends hook events from the observability plugin when its
+  // creator may grant that. Only confirmed permissions count: a failed grants
+  // read must not add a grant that would refuse the whole creation.
+  const canGrantHookEvents =
+    !rbacError &&
+    hasAllScopes([HOOKS_INGEST_SCOPE], organization.id, project.id);
   // The catalog itself needs workload read access. Without it the request is
   // refused, so it is not made, and the step shows the API key alone rather
   // than an error. Write satisfies read on the server, so either scope counts.
@@ -342,6 +360,14 @@ export function CredentialsWizard({
   // What provisioning produced. The secret is held only while this page is
   // open; nothing writes it to storage or to the query cache.
   const [agentID, setAgentID] = useState<string | null>(agent?.id ?? null);
+  // Whether the agent this flow created was given hook ingestion. Once it is
+  // created its policy is settled, so that choice holds even if the caller's
+  // permissions change afterwards. An agent that exists keeps the policy it
+  // has, and its keys are not asked for hook ingestion here.
+  const [createdHookEvents, setCreatedHookEvents] = useState<boolean | null>(
+    null,
+  );
+  const hookEvents = !existing && (createdHookEvents ?? canGrantHookEvents);
   const [secret, setSecret] = useState<string | null>(null);
   const [command, setCommand] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
@@ -665,6 +691,13 @@ export function CredentialsWizard({
       throw new Error("This project is still loading. Try again in a moment.");
     }
     if (refusedChoice) throw new Error(refusedChoice);
+    // Whether the agent sends hook events is read from the caller's grants,
+    // so it is not decided while they are still loading.
+    if (rbacLoading) {
+      throw new Error(
+        "Your permissions are still loading. Try again in a moment.",
+      );
+    }
     // "All servers" is one wildcard selector rather than today's inventory
     // listed out, so it covers the servers added after this is saved. Scoped
     // to the project, never the draft's bare `null`: `null` means
@@ -689,10 +722,18 @@ export function CredentialsWizard({
       createAgentForm: {
         name: name.trim(),
         projectId: projectID,
-        policyGrants: agentPolicyGrantsFromDraft(draft),
+        // Hook ingestion is bounded to the agent's project, the only one its
+        // hook events may name.
+        policyGrants: [
+          ...agentPolicyGrantsFromDraft(draft),
+          ...(hookEvents
+            ? [hooksIngestPolicyGrant(organization.id, projectID)]
+            : []),
+        ],
       },
     });
     setAgentID(created.id);
+    setCreatedHookEvents(hookEvents);
     void invalidateAgentPolicy(
       queryClient,
       organization.id,
@@ -937,21 +978,31 @@ export function CredentialsWizard({
       return targetId;
     },
     onConnected: setAgentID,
-    // The rule this agent already holds: its own rule is not a duplicate of
-    // itself, and the create step has nothing left to write.
-    connectedSubject: admitted?.subject,
-    // Editing never writes a rule: the agent already holds one, and the
-    // steps after this are the platform's own settings to read.
-    settled: editing,
+    // The rule this agent already holds. Editing its values replaces it.
+    replacing: editing ? admitted : undefined,
+    // Editing without permission to manage workload identities shows the
+    // rule without letting it be changed.
+    readOnly: editing && !canFederate,
     // What the rule already says, so editing shows it rather than an empty
     // field that would write a second rule.
     initialValues:
-      admitted !== undefined && admittedEntry !== undefined
-        ? {
-            ...valuesFromIssuer(admittedEntry, admitted.issuer),
-            ...valuesFromSubject(admittedEntry, admitted.subject),
-          }
-        : undefined,
+      admitted === undefined
+        ? undefined
+        : admittedEntry !== undefined
+          ? {
+              ...valuesFromIssuer(admittedEntry, admitted.issuer),
+              ...valuesFromSubject(admittedEntry, admitted.subject),
+            }
+          : // A custom issuer: the issuer picked from the trusted list, and
+            // the subject as typed, without the `*` the match kind adds.
+            {
+              issuer_id: admitted.workloadIssuerId,
+              subject:
+                admitted.matchKind === "wildcard"
+                  ? admitted.subject.replace(/\*$/, "")
+                  : admitted.subject,
+              match_kind: admitted.matchKind,
+            },
     onValueChange: (key) =>
       setHighlight(
         key === "org_id"
@@ -1077,6 +1128,30 @@ export function CredentialsWizard({
         );
       }
 
+      const authClientChoices = await keyCredentialChoices(
+        sdk,
+        allServers
+          ? []
+          : selected.map((entry) => ({
+              ...entry.server,
+              authClientId: entry.authClientId,
+            })),
+      );
+      // Hook ingestion names the organization rather than a server, so only
+      // discovery that names no server returns it. Asked for only when the
+      // agent was created with it, and bounded to the agent's project.
+      const hookGrants =
+        hookEvents && scopedProjectID
+          ? hooksIngestKeyGrants(
+              await discoverUnscopedGrants(
+                sdk.agents,
+                target.id,
+                controller.signal,
+              ),
+              scopedProjectID,
+            )
+          : [];
+
       const expiresAt = new Date(Date.now() + KEY_LIFETIME_DAYS * 86_400_000);
       const issued = await sdk.keys.create({
         createKeyForm: {
@@ -1087,8 +1162,9 @@ export function CredentialsWizard({
           name: `${name.trim()} key ${new Date().toISOString().replace(/[:.]/g, "-")}`,
           expiresAt,
           delegatedGrantsVersion: 2,
-          requestedGrants,
+          requestedGrants: [...requestedGrants, ...hookGrants],
           scopes: [],
+          authClientChoices,
         },
       });
       keyID.current = issued.id;
@@ -1130,7 +1206,13 @@ export function CredentialsWizard({
         },
         {
           label: "Grants",
-          value: <code className="text-xs">mcp:connect</code>,
+          value: (
+            <code className="text-xs">
+              {hookEvents
+                ? `${CONNECT_SCOPE}, ${HOOKS_INGEST_SCOPE}`
+                : CONNECT_SCOPE}
+            </code>
+          ),
         },
         {
           label: "Credential",
@@ -1477,8 +1559,9 @@ export function CredentialsWizard({
           primary={
             workloadStep.phase === "create" ? (
               // Already connected under this very rule: there is nothing to
-              // write, so the step is a page to read and move past.
-              workload.connected || editing ? (
+              // write, so the step is a page to read and move past. Someone
+              // who cannot manage workload identities only reads it.
+              workload.connected || (editing && !canFederate) ? (
                 <Button onClick={() => setStep(step + 1)}>Continue</Button>
               ) : (
                 <Button
@@ -1492,8 +1575,12 @@ export function CredentialsWizard({
                   }}
                 >
                   {workload.connecting
-                    ? "Connecting…"
-                    : `Connect ${platform?.displayName ?? "platform"}`}
+                    ? editing
+                      ? "Saving…"
+                      : "Connecting…"
+                    : editing
+                      ? "Save changes"
+                      : `Connect ${platform?.displayName ?? "platform"}`}
                 </Button>
               )
             ) : last ? (

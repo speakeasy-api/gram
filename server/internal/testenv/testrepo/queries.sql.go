@@ -146,6 +146,25 @@ func (q *Queries) ClearMCPServerRemoteSessionClientsFixture(ctx context.Context,
 	return err
 }
 
+const clearOrganizationFeatureSettingFixture = `-- name: ClearOrganizationFeatureSettingFixture :execrows
+DELETE FROM organization_features WHERE organization_id = $1 AND feature_name = $2
+`
+
+type ClearOrganizationFeatureSettingFixtureParams struct {
+	OrganizationID string
+	FeatureName    string
+}
+
+// Returns a feature setting to never configured, removing even the
+// soft-deleted row that records an explicit opt-in.
+func (q *Queries) ClearOrganizationFeatureSettingFixture(ctx context.Context, arg ClearOrganizationFeatureSettingFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearOrganizationFeatureSettingFixture, arg.OrganizationID, arg.FeatureName)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearPreparationFixtureState = `-- name: ClearPreparationFixtureState :exec
 UPDATE remote_session_ema_bindings SET state = NULL, grant_source = NULL
 WHERE id = $1 AND project_id = $2 AND organization_id = $3
@@ -363,15 +382,22 @@ func (q *Queries) CountDemoSeedAPIKeysFixture(ctx context.Context, organizationI
 }
 
 const countDemoSeedAgentGrantsFixture = `-- name: CountDemoSeedAgentGrantsFixture :one
-SELECT count(*) FROM principal_grants
+SELECT count(*) FILTER (WHERE scope = 'mcp:auth') AS auth_grants,
+       count(*) FILTER (WHERE scope <> 'mcp:auth') AS policy_grants
+FROM principal_grants
 WHERE organization_id = $1 AND principal_urn LIKE 'agent:%'
 `
 
-func (q *Queries) CountDemoSeedAgentGrantsFixture(ctx context.Context, organizationID string) (int64, error) {
+type CountDemoSeedAgentGrantsFixtureRow struct {
+	AuthGrants   int64
+	PolicyGrants int64
+}
+
+func (q *Queries) CountDemoSeedAgentGrantsFixture(ctx context.Context, organizationID string) (CountDemoSeedAgentGrantsFixtureRow, error) {
 	row := q.db.QueryRow(ctx, countDemoSeedAgentGrantsFixture, organizationID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+	var i CountDemoSeedAgentGrantsFixtureRow
+	err := row.Scan(&i.AuthGrants, &i.PolicyGrants)
+	return i, err
 }
 
 const countFunctionsAccess = `-- name: CountFunctionsAccess :one
@@ -818,6 +844,34 @@ func (q *Queries) CreateAuthClientHeaderFixture(ctx context.Context, arg CreateA
 		arg.Value,
 	)
 	return err
+}
+
+const createHostedToolsetEndpointFixture = `-- name: CreateHostedToolsetEndpointFixture :execrows
+INSERT INTO mcp_endpoints (project_id, mcp_server_id, custom_domain_id, slug)
+SELECT s.project_id, s.id, $1::uuid, $2
+FROM mcp_servers s
+WHERE s.id = $3 AND s.toolset_id = $3 AND s.project_id = $4 AND s.deleted IS FALSE
+`
+
+type CreateHostedToolsetEndpointFixtureParams struct {
+	CustomDomainID uuid.NullUUID
+	Slug           string
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// Gives the canonical MCP server of a toolset an endpoint.
+func (q *Queries) CreateHostedToolsetEndpointFixture(ctx context.Context, arg CreateHostedToolsetEndpointFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, createHostedToolsetEndpointFixture,
+		arg.CustomDomainID,
+		arg.Slug,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const createMCPGatewayFixture = `-- name: CreateMCPGatewayFixture :one
@@ -2125,6 +2179,32 @@ func (q *Queries) GetDeploymentFunctionInfraOverrides(ctx context.Context, deplo
 	return items, nil
 }
 
+const getDeviceAgentServedEtagFixture = `-- name: GetDeviceAgentServedEtagFixture :one
+SELECT served_etag, served_etag_changed_at
+FROM device_agent_syncs
+WHERE organization_id = $1
+  AND email = $2
+`
+
+type GetDeviceAgentServedEtagFixtureParams struct {
+	OrganizationID string
+	Email          string
+}
+
+type GetDeviceAgentServedEtagFixtureRow struct {
+	ServedEtag          pgtype.Text
+	ServedEtagChangedAt pgtype.Timestamptz
+}
+
+// Reads back the etag GetPlugins last served a user, which attestation
+// compares reported applied etags against.
+func (q *Queries) GetDeviceAgentServedEtagFixture(ctx context.Context, arg GetDeviceAgentServedEtagFixtureParams) (GetDeviceAgentServedEtagFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getDeviceAgentServedEtagFixture, arg.OrganizationID, arg.Email)
+	var i GetDeviceAgentServedEtagFixtureRow
+	err := row.Scan(&i.ServedEtag, &i.ServedEtagChangedAt)
+	return i, err
+}
+
 const getDeviceIntegrationCredentialsCiphertext = `-- name: GetDeviceIntegrationCredentialsCiphertext :one
 SELECT credentials_encrypted
 FROM device_integration_configs
@@ -2916,6 +2996,46 @@ func (q *Queries) InsertDeviceAgentDeviceSyncFixture(ctx context.Context, arg In
 	return err
 }
 
+const insertDeviceAgentStateReportFixture = `-- name: InsertDeviceAgentStateReportFixture :exec
+INSERT INTO device_agent_state_reports (
+    organization_id, email, serial_number, schema_version, generated_at, reported_at,
+    applied_etag, enforcement_halted, current_blocked, speakeasyd_version, tools
+)
+VALUES (
+    $1, $2, NULLIF($3::text, ''), 1, $4, $4,
+    NULLIF($5::text, ''), $6, $7, NULLIF($8::text, ''), $9
+)
+`
+
+type InsertDeviceAgentStateReportFixtureParams struct {
+	OrganizationID    string
+	Email             string
+	SerialNumber      string
+	ReportedAt        pgtype.Timestamptz
+	AppliedEtag       string
+	EnforcementHalted bool
+	CurrentBlocked    bool
+	SpeakeasydVersion string
+	Tools             []byte
+}
+
+// Seeds one stored state report for coverage tests; the write path is
+// agent.reportState.
+func (q *Queries) InsertDeviceAgentStateReportFixture(ctx context.Context, arg InsertDeviceAgentStateReportFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertDeviceAgentStateReportFixture,
+		arg.OrganizationID,
+		arg.Email,
+		arg.SerialNumber,
+		arg.ReportedAt,
+		arg.AppliedEtag,
+		arg.EnforcementHalted,
+		arg.CurrentBlocked,
+		arg.SpeakeasydVersion,
+		arg.Tools,
+	)
+	return err
+}
+
 const insertDeviceAgentSyncFixture = `-- name: InsertDeviceAgentSyncFixture :exec
 INSERT INTO device_agent_syncs (organization_id, email, first_seen_at, last_seen_at)
 VALUES ($1, $2, $3, $3)
@@ -3482,6 +3602,75 @@ func (q *Queries) ListDemoSeedAgentsFixture(ctx context.Context, organizationID 
 	return items, nil
 }
 
+const listDemoSeedAuthGrantsFixture = `-- name: ListDemoSeedAuthGrantsFixture :many
+SELECT g.principal_urn,
+       coalesce(a.name, '')::text AS agent_name,
+       coalesce(r.workos_slug, '')::text AS role_slug,
+       g.scope,
+       coalesce(ac.name, g.selectors->>'resource_id', '')::text AS auth_client,
+       coalesce(g.selectors->>'client_type', '')::text AS client_type,
+       coalesce(g.selectors->>'connection_owner', '')::text AS connection_owner,
+       coalesce(g.selectors->>'upstream_client', '')::text AS upstream_client,
+       coalesce(p.kind, '')::text AS provision_kind
+FROM principal_grants g
+LEFT JOIN agents a
+  ON a.organization_id = g.organization_id AND g.principal_urn = 'agent:' || a.id::text
+LEFT JOIN organization_roles r
+  ON r.organization_id = g.organization_id AND g.principal_urn = 'role:organization:' || r.id
+LEFT JOIN mcp_auth_clients ac
+  ON ac.organization_id = g.organization_id AND ac.id::text = g.selectors->>'resource_id'
+LEFT JOIN auth_permission_provisions p
+  ON p.organization_id = g.organization_id AND p.principal_urn = g.principal_urn
+ AND p.scope = g.scope AND p.selectors = g.selectors
+WHERE g.organization_id = $1
+  AND g.scope IN ('mcp:auth', 'mcp:blocked_auth')
+`
+
+type ListDemoSeedAuthGrantsFixtureRow struct {
+	PrincipalUrn    urn.Principal
+	AgentName       string
+	RoleSlug        string
+	Scope           string
+	AuthClient      string
+	ClientType      string
+	ConnectionOwner string
+	UpstreamClient  string
+	ProvisionKind   string
+}
+
+// Every mcp:auth and mcp:blocked_auth grant in the organization, with the
+// names that identify its principal and auth client across seed runs, and
+// the default auth permission ledger kind that provisioned it, if any.
+func (q *Queries) ListDemoSeedAuthGrantsFixture(ctx context.Context, organizationID string) ([]ListDemoSeedAuthGrantsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listDemoSeedAuthGrantsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDemoSeedAuthGrantsFixtureRow
+	for rows.Next() {
+		var i ListDemoSeedAuthGrantsFixtureRow
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.AgentName,
+			&i.RoleSlug,
+			&i.Scope,
+			&i.AuthClient,
+			&i.ClientType,
+			&i.ConnectionOwner,
+			&i.UpstreamClient,
+			&i.ProvisionKind,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDeploymentFunctionsResources = `-- name: ListDeploymentFunctionsResources :many
 SELECT id, resource_urn, project_id, deployment_id, function_id, runtime, name, description, uri, title, mime_type, variables, meta, created_at, updated_at, deleted_at, deleted
 FROM function_resource_definitions
@@ -3730,6 +3919,67 @@ func (q *Queries) ListDeviceAgentEnvironmentSyncsFixture(ctx context.Context, or
 	return items, nil
 }
 
+const listDeviceAgentStateReportsFixture = `-- name: ListDeviceAgentStateReportsFixture :many
+SELECT id, organization_id, email, serial_number, hostname, schema_version, generated_at, reported_at, applied_etag, applied_at, enforcement_halted, remote_config_etag, remote_config_failed, withheld_plugins, tools, degraded_tool_count, drift_counting_since, speakeasyd_version, speakeasy_version, speakeasy_ui_version, os, arch, auto_update, update_channel, pinned_target, current_blocked, last_rollback_at, last_rollback_from, last_rollback_to, created_at, updated_at
+FROM device_agent_state_reports
+WHERE organization_id = $1
+ORDER BY email ASC, serial_number ASC NULLS FIRST
+`
+
+// Reads back stored agent state reports so tests can assert the upsert's
+// dedup key and what a report stores.
+func (q *Queries) ListDeviceAgentStateReportsFixture(ctx context.Context, organizationID string) ([]DeviceAgentStateReport, error) {
+	rows, err := q.db.Query(ctx, listDeviceAgentStateReportsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeviceAgentStateReport
+	for rows.Next() {
+		var i DeviceAgentStateReport
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Email,
+			&i.SerialNumber,
+			&i.Hostname,
+			&i.SchemaVersion,
+			&i.GeneratedAt,
+			&i.ReportedAt,
+			&i.AppliedEtag,
+			&i.AppliedAt,
+			&i.EnforcementHalted,
+			&i.RemoteConfigEtag,
+			&i.RemoteConfigFailed,
+			&i.WithheldPlugins,
+			&i.Tools,
+			&i.DegradedToolCount,
+			&i.DriftCountingSince,
+			&i.SpeakeasydVersion,
+			&i.SpeakeasyVersion,
+			&i.SpeakeasyUiVersion,
+			&i.Os,
+			&i.Arch,
+			&i.AutoUpdate,
+			&i.UpdateChannel,
+			&i.PinnedTarget,
+			&i.CurrentBlocked,
+			&i.LastRollbackAt,
+			&i.LastRollbackFrom,
+			&i.LastRollbackTo,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDirectoryReviewItemsFixture = `-- name: ListDirectoryReviewItemsFixture :many
 SELECT
   i.kind,
@@ -3793,6 +4043,62 @@ func (q *Queries) ListDirectoryReviewOrgStateIDsFixture(ctx context.Context) ([]
 			return nil, err
 		}
 		items = append(items, organization_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPSkillObservations = `-- name: ListMCPSkillObservations :many
+SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, skill_version_id, reconciled_at, metrics_synced_at, efficacy_enqueued_at, reconcile_error_code, created_at
+FROM skill_observations
+WHERE project_id = $1
+  AND provider = $2::text
+ORDER BY seen_at ASC, id ASC
+`
+
+type ListMCPSkillObservationsParams struct {
+	ProjectID uuid.UUID
+	Provider  string
+}
+
+// The skill observations one project recorded with one provider, oldest first.
+func (q *Queries) ListMCPSkillObservations(ctx context.Context, arg ListMCPSkillObservationsParams) ([]SkillObservation, error) {
+	rows, err := q.db.Query(ctx, listMCPSkillObservations, arg.ProjectID, arg.Provider)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SkillObservation
+	for rows.Next() {
+		var i SkillObservation
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.IdempotencyKey,
+			&i.Provider,
+			&i.UserID,
+			&i.UserEmail,
+			&i.Hostname,
+			&i.SessionID,
+			&i.SkillName,
+			&i.Source,
+			&i.SourceLevel,
+			&i.SourcePath,
+			&i.RawSha256,
+			&i.SeenAt,
+			&i.SkillID,
+			&i.SkillVersionID,
+			&i.ReconciledAt,
+			&i.MetricsSyncedAt,
+			&i.EfficacyEnqueuedAt,
+			&i.ReconcileErrorCode,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -4070,6 +4376,21 @@ func (q *Queries) LockExternalOAuthMetadataNowaitFixture(ctx context.Context, ar
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const lockMCPServerForUpdateFixture = `-- name: LockMCPServerForUpdateFixture :one
+SELECT id
+FROM mcp_servers
+WHERE id = $1
+FOR UPDATE
+`
+
+// Test-only synchronization: holds an MCP server's row lock.
+func (q *Queries) LockMCPServerForUpdateFixture(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockMCPServerForUpdateFixture, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
 }
 
 const lockMCPServerRowFixture = `-- name: LockMCPServerRowFixture :one
@@ -4912,6 +5233,22 @@ func (q *Queries) RestoreAttachmentConfigFixture(ctx context.Context, arg Restor
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const retireHostedToolsetEndpointsFixture = `-- name: RetireHostedToolsetEndpointsFixture :exec
+UPDATE mcp_endpoints
+SET deleted_at = clock_timestamp()
+WHERE mcp_server_id = $1 AND project_id = $2 AND deleted IS FALSE
+`
+
+type RetireHostedToolsetEndpointsFixtureParams struct {
+	ID        uuid.NullUUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) RetireHostedToolsetEndpointsFixture(ctx context.Context, arg RetireHostedToolsetEndpointsFixtureParams) error {
+	_, err := q.db.Exec(ctx, retireHostedToolsetEndpointsFixture, arg.ID, arg.ProjectID)
+	return err
 }
 
 const revokeAgentAttachmentsFixture = `-- name: RevokeAgentAttachmentsFixture :execrows
@@ -5803,6 +6140,67 @@ func (q *Queries) SetDeploymentFunctionInfraOverrides(ctx context.Context, arg S
 	return err
 }
 
+const setDeviceAgentServedEtagFixture = `-- name: SetDeviceAgentServedEtagFixture :exec
+UPDATE device_agent_syncs
+SET served_etag = $1, served_etag_changed_at = clock_timestamp()
+WHERE organization_id = $2
+  AND email = $3
+`
+
+type SetDeviceAgentServedEtagFixtureParams struct {
+	ServedEtag     pgtype.Text
+	OrganizationID string
+	Email          string
+}
+
+// Records the etag GetPlugins last served a user, as a poll would.
+func (q *Queries) SetDeviceAgentServedEtagFixture(ctx context.Context, arg SetDeviceAgentServedEtagFixtureParams) error {
+	_, err := q.db.Exec(ctx, setDeviceAgentServedEtagFixture, arg.ServedEtag, arg.OrganizationID, arg.Email)
+	return err
+}
+
+const setDeviceAgentStateReportUpdateFixture = `-- name: SetDeviceAgentStateReportUpdateFixture :exec
+UPDATE device_agent_state_reports
+SET auto_update = $1
+  , update_channel = $2
+  , pinned_target = $3
+  , last_rollback_at = $4
+  , last_rollback_from = $5
+  , last_rollback_to = $6
+WHERE organization_id = $7
+  AND LOWER(email) = LOWER($8)
+  AND LOWER(serial_number) IS NOT DISTINCT FROM LOWER(NULLIF($9::text, ''))
+`
+
+type SetDeviceAgentStateReportUpdateFixtureParams struct {
+	AutoUpdate       pgtype.Text
+	UpdateChannel    pgtype.Text
+	PinnedTarget     pgtype.Text
+	LastRollbackAt   pgtype.Timestamptz
+	LastRollbackFrom pgtype.Text
+	LastRollbackTo   pgtype.Text
+	OrganizationID   string
+	Email            string
+	SerialNumber     string
+}
+
+// Sets one seeded state report's update posture and last rollback. Matches
+// the report key: an empty serial selects the serial-less report.
+func (q *Queries) SetDeviceAgentStateReportUpdateFixture(ctx context.Context, arg SetDeviceAgentStateReportUpdateFixtureParams) error {
+	_, err := q.db.Exec(ctx, setDeviceAgentStateReportUpdateFixture,
+		arg.AutoUpdate,
+		arg.UpdateChannel,
+		arg.PinnedTarget,
+		arg.LastRollbackAt,
+		arg.LastRollbackFrom,
+		arg.LastRollbackTo,
+		arg.OrganizationID,
+		arg.Email,
+		arg.SerialNumber,
+	)
+	return err
+}
+
 const setDeviceIntegrationSyncPushDigestFixture = `-- name: SetDeviceIntegrationSyncPushDigestFixture :exec
 UPDATE device_integration_syncs s
 SET last_push_digest = $1
@@ -5939,6 +6337,47 @@ type SetGcpIamCredentialServiceAccountFixtureParams struct {
 func (q *Queries) SetGcpIamCredentialServiceAccountFixture(ctx context.Context, arg SetGcpIamCredentialServiceAccountFixtureParams) error {
 	_, err := q.db.Exec(ctx, setGcpIamCredentialServiceAccountFixture, arg.ImpersonateServiceAccount, arg.ExternalCredentialID, arg.OrganizationID)
 	return err
+}
+
+const setHostedToolsetIssuerFixture = `-- name: SetHostedToolsetIssuerFixture :execrows
+UPDATE mcp_servers
+SET user_session_issuer_id = $1, updated_at = clock_timestamp()
+WHERE id = $2 AND toolset_id = $2 AND project_id = $3 AND deleted IS FALSE
+`
+
+type SetHostedToolsetIssuerFixtureParams struct {
+	UserSessionIssuerID uuid.NullUUID
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+func (q *Queries) SetHostedToolsetIssuerFixture(ctx context.Context, arg SetHostedToolsetIssuerFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setHostedToolsetIssuerFixture, arg.UserSessionIssuerID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setHostedToolsetVisibilityFixture = `-- name: SetHostedToolsetVisibilityFixture :execrows
+UPDATE mcp_servers
+SET visibility = $1, updated_at = clock_timestamp()
+WHERE id = $2 AND toolset_id = $2 AND project_id = $3 AND deleted IS FALSE
+`
+
+type SetHostedToolsetVisibilityFixtureParams struct {
+	Visibility string
+	ID         uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+// Sets a toolset's hosting visibility on its canonical MCP server, which owns it.
+func (q *Queries) SetHostedToolsetVisibilityFixture(ctx context.Context, arg SetHostedToolsetVisibilityFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setHostedToolsetVisibilityFixture, arg.Visibility, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setLocalLockTimeoutFixture = `-- name: SetLocalLockTimeoutFixture :one
@@ -6595,100 +7034,6 @@ func (q *Queries) SetRemoteSessionValidationTrackingFixture(ctx context.Context,
 		arg.ID,
 		arg.ProjectID,
 	)
-	return err
-}
-
-const setToolsetCustomDomain = `-- name: SetToolsetCustomDomain :exec
-UPDATE toolsets
-SET
-    custom_domain_id = $1
-  , updated_at = clock_timestamp()
-WHERE slug = $2 AND project_id = $3
-`
-
-type SetToolsetCustomDomainParams struct {
-	CustomDomainID uuid.NullUUID
-	Slug           string
-	ProjectID      uuid.UUID
-}
-
-// Points a toolset's legacy alias at a custom domain; the canonical wrapper's endpoints are left as they are.
-func (q *Queries) SetToolsetCustomDomain(ctx context.Context, arg SetToolsetCustomDomainParams) error {
-	_, err := q.db.Exec(ctx, setToolsetCustomDomain, arg.CustomDomainID, arg.Slug, arg.ProjectID)
-	return err
-}
-
-const setToolsetMCPEnabledByID = `-- name: SetToolsetMCPEnabledByID :exec
-WITH toolset AS (
-    UPDATE toolsets
-    SET mcp_enabled = $1
-    WHERE toolsets.id = $2 AND toolsets.project_id = $3
-    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
-)
-UPDATE mcp_servers
-SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
-FROM toolset
-WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE
-`
-
-type SetToolsetMCPEnabledByIDParams struct {
-	McpEnabled bool
-	ID         uuid.UUID
-	ProjectID  uuid.UUID
-}
-
-// Enables or disables as an MCP server update would: on the canonical wrapper, and on the column for wrapper-less toolsets.
-func (q *Queries) SetToolsetMCPEnabledByID(ctx context.Context, arg SetToolsetMCPEnabledByIDParams) error {
-	_, err := q.db.Exec(ctx, setToolsetMCPEnabledByID, arg.McpEnabled, arg.ID, arg.ProjectID)
-	return err
-}
-
-const setToolsetMCPPublicByID = `-- name: SetToolsetMCPPublicByID :exec
-WITH toolset AS (
-    UPDATE toolsets
-    SET mcp_is_public = $1
-    WHERE toolsets.id = $2 AND toolsets.project_id = $3
-    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
-)
-UPDATE mcp_servers
-SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
-FROM toolset
-WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE
-`
-
-type SetToolsetMCPPublicByIDParams struct {
-	McpIsPublic bool
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
-}
-
-// Sets publicness as an MCP server update would: on the canonical wrapper, and on the columns for wrapper-less toolsets.
-func (q *Queries) SetToolsetMCPPublicByID(ctx context.Context, arg SetToolsetMCPPublicByIDParams) error {
-	_, err := q.db.Exec(ctx, setToolsetMCPPublicByID, arg.McpIsPublic, arg.ID, arg.ProjectID)
-	return err
-}
-
-const setToolsetMCPPublicBySlug = `-- name: SetToolsetMCPPublicBySlug :exec
-WITH toolset AS (
-    UPDATE toolsets
-    SET mcp_is_public = $1
-    WHERE toolsets.mcp_slug = $2 AND toolsets.project_id = $3
-    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
-)
-UPDATE mcp_servers
-SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
-FROM toolset
-WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE
-`
-
-type SetToolsetMCPPublicBySlugParams struct {
-	McpIsPublic bool
-	McpSlug     pgtype.Text
-	ProjectID   uuid.UUID
-}
-
-func (q *Queries) SetToolsetMCPPublicBySlug(ctx context.Context, arg SetToolsetMCPPublicBySlugParams) error {
-	_, err := q.db.Exec(ctx, setToolsetMCPPublicBySlug, arg.McpIsPublic, arg.McpSlug, arg.ProjectID)
 	return err
 }
 

@@ -42,6 +42,24 @@ func (q *Queries) AdminAuditProjectBelongsToOrganization(ctx context.Context, ar
 	return exists, err
 }
 
+const adminBackfillMCPAuthFromConnect = `-- name: AdminBackfillMCPAuthFromConnect :execrows
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+SELECT DISTINCT g.organization_id, g.principal_urn, 'mcp:auth', '{"resource_kind":"mcp_auth_client","resource_id":"*"}'::jsonb
+FROM principal_grants AS g
+WHERE g.scope = 'mcp:connect'
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
+`
+
+// Grants unrestricted mcp:auth to every principal holding any mcp:connect
+// grant, whatever its selectors.
+func (q *Queries) AdminBackfillMCPAuthFromConnect(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, adminBackfillMCPAuthFromConnect)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const adminBulkUpdateAccountType = `-- name: AdminBulkUpdateAccountType :many
 UPDATE organization_metadata
 SET
@@ -348,7 +366,6 @@ const adminGetMcpServerAuth = `-- name: AdminGetMcpServerAuth :one
 SELECT
     m.id,
     COALESCE(m.name, t.name, m.slug, m.id::text)::text AS name,
-    FALSE AS toolset_only,
     m.toolset_id,
     m.remote_mcp_server_id,
     m.tunneled_mcp_server_id,
@@ -361,7 +378,7 @@ SELECT
         WHERE e.mcp_server_id = m.id AND e.deleted IS FALSE AND e.is_domain_root IS NOT TRUE
         ORDER BY (e.custom_domain_id IS NULL), e.created_at, e.id
         LIMIT 1
-    ), m.slug, CASE WHEN w.wrapper_count <= 1 THEN t.mcp_slug END, '')::text AS url_slug,
+    ), m.slug, '')::text AS url_slug,
     COALESCE(t.slug, '')::text AS toolset_slug,
     w.wrapper_count AS toolset_wrapper_count
 FROM mcp_servers m
@@ -382,28 +399,6 @@ CROSS JOIN LATERAL (
 WHERE m.id = $1
   AND m.project_id = $2
   AND m.deleted IS FALSE
-UNION ALL
-SELECT
-    t.id,
-    t.name,
-    TRUE AS toolset_only,
-    t.id AS toolset_id,
-    NULL::uuid AS remote_mcp_server_id,
-    NULL::uuid AS tunneled_mcp_server_id,
-    CASE WHEN t.mcp_is_public THEN 'public' ELSE 'private' END AS visibility,
-    t.created_at,
-    t.user_session_issuer_id,
-    t.external_oauth_server_id,
-    COALESCE(t.mcp_slug, '')::text AS url_slug,
-    t.slug AS toolset_slug,
-    0::bigint AS toolset_wrapper_count
-FROM toolsets t
-WHERE t.id = $1
-  AND t.project_id = $2
-  AND t.deleted IS FALSE
-  AND t.mcp_enabled IS TRUE
-  AND NOT EXISTS (SELECT 1 FROM mcp_servers m
-                   WHERE m.toolset_id = t.id AND m.deleted IS FALSE)
 `
 
 type AdminGetMcpServerAuthParams struct {
@@ -414,7 +409,6 @@ type AdminGetMcpServerAuthParams struct {
 type AdminGetMcpServerAuthRow struct {
 	ID                    uuid.UUID
 	Name                  string
-	ToolsetOnly           bool
 	ToolsetID             uuid.NullUUID
 	RemoteMcpServerID     uuid.NullUUID
 	TunneledMcpServerID   uuid.NullUUID
@@ -427,8 +421,8 @@ type AdminGetMcpServerAuthRow struct {
 	ToolsetWrapperCount   int64
 }
 
-// The server describeMcpServerHealth reports on, keyed on the mcp_servers id or,
-// for a toolset-only server, the toolset id. A toolset-backed wrapper takes its
+// The server describeMcpServerHealth reports on, keyed on the mcp_servers id.
+// A toolset-backed wrapper takes its
 // issuer from its own row, not its toolset's, matching how the MCP endpoint
 // resolves it; the legacy OAuth columns live on the toolset only.
 // toolset_wrapper_count counts the live wrappers competing for the toolset's
@@ -437,15 +431,14 @@ type AdminGetMcpServerAuthRow struct {
 // outright: it counts as one, and any other wrapper of that toolset as two.
 // url_slug is the slug in the /mcp/<slug> path clients call: the primary live
 // endpoint's (custom domain first, as endpointaddr.PrimaryEndpoint ranks them;
-// a domain root has no such path), else the server's own slug, else the
-// toolset's mcp_slug when no other wrapper shares that toolset.
+// a domain root has no such path), else the server's own slug; the caller falls
+// back to the toolset's legacy alias when no other wrapper shares that toolset.
 func (q *Queries) AdminGetMcpServerAuth(ctx context.Context, arg AdminGetMcpServerAuthParams) (AdminGetMcpServerAuthRow, error) {
 	row := q.db.QueryRow(ctx, adminGetMcpServerAuth, arg.ID, arg.ProjectID)
 	var i AdminGetMcpServerAuthRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.ToolsetOnly,
 		&i.ToolsetID,
 		&i.RemoteMcpServerID,
 		&i.TunneledMcpServerID,
@@ -485,6 +478,7 @@ SELECT
     t.converted_at AS trial_converted_at,
     t.demoted_at AS trial_demoted_at,
     om.creation_source,
+    om.adoption_dashboard_url,
     om.created_at,
     om.updated_at,
     (
@@ -523,6 +517,7 @@ type AdminGetOrganizationRow struct {
 	TrialConvertedAt     pgtype.Timestamptz
 	TrialDemotedAt       pgtype.Timestamptz
 	CreationSource       pgtype.Text
+	AdoptionDashboardUrl pgtype.Text
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
 	MemberCount          int64
@@ -556,6 +551,7 @@ func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganiza
 		&i.TrialConvertedAt,
 		&i.TrialDemotedAt,
 		&i.CreationSource,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MemberCount,
@@ -1427,17 +1423,7 @@ WHERE m.project_id = $1
   AND m.user_session_issuer_id = $2::uuid
   AND m.id <> $3
   AND m.deleted IS FALSE
-UNION ALL
-SELECT t.id, t.name
-FROM toolsets t
-WHERE t.project_id = $1
-  AND t.user_session_issuer_id = $2
-  AND t.id <> $3
-  AND t.deleted IS FALSE
-  AND t.mcp_enabled IS TRUE
-  AND NOT EXISTS (SELECT 1 FROM mcp_servers w
-                   WHERE w.toolset_id = t.id AND w.deleted IS FALSE)
-ORDER BY name, id
+ORDER BY 2, 1
 `
 
 type AdminListOtherServersUsingIssuerParams struct {
@@ -1452,7 +1438,7 @@ type AdminListOtherServersUsingIssuerRow struct {
 }
 
 // Live servers in the project, other than the one described, that share the
-// issuer: mcp_servers rows and toolset-only toolsets.
+// issuer.
 func (q *Queries) AdminListOtherServersUsingIssuer(ctx context.Context, arg AdminListOtherServersUsingIssuerParams) ([]AdminListOtherServersUsingIssuerRow, error) {
 	rows, err := q.db.Query(ctx, adminListOtherServersUsingIssuer, arg.ProjectID, arg.UserSessionIssuerID, arg.ExcludeID)
 	if err != nil {
@@ -1559,74 +1545,6 @@ func (q *Queries) AdminListProjectMcpServerRows(ctx context.Context, projectID u
 	return items, nil
 }
 
-const adminListProjectToolsetOnlyMcpServers = `-- name: AdminListProjectToolsetOnlyMcpServers :many
-SELECT
-    t.id,
-    t.name,
-    t.slug,
-    t.mcp_slug,
-    t.mcp_is_public,
-    t.default_environment_slug,
-    p.slug AS project_slug,
-    d.domain AS custom_domain,
-    t.created_at
-FROM toolsets t
-JOIN projects p ON p.id = t.project_id
-LEFT JOIN custom_domains d ON d.id = t.custom_domain_id AND d.deleted IS FALSE
-    AND d.organization_id = p.organization_id
-    AND d.verified IS TRUE AND d.activated IS TRUE
-WHERE t.project_id = $1
-  AND t.deleted IS FALSE
-  AND t.mcp_enabled IS TRUE
-  AND NOT EXISTS (SELECT 1 FROM mcp_servers m
-                   WHERE m.toolset_id = t.id AND m.deleted IS FALSE)
-ORDER BY t.created_at, t.id
-`
-
-type AdminListProjectToolsetOnlyMcpServersRow struct {
-	ID                     uuid.UUID
-	Name                   string
-	Slug                   string
-	McpSlug                pgtype.Text
-	McpIsPublic            bool
-	DefaultEnvironmentSlug pgtype.Text
-	ProjectSlug            string
-	CustomDomain           pgtype.Text
-	CreatedAt              pgtype.Timestamptz
-}
-
-// The legacy half of AdminListProjectsForOrganization's count, with the same
-// anti join, so this list and that count agree.
-func (q *Queries) AdminListProjectToolsetOnlyMcpServers(ctx context.Context, projectID uuid.UUID) ([]AdminListProjectToolsetOnlyMcpServersRow, error) {
-	rows, err := q.db.Query(ctx, adminListProjectToolsetOnlyMcpServers, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []AdminListProjectToolsetOnlyMcpServersRow
-	for rows.Next() {
-		var i AdminListProjectToolsetOnlyMcpServersRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Slug,
-			&i.McpSlug,
-			&i.McpIsPublic,
-			&i.DefaultEnvironmentSlug,
-			&i.ProjectSlug,
-			&i.CustomDomain,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const adminListProjectsForOrganization = `-- name: AdminListProjectsForOrganization :many
 SELECT
     p.id,
@@ -1634,12 +1552,8 @@ SELECT
     p.name,
     p.created_at,
     p.updated_at,
-    ((SELECT count(*) FROM toolsets t
-        WHERE t.project_id = p.id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
-          AND NOT EXISTS (SELECT 1 FROM mcp_servers m2
-                           WHERE m2.toolset_id = t.id AND m2.deleted IS FALSE))
-     + (SELECT count(*) FROM mcp_servers m
-          WHERE m.project_id = p.id AND m.deleted IS FALSE))::bigint AS mcp_server_count
+    (SELECT count(*) FROM mcp_servers m
+       WHERE m.project_id = p.id AND m.deleted IS FALSE)::bigint AS mcp_server_count
 FROM projects p
 WHERE p.organization_id = $1
   AND p.deleted IS FALSE
@@ -1656,10 +1570,6 @@ type AdminListProjectsForOrganizationRow struct {
 	McpServerCount int64
 }
 
-// Not a plain sum: once AGE-1880 copies legacy servers into mcp_servers, a
-// toolset and its mcp_servers row would each be counted. The anti join on the
-// legacy half gives the same answer before and after that copy, and it is the
-// direction that plans as an index anti join rather than a seq scan of toolsets.
 func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organizationID string) ([]AdminListProjectsForOrganizationRow, error) {
 	rows, err := q.db.Query(ctx, adminListProjectsForOrganization, organizationID)
 	if err != nil {
@@ -2191,6 +2101,28 @@ type AdminResolveProjectIDBySlugInOrganizationParams struct {
 func (q *Queries) AdminResolveProjectIDBySlugInOrganization(ctx context.Context, arg AdminResolveProjectIDBySlugInOrganizationParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, adminResolveProjectIDBySlugInOrganization, arg.OrganizationID, arg.Slug)
 	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const adminSetOrganizationAdoptionDashboardURL = `-- name: AdminSetOrganizationAdoptionDashboardURL :one
+UPDATE organization_metadata
+SET
+    adoption_dashboard_url = $1::text,
+    updated_at = clock_timestamp()
+WHERE id = $2::text
+RETURNING id
+`
+
+type AdminSetOrganizationAdoptionDashboardURLParams struct {
+	AdoptionDashboardUrl pgtype.Text
+	ID                   string
+}
+
+// NULL clears the link. Keyed on id alone, like every other admin write.
+func (q *Queries) AdminSetOrganizationAdoptionDashboardURL(ctx context.Context, arg AdminSetOrganizationAdoptionDashboardURLParams) (string, error) {
+	row := q.db.QueryRow(ctx, adminSetOrganizationAdoptionDashboardURL, arg.AdoptionDashboardUrl, arg.ID)
+	var id string
 	err := row.Scan(&id)
 	return id, err
 }

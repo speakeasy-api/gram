@@ -454,6 +454,47 @@ func TestOrganizationGatewayRoutes_ShadowedEndpointKeepsItsRoutes(t *testing.T) 
 	require.Contains(t, w.Body.String(), `"client_id"`)
 }
 
+func getGatewayPath(t *testing.T, router goahttp.Muxer, path string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	return w
+}
+
+// A GET from an MCP client opens no standalone stream on the organization
+// gateway, as on a stored gateway; browsers get the landing page instead.
+func TestOrganizationGatewayRoutes_ClientGetIsMethodNotAllowed(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestMCPService(t)
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service.Service, nil)
+
+	w := getGatewayPath(t, router, "/mcp/gateway/any-organization")
+	require.Equal(t, http.StatusMethodNotAllowed, w.Code, w.Body.String())
+}
+
+// An endpoint whose slug is "gateway" keeps its own GET routes, which the
+// organization gateway's GET route would otherwise capture.
+func TestOrganizationGatewayRoutes_ShadowedEndpointKeepsItsGetRoutes(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service.Service, nil)
+
+	w := getGatewayPath(t, router, "/mcp/gateway/authorize")
+	require.Equal(t, http.StatusMethodNotAllowed, w.Code, "without such an endpoint the path names an organization")
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "gateway", issuerID)
+
+	w = getGatewayPath(t, router, "/mcp/gateway/authorize")
+	require.NotEqual(t, http.StatusMethodNotAllowed, w.Code, "the endpoint's own authorize route answers")
+}
+
 // The gateway's consent page lists only the servers the person can reach,
 // and a reachable server's connect page shows the connection behind it: a
 // client whose only servers are hidden from them stays off every page, along

@@ -128,7 +128,7 @@ describe("create connection reauthentication", () => {
           }}
         />,
       );
-      fireEvent.click(screen.getByRole("button", { name: /^Example server/ }));
+      // The only row, so it starts expanded.
       fireEvent.click(
         screen.getByRole("button", {
           name: status === "missing" ? "Connect account" : "Reauthenticate",

@@ -86,6 +86,15 @@ type AgentDelegatedPolicy struct {
 	Effective []*AgentDelegatedGrant
 }
 
+// The upstream credential an agent key uses on one MCP server.
+type AgentKeyAuthClientChoice struct {
+	// The MCP server.
+	McpServerID string
+	// The auth client the key uses there. Omit for a server whose upstream needs
+	// no authentication.
+	AuthClientID *string
+}
+
 type AgentPolicyGrantForm struct {
 	// Agent-runtime-safe scope to grant
 	Scope string
@@ -145,6 +154,12 @@ type CreateKeyPayload struct {
 	// mcp:blocked_connect and mcp:blocked_auth blocks, that its server and auth
 	// client access is evaluated against. Not yet enforced. Requires org admin.
 	PolicyGrants []*APIKeyPolicyGrant
+	// For an agent key: the upstream credential the key uses on each MCP server it
+	// names. Where typed upstream authentication is enforced, the key is served on
+	// a server with the credential chosen here, checked again on every request.
+	// Shared credentials only: an agent reaches a person's own connection when it
+	// acts for them.
+	AuthClientChoices []*AgentKeyAuthClientChoice
 }
 
 // Key is the result type of the keys service createKey method.

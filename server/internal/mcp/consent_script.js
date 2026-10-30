@@ -114,12 +114,14 @@
           el.hidden = hide;
         },
       );
+      // The row attribute swaps the hide icon for the Show label (see the
+      // gatewayServerRow template).
+      row.toggleAttribute("data-gateway-server-hidden", hide);
       var toggle = row.querySelector("[data-gateway-visibility-toggle]");
       toggle.value = hide ? "show_server" : "hide_server";
-      toggle.textContent = hide ? "Show" : "Hide";
       toggle.title = hide
         ? "Make this server available to your tools again"
-        : "Hide this server from your tools";
+        : "Hide this server, preventing your agent from attempting to access it.";
       (hide ? hiddenServers : visibleServers).appendChild(row);
     };
 
@@ -771,6 +773,21 @@
       ) {
         refreshForm.submit();
       }
+    });
+  }
+
+  // A gateway server's credential decides which of its tools can be
+  // approved, so changing it reloads the page with every server's pick.
+  // Unsaved session length, agent selection, and tool toggles reset on this
+  // reload: approval must be reviewed against the newly selected credentials,
+  // rather than carrying a stale authorization selection into the new page.
+  var gatewayAuthForm = document.querySelector("#gateway-auth-form");
+  if (gatewayAuthForm) {
+    var authSelects = document.querySelectorAll("select[data-auto-submit]");
+    Array.prototype.forEach.call(authSelects, function (select) {
+      select.addEventListener("change", function () {
+        gatewayAuthForm.submit();
+      });
     });
   }
 })();
