@@ -43462,11 +43462,11 @@ paths:
                     format: uuid
                     type: string
                 - allowEmptyValue: true
-                  description: Optional MCP server the slug is for. Addresses that server may claim, such as its own legacy alias, read as available.
+                  description: 'Deprecated: ignored.'
                   in: query
                   name: mcp_server_id
                   schema:
-                    description: Optional MCP server the slug is for. Addresses that server may claim, such as its own legacy alias, read as available.
+                    description: 'Deprecated: ignored.'
                     format: uuid
                     type: string
                 - allowEmptyValue: true
@@ -115371,8 +115371,9 @@ components:
                     description: The ID of the MCP server
                     format: uuid
                 legacy_platform_slug:
+                    description: 'Deprecated: always absent.'
                     type: string
-                    description: 'The slug of an older Speakeasy-hosted address of this hosted server: its legacy custom-domain address, which the Speakeasy domain also answers under the same access rules. Absent when a platform endpoint or another alias holds that slug.'
+                    x-speakeasy-deprecation-message: Always absent; use platform_endpoint_slug instead
                 name:
                     type: string
                     description: A human-readable display name for the server

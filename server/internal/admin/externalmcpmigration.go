@@ -47,7 +47,7 @@ func (s *Service) ListExternalMcpMigrationCandidates(ctx context.Context, _ *gen
 			ProjectName:      row.ProjectName,
 			ProjectSlug:      row.ProjectSlug,
 			ServerName:       row.ToolsetName,
-			McpSlug:          conv.FromPGText[string](candidate.Alias.Slug),
+			McpSlug:          conv.PtrEmpty(candidate.Row.EndpointSlug),
 			RemoteURL:        conv.PtrEmpty(candidate.RemoteURL),
 			ReplacementURL:   conv.PtrEmpty(candidate.ReplacementURL),
 			SignInProvider:   conv.PtrEmpty(candidate.SignInProvider()),

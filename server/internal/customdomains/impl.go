@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -517,23 +516,15 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 				return nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope").LogError(ctx, s.logger)
 			}
 			available, err := mcpendpointsrepo.New(dbtx).CheckEndpointSlugAvailability(ctx, mcpendpointsrepo.CheckEndpointSlugAvailabilityParams{
-				Slug:             server.Slug.String,
-				CustomDomainID:   uuid.NullUUID{UUID: domain.ID, Valid: true},
-				OrganizationID:   authCtx.ActiveOrganizationID,
-				ExcludeToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				SkipDomainCheck:  false,
+				Slug:            server.Slug.String,
+				CustomDomainID:  uuid.NullUUID{UUID: domain.ID, Valid: true},
+				OrganizationID:  authCtx.ActiveOrganizationID,
+				SkipDomainCheck: false,
 			})
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").LogError(ctx, s.logger)
 			}
-			aliasTaken, err := legacyalias.Taken(ctx, dbtx, legacyalias.TakenCheck{
-				Slug: server.Slug.String, CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
-				ExcludeToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ExcludeMcpServerID: uuid.NullUUID{UUID: rootServerID, Valid: true},
-			})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").LogError(ctx, s.logger)
-			}
-			if !available.Bool || aliasTaken {
+			if !available.Bool {
 				return nil, oops.E(oops.CodeConflict, nil, "an endpoint named %s already exists on this domain", server.Slug.String).LogError(ctx, s.logger)
 			}
 			// Deliberately narrower than the mcpendpoints creation flow: no

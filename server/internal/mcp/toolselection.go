@@ -104,12 +104,10 @@ func endpointToolSelectionResource(endpoint *ResolvedMcpEndpoint) string {
 }
 
 // endpointAcceptsToolSelectionResource reports whether a stored consent
-// selection belongs to this endpoint. A toolset-backed wrapper additionally
-// accepts the legacy "toolset:<id>" form: selections consented while the
-// server was still resolved through toolsets.mcp_slug were stored against the
-// toolset resource and must keep authorizing the same server for one
-// access-token lifetime after the backfill (AIS-633; removed with the legacy
-// audience acceptance by AIS-646).
+// selection belongs to this endpoint. A toolset-backed server also accepts the
+// "toolset:<id>" form of its toolset, which selections consented before servers
+// owned their endpoints still carry, so those sessions keep serving and
+// refreshing.
 func endpointAcceptsToolSelectionResource(endpoint *ResolvedMcpEndpoint, resource string) bool {
 	if resource == endpointToolSelectionResource(endpoint) {
 		return true

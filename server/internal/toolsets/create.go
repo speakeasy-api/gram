@@ -248,8 +248,6 @@ func ensureGeneratedMcpSlug(ctx context.Context, dbtx pgx.Tx, logger *slog.Logge
 			Slug:                     slug,
 			CustomDomainID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			OrganizationID:           orgID,
-			ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			ExcludeMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			SkipDomainOwnershipCheck: false,
 		})
 		if err != nil {

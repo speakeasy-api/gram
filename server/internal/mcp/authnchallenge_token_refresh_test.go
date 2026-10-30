@@ -89,7 +89,7 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 		DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	otherToolset := hostLegacyToolset(t, ctx, ti, otherToolsetRow, otherSlug, "private", noIssuer())
+	otherToolset := hostToolset(t, ctx, ti, otherToolsetRow, otherSlug, "private", noIssuer())
 	otherToolset = setToolsetIssuer(t, ctx, ti.conn, otherToolset.ProjectID, otherToolset, issuer.ID)
 
 	otherEndpoint := performRefresh(otherSlug, client.ClientID, refreshToken)
@@ -101,7 +101,7 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 	}
 	require.NoError(t, json.Unmarshal([]byte(otherEndpoint.body), &otherResponse))
 	require.Equal(t, response["refresh_token"], otherResponse.RefreshToken)
-	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(otherResponse.AccessToken, urn.NewToolset(otherToolset.ID).String())
+	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(otherResponse.AccessToken, urn.NewUserSessionIssuer(otherToolset.UserSessionIssuerID.UUID).String())
 	require.NoError(t, err)
 	require.Equal(t, ti.serverURL.JoinPath("mcp", otherSlug).String(), claims.Issuer)
 
@@ -279,7 +279,7 @@ func TestApplyIssuerGate_AgentSessionAdmitsLiveParent(t *testing.T) {
 	issuer := ti.serverURL.JoinPath("mcp", fx.toolset.McpSlug.String).String()
 	accessToken, _, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
 		Subject:   session.SubjectUrn,
-		Audience:  urn.NewToolset(fx.toolset.ID).String(),
+		Audience:  urn.NewUserSessionIssuer(fx.toolset.UserSessionIssuerID.UUID).String(),
 		Issuer:    issuer,
 		ExpiresAt: &session.ExpiresAt.Time,
 		ClientID:  fx.client.ClientID,
@@ -287,11 +287,12 @@ func TestApplyIssuerGate_AgentSessionAdmitsLiveParent(t *testing.T) {
 	})
 	require.NoError(t, err)
 	endpoint := &mcp.ResolvedMcpEndpoint{
-		AudienceURN:         urn.NewToolset(fx.toolset.ID).String(),
+		AudienceURN:         urn.NewUserSessionIssuer(fx.toolset.UserSessionIssuerID.UUID).String(),
 		OrganizationID:      fx.orgID,
 		ProjectID:           fx.target.ProjectID,
 		RouteBase:           mcproute.MCP,
 		Slug:                fx.toolset.McpSlug.String,
+		McpServerID:         uuid.NullUUID{UUID: fx.toolset.ID, Valid: true},
 		ToolsetID:           uuid.NullUUID{UUID: fx.toolset.ID, Valid: true},
 		UserSessionIssuerID: fx.target.UserSessionIssuerID,
 	}
@@ -332,7 +333,7 @@ func TestHandleToken_AgentRefreshPreservesCredentialProfile(t *testing.T) {
 	require.Equal(t, http.StatusOK, result.code, result.body)
 	var response tokenResponseFixture
 	require.NoError(t, json.Unmarshal([]byte(result.body), &response))
-	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(response.AccessToken, urn.NewToolset(fx.toolset.ID).String())
+	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(response.AccessToken, urn.NewUserSessionIssuer(fx.toolset.UserSessionIssuerID.UUID).String())
 	require.NoError(t, err)
 
 	rotated, err := usersessions_repo.New(ti.conn).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{
@@ -356,7 +357,7 @@ func TestHandleToken_AgentRefreshReplayDeniesDirectlyRevokedSuccessor(t *testing
 	require.Equal(t, http.StatusOK, winner.code, winner.body)
 	var response tokenResponseFixture
 	require.NoError(t, json.Unmarshal([]byte(winner.body), &response))
-	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(response.AccessToken, urn.NewToolset(fx.toolset.ID).String())
+	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(response.AccessToken, urn.NewUserSessionIssuer(fx.toolset.UserSessionIssuerID.UUID).String())
 	require.NoError(t, err)
 	successor, err := usersessions_repo.New(ti.conn).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{
 		UserSessionIssuerID: fx.target.UserSessionIssuerID,

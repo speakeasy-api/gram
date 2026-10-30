@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
@@ -91,19 +90,16 @@ type MCPConnectionSettings struct {
 	// available and the organization has Code Mode.
 	CodeModeAvailable *bool `json:"code_mode_available,omitempty"`
 
-	ProjectID   string                          `json:"project_id"`
-	TargetKind  MCPConnectionSettingsTargetKind `json:"target_kind"`
-	TargetID    string                          `json:"target_id"`
-	Name        string                          `json:"name"`
-	Visibility  string                          `json:"visibility"`
-	NetworkMode string                          `json:"network_mode"`
-	Version     string                          `json:"version"`
-	Endpoints   []MCPConnectionEndpoint         `json:"endpoints"`
-	// LegacyPlatformSlug is an older Speakeasy-hosted address of a hosted server: its custom-domain alias, which the
-	// Speakeasy domain also serves.
-	LegacyPlatformSlug string                          `json:"legacy_platform_slug,omitempty"`
-	Ingress            *MCPConnectionIngress           `json:"ingress,omitempty"`
-	PluginMemberships  []MCPConnectionPluginMembership `json:"plugin_memberships"`
+	ProjectID         string                          `json:"project_id"`
+	TargetKind        MCPConnectionSettingsTargetKind `json:"target_kind"`
+	TargetID          string                          `json:"target_id"`
+	Name              string                          `json:"name"`
+	Visibility        string                          `json:"visibility"`
+	NetworkMode       string                          `json:"network_mode"`
+	Version           string                          `json:"version"`
+	Endpoints         []MCPConnectionEndpoint         `json:"endpoints"`
+	Ingress           *MCPConnectionIngress           `json:"ingress,omitempty"`
+	PluginMemberships []MCPConnectionPluginMembership `json:"plugin_memberships"`
 	// UpstreamAuthentication is set for MCP servers, not gateways.
 	UpstreamAuthentication *MCPUpstreamAuthentication `json:"upstream_authentication,omitempty"`
 }
@@ -214,7 +210,7 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, db platformrepo.
 		ProjectID: projectID.String(), TargetKind: input.TargetKind, TargetID: targetID.String(),
 		Name: row.Name, Visibility: row.Visibility, NetworkMode: row.NetworkMode, DiscoveryMode: row.DiscoveryMode,
 		EffectiveDiscoveryMode: "", CodeModeAvailable: nil,
-		Version: "", Endpoints: endpoints, LegacyPlatformSlug: "", Ingress: ingress, PluginMemberships: memberships, UpstreamAuthentication: nil,
+		Version: "", Endpoints: endpoints, Ingress: ingress, PluginMemberships: memberships, UpstreamAuthentication: nil,
 	}
 	if input.TargetKind == MCPConnectionSettingsMCPServer {
 		upstream, err := upstreamAuthentication(ctx, db, principal.OrganizationID, targetID)
@@ -222,11 +218,6 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, db platformrepo.
 			return MCPConnectionSettings{}, err
 		}
 		settings.UpstreamAuthentication = upstream
-		legacy, err := legacyalias.PlatformServedSlugs(ctx, db, principal.OrganizationID, []uuid.UUID{projectID}, []uuid.UUID{targetID})
-		if err != nil {
-			return MCPConnectionSettings{}, fmt.Errorf("list legacy platform alias: %w", err)
-		}
-		settings.LegacyPlatformSlug = legacy[targetID]
 	}
 	if input.TargetKind == MCPConnectionSettingsGateway {
 		available := s.codeModeAvailable != nil && s.codeModeAvailable(ctx, principal.OrganizationID)

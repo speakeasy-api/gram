@@ -792,7 +792,7 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	}
 	// A readable slug was locked and checked by claimReadableRegistrationSlug.
 	// The fallback embeds the 64-bit random registration suffix, so it cannot
-	// land on an existing toolsets.mcp_slug and needs no lock or probe.
+	// land on an existing endpoint slug and needs no lock or probe.
 	endpoint, err := mcpendpointsrepo.New(tx).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:   project.ID,
 		McpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
@@ -901,8 +901,6 @@ func readableRegistrationSlugFree(ctx context.Context, tx pgx.Tx, projectID uuid
 		Slug:                     endpointSlug,
 		CustomDomainID:           uuid.NullUUID{},
 		OrganizationID:           organizationID,
-		ExcludeToolsetID:         uuid.NullUUID{},
-		ExcludeMcpServerID:       uuid.NullUUID{},
 		SkipDomainOwnershipCheck: false,
 	})
 	if err != nil {
