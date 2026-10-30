@@ -224,6 +224,12 @@ func NewResolver(policy *guardian.Policy, meterProvider metric.MeterProvider, lo
 	return newResolver(newFetchClientFrom(policy.Client()), meterProvider, logger)
 }
 
+// NewResolverFromClient builds a resolver over a caller's HTTP client, for
+// tests in other packages that serve a document at a fixed URL locally.
+func NewResolverFromClient(client *guardian.HTTPClient, meterProvider metric.MeterProvider, logger *slog.Logger) *Resolver {
+	return newResolver(newFetchClientFrom(client), meterProvider, logger)
+}
+
 // newResolver is the injection seam for tests that need a fetch client built
 // from an httptest server instead of a guardian policy.
 func newResolver(client *guardian.HTTPClient, meterProvider metric.MeterProvider, logger *slog.Logger) *Resolver {

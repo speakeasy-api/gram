@@ -37,6 +37,12 @@ type CreateKeyRequestBody struct {
 	// mcp:blocked_connect and mcp:blocked_auth blocks, that its server and auth
 	// client access is evaluated against. Not yet enforced. Requires org admin.
 	PolicyGrants []*APIKeyPolicyGrantRequestBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
+	// For an agent key: the upstream credential the key uses on each MCP server it
+	// names. Where typed upstream authentication is enforced, the key is served on
+	// a server with the credential chosen here, checked again on every request.
+	// Shared credentials only: an agent reaches a person's own connection when it
+	// acts for them.
+	AuthClientChoices []*AgentKeyAuthClientChoiceRequestBody `form:"auth_client_choices,omitempty" json:"auth_client_choices,omitempty" xml:"auth_client_choices,omitempty"`
 }
 
 // RotateKeyRequestBody is the type of the "keys" service "rotateKey" endpoint
@@ -1460,6 +1466,16 @@ type APIKeyPolicySelectorRequestBody struct {
 	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
 }
 
+// AgentKeyAuthClientChoiceRequestBody is used to define fields on request body
+// types.
+type AgentKeyAuthClientChoiceRequestBody struct {
+	// The MCP server.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The auth client the key uses there. Omit for a server whose upstream needs
+	// no authentication.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+}
+
 // NewCreateKeyResponseBody builds the HTTP response body from the result of
 // the "createKey" endpoint of the "keys" service.
 func NewCreateKeyResponseBody(res *keys.Key) *CreateKeyResponseBody {
@@ -2510,6 +2526,16 @@ func NewCreateKeyPayload(body *CreateKeyRequestBody, sessionToken *string) *keys
 			v.PolicyGrants[i] = unmarshalAPIKeyPolicyGrantRequestBodyToKeysAPIKeyPolicyGrant(val)
 		}
 	}
+	if body.AuthClientChoices != nil {
+		v.AuthClientChoices = make([]*keys.AgentKeyAuthClientChoice, len(body.AuthClientChoices))
+		for i, val := range body.AuthClientChoices {
+			if val == nil {
+				v.AuthClientChoices[i] = nil
+				continue
+			}
+			v.AuthClientChoices[i] = unmarshalAgentKeyAuthClientChoiceRequestBodyToKeysAgentKeyAuthClientChoice(val)
+		}
+	}
 	v.SessionToken = sessionToken
 
 	return v
@@ -2625,6 +2651,16 @@ func ValidateCreateKeyRequestBody(body *CreateKeyRequestBody) (err error) {
 	for _, e := range body.PolicyGrants {
 		if e != nil {
 			if err2 := ValidateAPIKeyPolicyGrantRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if len(body.AuthClientChoices) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.auth_client_choices", body.AuthClientChoices, len(body.AuthClientChoices), 100, false))
+	}
+	for _, e := range body.AuthClientChoices {
+		if e != nil {
+			if err2 := ValidateAgentKeyAuthClientChoiceRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -2801,6 +2837,21 @@ func ValidateAPIKeyPolicySelectorRequestBody(body *APIKeyPolicySelectorRequestBo
 		if !(*body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "*") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"service_account", "static_credential", "pass_through", "ema", "*"}))
 		}
+	}
+	return
+}
+
+// ValidateAgentKeyAuthClientChoiceRequestBody runs the validations defined on
+// AgentKeyAuthClientChoiceRequestBody
+func ValidateAgentKeyAuthClientChoiceRequestBody(body *AgentKeyAuthClientChoiceRequestBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.AuthClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
 	}
 	return
 }

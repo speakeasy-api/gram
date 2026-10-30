@@ -269,6 +269,78 @@ var _ = Service("assistants", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "ensureManaged")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EnsureManagedAssistant", "type": "mutation"}`)
 	})
+
+	Method("listExecutionProfiles", func() {
+		Description("List the upstream credentials an assistant's turns use on each MCP server it reaches, per root trigger and per whether the turn acts for a user. Each server shows its current choice, or why it has none, and the credentials that can be chosen. Requires assistant read access.")
+
+		Payload(func() {
+			Attribute("assistant_id", String, "The assistant ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("assistant_id")
+
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListExecutionProfilesResult)
+
+		HTTP(func() {
+			GET("/rpc/assistants.listExecutionProfiles")
+			Param("assistant_id")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAssistantExecutionProfiles")
+		Meta("openapi:extension:x-speakeasy-name-override", "listExecutionProfiles")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AssistantExecutionProfiles"}`)
+	})
+
+	Method("setExecutionProfileChoice", func() {
+		Description("Choose the upstream credential an assistant's turns use on one MCP server, for one root trigger and execution context: an auth client, no upstream authentication, or back to the choice the next turn makes on its own. Turns already running keep their choice; later turns use the new one. Turns that act for nobody can use shared credentials only. Choosing grants nothing: each request checks the turn may use the credential. Requires assistant write access.")
+
+		Payload(func() {
+			Attribute("assistant_id", String, "The assistant ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("trigger_instance_id", String, "The root trigger.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("execution_context", String, "Whether the turns act for the user their event identified.", func() {
+				Enum("user_backed", "userless")
+			})
+			Attribute("mcp_server_id", String, "The MCP server.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("auth_client_id", String, "The auth client to use.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("no_auth", Boolean, "Use no upstream authentication.")
+			Attribute("automatic", Boolean, "Remove the choice so the next turn makes it from the server's configuration.")
+			Attribute("expected_version", Int64, "The profile version the change was decided from, from a fresh listExecutionProfiles read. A profile that changed since is refused with a conflict.", func() {
+				Minimum(0)
+			})
+			Required("assistant_id", "trigger_instance_id", "execution_context", "mcp_server_id", "expected_version")
+
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(AssistantExecutionProfile)
+
+		HTTP(func() {
+			POST("/rpc/assistants.setExecutionProfileChoice")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setAssistantExecutionProfileChoice")
+		Meta("openapi:extension:x-speakeasy-name-override", "setExecutionProfileChoice")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetAssistantExecutionProfileChoice"}`)
+	})
 })
 
 var CreateAssistantForm = Type("CreateAssistantForm", func() {
@@ -338,4 +410,48 @@ var SendMessageResult = Type("SendMessageResult", func() {
 	})
 	Attribute("accepted", Boolean, "Whether the message was accepted and enqueued for processing.")
 	Required("chat_id", "accepted")
+})
+
+var ExecutionProfileOption = Type("ExecutionProfileOption", func() {
+	Description("A credential a server offers that the profile's turns can use.")
+	Attribute("auth_client_id", String, "The auth client.", func() { Format(FormatUUID) })
+	Attribute("name", String, "The auth client's name.")
+	Attribute("client_type", String, "The auth client's type.")
+	Required("auth_client_id", "name", "client_type")
+})
+
+var ExecutionProfileChoiceSource = Type("ExecutionProfileChoiceSource", String, func() {
+	Enum("admin", "issuance", "backfill", "automatic")
+	Meta("openapi:extension:x-speakeasy-name-override", "ExecutionProfileChoiceSource")
+})
+
+var ExecutionProfileServer = Type("ExecutionProfileServer", func() {
+	Description("One MCP server an assistant's turns reach through Speakeasy.")
+	Attribute("mcp_server_id", String, "The MCP server.", func() { Format(FormatUUID) })
+	Attribute("chosen", Boolean, "Whether the server has a choice.")
+	Attribute("auth_client_id", String, "The chosen auth client. Absent with a choice means no upstream authentication.", func() { Format(FormatUUID) })
+	Attribute("source", ExecutionProfileChoiceSource, "How the choice was made: admin, issuance, backfill, or automatic for one the next turn makes on its own.")
+	Attribute("no_auth_allowed", Boolean, "Whether the server was decided to need no upstream authentication, so no-auth can be chosen.")
+	Attribute("gap_reason", String, "Why a server without a choice gets none on its own.", func() {
+		Enum("selection_required", "personal_requires_user", "no_client", "setup_incomplete", "upstream_auth_undecided")
+	})
+	Attribute("options", ArrayOf(ExecutionProfileOption), "The credentials that can be chosen.")
+	Required("mcp_server_id", "chosen", "options", "no_auth_allowed")
+})
+
+var AssistantExecutionProfile = Type("AssistantExecutionProfile", func() {
+	Description("The upstream credentials an assistant's turns under one root trigger and execution context use.")
+	Attribute("trigger_instance_id", String, "The root trigger.", func() { Format(FormatUUID) })
+	Attribute("trigger_name", String, "The root trigger's name.")
+	Attribute("execution_context", String, "Whether the turns act for the user their event identified.", func() {
+		Enum("user_backed", "userless")
+	})
+	Attribute("version", Int64, "The latest version; 0 before the first turn or change.")
+	Attribute("servers", ArrayOf(ExecutionProfileServer), "Each server the turns reach.")
+	Required("trigger_instance_id", "trigger_name", "execution_context", "version", "servers")
+})
+
+var ListExecutionProfilesResult = Type("ListExecutionProfilesResult", func() {
+	Attribute("profiles", ArrayOf(AssistantExecutionProfile), "Each root trigger and execution context.")
+	Required("profiles")
 })

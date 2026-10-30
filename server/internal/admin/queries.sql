@@ -1200,3 +1200,12 @@ ORDER BY om.name, om.id;
 SELECT id, name, slug
 FROM organization_metadata
 WHERE id = ANY(@ids::text[]);
+
+-- name: AdminBackfillMCPAuthFromConnect :execrows
+-- Grants unrestricted mcp:auth to every principal holding any mcp:connect
+-- grant, whatever its selectors.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+SELECT DISTINCT g.organization_id, g.principal_urn, 'mcp:auth', '{"resource_kind":"mcp_auth_client","resource_id":"*"}'::jsonb
+FROM principal_grants AS g
+WHERE g.scope = 'mcp:connect'
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;

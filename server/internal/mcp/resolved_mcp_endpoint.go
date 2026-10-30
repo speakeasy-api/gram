@@ -588,7 +588,7 @@ func (s *Service) loadResolvedMcpEndpointByRef(ctx context.Context, ref Endpoint
 			OrganizationID:   ref.Authority.OrganizationID,
 			NetworkIngressID: uuid.Nil,
 			NetworkIdentity:  nil,
-		}}
+		}, organizationGatewayDefault: false}
 	}
 	return endpoint, nil
 }

@@ -4,5 +4,3 @@
 -- expanded `SELECT *` and `RETURNING *` never name them and keep working once the
 -- columns are dropped. Remove each statement in the migration that drops its
 -- column.
-
-ALTER TABLE okta_identity_provider_connections DROP COLUMN issuer_url_override_reason;

@@ -9,6 +9,8 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
 )
 
 // chCheck is one postflight assert. cond is a ClickHouse boolean expression
@@ -45,6 +47,7 @@ func (s *seeder) chCheckArgs() []any {
 		clickhouse.Named("proj", s.projectID().String()),
 		clickhouse.Named("marker", s.spec.Marker),
 		clickhouse.Named("github", s.det("mcpserver-github").String()),
+		clickhouse.Named("orggateway", orggateway.GatewayID(s.orgID()).String()),
 		clickhouse.Named("gateway_suffix", "/mcp/"+s.spec.OrgSlug+"-gateway"),
 		clickhouse.Named("tunnel_source", s.tunnelSourceID().String()),
 	}
@@ -125,6 +128,14 @@ func (s *seeder) chTelemetryChecks() []chCheck {
      AND mcp_server_id = @github) < 24`,
 			settings: "",
 			msg:      "demo seed postflight: removed gateway member dispatches missing",
+		},
+		{
+			cond: `(SELECT count() FROM telemetry_logs
+   WHERE gram_project_id = toUUID(@proj)
+     AND meta_mcp_server_id = @orggateway
+     AND event_source = 'tool_call') < 120`,
+			settings: "",
+			msg:      "demo seed postflight: organization gateway dispatches missing",
 		},
 		{
 			cond: `(SELECT count() FROM telemetry_logs

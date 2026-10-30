@@ -24,7 +24,9 @@ WHERE s.id = @mcp_server_id::uuid
 ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE
 DO UPDATE SET updated_at = clock_timestamp();
 
--- name: CaptureSoleConsumerAssociations :execrows
+-- name: CaptureSoleConsumerAssociations :many
+-- Returns the server of each association it adds, so the caller can record
+-- the typed auth clients those associations need.
 -- Associates every client bound to a user session issuer with the issuer's
 -- MCP server when that server is the issuer's only consumer in the
 -- organization. With one consumer the binding can only be meant for that
@@ -80,9 +82,12 @@ WHERE s.project_id = @project_id::uuid
       AND gateway.organization_id = p.organization_id
       AND gateway.deleted IS FALSE
   )
-ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING;
+ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING
+RETURNING mcp_server_id;
 
--- name: CaptureGatewayDerivedAssociations :execrows
+-- name: CaptureGatewayDerivedAssociations :many
+-- Returns the server of each association it adds, so the caller can record
+-- the typed auth clients those associations need.
 -- Associates a gateway-fronted server in the project with the one client its
 -- gateway issuer binds for the server's derived authorization server, which
 -- is how consent claims a member for a gateway client. Runs for a gateway
@@ -197,9 +202,10 @@ WHERE (f.issuer_id = ANY(@user_session_issuer_ids::uuid[]) OR s.user_session_iss
     WHERE recorded.mcp_server_id = s.id
       AND recorded.remote_session_client_id = c.id
   )
-ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING;
+ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING
+RETURNING mcp_server_id;
 
--- name: PruneUnservableAssociations :execrows
+-- name: PruneUnservableAssociations :many
 -- Removes the project's associations no issuer can serve: the server is gone,
 -- the client is deleted, or the client is bound neither to the server's own
 -- user session issuer nor to the live issuer of a gateway fronting the server
@@ -261,7 +267,8 @@ WHERE a.mcp_server_id = s.id
           )
         )
     )
-  );
+  )
+RETURNING a.mcp_server_id;
 
 -- name: PruneRemoteSessionClientAssociations :execrows
 -- The client-keyed form of PruneUnservableAssociations, for a change to one
@@ -764,11 +771,12 @@ WHERE s.id = ANY(@mcp_server_ids::uuid[])
       AND COALESCE(us.credential_id, us.id) = @credential_id::uuid
   );
 
--- name: RecordNewMemberSelection :execrows
--- Records a credential's choice for a gateway member added after it was
--- issued: the one auth client named, which must still be enabled and offered
--- by the server, or no-auth when none is. A choice already recorded, by a
--- concurrent request or otherwise, is kept.
+-- name: RecordAuthClientChoice :execrows
+-- Records one credential's choice for one MCP server: the auth client named,
+-- which must still be enabled and offered by the server, or no-auth when none
+-- is. A choice already recorded, by a concurrent request or otherwise, is
+-- kept. Callers validate the choice first; this only refuses one the server
+-- no longer offers.
 INSERT INTO upstream_client_selections (
     project_id,
     organization_id,
@@ -820,3 +828,58 @@ WHERE s.id = @mcp_server_id::uuid
   AND (sqlc.narg('auth_client_id')::uuid IS NULL OR ac.id IS NOT NULL)
   AND (ac.remote_session_client_id IS NULL OR reg.id IS NOT NULL)
 ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO NOTHING;
+
+-- name: CopyCredentialChoices :execrows
+-- Gives a replacement credential the choices of the one it replaces.
+INSERT INTO upstream_client_selections (
+    project_id, organization_id, credential_kind, credential_id, mcp_server_id,
+    remote_session_client_id, client_attachment_scope, no_auth, auth_client_id,
+    auth_client_attachment_scope, source
+)
+SELECT project_id, organization_id, credential_kind, @to_credential_id::uuid, mcp_server_id,
+       remote_session_client_id, client_attachment_scope, no_auth, auth_client_id,
+       auth_client_attachment_scope, source
+FROM upstream_client_selections
+WHERE credential_kind = @credential_kind::text
+  AND credential_id = @from_credential_id::uuid
+  AND organization_id = @organization_id::text
+  AND deleted IS FALSE
+ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO NOTHING;
+
+-- name: HasCredentialChoice :one
+SELECT EXISTS (
+  SELECT 1
+  FROM upstream_client_selections
+  WHERE credential_kind = @credential_kind::text
+    AND credential_id = @credential_id::uuid
+    AND mcp_server_id = @mcp_server_id::uuid
+    AND organization_id = @organization_id::text
+    AND deleted IS FALSE
+)::boolean AS has_choice;
+
+-- name: GetIssuanceProfileForCaller :one
+-- The profile configured for one headless caller signing in through one user
+-- session issuer: a client, or a workload issuer and subject.
+SELECT p.id
+FROM issuance_selection_profiles AS p
+WHERE p.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND p.organization_id = @organization_id::text
+  AND p.deleted IS FALSE
+  AND (
+    (sqlc.narg('user_session_client_id')::uuid IS NOT NULL AND p.user_session_client_id = sqlc.narg('user_session_client_id')::uuid)
+    OR (sqlc.narg('workload_issuer_id')::uuid IS NOT NULL
+        AND p.workload_issuer_id = sqlc.narg('workload_issuer_id')::uuid
+        AND p.workload_subject = sqlc.narg('workload_subject')::text)
+  );
+
+-- name: ListCredentialChoices :many
+-- One credential's (or profile's) recorded choices for the given servers.
+SELECT sel.mcp_server_id,
+       sel.auth_client_id,
+       sel.no_auth
+FROM upstream_client_selections AS sel
+WHERE sel.credential_kind = @credential_kind::text
+  AND sel.credential_id = @credential_id::uuid
+  AND sel.organization_id = @organization_id::text
+  AND sel.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND sel.deleted IS FALSE;

@@ -34,7 +34,7 @@ func (s *nativeTestSource) GetByName(_ context.Context, name string) (mcpregistr
 	return s.entry, s.err
 }
 
-const nativeRecord = `{"server":{"name":"io.example/native","title":"Native","description":"Synthetic registry server","version":"1","repository":{"url":"https://example.com/repo"},"remotes":[{"type":"sse","url":"https://example.com/first"},{"type":"sse","url":"https://example.com/last"},{"type":"streamable-http","url":"https://example.com/mcp","headers":[{"name":"X-Key","isSecret":true}],"variables":{"tenant":{"description":"Tenant"}}}]},"_meta":{"custom.example/metadata":{"keep":true},"io.modelcontextprotocol.registry/official":{"status":"deprecated"},"com.pulsemcp/server-version":{"remotes[0]":{"tools":[{"name":"read","annotations":{"readOnlyHint":true}}]},"remotes[1]":{"tools":[]}}}}`
+const nativeRecord = `{"server":{"name":"io.example/native","title":"Native","description":"Synthetic registry server","version":"1","repository":{"url":"https://example.com/repo"},"remotes":[{"type":"sse","url":"https://example.com/first"},{"type":"sse","url":"https://example.com/last"},{"type":"streamable-http","url":"https://example.com/mcp","headers":[{"name":"X-Key","isSecret":true}],"variables":{"tenant":{"description":"Tenant"}}}]},"_meta":{"com.speakeasy.ai/icons":{"default":{"src":"https://assets.example/rpc/assets.serveImage?id=00000000-0000-4000-8000-000000000001","mimeType":"image/svg+xml","sizes":["any"]}},"custom.example/metadata":{"keep":true},"io.modelcontextprotocol.registry/official":{"status":"deprecated"},"com.pulsemcp/server-version":{"remotes[0]":{"tools":[{"name":"read","annotations":{"readOnlyHint":true}}]},"remotes[1]":{"tools":[]}}}}`
 
 func TestNativeList(t *testing.T) {
 	t.Parallel()
@@ -52,6 +52,7 @@ func TestNativeList(t *testing.T) {
 	require.Equal(t, 1, row.ToolCount)
 	require.True(t, row.IsReadOnly)
 	require.Equal(t, map[string]any{"keep": true}, nativeTestMap(t, row.Meta)["custom.example/metadata"])
+	require.Equal(t, map[string]any{"default": map[string]any{"src": "https://assets.example/rpc/assets.serveImage?id=00000000-0000-4000-8000-000000000001", "mimeType": "image/svg+xml", "sizes": []any{"any"}}}, nativeTestMap(t, row.Meta)[mcpregistry.IconsNamespace])
 	require.Equal(t, "next", source.options[1].Cursor)
 	require.False(t, source.options[0].IncludeDeleted)
 }

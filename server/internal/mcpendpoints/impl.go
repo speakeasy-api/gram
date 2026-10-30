@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -882,6 +883,9 @@ func uniqueIDs(ids ...uuid.NullUUID) []uuid.UUID {
 func lockEndpointMutationScope(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext) error {
 	if tx == nil || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ProjectID == nil {
 		return fmt.Errorf("invalid MCP endpoint mutation scope")
+	}
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return fmt.Errorf("lock endpoint EMA scope: %w", err)
 	}
 	if err := networkingressrepo.New(tx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return fmt.Errorf("lock network ingress lifecycle: %w", err)

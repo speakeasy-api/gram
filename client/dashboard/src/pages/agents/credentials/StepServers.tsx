@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { useEffect, useId, useState, type JSX } from "react";
+import { KeyCredentialChoice } from "./KeyCredentialChoice";
 import { WizardStepHeader } from "./WizardChrome";
 import type { InventoryServer } from "./useServerInventory";
 
@@ -18,6 +19,8 @@ import type { InventoryServer } from "./useServerInventory";
 export interface ServerSelection {
   server: InventoryServer;
   tools?: string[];
+  /** The shared credential the key uses on a server that offers several. */
+  authClientId?: string;
 }
 
 /** Why "All servers" cannot be turned on, said beside it. */
@@ -267,7 +270,7 @@ export function StepServers({
                   <li
                     key={server.id}
                     className={cn(
-                      "flex items-center pr-4",
+                      "flex flex-wrap items-center pr-4",
                       !locked && checked && "bg-accent/40",
                       !locked && !checked && "hover:bg-muted/40",
                     )}
@@ -309,6 +312,31 @@ export function StepServers({
                       </span>
                     </label>
                     <ServerInfoPopover server={server} />
+                    {checked &&
+                      !allServers &&
+                      (server.kind === "Remote" ||
+                        server.kind === "Tunneled") && (
+                        <div className="w-full px-4 pb-3 pl-12">
+                          <KeyCredentialChoice
+                            serverId={server.id}
+                            serverName={server.name}
+                            value={
+                              selected.find(
+                                (entry) => entry.server.id === server.id,
+                              )?.authClientId
+                            }
+                            onChange={(authClientId) =>
+                              onChange(
+                                selected.map((entry) =>
+                                  entry.server.id === server.id
+                                    ? { ...entry, authClientId }
+                                    : entry,
+                                ),
+                              )
+                            }
+                          />
+                        </div>
+                      )}
                   </li>
                 );
               })}

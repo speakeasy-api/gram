@@ -71,7 +71,7 @@ func (c *memberChoices) recordNewMemberChoices(ctx context.Context, logger *slog
 		if !decided {
 			continue
 		}
-		if _, err := queries.RecordNewMemberSelection(ctx, upstreamclientsrepo.RecordNewMemberSelectionParams{
+		if _, err := queries.RecordAuthClientChoice(ctx, upstreamclientsrepo.RecordAuthClientChoiceParams{
 			CredentialKind: upstreamclients.CredentialKindUserSession,
 			CredentialID:   c.selector.credentialID,
 			Source:         upstreamclients.SelectionSourceNewMember,

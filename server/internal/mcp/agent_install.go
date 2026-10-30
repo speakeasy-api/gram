@@ -3,9 +3,9 @@
 // The dashboard shows an agent's key exactly once, so a copyable install
 // command must not contain it: a one-liner lands in shell history, in chat
 // threads, and in screen shares. Instead the dashboard exchanges the key it is
-// already holding for a short-lived, single-use code, and the command carries
-// the code. Fetching the script consumes the code and returns a script with
-// the key inlined, so a leaked command is worthless a moment later.
+// already holding for a short-lived code, and the command carries the code.
+// Fetching the script returns a script with the key inlined. The code stays
+// valid until its TTL runs out, so a leaked command is worthless after that.
 
 package mcp
 
@@ -34,7 +34,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
-// AgentInstallCodeRoute mints a code; AgentInstallScriptRoute spends it.
+// AgentInstallCodeRoute mints a code; AgentInstallScriptRoute redeems it.
 const (
 	AgentInstallCodeRoute   = "/agent-mcp/{agentID}/install-code"
 	AgentInstallScriptRoute = "/agent-mcp/install/{code}"
@@ -45,7 +45,7 @@ const (
 const agentInstallCodeTTL = 15 * time.Minute
 
 // agentInstallCode is the exchange record. It holds the credential, so it
-// lives only in the cache, only for its TTL, and is deleted on first read.
+// lives only in the cache, and only for its TTL.
 type agentInstallCode struct {
 	Code    string `json:"code"`
 	AgentID string `json:"agent_id"`
@@ -83,8 +83,8 @@ func newInstallCode() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(raw), nil
 }
 
-// HandleAgentInstallCode exchanges a live agent key for a single-use install
-// code. Authenticated by that key, so possession of the key is the only thing
+// HandleAgentInstallCode exchanges a live agent key for an install code.
+// Authenticated by that key, so possession of the key is the only thing
 // that can mint one, and only for the agent the key belongs to.
 func (s *Service) HandleAgentInstallCode(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -100,13 +100,14 @@ func (s *Service) HandleAgentInstallCode(w http.ResponseWriter, r *http.Request)
 	organizationID := authCtx.ActiveOrganizationID
 
 	// The command fetches the script from this origin, and the code is a
-	// bearer of the key until spent: never hand it out for a plain-HTTP fetch.
+	// bearer of the key until it expires: never hand it out for a plain-HTTP
+	// fetch.
 	serverURL := s.BaseURLForRequest(r)
 	if base, err := url.Parse(serverURL); err != nil || base.Scheme != "https" {
 		return oops.E(oops.CodeBadRequest, nil, "install commands require an HTTPS server URL")
 	}
 
-	// Resolved now, while the request is authenticated by the key: spending
+	// Resolved now, while the request is authenticated by the key: redeeming
 	// the code is not.
 	projectSlug, err := s.agentHooksProjectSlug(ctx, organizationID, agentID)
 	if err != nil {
@@ -183,9 +184,9 @@ func (s *Service) hooksInstallFailOpen(ctx context.Context, organizationID strin
 	return enabled
 }
 
-// HandleAgentInstallScript spends a code and returns the shell script that
+// HandleAgentInstallScript redeems a code and returns the shell script that
 // configures the local MCP clients. Unauthenticated by design: the code is the
-// credential, which is why it is single-use and short-lived.
+// credential, which is why it is short-lived.
 func (s *Service) HandleAgentInstallScript(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
@@ -193,14 +194,14 @@ func (s *Service) HandleAgentInstallScript(w http.ResponseWriter, r *http.Reques
 	if code == "" {
 		return oops.C(oops.CodeNotFound)
 	}
-	// GetAndDelete, not Get: a code that has been read is spent, whether or not
-	// the script that follows reaches its target.
+	// Get, not GetAndDelete: the code can be redeemed again until its TTL runs
+	// out, so a failed or inspected install can be rerun with the same command.
 	// Only the key matters for the lookup; the rest comes back from the cache.
 	lookup := agentInstallCode{Code: code, AgentID: "", Key: "", URL: "", ServerURL: "", OrganizationID: "", ProjectSlug: "", InstallFailOpen: false}
-	record, err := s.agentInstallCache.GetAndDelete(ctx, lookup.CacheKey())
+	record, err := s.agentInstallCache.Get(ctx, lookup.CacheKey())
 	if err != nil || record.Key == "" {
-		// An expired, unknown or already-spent code are the same thing to the
-		// caller: nothing to hand over.
+		// An expired or unknown code are the same thing to the caller: nothing
+		// to hand over.
 		return oops.C(oops.CodeNotFound)
 	}
 

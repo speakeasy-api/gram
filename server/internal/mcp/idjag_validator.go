@@ -31,6 +31,7 @@ func newIDJAGValidator(
 	policy *guardian.Policy,
 	meterProvider metric.MeterProvider,
 	logger *slog.Logger,
+	trust idjag.Store,
 ) (*idjag.Validator, error) {
 	cache, err := idjag.NewIssuerKeyCache(db)
 	if err != nil {
@@ -55,11 +56,7 @@ func newIDJAGValidator(
 	if err != nil {
 		return nil, fmt.Errorf("create replay guard: %w", err)
 	}
-	postgresStore, err := idjag.NewPostgresStore(db)
-	if err != nil {
-		return nil, fmt.Errorf("create ID-JAG store: %w", err)
-	}
-	validator, err := idjag.NewValidator(keys, guard, postgresStore)
+	validator, err := idjag.NewValidator(keys, guard, trust)
 	if err != nil {
 		return nil, fmt.Errorf("create validator: %w", err)
 	}
