@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => ({
   sessionClients: vi.fn(),
   bindings: vi.fn(),
   attach: vi.fn(),
+  detach: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/mcpServerAuthClientChoices.js", () => ({
@@ -109,6 +110,7 @@ vi.mock("@/contexts/Sdk", () => ({
       ],
       listBindings: async () => ({ items: await mocks.bindings() }),
       attachBinding: mocks.attach,
+      detachBinding: mocks.detach,
     },
     remoteSessionClients: {
       list: async (request: object) => [
@@ -1702,7 +1704,7 @@ describe("Editing an agent that already exists", () => {
     expect(mocks.deleteGrant).not.toHaveBeenCalled();
   });
 
-  it("keeps an unavailable assignment removable when its issuer has no clients", async () => {
+  it("drops an unavailable assignment whose sign-in client is gone when saving", async () => {
     mocks.mcpServers.mockResolvedValue({
       mcpServers: [
         {
@@ -1729,24 +1731,24 @@ describe("Editing an agent that already exists", () => {
       },
     ]);
     mocks.sessionClients.mockResolvedValue([]);
+    mocks.detach.mockResolvedValue({});
     editing();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("checkbox", { name: "GitHub" });
-    await authenticationSave();
-    // The first row starts expanded.
-    await screen.findByRole("button", {
-      name: /GitHub.*Requires connection/,
-    });
-    expect(
-      await screen.findByRole("button", {
-        name: "Disconnect unavailable account",
-      }),
-    ).toBeTruthy();
-    expect(
-      screen.queryByText(
-        "This server uses a shared credential. No personal connection is needed.",
+    fireEvent.click(await authenticationSave());
+    // Nothing can repair it, so saving removes it rather than asking the
+    // editor to find a button for it.
+    await waitFor(() =>
+      expect(mocks.detach).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detachBindingRequestBody: expect.objectContaining({
+            id: "binding_unavailable",
+          }),
+        }),
+        undefined,
+        expect.anything(),
       ),
-    ).toBeNull();
+    );
   });
 
   it("creates no agent: this one already exists", async () => {

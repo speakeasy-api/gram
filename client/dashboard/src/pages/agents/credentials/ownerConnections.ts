@@ -122,6 +122,25 @@ export async function attachOwnerConnections(
       collectPageItems(api.remoteSessions.list(scope, undefined, { signal })),
       api.remoteSessions.listBindings(scope, undefined, { signal }),
     ]);
+    // An assignment whose session is gone and whose sign-in client no longer
+    // exists can never be repaired, and it blocks the server: drop it.
+    for (const orphan of bindings.items.filter(
+      (binding) =>
+        binding.remoteSession === undefined &&
+        !clients.some((client) => client.id === binding.remoteSessionClientId),
+    ))
+      await api.remoteSessions.detachBinding(
+        {
+          gramProject,
+          detachBindingRequestBody: {
+            principalId: agentId,
+            userSessionIssuerId,
+            id: orphan.id,
+          },
+        },
+        undefined,
+        { signal },
+      );
     for (const client of clients) {
       if (client.credentialOwner === "self") continue;
       const current = bindings.items.filter(
