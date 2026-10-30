@@ -19,25 +19,22 @@ import (
 )
 
 const (
-	// RetiredPulseCatalogFailureReason identifies terminal retirement failures in logs and workflows.
-	RetiredPulseCatalogFailureReason = "retired_pulse_catalog"
+	// UnsupportedCatalogSourceFailureReason identifies terminal unsupported-source failures in logs and workflows.
+	UnsupportedCatalogSourceFailureReason = "unsupported_catalog_source"
 
-	registrySourceTypeNative      = "native_v1"
-	registrySourceTypePulseV01    = "pulse_v0_1"
-	registrySourceTypeOfficialV01 = "official_v0_1"
+	registrySourceTypeNative = "native_v1"
 
-	registryAuthProfilePulseServerCredentials = "pulse" + "_server_credentials"
-	registryAuthProfileNone                   = "none"
+	registryAuthProfileNone = "none"
 
 	registryCertificationStateCertified = "certified"
 )
 
 var (
-	errCatalogEmpty          = errors.New("catalog has no configured sources")
-	ErrCatalogSourceNotFound = errors.New("catalog source not found")
-	ErrCatalogSourceRetired  = errors.New("pulse catalog source is retired")
-	ErrCatalogSourceDisabled = errors.New("catalog source is not enabled and certified")
-	ErrUnknownRegistrySource = errors.New("unknown registry source profile")
+	errCatalogEmpty             = errors.New("catalog has no configured sources")
+	ErrCatalogSourceNotFound    = errors.New("catalog source not found")
+	ErrUnsupportedCatalogSource = errors.New("unsupported catalog source")
+	ErrCatalogSourceDisabled    = errors.New("catalog source is not enabled and certified")
+	ErrUnknownRegistrySource    = errors.New("unknown registry source profile")
 )
 
 // CatalogSource is an operator-owned, reviewed registry configuration. It is
@@ -271,7 +268,7 @@ func (s *CatalogService) SelectSource(ctx context.Context, organizationID, organ
 }
 
 // IdentitySource resolves persisted/accepted work independently of rollout state.
-// Retired identities are rejected before enabled/certified admission; identities never switch.
+// Unsupported identities are rejected before enabled/certified admission; identities never switch.
 func (s *CatalogService) IdentitySource(ctx context.Context, id uuid.UUID) (CatalogSource, error) {
 	if s == nil || s.repo == nil {
 		return zeroCatalogSource(), ErrCatalogSourceNotFound
@@ -283,10 +280,8 @@ func (s *CatalogService) IdentitySource(ctx context.Context, id uuid.UUID) (Cata
 	if err != nil {
 		return zeroCatalogSource(), fmt.Errorf("get catalog identity: %w", err)
 	}
-	if strings.TrimRight(row.Url, "/") == "https://api.pulsemcp.com" ||
-		(row.SourceType.Valid && row.SourceType.String == registrySourceTypePulseV01) ||
-		(row.AuthProfile.Valid && row.AuthProfile.String == registryAuthProfilePulseServerCredentials) {
-		return zeroCatalogSource(), ErrCatalogSourceRetired
+	if row.ID != NativeCatalogRegistryID || !row.SourceType.Valid || row.SourceType.String != registrySourceTypeNative || !row.AuthProfile.Valid || row.AuthProfile.String != registryAuthProfileNone {
+		return zeroCatalogSource(), ErrUnsupportedCatalogSource
 	}
 	source, ok := catalogSourceFromDetailRow(row)
 	if !ok {
@@ -347,21 +342,6 @@ func EnsureNativeCatalogSource(ctx context.Context, db *pgxpool.Pool) error {
 }
 
 func catalogSourceFromRow(row repo.ListMCPRegistriesRow) (CatalogSource, bool) {
-	// Existing Pulse rows predate source metadata. They remain eligible only for
-	// the exact historic Pulse URL while this reader compatibility release rolls
-	// out; arbitrary legacy URLs cannot enter the shared catalogue.
-	if legacyPulseSourceMetadataAbsent(row) && strings.TrimRight(row.Url, "/") == "https://api.pulsemcp.com" {
-		return CatalogSource{
-			Name:                 row.Name,
-			Registry:             Registry{ID: row.ID, URL: row.Url},
-			SourceType:           registrySourceTypePulseV01,
-			AuthProfile:          registryAuthProfilePulseServerCredentials,
-			CertificationVersion: "",
-			Priority:             0,
-			SourceKey:            "legacy-pulse-" + row.ID.String(),
-			Legacy:               true,
-		}, true
-	}
 	if !row.Enabled.Valid || !row.Enabled.Bool || !row.CertificationState.Valid || row.CertificationState.String != registryCertificationStateCertified || !row.SourceType.Valid || !row.AuthProfile.Valid || !row.SourceKey.Valid || strings.TrimSpace(row.SourceKey.String) == "" {
 		return zeroCatalogSource(), false
 	}
@@ -379,19 +359,6 @@ func catalogSourceFromRow(row repo.ListMCPRegistriesRow) (CatalogSource, bool) {
 		SourceKey:            row.SourceKey.String,
 		Legacy:               false,
 	}, true
-}
-
-// legacyPulseSourceMetadataAbsent admits only rows that have not started the
-// metadata migration. Partially populated rows must satisfy the full reviewed
-// source contract rather than bypassing enabled/certified admission.
-func legacyPulseSourceMetadataAbsent(row repo.ListMCPRegistriesRow) bool {
-	return !row.SourceType.Valid &&
-		!row.AuthProfile.Valid &&
-		!row.Enabled.Valid &&
-		!row.CertificationState.Valid &&
-		!row.CertificationVersion.Valid &&
-		!row.Priority.Valid &&
-		!row.SourceKey.Valid
 }
 
 func catalogSourceFromDetailRow(row repo.GetMCPRegistryByIDRow) (CatalogSource, bool) {

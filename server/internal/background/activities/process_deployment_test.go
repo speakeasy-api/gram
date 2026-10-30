@@ -11,21 +11,21 @@ import (
 	"testing"
 )
 
-func TestProcessDeploymentRetiredAggregate(t *testing.T) {
+func TestProcessDeploymentUnsupportedAggregate(t *testing.T) {
 	t.Parallel()
 	workers := pool.New().WithErrors()
 	workers.Go(func() error { return errors.New("unrelated source failed") })
-	workers.Go(func() error { return fmt.Errorf("external attachment: %w", externalmcp.ErrCatalogSourceRetired) })
+	workers.Go(func() error { return fmt.Errorf("external attachment: %w", externalmcp.ErrUnsupportedCatalogSource) })
 	workers.Go(func() error { return oops.ErrPermanent })
 	workers.Go(func() error { return nil })
 	aggregate := workers.Wait()
-	require.ErrorIs(t, aggregate, externalmcp.ErrCatalogSourceRetired)
+	require.ErrorIs(t, aggregate, externalmcp.ErrUnsupportedCatalogSource)
 	err := deploymentProcessingError(aggregate)
 	var app *temporal.ApplicationError
 	require.ErrorAs(t, err, &app)
 	require.True(t, app.NonRetryable())
-	require.Equal(t, "retired_pulse_catalog", app.Type())
-	require.ErrorIs(t, err, externalmcp.ErrCatalogSourceRetired)
+	require.Equal(t, "unsupported_catalog_source", app.Type())
+	require.ErrorIs(t, err, externalmcp.ErrUnsupportedCatalogSource)
 }
 func TestProcessDeploymentOtherErrorsUnchanged(t *testing.T) {
 	t.Parallel()

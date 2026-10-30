@@ -91,7 +91,7 @@ func TestCatalogRetiredSourceRejected(t *testing.T) {
 	_, err = catalog.Inspect(ctx, key, "reviewed/mcp")
 	require.ErrorIs(t, err, ErrCatalogRejected)
 	_, err = catalog.InspectIdentity(ctx, key, "reviewed/mcp")
-	require.ErrorIs(t, err, externalmcp.ErrCatalogSourceRetired)
+	require.ErrorIs(t, err, externalmcp.ErrUnsupportedCatalogSource)
 }
 
 func TestCatalogRetainedUnpublishedIdentity(t *testing.T) {

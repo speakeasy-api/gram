@@ -448,8 +448,8 @@ func (p *ProcessDeployment) doExternalMCPs(
 }
 
 func deploymentProcessingError(err error) error {
-	if errors.Is(err, externalmcp.ErrCatalogSourceRetired) {
-		return temporal.NewNonRetryableApplicationError("Pulse catalog source is retired", externalmcp.RetiredPulseCatalogFailureReason, err)
+	if errors.Is(err, externalmcp.ErrUnsupportedCatalogSource) {
+		return temporal.NewNonRetryableApplicationError("unsupported catalog source", externalmcp.UnsupportedCatalogSourceFailureReason, err)
 	}
 	if errors.Is(err, oops.ErrPermanent) {
 		return temporal.NewApplicationErrorWithOptions("openapiv3 document was not processed successfully", "openapi_doc_error", temporal.ApplicationErrorOptions{

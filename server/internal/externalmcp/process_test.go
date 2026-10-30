@@ -15,7 +15,7 @@ import (
 	"testing"
 )
 
-func TestToolExtractorRetiredPulse(t *testing.T) {
+func TestToolExtractorUnsupportedSource(t *testing.T) {
 	t.Parallel()
 	var remoteCalls atomic.Int32
 	remote := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { remoteCalls.Add(1) }))
@@ -27,19 +27,19 @@ func TestToolExtractorRetiredPulse(t *testing.T) {
 	native := &failedCatalogReader{}
 	catalog := NewCatalogService(nil, nil, native)
 	registryID := uuid.New()
-	catalog.repo = routingRepo{rows: []repo.ListMCPRegistriesRow{{ID: registryID, Url: "https://api.pulsemcp.com"}}}
+	catalog.repo = routingRepo{rows: []repo.ListMCPRegistriesRow{{ID: registryID, Url: "https://unsupported.example.test"}}}
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	task := ToolExtractorTask{ProjectID: uuid.New(), DeploymentID: uuid.New(), OrgSlug: "test-org", ProjectSlug: "test-project", MCP: ToolExtractorTaskMCPServer{AttachmentID: uuid.New(), RegistryID: uuid.NullUUID{UUID: registryID, Valid: true}, Name: "retired", Slug: "retired", RegistryServerSpecifier: "example/server", SelectedRemotes: []string{remote.URL}}}
 	err = NewToolExtractor(logger, nil, db, catalog).Do(t.Context(), task)
-	require.ErrorIs(t, err, ErrCatalogSourceRetired)
+	require.ErrorIs(t, err, ErrUnsupportedCatalogSource)
 	require.Zero(t, native.calls, "must not fall back")
 	require.Zero(t, remoteCalls.Load(), "remote discovery must not start")
 	found := false
 	for line := range bytes.SplitSeq(bytes.TrimSpace(logs.Bytes()), []byte("\n")) {
 		var record map[string]any
 		require.NoError(t, json.Unmarshal(line, &record))
-		if record["gram.external_mcp.failure_reason"] != "retired_pulse_catalog" {
+		if record["gram.external_mcp.failure_reason"] != "unsupported_catalog_source" {
 			continue
 		}
 		found = true
@@ -49,5 +49,5 @@ func TestToolExtractorRetiredPulse(t *testing.T) {
 		require.Equal(t, task.ProjectID.String(), record[string(attr.ProjectIDKey)])
 		require.Equal(t, registryID.String(), record[string(attr.MCPRegistryIDKey)])
 	}
-	require.True(t, found, "missing stable retired-source failure log")
+	require.True(t, found, "missing stable unsupported-source failure log")
 }

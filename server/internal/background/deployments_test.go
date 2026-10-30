@@ -107,7 +107,7 @@ func TestProcessGuardedDeploymentWorkflowRetriesDuringRollingRegistration(t *tes
 	testProcessDeploymentWorkflowCompletionActivity(t, true, 6)
 }
 
-func TestProcessDeploymentWorkflowRetiredPulseFailsWithoutRetry(t *testing.T) {
+func TestProcessDeploymentWorkflowUnsupportedSourceFailsWithoutRetry(t *testing.T) {
 	t.Parallel()
 	for _, guarded := range []bool{false, true} {
 		t.Run(fmt.Sprintf("guarded=%t", guarded), func(t *testing.T) {
@@ -125,7 +125,7 @@ func TestProcessDeploymentWorkflowRetiredPulseFailsWithoutRetry(t *testing.T) {
 			env.RegisterActivityWithOptions(func(context.Context, uuid.UUID, uuid.UUID) error { return nil }, activity.RegisterOptions{Name: "ValidateDeployment"})
 			env.RegisterActivityWithOptions(func(context.Context, uuid.UUID, uuid.UUID) error {
 				attempts++
-				return temporal.NewNonRetryableApplicationError("Pulse catalog source is retired", "retired_pulse_catalog", externalmcp.ErrCatalogSourceRetired)
+				return temporal.NewNonRetryableApplicationError("unsupported catalog source", "unsupported_catalog_source", externalmcp.ErrUnsupportedCatalogSource)
 			}, activity.RegisterOptions{Name: "ProcessDeployment"})
 			env.RegisterActivityWithOptions(func(context.Context, uuid.UUID, uuid.UUID) error { return nil }, activity.RegisterOptions{Name: "ProvisionFunctionsAccess"})
 			env.RegisterActivityWithOptions(func(context.Context, backgroundactivities.DeployFunctionRunnersRequest) error { return nil }, activity.RegisterOptions{Name: "DeployFunctionRunners"})
