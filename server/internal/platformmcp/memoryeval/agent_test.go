@@ -344,7 +344,7 @@ func summarize(corpus *memoryeval.Corpus, runs int, arms []arm, answers []answer
 				s.notFound++
 			}
 		}
-		if !ans.question.ExpectsNotFound() {
+		if graded && !ans.question.ExpectsNotFound() {
 			s.answerable++
 			if len(ans.citations) > 0 {
 				s.citedAnswers++

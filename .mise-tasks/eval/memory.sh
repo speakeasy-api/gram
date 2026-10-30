@@ -23,6 +23,6 @@ if [ -n "${usage_out:-}" ]; then
   export MEMORYEVAL_OUT="$(cd "$out_dir" && pwd)/$(basename "$usage_out")"
 fi
 
-# No overall test timeout: every answer and judge call has its own timeout,
-# and the total grows with runs and arms.
-exec mise run test:server -tags=memoryeval -run "^TestMemoryEvalJudged\$" -count=1 -timeout=0 -v ./internal/platformmcp/memoryeval/
+# Every answer and judge call has its own timeout; the overall timeout is only
+# a backstop against a hung setup step, sized well above a full four-arm run.
+exec mise run test:server -tags=memoryeval -run "^TestMemoryEvalJudged\$" -count=1 -timeout=6h -v ./internal/platformmcp/memoryeval/
