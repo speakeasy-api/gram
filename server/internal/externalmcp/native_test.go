@@ -343,6 +343,7 @@ func TestNativeSparsePublication(t *testing.T) {
 		`{"supportsDcr":false,"supportsCimd":false,"authSetup":"none","authDiscoveryStatus":"not_required"}`,
 	} {
 		t.Run(catalog, func(t *testing.T) {
+			t.Parallel()
 			raw := json.RawMessage(`{"server":{"name":"io.example/sparse","description":"Reviewed server","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.com/mcp"}]},"_meta":{"com.speakeasy.ai/catalog":` + catalog + `,"com.speakeasy.ai/registry":{"publishedAt":"2026-10-01T00:00:00Z"}}}`)
 			source := &nativeTestSource{pages: []mcpregistry.DiscoveryPage{{Records: []json.RawMessage{raw}}}, entry: mcpregistry.Entry{Data: raw}}
 			reader := NewNativeRegistryReader(source)

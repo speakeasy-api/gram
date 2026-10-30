@@ -9,6 +9,7 @@ import (
 )
 
 func TestNativeLifecycle(t *testing.T) {
+	t.Parallel()
 	var meta any
 	require.NoError(t, json.Unmarshal([]byte(`{"io.modelcontextprotocol.registry/official":{"status":"deprecated","isLatest":false,"updatedAt":"2026-08-01T00:00:00Z"},"com.speakeasy.ai/registry":{"publishedAt":"2026-07-01T00:00:00Z"}}`), &meta))
 	got := provenance.Read(meta)
@@ -24,6 +25,7 @@ func TestNativeLifecycle(t *testing.T) {
 }
 
 func TestAbsentEvidenceStaysUnknown(t *testing.T) {
+	t.Parallel()
 	for _, raw := range []string{`null`, `{}`, `{"com.speakeasy.ai/catalog":{"supportsDcr":true}}`, `{"com.pulsemcp/server":{"isOfficial":true,"visitorsEstimateTotal":42},"com.pulsemcp/server-version":{"status":"deleted","updatedAt":"2026-08-01T00:00:00Z"}}`} {
 		var meta any
 		require.NoError(t, json.Unmarshal([]byte(raw), &meta))

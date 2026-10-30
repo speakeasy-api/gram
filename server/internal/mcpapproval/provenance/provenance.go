@@ -29,19 +29,21 @@ type metaDocument struct {
 
 // Read parses metadata without inferring membership or vendor identity from namespaces.
 func Read(meta any) Provenance {
+	var zero Provenance
 	encoded, err := json.Marshal(meta)
 	if err != nil {
-		return Provenance{}
+		return zero
 	}
 	var doc metaDocument
 	if json.Unmarshal(encoded, &doc) != nil {
-		return Provenance{}
+		return zero
 	}
 	published := parseTime(doc.Version.PublishedAt)
 	if published.IsZero() {
 		published = parseTime(doc.Publication.PublishedAt)
 	}
 	return Provenance{
+		Catalogued:  false,
 		Status:      doc.Version.Status,
 		IsLatest:    doc.Version.IsLatest,
 		PublishedAt: published,
