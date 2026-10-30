@@ -995,6 +995,56 @@ describe("Connecting a GKE cluster", () => {
     });
   }
 
+  it("ticks the servers the preselected provider already serves", async () => {
+    mocks.platforms.mockReturnValue([gke]);
+    mocks.tokenEndpoints.mockReturnValue([sharedServer]);
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [
+        { ...githubServer, userSessionIssuerId: "usi_shared" },
+        {
+          ...githubServer,
+          id: "server_two",
+          name: "Linear",
+          slug: "linear",
+          toolsetId: "toolset_two",
+          userSessionIssuerId: "usi_private",
+        },
+      ],
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Review Agent" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await passCredentialStep(/GKE/);
+
+    const github = await screen.findByRole("checkbox", { name: "GitHub" });
+    await waitFor(() =>
+      expect(github.getAttribute("data-state")).toBe("checked"),
+    );
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Linear" })
+        .getAttribute("data-state"),
+    ).toBe("unchecked");
+  });
+
+  it("ticks nothing for an agent signing in with an API key", async () => {
+    mocks.tokenEndpoints.mockReturnValue([sharedServer]);
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [{ ...githubServer, userSessionIssuerId: "usi_shared" }],
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Review Agent" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await passCredentialStep();
+
+    const github = await screen.findByRole("checkbox", { name: "GitHub" });
+    expect(github.getAttribute("data-state")).toBe("unchecked");
+  });
+
   it("names the audience, token endpoint and server URL the pod needs", async () => {
     mocks.tokenEndpoints.mockReturnValue([sharedServer]);
     await reachPodStep();

@@ -998,6 +998,54 @@ export function CredentialsWizard({
   // Chosen while servers are picked and shown again in the platform's setup,
   // so both are the same choice.
   const signIn = useSetupValues(undefined, reachServers);
+  // Servers ticked because a provider was chosen rather than by the reader,
+  // so choosing another provider can take them back off.
+  const autoSelected = useRef(new Set<string>());
+  // A provider's servers are the ones its token works at, so choosing it
+  // ticks them. Never while editing, where the ticks are the agent's saved
+  // access, nor under All servers, and never a server the reader may not
+  // give this agent.
+  const selectProviderServers = (providerId: string) => {
+    if (editing || allServers) return;
+    const kept = selected.filter(
+      (entry) =>
+        !autoSelected.current.has(entry.server.id) ||
+        entry.server.issuerId === providerId,
+    );
+    const keptIds = new Set(kept.map((entry) => entry.server.id));
+    const added = listedServers.filter(
+      (server) =>
+        server.issuerId === providerId &&
+        !refusedServers.has(server.id) &&
+        !keptIds.has(server.id),
+    );
+    autoSelected.current = new Set([
+      ...[...autoSelected.current].filter((id) => keptIds.has(id)),
+      ...added.map((server) => server.id),
+    ]);
+    if (added.length > 0 || kept.length !== selected.length) {
+      setSelected([...kept, ...added.map((server) => ({ server }))]);
+    }
+  };
+  const pickerValues = {
+    ...signIn,
+    onEndpointChange: (id: string) => {
+      signIn.onEndpointChange(id);
+      selectProviderServers(id);
+    },
+  };
+  // The preselected provider's servers are ticked on arriving at the list,
+  // once, and only while nothing is ticked yet.
+  const providerApplied = useRef(false);
+  useEffect(() => {
+    if (providerApplied.current || step !== 2 || credential !== "workload") {
+      return;
+    }
+    if (inventory.isLoading || signIn.loadState !== "ready") return;
+    if (!signIn.selectedEndpointId) return;
+    providerApplied.current = true;
+    if (selected.length === 0) selectProviderServers(signIn.selectedEndpointId);
+  });
   const workload = useWorkloadSetup({
     entry: credential === "workload" ? platform : undefined,
     platformKey: credential === "workload" ? platformKey : null,
@@ -1417,15 +1465,7 @@ export function CredentialsWizard({
               }}
               intro={
                 credential === "workload" ? (
-                  <SignInPicker
-                    setupValues={signIn}
-                    serversUsing={(providerId) =>
-                      inventory.servers
-                        .filter((server) => server.issuerId === providerId)
-                        .map((server) => server.name)
-                        .sort((a, b) => a.localeCompare(b))
-                    }
-                  />
+                  <SignInPicker setupValues={pickerValues} />
                 ) : undefined
               }
               signInNote={
@@ -1455,6 +1495,12 @@ export function CredentialsWizard({
               selected={selected}
               onChange={(next) => {
                 setSelected(next);
+                // Unticked by the reader, so no longer the provider's to undo.
+                autoSelected.current = new Set(
+                  [...autoSelected.current].filter((id) =>
+                    next.some((entry) => entry.server.id === id),
+                  ),
+                );
                 // The one just added, or the last one left when removing.
                 const added = next.find(
                   (entry) =>
