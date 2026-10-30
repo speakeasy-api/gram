@@ -179,16 +179,18 @@ func (s *Service) probeRemoteSession(
 	verdict, reason = combineUpstreamVerdict(verdict, reason, upstream, issuerDisplay)
 	logger = logger.With(attr.SlogRemoteSessionID(entry.RemoteSessionID.String()), attr.SlogOutcome(string(verdict)))
 	s.validationMetrics.Record(ctx, client.IssuerURL, trigger, string(verdict))
+	probeAttrs := []slog.Attr{attr.SlogReason(reason)}
+	if upstreamStatus != 0 {
+		probeAttrs = append(probeAttrs, attr.SlogHTTPResponseStatusCode(upstreamStatus))
+	}
 	switch verdict {
 	case remotesessions.ValidationOutcomeRejectedByMember:
-		attrs := []slog.Attr{attr.SlogReason(reason)}
-		if upstreamStatus != 0 {
-			attrs = append(attrs, attr.SlogHTTPResponseStatusCode(upstreamStatus))
-		}
-		logConnectVerificationFailure(ctx, logger, trigger, client, "member_rejected_new_grant", attrs...)
+		logConnectVerificationFailure(ctx, logger, trigger, client, "member_rejected_new_grant", probeAttrs...)
 	case remotesessions.ValidationOutcomeInactive:
 		logConnectVerificationFailure(ctx, logger, trigger, client, "issuer_reports_new_grant_inactive", attr.SlogReason(reason))
-	case remotesessions.ValidationOutcomeValid, remotesessions.ValidationOutcomeUnknown:
+	case remotesessions.ValidationOutcomeUnknown:
+		logConnectVerificationFailure(ctx, logger, trigger, client, "new_grant_check_inconclusive", probeAttrs...)
+	case remotesessions.ValidationOutcomeValid:
 	}
 
 	written, err := s.remoteChallengeMgr.RecordRemoteSessionValidation(ctx, ref, remotesessions.RemoteSessionValidation{
@@ -207,7 +209,7 @@ func (s *Service) probeRemoteSession(
 	return nil
 }
 
-// logConnectVerificationFailure warns when a new connection fails its check right after sign-in.
+// logConnectVerificationFailure warns when a new connection fails or cannot finish its check right after sign-in.
 func logConnectVerificationFailure(ctx context.Context, logger *slog.Logger, trigger remotesessionmetrics.ValidationTrigger, client remotesessions.Client, failureReason string, attrs ...slog.Attr) {
 	all := connectFailureAttrs(trigger, client, failureReason)
 	if all == nil {
@@ -217,7 +219,7 @@ func logConnectVerificationFailure(ctx context.Context, logger *slog.Logger, tri
 	for _, a := range append(all, attrs...) {
 		args = append(args, a)
 	}
-	logger.WarnContext(ctx, "new connection failed its check right after sign-in", args...)
+	logger.WarnContext(ctx, "new connection did not pass its check right after sign-in", args...)
 }
 
 // connectFailureAttrs names why a connect-triggered check failed; nil for other triggers.

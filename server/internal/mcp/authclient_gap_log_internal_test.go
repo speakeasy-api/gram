@@ -8,8 +8,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -22,7 +25,9 @@ func TestNoteAuthClientGap(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	s := &Service{authClientGapLog: newMandatoryShadowLog()}
+	reader := sdkmetric.NewManualReader()
+	metrics := mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), logger)
+	s := &Service{authClientGapLog: newMandatoryShadowLog(), metrics: metrics}
 	member := metaMember{serverID: uuid.New(), slug: "db"}
 	user := urn.NewUserSubject("user_1")
 
@@ -41,6 +46,17 @@ func TestNoteAuthClientGap(t *testing.T) {
 	require.Contains(t, lines[1], `"level":"WARN"`, "another subject warns on its own")
 	require.Contains(t, lines[2], `"level":"DEBUG"`)
 	require.Contains(t, lines[2], `"gram.auth_client.reason":"missing_choice"`)
+	gapKey := func(reason string) attribute.Set {
+		return attribute.NewSet(attr.AuthClientOutcome(string(authClientGap)), attr.AuthClientReason(reason))
+	}
+	require.Equal(t, map[attribute.Set]int64{
+		gapKey(authClientReasonNoAuthStale):   3,
+		gapKey(authClientReasonMissingChoice): 1,
+	}, counterPoints(t, reader, "mcp.auth_client.gap"), "every gap counts, even when its warning is quiet")
+
+	buf.Reset()
+	s.noteAuthClientGap(t.Context(), logger, user, member, gapResolution(authClientReasonUnknownType))
+	require.Contains(t, buf.String(), `"level":"WARN"`, "an unrecognized client type is broken state")
 
 	buf.Reset()
 	s.noteAuthClientGap(t.Context(), logger, user, member, gapResolution(authClientReasonUnassociated))

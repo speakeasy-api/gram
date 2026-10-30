@@ -864,12 +864,18 @@ func TestAnnotateAuthClientRecordsIDsOnly(t *testing.T) {
 // parityPoints reads the mcp.auth_client.parity counter back by attribute set.
 func parityPoints(t *testing.T, reader *sdkmetric.ManualReader) map[attribute.Set]int64 {
 	t.Helper()
+	return counterPoints(t, reader, "mcp.auth_client.parity")
+}
+
+// counterPoints reads an int64 counter back by attribute set.
+func counterPoints(t *testing.T, reader *sdkmetric.ManualReader, name string) map[attribute.Set]int64 {
+	t.Helper()
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(t.Context(), &rm))
 	points := map[attribute.Set]int64{}
 	for _, scope := range rm.ScopeMetrics {
 		for _, m := range scope.Metrics {
-			if m.Name != "mcp.auth_client.parity" {
+			if m.Name != name {
 				continue
 			}
 			sum, ok := m.Data.(metricdata.Sum[int64])

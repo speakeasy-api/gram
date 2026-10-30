@@ -723,7 +723,7 @@ func (s *Service) applyMemberAuthClient(ctx context.Context, logger *slog.Logger
 	member.upstreamNoAuth = res.outcome == authClientNoAuth || res.headersOnly() || (res.outcome == authClientLegacy && res.choice.noAuth())
 }
 
-// authClientGapWarnReasons are the gaps that mean something broke, rather than a choice not yet made.
+// authClientGapWarnReasons are the gaps that mean something broke; setup and missing choices await an admin or user and only count.
 var authClientGapWarnReasons = map[string]bool{
 	authClientReasonNoAuthStale:     true,
 	authClientReasonNoAuthForbidden: true,
@@ -734,6 +734,7 @@ var authClientGapWarnReasons = map[string]bool{
 	authClientReasonRegistration:    true,
 	authClientReasonDetached:        true,
 	authClientReasonHeadersStale:    true,
+	authClientReasonUnknownType:     true,
 }
 
 // noteAuthClientGap counts every gap and warns once per subject, server and reason per window.
