@@ -42,7 +42,7 @@ var RequiredOktaScopes = []string{"okta.apps.read"}
 
 // RequiredOktaAdminRoles are the admin roles the checklist asks operators to
 // assign to the service app.
-var RequiredOktaAdminRoles = []string{"Application Administrator (org-wide)", "Read-only Administrator"}
+var RequiredOktaAdminRoles = []string{"Application Administrator (org-wide)"}
 
 // ChecklistItem is one console step for the administrator. Completed is nil
 // for steps the server has no signal for.
@@ -95,7 +95,7 @@ type AgentAppSignal struct {
 }
 
 const (
-	accessInstruction   = "On the app's Admin roles tab, assign these roles. Speakeasy checks whether it can read your apps through the Okta API; it does not check which named admin roles are assigned. Okta will ask you to confirm your identity with multi-factor authentication first."
+	accessInstruction   = "On the app's Admin roles tab, assign this role. Speakeasy checks whether it can read your apps through the Okta API; it does not check which named admin roles are assigned. Okta will ask you to confirm your identity with multi-factor authentication first."
 	linkInstruction     = "On User access and authentication, keep Allow users to access this agent checked and Create a new OIDC app linked to this AI agent selected, then click Next. You can skip the Add owners step that follows. The linked app becomes the app your people use to sign in to Speakeasy, which is what lets Okta turn that sign-in into Cross App Access assertions."
 	activateInstruction = "Okta creates the agent in Staged status and its linked app as Inactive. Open the linked app (linked from the agent's User access section), set it to Active, and on its Assignments tab assign the users or groups who use MCP servers through Speakeasy. Okta issues assertions only for the users assigned here. People who sign in through Okta must already exist in Speakeasy, provisioned through directory sync (SCIM); Speakeasy does not create accounts at sign-in."
 )
