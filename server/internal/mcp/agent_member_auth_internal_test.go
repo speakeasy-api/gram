@@ -187,12 +187,14 @@ func TestAgentMemberLegacyClientUsesTheAgentKeysAuthorizer(t *testing.T) {
 		block    bool
 		attached bool
 		allowed  bool
+		bound    bool
 	}{
-		{"the agent's mcp:auth serves its authorizer's connection without an attachment", []authz.Grant{personal}, false, false, true},
-		{"without the agent's mcp:auth it refuses", connectOnly, false, false, false},
-		{"a grant for another owner refuses", []authz.Grant{other}, false, false, false},
-		{"an owner block refuses", []authz.Grant{personal}, true, false, false},
-		{"an explicit attachment serves first, pinned", []authz.Grant{personal}, false, true, true},
+		{"the agent's mcp:auth serves its authorizer's connection without an attachment", []authz.Grant{personal}, false, false, true, false},
+		{"without the agent's mcp:auth it refuses", connectOnly, false, false, false, false},
+		{"a grant for another owner refuses", []authz.Grant{other}, false, false, false, false},
+		{"an owner block refuses", []authz.Grant{personal}, true, false, false, false},
+		{"a revoked or stale explicit binding keeps governing", []authz.Grant{personal}, false, false, false, true},
+		{"an explicit attachment serves first, pinned", []authz.Grant{personal}, false, true, true, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -217,7 +219,7 @@ func TestAgentMemberLegacyClientUsesTheAgentKeysAuthorizer(t *testing.T) {
 			})
 			f.service.authClientPermitter = mandatoryPermitter{engine: f.service.authz}
 			session := uuid.New()
-			f.service.attachedConnections = &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: session, OwnerUserID: "user_owner"}, attached: tc.attached, err: nil, asked: nil}
+			f.service.attachedConnections = &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: session, OwnerUserID: "user_owner", Bound: tc.attached || tc.bound}, attached: tc.attached, err: nil, asked: nil}
 			source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: session}
 			f.service.upstreamTokens = source
 			agentID := uuid.New()

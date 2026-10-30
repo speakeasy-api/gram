@@ -77,6 +77,10 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 		return fallback, nil
 	case err != nil:
 		return none, fmt.Errorf("resolve attached connection owner: %w", err)
+	case !attached && conn.Bound:
+		// An explicit binding that was revoked or went stale keeps governing
+		// the agent; the authorizer's own connection never bypasses it.
+		return none, nil
 	case !attached:
 		return fallback, nil
 	case conn.RemoteSessionID == uuid.Nil:

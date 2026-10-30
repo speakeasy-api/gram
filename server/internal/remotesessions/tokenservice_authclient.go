@@ -185,6 +185,10 @@ func attachedCaller(ctx context.Context, subject urn.SessionSubject) (bool, erro
 type AttachedConnection struct {
 	RemoteSessionID uuid.UUID
 	OwnerUserID     string
+	// Bound reports an explicit binding of the agent for the sign-in and
+	// registration, usable or not. A revoked binding, or one pinned to a
+	// replaced source, still governs: no other source stands in for it.
+	Bound bool
 }
 
 // AuthClientAttachedConnection reports the connection an attached caller's
@@ -219,14 +223,24 @@ func (m *ChallengeManager) AuthClientAttachedConnection(ctx context.Context, req
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return zero, false, nil
+		bound, err := remotesessions_repo.New(m.db).HasPrincipalRemoteSessionBindingHistory(ctx, remotesessions_repo.HasPrincipalRemoteSessionBindingHistoryParams{
+			ProjectID:             req.ProjectID,
+			OrganizationID:        req.OrganizationID,
+			PrincipalID:           principalID,
+			UserSessionIssuerID:   req.UserSessionIssuerID,
+			RemoteSessionClientID: req.RegistrationID,
+		})
+		if err != nil {
+			return zero, false, fmt.Errorf("check principal remote session binding history: %w", err)
+		}
+		return AttachedConnection{RemoteSessionID: uuid.Nil, OwnerUserID: "", Bound: bound}, false, nil
 	case err != nil:
 		return zero, false, fmt.Errorf("get principal remote session binding: %w", err)
 	}
 	if source.SubjectUrn.Kind != urn.SessionSubjectKindUser || source.SubjectUrn.ID == "" {
-		return zero, false, nil
+		return AttachedConnection{RemoteSessionID: uuid.Nil, OwnerUserID: "", Bound: true}, false, nil
 	}
-	return AttachedConnection{RemoteSessionID: source.ID, OwnerUserID: source.SubjectUrn.ID}, true, nil
+	return AttachedConnection{RemoteSessionID: source.ID, OwnerUserID: source.SubjectUrn.ID, Bound: true}, true, nil
 }
 
 func (m *ChallengeManager) reachableClient(ctx context.Context, projectID uuid.UUID, organizationID string, registrationID uuid.UUID) (remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow, error) {

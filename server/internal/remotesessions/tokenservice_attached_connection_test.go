@@ -58,14 +58,15 @@ func TestAuthClientAttachedConnection(t *testing.T) {
 		conn, attached, err := manager.AuthClientAttachedConnection(ctx, req)
 		require.NoError(t, err, msg)
 		require.False(t, attached, msg)
-		require.Equal(t, remotesessions.AttachedConnection{}, conn, msg)
+		require.Equal(t, uuid.Nil, conn.RemoteSessionID, msg)
+		require.Empty(t, conn.OwnerUserID, msg)
 	}
 	requireOwnerIn := func(t *testing.T, callerCtx context.Context, a attachment) {
 		t.Helper()
 		conn, attached, err := manager.AuthClientAttachedConnection(callerCtx, a.req)
 		require.NoError(t, err)
 		require.True(t, attached)
-		require.Equal(t, remotesessions.AttachedConnection{RemoteSessionID: a.source.ID, OwnerUserID: auth.UserID}, conn)
+		require.Equal(t, remotesessions.AttachedConnection{RemoteSessionID: a.source.ID, OwnerUserID: auth.UserID, Bound: true}, conn)
 	}
 	requireOwner := func(t *testing.T, a attachment) {
 		t.Helper()
@@ -130,6 +131,14 @@ func TestAuthClientAttachedConnection(t *testing.T) {
 		_, err := testrepo.New(ti.conn).RevokeAgentAttachmentsFixture(ctx, testrepo.RevokeAgentAttachmentsFixtureParams{ProjectID: projectID, PrincipalID: a.agentID})
 		require.NoError(t, err)
 		requireNone(t, sessionOf(a), a.req, "a revoked binding names no owner")
+		conn, _, err := manager.AuthClientAttachedConnection(sessionOf(a), a.req)
+		require.NoError(t, err)
+		require.True(t, conn.Bound, "a revoked binding still governs the agent")
+		other := a.req
+		other.RegistrationID = uuid.New()
+		conn, _, err = manager.AuthClientAttachedConnection(sessionOf(a), other)
+		require.NoError(t, err)
+		require.False(t, conn.Bound, "a registration never bound reports no binding")
 		_, err = testrepo.New(ti.conn).RestoreAgentAttachmentsFixture(ctx, testrepo.RestoreAgentAttachmentsFixtureParams{ProjectID: projectID, PrincipalID: a.agentID})
 		require.NoError(t, err)
 		requireOwner(t, a)

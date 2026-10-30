@@ -6928,6 +6928,42 @@ func (q *Queries) HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx cont
 	return exists, err
 }
 
+const hasPrincipalRemoteSessionBindingHistory = `-- name: HasPrincipalRemoteSessionBindingHistory :one
+SELECT EXISTS (
+  SELECT 1
+  FROM principal_remote_session_bindings AS b
+  WHERE b.project_id = $1::uuid
+    AND b.organization_id = $2::text
+    AND b.principal_id = $3::uuid
+    AND b.user_session_issuer_id = $4::uuid
+    AND b.remote_session_client_id = $5::uuid
+)::boolean AS has_binding
+`
+
+type HasPrincipalRemoteSessionBindingHistoryParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	PrincipalID           uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+// Any binding this agent ever had for the sign-in and registration, live,
+// revoked or pinned to a replaced source. An explicit binding keeps governing
+// the agent: its revocation or staleness is never bypassed by another source.
+func (q *Queries) HasPrincipalRemoteSessionBindingHistory(ctx context.Context, arg HasPrincipalRemoteSessionBindingHistoryParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPrincipalRemoteSessionBindingHistory,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.PrincipalID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+	)
+	var has_binding bool
+	err := row.Scan(&has_binding)
+	return has_binding, err
+}
+
 const insertEMAProvider = `-- name: InsertEMAProvider :exec
 INSERT INTO remote_session_ema_providers (
   organization_id, vendor_issuer, remote_session_issuer_id, internal_session_issuer_id, position

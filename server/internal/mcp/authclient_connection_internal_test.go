@@ -518,13 +518,21 @@ func TestAgentKeyAuthClientUsesItsAuthorizersConnection(t *testing.T) {
 		block      bool
 		outcome    authClientOutcome
 		attached   bool
+		bound      bool
+		// ceiling, when set, replaces the agent grants as the credential's
+		// own ceiling.
+		ceiling []authz.Grant
 	}{
-		{"the agent's mcp:auth serves its authorizer's connection without an attachment", []authz.Grant{personal}, []authz.Grant{personal}, false, authClientResolved, false},
-		{"without the agent's mcp:auth it refuses", connectOnly, []authz.Grant{personal}, false, authClientNoAccess, false},
-		{"a grant for another owner refuses", []authz.Grant{forOwner("user_other")}, []authz.Grant{personal}, false, authClientNoAccess, false},
-		{"the authorizer's own policy must allow", []authz.Grant{personal}, connectOnly, false, authClientNoAccess, false},
-		{"an owner block refuses", []authz.Grant{personal}, []authz.Grant{personal}, true, authClientNoAccess, false},
-		{"an explicit attachment keeps its pinned connection", []authz.Grant{personal}, []authz.Grant{personal}, false, authClientResolved, true},
+		{"the agent's mcp:auth serves its authorizer's connection without an attachment", []authz.Grant{personal}, []authz.Grant{personal}, false, authClientResolved, false, false, nil},
+		{"without the agent's mcp:auth it refuses", connectOnly, []authz.Grant{personal}, false, authClientNoAccess, false, false, nil},
+		{"a grant for another owner refuses", []authz.Grant{forOwner("user_other")}, []authz.Grant{personal}, false, authClientNoAccess, false, false, nil},
+		{"the authorizer's own policy must allow", []authz.Grant{personal}, connectOnly, false, authClientNoAccess, false, false, nil},
+		{"an owner block refuses", []authz.Grant{personal}, []authz.Grant{personal}, true, authClientNoAccess, false, false, nil},
+		// An agent session's stored policy is exactly this connect-only grant
+		// (encodeAgentSessionPolicy), so its ceiling refuses every mcp:auth use.
+		{"a connect-only credential ceiling refuses", []authz.Grant{personal}, []authz.Grant{personal}, false, authClientNoAccess, false, false, connectOnly},
+		{"a revoked or stale explicit binding keeps governing", []authz.Grant{personal}, []authz.Grant{personal}, false, authClientNoAccess, false, true, nil},
+		{"an explicit attachment keeps its pinned connection", []authz.Grant{personal}, []authz.Grant{personal}, false, authClientResolved, true, false, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -541,17 +549,21 @@ func TestAgentKeyAuthClientUsesItsAuthorizersConnection(t *testing.T) {
 					authz.SelectorKeyClientType: authz.AuthClientTypeRemoteSession, authz.SelectorKeyConnectionOwner: "user_owner",
 				}))
 			}
+			credential := tc.agent
+			if tc.ceiling != nil {
+				credential = tc.ceiling
+			}
 			f.service.authz = authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), authz.EngineOpts{
 				AdmitPrincipalCredential: func(context.Context, *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
 					return authz.PrincipalCredentialAdmission{
-						OwnerUserID: "user_owner", Credential: tc.agent, Agent: tc.agent, Owner: owner,
+						OwnerUserID: "user_owner", Credential: credential, Agent: tc.agent, Owner: owner,
 						Authorizer: authz.RepresentedUserPolicy{UserID: "user_owner", Policy: tc.authorizer}, LegacyAuthCeiling: false,
 					}, nil
 				},
 			})
 			f.service.authClientPermitter = mandatoryPermitter{engine: f.service.authz}
 			session := uuid.New()
-			lookup := &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: session, OwnerUserID: "user_owner"}, attached: tc.attached, err: nil, asked: nil}
+			lookup := &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: session, OwnerUserID: "user_owner", Bound: tc.attached || tc.bound}, attached: tc.attached, err: nil, asked: nil}
 			f.service.attachedConnections = lookup
 			agentID := uuid.New()
 			agent := urn.NewAgentSubject(agentID)
@@ -559,12 +571,22 @@ func TestAgentKeyAuthClientUsesItsAuthorizersConnection(t *testing.T) {
 			ctx := admittedAgentContext(t, f.orgID, agentID)
 			require.Equal(t, agent, connectionSubject(ctx, agent), "the key keeps its agent subject")
 			res, err := f.service.resolveAuthClientForServing(ctx, selector, f.serverID, f.projectID, agent)
+			if tc.bound {
+				// Like any agent without a usable attachment, it names no owner
+				// and fails closed; the authorizer's connection never stands in.
+				require.Error(t, err)
+				require.Empty(t, res.authorizerOwner)
+				return
+			}
 			require.NoError(t, err)
 			require.Equal(t, tc.outcome, res.outcome)
 			require.Len(t, lookup.asked, 1, "an explicit attachment is looked up first")
 			if tc.attached {
 				require.Equal(t, session, res.attachedSession, "the attachment keeps binding its exact connection")
 				require.Empty(t, res.authorizerOwner)
+			} else if tc.bound {
+				require.Equal(t, uuid.Nil, res.attachedSession)
+				require.Empty(t, res.authorizerOwner, "a revoked or stale binding is never bypassed by the authorizer's connection")
 			} else {
 				require.Equal(t, uuid.Nil, res.attachedSession)
 				require.Equal(t, "user_owner", res.authorizerOwner, "without an attachment the authorizer owns the connection checked")
