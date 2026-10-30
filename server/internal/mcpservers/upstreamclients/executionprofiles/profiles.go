@@ -120,6 +120,11 @@ func decide(row ListProfileServersRow, execCtx Context) (decision, *Gap) {
 	choose := func(id uuid.UUID) (decision, *Gap) {
 		return decision{serverID: row.McpServerID, authClientID: id}, nil
 	}
+	// A server that needs no upstream sign-in takes no credential, matching
+	// the choices an administrator may record for it.
+	if row.RequiresUpstreamAuth.Valid && !row.RequiresUpstreamAuth.Bool {
+		return choose(uuid.Nil)
+	}
 	switch len(row.RegistrationIds) {
 	case 0:
 		headers, oauth := []uuid.UUID{}, false

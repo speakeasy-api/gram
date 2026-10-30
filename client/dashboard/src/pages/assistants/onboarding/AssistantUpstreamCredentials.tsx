@@ -193,7 +193,14 @@ function ProfileCard({
 function choiceValue(server: ExecutionProfileServer): string {
   if (!server.chosen || server.executionProfileChoiceSource === AUTOMATIC)
     return AUTOMATIC;
-  return server.authClientId ?? NO_AUTH;
+  // A recorded choice the server no longer offers shows as not chosen, so the
+  // control stays readable and another credential can replace it.
+  if (server.authClientId) {
+    return server.options.some((o) => o.authClientId === server.authClientId)
+      ? server.authClientId
+      : AUTOMATIC;
+  }
+  return server.noAuthAllowed ? NO_AUTH : AUTOMATIC;
 }
 
 function ServerChoice({

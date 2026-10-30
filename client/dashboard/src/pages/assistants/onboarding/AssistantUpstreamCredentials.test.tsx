@@ -78,6 +78,34 @@ const sharedToken = {
 };
 
 describe("AssistantUpstreamCredentials", () => {
+  it("shows a withdrawn choice as not chosen", () => {
+    mocks.profiles = [
+      {
+        triggerInstanceId: "t-1",
+        triggerName: "Dashboard",
+        executionContext: "userless",
+        version: 2,
+        servers: [
+          {
+            mcpServerId: "server-1",
+            chosen: true,
+            executionProfileChoiceSource: "admin",
+            authClientId: "ac-retired",
+            gapReason: "no_client",
+            options: [sharedToken],
+          },
+        ],
+      },
+    ];
+    renderSection();
+
+    expect(
+      screen.getByRole("combobox", { name: "Credential for Linear" })
+        .textContent,
+    ).toContain("Not chosen");
+    expect(screen.getByText("No credential fits yet.")).toBeTruthy();
+  });
+
   it("says why a server has no credential yet", () => {
     mocks.profiles = [
       {
