@@ -74,18 +74,6 @@ const PINNED_PACKAGES = {
   codex: "@openai/codex@0.166.0",
 } as const;
 
-export type WorkflowAgent = "claude" | "codex";
-
-/** The coding agents a workflow can run, in the order they are offered. */
-export const WORKFLOW_AGENT_KEYS: readonly WorkflowAgent[] = [
-  "claude",
-  "codex",
-];
-
-export function isWorkflowAgent(value: string): value is WorkflowAgent {
-  return (WORKFLOW_AGENT_KEYS as readonly string[]).includes(value);
-}
-
 /** What the workflow needs to run each coding agent after Speakeasy syncs. */
 export const WORKFLOW_AGENTS = {
   claude: {
@@ -118,6 +106,17 @@ export const WORKFLOW_AGENTS = {
     ],
   },
 } as const;
+
+export type WorkflowAgent = keyof typeof WORKFLOW_AGENTS;
+
+/** The coding agents a workflow can run, in the order they are offered. */
+export const WORKFLOW_AGENT_KEYS = Object.keys(
+  WORKFLOW_AGENTS,
+) as WorkflowAgent[];
+
+export function isWorkflowAgent(value: string): value is WorkflowAgent {
+  return Object.hasOwn(WORKFLOW_AGENTS, value);
+}
 
 /**
  * The control plane the action talks to when its input is left out. The token
