@@ -8,24 +8,29 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { Asset, Asset$inboundSchema } from "./asset.js";
 
-export type UploadImageResult = {
+export type AdminUploadImageResult = {
   asset: Asset;
+  /**
+   * Canonical public URL for the uploaded image
+   */
+  url: string;
 };
 
 /** @internal */
-export const UploadImageResult$inboundSchema: z.ZodMiniType<
-  UploadImageResult,
+export const AdminUploadImageResult$inboundSchema: z.ZodMiniType<
+  AdminUploadImageResult,
   unknown
 > = z.object({
   asset: Asset$inboundSchema,
+  url: z.string(),
 });
 
-export function uploadImageResultFromJSON(
+export function adminUploadImageResultFromJSON(
   jsonString: string,
-): SafeParseResult<UploadImageResult, SDKValidationError> {
+): SafeParseResult<AdminUploadImageResult, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => UploadImageResult$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'UploadImageResult' from JSON`,
+    (x) => AdminUploadImageResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AdminUploadImageResult' from JSON`,
   );
 }
