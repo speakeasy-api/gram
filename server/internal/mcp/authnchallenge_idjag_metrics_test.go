@@ -254,7 +254,7 @@ func TestTokenIDJAGExchangeRecordsInfrastructureRefusalAsError(t *testing.T) {
 	const upstreamIssuer = "https://identity.example.test"
 	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, upstreamIssuer, jwksServer.URL)
 	toolset = setToolsetIssuer(t, ctx, ti.conn, *authCtx.ProjectID, toolset, issuer.ID)
-	client := createDCRClient(t, ctx, ti, issuer.ID)
+	client := seedCIMDClient(t, ctx, ti, issuer.ID, codexCIMDClientID)
 	resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
 
 	assertion := assertionSigner.sign(t, upstreamIssuer, resource, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString())
