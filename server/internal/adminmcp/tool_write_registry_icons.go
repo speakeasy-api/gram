@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
-	"time"
 )
 
 type PrepareSetRegistryIconsInput struct {
@@ -43,33 +45,36 @@ func (s *registryIconsWriter) prepare(ctx context.Context, input PrepareSetRegis
 		return ProposalOutput{}, errors.New("provide an exact entry UUID and retry key of at most 128 characters")
 	}
 	if _, err := mcpregistry.ParseToken(input.ExpectedUpdatedAt); err != nil {
-		return ProposalOutput{}, err
+		return ProposalOutput{}, fmt.Errorf("parse registry revision: %w", err)
 	}
 	args, err := json.Marshal(input)
 	if err != nil {
-		return ProposalOutput{}, err
+		return ProposalOutput{}, fmt.Errorf("marshal registry icon arguments: %w", err)
 	}
 	if len(args) > maxProposalArgumentBytes {
 		return ProposalOutput{}, errors.New("icon replacement exceeds storage limit")
 	}
 	old, err := s.registry.Get(ctx, uuid.MustParse(input.EntryID))
 	if err != nil {
-		return ProposalOutput{}, err
+		return ProposalOutput{}, fmt.Errorf("get registry entry: %w", err)
 	}
-	before, err := mcpregistry.ParseCatalogIcons(old.Data)
-	if err != nil {
-		return ProposalOutput{}, err
-	}
+	before := boundedCatalogIcons(ctx, s.registry, old.Data)
 	preview, err := json.Marshal(registryIconsPreview{EntryID: input.EntryID, Before: before, After: input.Icons})
 	if err != nil {
-		return ProposalOutput{}, err
+		return ProposalOutput{}, fmt.Errorf("marshal registry icon preview: %w", err)
+	}
+	if len(preview) > maxProposalPreviewBytes {
+		return ProposalOutput{}, errors.New("icon replacement preview exceeds storage limit; use shorter icon URLs")
 	}
 	expected, _ := json.Marshal(struct {
 		Revision string `json:"revision"`
 	}{input.ExpectedUpdatedAt})
 	check := func(ctx context.Context, tx pgx.Tx) error {
 		_, err := s.registry.CheckCatalogIconsTx(ctx, tx, old.ID, input.ExpectedUpdatedAt, input.Icons)
-		return err
+		if err != nil {
+			return fmt.Errorf("check registry icons: %w", err)
+		}
+		return nil
 	}
 	proposal, replay, err := s.store.CreateChecked(ctx, owner, NewProposal{Operation: OperationSetRegistryIcons, SchemaVersion: 1, IdempotencyKey: input.RetryKey, Arguments: args, ExpectedState: expected, Preview: preview}, time.Now(), check)
 	if err != nil {
@@ -116,7 +121,10 @@ func (s *registryIconsWriter) execution(_ writeAuthority) ProposalExecution {
 			return "", nil, registryCreateError(err)
 		}
 		receipt, err := json.Marshal(registryCreateReceipt{ID: updated.ID.String(), UpdatedAt: mcpregistry.Token(updated)})
-		return "succeeded", receipt, err
+		if err != nil {
+			return "", nil, fmt.Errorf("marshal registry icon receipt: %w", err)
+		}
+		return "succeeded", receipt, nil
 	}}
 }
 func (s *registryIconsWriter) view(p Proposal) (proposalView, error) {

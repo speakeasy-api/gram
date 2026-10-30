@@ -232,8 +232,10 @@ func TestRegistryProjectionBoundsAndSafeCategories(t *testing.T) {
 }
 
 func TestRegistryIconsLegacyProjectionFailsClosed(t *testing.T) {
+	t.Parallel()
 	for _, src := range []string{"private-value", "https://user:password@assets.example/rpc/assets.serveImage?id=" + testRegistryID, "https://external.example/icon.svg", "https://assets.example/rpc/assets.serveImage?id=" + testRegistryID} {
 		t.Run(src, func(t *testing.T) {
+			t.Parallel()
 			for _, record := range []string{`{}`, `{"server":{"name":"test","description":"test","version":"1"}}`} {
 				var root map[string]any
 				require.NoError(t, json.Unmarshal([]byte(record), &root))
