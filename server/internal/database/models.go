@@ -1203,8 +1203,6 @@ type Chat struct {
 	Summary pgtype.Text
 	// @access: confidential
 	SummaryGeneratedAt pgtype.Timestamptz
-	// @access: confidential
-	InferenceAcceptedCheckpoint []byte
 	// @access: confidential-pii
 	InferenceActorKey []byte
 	// @access: confidential
