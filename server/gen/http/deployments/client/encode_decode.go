@@ -2618,29 +2618,6 @@ func marshalDeploymentsAddDeploymentPackageFormToAddDeploymentPackageFormRequest
 	return res
 }
 
-// marshalDeploymentsAddExternalMCPFormToAddExternalMCPFormRequestBody builds a
-// value of type *AddExternalMCPFormRequestBody from a value of type
-// *deployments.AddExternalMCPForm.
-func marshalDeploymentsAddExternalMCPFormToAddExternalMCPFormRequestBody(v *deployments.AddExternalMCPForm) *AddExternalMCPFormRequestBody {
-	if v == nil {
-		return nil
-	}
-	res := &AddExternalMCPFormRequestBody{
-		RegistryID:              v.RegistryID,
-		Name:                    v.Name,
-		Slug:                    string(v.Slug),
-		RegistryServerSpecifier: v.RegistryServerSpecifier,
-	}
-	if v.SelectedRemotes != nil {
-		res.SelectedRemotes = make([]string, len(v.SelectedRemotes))
-		for i, val := range v.SelectedRemotes {
-			res.SelectedRemotes[i] = val
-		}
-	}
-
-	return res
-}
-
 // marshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv3DeploymentAssetForm
 // builds a value of type *deployments.AddOpenAPIv3DeploymentAssetForm from a
 // value of type *AddOpenAPIv3DeploymentAssetFormRequestBody.
@@ -2686,29 +2663,6 @@ func marshalAddDeploymentPackageFormRequestBodyToDeploymentsAddDeploymentPackage
 	res := &deployments.AddDeploymentPackageForm{
 		Name:    v.Name,
 		Version: v.Version,
-	}
-
-	return res
-}
-
-// marshalAddExternalMCPFormRequestBodyToDeploymentsAddExternalMCPForm builds a
-// value of type *deployments.AddExternalMCPForm from a value of type
-// *AddExternalMCPFormRequestBody.
-func marshalAddExternalMCPFormRequestBodyToDeploymentsAddExternalMCPForm(v *AddExternalMCPFormRequestBody) *deployments.AddExternalMCPForm {
-	if v == nil {
-		return nil
-	}
-	res := &deployments.AddExternalMCPForm{
-		RegistryID:              v.RegistryID,
-		Name:                    v.Name,
-		Slug:                    types.Slug(v.Slug),
-		RegistryServerSpecifier: v.RegistryServerSpecifier,
-	}
-	if v.SelectedRemotes != nil {
-		res.SelectedRemotes = make([]string, len(v.SelectedRemotes))
-		for i, val := range v.SelectedRemotes {
-			res.SelectedRemotes[i] = val
-		}
 	}
 
 	return res

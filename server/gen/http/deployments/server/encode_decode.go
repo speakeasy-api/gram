@@ -2503,29 +2503,6 @@ func unmarshalAddDeploymentPackageFormRequestBodyToDeploymentsAddDeploymentPacka
 	return res
 }
 
-// unmarshalAddExternalMCPFormRequestBodyToDeploymentsAddExternalMCPForm builds
-// a value of type *deployments.AddExternalMCPForm from a value of type
-// *AddExternalMCPFormRequestBody.
-func unmarshalAddExternalMCPFormRequestBodyToDeploymentsAddExternalMCPForm(v *AddExternalMCPFormRequestBody) *deployments.AddExternalMCPForm {
-	if v == nil {
-		return nil
-	}
-	res := &deployments.AddExternalMCPForm{
-		RegistryID:              v.RegistryID,
-		Name:                    *v.Name,
-		Slug:                    types.Slug(*v.Slug),
-		RegistryServerSpecifier: *v.RegistryServerSpecifier,
-	}
-	if v.SelectedRemotes != nil {
-		res.SelectedRemotes = make([]string, len(v.SelectedRemotes))
-		for i, val := range v.SelectedRemotes {
-			res.SelectedRemotes[i] = val
-		}
-	}
-
-	return res
-}
-
 // unmarshalAddPackageFormRequestBodyToDeploymentsAddPackageForm builds a value
 // of type *deployments.AddPackageForm from a value of type
 // *AddPackageFormRequestBody.

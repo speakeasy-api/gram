@@ -86472,37 +86472,6 @@ components:
           description: The version of the package.
       required:
         - name
-    AddExternalMCPForm:
-      type: object
-      properties:
-        name:
-          type: string
-          description: The display name for the external MCP server.
-          example: My Slack Integration
-        registry_id:
-          type: string
-          description: The ID of the external MCP registry the server is from.
-          format: uuid
-        registry_server_specifier:
-          type: string
-          description: The canonical server name used to look up the server in the registry (e.g., 'slack', 'ai.exa/exa').
-          example: slack
-        selected_remotes:
-          type: array
-          items:
-            type: string
-          description: URLs of the remotes to use for this MCP server. If not provided, the backend will auto-select based on transport type preference.
-          example:
-            - https://mcp.example.com/sse
-        slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-      required:
-        - name
-        - slug
-        - registry_server_specifier
     AddExternalOAuthServerRequestBody:
       type: object
       properties:
@@ -91286,10 +91255,6 @@ components:
           type: string
           description: The external ID to refer to the deployment. This can be a git commit hash for example.
           example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-        external_mcps:
-          type: array
-          items:
-            $ref: '#/components/schemas/AddExternalMCPForm'
         external_url:
           type: string
           description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
@@ -95280,7 +95245,7 @@ components:
           type: array
           items:
             type: string
-          description: The external MCP servers, identified by slug, to exclude from the new deployment when cloning a previous deployment.
+          description: 'Has no effect: new deployments never include external MCP servers. Accepted so existing callers keep working.'
         exclude_functions:
           type: array
           items:
@@ -95300,11 +95265,6 @@ components:
           type: boolean
           description: If true, the deployment will be created in non-blocking mode where the request will return immediately and the deployment will proceed asynchronously.
           example: false
-        upsert_external_mcps:
-          type: array
-          items:
-            $ref: '#/components/schemas/AddExternalMCPForm'
-          description: The external MCP servers to upsert in the new deployment.
         upsert_functions:
           type: array
           items:
