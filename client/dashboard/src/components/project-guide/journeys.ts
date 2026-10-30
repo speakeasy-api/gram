@@ -11,13 +11,15 @@ export function otherProjectGuideJourney(id: JourneyId): JourneyId {
 }
 
 /** Catalog entries we surface first in the automatic project-guide chooser. */
-export const AUTOMATIC_CATALOG_SERVER_NAMES = [
-  "Linear",
-  "Notion",
-  "Vercel",
-  "Granola",
-  "Ramp",
-  "GitHub",
+// Exact native identities from server/internal/mcpregistry/oktaseed/oktaseed.go.
+// Display titles are not identity or provenance evidence.
+export const AUTOMATIC_CATALOG_SERVER_SPECIFIERS = [
+  "app.linear/mcp",
+  "com.notion/mcp",
+  "com.vercel/mcp",
+  "ai.granola/mcp",
+  "com.ramp/mcp",
+  "com.github/mcp",
 ] as const;
 
 export const JOURNEY_STATUS_LABELS: Record<JourneyStatus, string> = {
@@ -104,7 +106,7 @@ export const PROJECT_GUIDE_JOURNEYS: JourneyMeta[] = [
     },
     steps: PROJECT_GUIDE_MCP_STEPS,
     stepBlurbs: [
-      "The catalog lists servers from the official MCP Registry. Installing one creates a governed endpoint in front of the vendor's server — the vendor's URL is already known, and nothing upstream changes.",
+      "The catalog lists curated MCP servers. Installing one creates a governed endpoint in front of the vendor's server — the vendor's URL is already known, and nothing upstream changes.",
       "Run the command below to add the governed endpoint to your client. Complete OAuth when the client connects; the proxy keeps vendor credentials off the developer's machine.",
       "Run this in the client you just configured. Listing tools reads nothing and writes nothing — it puts the first real request on the governed path.",
       "The endpoint checks the call against the caller's tool access and records it before forwarding. This is the first entry.",

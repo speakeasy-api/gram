@@ -1,5 +1,5 @@
 /**
- * Client-side reading of the version-1 evidence document assembled at intake
+ * Client-side reading of version-1 and version-2 evidence documents assembled at intake
  * (server/internal/mcpapproval/evidence). Everything in it is a declaration by
  * the server or its registry, or an observation of this org's own traffic —
  * never a claim about the server's behavior, and the panel's copy must keep
@@ -10,7 +10,7 @@
  * never as an error and never as clean.
  */
 
-const SUPPORTED_EVIDENCE_VERSION = 1;
+const SUPPORTED_EVIDENCE_VERSIONS = [1, 2];
 
 /**
  * The question observed traffic answers. Lives here so the evidence panel and
@@ -125,9 +125,8 @@ export type EvidenceProvenance = {
   registry?: string;
   specifier?: string;
   catalogued: boolean;
-  official: boolean;
   status?: string;
-  isLatest: boolean;
+  isLatest?: boolean;
   publishedAt?: string;
   updatedAt?: string;
   visitorsLastWeek?: number;
@@ -221,7 +220,7 @@ export function parseEvidenceDocument(
   evidence: unknown,
   evidenceVersion: number | undefined,
 ): EvidenceDocument | null {
-  if (evidenceVersion !== SUPPORTED_EVIDENCE_VERSION) return null;
+  if (!SUPPORTED_EVIDENCE_VERSIONS.includes(evidenceVersion ?? 0)) return null;
 
   const root = asRecord(evidence);
   if (!root) return null;
@@ -370,9 +369,11 @@ export function parseEvidenceDocument(
       registry: str(provenanceRecord, "registry"),
       specifier: str(provenanceRecord, "specifier"),
       catalogued: bool(provenanceRecord, "catalogued"),
-      official: bool(provenanceRecord, "official"),
       status: str(provenanceRecord, "status"),
-      isLatest: bool(provenanceRecord, "is_latest"),
+      isLatest:
+        typeof provenanceRecord["is_latest"] === "boolean"
+          ? provenanceRecord["is_latest"]
+          : undefined,
       publishedAt: str(provenanceRecord, "published_at"),
       updatedAt: str(provenanceRecord, "updated_at"),
       visitorsLastWeek: num(provenanceRecord, "visitors_last_week"),

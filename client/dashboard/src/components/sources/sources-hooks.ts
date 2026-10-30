@@ -1,7 +1,7 @@
 import {
-  PulseMcpAuthType,
+  CatalogAuthType,
   extractAuthType,
-  isPulseMcpServer,
+  isCatalogServer,
 } from "@/pages/catalog/hooks/serverMetadata";
 
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
@@ -27,20 +27,20 @@ export const useCatalogIconMap = (): Map<string, string> => {
   }, [catalogData]);
 };
 
-const useCatalogAuthMap = (enabled = true): Map<string, PulseMcpAuthType> => {
+const useCatalogAuthMap = (enabled = true): Map<string, CatalogAuthType> => {
   const { data: catalogData } = useListMCPCatalog(undefined, undefined, {
     enabled,
   });
 
   return useMemo(() => {
-    const result = new Map<string, PulseMcpAuthType>();
+    const result = new Map<string, CatalogAuthType>();
 
     if (!catalogData?.servers) {
       return result;
     }
 
     for (const server of catalogData.servers) {
-      if (!isPulseMcpServer(server)) continue;
+      if (!isCatalogServer(server)) continue;
       const auth = extractAuthType(server);
       result.set(server.registrySpecifier, auth);
     }

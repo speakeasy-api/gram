@@ -50,7 +50,7 @@ import (
 // Version is the shape version of the document this package assembles. It is
 // stored alongside every gather and copied onto every decision's frozen
 // snapshot, so bump it when the document's shape changes.
-const Version = 1
+const Version = 2
 
 // Document is one gather of everything known about a requested server.
 type Document struct {
@@ -113,7 +113,7 @@ type Document struct {
 	// source answered with zero tools, which is a real (if odd) declaration.
 	CapabilitiesSource string `json:"capabilities_source,omitempty"`
 
-	// Provenance is the registry catalog's maturity and popularity signals
+	// Provenance is the registry catalog's membership and lifecycle evidence
 	// for the matched entry, present for remote targets whose catalog lookup
 	// ran. Catalogued false is checked-and-absent — every registry answered
 	// and none carries the URL — distinct from a lookup failure, which is a
@@ -268,17 +268,13 @@ type CapabilitySection struct {
 // ProvenanceSection mirrors provenance.Provenance for storage, plus which
 // registry made the claims.
 type ProvenanceSection struct {
-	Registry              string `json:"registry,omitempty"`
-	Specifier             string `json:"specifier,omitempty"`
-	Catalogued            bool   `json:"catalogued"`
-	Official              bool   `json:"official,omitempty"`
-	Status                string `json:"status,omitempty"`
-	IsLatest              bool   `json:"is_latest,omitempty"`
-	PublishedAt           string `json:"published_at,omitempty"`
-	UpdatedAt             string `json:"updated_at,omitempty"`
-	VisitorsLastWeek      int    `json:"visitors_last_week,omitempty"`
-	VisitorsLastFourWeeks int    `json:"visitors_last_four_weeks,omitempty"`
-	VisitorsTotal         int    `json:"visitors_total,omitempty"`
+	Registry    string `json:"registry,omitempty"`
+	Specifier   string `json:"specifier,omitempty"`
+	Catalogued  bool   `json:"catalogued"`
+	Status      string `json:"status,omitempty"`
+	IsLatest    *bool  `json:"is_latest,omitempty"`
+	PublishedAt string `json:"published_at,omitempty"`
+	UpdatedAt   string `json:"updated_at,omitempty"`
 }
 
 // Gap names for the sources that can fail independently.
@@ -744,17 +740,13 @@ func (a *Assembler) lookupCatalog(ctx context.Context, projectID uuid.UUID, serv
 
 	if match == nil {
 		document.Provenance = &ProvenanceSection{
-			Registry:              "",
-			Specifier:             "",
-			Catalogued:            false,
-			Official:              false,
-			Status:                "",
-			IsLatest:              false,
-			PublishedAt:           "",
-			UpdatedAt:             "",
-			VisitorsLastWeek:      0,
-			VisitorsLastFourWeeks: 0,
-			VisitorsTotal:         0,
+			Registry:    "",
+			Specifier:   "",
+			Catalogued:  false,
+			Status:      "",
+			IsLatest:    nil,
+			PublishedAt: "",
+			UpdatedAt:   "",
 		}
 		if !serverDeclared {
 			document.Gaps = append(document.Gaps, GapToolDeclarations)
@@ -763,17 +755,13 @@ func (a *Assembler) lookupCatalog(ctx context.Context, projectID uuid.UUID, serv
 	}
 
 	document.Provenance = &ProvenanceSection{
-		Registry:              match.Registry,
-		Specifier:             match.Specifier,
-		Catalogued:            match.Provenance.Catalogued,
-		Official:              match.Provenance.Official,
-		Status:                match.Provenance.Status,
-		IsLatest:              match.Provenance.IsLatest,
-		PublishedAt:           formatTime(match.Provenance.PublishedAt),
-		UpdatedAt:             formatTime(match.Provenance.UpdatedAt),
-		VisitorsLastWeek:      match.Provenance.VisitorsLastWeek,
-		VisitorsLastFourWeeks: match.Provenance.VisitorsLastFourWeeks,
-		VisitorsTotal:         match.Provenance.VisitorsTotal,
+		Registry:    match.Registry,
+		Specifier:   match.Specifier,
+		Catalogued:  match.Provenance.Catalogued,
+		Status:      match.Provenance.Status,
+		IsLatest:    match.Provenance.IsLatest,
+		PublishedAt: formatTime(match.Provenance.PublishedAt),
+		UpdatedAt:   formatTime(match.Provenance.UpdatedAt),
 	}
 
 	if serverDeclared {
@@ -824,7 +812,11 @@ func capabilityStrings(values []capability.Capability) []string {
 // here so a frozen version-1 snapshot stays decodable after the shape moves
 // on.
 func DecodeDocument(raw []byte, version int) (Document, error) {
-	if version != Version {
+	// Version 1 used omitempty booleans for is_latest: an absent value cannot
+	// establish false, so decode it as unknown. Shared fields retain their JSON
+	// representation; retired official/visitor claims are intentionally ignored
+	// in the current view, without rewriting the stored snapshot.
+	if version != 1 && version != Version {
 		return Document{}, fmt.Errorf("unsupported evidence version %d", version)
 	}
 

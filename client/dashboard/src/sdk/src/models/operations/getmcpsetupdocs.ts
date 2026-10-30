@@ -26,7 +26,7 @@ export type GetMCPSetupDocsRequest = {
    */
   serverUrl?: string | undefined;
   /**
-   * Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')
+   * Registry specifier for the server, as returned by listCatalog (e.g., 'io.example/server')
    */
   registrySpecifier?: string | undefined;
   /**

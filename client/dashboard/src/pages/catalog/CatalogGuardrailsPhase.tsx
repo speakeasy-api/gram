@@ -172,7 +172,9 @@ function ServerSummaryRow({
   server: GuardrailServerSummary;
 }): JSX.Element {
   const facts = [
-    `${server.toolCount} ${server.toolCount === 1 ? "tool" : "tools"}`,
+    ...(server.toolCount !== undefined
+      ? [`${server.toolCount} ${server.toolCount === 1 ? "tool" : "tools"}`]
+      : []),
     ...(server.destructiveTools.length > 0
       ? [`${server.destructiveTools.length} destructive`]
       : []),

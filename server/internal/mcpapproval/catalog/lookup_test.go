@@ -118,7 +118,7 @@ func TestLookupMatchKeepsProvenanceAndToolPresence(t *testing.T) {
 			t.Parallel()
 			reader := &lookupReader{details: details(t, tc.raw), detailErr: tc.detailErr, result: externalmcp.ListServersResult{Servers: []*types.ExternalMCPServerEntry{
 				{RegistrySpecifier: "wrong", Remotes: []*types.ExternalMCPRemote{{URL: "https://example.com/other"}}},
-				{RegistrySpecifier: "matched", Meta: map[string]any{"com.pulsemcp/server": map[string]any{"isOfficial": true}}, Remotes: []*types.ExternalMCPRemote{{URL: "https://example.com/mcp"}}},
+				{RegistrySpecifier: "matched", Meta: nil, Remotes: []*types.ExternalMCPRemote{{URL: "https://example.com/mcp"}}},
 			}}}
 			catalogs := &lookupCatalog{selected: externalmcp.CatalogSource{Registry: externalmcp.Registry{ID: uuid.New()}, SourceKey: "selected-key", Name: "Selected display"}, reader: reader}
 			source := &Source{logger: testenv.NewLogger(t), projects: &lookupProjects{}, organizations: &lookupOrganizations{}, catalog: catalogs}
@@ -127,7 +127,9 @@ func TestLookupMatchKeepsProvenanceAndToolPresence(t *testing.T) {
 			require.NotNil(t, match)
 			require.Equal(t, "matched", match.Specifier)
 			require.Equal(t, "Selected display", match.Registry)
-			require.True(t, match.Provenance.Official)
+			require.True(t, match.Provenance.Catalogued)
+			require.Nil(t, match.Provenance.IsLatest)
+			require.Empty(t, match.Provenance.Status)
 			if tc.wantNil {
 				require.Nil(t, match.Tools)
 			} else {
@@ -170,4 +172,26 @@ func TestLookupUsesSelectedRetainedEvidenceReader(t *testing.T) {
 	_, err = source.Lookup(t.Context(), uuid.New(), "https://example.com/mcp", false)
 	require.Error(t, err)
 	require.Equal(t, 1, reader.retainedCalls)
+}
+
+func TestLookupPreservesNativeLifecycle(t *testing.T) {
+	t.Parallel()
+	for _, latest := range []bool{false, true} {
+		t.Run(map[bool]string{false: "not latest", true: "latest"}[latest], func(t *testing.T) {
+			t.Parallel()
+			reader := &lookupReader{result: externalmcp.ListServersResult{Servers: []*types.ExternalMCPServerEntry{{
+				RegistrySpecifier: "matched", Remotes: []*types.ExternalMCPRemote{{URL: "https://example.com/mcp"}},
+				Meta: map[string]any{"io.modelcontextprotocol.registry/official": map[string]any{"status": "deprecated", "isLatest": latest}},
+			}}}}
+			catalogs := &lookupCatalog{selected: externalmcp.CatalogSource{Registry: externalmcp.Registry{ID: externalmcp.NativeCatalogRegistryID}, Name: "Speakeasy"}, reader: reader}
+			source := &Source{logger: testenv.NewLogger(t), projects: &lookupProjects{}, organizations: &lookupOrganizations{}, catalog: catalogs}
+			match, err := source.Lookup(t.Context(), uuid.New(), "https://example.com/mcp", false)
+			require.NoError(t, err)
+			require.NotNil(t, match)
+			require.Equal(t, "matched", match.Specifier)
+			require.True(t, match.Provenance.Catalogued)
+			require.Equal(t, "deprecated", match.Provenance.Status)
+			require.Equal(t, new(latest), match.Provenance.IsLatest)
+		})
+	}
 }

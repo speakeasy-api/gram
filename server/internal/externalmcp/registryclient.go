@@ -33,7 +33,7 @@ type RegistryBackend interface {
 
 // RegistryReader is the narrow, normalized registry contract consumed by both
 // dashboard and Platform MCP catalogue projections. RegistryClient remains the
-// Pulse-compatible transport implementation; CatalogService selects an adapter
+// Registry transport implementation; CatalogService selects an adapter
 // before delegating to it.
 type RegistryReader interface {
 	ListServers(ctx context.Context, registry Registry, params ListServersParams) (ListServersResult, error)
@@ -149,36 +149,19 @@ type listResponse struct {
 }
 
 type serverEntry struct {
-	Server serverJSON         `json:"server"`
-	Meta   pulseMCPServerMeta `json:"_meta"`
+	Server serverJSON        `json:"server"`
+	Meta   catalogServerMeta `json:"_meta"`
 }
 
-type pulseMCPServerMeta struct {
+type catalogServerMeta struct {
 	// Catalog contains only staff-curated public capabilities.
 	Catalog *catalogCapabilities `json:"com.speakeasy.ai/catalog,omitempty"`
 
-	Server  serverMetaServer  `json:"com.pulsemcp/server"`
-	Version serverMetaVersion `json:"com.pulsemcp/server-version"`
-}
-
-type serverMetaServer struct {
-	VisitorsEstimateMostRecentWeek int  `json:"visitorsEstimateMostRecentWeek"`
-	VisitorsEstimateLastFourWeeks  int  `json:"visitorsEstimateLastFourWeeks"`
-	VisitorsEstimateTotal          int  `json:"visitorsEstimateTotal"`
-	IsOfficial                     bool `json:"isOfficial"`
+	Version serverMetaVersion `json:"io.modelcontextprotocol.registry/official"`
 }
 
 type serverMetaVersion struct {
-	Source       string           `json:"source"`
-	Status       string           `json:"status"`
-	PublishedAt  string           `json:"publishedAt"`
-	UpdatedAt    string           `json:"updatedAt"`
-	IsLatest     bool             `json:"isLatest"`
-	FirstRemote  serverRemoteMeta `json:"remotes[0]"`
-	SecondRemote serverRemoteMeta `json:"remotes[1]"`
-	ThirdRemote  serverRemoteMeta `json:"remotes[2]"`
-	FourthRemote serverRemoteMeta `json:"remotes[3]"`
-	FifthRemote  serverRemoteMeta `json:"remotes[4]"`
+	Status string `json:"status,omitempty"`
 }
 
 type serverJSON struct {
@@ -297,7 +280,7 @@ type RemoteVariable struct {
 }
 
 type catalogCapabilities struct {
-	// SupportsDCR overrides legacy metadata only when explicitly present.
+	// SupportsDCR records a positive automatic OAuth capability hint.
 	SupportsDCR *bool `json:"supportsDcr,omitempty"`
 	// SupportsCIMD records compatible public-client metadata support.
 	SupportsCIMD bool `json:"supportsCimd,omitempty"`
@@ -305,15 +288,15 @@ type catalogCapabilities struct {
 	AuthSetup string `json:"authSetup,omitempty"`
 }
 
-func projectCatalogAuth(catalog *catalogCapabilities, dcr bool) (bool, bool, string) {
-	cimd := false
+func projectCatalogAuth(catalog *catalogCapabilities) (bool, bool, string) {
+	dcr, cimd := false, false
 	setup := "unknown"
 	if catalog != nil {
 		if catalog.SupportsDCR != nil {
 			dcr = *catalog.SupportsDCR
 		}
 		cimd = catalog.SupportsCIMD
-		if catalog.AuthSetup == "none" || catalog.AuthSetup == "manual" {
+		if catalog.AuthSetup == "none" || catalog.AuthSetup == "manual" || catalog.AuthSetup == "dcr" || catalog.AuthSetup == "cimd" {
 			setup = catalog.AuthSetup
 		}
 	}
@@ -325,32 +308,10 @@ func projectCatalogAuth(catalog *catalogCapabilities, dcr bool) (bool, bool, str
 	return dcr, cimd, setup
 }
 
-type serverRemoteMeta struct {
-	AuthOptions []serverRemoteMetaAuthOptions `json:"authOptions"`
-	Tools       []serverTool                  `json:"tools"`
-}
-
-type serverRemoteMetaAuthOptions struct {
-	Type   string                     `json:"type"`
-	Detail serverRemoteMetaAuthDetail `json:"detail"`
-}
-
-type serverRemoteMetaAuthDetail struct {
-	// AuthorizationServerMetadata is PulseMCP's embedded RFC 8414 discovery
-	// result for OAuth remotes. A non-empty registration_endpoint means the
-	// upstream authorization server supports dynamic client registration (DCR).
-	// Note: we deliberately read registration_endpoint here rather than
-	// clientRegistration.dynamic.supported, which PulseMCP reports
-	// optimistically (true even when the AS exposes no registration endpoint).
-	AuthorizationServerMetadata struct {
-		RegistrationEndpoint string `json:"registration_endpoint"`
-	} `json:"authorizationServerMetadata"`
-}
-
 // serverDetailsEntry represents the response from the server details endpoint
 type serverDetailsEntry struct {
-	Server serverDetailsJSON  `json:"server"`
-	Meta   pulseMCPServerMeta `json:"_meta"`
+	Server serverDetailsJSON `json:"server"`
+	Meta   catalogServerMeta `json:"_meta"`
 }
 
 type serverDetailsJSON struct {
@@ -604,7 +565,7 @@ func filterServers(servers []*types.ExternalMCPServerEntry, search string) []*ty
 func convertListServers(registryUUID uuid.UUID, entries []serverEntry) ([]*types.ExternalMCPServerEntry, error) {
 	servers := make([]*types.ExternalMCPServerEntry, 0, len(entries))
 	for _, entry := range entries {
-		// Legacy lifecycle filtering does not apply to native discovery records.
+		// Discovery omits entries explicitly marked deleted.
 		if entry.Meta.Version.Status == "deleted" {
 			continue
 		}
@@ -624,43 +585,6 @@ func projectListServer(registryUUID uuid.UUID, s serverEntry) (*types.ExternalMC
 		iconURL = &s.Server.Icons[0].Src
 	}
 
-	// The catalog list view needs only a tool count and a read-only flag
-	// (for the card badge and the tool-behavior filter); it never reads the
-	// tool definitions, whose JSON Schemas dominate the registry payload
-	// (repeated in the top-level tools list and across every _meta remote
-	// slot). Compute the two scalars the list needs, then drop the tools from
-	// the _meta blob and omit the top-level tools array entirely. The detail
-	// page fetches full tools via getServerDetails.
-	listTools := s.Meta.Version.FirstRemote.Tools
-	toolCount := len(listTools)
-	isReadOnly := toolCount > 0
-	for _, tool := range listTools {
-		if readOnly, _ := tool.Annotations["readOnlyHint"].(bool); !readOnly {
-			isReadOnly = false
-			break
-		}
-	}
-
-	// A server supports DCR when any remote's OAuth auth option carries a
-	// non-empty registration endpoint in the legacy catalog's embedded discovery
-	// result. Computed in the same pass that strips per-remote tools.
-	supportsDCR := false
-	for _, remote := range []*serverRemoteMeta{
-		&s.Meta.Version.FirstRemote,
-		&s.Meta.Version.SecondRemote,
-		&s.Meta.Version.ThirdRemote,
-		&s.Meta.Version.FourthRemote,
-		&s.Meta.Version.FifthRemote,
-	} {
-		for _, auth := range remote.AuthOptions {
-			if auth.Detail.AuthorizationServerMetadata.RegistrationEndpoint != "" {
-				supportsDCR = true
-				break
-			}
-		}
-		remote.Tools = nil
-	}
-
 	var remotes []*types.ExternalMCPRemote
 	for _, r := range s.Server.Remotes {
 		remotes = append(remotes, &types.ExternalMCPRemote{
@@ -676,7 +600,7 @@ func projectListServer(registryUUID uuid.UUID, s serverEntry) (*types.ExternalMC
 		return nil, fmt.Errorf("convert meta: %w", err)
 	}
 
-	supportsDCR, supportsCIMD, authSetup := projectCatalogAuth(s.Meta.Catalog, supportsDCR)
+	supportsDCR, supportsCIMD, authSetup := projectCatalogAuth(s.Meta.Catalog)
 	return &types.ExternalMCPServerEntry{
 		Repository:        toExternalMCPRepository(s.Server.Repository),
 		Packages:          toExternalMCPPackages(s.Server.Packages),
@@ -689,8 +613,8 @@ func projectListServer(registryUUID uuid.UUID, s serverEntry) (*types.ExternalMC
 		Title:             s.Server.Title,
 		IconURL:           iconURL,
 		Meta:              meta,
-		ToolCount:         toolCount,
-		IsReadOnly:        isReadOnly,
+		ToolCount:         nil,
+		IsReadOnly:        nil,
 		SupportsDcr:       supportsDCR,
 		SupportsCimd:      new(supportsCIMD), AuthSetup: new(authSetup),
 		Remotes: remotes,
@@ -894,7 +818,7 @@ func projectServerDetails(record serverDetailsEntry, allowedRemoteURLs []string)
 		}
 	}
 	if selected < 0 {
-		details.SupportsDCR, details.SupportsCIMD, details.AuthSetup = projectCatalogAuth(record.Meta.Catalog, false)
+		details.SupportsDCR, details.SupportsCIMD, details.AuthSetup = projectCatalogAuth(record.Meta.Catalog)
 		return details
 	}
 	remote := record.Server.Remotes[selected]
@@ -902,13 +826,6 @@ func projectServerDetails(record serverDetailsEntry, allowedRemoteURLs []string)
 	details.TransportType = externalmcptypes.TransportType(remote.Type)
 	details.Headers = remote.Headers
 	details.Variables = remote.Variables
-	remotes := []serverRemoteMeta{record.Meta.Version.FirstRemote, record.Meta.Version.SecondRemote, record.Meta.Version.ThirdRemote, record.Meta.Version.FourthRemote, record.Meta.Version.FifthRemote}
-	if selected < len(remotes) {
-		details.Tools = remotes[selected].Tools
-		for _, auth := range remotes[selected].AuthOptions {
-			details.SupportsDCR = details.SupportsDCR || auth.Detail.AuthorizationServerMetadata.RegistrationEndpoint != ""
-		}
-	}
-	details.SupportsDCR, details.SupportsCIMD, details.AuthSetup = projectCatalogAuth(record.Meta.Catalog, details.SupportsDCR)
+	details.SupportsDCR, details.SupportsCIMD, details.AuthSetup = projectCatalogAuth(record.Meta.Catalog)
 	return details
 }

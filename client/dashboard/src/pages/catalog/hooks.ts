@@ -9,34 +9,30 @@ import { useQuery } from "@tanstack/react-query";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 
 interface ServerMeta {
-  "com.pulsemcp/server"?: {
-    visitorsEstimateMostRecentWeek?: number;
-    visitorsEstimateLastFourWeeks?: number;
-    visitorsEstimateTotal?: number;
-    isOfficial?: boolean;
+  [namespace: string]: unknown;
+  "com.speakeasy.ai/catalog"?: {
+    supportsDcr?: boolean;
+    supportsCimd?: boolean;
+    authSetup?: "none" | "dcr" | "cimd" | "manual" | "unknown";
+    authDiscoveryStatus?:
+      | "complete"
+      | "partial"
+      | "unavailable"
+      | "not_required";
   };
-  "com.pulsemcp/server-version"?: {
-    source?: string;
+  "io.modelcontextprotocol.registry/official"?: {
     status?: string;
     publishedAt?: string;
     updatedAt?: string;
     isLatest?: boolean;
-    // The catalog list response strips per-tool definitions from the meta blob
-    // to stay small; only the lightweight auth info is kept. Full tools come
-    // from getServerDetails (see `tools` below, populated by enrichment).
-    "remotes[0]"?: {
-      authOptions?: {
-        type?: string;
-      }[];
-    };
   };
 }
 
 // The catalog list returns `ExternalMCPServerEntry` (no tools). `tools` is
 // optional and populated client-side by enrichment (getServerDetails) for the
 // add/release flow that needs per-tool URNs.
-export type PulseMCPServer = Omit<ExternalMCPServerEntry, "meta"> & {
-  meta: ServerMeta;
+export type CatalogServer = Omit<ExternalMCPServerEntry, "meta"> & {
+  meta?: ServerMeta;
   tools?: ExternalMCPTool[];
 };
 
@@ -103,7 +99,7 @@ export function useListMCPCatalog(
  * server, so this only drives indicators, never blocking.
  */
 export function useIsCatalogServerInstalled(): (
-  server: PulseMCPServer,
+  server: CatalogServer,
 ) => boolean {
   const { data: remoteServersData } = useRemoteMcpServers();
   const installedUrls = useMemo(
@@ -117,7 +113,7 @@ export function useIsCatalogServerInstalled(): (
   );
 
   return useCallback(
-    (server: PulseMCPServer) =>
+    (server: CatalogServer) =>
       (server.remotes ?? []).some((remote) =>
         installedUrls.has(normalizeRemoteUrl(remote.url)),
       ),

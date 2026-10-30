@@ -126,6 +126,7 @@ func (s *Source) Lookup(ctx context.Context, projectID uuid.UUID, serverURL stri
 				continue
 			}
 			match := &Match{Registry: source.Name, Specifier: entry.RegistrySpecifier, Provenance: provenance.Read(entry.Meta), Tools: nil}
+			match.Provenance.Catalogued = true
 			if !includeTools {
 				return match, nil
 			}

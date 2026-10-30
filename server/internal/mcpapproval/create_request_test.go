@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -315,7 +316,7 @@ func TestCreateRequest_AssemblesEvidenceAtIntake(t *testing.T) {
 	detail, err := ti.service.GetRequest(ctx, getPayload(created.ID))
 	require.NoError(t, err)
 	require.NotNil(t, detail.EvidenceVersion)
-	require.Equal(t, 1, *detail.EvidenceVersion)
+	require.Equal(t, evidence.Version, *detail.EvidenceVersion)
 	require.NotNil(t, detail.EvidenceCollectedAt)
 
 	doc, ok := detail.Evidence.(map[string]any)

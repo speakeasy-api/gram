@@ -8,7 +8,7 @@ import {
   isFigmaCatalogServer,
   normalizeRemoteUrl,
 } from "./remotes";
-import type { PulseMCPServer } from "./hooks";
+import type { CatalogServer } from "./hooks";
 
 function remote(
   url: string,
@@ -31,7 +31,7 @@ function remote(
 function server(
   remotes: ExternalMCPRemote[],
   registrySpecifier = "test/server",
-): PulseMCPServer {
+): CatalogServer {
   return {
     description: "test",
     registrySpecifier,

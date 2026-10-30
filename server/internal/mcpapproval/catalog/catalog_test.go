@@ -29,7 +29,7 @@ func details(t *testing.T, raw string) *externalmcp.ServerDetails {
 	return &out
 }
 
-// A details fetch that succeeded without carrying tool metadata — no PulseMCP
+// A details fetch that succeeded without carrying tool metadata — no catalog
 // extension, unmatched remote slot — must stay nil: the assembler records the
 // tool-declarations gap only on nil, and mapping absent metadata onto an
 // empty slice would render "unknown" as "the registry declared zero tools".

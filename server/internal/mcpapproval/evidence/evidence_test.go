@@ -402,9 +402,8 @@ func (declaringProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) 
 		Registry:  "Test Registry",
 		Specifier: "com.example/server",
 		Provenance: provenance.Provenance{
-			Catalogued: true, Official: true, Status: "active", IsLatest: true,
+			Catalogued: true, Status: "active", IsLatest: new(true),
 			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
-			VisitorsLastWeek: 120, VisitorsLastFourWeeks: 480, VisitorsTotal: 9000,
 		},
 		Tools: nil,
 	}, nil
@@ -428,9 +427,8 @@ func (cataloguedOnlyProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ b
 		Registry:  "Test Registry",
 		Specifier: "com.example/server",
 		Provenance: provenance.Provenance{
-			Catalogued: true, Official: true, Status: "active", IsLatest: true,
+			Catalogued: true, Status: "active", IsLatest: new(true),
 			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
-			VisitorsLastWeek: 120, VisitorsLastFourWeeks: 480, VisitorsTotal: 9000,
 		},
 		Tools: []capability.Declaration{
 			{
@@ -470,7 +468,8 @@ func TestAssemble_RegistryCopyFillsCapabilitiesWhenServerRefuses(t *testing.T) {
 	prov, ok := doc["provenance"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, true, prov["catalogued"])
-	require.Equal(t, true, prov["official"])
+	require.NotContains(t, prov, "official")
+	require.NotContains(t, prov, "visitors_total")
 	require.Equal(t, "Test Registry", prov["registry"])
 
 	gaps, _ := doc["gaps"].([]any)
@@ -495,9 +494,8 @@ func (cataloguedNoToolMetadata) Lookup(_ context.Context, _ uuid.UUID, _ string,
 		Registry:  "Test Registry",
 		Specifier: "com.example/server",
 		Provenance: provenance.Provenance{
-			Catalogued: true, Official: false, Status: "active", IsLatest: true,
+			Catalogued: true, Status: "active", IsLatest: new(true),
 			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
-			VisitorsLastWeek: 0, VisitorsLastFourWeeks: 0, VisitorsTotal: 0,
 		},
 		Tools: nil,
 	}, nil
@@ -959,4 +957,35 @@ func TestAssembleCatalogReceivesResearchProjectWithoutAuthContext(t *testing.T) 
 	_, err := assembler.Assemble(t.Context(), projectID, identity.Resolve("https://example.com/mcp"))
 	require.NoError(t, err)
 	require.Equal(t, projectID, probe.projectID)
+}
+
+func TestDecodeDocument_LegacyProvenance(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, 2, evidence.Version)
+	for _, tc := range []struct {
+		name, provenance string
+		latest           *bool
+	}{
+		{"omitted legacy false is unknown", `{"registry":"historical","catalogued":true,"official":true,"visitors_total":123}`, nil},
+		{"recorded latest survives", `{"catalogued":true,"status":"active","is_latest":true}`, new(true)},
+		{"explicit false survives", `{"catalogued":true,"is_latest":false}`, new(false)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			document, err := evidence.DecodeDocument([]byte(`{"identity":{"kind":"remote","artifact_ref":"https://example.com/mcp"},"provenance":`+tc.provenance+`}`), 1)
+			require.NoError(t, err)
+			require.Equal(t, "https://example.com/mcp", document.Identity.ArtifactRef)
+			require.NotNil(t, document.Provenance)
+			require.True(t, document.Provenance.Catalogued)
+			require.Equal(t, tc.latest, document.Provenance.IsLatest)
+			raw, err := json.Marshal(document.Provenance)
+			require.NoError(t, err)
+			require.NotContains(t, string(raw), "official")
+			require.NotContains(t, string(raw), "visitors")
+		})
+	}
+	_, err := evidence.DecodeDocument([]byte(`{`), 1)
+	require.ErrorContains(t, err, "decode evidence document")
+	_, err = evidence.DecodeDocument([]byte(`{}`), 0)
+	require.ErrorContains(t, err, "unsupported evidence version")
 }

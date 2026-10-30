@@ -1,4 +1,4 @@
-import type { PulseMCPServer } from "@/pages/catalog/hooks";
+import type { CatalogServer } from "@/pages/catalog/hooks";
 import { filterToHttpRemotes } from "@/pages/catalog/remotes";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
 import { ExternalMCPRemoteTransportType } from "@gram/client/models/components/externalmcpremote.js";
@@ -22,7 +22,7 @@ function transportType(type: string): ExternalMCPRemoteTransportType | null {
  */
 export function suggestionToCatalogServer(
   suggestion: OktaServerSuggestion,
-): PulseMCPServer {
+): CatalogServer {
   const remotes: ExternalMCPRemote[] = [];
   for (const remote of suggestion.remotes) {
     const type = transportType(remote.type);
@@ -44,9 +44,7 @@ export function suggestionToCatalogServer(
     description: suggestion.description,
     iconUrl: suggestion.iconUrl,
     remotes,
-    isReadOnly: false,
     supportsDcr: suggestion.supportsDcr,
-    toolCount: 0,
     version: "",
     meta: {},
   });

@@ -230,7 +230,7 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		if lookupErr != nil {
 			err = lookupErr
 		} else {
-			details, err = decodeDashboardDetails(entry.Data, true)
+			details, err = decodeDashboardDetails(entry.Data)
 		}
 	} else {
 		err = ErrUnknownRegistrySource
@@ -308,7 +308,7 @@ func (s *Service) clearRegistryCache(ctx context.Context, registryURL string) er
 	return client.ClearCache(ctx, registryURL)
 }
 
-func decodeDashboardDetails(body []byte, nativeSelection bool) (*serverDetailsResult, error) {
+func decodeDashboardDetails(body []byte) (*serverDetailsResult, error) {
 	var enrichment struct {
 		Server struct {
 			Title *string `json:"title"`
@@ -326,88 +326,26 @@ func decodeDashboardDetails(body []byte, nativeSelection bool) (*serverDetailsRe
 		icon = &enrichment.Server.Icons[0].Src
 	}
 
-	type remoteMeta struct {
-		Tools []struct {
-			Name        string          `json:"name"`
-			Description string          `json:"description"`
-			InputSchema json.RawMessage `json:"inputSchema"`
-			Annotations map[string]any  `json:"annotations"`
-		} `json:"tools"`
-	}
-	var serverResp struct {
-		Server struct {
-			Name        string             `json:"name"`
-			Description string             `json:"description"`
-			Version     string             `json:"version"`
-			Remotes     []serverRemoteJSON `json:"remotes"`
-		} `json:"server"`
-		Meta struct {
-			Version struct {
-				FirstRemote  remoteMeta `json:"remotes[0]"`
-				SecondRemote remoteMeta `json:"remotes[1]"`
-				ThirdRemote  remoteMeta `json:"remotes[2]"`
-				FourthRemote remoteMeta `json:"remotes[3]"`
-				FifthRemote  remoteMeta `json:"remotes[4]"`
-			} `json:"com.pulsemcp/server-version"`
-		} `json:"_meta"`
-	}
+	var serverResp serverDetailsEntry
 	if err := json.Unmarshal(body, &serverResp); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
-	// Convert remotes and find preferred remote index (streamable-http > sse)
 	var remotes []*types.ExternalMCPRemote
-	preferredIndex := -1
-	foundStreamable := false
-	for i, r := range serverResp.Server.Remotes {
+	for _, r := range serverResp.Server.Remotes {
 		remotes = append(remotes, &types.ExternalMCPRemote{
-			URL:           r.URL,
-			TransportType: r.Type,
-			Headers:       toExternalMCPRemoteHeaders(r.Headers),
-			Variables:     toExternalMCPRemoteVariables(r.Variables),
-		})
-		// Prefer first streamable-http; native falls back to last SSE, the legacy catalog to first.
-		// Can't break early because we need all remotes in the slice.
-		if r.Type == "streamable-http" && !foundStreamable {
-			preferredIndex = i
-			foundStreamable = true
-		} else if r.Type == "sse" && !foundStreamable && (nativeSelection || preferredIndex == -1) {
-			preferredIndex = i
-		}
-	}
-
-	// Get tools from the preferred remote (matching registryclient.go behavior)
-	var selectedRemote remoteMeta
-	switch preferredIndex {
-	case 0:
-		selectedRemote = serverResp.Meta.Version.FirstRemote
-	case 1:
-		selectedRemote = serverResp.Meta.Version.SecondRemote
-	case 2:
-		selectedRemote = serverResp.Meta.Version.ThirdRemote
-	case 3:
-		selectedRemote = serverResp.Meta.Version.FourthRemote
-	case 4:
-		selectedRemote = serverResp.Meta.Version.FifthRemote
-	}
-
-	// Convert tools
-	var tools []*types.ExternalMCPTool
-	for _, t := range selectedRemote.Tools {
-		tools = append(tools, &types.ExternalMCPTool{
-			Name:        &t.Name,
-			Description: &t.Description,
-			InputSchema: t.InputSchema,
-			Annotations: t.Annotations,
+			URL: r.URL, TransportType: r.Type,
+			Headers:   toExternalMCPRemoteHeaders(r.Headers),
+			Variables: toExternalMCPRemoteVariables(r.Variables),
 		})
 	}
-
+	// Catalog records do not publish tool declarations. Live discovery is separate.
 	return &serverDetailsResult{
 		Title: enrichment.Server.Title, IconURL: icon, Meta: enrichment.Meta,
 		Name:        serverResp.Server.Name,
 		Description: serverResp.Server.Description,
 		Version:     serverResp.Server.Version,
-		Tools:       tools,
+		Tools:       nil,
 		Remotes:     remotes,
 	}, nil
 }

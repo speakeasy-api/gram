@@ -228,6 +228,19 @@ afterEach(() => {
 resetMcpOperations();
 resetSecretOperations();
 
+it("omits unknown catalog tool counts", () => {
+  mcpOperations.current.catalogServers = [
+    { ...catalogServer, toolCount: undefined },
+  ];
+  render(<ProjectGuide />);
+  fireEvent.click(
+    screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+  const choice = screen.getByRole("button", { name: "Linear" });
+  expect(choice.textContent).not.toContain("tools");
+});
+
 describe("ProjectGuide", () => {
   it("resets in-memory state when the project changes", () => {
     const { rerender } = render(<ProjectGuide />);
@@ -385,7 +398,7 @@ describe("ProjectGuide", () => {
     ).toBeTruthy();
     expect(
       screen.getByText(
-        "The catalog lists servers from the official MCP Registry. Installing one creates a governed endpoint in front of the vendor's server — the vendor's URL is already known, and nothing upstream changes.",
+        "The catalog lists curated MCP servers. Installing one creates a governed endpoint in front of the vendor's server — the vendor's URL is already known, and nothing upstream changes.",
       ),
     ).toBeTruthy();
     expect(
