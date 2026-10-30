@@ -458,7 +458,7 @@ func TestRun_ChoicesAreNotMappedAfterAFailedPhase(t *testing.T) { //nolint:paral
 	f.oauthSelection(credential, server, registration)
 	original := beforePhase
 	beforePhase = func(name string) error {
-		if name == PhaseMark {
+		if name == PhaseReconcile {
 			return errors.New("injected failure")
 		}
 		return nil
@@ -466,7 +466,7 @@ func TestRun_ChoicesAreNotMappedAfterAFailedPhase(t *testing.T) { //nolint:paral
 	t.Cleanup(func() { beforePhase = original })
 
 	report := f.run(true)
-	require.Contains(t, report.PhaseErrors, PhaseMark)
+	require.Contains(t, report.PhaseErrors, PhaseReconcile)
 	require.Equal(t, 1, report.PendingSelectionMappings)
 	require.Zero(t, report.SelectionsMapped)
 	require.False(t, f.selection(credential, server).AuthClientID.Valid)

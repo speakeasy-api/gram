@@ -8,9 +8,7 @@
 // the organization's advisory lock, so a run is idempotent and a concurrent
 // change is skipped rather than overwritten; rerunning picks it up. Each run
 // also retires backfilled clients, links and header copies the configuration
-// no longer yields, so the records track it, and marks each server it links a
-// client to as needing upstream authentication where that is still
-// undecided. Admin-created records are never
+// no longer yields, so the records track it. Admin-created records are never
 // retired here. It then names, on each live credential's choice for a server,
 // the one auth client that serves it, admin-created clients included (see
 // selections.go), and reports coverage by credential class; a choice several
@@ -87,7 +85,6 @@ const (
 	// PhaseEMAWarnings reports same-origin servers no client covers.
 	PhaseEMAWarnings = "ema_warnings"
 	PhaseReconcile   = "reconcile"
-	PhaseMark        = "mark"
 	// PhaseSelections names auth clients on credentials' choices.
 	PhaseSelections = "selections"
 	PhaseGrants     = "grants"
@@ -346,14 +343,6 @@ type Report struct {
 	// LinksRetired counts server links retired.
 	LinksRetired int `json:"links_retired"`
 
-	// PendingMarkedServers counts servers offering a backfilled auth client
-	// whose need for upstream authentication is still undecided, marked or
-	// not.
-	PendingMarkedServers int `json:"pending_marked_servers"`
-
-	// ServersMarked counts servers marked as needing upstream authentication.
-	ServersMarked int `json:"servers_marked"`
-
 	// PendingGrants counts default grants the organization is missing, and
 	// PendingGrantsByKind splits them by default.
 	PendingGrants       int               `json:"pending_grants"`
@@ -458,8 +447,6 @@ func newReport(apply bool) Report {
 		PendingRetiredLinks:      0,
 		ClientsRetired:           0,
 		LinksRetired:             0,
-		PendingMarkedServers:     0,
-		ServersMarked:            0,
 		PendingGrants:            0,
 		PendingGrantsByKind:      make(map[GrantKind]int),
 		GrantsWritten:            0,
@@ -513,8 +500,6 @@ func (r *Report) merge(o Report) {
 	r.PendingRetiredLinks += o.PendingRetiredLinks
 	r.ClientsRetired += o.ClientsRetired
 	r.LinksRetired += o.LinksRetired
-	r.PendingMarkedServers += o.PendingMarkedServers
-	r.ServersMarked += o.ServersMarked
 	r.PendingGrants += o.PendingGrants
 	for kind, n := range o.PendingGrantsByKind {
 		r.PendingGrantsByKind[kind] += n
@@ -751,9 +736,6 @@ func runPhases(ctx context.Context, db TxStarter, opts Options, startedAt pgtype
 		}},
 		{name: PhaseReconcile, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
 			return reconcileDerived(ctx, New(tx), opts, local, want, failed, startedAt)
-		}},
-		{name: PhaseMark, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
-			return markRequiringUpstreamAuth(ctx, New(tx), opts, &report, local)
 		}},
 		// After every phase that records or retires clients and links, so
 		// choices name what this run left in place.
@@ -1087,42 +1069,5 @@ func reconcile(ctx context.Context, q *Queries, opts Options, report *Report) er
 	report.LinksRetired += len(retiredLinks)
 	counts.PendingRetirements += len(staleClients) + pendingLinks
 	counts.Retired += len(retiredClients) + len(retiredLinks)
-	return nil
-}
-
-// markRequiringUpstreamAuth counts, and with Apply records, that servers
-// offering a backfilled auth client of any kind need upstream authentication.
-// Only undecided servers change; a decision either way is never overwritten.
-func markRequiringUpstreamAuth(ctx context.Context, q *Queries, opts Options, committed *Report, report *Report) error {
-	seen := map[uuid.UUID]bool{}
-	serverIDs := []uuid.UUID{}
-	for _, result := range committed.Results {
-		if result.MCPServerID != uuid.Nil && result.Outcome.Covered() && result.Outcome != OutcomeWarning && !seen[result.MCPServerID] {
-			seen[result.MCPServerID] = true
-			serverIDs = append(serverIDs, result.MCPServerID)
-		}
-	}
-	if len(serverIDs) == 0 {
-		return nil
-	}
-	undecided, err := q.ListUndecidedUpstreamAuthServers(ctx, ListUndecidedUpstreamAuthServersParams{
-		OrganizationID: opts.OrganizationID,
-		McpServerIds:   serverIDs,
-	})
-	if err != nil {
-		return fmt.Errorf("list servers with undecided upstream auth: %w", err)
-	}
-	report.PendingMarkedServers = len(undecided)
-	if !opts.Apply || len(undecided) == 0 {
-		return nil
-	}
-	marked, err := q.MarkServersRequiringUpstreamAuth(ctx, MarkServersRequiringUpstreamAuthParams{
-		OrganizationID: opts.OrganizationID,
-		McpServerIds:   undecided,
-	})
-	if err != nil {
-		return fmt.Errorf("mark servers requiring upstream auth: %w", err)
-	}
-	report.ServersMarked = len(marked)
 	return nil
 }

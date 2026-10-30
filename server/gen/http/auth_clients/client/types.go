@@ -107,7 +107,7 @@ type DeleteIssuanceProfileRequestBody struct {
 type SetMcpServerUpstreamAuthRequirementRequestBody struct {
 	// The MCP server id.
 	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	// Whether the upstream needs authentication.
+	// Ignored.
 	RequiresUpstreamAuth bool `form:"requires_upstream_auth" json:"requires_upstream_auth" xml:"requires_upstream_auth"`
 }
 
@@ -360,8 +360,14 @@ type DetachAuthClientFromMcpServerResponseBody struct {
 // ListMcpServerAuthClientChoicesResponseBody is the type of the "authClients"
 // service "listMcpServerAuthClientChoices" endpoint HTTP response body.
 type ListMcpServerAuthClientChoicesResponseBody struct {
-	// Whether the upstream needs authentication. Omitted while undecided.
+	// Whether the upstream needs authentication: true when the server offers at
+	// least one enabled auth client.
 	RequiresUpstreamAuth *bool `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
+	// configured when the server offers at least one enabled auth client;
+	// setup_incomplete when no auth client was ever linked to it, live or
+	// detached, but it has a live upstream OAuth client or a credential header on
+	// its source that no auth client records yet; no_auth_required otherwise.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// The enabled shared credentials the server offers.
 	Choices []*AuthClientChoiceResponseBody `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
 }
@@ -402,12 +408,13 @@ type GetMcpServerAuthenticationResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Whether the MCP server is public.
 	Public *bool `form:"public,omitempty" json:"public,omitempty" xml:"public,omitempty"`
-	// Whether the upstream needs authentication. Omitted while undecided.
+	// Whether the upstream needs authentication: true when the server offers at
+	// least one enabled auth client.
 	RequiresUpstreamAuth *bool `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
-	// configured when authentication is required and at least one enabled client
-	// is offered; setup_incomplete when it is required and none is;
-	// no_auth_required when the upstream explicitly needs none; undecided when
-	// nobody has said.
+	// configured when the server offers at least one enabled auth client;
+	// setup_incomplete when no auth client was ever linked to it, live or
+	// detached, but it has a live upstream OAuth client or a credential header on
+	// its source that no auth client records yet; no_auth_required otherwise.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// The auth clients the server offers.
 	Clients []*AuthClientResponseBody `form:"clients,omitempty" json:"clients,omitempty" xml:"clients,omitempty"`
@@ -423,12 +430,13 @@ type SetMcpServerUpstreamAuthRequirementResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Whether the MCP server is public.
 	Public *bool `form:"public,omitempty" json:"public,omitempty" xml:"public,omitempty"`
-	// Whether the upstream needs authentication. Omitted while undecided.
+	// Whether the upstream needs authentication: true when the server offers at
+	// least one enabled auth client.
 	RequiresUpstreamAuth *bool `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
-	// configured when authentication is required and at least one enabled client
-	// is offered; setup_incomplete when it is required and none is;
-	// no_auth_required when the upstream explicitly needs none; undecided when
-	// nobody has said.
+	// configured when the server offers at least one enabled auth client;
+	// setup_incomplete when no auth client was ever linked to it, live or
+	// detached, but it has a live upstream OAuth client or a credential header on
+	// its source that no auth client records yet; no_auth_required otherwise.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// The auth clients the server offers.
 	Clients []*AuthClientResponseBody `form:"clients,omitempty" json:"clients,omitempty" xml:"clients,omitempty"`
@@ -4898,7 +4906,8 @@ func NewDetachAuthClientFromMcpServerGatewayError(body *DetachAuthClientFromMcpS
 // "listMcpServerAuthClientChoices" endpoint result from a HTTP "OK" response.
 func NewListMcpServerAuthClientChoicesResultOK(body *ListMcpServerAuthClientChoicesResponseBody) *authclients.ListMcpServerAuthClientChoicesResult {
 	v := &authclients.ListMcpServerAuthClientChoicesResult{
-		RequiresUpstreamAuth: body.RequiresUpstreamAuth,
+		RequiresUpstreamAuth: *body.RequiresUpstreamAuth,
+		Status:               *body.Status,
 	}
 	v.Choices = make([]*types.AuthClientChoice, len(body.Choices))
 	for i, val := range body.Choices {
@@ -5560,7 +5569,7 @@ func NewGetMcpServerAuthenticationMcpServerAuthenticationOK(body *GetMcpServerAu
 		McpServerID:          *body.McpServerID,
 		ProjectID:            *body.ProjectID,
 		Public:               *body.Public,
-		RequiresUpstreamAuth: body.RequiresUpstreamAuth,
+		RequiresUpstreamAuth: *body.RequiresUpstreamAuth,
 		Status:               *body.Status,
 	}
 	v.Clients = make([]*types.AuthClient, len(body.Clients))
@@ -5733,7 +5742,7 @@ func NewSetMcpServerUpstreamAuthRequirementMcpServerAuthenticationOK(body *SetMc
 		McpServerID:          *body.McpServerID,
 		ProjectID:            *body.ProjectID,
 		Public:               *body.Public,
-		RequiresUpstreamAuth: body.RequiresUpstreamAuth,
+		RequiresUpstreamAuth: *body.RequiresUpstreamAuth,
 		Status:               *body.Status,
 	}
 	v.Clients = make([]*types.AuthClient, len(body.Clients))
@@ -6714,8 +6723,19 @@ func ValidateDetachAuthClientFromMcpServerResponseBody(body *DetachAuthClientFro
 // ValidateListMcpServerAuthClientChoicesResponseBody runs the validations
 // defined on ListMcpServerAuthClientChoicesResponseBody
 func ValidateListMcpServerAuthClientChoicesResponseBody(body *ListMcpServerAuthClientChoicesResponseBody) (err error) {
+	if body.RequiresUpstreamAuth == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requires_upstream_auth", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
 	if body.Choices == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("choices", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "configured" || *body.Status == "setup_incomplete" || *body.Status == "no_auth_required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"configured", "setup_incomplete", "no_auth_required"}))
+		}
 	}
 	for _, e := range body.Choices {
 		if e != nil {
@@ -6798,6 +6818,9 @@ func ValidateGetMcpServerAuthenticationResponseBody(body *GetMcpServerAuthentica
 	if body.Public == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("public", "body"))
 	}
+	if body.RequiresUpstreamAuth == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requires_upstream_auth", "body"))
+	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
@@ -6811,8 +6834,8 @@ func ValidateGetMcpServerAuthenticationResponseBody(body *GetMcpServerAuthentica
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.Status != nil {
-		if !(*body.Status == "configured" || *body.Status == "setup_incomplete" || *body.Status == "no_auth_required" || *body.Status == "undecided") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"configured", "setup_incomplete", "no_auth_required", "undecided"}))
+		if !(*body.Status == "configured" || *body.Status == "setup_incomplete" || *body.Status == "no_auth_required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"configured", "setup_incomplete", "no_auth_required"}))
 		}
 	}
 	for _, e := range body.Clients {
@@ -6837,6 +6860,9 @@ func ValidateSetMcpServerUpstreamAuthRequirementResponseBody(body *SetMcpServerU
 	if body.Public == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("public", "body"))
 	}
+	if body.RequiresUpstreamAuth == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requires_upstream_auth", "body"))
+	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
@@ -6850,8 +6876,8 @@ func ValidateSetMcpServerUpstreamAuthRequirementResponseBody(body *SetMcpServerU
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.Status != nil {
-		if !(*body.Status == "configured" || *body.Status == "setup_incomplete" || *body.Status == "no_auth_required" || *body.Status == "undecided") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"configured", "setup_incomplete", "no_auth_required", "undecided"}))
+		if !(*body.Status == "configured" || *body.Status == "setup_incomplete" || *body.Status == "no_auth_required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"configured", "setup_incomplete", "no_auth_required"}))
 		}
 	}
 	for _, e := range body.Clients {

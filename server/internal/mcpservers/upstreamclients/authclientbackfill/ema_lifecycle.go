@@ -87,9 +87,6 @@ func SyncEMARegistrations(ctx context.Context, tx pgx.Tx, organizationID string,
 	for _, server := range reached {
 		servers = append(servers, server.id)
 	}
-	if err := markLinkedServers(ctx, q, organizationID, want); err != nil {
-		return err
-	}
 	sources, err := q.ListServerCredentialSources(ctx, ListServerCredentialSourcesParams{OrganizationID: organizationID, McpServerIds: servers})
 	if err != nil {
 		return err

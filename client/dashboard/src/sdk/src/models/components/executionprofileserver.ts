@@ -22,7 +22,6 @@ export const GapReason = {
   PersonalRequiresUser: "personal_requires_user",
   NoClient: "no_client",
   SetupIncomplete: "setup_incomplete",
-  UpstreamAuthUndecided: "upstream_auth_undecided",
 } as const;
 /**
  * Why a server without a choice gets none on its own.
@@ -60,7 +59,7 @@ export type ExecutionProfileServer = {
    */
   mcpServerId: string;
   /**
-   * Whether the server was decided to need no upstream authentication, so no-auth can be chosen.
+   * Whether the server offers no enabled auth client and has no upstream credentials left to record as one, so no-auth can be chosen.
    */
   noAuthAllowed: boolean;
   /**

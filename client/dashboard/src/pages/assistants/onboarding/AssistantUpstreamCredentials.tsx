@@ -36,8 +36,6 @@ const GAP_LABELS: Record<string, string> = {
     "Only a personal account fits, and these turns act for nobody.",
   no_client: "No credential fits yet.",
   setup_incomplete: "Upstream sign-in is not set up for this server.",
-  upstream_auth_undecided:
-    "Decide on the server whether it needs upstream credentials.",
 };
 
 /**

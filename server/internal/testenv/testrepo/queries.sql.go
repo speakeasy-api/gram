@@ -1091,6 +1091,21 @@ func (q *Queries) CreateRemoteMCPBackendFixture(ctx context.Context, arg CreateR
 	return err
 }
 
+const createRemoteMCPCredentialHeaderFixture = `-- name: CreateRemoteMCPCredentialHeaderFixture :exec
+INSERT INTO remote_mcp_server_headers (remote_mcp_server_id, name, is_secret, value)
+VALUES ($1, 'Authorization', TRUE, $2)
+`
+
+type CreateRemoteMCPCredentialHeaderFixtureParams struct {
+	RemoteMcpServerID uuid.UUID
+	Value             pgtype.Text
+}
+
+func (q *Queries) CreateRemoteMCPCredentialHeaderFixture(ctx context.Context, arg CreateRemoteMCPCredentialHeaderFixtureParams) error {
+	_, err := q.db.Exec(ctx, createRemoteMCPCredentialHeaderFixture, arg.RemoteMcpServerID, arg.Value)
+	return err
+}
+
 const createRemoteMCPServerFixture = `-- name: CreateRemoteMCPServerFixture :one
 INSERT INTO mcp_servers (id, project_id, toolset_id, visibility)
 VALUES ($1, $2, $3, $4)
@@ -2272,6 +2287,17 @@ func (q *Queries) GetLatestTrialArmAuditIDFixture(ctx context.Context, organizat
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getMCPServerRequiresUpstreamAuthFixture = `-- name: GetMCPServerRequiresUpstreamAuthFixture :one
+SELECT requires_upstream_auth FROM mcp_servers WHERE id = $1
+`
+
+func (q *Queries) GetMCPServerRequiresUpstreamAuthFixture(ctx context.Context, id uuid.UUID) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, getMCPServerRequiresUpstreamAuthFixture, id)
+	var requires_upstream_auth pgtype.Bool
+	err := row.Scan(&requires_upstream_auth)
+	return requires_upstream_auth, err
 }
 
 const getOpenRouterAPIKeyStateFixture = `-- name: GetOpenRouterAPIKeyStateFixture :one
@@ -6441,6 +6467,20 @@ func (q *Queries) SetMCPServerRemoteSessionIssuerFixture(ctx context.Context, ar
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setMCPServerRequiresUpstreamAuthFixture = `-- name: SetMCPServerRequiresUpstreamAuthFixture :exec
+UPDATE mcp_servers SET requires_upstream_auth = $1 WHERE id = $2
+`
+
+type SetMCPServerRequiresUpstreamAuthFixtureParams struct {
+	RequiresUpstreamAuth pgtype.Bool
+	ID                   uuid.UUID
+}
+
+func (q *Queries) SetMCPServerRequiresUpstreamAuthFixture(ctx context.Context, arg SetMCPServerRequiresUpstreamAuthFixtureParams) error {
+	_, err := q.db.Exec(ctx, setMCPServerRequiresUpstreamAuthFixture, arg.RequiresUpstreamAuth, arg.ID)
+	return err
 }
 
 const setMCPServerVisibilityFixture = `-- name: SetMCPServerVisibilityFixture :exec

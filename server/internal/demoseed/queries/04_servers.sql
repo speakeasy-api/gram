@@ -748,8 +748,7 @@ VALUES
 -- Typed auth clients, as the upstream OAuth migration records them: Linear's
 -- personal client over its OAuth registration, and one static credential
 -- shared by GitHub and Linear, so the server settings show a shared client
--- and a server offering two. Slack is left undecided about upstream
--- authentication.
+-- and a server offering two. Slack offers none.
 -- The projects delete cascades the clients, their headers and associations.
 -- name: ServersInsertAuthClient :exec
 INSERT INTO mcp_auth_clients
@@ -784,12 +783,6 @@ SELECT @id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
        ac.id, ac.attachment_scope, ac.source
 FROM mcp_auth_clients AS ac
 WHERE ac.id = @auth_client_id::uuid;
-
--- name: ServersMarkRequiresUpstreamAuth :exec
-UPDATE mcp_servers
-SET requires_upstream_auth = TRUE
-WHERE project_id = @project_id::uuid
-  AND id = ANY(@ids::uuid[]);
 
 -- Engineers may use the shared GitHub token; Contractors are blocked from
 -- it on every server that offers it. Cleared by id at the top of the seed.

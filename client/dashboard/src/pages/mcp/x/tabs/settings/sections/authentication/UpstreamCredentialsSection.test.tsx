@@ -8,10 +8,16 @@ import { UpstreamCredentialsSection } from "./UpstreamCredentialsSection";
 const mocks = vi.hoisted(() => ({
   probe: "idle",
   probed: vi.fn(),
+  admin: true,
+  authentication: {
+    status: "no_auth_required",
+    requiresUpstreamAuth: false,
+    clients: [] as unknown[],
+  },
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => true }),
+  useRBAC: () => ({ hasScope: () => mocks.admin }),
 }));
 
 vi.mock("@/lib/remote-identity", () => ({
@@ -25,19 +31,9 @@ vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
   useMcpServerAuthentication: () => ({
     isLoading: false,
     isError: false,
-    data: { status: "undecided", requiresUpstreamAuth: undefined, clients: [] },
+    data: mocks.authentication,
   }),
 }));
-
-vi.mock(
-  "@gram/client/react-query/setMcpServerUpstreamAuthRequirement.js",
-  () => ({
-    useSetMcpServerUpstreamAuthRequirementMutation: () => ({
-      mutate: vi.fn(),
-      isPending: false,
-    }),
-  }),
-);
 
 vi.mock("@gram/client/react-query/updateAuthClient.js", () => ({
   useUpdateAuthClientMutation: () => ({ mutate: vi.fn(), isPending: false }),
@@ -61,6 +57,12 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   mocks.probe = "idle";
+  mocks.admin = true;
+  mocks.authentication = {
+    status: "no_auth_required",
+    requiresUpstreamAuth: false,
+    clients: [],
+  };
 });
 
 describe("UpstreamCredentialsSection", () => {
@@ -70,6 +72,46 @@ describe("UpstreamCredentialsSection", () => {
 
     expect(mocks.probed).toHaveBeenCalledWith("remote-1", true);
     expect(screen.getByText(/it asks for sign-in/)).toBeTruthy();
+  });
+
+  it.each([
+    ["configured", "Credentials set up"],
+    ["setup_incomplete", "Authentication setup incomplete"],
+    ["no_auth_required", "No authentication required"],
+  ])("states the %s status without a control to change it", (status, label) => {
+    mocks.authentication = { ...mocks.authentication, status };
+    renderSection({ remoteMcpServerId: "remote-1" });
+
+    expect(screen.getByText(label)).toBeTruthy();
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+    expect(screen.queryByText(/Needs none/i)).toBeNull();
+    expect(screen.getByText("Add credential")).toBeTruthy();
+  });
+
+  it("flags setup when the upstream asks for sign-in and no credential is on", () => {
+    mocks.probe = "authentication-required";
+    renderSection({ remoteMcpServerId: "remote-1" });
+
+    expect(screen.getByText("Authentication setup incomplete")).toBeTruthy();
+    expect(screen.getByText(/it asks for sign-in/)).toBeTruthy();
+  });
+
+  it("leaves the derived status alone for people who cannot change it", () => {
+    mocks.admin = false;
+    mocks.probe = "authentication-required";
+    renderSection({ remoteMcpServerId: "remote-1" });
+
+    expect(mocks.probed).toHaveBeenCalledWith("remote-1", false);
+    expect(screen.getByText("No authentication required")).toBeTruthy();
+    expect(screen.queryByText("Add credential")).toBeNull();
+  });
+
+  it("never reads an unknown status as needing no authentication", () => {
+    mocks.authentication = { ...mocks.authentication, status: "future" };
+    renderSection({ remoteMcpServerId: "remote-1" });
+
+    expect(screen.getByText("Status unavailable")).toBeTruthy();
+    expect(screen.queryByText("No authentication required")).toBeNull();
   });
 
   it("does not probe a server with no remote upstream", () => {

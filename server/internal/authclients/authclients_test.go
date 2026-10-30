@@ -5,16 +5,20 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth_clients"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestListAuthClientsRedactsValuesAndShowsSharedServers(t *testing.T) {
@@ -148,40 +152,118 @@ func TestMcpServerAuthenticationStatus(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Public)
 	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
+	status := func() *types.McpServerAuthentication {
+		t.Helper()
+		got, err := ti.service.GetMcpServerAuthentication(ctx, &gen.GetMcpServerAuthenticationPayload{McpServerID: server.id.String()})
+		require.NoError(t, err)
+		return got
+	}
 
-	got, err := ti.service.GetMcpServerAuthentication(ctx, &gen.GetMcpServerAuthenticationPayload{McpServerID: server.id.String()})
-	require.NoError(t, err)
-	require.Equal(t, authclients.StatusUndecided, got.Status)
-	require.Nil(t, got.RequiresUpstreamAuth)
+	got := status()
+	require.Equal(t, authclients.StatusNoAuthRequired, got.Status, "a server with no auth client and no upstream credentials needs none")
+	require.False(t, got.RequiresUpstreamAuth)
 	require.True(t, got.Public)
 
-	before := auditCount(t, ti, audit.ActionMcpServerUpstreamAuthRequirementUpdate)
-	got, err = ti.service.SetMcpServerUpstreamAuthRequirement(ctx, &gen.SetMcpServerUpstreamAuthRequirementPayload{McpServerID: server.id.String(), RequiresUpstreamAuth: true})
+	first := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "First")
+	second := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "Second")
+	associate(t, ctx, ti.conn, ti.organizationID, server, first)
+	associate(t, ctx, ti.conn, ti.organizationID, server, second)
+	got = status()
+	require.Equal(t, authclients.StatusConfigured, got.Status)
+	require.True(t, got.RequiresUpstreamAuth)
+	require.Len(t, got.Clients, 2)
+
+	_, err := ti.service.UpdateAuthClient(ctx, &gen.UpdateAuthClientPayload{ID: first.String(), Enabled: new(false)})
 	require.NoError(t, err)
-	require.Equal(t, authclients.StatusSetupIncomplete, got.Status, "required with no client is incomplete setup, not no-auth")
-	require.Equal(t, before+1, auditCount(t, ti, audit.ActionMcpServerUpstreamAuthRequirementUpdate))
+	require.Equal(t, authclients.StatusConfigured, status().Status, "one enabled client of several is enough")
+
+	_, err = ti.service.UpdateAuthClient(ctx, &gen.UpdateAuthClientPayload{ID: second.String(), Enabled: new(false)})
+	require.NoError(t, err)
+	got = status()
+	require.Equal(t, authclients.StatusNoAuthRequired, got.Status, "with every client disabled the server needs none")
+	require.False(t, got.RequiresUpstreamAuth)
+
+	_, err = ti.service.UpdateAuthClient(ctx, &gen.UpdateAuthClientPayload{ID: second.String(), Enabled: new(true)})
+	require.NoError(t, err, "enabling a client is never refused by a stored requirement")
+	require.Equal(t, authclients.StatusConfigured, status().Status)
+
+	_, err = ti.service.DetachAuthClientFromMcpServer(ctx, &gen.DetachAuthClientFromMcpServerPayload{ID: second.String(), McpServerID: server.id.String()})
+	require.NoError(t, err)
+	got = status()
+	require.Equal(t, authclients.StatusNoAuthRequired, got.Status, "a detached client no longer counts")
+	require.Len(t, got.Clients, 1)
+}
+
+func TestMcpServerAuthenticationStatusIgnoresTheStoredRequirement(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Private)
+	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
+	queries := testrepo.New(ti.conn)
+
+	require.NoError(t, queries.SetMCPServerRequiresUpstreamAuthFixture(ctx, testrepo.SetMCPServerRequiresUpstreamAuthFixtureParams{ID: server.id, RequiresUpstreamAuth: pgtype.Bool{Bool: true, Valid: true}}))
+	got, err := ti.service.GetMcpServerAuthentication(ctx, &gen.GetMcpServerAuthenticationPayload{McpServerID: server.id.String()})
+	require.NoError(t, err)
+	require.Equal(t, authclients.StatusNoAuthRequired, got.Status)
+	require.False(t, got.RequiresUpstreamAuth)
 
 	clientID := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "Credential")
 	associate(t, ctx, ti.conn, ti.organizationID, server, clientID)
-
+	require.NoError(t, queries.SetMCPServerRequiresUpstreamAuthFixture(ctx, testrepo.SetMCPServerRequiresUpstreamAuthFixtureParams{ID: server.id, RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true}}))
 	got, err = ti.service.GetMcpServerAuthentication(ctx, &gen.GetMcpServerAuthenticationPayload{McpServerID: server.id.String()})
 	require.NoError(t, err)
 	require.Equal(t, authclients.StatusConfigured, got.Status)
-	require.Len(t, got.Clients, 1)
+	require.True(t, got.RequiresUpstreamAuth)
+}
 
-	_, err = ti.service.SetMcpServerUpstreamAuthRequirement(ctx, &gen.SetMcpServerUpstreamAuthRequirementPayload{McpServerID: server.id.String(), RequiresUpstreamAuth: false})
-	requireOopsCode(t, err, oops.CodeConflict)
+// Upstream credentials that no auth client records yet are incomplete setup:
+// the migration has not reached the server, which is never read as needing
+// no authentication.
+func TestMcpServerAuthenticationStatusTellsPendingSetupFromNoAuth(t *testing.T) {
+	t.Parallel()
 
-	_, err = ti.service.UpdateAuthClient(ctx, &gen.UpdateAuthClientPayload{ID: clientID.String(), Enabled: new(false)})
+	ctx, ti := newTestService(t)
+	server := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Private)
+	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
+	require.NoError(t, testrepo.New(ti.conn).CreateRemoteMCPCredentialHeaderFixture(ctx, testrepo.CreateRemoteMCPCredentialHeaderFixtureParams{RemoteMcpServerID: server.remoteID, Value: conv.ToPGText("sealed")}))
+
+	got, err := ti.service.GetMcpServerAuthentication(ctx, &gen.GetMcpServerAuthenticationPayload{McpServerID: server.id.String()})
 	require.NoError(t, err)
+	require.Equal(t, authclients.StatusSetupIncomplete, got.Status)
+	require.False(t, got.RequiresUpstreamAuth)
 
+	clientID := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "Credential")
+	associate(t, ctx, ti.conn, ti.organizationID, server, clientID)
+	_, err = ti.service.DetachAuthClientFromMcpServer(ctx, &gen.DetachAuthClientFromMcpServerPayload{ID: clientID.String(), McpServerID: server.id.String()})
+	require.NoError(t, err)
 	got, err = ti.service.GetMcpServerAuthentication(ctx, &gen.GetMcpServerAuthenticationPayload{McpServerID: server.id.String()})
 	require.NoError(t, err)
-	require.Equal(t, authclients.StatusSetupIncomplete, got.Status, "a disabled client does not complete setup")
+	require.Equal(t, authclients.StatusNoAuthRequired, got.Status, "an administrator's detach is a decision, not a pending migration")
+}
 
-	got, err = ti.service.SetMcpServerUpstreamAuthRequirement(ctx, &gen.SetMcpServerUpstreamAuthRequirementPayload{McpServerID: server.id.String(), RequiresUpstreamAuth: false})
+func TestSetMcpServerUpstreamAuthRequirementIgnoresTheRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Private)
+	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
+
+	got, err := ti.service.SetMcpServerUpstreamAuthRequirement(ctx, &gen.SetMcpServerUpstreamAuthRequirementPayload{McpServerID: server.id.String(), RequiresUpstreamAuth: true})
 	require.NoError(t, err)
 	require.Equal(t, authclients.StatusNoAuthRequired, got.Status)
+	require.False(t, got.RequiresUpstreamAuth)
+
+	clientID := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "Credential")
+	associate(t, ctx, ti.conn, ti.organizationID, server, clientID)
+	got, err = ti.service.SetMcpServerUpstreamAuthRequirement(ctx, &gen.SetMcpServerUpstreamAuthRequirementPayload{McpServerID: server.id.String(), RequiresUpstreamAuth: false})
+	require.NoError(t, err, "declaring no auth with an enabled client is no longer refused")
+	require.Equal(t, authclients.StatusConfigured, got.Status)
+	require.True(t, got.RequiresUpstreamAuth)
+
+	stored, err := testrepo.New(ti.conn).GetMCPServerRequiresUpstreamAuthFixture(ctx, server.id)
+	require.NoError(t, err)
+	require.False(t, stored.Valid, "the request writes nothing")
 }
 
 func TestSetMcpServerUpstreamAuthRequirementRequiresOrgAdmin(t *testing.T) {
@@ -250,26 +332,4 @@ func TestLegacyKeysCannotManageAuthClients(t *testing.T) {
 			requireOopsCode(t, err, oops.CodeForbidden)
 		})
 	}
-}
-
-func TestEnablingAuthClientRespectsServersWithoutUpstreamAuth(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	server := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Private)
-	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
-
-	clientID := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "Credential")
-	associate(t, ctx, ti.conn, ti.organizationID, server, clientID)
-
-	_, err := ti.service.UpdateAuthClient(ctx, &gen.UpdateAuthClientPayload{ID: clientID.String(), Enabled: new(false)})
-	require.NoError(t, err)
-	_, err = ti.service.SetMcpServerUpstreamAuthRequirement(ctx, &gen.SetMcpServerUpstreamAuthRequirementPayload{McpServerID: server.id.String(), RequiresUpstreamAuth: false})
-	require.NoError(t, err)
-
-	_, err = ti.service.UpdateAuthClient(ctx, &gen.UpdateAuthClientPayload{ID: clientID.String(), Enabled: new(true)})
-	requireOopsCode(t, err, oops.CodeConflict)
-
-	_, err = ti.service.UpdateAuthClient(ctx, &gen.UpdateAuthClientPayload{ID: clientID.String(), Name: new("Renamed")})
-	require.NoError(t, err, "a disabled client can still be renamed")
 }
