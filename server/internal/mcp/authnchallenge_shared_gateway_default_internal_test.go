@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"net/url"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -72,6 +74,28 @@ func TestSharedOrganizationGatewayResource(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, endpoint)
 	require.Empty(t, resource)
+
+	s.platformHosts = map[string]string{"a.example": "https://a.example", "b.example": "https://b.example"}
+	authHostCtx := context.WithValue(ctx, authenticationHostContextKey{}, "https://auth.example")
+	platformCtx := func(baseURL string) context.Context {
+		return requestorigin.WithContext(ctx, requestorigin.Origin{Surface: requestorigin.SurfacePlatform, BaseURL: baseURL, OrganizationID: "", NetworkIngressID: uuid.Nil, NetworkIdentity: nil})
+	}
+	gatewayFor := func(reqCtx context.Context) string {
+		t.Helper()
+		endpoint, resource, err := s.sharedOrganizationGatewayResource(reqCtx, s.logger, issuerFor(orgIssuer.ID))
+		require.NoError(t, err)
+		require.NotNil(t, endpoint)
+		return resource
+	}
+
+	require.Equal(t, base.String()+"/mcp/gateway/"+org, gatewayFor(authHostCtx))
+
+	orgs := organizationsrepo.New(pool)
+	require.NoError(t, orgs.SetOrganizationDefaultHostForTest(ctx, organizationsrepo.SetOrganizationDefaultHostForTestParams{DefaultHost: conv.ToPGText("https://a.example"), ID: org}))
+	require.Equal(t, "https://b.example/mcp/gateway/"+org, gatewayFor(platformCtx("https://b.example")))
+	require.Equal(t, "https://a.example/mcp/gateway/"+org, gatewayFor(platformCtx("https://a.example")))
+	require.Equal(t, base.String()+"/mcp/gateway/"+org, gatewayFor(platformCtx(base.String())))
+	require.Equal(t, "https://a.example/mcp/gateway/"+org, gatewayFor(authHostCtx))
 
 	_, err = featureQuery.EnableFeature(ctx, setting)
 	require.NoError(t, err)

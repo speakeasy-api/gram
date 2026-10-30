@@ -449,22 +449,23 @@ func (s *Service) sharedOrganizationGatewayResource(ctx context.Context, logger 
 		return nil, "", nil
 	}
 
-	requestBaseURL := strings.TrimSuffix(s.serverURL.String(), "/")
-	if !OnAuthenticationHost(ctx) {
-		requestBaseURL = requestorigin.PlatformHostBaseURL(ctx, requestBaseURL, requestBaseURL)
+	// Bind to the host the client discovered the resource on (RFC 9728); the auth host uses the stored default.
+	var baseURL *url.URL
+	if origin, ok := requestorigin.FromContext(ctx); ok && !OnAuthenticationHost(ctx) && origin.Surface == requestorigin.SurfacePlatform && origin.BaseURL != "" {
+		baseURL, err = url.Parse(origin.BaseURL)
+		if err != nil {
+			return nil, "", fmt.Errorf("parse organization gateway base URL: %w", err)
+		}
+	} else {
+		hosts := orghost.New(orghost.Config{
+			ServerURL:                  s.serverURL,
+			SiteURL:                    nil,
+			PlatformHosts:              s.platformHosts,
+			LegacyDefaultHost:          nil,
+			NewOrganizationDefaultHost: nil,
+		})
+		baseURL, _ = hosts.StoredPlatformBaseURLsOr(organization.DefaultHost, s.serverURL, nil)
 	}
-	fallback, err := url.Parse(requestBaseURL)
-	if err != nil {
-		return nil, "", fmt.Errorf("parse organization gateway base URL: %w", err)
-	}
-	hosts := orghost.New(orghost.Config{
-		ServerURL:                  s.serverURL,
-		SiteURL:                    nil,
-		PlatformHosts:              s.platformHosts,
-		LegacyDefaultHost:          nil,
-		NewOrganizationDefaultHost: nil,
-	})
-	baseURL, _ := hosts.StoredPlatformBaseURLsOr(organization.DefaultHost, fallback, nil)
 	resource := orggateway.URL(baseURL, organization.Slug)
 
 	endpoint, rejection, err := s.resolveSharedResource(ctx, logger, issuer.authorizationServer, resource)

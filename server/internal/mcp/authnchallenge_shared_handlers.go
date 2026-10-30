@@ -358,7 +358,7 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 				s.recordSharedIDJAGRequestRejection(ctx, logger, r, issuer.authorizationServer.issuerID, "missing_assertion", mcpmetrics.IDJAGRejectionInvalidRequest)
 				return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "assertion is required")
 			}
-			// Unverified: it only picks the server whose ID-JAG checks then verify it.
+			// Read unverified only to choose the server; Validate binds it (ID-JAG draft resource claim).
 			resource, ok, claimErr := idjag.UnverifiedResource(assertion)
 			if idjag.ReasonOf(claimErr) == idjag.ReasonMalformed {
 				s.recordSharedIDJAGAssertionRejection(ctx, logger, issuer.authorizationServer.issuerID, claimErr)
@@ -370,6 +370,7 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 					rejection = sharedResourceMalformed
 				}
 			} else {
+				// RFC 8707 §2: with no resource, the AS MAY use a pre-defined default resource.
 				var gatewayResource string
 				endpoint, gatewayResource, err = s.sharedOrganizationGatewayResource(ctx, logger, issuer)
 				if err != nil {
