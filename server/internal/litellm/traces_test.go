@@ -9,8 +9,6 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -23,12 +21,10 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
-	collectortracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	tracev1 "go.opentelemetry.io/proto/otlp/trace/v1"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 	"google.golang.org/protobuf/encoding/protowire"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -969,52 +965,6 @@ func metricCounterValueForReason(t *testing.T, reader *sdkmetric.ManualReader, n
 	return 0
 }
 
-// fixtureTraceEpoch is the day the recorded OTLP trace fixtures start on.
-var fixtureTraceEpoch = time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
-
-var otlpJSONTimestampPattern = regexp.MustCompile(`"(\d{19})"`)
-
-// shiftOTLPJSONTimestamps moves every quoted 19-digit Unix-nano value on the
-// fixture's day by shift, leaving other values untouched.
-func shiftOTLPJSONTimestamps(body []byte, shift time.Duration) []byte {
-	dayStart := fixtureTraceEpoch.UnixNano()
-	dayEnd := fixtureTraceEpoch.Add(24 * time.Hour).UnixNano()
-	return otlpJSONTimestampPattern.ReplaceAllFunc(body, func(match []byte) []byte {
-		value, err := strconv.ParseInt(string(match[1:len(match)-1]), 10, 64)
-		if err != nil || value < dayStart || value >= dayEnd {
-			return match
-		}
-		return []byte(`"` + strconv.FormatInt(value+shift.Nanoseconds(), 10) + `"`)
-	})
-}
-
-func shiftOTLPProtobufTimestamps(t *testing.T, body []byte, shift time.Duration) []byte {
-	t.Helper()
-	request := &collectortracev1.ExportTraceServiceRequest{ResourceSpans: nil}
-	require.NoError(t, proto.Unmarshal(body, request))
-	delta := uint64(shift.Nanoseconds())
-	for _, resourceSpans := range request.GetResourceSpans() {
-		for _, scopeSpans := range resourceSpans.GetScopeSpans() {
-			for _, span := range scopeSpans.GetSpans() {
-				if span.StartTimeUnixNano != 0 {
-					span.StartTimeUnixNano += delta
-				}
-				if span.EndTimeUnixNano != 0 {
-					span.EndTimeUnixNano += delta
-				}
-				for _, event := range span.GetEvents() {
-					if event.TimeUnixNano != 0 {
-						event.TimeUnixNano += delta
-					}
-				}
-			}
-		}
-	}
-	shifted, err := proto.Marshal(request)
-	require.NoError(t, err)
-	return shifted
-}
-
 func TestTracePersistenceKeepsOnlyAllowlistedAttributes(t *testing.T) {
 	t.Parallel()
 
@@ -1023,25 +973,20 @@ func TestTracePersistenceKeepsOnlyAllowlistedAttributes(t *testing.T) {
 	require.True(t, ok)
 	instance.service.auth = fixedAuthorizer{authCtx: authCtx}
 	mux := mountedTraceMux(instance.service)
-	// The fixtures are pinned to fixtureTraceEpoch. Shift them to today so the
-	// rows land inside the telemetry_logs TTL window.
-	windowStart := time.Now().UTC().Truncate(24 * time.Hour)
-	shift := windowStart.Sub(fixtureTraceEpoch)
-	jsonFixture := shiftOTLPJSONTimestamps(testenv.ReadFixture(t, contractFixtureDir+"otlp-traces.json"), shift)
-	protobufFixture := shiftOTLPProtobufTimestamps(t, testenv.ReadFixture(t, contractFixtureDir+"otlp-traces.pb"), shift)
+	jsonFixture := testenv.ReadFixture(t, contractFixtureDir+"otlp-traces.json")
+	protobufFixture := testenv.ReadFixture(t, contractFixtureDir+"otlp-traces.pb")
 
 	require.Equal(t, http.StatusAccepted, serveTraceRequest(t, mux, jsonFixture, "application/json", "", "fixture-key", "fixture-project").Code)
 	require.Equal(t, http.StatusAccepted, serveTraceRequest(t, mux, gzipBody(t, protobufFixture), "application/x-protobuf", "gzip", "fixture-key", "fixture-project").Code)
 	invalidBatch := []byte(`{"resourceSpans":[{"scopeSpans":[{"spans":[{"traceId":"0123456789abcdef0123456789abcdef","spanId":"fedcba9876543210","name":"valid sibling","startTimeUnixNano":"1785542401000000000","endTimeUnixNano":"1785542401000000001"},{"traceId":"not-a-trace-id","spanId":"bad-span","parentSpanId":"bad-parent","name":"invalid ids","startTimeUnixNano":"1785542402000000000","endTimeUnixNano":"1785542402000000001"}]}]}]}`)
-	invalidBatch = shiftOTLPJSONTimestamps(invalidBatch, shift)
 	require.Equal(t, http.StatusAccepted, serveTraceRequest(t, mux, invalidBatch, "application/json", "", "fixture-key", "fixture-project").Code)
 	require.NoError(t, instance.service.traces.Shutdown(t.Context()))
 
 	query := telemetryrepo.New(instance.chConn)
 	logs, err := query.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
 		GramProjectID: authCtx.ProjectID.String(),
-		TimeStart:     windowStart.UnixNano(),
-		TimeEnd:       windowStart.Add(24 * time.Hour).UnixNano(),
+		TimeStart:     time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC).UnixNano(),
+		TimeEnd:       time.Date(2026, time.August, 2, 0, 0, 0, 0, time.UTC).UnixNano(),
 		GramURNs:      []string{litellmOTLPResourceURN},
 		SortOrder:     "asc",
 		Cursor:        "",
