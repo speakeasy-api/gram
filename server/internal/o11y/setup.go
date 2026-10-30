@@ -174,6 +174,7 @@ func newClueConfig(
 		meterProvider = sdkmetric.NewMeterProvider(
 			sdkmetric.WithResource(res),
 			sdkmetric.WithReader(reader),
+			sdkmetric.WithView(dropUnqueriedInstruments),
 		)
 	}
 	var tracerProvider trace.TracerProvider
