@@ -410,7 +410,8 @@ func ReadServerAuthentication(ctx context.Context, db repo.DBTX, organizationID 
 
 // upstreamAuthStatus is a server's upstream authentication status: configured
 // when it offers an enabled auth client, setup_incomplete when it has upstream
-// credentials no auth client records yet, and no_auth_required otherwise.
+// credentials and no auth-client link has ever existed, live or detached, and
+// no_auth_required otherwise.
 func upstreamAuthStatus(offersEnabledClient, pending bool) string {
 	switch {
 	case offersEnabledClient:
@@ -424,8 +425,9 @@ func upstreamAuthStatus(offersEnabledClient, pending bool) string {
 
 // serverAuthenticationView derives whether the upstream needs authentication
 // from the auth clients the server offers: it does when at least one is
-// enabled. pending is a server with upstream credentials no auth client
-// records yet, which is incomplete setup rather than a server needing none.
+// enabled. pending is a server with upstream credentials that has never had an
+// auth-client link, live or detached, which is incomplete setup rather than a
+// server needing none.
 func serverAuthenticationView(ctx context.Context, queries *repo.Queries, organizationID string, serverID, projectID uuid.UUID, serverVisibility string, pending bool) (*types.McpServerAuthentication, error) {
 	clients, err := queries.ListServerAuthClients(ctx, repo.ListServerAuthClientsParams{
 		McpServerID:    serverID,
