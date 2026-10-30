@@ -669,7 +669,8 @@ func (r *PostgresReader) WithShadowAI(service *ShadowAIService) *PostgresReader 
 	return r
 }
 
-// WithDeviceCoverage serves the MDM coverage reads.
+// WithOrganizationGatewayActivity serves the organization-wide gateway
+// activity read.
 func (r *PostgresReader) WithOrganizationGatewayActivity(service *OrganizationGatewayActivityService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.gatewayActivity = service
@@ -677,6 +678,7 @@ func (r *PostgresReader) WithOrganizationGatewayActivity(service *OrganizationGa
 	return r
 }
 
+// WithDeviceCoverage serves the MDM coverage reads.
 func (r *PostgresReader) WithDeviceCoverage(service *DeviceCoverageService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.deviceCoverage = service

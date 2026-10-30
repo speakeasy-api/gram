@@ -53,10 +53,15 @@ func registerUnavailableOrganizationGatewayActivityTool(reg *Registrar) {
 }
 
 func organizationGatewayActivityToolResult(err error) (*mcp.CallToolResult, bool) {
-	if !errors.Is(err, ErrOrganizationGatewayActivityUnavailable) {
+	result := featureUnavailableResult{Feature: organizationGatewayActivityFeature}
+	switch {
+	case errors.Is(err, ErrDiagnosticWindowInvalid), errors.Is(err, ErrDiagnosticWindowTooLong):
+		result.Code, result.Message = "invalid_request", "That window is not supported. Use 1h, 24h, 7d, or 30d."
+	case errors.Is(err, ErrOrganizationGatewayActivityUnavailable):
+		result.Code, result.Message = unavailableCode, "Organization Gateway activity is temporarily unavailable."
+	default:
 		return operationBudgetToolResult(err)
 	}
-	result := featureUnavailableResult{Code: unavailableCode, Feature: organizationGatewayActivityFeature, Message: "Organization Gateway activity is temporarily unavailable."}
 	content, marshalErr := json.Marshal(result)
 	if marshalErr != nil {
 		return nil, false

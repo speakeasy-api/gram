@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -126,7 +127,22 @@ func TestOrganizationGatewayActivityRefusesWithoutLiveOrgRead(t *testing.T) {
 	service := NewOrganizationGatewayActivityService(conn, reader, &stubOrgReadAuthorizer{err: denied}, allowingBudget())
 	require.NotNil(t, service)
 
-	_, err = service.Get(t.Context(), shadowAIPrincipal(), GetOrganizationGatewayActivityInput{})
-	require.ErrorIs(t, err, denied)
+	for _, window := range []string{"", "1y"} {
+		_, err = service.Get(t.Context(), shadowAIPrincipal(), GetOrganizationGatewayActivityInput{Window: window})
+		require.ErrorIs(t, err, denied, "window %q", window)
+	}
 	require.Zero(t, reader.summaryCalls)
+}
+
+func TestOrganizationGatewayActivityRefusesUnsupportedWindowAsInvalid(t *testing.T) {
+	t.Parallel()
+
+	for _, window := range []string{"1y", "90d"} {
+		_, err := resolveWindow(window, time.Now(), overviewWindowSpec)
+		require.Error(t, err)
+		result, ok := organizationGatewayActivityToolResult(err)
+		require.True(t, ok, "window %q", window)
+		require.True(t, result.IsError)
+		require.Contains(t, result.Content[0].(*mcp.TextContent).Text, `"invalid_request"`)
+	}
 }
