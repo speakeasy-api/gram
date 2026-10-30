@@ -6625,7 +6625,7 @@ FROM (
       AND projects.deleted IS FALSE
       AND meta_mcp_servers.deleted IS FALSE
 ) AS candidates
-WHERE candidates.id::text = $4::text
+WHERE candidates.id::text = lower($4::text)
    OR (candidates.slug <> '' AND lower(candidates.slug) = lower($4::text))
    OR lower(candidates.name) = lower($4::text)
 ORDER BY candidates.name ASC, candidates.id ASC
