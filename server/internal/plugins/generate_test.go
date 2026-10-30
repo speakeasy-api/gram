@@ -2537,6 +2537,9 @@ setTimeout(() => process.exit(0), 5500)
 // commands never exit.
 func TestGenerateOpenClawShimLetsShortLivedHostsExit(t *testing.T) {
 	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("the shim runs bootstrap.ps1 on Windows; this fake daemon is a shell script")
+	}
 	nodePath, err := exec.LookPath("node")
 	require.NoError(t, err, "node is required to run the generated shim")
 	files, err := GenerateObservabilityPluginPackage(GenerateConfig{
@@ -2558,8 +2561,12 @@ func TestGenerateOpenClawShimLetsShortLivedHostsExit(t *testing.T) {
 		"  printf '{\"seq\":%s}\\n' \"$seq\"\n" +
 		"done\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "hooks", "bootstrap.sh"), []byte(daemon), 0o600))
+	// Loading the plugin and then stopping, as a Gateway that loaded it while
+	// running does when it shuts down before any other hook.
 	registerOnly := `import plugin from "./index.js"
-plugin.register({ on() {} })
+const handlers = {}
+plugin.register({ on(name, fn) { (handlers[name] ??= []).push(fn) } })
+for (const stop of handlers.gateway_stop ?? []) await stop({}, {})
 `
 	oneHook := `import plugin from "./index.js"
 const handlers = {}

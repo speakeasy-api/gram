@@ -394,7 +394,7 @@ const platformMCPGeneratorVersion = "4"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "56"
+const hooksGeneratorVersion = "57"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -2225,6 +2225,9 @@ export default {
     for (const hook of HOOKS) {
       const gateTimeoutMs = GATE_TIMEOUT_MS[hook]
       api.on(hook, (rawEvent, ctx) => {
+        // A Gateway that loaded the plugin while running fires no gateway_start,
+        // so its shutdown may be the first hook: never start the daemon for it.
+        if (hook === "gateway_stop" && child === null) return
         const event = slimEvent(hook, rawEvent)
         if (hook === "llm_output") {
           const texts = Array.isArray(event?.assistantTexts) ? event.assistantTexts : []
