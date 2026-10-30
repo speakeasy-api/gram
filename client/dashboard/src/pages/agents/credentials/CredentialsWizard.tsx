@@ -46,6 +46,13 @@ import { StepVerify, type VerifyState } from "./StepVerify";
 import { CredentialPicker } from "./CredentialPicker";
 import { StepWorkload } from "./StepWorkload";
 import { useWorkloadSetup } from "./useWorkloadSetup";
+import {
+  ServerSignInAction,
+  ServerSignInNote,
+  SignInChoice,
+} from "./ServerSignInStatus";
+import type { SetupServer } from "./setupInstructions";
+import { useSetupValues } from "./workloadTokenEndpoints";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
 import {
   CONNECT_SCOPE,
@@ -92,6 +99,20 @@ import {
  * before Install is still a draft the user can abandon without leaving a
  * half-made agent behind.
  */
+
+/** A server as the platform setup needs it. */
+function toSetupServer(server: InventoryServer, mcpUrl = ""): SetupServer {
+  return {
+    id: server.id,
+    name: server.name,
+    mcpUrl,
+    issuerId: server.issuerId,
+    projectId: server.projectId,
+    projectSlug: server.projectSlug,
+    slug: server.slug,
+    resourceId: server.resourceId,
+  };
+}
 
 /** Each step's name, and the one or two words it shrinks to in a full row. */
 const STEPS = [
@@ -969,26 +990,18 @@ export function CredentialsWizard({
     }
   };
 
+  const reachServers = connectionReach().flatMap((server) =>
+    server.mcpUrl ? [toSetupServer(server, server.mcpUrl)] : [],
+  );
+  // Chosen while servers are picked and shown again in the platform's setup,
+  // so both are the same choice.
+  const signIn = useSetupValues(undefined, reachServers);
   const workload = useWorkloadSetup({
     entry: credential === "workload" ? platform : undefined,
     platformKey: credential === "workload" ? platformKey : null,
     agentName: name.trim(),
-    servers: connectionReach().flatMap((server) =>
-      server.mcpUrl
-        ? [
-            {
-              id: server.id,
-              name: server.name,
-              mcpUrl: server.mcpUrl,
-              issuerId: server.issuerId,
-              projectId: server.projectId,
-              projectSlug: server.projectSlug,
-              slug: server.slug,
-              resourceId: server.resourceId,
-            },
-          ]
-        : [],
-    ),
+    servers: reachServers,
+    exchange: signIn,
     ensureAgent: async () => {
       const targetId = await ensureAgent();
       await attachSelectedConnections(targetId, connectionReach());
@@ -1400,6 +1413,42 @@ export function CredentialsWizard({
                 setAllServers(next);
                 setHighlight(next ? "server:all" : null);
               }}
+              intro={
+                <SignInChoice
+                  mode={credential}
+                  onModeChange={(mode) => {
+                    setCredential(mode);
+                    setHighlight("Credential");
+                  }}
+                  canUsePlatform={canFederate}
+                  disabled={editing}
+                  setupValues={signIn}
+                />
+              }
+              signInNote={
+                credential === "workload"
+                  ? (server) => (
+                      <ServerSignInNote
+                        name={server.name}
+                        signIn={signIn.signInOf(toSetupServer(server))}
+                      />
+                    )
+                  : undefined
+              }
+              signInAction={
+                credential === "workload"
+                  ? (server) => {
+                      const setupServer = toSetupServer(server);
+                      const status = signIn.signInOf(setupServer);
+                      return status.status === "not_shared" ? (
+                        <ServerSignInAction
+                          server={setupServer}
+                          signIn={status}
+                        />
+                      ) : null;
+                    }
+                  : undefined
+              }
               selected={selected}
               onChange={(next) => {
                 setSelected(next);

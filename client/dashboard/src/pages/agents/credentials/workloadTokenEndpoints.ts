@@ -48,7 +48,23 @@ export interface SetupValues {
   coveredServers: SetupServer[];
   /** The agent's servers that refuse a token from the selected issuer. */
   uncoveredServers: UncoveredServer[];
+  /**
+   * How any server signs in, measured against the selected issuer, for a list
+   * that shows servers before they are chosen.
+   */
+  signInOf: (server: SetupServer) => ServerSignIn;
 }
+
+/** How one server signs in, measured against the selected issuer. */
+export type ServerSignIn =
+  /** It signs no one in, or the issuers have not loaded yet. */
+  | { status: "no_sign_in" }
+  /** A token from the selected issuer works at it. */
+  | { status: "covered"; label: string }
+  /** It signs in through another shared issuer. */
+  | { status: "another_issuer"; label: string }
+  /** Its issuer has no shared authorization server. */
+  | { status: "not_shared"; switchTo?: { id: string; label: string } };
 
 const ORGANIZATION_GROUP = "Organization";
 
@@ -171,9 +187,26 @@ export function useSetupValues(
         : { server, reason: "not_shared", switchTo: switchTarget(server) },
     );
 
+  const sharedById = new Map(
+    inScope.map((endpoint) => [endpoint.userSessionIssuerId, endpoint]),
+  );
+  const signInOf = (server: SetupServer): ServerSignIn => {
+    if (query.data === undefined || !server.issuerId) {
+      return { status: "no_sign_in" };
+    }
+    const shared = sharedById.get(server.issuerId);
+    if (shared === undefined) {
+      return { status: "not_shared", switchTo: switchTarget(server) };
+    }
+    return server.issuerId === selected?.userSessionIssuerId
+      ? { status: "covered", label: endpointLabel(shared) }
+      : { status: "another_issuer", label: endpointLabel(shared) };
+  };
+
   return {
     coveredServers,
     uncoveredServers,
+    signInOf,
     values:
       selected === undefined
         ? undefined

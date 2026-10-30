@@ -107,6 +107,7 @@ function setupValues(overrides: Partial<SetupValues>): SetupValues {
     refreshAndSelect: vi.fn<(id: string) => Promise<void>>(),
     coveredServers: [],
     uncoveredServers: [],
+    signInOf: () => ({ status: "no_sign_in" }),
     ...overrides,
   };
 }

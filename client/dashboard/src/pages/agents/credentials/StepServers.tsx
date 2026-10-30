@@ -4,7 +4,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { useEffect, useId, useState, type JSX } from "react";
+import { useEffect, useId, useState, type JSX, type ReactNode } from "react";
 import { KeyCredentialChoice } from "./KeyCredentialChoice";
 import { WizardStepHeader } from "./WizardChrome";
 import type { InventoryServer } from "./useServerInventory";
@@ -43,7 +43,16 @@ export function StepServers({
   scopeLabel,
   selected,
   onChange,
+  intro,
+  signInNote,
+  signInAction,
 }: {
+  /** Shown above the list, such as how the agent will sign in. */
+  intro?: ReactNode;
+  /** A line under a server's name saying how it signs in. */
+  signInNote?: (server: InventoryServer) => ReactNode;
+  /** What fixes a chosen server's sign-in, shown under its row. */
+  signInAction?: (server: InventoryServer) => ReactNode;
   servers: InventoryServer[];
   isLoading: boolean;
   isError: boolean;
@@ -123,6 +132,7 @@ export function StepServers({
         title="MCP Selection"
         description="The MCP servers this agent may call. It can reach nothing else, and never more than you can reach yourself."
       />
+      {intro}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex-1">
           <Input
@@ -309,9 +319,17 @@ export function StepServers({
                         {refusal && (
                           <span className="mt-1 block text-xs">{refusal}</span>
                         )}
+                        {signInNote && (
+                          <span className="text-muted-foreground mt-1 block text-xs">
+                            {signInNote(server)}
+                          </span>
+                        )}
                       </span>
                     </label>
                     <ServerInfoPopover server={server} />
+                    {checked && signInAction && (
+                      <SignInActionRow>{signInAction(server)}</SignInActionRow>
+                    )}
                     {checked &&
                       !allServers &&
                       (server.kind === "Remote" ||
@@ -345,5 +363,14 @@ export function StepServers({
         </div>
       )}
     </div>
+  );
+}
+
+/** A chosen server's sign-in fix, under its row; nothing when there is none. */
+function SignInActionRow({ children }: { children: ReactNode }): JSX.Element {
+  return children ? (
+    <div className="w-full px-4 pb-3 pl-12">{children}</div>
+  ) : (
+    <></>
   );
 }

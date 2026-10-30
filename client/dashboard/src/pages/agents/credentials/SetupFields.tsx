@@ -111,6 +111,41 @@ export function TextField({
   );
 }
 
+/** The shared user session issuer a workload's token comes from. */
+export function SignInSelect({
+  setupValues,
+  id,
+}: {
+  setupValues: SetupValues;
+  id: string;
+}): JSX.Element {
+  return (
+    <Stack gap={2}>
+      <Label htmlFor={id}>User session issuer</Label>
+      <Select
+        value={setupValues.selectedEndpointId}
+        onValueChange={setupValues.onEndpointChange}
+      >
+        <SelectTrigger id={id} className="w-full">
+          <SelectValue placeholder="Select an issuer" />
+        </SelectTrigger>
+        <SelectContent>
+          {setupValues.endpointGroups.map((group) => (
+            <SelectGroup key={group.label}>
+              <SelectLabel>{group.label}</SelectLabel>
+              {group.options.map((option) => (
+                <SelectItem key={option.id} value={option.id}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          ))}
+        </SelectContent>
+      </Select>
+    </Stack>
+  );
+}
+
 /**
  * Which user session issuer the derived values come from, and why there are
  * none when there are none.
@@ -138,27 +173,7 @@ export function ComputedStatus({
   }
   return (
     <Stack gap={2}>
-      <Label htmlFor="setup-token-endpoint">User session issuer</Label>
-      <Select
-        value={setupValues.selectedEndpointId}
-        onValueChange={setupValues.onEndpointChange}
-      >
-        <SelectTrigger id="setup-token-endpoint" className="w-full">
-          <SelectValue placeholder="Select an issuer" />
-        </SelectTrigger>
-        <SelectContent>
-          {setupValues.endpointGroups.map((group) => (
-            <SelectGroup key={group.label}>
-              <SelectLabel>{group.label}</SelectLabel>
-              {group.options.map((option) => (
-                <SelectItem key={option.id} value={option.id}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          ))}
-        </SelectContent>
-      </Select>
+      <SignInSelect setupValues={setupValues} id="setup-token-endpoint" />
       <Text muted small>
         Tokens are issued for the organization or project that owns this issuer.
       </Text>
@@ -318,7 +333,7 @@ function LeftOutRow({
   );
 }
 
-function ServerSignInSettingsLink({
+export function ServerSignInSettingsLink({
   server,
 }: {
   server: UncoveredServer["server"];

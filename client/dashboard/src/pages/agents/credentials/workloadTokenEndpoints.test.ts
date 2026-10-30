@@ -290,3 +290,24 @@ it("keeps filtering by the last issuers loaded when a refetch fails", () => {
     endpointQuery.error = false;
   }
 });
+
+it("says how any server signs in, measured against the selected issuer", () => {
+  endpointQuery.items = [endpoint("one", "one"), endpoint("two", "two")];
+  const { result } = renderHook(() =>
+    useSetupValues(undefined, [server("a", "one")]),
+  );
+  const { signInOf } = result.current;
+  expect(signInOf(server("a", "one"))).toEqual({
+    status: "covered",
+    label: "one",
+  });
+  expect(signInOf(server("b", "two"))).toEqual({
+    status: "another_issuer",
+    label: "two",
+  });
+  expect(signInOf(server("c", "private"))).toEqual({
+    status: "not_shared",
+    switchTo: { id: "one", label: "one" },
+  });
+  expect(signInOf(server("d"))).toEqual({ status: "no_sign_in" });
+});

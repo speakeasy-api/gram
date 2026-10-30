@@ -84,7 +84,13 @@ export function useWorkloadSetup({
   setupOverride,
   targetProjectId,
   servers = [],
+  exchange,
 }: {
+  /**
+   * The sign-in choice, when the caller already holds one: the wizard asks
+   * for it while servers are chosen, and the setup must show the same one.
+   */
+  exchange?: SetupValues;
   /** The servers the agent may call, for steps that name one to call. */
   servers?: SetupServer[];
   /** Reuses issuer registration and admission for non-MCP setup. */
@@ -148,7 +154,8 @@ export function useWorkloadSetup({
   const [connecting, setConnecting] = useState(false);
   const [reuseIssuer, setReuseIssuer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const setupValues = useSetupValues(targetProjectId, servers);
+  const ownSetupValues = useSetupValues(targetProjectId, servers);
+  const setupValues = exchange ?? ownSetupValues;
 
   // The issuer this flow has already trusted, so a retry after a later failure
   // does not try to trust it a second time. The URL rather than a flag: a
