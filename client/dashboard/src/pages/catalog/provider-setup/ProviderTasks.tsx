@@ -1,4 +1,6 @@
 import { useSetup } from "./setup-context";
+import { names, orgValid } from "./state";
+import type { ReactNode } from "react";
 import { scopesFor } from "./provider-data";
 import { Eye, Link, Settings2 } from "lucide-react";
 import {
@@ -19,6 +21,8 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 
 function Plan() {
+  const { s } = useSetup();
+  const github = s.provider === "github";
   return (
     <>
       <Card className="h-auto bg-muted/10">
@@ -26,32 +30,79 @@ function Plan() {
           <Link className="mt-1 size-5" aria-hidden />
           <div>
             <h3 className="mb-4 text-lg font-normal">
-              Let’s connect Slack to Speakeasy.
+              Let’s connect {names[s.provider]} to Speakeasy.
             </h3>
             <p>
-              We’ll walk you through creating or configuring a Slack app,
-              choosing its permissions, adding its credentials here, and testing
-              the connection.
+              {github
+                ? "We’ll walk you through setting up an OAuth app in GitHub, adding its credentials here, and testing the connection."
+                : "We’ll walk you through creating or configuring a Slack app, choosing its permissions, adding its credentials here, and testing the connection."}
             </p>
             <p className="mt-[18px]">
-              You’ll need access to your Slack workspace and permission to
-              manage an app—or a teammate who can help. Your workspace may also
-              require app approval.
+              {github
+                ? "You’ll need permission to manage OAuth apps in your GitHub organization—or a teammate who can help."
+                : "You’ll need access to your Slack workspace and permission to manage an app—or a teammate who can help. Your workspace may also require app approval."}
             </p>
           </div>
         </Card.Content>
       </Card>
-      <details className="mt-6">
-        <summary>Using an existing app or an IP allowlist?</summary>
-        <p className="mt-3">
-          Existing apps must be internal to your workspace or published in the
-          Slack Marketplace. If your app uses an IP allowlist, ask your network
-          administrator to add Speakeasy’s outbound addresses while keeping the
-          restriction in place.
-        </p>
-      </details>
+      {github ? (
+        <details className="mt-6">
+          <summary>Organization approval and SSO</summary>
+          <p className="mt-3">
+            If your organization restricts OAuth access, an owner will need to
+            approve the app. If it enforces SSO, start your SSO session before
+            authorizing the app.
+          </p>
+        </details>
+      ) : (
+        <details className="mt-6">
+          <summary>Using an existing app or an IP allowlist?</summary>
+          <p className="mt-3">
+            Existing apps must be internal to your workspace or published in the
+            Slack Marketplace. If your app uses an IP allowlist, ask your
+            network administrator to add Speakeasy’s outbound addresses while
+            keeping the restriction in place.
+          </p>
+        </details>
+      )}
     </>
   );
+}
+function credentialInstructions(
+  provider: "slack" | "github",
+  existing: boolean,
+): ReactNode[] {
+  const copyCredentials = (
+    <>
+      Copy <strong>Client ID</strong> and <strong>Client Secret</strong> into
+      the fields below.
+    </>
+  );
+  if (provider === "slack")
+    return [
+      <>
+        Open your app’s <strong>Basic Information → App Credentials</strong>.
+      </>,
+      copyCredentials,
+    ];
+  let secretInstruction = (
+    <>
+      Under <strong>Client secrets</strong>, select{" "}
+      <strong>Generate a new client secret</strong>.
+    </>
+  );
+  if (existing)
+    secretInstruction = (
+      <>
+        Use your saved secret, or select{" "}
+        <strong>Client secrets → Generate a new client secret</strong>.
+      </>
+    );
+  return [
+    <>Open your OAuth app’s settings.</>,
+    secretInstruction,
+    copyCredentials,
+  ];
 }
 function Credentials() {
   const { s, dispatch, live } = useSetup();
@@ -59,16 +110,10 @@ function Credentials() {
   return (
     <>
       <InProvider
-        actions={[
-          <>
-            Open your app’s <strong>Basic Information → App Credentials</strong>
-            .
-          </>,
-          <>
-            Copy <strong>Client ID</strong> and <strong>Client Secret</strong>{" "}
-            into the fields below.
-          </>,
-        ]}
+        actions={credentialInstructions(
+          s.provider,
+          s.values.appChoice === "existing",
+        )}
       />
       <SetupField
         field="clientId"
@@ -107,6 +152,111 @@ function Credentials() {
           </Button>
         </div>
       )}
+    </>
+  );
+}
+function GitHubTask() {
+  const { s, live } = useSetup(),
+    existing = s.values.appChoice === "existing";
+  const callbackQuery = useNewRemoteSessionClientCallbackUrl(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
+  const redirectUrl = s.saved
+    ? live?.callbackUrl
+    : callbackQuery.data?.callbackUrl;
+  if (s.step === "organization")
+    return (
+      <>
+        <p>
+          We’ll use this organization to open its OAuth app settings on
+          github.com.
+        </p>
+        <SetupField
+          field="org"
+          label="GitHub organization"
+          placeholder="your-organization"
+        />
+      </>
+    );
+  const directory = orgValid(s)
+    ? `https://github.com/organizations/${encodeURIComponent(s.values.org.trim())}/settings/applications`
+    : "https://github.com/settings/organizations";
+  return (
+    <>
+      <AppChoice />
+      <div className="mt-7 min-w-0">
+        <ExternalAction
+          title={
+            existing
+              ? "Open an existing GitHub OAuth app"
+              : "Create a new GitHub OAuth app"
+          }
+          label="Open GitHub settings"
+          href={directory}
+        />
+        <InProvider
+          actions={[
+            existing ? (
+              <>Choose the existing OAuth app you want to use.</>
+            ) : (
+              <>
+                Select <strong>New OAuth app</strong>.
+              </>
+            ),
+          ]}
+        />
+      </div>
+      <Section
+        title={existing ? "Check the Redirect URI" : "Configure the app"}
+      >
+        {!existing && (
+          <>
+            <CopyValue
+              label="Application name"
+              value="Speakeasy AI Control Plane – GitHub MCP"
+            />
+            <CopyValue label="Homepage URL" value="https://www.speakeasy.com" />
+          </>
+        )}
+        {redirectUrl ? (
+          <CopyValue label="Redirect URI" value={redirectUrl} />
+        ) : callbackQuery.isError ? (
+          <Alert variant="error">
+            Couldn’t load the Redirect URI.{" "}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void callbackQuery.refetch()}
+            >
+              <Button.Text>Retry</Button.Text>
+            </Button>
+          </Alert>
+        ) : (
+          <p className="mt-4 text-sm text-muted-foreground">
+            Loading Redirect URI…
+          </p>
+        )}
+        <InProvider
+          actions={[
+            existing ? (
+              <>
+                Set <strong>Redirect URI</strong> to the value above.
+              </>
+            ) : (
+              <>
+                Enter the values above in <strong>Application name</strong>,{" "}
+                <strong>Homepage URL</strong>, and <strong>Redirect URI</strong>
+                .
+              </>
+            ),
+            <>
+              Leave <strong>Enable Device Flow</strong> off.
+            </>,
+          ]}
+        />
+      </Section>
     </>
   );
 }
@@ -286,5 +436,6 @@ export function ProviderTask({
   const { s } = useSetup();
   if (s.step === "begin") return <Plan />;
   if (s.step === "credentials") return <Credentials />;
+  if (s.provider === "github") return <GitHubTask />;
   return <SlackTask serverName={serverName} />;
 }

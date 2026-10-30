@@ -45,6 +45,12 @@ const sameScopes = (
 };
 
 const providers = {
+  github: {
+    name: "GitHub",
+    issuer: "https://github.com/login/oauth",
+    authorizationEndpoint: "https://github.com/login/oauth/authorize",
+    tokenEndpoint: "https://github.com/login/oauth/access_token",
+  },
   slack: {
     name: "Slack",
     issuer: "https://mcp.slack.com",
@@ -70,6 +76,7 @@ type ProviderConnection = {
 function connectionFailure(
   result: { status: string; code: string },
   action: "signin" | "test",
+  name: string,
 ): string {
   if (result.code === "scope_mismatch")
     return "Slack is still granting write access. Remove write scopes and revoke the app’s existing authorization in Slack, then sign in again.";
@@ -78,10 +85,10 @@ function connectionFailure(
   if (result.status === "configuration_required")
     return "Review this server’s User Identity configuration before continuing.";
   if (result.status === "authorization_required")
-    return "Sign in to Slack, then test the connection again.";
+    return `Sign in to ${name}, then test the connection again.`;
   return action === "signin"
-    ? "Couldn’t verify Slack sign-in. Try again."
-    : "Couldn’t test the Slack connection. Review app permissions and try again.";
+    ? `Couldn’t verify ${name} sign-in. Try again.`
+    : `Couldn’t test the ${name} connection. Review app permissions and try again.`;
 }
 
 // Shared setup actions use the management API; secrets and tokens are never progress state.
@@ -90,13 +97,13 @@ export function useProviderConnection(
   dispatch: Dispatch<Action>,
   server: McpServer,
 ): ProviderConnection {
-  const providerKey = "slack";
+  const providerKey = s.provider;
   const config = providers[providerKey];
   const name = config.name;
   const access = s.values.access;
   const requestedScopes = useMemo(
-    () => scopesFor({ values: { access } }),
-    [access],
+    () => (providerKey === "slack" ? scopesFor({ values: { access } }) : []),
+    [access, providerKey],
   );
   const sdk = useSdkClient();
   const session = useSession();
@@ -149,8 +156,9 @@ export function useProviderConnection(
       try {
         const url = new URL(a.issuerUrl);
         return (
-          url.origin === config.issuer &&
-          url.pathname.replace(/\/+$/, "") === "" &&
+          url.origin === new URL(config.issuer).origin &&
+          url.pathname.replace(/\/+$/, "") ===
+            new URL(config.issuer).pathname.replace(/\/+$/, "") &&
           !url.search &&
           !url.hash &&
           !url.username &&
@@ -279,6 +287,7 @@ export function useProviderConnection(
     );
     // Slack scopes are additive. Never accept a returned write grant as read-only.
     if (
+      providerKey === "slack" &&
       result.status === "ready" &&
       s.values.access === "read" &&
       status.data?.client.id
@@ -311,6 +320,7 @@ export function useProviderConnection(
     project.slug,
     session.session,
     s.values.access,
+    providerKey,
     status.data?.client.id,
     revokeSessions,
   ]);
@@ -335,10 +345,10 @@ export function useProviderConnection(
           popup.current?.close();
           setPending(null);
           setRecovery("permissions");
-          setError(connectionFailure(result, "signin"));
+          setError(connectionFailure(result, "signin", name));
         } else if (result.status !== "authorization_required") {
           setPending(null);
-          setError(connectionFailure(result, "signin"));
+          setError(connectionFailure(result, "signin", name));
           if (result.status === "configuration_required")
             setRecovery("settings");
         } else if (popup.current?.closed) {
@@ -546,7 +556,8 @@ export function useProviderConnection(
                   name,
                   authorizationEndpoint: config.authorizationEndpoint,
                   tokenEndpoint: config.tokenEndpoint,
-                  authorizationResponseIssParameterSupported: false,
+                  authorizationResponseIssParameterSupported:
+                    providerKey === "github",
                   tokenEndpointAuthMethodsSupported: ["client_secret_post"],
                   responseTypesSupported: ["code"],
                   codeChallengeMethodsSupported: ["S256"],
@@ -633,7 +644,7 @@ export function useProviderConnection(
       )
         throw new Error("Insecure address");
     } catch {
-      setError("Use an HTTPS server address before signing in to Slack.");
+      setError(`Use an HTTPS server address before signing in to ${name}.`);
       return;
     }
     // Open synchronously so browsers allow the tab before any await.
@@ -701,7 +712,7 @@ export function useProviderConnection(
               : "credentials",
           );
         }
-        setError(connectionFailure(result, "test"));
+        setError(connectionFailure(result, "test", name));
       }
     } catch {
       if (generation.current === run)
@@ -724,7 +735,7 @@ export function useProviderConnection(
       setError(null);
       setRecovery(undefined);
     }
-    if (status.data?.client) {
+    if (providerKey === "slack" && status.data?.client) {
       if (
         action.type === "field" &&
         action.field === "access" &&

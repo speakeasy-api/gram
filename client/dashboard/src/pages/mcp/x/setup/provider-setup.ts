@@ -28,6 +28,8 @@ export function setupProviderForUrl(
     const path = url.pathname.replace(/\/+$/, "");
     if (url.origin === "https://mcp.slack.com" && path === "/mcp")
       return "slack";
+    if (url.origin === "https://api.githubcopilot.com" && path === "/mcp")
+      return "github";
     return null;
   } catch {
     return null;
@@ -63,6 +65,7 @@ export function providerProgressKey(
   return `provider-setup:${provider}:v1:${[userId, orgId, projectId, serverId].map(encodeURIComponent).join(":")}`;
 }
 const progressFields = [
+  "org",
   "appChoice",
   "access",
 ] as const satisfies readonly FieldName[];
