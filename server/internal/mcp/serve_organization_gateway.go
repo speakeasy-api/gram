@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -106,15 +107,12 @@ func (s *Service) ServeOrganizationGateway(w http.ResponseWriter, r *http.Reques
 // route segment shadows.
 const shadowedEndpointSlug = "gateway"
 
-// shadowedEndpointHandler serves POST /mcp/gateway/{name} for one of an
-// endpoint's own POST routes. It is the endpoint's own route when an endpoint
-// whose slug is "gateway" resolves on this host, and otherwise the
-// organization gateway of the organization named name. Each answers with its
-// own error shape: OAuth errors for the endpoint's routes, JSON-RPC errors
-// for the gateway.
-func (s *Service) shadowedEndpointHandler(name string, serve func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
-	endpointRoute := oauthRouteHandler(s.logger, http.MethodPost, "/"+name, serve)
-	gatewayRoute := oops.MCPErrHandle(s.logger, s.ServeOrganizationGateway)
+// shadowedEndpointHandler serves a request at /mcp/gateway/{name} for one of
+// an endpoint's own routes one segment below its slug. It is the endpoint's
+// own route when an endpoint whose slug is "gateway" resolves on this host,
+// and otherwise the organization gateway route of the organization named
+// name. Each answers with its own error shape.
+func (s *Service) shadowedEndpointHandler(name string, endpointRoute, gatewayRoute http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		rctx := chi.RouteContext(r.Context())
 		if rctx == nil {
@@ -128,6 +126,22 @@ func (s *Service) shadowedEndpointHandler(name string, serve func(http.ResponseW
 		}
 		rctx.URLParams.Add("mcpSlug", name)
 		gatewayRoute.ServeHTTP(w, r)
+	}
+}
+
+// handleOrganizationGatewayGet answers GET at an organization gateway's URL.
+// A browser gets the gateway's landing page. Anything else gets the answer a
+// stored gateway gives, since the gateway serves Streamable HTTP over POST
+// only and opens no standalone stream.
+func (s *Service) handleOrganizationGatewayGet(metadataService *mcpmetadata.Service) func(http.ResponseWriter, *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		if wantsHTML, _ := getServerAccept(r.Header.Get("Accept")); wantsHTML {
+			if err := metadataService.ServeOrganizationGatewayPage(w, r, chi.URLParam(r, "mcpSlug")); err != nil {
+				return fmt.Errorf("serve organization gateway page: %w", err)
+			}
+			return nil
+		}
+		return oops.E(oops.CodeMethodNotAllowed, nil, getServerMethodNotAllowedMessage)
 	}
 }
 
@@ -166,21 +180,36 @@ func (s *Service) organizationGatewayOAuthRoutes() []organizationGatewayOAuthRou
 	return routes
 }
 
-// shadowedEndpointRoute is one of an endpoint's own POST routes one segment
-// below its slug. For an endpoint whose slug is "gateway", chi would otherwise
-// match the organization gateway's route first, with the route name in the
-// slug position.
+// shadowedEndpointRoute is one of an endpoint's own routes one segment below
+// its slug. For an endpoint whose slug is "gateway", chi would otherwise match
+// the organization gateway's route first, with the route name in the slug
+// position.
 type shadowedEndpointRoute struct {
-	name  string
-	serve func(http.ResponseWriter, *http.Request) error
+	name    string
+	handler http.Handler
 }
 
-func (s *Service) shadowedEndpointRoutes() []shadowedEndpointRoute {
+// shadowedEndpointPostRoutes are shadowed by POST at the organization
+// gateway's URL, on the public listener and the authentication host.
+func (s *Service) shadowedEndpointPostRoutes() []shadowedEndpointRoute {
 	return []shadowedEndpointRoute{
-		{"register", s.HandleRegister},
-		{"token", s.HandleToken},
-		{"revoke", s.HandleRevoke},
-		{"connect", s.HandleConsent},
+		{"register", oauthRouteHandler(s.logger, http.MethodPost, "/register", s.HandleRegister)},
+		{"token", oauthRouteHandler(s.logger, http.MethodPost, "/token", s.HandleToken)},
+		{"revoke", oauthRouteHandler(s.logger, http.MethodPost, "/revoke", s.HandleRevoke)},
+		{"connect", oauthRouteHandler(s.logger, http.MethodPost, "/connect", s.HandleConsent)},
+	}
+}
+
+// shadowedEndpointGetRoutes are shadowed by GET at the organization gateway's
+// URL, which only the public listener serves. Each keeps the error handler
+// Attach mounts it with.
+func (s *Service) shadowedEndpointGetRoutes(metadataService *mcpmetadata.Service) []shadowedEndpointRoute {
+	return []shadowedEndpointRoute{
+		{"install", oops.ErrHandle(s.logger, metadataService.ServeInstallPage)},
+		{"authorize", oops.BrowserErrHandle(s.logger, s.HandleAuthorize)},
+		{"idp_callback", oops.BrowserErrHandle(s.logger, s.HandleIDPCallback)},
+		{"connect", oops.BrowserErrHandle(s.logger, s.HandleConsent)},
+		{"remote_login_callback", oops.BrowserErrHandle(s.logger, s.HandleRemoteLoginCallback)},
 	}
 }
 
@@ -188,11 +217,17 @@ func (s *Service) shadowedEndpointRoutes() []shadowedEndpointRoute {
 // surface under it on the public listener. Each OAuth route resolves the
 // gateway first and hands it to the handler stored endpoints use, so the two
 // cannot drift apart in what they serve.
-func attachOrganizationGateway(mux goahttp.Muxer, service *Service) {
-	o11y.AttachHandler(mux, http.MethodPost, ProjectGatewayRoute, oops.MCPErrHandle(service.logger, service.ServeOrganizationGateway).ServeHTTP)
-	o11y.AttachHandler(mux, http.MethodPost, OrganizationGatewayRoute, oops.MCPErrHandle(service.logger, service.ServeOrganizationGateway).ServeHTTP)
-	for _, route := range service.shadowedEndpointRoutes() {
-		o11y.AttachHandler(mux, http.MethodPost, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.serve))
+func attachOrganizationGateway(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
+	gatewayPost := oops.MCPErrHandle(service.logger, service.ServeOrganizationGateway)
+	gatewayGet := oops.MCPErrHandle(service.logger, service.handleOrganizationGatewayGet(metadataService))
+	o11y.AttachHandler(mux, http.MethodPost, ProjectGatewayRoute, gatewayPost.ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodPost, OrganizationGatewayRoute, gatewayPost.ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, OrganizationGatewayRoute, gatewayGet.ServeHTTP)
+	for _, route := range service.shadowedEndpointPostRoutes() {
+		o11y.AttachHandler(mux, http.MethodPost, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.handler, gatewayPost))
+	}
+	for _, route := range service.shadowedEndpointGetRoutes(metadataService) {
+		o11y.AttachHandler(mux, http.MethodGet, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.handler, gatewayGet))
 	}
 	for _, route := range service.organizationGatewayOAuthRoutes() {
 		o11y.AttachHandler(mux, route.method, route.path, oauthRouteHandler(service.logger, route.method, route.path, service.withOrganizationGateway(route.serve, isOAuthTokenRoute(route.method, route.path))).ServeHTTP)
@@ -204,8 +239,9 @@ func attachOrganizationGateway(mux goahttp.Muxer, service *Service) {
 // organization issuer that opts in to it announces as the gateway's
 // authorization server.
 func attachOrganizationGatewayAuthenticationHost(host *AuthenticationHost, service *Service) {
-	for _, route := range service.shadowedEndpointRoutes() {
-		host.Handle(http.MethodPost, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.serve))
+	gatewayPost := oops.MCPErrHandle(service.logger, service.ServeOrganizationGateway)
+	for _, route := range service.shadowedEndpointPostRoutes() {
+		host.Handle(http.MethodPost, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.handler, gatewayPost))
 	}
 	for _, route := range service.organizationGatewayOAuthRoutes() {
 		if route.onAuthenticationHost {
