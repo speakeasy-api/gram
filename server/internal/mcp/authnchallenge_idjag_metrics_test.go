@@ -117,12 +117,7 @@ func TestTokenIDJAGExchangeRecordsClientNotAllowed(t *testing.T) {
 	authCtx := requireProjectAuthContext(t, ctx)
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, "https://identity.example.test", "https://identity.example.test/keys")
-	toolset, err := toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, *authCtx.ProjectID, toolset, issuer.ID)
 	client := createDCRClient(t, ctx, ti, issuer.ID)
 
 	w := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, "unused.assertion.value")
@@ -186,12 +181,7 @@ func TestTokenIDJAGExchangeRecordsClientRefusals(t *testing.T) {
 			authCtx := requireProjectAuthContext(t, ctx)
 			toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 			issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, "https://identity.example.test", "https://identity.example.test/keys")
-			toolset, err := toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-				UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
-				Slug:                toolset.Slug,
-				ProjectID:           *authCtx.ProjectID,
-			})
-			require.NoError(t, err)
+			toolset = setToolsetIssuer(t, ctx, ti.conn, *authCtx.ProjectID, toolset, issuer.ID)
 			seedCIMDClient(t, ctx, ti, issuer.ID, codexCIMDClientID)
 			setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, tc.mode)
 			if tc.block != "" {
