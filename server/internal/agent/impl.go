@@ -99,6 +99,9 @@ type Service struct {
 	// stateReportLimiter bounds reportState writes per device. Nil leaves it
 	// unlimited.
 	stateReportLimiter *ratelimit.Limiter
+	// newStateReportLimiter bounds, per organization, the reports that add a
+	// row. Nil leaves it unlimited.
+	newStateReportLimiter *ratelimit.Limiter
 }
 
 // WorkloadTokenTargets resolves where a workload exchanges an identity
@@ -130,25 +133,26 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
-		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
-		logger:             logger,
-		db:                 db,
-		repo:               repo.New(db),
-		auth:               auth.New(logger, db, sessions, authzEngine),
-		authz:              authzEngine,
-		audit:              auditLogger,
-		productFeatures:    productFeatures,
-		serverURL:          serverURL,
-		orgHosts:           orgHosts,
-		blobStore:          blobStore,
-		telemetry:          telemetryLogger,
-		growth:             growthEmitter,
-		workloadTokens:     nil,
-		deviceAgentTokens:  deviceAgentTokens,
-		agentVersions:      nil,
-		connectionStatuses: nil,
-		connectionsLimiter: nil,
-		stateReportLimiter: nil,
+		tracer:                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
+		logger:                logger,
+		db:                    db,
+		repo:                  repo.New(db),
+		auth:                  auth.New(logger, db, sessions, authzEngine),
+		authz:                 authzEngine,
+		audit:                 auditLogger,
+		productFeatures:       productFeatures,
+		serverURL:             serverURL,
+		orgHosts:              orgHosts,
+		blobStore:             blobStore,
+		telemetry:             telemetryLogger,
+		growth:                growthEmitter,
+		workloadTokens:        nil,
+		deviceAgentTokens:     deviceAgentTokens,
+		agentVersions:         nil,
+		connectionStatuses:    nil,
+		connectionsLimiter:    nil,
+		stateReportLimiter:    nil,
+		newStateReportLimiter: nil,
 	}
 }
 
