@@ -9444,6 +9444,7 @@ examples:
       parameters:
         query:
           agent_id: "5aaf7be9-796f-4e39-a5a2-5465df7b9715"
+          carry_exclusions: false
       responses:
         "200":
           application/json: [{"effect": "allow", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "risk_policy"}}]

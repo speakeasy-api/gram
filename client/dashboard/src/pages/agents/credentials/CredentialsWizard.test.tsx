@@ -1939,10 +1939,15 @@ describe("Editing an agent that already exists", () => {
     fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Issue key" }));
 
+    // Discovery offers no wildcard here, only the servers one by one, so the
+    // key falls back to naming every server in reach.
     await waitFor(() =>
-      expect(mocks.listDelegableGrants).toHaveBeenCalledTimes(1),
+      expect(mocks.listDelegableGrants).toHaveBeenCalledTimes(2),
     );
-    expect(mocks.listDelegableGrants.mock.calls[0]?.[0]?.toolsetIds).toEqual([
+    expect(mocks.listDelegableGrants.mock.calls[0]?.[0]?.carryExclusions).toBe(
+      true,
+    );
+    expect(mocks.listDelegableGrants.mock.calls[1]?.[0]?.toolsetIds).toEqual([
       "toolset_one",
       "toolset_two",
     ]);
@@ -1954,6 +1959,41 @@ describe("Editing an agent that already exists", () => {
           form.selector.resourceId,
       ),
     ).toEqual(["toolset_one", "toolset_two"]);
+  });
+
+  it("issues an All servers key with the wildcard, so it reaches servers added later", async () => {
+    // A key reaches only what it stores. Today's servers listed out would
+    // leave every server added after this key unreachable.
+    const exclusion = {
+      effect: "allow",
+      scope: "mcp:blocked_connect",
+      selector: {
+        resourceKind: "mcp",
+        resourceId: "toolset_blocked",
+        projectId: "project_one",
+      },
+    };
+    const wildcard = {
+      effect: "allow",
+      scope: "mcp:connect",
+      selector: { resourceKind: "mcp", resourceId: "*" },
+    };
+    mocks.listDelegableGrants.mockResolvedValue([wildcard, exclusion]);
+    editing({ grants: [WILDCARD] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const all = await screen.findByRole("checkbox", { name: "All servers" });
+    await waitFor(() => expect(all.getAttribute("data-state")).toBe("checked"));
+
+    fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Issue key" }));
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(mocks.listDelegableGrants).toHaveBeenCalledTimes(1);
+    const form = mocks.createKey.mock.calls[0]?.[0]?.createKeyForm;
+    // The owner's blocked server travels with the wildcard, which needs a
+    // version that can store an exclusion.
+    expect(form?.requestedGrants).toEqual([wildcard, exclusion]);
+    expect(form?.delegatedGrantsVersion).toBe(4);
   });
 
   it("creates the wildcard once when a later removal fails", async () => {
