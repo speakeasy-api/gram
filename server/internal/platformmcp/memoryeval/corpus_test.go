@@ -24,7 +24,9 @@ func countChats(c *memoryeval.Corpus, keep func(memoryeval.Chat) bool) int {
 
 func TestBuildIsDeterministic(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, memoryeval.Build(corpusNow), memoryeval.Build(corpusNow))
+	first := memoryeval.Build(corpusNow)
+	second := memoryeval.Build(corpusNow)
+	require.Equal(t, first, second)
 }
 
 func TestCorpusShape(t *testing.T) {
@@ -86,7 +88,7 @@ func TestQuestionMix(t *testing.T) {
 	t.Parallel()
 	c := memoryeval.Build(corpusNow)
 
-	kinds := map[memoryeval.QuestionKind]int{}
+	kinds := make(map[memoryeval.QuestionKind]int)
 	ids := map[string]bool{}
 	for _, q := range c.Questions {
 		require.False(t, ids[q.ID], "duplicate question %s", q.ID)
@@ -200,7 +202,7 @@ func TestSecretsAreCoveredAndPlacedInTeamChats(t *testing.T) {
 	c := memoryeval.Build(corpusNow)
 
 	require.Len(t, c.Secrets, 10)
-	categories := map[memoryeval.SecretCategory]bool{}
+	categories := make(map[memoryeval.SecretCategory]bool)
 	for _, s := range c.Secrets {
 		categories[s.Category] = true
 		holders := 0

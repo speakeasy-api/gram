@@ -236,7 +236,8 @@ func ChatID(key string) uuid.UUID {
 func (c *Corpus) Chat(key string) (Chat, bool) {
 	i := slices.IndexFunc(c.Chats, func(chat Chat) bool { return chat.Key == key })
 	if i < 0 {
-		return Chat{}, false
+		var missing Chat
+		return missing, false
 	}
 	return c.Chats[i], true
 }
@@ -245,7 +246,8 @@ func (c *Corpus) Chat(key string) (Chat, bool) {
 func (c *Corpus) ChatByID(id uuid.UUID) (Chat, bool) {
 	i := slices.IndexFunc(c.Chats, func(chat Chat) bool { return chat.ID == id })
 	if i < 0 {
-		return Chat{}, false
+		var missing Chat
+		return missing, false
 	}
 	return c.Chats[i], true
 }
