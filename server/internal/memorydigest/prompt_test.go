@@ -75,6 +75,8 @@ func TestPromptOrdersByAtAndCapsAuthor(t *testing.T) {
 		{Kind: memorydigest.SourceChat, At: date(2026, 10, 29).Add(time.Hour), Text: "earlier"},
 	})
 	require.True(t, ok)
+	require.Contains(t, user, "earlier")
+	require.Contains(t, user, "later")
 	require.Less(t, strings.Index(user, "earlier"), strings.Index(user, "later"))
 	require.NotContains(t, user, strings.Repeat("a", 201))
 }

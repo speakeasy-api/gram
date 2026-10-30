@@ -152,10 +152,11 @@ func Uncovered(digests []Digest, chats []ChatNote) []Entry {
 func Budget(entries []Entry, budgetTokens int) (kept []Entry, dropped int) {
 	entries = slices.Clone(entries)
 	slices.SortStableFunc(entries, func(a, b Entry) int { return a.At.Compare(b.At) })
-	used := 0
+	// Reserve room for the omission notice Render adds when anything is dropped.
+	used := EstimateTokens(omittedNotice(len(entries)))
 	start := len(entries)
 	for i := len(entries) - 1; i >= 0; i-- {
-		cost := EstimateTokens(entries[i].Heading) + EstimateTokens(entries[i].Text)
+		cost := EstimateTokens(renderEntry(entries[i])) + EstimateTokens(entrySeparator)
 		if used+cost > budgetTokens {
 			break
 		}
@@ -197,13 +198,24 @@ func Citation(kind SourceKind, id uuid.UUID) string {
 func Render(entries []Entry, dropped int) string {
 	var b strings.Builder
 	if dropped > 0 {
-		fmt.Fprintf(&b, "(%d older entries omitted to fit the budget; use search_team_memory for older history.)\n\n", dropped)
+		b.WriteString(omittedNotice(dropped))
 	}
 	for i, e := range entries {
 		if i > 0 {
-			b.WriteString("\n\n")
+			b.WriteString(entrySeparator)
 		}
-		fmt.Fprintf(&b, "## %s %s\n%s", e.Heading, Citation(e.Kind, e.ID), e.Text)
+		b.WriteString(renderEntry(e))
 	}
 	return b.String()
+}
+
+// entrySeparator sits between rendered recall entries.
+const entrySeparator = "\n\n"
+
+func renderEntry(e Entry) string {
+	return "## " + e.Heading + " " + Citation(e.Kind, e.ID) + "\n" + e.Text
+}
+
+func omittedNotice(dropped int) string {
+	return fmt.Sprintf("(%d older entries omitted to fit the budget; use search_team_memory for older history.)\n\n", dropped)
 }
