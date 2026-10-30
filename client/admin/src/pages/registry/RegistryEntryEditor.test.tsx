@@ -75,7 +75,6 @@ vi.mock(
   }),
 );
 import { RegistryEntryEditor } from "./RegistryEntryEditor";
-import { NewRegistryEntryPage } from "./RegistryEntryPage";
 import { registryEntryNameKey } from "@/lib/registryEntryName";
 
 const id = "00000000-0000-4000-8000-000000000001";
@@ -854,6 +853,8 @@ it("replaces the new-entry page with the created entry", async () => {
   );
   expect(router.history.length).toBe(length);
   expect(router.state.location.search).toEqual({ q: "demo" });
+});
+
 it("locks JSON and Save during upload and saves icons with the same draft after retry", async () => {
   let resolve!: (value: unknown) => void;
   mutations.upload.mockImplementation(
