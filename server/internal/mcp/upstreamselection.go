@@ -645,6 +645,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 		}
 	}
 	headers, headerErr := c.selector.service.loadAuthClientHeaders(ctx, c.selector.organizationID, headerIDs)
+	memberLogger := logger.With(attr.SlogOrganizationID(c.selector.organizationID))
 	for i := range members {
 		member := &members[i]
 		if member.backend != metaMemberBackendProxied {
@@ -686,7 +687,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 				res.choice, memberErr = choices.forServer(member.serverID)
 			}
 		}
-		c.selector.service.applyMemberAuthClient(ctx, logger, c.subject, member, res, memberErr)
+		c.selector.service.applyMemberAuthClient(ctx, memberLogger, c.subject, member, res, memberErr)
 		// Under enforcement a resolved OAuth-backed client was checked against
 		// the member, which authorizes its registration without a sign-in link.
 		member.typedAuthClient = c.enforced && member.upstreamUnavailable == nil && res.outcome == authClientResolved && member.chosenClientID.Valid

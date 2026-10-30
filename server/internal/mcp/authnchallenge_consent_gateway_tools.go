@@ -192,6 +192,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		return nil, nil, nil, oops.E(oops.CodeUnavailable, err, "read gateway credential choices").LogError(ctx, logger)
 	}
 	view.auth = memberAuth
+	authLogger := logger.With(attr.SlogOrganizationID(endpoint.OrganizationID))
 	for i := range members {
 		member := &members[i]
 		if member.backend != metaMemberBackendProxied {
@@ -199,7 +200,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		}
 		if memberAuth != nil {
 			res, resolveErr := s.resolveMemberAuthChoice(ctx, endpoint, *member, memberAuth[member.serverID], subject)
-			s.applyMemberAuthClient(ctx, logger, subject, member, res, resolveErr)
+			s.applyMemberAuthClient(ctx, authLogger, subject, member, res, resolveErr)
 			// As at runtime, a resolved client was checked against the member,
 			// which authorizes its registration without a sign-in link.
 			member.typedAuthClient = member.upstreamUnavailable == nil && res.outcome == authClientResolved && member.chosenClientID.Valid
@@ -207,7 +208,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		}
 		clientID, chosen := picks[member.serverID]
 		res, resolveErr := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.serverID, member.projectID, uuid.NullUUID{UUID: clientID, Valid: chosen}, subject)
-		s.applyMemberAuthClient(ctx, logger, subject, member, res, resolveErr)
+		s.applyMemberAuthClient(ctx, authLogger, subject, member, res, resolveErr)
 	}
 	gate.memberChoices = &memberChoices{selector: nil, enforced: false, subject: subject, profile: false, metaServerID: endpoint.MetaMcpServerID, onlyChosen: false, chosen: nil, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 		if member.typedAuthClient {
