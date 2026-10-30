@@ -52,12 +52,16 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 	// An agent key with no attachment for this registration is served by its
 	// validated authorizer's own connection; the mcp:auth check names that
 	// user as the owner and still decides with the agent's own grants.
+	// Without a usable attachment the owner is this fallback: the agent
+	// key's authorizer, or no owner for any other caller, which no personal
+	// grant matches.
+	fallback := none
 	if authorizer, ok := agentKeyAuthorizer(ctx, permit.Subject); ok {
-		none = authClientConnectionOwner{owner: authorizer, attachedSession: uuid.Nil, authorizer: true}
+		fallback = authClientConnectionOwner{owner: authorizer, attachedSession: uuid.Nil, authorizer: true}
 	}
 	lookup := s.attachedConnectionLookup()
 	if lookup == nil || !permit.RegistrationID.Valid || permit.Subject.IsZero() {
-		return none, nil
+		return fallback, nil
 	}
 	conn, attached, err := lookup.AuthClientAttachedConnection(ctx, remotesessions.AuthClientTokenRequest{
 		ProjectID:           permit.ProjectID,
@@ -69,12 +73,12 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 	})
 	switch {
 	case errors.Is(err, remotesessions.ErrInvalidAuthorizationRequest):
-		// A caller the attachment lookup refuses has no connection to own.
-		return none, nil
+		// A caller the attachment lookup refuses has no attached connection.
+		return fallback, nil
 	case err != nil:
 		return none, fmt.Errorf("resolve attached connection owner: %w", err)
 	case !attached:
-		return none, nil
+		return fallback, nil
 	case conn.RemoteSessionID == uuid.Nil:
 		// A zero connection would disable the pin that binds tokens to
 		// the checked connection, so it is never an owner.
