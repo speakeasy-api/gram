@@ -33,9 +33,18 @@ type Definition struct {
 // mcpServerAncestors are the containers every MCP server target carries.
 var mcpServerAncestors = []string{authz.ResourceKindProject, authz.ResourceKindOrg}
 
-// definitions is the registry. Configuring a server (mcp:write) and reading
-// its settings (mcp:read) never imply using it (mcp:connect), a connect grant
-// names one server, and a matching block always wins.
+// projectAncestors are the containers every project target carries.
+var projectAncestors = []string{authz.ResourceKindOrg}
+
+// definitions is the registry.
+//
+// MCP servers follow the slice 1 rules: configuring a server (mcp:write) and
+// reading its settings (mcp:read) never imply using it (mcp:connect), a
+// connect grant names one server, and a matching block always wins.
+//
+// Projects keep today's rules: changing a project (project:write) also lets a
+// caller view it, a grant may name one project or the whole organization, and
+// a block yields to a direct grant to the user.
 var definitions = mustValidate([]Definition{
 	{
 		Name:              authz.ScopeMCPRead,
@@ -63,6 +72,24 @@ var definitions = mustValidate([]Definition{
 		ImpliedBy:         nil,
 		ExcludedBy:        authz.ScopeMCPBlockedConnect,
 		BlockWins:         true,
+	},
+	{
+		Name:              authz.ScopeProjectRead,
+		Resource:          authz.ResourceKindProject,
+		AllowedAnchors:    []string{authz.ResourceKindProject, authz.ResourceKindOrg},
+		RequiredAncestors: projectAncestors,
+		ImpliedBy:         []authz.Scope{authz.ScopeProjectWrite},
+		ExcludedBy:        authz.ScopeProjectBlockedRead,
+		BlockWins:         false,
+	},
+	{
+		Name:              authz.ScopeProjectWrite,
+		Resource:          authz.ResourceKindProject,
+		AllowedAnchors:    []string{authz.ResourceKindProject, authz.ResourceKindOrg},
+		RequiredAncestors: projectAncestors,
+		ImpliedBy:         nil,
+		ExcludedBy:        authz.ScopeProjectBlockedWrite,
+		BlockWins:         false,
 	},
 })
 
