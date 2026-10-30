@@ -20,6 +20,484 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
+// BuildBeginBindingRefreshRequest instantiates a HTTP request object with
+// method and path set to call the "remoteSessions" service
+// "beginBindingRefresh" endpoint
+func (c *Client) BuildBeginBindingRefreshRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: BeginBindingRefreshRemoteSessionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessions", "beginBindingRefresh", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeBeginBindingRefreshRequest returns an encoder for requests sent to the
+// remoteSessions beginBindingRefresh server.
+func EncodeBeginBindingRefreshRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessions.BeginBindingRefreshPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessions", "beginBindingRefresh", "*remotesessions.BeginBindingRefreshPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewBeginBindingRefreshRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteSessions", "beginBindingRefresh", err)
+		}
+		return nil
+	}
+}
+
+// DecodeBeginBindingRefreshResponse returns a decoder for responses returned
+// by the remoteSessions beginBindingRefresh endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeBeginBindingRefreshResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeBeginBindingRefreshResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body BeginBindingRefreshResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "beginBindingRefresh", err)
+			}
+			err = ValidateBeginBindingRefreshResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "beginBindingRefresh", err)
+			}
+			res := NewBeginBindingRefreshBindingRefreshAttemptOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body BeginBindingRefreshUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "beginBindingRefresh", err)
+			}
+			err = ValidateBeginBindingRefreshUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "beginBindingRefresh", err)
+			}
+			return nil, NewBeginBindingRefreshUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body BeginBindingRefreshForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "beginBindingRefresh", err)
+			}
+			err = ValidateBeginBindingRefreshForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "beginBindingRefresh", err)
+			}
+			return nil, NewBeginBindingRefreshForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body BeginBindingRefreshBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "beginBindingRefresh", err)
+			}
+			err = ValidateBeginBindingRefreshBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "beginBindingRefresh", err)
+			}
+			return nil, NewBeginBindingRefreshBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body BeginBindingRefreshNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "beginBindingRefresh", err)
+			}
+			err = ValidateBeginBindingRefreshNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "beginBindingRefresh", err)
+			}
+			return nil, NewBeginBindingRefreshNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body BeginBindingRefreshConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "beginBindingRefresh", err)
+			}
+			err = ValidateBeginBindingRefreshConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "beginBindingRefresh", err)
+			}
+			return nil, NewBeginBindingRefreshConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body BeginBindingRefreshUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "beginBindingRefresh", err)
+			}
+			err = ValidateBeginBindingRefreshUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "beginBindingRefresh", err)
+			}
+			return nil, NewBeginBindingRefreshUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body BeginBindingRefreshInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "beginBindingRefresh", err)
+			}
+			err = ValidateBeginBindingRefreshInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "beginBindingRefresh", err)
+			}
+			return nil, NewBeginBindingRefreshInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body BeginBindingRefreshInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessions", "beginBindingRefresh", err)
+				}
+				err = ValidateBeginBindingRefreshInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessions", "beginBindingRefresh", err)
+				}
+				return nil, NewBeginBindingRefreshInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body BeginBindingRefreshUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessions", "beginBindingRefresh", err)
+				}
+				err = ValidateBeginBindingRefreshUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessions", "beginBindingRefresh", err)
+				}
+				return nil, NewBeginBindingRefreshUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessions", "beginBindingRefresh", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body BeginBindingRefreshGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "beginBindingRefresh", err)
+			}
+			err = ValidateBeginBindingRefreshGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "beginBindingRefresh", err)
+			}
+			return nil, NewBeginBindingRefreshGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessions", "beginBindingRefresh", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCompleteBindingRefreshRequest instantiates a HTTP request object with
+// method and path set to call the "remoteSessions" service
+// "completeBindingRefresh" endpoint
+func (c *Client) BuildCompleteBindingRefreshRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CompleteBindingRefreshRemoteSessionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessions", "completeBindingRefresh", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCompleteBindingRefreshRequest returns an encoder for requests sent to
+// the remoteSessions completeBindingRefresh server.
+func EncodeCompleteBindingRefreshRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessions.CompleteBindingRefreshPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessions", "completeBindingRefresh", "*remotesessions.CompleteBindingRefreshPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCompleteBindingRefreshRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteSessions", "completeBindingRefresh", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCompleteBindingRefreshResponse returns a decoder for responses
+// returned by the remoteSessions completeBindingRefresh endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeCompleteBindingRefreshResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCompleteBindingRefreshResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CompleteBindingRefreshResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "completeBindingRefresh", err)
+			}
+			err = ValidateCompleteBindingRefreshResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "completeBindingRefresh", err)
+			}
+			res := NewCompleteBindingRefreshBindingRefreshResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CompleteBindingRefreshUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "completeBindingRefresh", err)
+			}
+			err = ValidateCompleteBindingRefreshUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "completeBindingRefresh", err)
+			}
+			return nil, NewCompleteBindingRefreshUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CompleteBindingRefreshForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "completeBindingRefresh", err)
+			}
+			err = ValidateCompleteBindingRefreshForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "completeBindingRefresh", err)
+			}
+			return nil, NewCompleteBindingRefreshForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CompleteBindingRefreshBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "completeBindingRefresh", err)
+			}
+			err = ValidateCompleteBindingRefreshBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "completeBindingRefresh", err)
+			}
+			return nil, NewCompleteBindingRefreshBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CompleteBindingRefreshNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "completeBindingRefresh", err)
+			}
+			err = ValidateCompleteBindingRefreshNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "completeBindingRefresh", err)
+			}
+			return nil, NewCompleteBindingRefreshNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CompleteBindingRefreshConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "completeBindingRefresh", err)
+			}
+			err = ValidateCompleteBindingRefreshConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "completeBindingRefresh", err)
+			}
+			return nil, NewCompleteBindingRefreshConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CompleteBindingRefreshUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "completeBindingRefresh", err)
+			}
+			err = ValidateCompleteBindingRefreshUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "completeBindingRefresh", err)
+			}
+			return nil, NewCompleteBindingRefreshUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CompleteBindingRefreshInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "completeBindingRefresh", err)
+			}
+			err = ValidateCompleteBindingRefreshInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "completeBindingRefresh", err)
+			}
+			return nil, NewCompleteBindingRefreshInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CompleteBindingRefreshInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessions", "completeBindingRefresh", err)
+				}
+				err = ValidateCompleteBindingRefreshInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessions", "completeBindingRefresh", err)
+				}
+				return nil, NewCompleteBindingRefreshInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CompleteBindingRefreshUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessions", "completeBindingRefresh", err)
+				}
+				err = ValidateCompleteBindingRefreshUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessions", "completeBindingRefresh", err)
+				}
+				return nil, NewCompleteBindingRefreshUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessions", "completeBindingRefresh", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CompleteBindingRefreshGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "completeBindingRefresh", err)
+			}
+			err = ValidateCompleteBindingRefreshGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "completeBindingRefresh", err)
+			}
+			return nil, NewCompleteBindingRefreshGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessions", "completeBindingRefresh", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListBindingsRequest instantiates a HTTP request object with method and
 // path set to call the "remoteSessions" service "listBindings" endpoint
 func (c *Client) BuildListBindingsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1218,6 +1696,480 @@ func DecodeGetServerIdentityImpactResponse(decoder func(*http.Response) goahttp.
 	}
 }
 
+// BuildListServerClientAssociationsRequest instantiates a HTTP request object
+// with method and path set to call the "remoteSessions" service
+// "listServerClientAssociations" endpoint
+func (c *Client) BuildListServerClientAssociationsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListServerClientAssociationsRemoteSessionsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessions", "listServerClientAssociations", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListServerClientAssociationsRequest returns an encoder for requests
+// sent to the remoteSessions listServerClientAssociations server.
+func EncodeListServerClientAssociationsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessions.ListServerClientAssociationsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessions", "listServerClientAssociations", "*remotesessions.ListServerClientAssociationsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("mcp_server_id", p.McpServerID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListServerClientAssociationsResponse returns a decoder for responses
+// returned by the remoteSessions listServerClientAssociations endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeListServerClientAssociationsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListServerClientAssociationsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListServerClientAssociationsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "listServerClientAssociations", err)
+			}
+			err = ValidateListServerClientAssociationsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "listServerClientAssociations", err)
+			}
+			res := NewListServerClientAssociationsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListServerClientAssociationsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "listServerClientAssociations", err)
+			}
+			err = ValidateListServerClientAssociationsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "listServerClientAssociations", err)
+			}
+			return nil, NewListServerClientAssociationsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListServerClientAssociationsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "listServerClientAssociations", err)
+			}
+			err = ValidateListServerClientAssociationsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "listServerClientAssociations", err)
+			}
+			return nil, NewListServerClientAssociationsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListServerClientAssociationsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "listServerClientAssociations", err)
+			}
+			err = ValidateListServerClientAssociationsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "listServerClientAssociations", err)
+			}
+			return nil, NewListServerClientAssociationsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListServerClientAssociationsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "listServerClientAssociations", err)
+			}
+			err = ValidateListServerClientAssociationsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "listServerClientAssociations", err)
+			}
+			return nil, NewListServerClientAssociationsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListServerClientAssociationsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "listServerClientAssociations", err)
+			}
+			err = ValidateListServerClientAssociationsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "listServerClientAssociations", err)
+			}
+			return nil, NewListServerClientAssociationsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListServerClientAssociationsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "listServerClientAssociations", err)
+			}
+			err = ValidateListServerClientAssociationsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "listServerClientAssociations", err)
+			}
+			return nil, NewListServerClientAssociationsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListServerClientAssociationsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "listServerClientAssociations", err)
+			}
+			err = ValidateListServerClientAssociationsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "listServerClientAssociations", err)
+			}
+			return nil, NewListServerClientAssociationsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListServerClientAssociationsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessions", "listServerClientAssociations", err)
+				}
+				err = ValidateListServerClientAssociationsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessions", "listServerClientAssociations", err)
+				}
+				return nil, NewListServerClientAssociationsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListServerClientAssociationsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessions", "listServerClientAssociations", err)
+				}
+				err = ValidateListServerClientAssociationsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessions", "listServerClientAssociations", err)
+				}
+				return nil, NewListServerClientAssociationsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessions", "listServerClientAssociations", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListServerClientAssociationsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "listServerClientAssociations", err)
+			}
+			err = ValidateListServerClientAssociationsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "listServerClientAssociations", err)
+			}
+			return nil, NewListServerClientAssociationsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessions", "listServerClientAssociations", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDetachServerClientAssociationRequest instantiates a HTTP request object
+// with method and path set to call the "remoteSessions" service
+// "detachServerClientAssociation" endpoint
+func (c *Client) BuildDetachServerClientAssociationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DetachServerClientAssociationRemoteSessionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessions", "detachServerClientAssociation", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDetachServerClientAssociationRequest returns an encoder for requests
+// sent to the remoteSessions detachServerClientAssociation server.
+func EncodeDetachServerClientAssociationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessions.DetachServerClientAssociationPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessions", "detachServerClientAssociation", "*remotesessions.DetachServerClientAssociationPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewDetachServerClientAssociationRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteSessions", "detachServerClientAssociation", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDetachServerClientAssociationResponse returns a decoder for responses
+// returned by the remoteSessions detachServerClientAssociation endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeDetachServerClientAssociationResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDetachServerClientAssociationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DetachServerClientAssociationUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "detachServerClientAssociation", err)
+			}
+			err = ValidateDetachServerClientAssociationUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "detachServerClientAssociation", err)
+			}
+			return nil, NewDetachServerClientAssociationUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DetachServerClientAssociationForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "detachServerClientAssociation", err)
+			}
+			err = ValidateDetachServerClientAssociationForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "detachServerClientAssociation", err)
+			}
+			return nil, NewDetachServerClientAssociationForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DetachServerClientAssociationBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "detachServerClientAssociation", err)
+			}
+			err = ValidateDetachServerClientAssociationBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "detachServerClientAssociation", err)
+			}
+			return nil, NewDetachServerClientAssociationBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DetachServerClientAssociationNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "detachServerClientAssociation", err)
+			}
+			err = ValidateDetachServerClientAssociationNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "detachServerClientAssociation", err)
+			}
+			return nil, NewDetachServerClientAssociationNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DetachServerClientAssociationConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "detachServerClientAssociation", err)
+			}
+			err = ValidateDetachServerClientAssociationConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "detachServerClientAssociation", err)
+			}
+			return nil, NewDetachServerClientAssociationConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DetachServerClientAssociationUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "detachServerClientAssociation", err)
+			}
+			err = ValidateDetachServerClientAssociationUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "detachServerClientAssociation", err)
+			}
+			return nil, NewDetachServerClientAssociationUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DetachServerClientAssociationInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "detachServerClientAssociation", err)
+			}
+			err = ValidateDetachServerClientAssociationInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "detachServerClientAssociation", err)
+			}
+			return nil, NewDetachServerClientAssociationInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DetachServerClientAssociationInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessions", "detachServerClientAssociation", err)
+				}
+				err = ValidateDetachServerClientAssociationInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessions", "detachServerClientAssociation", err)
+				}
+				return nil, NewDetachServerClientAssociationInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DetachServerClientAssociationUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessions", "detachServerClientAssociation", err)
+				}
+				err = ValidateDetachServerClientAssociationUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessions", "detachServerClientAssociation", err)
+				}
+				return nil, NewDetachServerClientAssociationUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessions", "detachServerClientAssociation", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DetachServerClientAssociationGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "detachServerClientAssociation", err)
+			}
+			err = ValidateDetachServerClientAssociationGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "detachServerClientAssociation", err)
+			}
+			return nil, NewDetachServerClientAssociationGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessions", "detachServerClientAssociation", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListRemoteSessionsRequest instantiates a HTTP request object with
 // method and path set to call the "remoteSessions" service
 // "listRemoteSessions" endpoint
@@ -1952,6 +2904,9 @@ func DecodeRevokeRemoteSessionResponse(decoder func(*http.Response) goahttp.Deco
 // builds a value of type *remotesessions.PrincipalRemoteSessionBinding from a
 // value of type *PrincipalRemoteSessionBindingResponseBody.
 func unmarshalPrincipalRemoteSessionBindingResponseBodyToRemotesessionsPrincipalRemoteSessionBinding(v *PrincipalRemoteSessionBindingResponseBody) *remotesessions.PrincipalRemoteSessionBinding {
+	if v == nil {
+		return nil
+	}
 	res := &remotesessions.PrincipalRemoteSessionBinding{
 		ID:                    *v.ID,
 		PrincipalID:           *v.PrincipalID,
@@ -1973,20 +2928,22 @@ func unmarshalRemoteSessionResponseBodyToTypesRemoteSession(v *RemoteSessionResp
 		return nil
 	}
 	res := &types.RemoteSession{
-		ID:                    *v.ID,
-		SubjectUrn:            *v.SubjectUrn,
-		SubjectDisplayName:    v.SubjectDisplayName,
-		SubjectEmail:          v.SubjectEmail,
-		UpstreamEmail:         v.UpstreamEmail,
-		UpstreamDisplayName:   v.UpstreamDisplayName,
-		IdentitySource:        v.IdentitySource,
-		UserSessionIssuerID:   *v.UserSessionIssuerID,
-		RemoteSessionClientID: *v.RemoteSessionClientID,
-		AccessExpiresAt:       *v.AccessExpiresAt,
-		RefreshExpiresAt:      v.RefreshExpiresAt,
-		HasRefreshToken:       *v.HasRefreshToken,
-		CreatedAt:             *v.CreatedAt,
-		UpdatedAt:             *v.UpdatedAt,
+		ID:                     *v.ID,
+		SubjectUrn:             *v.SubjectUrn,
+		SubjectDisplayName:     v.SubjectDisplayName,
+		SubjectEmail:           v.SubjectEmail,
+		UpstreamEmail:          v.UpstreamEmail,
+		UpstreamDisplayName:    v.UpstreamDisplayName,
+		IdentitySource:         v.IdentitySource,
+		UserSessionIssuerID:    *v.UserSessionIssuerID,
+		RemoteSessionClientID:  *v.RemoteSessionClientID,
+		AccessExpiresAt:        *v.AccessExpiresAt,
+		RefreshExpiresAt:       v.RefreshExpiresAt,
+		AuthorizationExpiresAt: v.AuthorizationExpiresAt,
+		LastUsedAt:             v.LastUsedAt,
+		HasRefreshToken:        *v.HasRefreshToken,
+		CreatedAt:              *v.CreatedAt,
+		UpdatedAt:              *v.UpdatedAt,
 	}
 	res.Scopes = make([]string, len(v.Scopes))
 	for i, val := range v.Scopes {
@@ -2390,6 +3347,7 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		OrganizationID:                  *v.OrganizationID,
 		RemoteSessionIssuerID:           *v.RemoteSessionIssuerID,
 		ClientID:                        *v.ClientID,
+		DisplayName:                     v.DisplayName,
 		ClientIDMetadataURI:             v.ClientIDMetadataURI,
 		ClientIDIssuedAt:                v.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           v.ClientSecretExpiresAt,
@@ -2455,6 +3413,25 @@ func unmarshalServerIdentityImpactServerResponseBodyToRemotesessionsServerIdenti
 		ProjectID:   *v.ProjectID,
 		ProjectName: *v.ProjectName,
 		Impact:      *v.Impact,
+	}
+
+	return res
+}
+
+// unmarshalServerClientAssociationResponseBodyToRemotesessionsServerClientAssociation
+// builds a value of type *remotesessions.ServerClientAssociation from a value
+// of type *ServerClientAssociationResponseBody.
+func unmarshalServerClientAssociationResponseBodyToRemotesessionsServerClientAssociation(v *ServerClientAssociationResponseBody) *remotesessions.ServerClientAssociation {
+	res := &remotesessions.ServerClientAssociation{
+		RemoteSessionClientID: *v.RemoteSessionClientID,
+		ClientID:              *v.ClientID,
+		RemoteSessionIssuerID: *v.RemoteSessionIssuerID,
+		IssuerName:            v.IssuerName,
+		IssuerSlug:            *v.IssuerSlug,
+		IssuerURL:             *v.IssuerURL,
+		Scope:                 *v.Scope,
+		ServerCount:           *v.ServerCount,
+		AssociatedAt:          *v.AssociatedAt,
 	}
 
 	return res

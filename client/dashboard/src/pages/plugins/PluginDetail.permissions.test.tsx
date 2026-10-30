@@ -150,26 +150,23 @@ vi.mock("@gram/client/react-query/addPluginServer", () => ({
 vi.mock("@gram/client/react-query/removePluginServer", () => ({
   useRemovePluginServerMutation: () => ({ mutate: vi.fn() }),
 }));
-function renderAdmin(section = "overview") {
+const hostedServer = {
+  id: "server-a",
+  displayName: "Example server",
+  toolsetId: "toolset-a",
+  mcpServerId: "toolset-a",
+  createdAt: new Date(),
+};
+function renderAdmin(section = "overview", servers: object[] = [hostedServer]) {
   adminQuery.mockReturnValue({
-    data: {
-      name: "Example plugin",
-      slug: "example-plugin",
-      servers: [
-        {
-          id: "server-a",
-          displayName: "Example server",
-          toolsetId: "toolset-a",
-          createdAt: new Date(),
-        },
-      ],
-    },
+    data: { name: "Example plugin", slug: "example-plugin", servers },
   });
   return render(
     <TooltipProvider>
       <QueryClientProvider client={new QueryClient()}>
         <MemoryRouter initialEntries={[`/plugins/plugin-a/${section}`]}>
           <Routes>
+            <Route path="/plugins" element={<h1>Plugins</h1>} />
             <Route
               path="/plugins/:pluginId/:section"
               element={<PluginDetail />}
@@ -247,7 +244,6 @@ describe("plugin detail permission boundary", () => {
     });
     expect(screen.getByText("Example server")).toBeTruthy();
     expect(screen.getByText("Server metadata unavailable")).toBeTruthy();
-    expect(screen.queryByText("Toolset missing")).toBeNull();
     for (const query of Object.values(assignments))
       expect(query).not.toHaveBeenCalled();
   });
@@ -270,11 +266,48 @@ describe("plugin detail permission boundary", () => {
           slug: "already-added",
           tools: [],
         },
-        { id: "toolset-b", name: "Billing", slug: "billing", tools: [] },
+        {
+          id: "toolset-b",
+          name: "Billing",
+          slug: "billing",
+          mcpEnabled: true,
+          mcpSlug: "billing",
+          tools: [],
+        },
+        {
+          id: "toolset-c",
+          name: "Payroll",
+          slug: "payroll",
+          mcpEnabled: false,
+          tools: [],
+        },
+        {
+          id: "toolset-d",
+          name: "Expenses",
+          slug: "expenses",
+          mcpEnabled: true,
+          tools: [],
+        },
+        {
+          id: "toolset-e",
+          name: "Ledger",
+          slug: "ledger",
+          mcpEnabled: true,
+          mcpSlug: "ledger",
+          tools: [],
+        },
       ],
     };
     serverData.mcpServers = {
       mcpServers: [
+        // Billing's canonical MCP server; Ledger has none.
+        {
+          id: "toolset-b",
+          name: "Billing",
+          slug: "billing",
+          toolsetId: "toolset-b",
+          visibility: "private",
+        },
         {
           id: "remote-a",
           name: "Linear",
@@ -308,6 +341,24 @@ describe("plugin detail permission boundary", () => {
     expect(
       screen.queryByRole("checkbox", { name: "Already added" }),
     ).toBeNull();
+    // The backend refuses hosted servers with MCP off, so they can't be picked.
+    expect(
+      (screen.getByRole("checkbox", { name: "Payroll" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(screen.getByRole("img", { name: "MCP off" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "No MCP address" })).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Set an MCP address for this server before adding it to a plugin.",
+      ),
+    ).toBeTruthy();
+    // A hosted toolset without a canonical MCP server is rejected by the API too.
+    expect(
+      (screen.getByRole("checkbox", { name: "Ledger" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(screen.getByRole("img", { name: "No MCP server" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Select all" }));
     await act(async () => {
       fireEvent.click(
@@ -360,11 +411,7 @@ describe("plugin detail permission boundary", () => {
         expect(screen.getByText("Example server")).toBeTruthy();
       }
       expect(adminQuery).toHaveBeenCalled();
-      expect(features).toHaveBeenLastCalledWith(
-        { organizationId: "org-a" },
-        undefined,
-        { enabled: false },
-      );
+      expect(features).not.toHaveBeenCalled();
       expect(screen.queryByText("Distribution-only skills")).toBeNull();
       for (const query of Object.values(assignments))
         expect(query).not.toHaveBeenCalled();
@@ -397,12 +444,19 @@ describe("plugin detail permission boundary", () => {
     for (const query of Object.values(assignments))
       expect(query).toHaveBeenCalled();
   });
-  it("reports missing toolsets only when metadata is available", () => {
+  it("labels gateway-backed members as gateways", () => {
     state.orgRead = true;
     state.canReadServers = true;
-    renderAdmin();
-    expect(screen.getByText("Toolset missing")).toBeTruthy();
-    expect(screen.queryByText("Server metadata unavailable")).toBeNull();
+    renderAdmin("overview", [
+      {
+        id: "server-g",
+        displayName: "Example gateway",
+        metaMcpServerId: "gateway-a",
+        createdAt: new Date(),
+      },
+    ]);
+    expect(screen.getByText("Gateway")).toBeTruthy();
+    expect(screen.queryByText("Remote MCP")).toBeNull();
   });
 });
 

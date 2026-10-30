@@ -26,7 +26,7 @@ function page(withProvider = true, initialize = true) {
     <form id="approve" data-approve-form><input name="state" value="state-a"><input name="csrf_token" value="csrf-a">
       <button type="submit" data-self-label="Give access" data-agent-label="Authorize agent" data-consent-self-ready="true">Give access</button>
     </form>
-    <div data-service-connections data-action-url="/x/mcp/example/connect/remote-session">
+    <div data-service-connections data-action-url="/mcp/example/connect/remote-session">
       <li data-remote-client="client-a" data-remote-display="Example provider">
         <span>Example provider</span><span data-account-identity>Connected</span>
         <div data-agent-access hidden></div>
@@ -61,7 +61,11 @@ function select(id: string) {
   fireEvent.change(input);
 }
 function reply(value: unknown, status = 200) {
-  return { ok: status === 200, status, json: async () => value };
+  return {
+    ok: status === 200,
+    status,
+    json: async () => ({ canManageConnections: true, ...(value as object) }),
+  };
 }
 beforeEach(() => {
   sessionStorage.clear();
@@ -551,7 +555,7 @@ describe("consent actor picker", () => {
 describe("identity chaining checks", () => {
   function chainedPage() {
     document.body.innerHTML = `
-      <div data-service-connections data-action-url="/x/mcp/example/connect/remote-session">
+      <div data-service-connections data-action-url="/mcp/example/connect/remote-session">
         ${["client-a", "client-b"]
           .map(
             (id) => `
@@ -624,4 +628,31 @@ describe("identity chaining checks", () => {
     ).toBe(false);
     expect(rejected).not.toHaveBeenCalled();
   });
+});
+
+it("authorizers can use a valid attached connection without managing it", async () => {
+  fetchMock.mockResolvedValue(
+    reply({
+      canManageConnections: false,
+      candidates: [],
+      bindings: [
+        {
+          ID: "binding",
+          RemoteSessionClientID: "client-a",
+          RemoteSessionID: "other-session",
+          RemoteSession: {
+            ID: "other-session",
+            UpstreamDisplayName: "Another member",
+            RemoteSessionClientID: "client-a",
+          },
+        },
+      ],
+    }),
+  );
+  const approve = page();
+  select("agent-a");
+  await waitFor(() => expect(approve.disabled).toBe(false));
+  expect(document.body.textContent).toContain("Available to agent");
+  expect(document.body.textContent).not.toContain("Remove agent access");
+  expect(document.body.textContent).not.toContain("Use this account");
 });

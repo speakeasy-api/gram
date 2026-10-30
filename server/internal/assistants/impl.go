@@ -28,6 +28,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -91,7 +92,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	o11y.AttachHandler(mux, "POST", "/rpc/assistants.getThreadBootstrap", oops.ErrHandle(service.logger, service.handleGetThreadBootstrap).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/rpc/assistants.recordCompactedGeneration", oops.ErrHandle(service.logger, service.handleRecordCompactedGeneration).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/rpc/assistantMcpAuth.create", oops.ErrHandle(service.logger, service.handleCreateMCPAuthFlow).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", "/rpc/assistantMcpAuth/{id}/oauth/callback", oops.ErrHandle(service.logger, service.handleMCPAuthCallback).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/rpc/assistantMcpAuth/{id}/oauth/callback", oops.BrowserErrHandle(service.logger, service.handleMCPAuthCallback).ServeHTTP)
 	// Public, unauthenticated outbound-CIMD document. Distinct from the
 	// remote-session path at /.well-known/oauth-client/{id}: assistants are
 	// addressed by assistant id, and the document identifies the assistant.
@@ -235,6 +236,7 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 		payload.MaxConcurrency,
 		payload.Status,
 		canEnableMCP,
+		runtimeSelectionChange{Version: payload.RuntimeVersion, ExpectedVersion: payload.ExpectedRuntimeVersion},
 	)
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "update assistant")
@@ -530,7 +532,7 @@ func (s *Service) Dispatch(ctx context.Context, task bgtriggers.Task) error {
 }
 
 // startRuntimeWarmup eagerly boots the assistant's runtime so the first turn
-// doesn't pay the Fly cold-start cost. It rides the standard turn machinery:
+// doesn't pay the runtime cold-start cost. It rides the standard turn machinery:
 // an event-less warmup thread reserves the runtime row, and its thread
 // workflow runs Ensure, coordinator kicks and the warm window exactly as a
 // turn would. Best-effort: a failure here never fails the request — the
@@ -572,6 +574,12 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 		}
 	}
 	switch {
+	case errors.Is(err, errRuntimeSwitchBusy):
+		return oops.E(oops.CodeConflict, err, "%s", errRuntimeSwitchBusy.Error()).LogWarn(ctx, logger)
+	case errors.Is(err, errRuntimeSwitchConflict):
+		return oops.E(oops.CodeConflict, err, "%s", errRuntimeSwitchConflict.Error()).LogWarn(ctx, logger)
+	case errors.Is(err, errRuntimeSwitchUnavailable):
+		return oops.E(oops.CodeConflict, err, "%s", errRuntimeSwitchUnavailable.Error()).LogWarn(ctx, logger)
 	case errors.Is(err, pgx.ErrNoRows), errors.Is(err, assistantidentity.ErrNotFound):
 		return oops.E(oops.CodeNotFound, err, "%s", message).LogError(ctx, logger)
 	case errors.Is(err, assistantidentity.ErrInvalidIdentity):
@@ -582,6 +590,10 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 		return oops.E(oops.CodeUnauthorized, err, "%s", message).LogWarn(ctx, logger)
 	case errors.Is(err, errMCPEnableForbidden):
 		return oops.E(oops.CodeForbidden, err, "%s", errMCPEnableForbidden.Error()).LogWarn(ctx, logger)
+	case errors.Is(err, errMCPEnableUnavailable):
+		return oops.E(oops.CodeInvalid, err, "%s", errMCPEnableUnavailable.Error()).LogWarn(ctx, logger)
+	case errors.Is(err, errToolsetNoMCPServer):
+		return oops.E(oops.CodeBadRequest, err, "%s", hostedmcp.NoServerMessage).LogWarn(ctx, logger)
 	case errors.Is(err, errAssistantValidation):
 		return oops.E(oops.CodeBadRequest, err, "%s", message).LogError(ctx, logger)
 	default:

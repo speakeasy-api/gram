@@ -298,6 +298,13 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		return ctx, oops.E(oops.CodeUnexpected, err, "error loading api key details")
 	}
 
+	// Managed Kit credentials were replaced by workload identity. Never let a
+	// historical key re-enter through an ordinary API-key transport, regardless
+	// of its runtime state or the binding's revocation timestamp.
+	if apiKey.SupersededKitCredential {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+
 	actor, credential, principalBacked, err := classifyPrincipalAPIKey(apiKey, time.Now())
 	if err != nil {
 		return ctx, oops.C(oops.CodeUnauthorized)
@@ -398,23 +405,24 @@ func classifyPrincipalAPIKey(apiKey repo.GetAPIKeyByKeyHashRow, now time.Time) (
 	// expired row.
 	profilePresent := apiKey.SubjectUrn.Valid || apiKey.DelegatedGrants != nil || apiKey.DelegatedGrantsVersion.Valid
 	if !profilePresent {
-		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0}, false, nil
+		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0, DerivesPolicyAtAdmission: false}, false, nil
 	}
 	if !apiKey.SubjectUrn.Valid || apiKey.DelegatedGrants == nil || !apiKey.DelegatedGrantsVersion.Valid || !apiKey.ExpiresAt.Valid || !apiKey.CreatedAt.Valid ||
 		len(apiKey.Scopes) != 0 || apiKey.CreatedByUserID == "" || !apiKey.ExpiresAt.Time.After(now) ||
 		!apiKey.ExpiresAt.Time.After(apiKey.CreatedAt.Time) || apiKey.ExpiresAt.Time.After(apiKey.CreatedAt.Time.Add(maxAgentAPIKeyLifetime)) {
-		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0}, true, errors.New("invalid principal-backed api key profile")
+		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0, DerivesPolicyAtAdmission: false}, true, errors.New("invalid principal-backed api key profile")
 	}
 
 	actor, err := urn.ParsePrincipal(apiKey.SubjectUrn.String)
 	if err != nil || actor.Type != urn.PrincipalTypeAgent {
-		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0}, true, errors.New("invalid principal-backed api key subject")
+		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0, DerivesPolicyAtAdmission: false}, true, errors.New("invalid principal-backed api key subject")
 	}
 
 	return actor, contextvalues.PrincipalCredential{
-		AuthorizerUserID:       apiKey.CreatedByUserID,
-		DelegatedGrants:        apiKey.DelegatedGrants,
-		DelegatedGrantsVersion: apiKey.DelegatedGrantsVersion.Int32,
+		AuthorizerUserID:         apiKey.CreatedByUserID,
+		DelegatedGrants:          apiKey.DelegatedGrants,
+		DelegatedGrantsVersion:   apiKey.DelegatedGrantsVersion.Int32,
+		DerivesPolicyAtAdmission: false,
 	}, true, nil
 }
 

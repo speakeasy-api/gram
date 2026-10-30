@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/message"
 )
 
 // ahpAdapter is the canonical hook source for AHP events that report no
@@ -33,11 +35,13 @@ func AttachAHP(mux goahttp.Muxer, s *Service) error {
 		return err
 	}
 	mux.Handle("POST", "/ahp", h.ServeHTTP)
+	mux.Handle("POST", ahpUploadPath, s.ahpUploadHandler().ServeHTTP)
 	return nil
 }
 
 func (s *Service) ahpHandler() (http.Handler, error) {
 	h, err := ahpserver.NewHandler(ahpserver.Handlers{
+		Configuration: ahp.ConfigurationFunc(s.ahpResolveConfiguration),
 		Intercept: ahpserver.InterceptHandlers{ //nolint:exhaustruct // unhandled events are rejected as unsupported
 			ToolBefore: func(ctx context.Context, c ahpserver.InterceptContext[ahp.ToolBeforeEvent, ahp.ToolBeforeCapabilities]) (ahpserver.ToolBeforeReply, error) {
 				var reply ahpserver.ToolBeforeReply
@@ -51,16 +55,120 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 			},
 			UserMessageInbound: func(ctx context.Context, c ahpserver.InterceptContext[ahp.UserMessageInboundEvent, ahp.UserMessageInboundCapabilities]) (ahpserver.UserMessageInboundReply, error) {
 				var reply ahpserver.UserMessageInboundReply
-				payload := ahpUserMessageInboundPayload(c.Event)
+				canDeny := slices.Contains(c.Capabilities.Effects, ahp.UserMessageInboundCapabilitiesEffectsValueItemDeny)
+				attachments, err := s.ahpPromptAttachments(ctx, c.Event)
+				if err != nil {
+					if canDeny && errors.Is(err, errAHPEvidenceSize) {
+						reply.Effects = []*ahp.UserMessageInboundEffect{{DenyEffect: ahp.Some(ahpDeny(err.Error()))}}
+						return reply, nil
+					}
+					return reply, err
+				}
+				payload := ahpUserMessageInboundPayload(c.Event, attachments)
 				if payload == nil {
 					return reply, nil
 				}
-				canDeny := slices.Contains(c.Capabilities.Effects, ahp.UserMessageInboundCapabilitiesEffectsValueItemDeny)
-				reason, err := s.ingestAHP(ctx, payload, !canDeny)
+				reason, err := s.ingestAHPInbound(ctx, payload, !canDeny)
 				if err != nil || reason == "" {
 					return reply, err
 				}
 				reply.Effects = []*ahp.UserMessageInboundEffect{{DenyEffect: ahp.Some(ahpDeny(reason))}}
+				return reply, nil
+			},
+			ToolAfter: func(ctx context.Context, c ahpserver.InterceptContext[ahp.ToolAfterEvent, ahp.ToolAfterCapabilities]) (ahpserver.ToolAfterReply, error) {
+				var reply ahpserver.ToolAfterReply
+				payload := ahpToolAfterPayload(c.Event)
+				if payload == nil {
+					// A hook can supply a result without executing the tool.
+					// Record a notification instead of a tool execution event.
+					payload = ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID)
+				}
+				canReplace := slices.Contains(c.Capabilities.Effects, ahp.ToolAfterCapabilitiesEffectsValueItemModify) && c.Capabilities.Modify.Present && c.Capabilities.Modify.Value.Output.Present && c.Capabilities.Modify.Value.Output.Value.Replace
+				reason, err := s.ingestAHPBoundary(ctx, payload, !canReplace, ahpBoundaryScan{text: ahpText(c.Event.Items), kind: message.ToolResponse, tool: c.Event.Tool.Name})
+				if err != nil || reason == "" {
+					return reply, err
+				}
+				reply.Effects = []*ahp.ToolAfterEffect{{ToolAfterModifyEffect: ahp.Some(ahpReplaceToolOutput())}}
+				return reply, nil
+			},
+			ModelResponseAfter: func(ctx context.Context, c ahpserver.InterceptContext[ahp.ModelResponseAfterEvent, ahp.ModelResponseAfterCapabilities]) (ahpserver.ModelResponseAfterReply, error) {
+				var reply ahpserver.ModelResponseAfterReply
+				payloads := ahpModelResponsePayloads(c.Event)
+				canReplace := slices.Contains(c.Capabilities.Effects, ahp.ModelResponseAfterCapabilitiesEffectsValueItemModify) && c.Capabilities.Modify.Present && c.Capabilities.Modify.Value.Response.Present && c.Capabilities.Modify.Value.Response.Value.Replace
+				reason, err := s.ingestAHPBoundary(ctx, payloads[0], !canReplace, ahpItemScans(c.Event.Items)...)
+				if err != nil {
+					return reply, err
+				}
+				for _, payload := range payloads[1:] {
+					if _, err := s.ingestAHP(ctx, payload, true); err != nil {
+						return reply, err
+					}
+				}
+				if reason == "" {
+					return reply, nil
+				}
+				reply.Effects = []*ahp.ModelResponseAfterEffect{{ModelResponseAfterModifyEffect: ahp.Some(ahpReplaceResponse())}}
+				return reply, nil
+			},
+			ModelRequestBefore: func(ctx context.Context, c ahpserver.InterceptContext[ahp.ModelRequestBeforeEvent, ahp.ModelRequestBeforeCapabilities]) (ahpserver.ModelRequestBeforeReply, error) {
+				var reply ahpserver.ModelRequestBeforeReply
+				payload := ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID)
+
+				canDeny := slices.Contains(c.Capabilities.Effects, ahp.ModelRequestBeforeCapabilitiesEffectsValueItemDeny)
+				reason, err := s.ingestAHPBoundary(ctx, payload, !canDeny, ahpItemScans(c.Event.Items)...)
+				if err != nil || reason == "" {
+					return reply, err
+				}
+				reply.Effects = []*ahp.ModelRequestBeforeEffect{{DenyEffect: ahp.Some(ahpDeny(reason))}}
+				return reply, nil
+			},
+			UserMessageOutbound: func(ctx context.Context, c ahpserver.InterceptContext[ahp.UserMessageOutboundEvent, ahp.UserMessageOutboundCapabilities]) (ahpserver.UserMessageOutboundReply, error) {
+				var reply ahpserver.UserMessageOutboundReply
+				payload := ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID)
+				var scans []ahpBoundaryScan
+				for _, item := range c.Event.Message.Messages {
+					scans = append(scans, ahpPartScans(item.Parts, message.Assistant)...)
+				}
+				canDeny := slices.Contains(c.Capabilities.Effects, ahp.UserMessageOutboundCapabilitiesEffectsValueItemDeny)
+				reason, err := s.ingestAHPBoundary(ctx, payload, !canDeny, scans...)
+				if err != nil || reason == "" {
+					return reply, err
+				}
+				reply.Effects = []*ahp.UserMessageOutboundEffect{{DenyEffect: ahp.Some(ahpDeny(reason))}}
+				return reply, nil
+			},
+			ContextCompactBefore: func(ctx context.Context, c ahpserver.InterceptContext[ahp.ContextCompactBeforeEvent, ahp.ContextCompactBeforeCapabilities]) (ahpserver.ContextCompactBeforeReply, error) {
+				var reply ahpserver.ContextCompactBeforeReply
+				payload := ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID)
+
+				canDeny := slices.Contains(c.Capabilities.Effects, ahp.ContextCompactBeforeCapabilitiesEffectsValueItemDeny)
+				reason, err := s.ingestAHPBoundary(ctx, payload, !canDeny, ahpItemScans(c.Event.Items)...)
+				if err != nil || reason == "" {
+					return reply, err
+				}
+				reply.Effects = []*ahp.ContextCompactBeforeEffect{{DenyEffect: ahp.Some(ahpDeny(reason))}}
+				return reply, nil
+			},
+			ToolPermissionRequest: func(ctx context.Context, c ahpserver.InterceptContext[ahp.ToolPermissionRequestEvent, ahp.ToolPermissionRequestCapabilities]) (ahpserver.ToolPermissionRequestReply, error) {
+				var reply ahpserver.ToolPermissionRequestReply
+				payload := ahpToolPermissionPayload(c.Event)
+				canDeny := slices.Contains(c.Capabilities.Effects, ahp.ToolPermissionRequestCapabilitiesEffectsValueItemDeny)
+				reason, err := s.ingestAHP(ctx, payload, !canDeny)
+				if err != nil || reason == "" {
+					return reply, err
+				}
+				reply.Effects = []*ahp.ToolPermissionRequestEffect{{DenyEffect: ahp.Some(ahpDeny(reason))}}
+				return reply, nil
+			},
+			ContextCompactAfter: func(ctx context.Context, c ahpserver.InterceptContext[ahp.ContextCompactAfterEvent, ahp.ContextCompactAfterCapabilities]) (ahpserver.ContextCompactAfterReply, error) {
+				var reply ahpserver.ContextCompactAfterReply
+				payload := ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID)
+				canReplace := slices.Contains(c.Capabilities.Effects, ahp.ContextCompactAfterCapabilitiesEffectsValueItemModify) && c.Capabilities.Modify.Present && c.Capabilities.Modify.Value.Summary.Present && c.Capabilities.Modify.Value.Summary.Value.Replace
+				reason, err := s.ingestAHPBoundary(ctx, payload, !canReplace, ahpBoundaryScan{text: ahpTextParts(c.Event.Summary), kind: message.Assistant, tool: ""})
+				if err != nil || reason == "" {
+					return reply, err
+				}
+				reply.Effects = []*ahp.ContextCompactAfterEffect{{ContextCompactAfterModifyEffect: ahp.Some(ahpReplaceSummary())}}
 				return reply, nil
 			},
 			// Lifecycle notifications are not authoritative user input.
@@ -72,16 +180,49 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 		// Observations are recorded without policy evaluation: the harness
 		// has already acted, so a block could not be enforced.
 		Observe: ahpserver.ObserveHandlers{ //nolint:exhaustruct // unobserved events are acknowledged and dropped
+			ModelRequestBefore: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ModelRequestBeforeEvent]) error {
+				return s.ahpNotify(ctx, ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID))
+			},
+			UserMessageOutbound: func(ctx context.Context, c ahpserver.ObserveContext[ahp.UserMessageOutboundEvent]) error {
+				return s.ahpNotify(ctx, ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID))
+			},
+			ContextCompactBefore: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ContextCompactBeforeEvent]) error {
+				return s.ahpNotify(ctx, ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID))
+			},
+			ContextCompactAfter: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ContextCompactAfterEvent]) error {
+				return s.ahpNotify(ctx, ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID))
+			},
+			ToolPermissionRequest: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ToolPermissionRequestEvent]) error {
+				payload := ahpToolPermissionPayload(c.Event)
+				_, err := s.ingestAHP(ctx, payload, true)
+				return err
+			},
+			ToolPermissionResolved: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ToolPermissionResolvedEvent]) error {
+				return s.ahpNotify(ctx, ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID))
+			},
+			ToolBatchAfter: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ToolBatchAfterEvent]) error {
+				return s.ahpNotify(ctx, ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID))
+			},
+			ModelError: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ModelErrorEvent]) error {
+				return s.ahpNotify(ctx, ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID))
+			},
+			TurnEnd: func(ctx context.Context, c ahpserver.ObserveContext[ahp.TurnEndEvent]) error {
+				return s.ahpNotify(ctx, ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.ID))
+			},
 			ToolBefore: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ToolBeforeEvent]) error {
 				_, err := s.ingestAHP(ctx, ahpToolBeforePayload(c.Event), true)
 				return err
 			},
 			UserMessageInbound: func(ctx context.Context, c ahpserver.ObserveContext[ahp.UserMessageInboundEvent]) error {
-				payload := ahpUserMessageInboundPayload(c.Event)
+				attachments, err := s.ahpPromptAttachments(ctx, c.Event)
+				if err != nil {
+					return err
+				}
+				payload := ahpUserMessageInboundPayload(c.Event, attachments)
 				if payload == nil {
 					return nil
 				}
-				_, err := s.ingestAHP(ctx, payload, true)
+				_, err = s.ingestAHP(ctx, payload, true)
 				return err
 			},
 			ModelResponseAfter: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ModelResponseAfterEvent]) error {
@@ -97,7 +238,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 			ToolAfter: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ToolAfterEvent]) error {
 				payload := ahpToolAfterPayload(c.Event)
 				if payload == nil {
-					return nil
+					payload = ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID)
 				}
 				_, err := s.ingestAHP(ctx, payload, true)
 				return err
@@ -153,13 +294,63 @@ func (s *Service) ahpAuthenticate(h http.Handler) http.Handler {
 // without evaluating policy. Errors surface to the harness as protocol errors,
 // so its registered failure policy decides the outcome.
 func (s *Service) ingestAHP(ctx context.Context, payload *gen.IngestPayload, observeOnly bool) (string, error) {
+	options := defaultAuthenticatedIngestOptions()
+	options.ObserveOnly = observeOnly
+	return s.ingestAHPWithOptions(ctx, payload, options)
+}
+
+// ingestAHPInbound includes resolved attachments in prompt policy evidence,
+// without adding their contents to the persisted prompt text.
+func (s *Service) ingestAHPInbound(ctx context.Context, payload *gen.IngestPayload, observeOnly bool) (string, error) {
+	if len(payload.Data.PromptAttachments) == 0 {
+		return s.ingestAHP(ctx, payload, observeOnly)
+	}
+	var texts []string
+	if prompt := canonicalPromptText(payload); prompt != "" {
+		texts = append(texts, prompt)
+	}
+	for _, attachment := range payload.Data.PromptAttachments {
+		if attachment != nil {
+			texts = append(texts, attachment.Content)
+		}
+	}
+	evidenceBytes := 0
+	for i, text := range texts {
+		size := len(text)
+		if i > 0 {
+			size++
+		}
+		if size > ahpMaxEvidenceBytes-evidenceBytes {
+			if observeOnly {
+				return "", errAHPEvidenceSize
+			}
+			return errAHPEvidenceSize.Error(), nil
+		}
+		evidenceBytes += size
+	}
+	policyText := strings.Join(texts, "\n")
+	options := defaultAuthenticatedIngestOptions()
+	options.ObserveOnly = observeOnly
+	options.promptPolicyText = &policyText
+	return s.ingestAHPWithOptions(ctx, payload, options)
+}
+
+// ingestAHPBoundary scans content at an AHP boundary. It checks quarantine also
+// when there is no text to scan.
+func (s *Service) ingestAHPBoundary(ctx context.Context, payload *gen.IngestPayload, observeOnly bool, scans ...ahpBoundaryScan) (string, error) {
+	options := defaultAuthenticatedIngestOptions()
+	options.ObserveOnly = observeOnly
+	options.contentBoundary = true
+	options.boundaryScans = mergeAHPScans(scans)
+	return s.ingestAHPWithOptions(ctx, payload, options)
+}
+
+func (s *Service) ingestAHPWithOptions(ctx context.Context, payload *gen.IngestPayload, options AuthenticatedIngestOptions) (string, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return "", errors.New("AHP request is not authenticated")
 	}
 	payload.IdempotencyKey = new(fmt.Sprintf("ahp:%s:%s", authCtx.ProjectID, *payload.IdempotencyKey))
-	options := defaultAuthenticatedIngestOptions()
-	options.ObserveOnly = observeOnly
 	result, err := s.IngestAuthenticatedWithOptions(ctx, authCtx, payload, options)
 	if err != nil {
 		return "", err
@@ -174,9 +365,66 @@ func ahpDeny(reason string) *ahp.DenyEffect {
 	return &ahp.DenyEffect{Type: ahp.DenyEffectTypeDeny, Reason: reason, Code: ahp.Optional[string]{Value: "", Present: false}, Extensions: ahp.Optional[*ahp.Extensions]{Value: nil, Present: false}, AdditionalProperties: nil}
 }
 
+func ahpReplaceToolOutput() *ahp.ToolAfterModifyEffect {
+	return &ahp.ToolAfterModifyEffect{
+		Type: "modify", Target: "output",
+		Operation: ahp.ToolAfterModifyEffectOperation{
+			Replace: ahp.Some(ahp.ToolAfterModifyEffectOperationReplace("replace")),
+			Merge:   ahp.Optional[ahp.ToolAfterModifyEffectOperationMerge]{Value: "", Present: false},
+			Unknown: nil,
+		},
+		Value: new(ahp.CanonicalMessages{}), AdditionalProperties: nil,
+	}
+}
+
+func ahpReplaceResponse() *ahp.ModelResponseAfterModifyEffect {
+	return &ahp.ModelResponseAfterModifyEffect{
+		Type: "modify", Target: "response",
+		Operation: ahp.ModelResponseAfterModifyEffectOperation{
+			Replace: ahp.Some(ahp.ModelResponseAfterModifyEffectOperationReplace("replace")),
+			Merge:   ahp.Optional[ahp.ModelResponseAfterModifyEffectOperationMerge]{Value: "", Present: false},
+			Unknown: nil,
+		},
+		Value: new(ahp.CanonicalMessages{}), AdditionalProperties: nil,
+	}
+}
+
+func ahpReplaceSummary() *ahp.ContextCompactAfterModifyEffect {
+	return &ahp.ContextCompactAfterModifyEffect{
+		Type: "modify", Target: "summary",
+		Operation: ahp.ContextCompactAfterModifyEffectOperation{
+			Replace: ahp.Some(ahp.ContextCompactAfterModifyEffectOperationReplace("replace")),
+			Merge:   ahp.Optional[ahp.ContextCompactAfterModifyEffectOperationMerge]{Value: "", Present: false},
+			Unknown: nil,
+		},
+		Value: new(ahp.TextParts{}), AdditionalProperties: nil,
+	}
+}
+
+// ahpNotificationPayload records an AHP event as a notification.
+func ahpNotificationPayload(source string, harness *ahp.Harness, id, rawType, occurredAt string, session ahp.Optional[*ahp.Session], turnID string) *gen.IngestPayload {
+	return ahpPayload(source, harness, id, rawType, occurredAt, "notification.reported", session, turnID)
+}
+
+// ahpNotify records a notification without policy evaluation.
+func (s *Service) ahpNotify(ctx context.Context, payload *gen.IngestPayload) error {
+	_, err := s.ingestAHP(ctx, payload, true)
+	return err
+}
+
+// ahpToolPermissionPayload records a permission request as a tool request.
+func ahpToolPermissionPayload(e *ahp.ToolPermissionRequestEvent) *gen.IngestPayload {
+	payload := ahpPayload(e.Source, e.Harness, e.ID, string(e.Type), e.Time, "tool.requested", e.Session, e.Turn.Value.ID)
+	payload.Data.ToolCall = ahpToolCall(e.Call.ID, e.Tool)
+	payload.Data.ToolCall.PermissionType = new("permission")
+	payload.Data.Mcp = ahpMCP(e.Tool)
+	return payload
+}
+
 func ahpPayload(source string, harness *ahp.Harness, id, rawType, occurredAt, eventType string, session ahp.Optional[*ahp.Session], turnID string) *gen.IngestPayload {
 	payload := &gen.IngestPayload{
 		ApikeyToken:      nil,
+		DeviceAgentToken: nil,
 		ProjectSlugInput: nil,
 		Replayed:         nil,
 		SchemaVersion:    hookIngestSchemaV1,
@@ -184,7 +432,7 @@ func ahpPayload(source string, harness *ahp.Harness, id, rawType, occurredAt, ev
 		Source:           &gen.HookIngestSource{Adapter: ahpAdapter, AdapterVersion: nil, RawEventName: &rawType, Hostname: nil, UserEmail: nil},
 		Session:          nil,
 		Event:            &gen.HookIngestEvent{Type: eventType, OccurredAt: &occurredAt},
-		Data:             &gen.HookIngestData{Prompt: nil, ToolCall: nil, Mcp: nil, McpInventory: nil, McpInventoryCollected: nil, Usage: nil, Message: nil, Skill: nil, Notification: nil, McpAttribution: nil, PromptAttachments: nil},
+		Data:             &gen.HookIngestData{Prompt: nil, ToolCall: nil, Mcp: nil, McpInventory: nil, McpInventoryCollected: nil, Usage: nil, Message: nil, Skill: nil, Notification: nil, McpAttribution: nil, PromptAttachments: nil, DeliveryFailure: nil},
 		Raw:              nil,
 	}
 	if harness != nil && strings.TrimSpace(harness.Name) != "" {
@@ -235,7 +483,9 @@ func ahpToolAfterPayload(e *ahp.ToolAfterEvent) *gen.IngestPayload {
 }
 
 // Only inbound user envelopes own prompt policy and transcript capture.
-func ahpUserMessageInboundPayload(e *ahp.UserMessageInboundEvent) *gen.IngestPayload {
+// Resolved attachments ride along as prompt attachments, so they persist
+// through the same path as transcript-derived hook attachments.
+func ahpUserMessageInboundPayload(e *ahp.UserMessageInboundEvent, attachments []*gen.HookPromptAttachmentEntry) *gen.IngestPayload {
 	var texts []string
 	for _, message := range e.Message.Messages {
 		if message.Role == "user" {
@@ -244,11 +494,23 @@ func ahpUserMessageInboundPayload(e *ahp.UserMessageInboundEvent) *gen.IngestPay
 			}
 		}
 	}
-	if len(texts) == 0 {
+	if len(texts) == 0 && len(attachments) == 0 {
 		return nil
 	}
 	payload := ahpPayload(e.Source, e.Harness, e.ID, string(e.Type), e.Time, "prompt.submitted", e.Session, e.Turn.Value.ID)
-	payload.Data.Prompt = &gen.HookPromptData{Text: new(strings.Join(texts, "\n"))}
+	if len(texts) > 0 {
+		prompt := strings.Join(texts, "\n")
+		payload.Data.Prompt = &gen.HookPromptData{Text: &prompt}
+		// Link attachments to the prompt row this event persists.
+		sum := sha256.Sum256([]byte(strings.TrimSpace(prompt)))
+		promptSHA256 := hex.EncodeToString(sum[:])
+		for _, attachment := range attachments {
+			attachment.PromptSha256 = &promptSHA256
+		}
+	}
+	if len(attachments) > 0 {
+		payload.Data.PromptAttachments = attachments
+	}
 	return payload
 }
 
@@ -263,6 +525,12 @@ func ahpModelResponsePayloads(e *ahp.ModelResponseAfterEvent) []*gen.IngestPaylo
 				InputTokens: ahpTokenCount(u.InputTokens), OutputTokens: ahpTokenCount(u.OutputTokens),
 				CacheReadTokens: ahpTokenCount(u.CacheReadTokens), CacheWriteTokens: ahpTokenCount(u.CacheWriteTokens),
 				Cost: nil, LoopCount: nil, Status: nil,
+			}
+			// AHP input includes cache reads; canonical input counts exclude them.
+			// Keep missing counts unknown and preserve cache usage separately.
+			usage := original.Data.Usage
+			if usage.InputTokens != nil && usage.CacheReadTokens != nil {
+				*usage.InputTokens = max(0, *usage.InputTokens-*usage.CacheReadTokens)
 			}
 			if u.Cost.Present && u.Cost.Value.Currency == "USD" {
 				if cost, err := u.Cost.Value.Amount.Float64(); err == nil {

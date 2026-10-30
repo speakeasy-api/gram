@@ -44,14 +44,18 @@ type consentChainCheckResult struct {
 // consentSessionRouting loads the subject's connection state and the routing
 // that decides which grants still route. Statuses are empty before the subject
 // is stamped, so every card then reads not connected.
-func (s *Service) consentSessionRouting(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clients []remotesessions.Client) (map[uuid.UUID]remotesessions.RemoteSessionState, consentRouting, error) {
-	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: nil, projectScoped: false}
+func (s *Service) consentSessionRouting(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clients []remotesessions.Client, typed map[uuid.UUID]uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, consentRouting, error) {
+	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
 		return nil, routing, nil
 	}
 	statuses, err := s.endpointRemoteSessionStatuses(ctx, *challengeState.Subject, endpoint)
 	if err != nil {
 		return nil, routing, fmt.Errorf("remote session statuses: %w", err)
+	}
+	statuses, err = s.withTypedRegistrationStatuses(ctx, endpoint.OrganizationID, *challengeState.Subject, statuses, typed)
+	if err != nil {
+		return nil, routing, err
 	}
 	if len(statuses) > 0 {
 		routing, err = s.resolveConsentRouting(ctx, endpoint, challengeState, clients, statuses)
@@ -84,7 +88,7 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid client_id").LogError(ctx, logger)
 	}
-	bound, err := s.listEndpointClients(ctx, endpoint, challengeState)
+	bound, typed, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
 	}
@@ -93,7 +97,7 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	if client == nil {
 		return oops.E(oops.CodeBadRequest, nil, "unknown remote session client for this MCP server").LogError(ctx, logger)
 	}
-	statuses, routing, err := s.consentSessionRouting(ctx, endpoint, challengeState, clients)
+	statuses, routing, err := s.consentSessionRouting(ctx, endpoint, challengeState, clients, typed)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resolve consent routing").LogError(ctx, logger)
 	}
@@ -130,12 +134,15 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 // consent pages stored that no grant adopted, as of the denial. An exchange
 // already in flight can still store one afterwards; only another eligible
 // grant of the same sign-in could adopt it, and it expires within the hour.
+// Retirement also clears unadopted credentials from other in-flight consent
+// flows for this issuer, subject and sign-in. Those flows re-exchange on retry;
+// credentials already adopted by a session remain usable.
 func (s *Service) retireDeniedConsentCredentials(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) {
 	subject := challengeState.Subject
 	if s.identityChainer == nil || challengeState.SignInID == nil || subject == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
 		return
 	}
-	if err := s.identityChainer.RetireConsentCredentials(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, subject.ID, *challengeState.SignInID); err != nil {
+	if err := s.identityChainer.RetireConsentCredentials(ctx, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject.ID, *challengeState.SignInID); err != nil {
 		logger.WarnContext(ctx, "retire denied consent identity chaining credentials", attr.SlogError(err))
 	}
 }

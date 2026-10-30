@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -29,6 +31,9 @@ import (
 )
 
 type preparationDCRResponse struct {
+	// callbackBaseURL is local registration provenance, never provider input.
+	callbackBaseURL pgtype.Text
+
 	ClientID                string   `json:"client_id"`
 	ClientSecret            string   `json:"client_secret"`
 	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
@@ -64,7 +69,20 @@ func (s *Service) submitPreparationDCRWithTunnel(ctx context.Context, in Prepara
 	if (method != oauthwire.AuthMethodClientSecretBasic && method != oauthwire.AuthMethodClientSecretPost) || !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
 		return result, PreparationStateManualSetupRequired
 	}
-	origin := s.origins.ForNewClient(true)
+	callbackBaseURL := s.origins.NewClientBaseURL(true)
+	if s.origins.OrganizationHosts != nil {
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+			return result, PreparationStateIndeterminate
+		}
+		var err error
+		callbackBaseURL, err = s.origins.ResolveNewClientBaseURL(ctx, s.db, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return result, PreparationStateIndeterminate
+		}
+	}
+	result.callbackBaseURL = callbackBaseURL
+	origin := s.origins.ForClient(callbackBaseURL)
 	if s.policy == nil || origin == nil {
 		return result, PreparationStateIndeterminate
 	}
@@ -206,7 +224,10 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 	}()
 	// Persist an outcome even if the requesting connection has gone away. If this
 	// process dies before commit, the durable claim becomes indeterminate on read.
-	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	// Do not expire a confirmed provider result while waiting for ordinary
+	// database writers. The provider POST is not replayable; completion must
+	// wait for the ordered locks rather than discard returned credentials.
+	saveCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	defer cancel()
 	tx, err := conn.Begin(saveCtx)
 	if err != nil {
@@ -217,6 +238,9 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 		defer cleanupCancel()
 		_ = tx.Rollback(cleanupCtx)
 	}()
+	if err := authclientbackfill.LockEMAPreparationScope(saveCtx, tx, claim.OrganizationID, claim.ProjectID, claim.RemoteSessionIssuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock identity chaining completion sources")
+	}
 	q := repo.New(tx)
 	// Lock the project before parents, including wholly inherited configurations.
 	if _, err = q.LockEMAProject(saveCtx, repo.LockEMAProjectParams{ProjectID: claim.ProjectID, OrganizationID: claim.OrganizationID}); err != nil {
@@ -265,7 +289,7 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 			expires = conv.ToPGTimestamptz(time.Unix(response.ClientSecretExpiresAt, 0))
 		}
 		// The registration's redirect_uris use this origin, as interactive clients do.
-		client, err = q.CreateRemoteSessionClient(saveCtx, repo.CreateRemoteSessionClientParams{JsonWebKeySetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, TokenEndpointAuthAudienceFormat: conv.ToPGTextEmpty(""), Audience: conv.ToPGTextEmpty(""), LegacyCallbackUrl: false, CallbackBaseUrl: s.origins.NewClientBaseURL(true), ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: response.ClientID, ClientSecretEncrypted: conv.ToPGText(ciphertext), TokenEndpointAuthMethod: conv.ToPGText(response.TokenEndpointAuthMethod), Scope: scopes, ClientIDIssuedAt: issued, ClientSecretExpiresAt: expires, GrantTypes: nil, CredentialOwner: pgtype.Text{String: "", Valid: false}})
+		client, err = q.CreateRemoteSessionClient(saveCtx, repo.CreateRemoteSessionClientParams{JsonWebKeySetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, TokenEndpointAuthAudienceFormat: conv.ToPGTextEmpty(""), Audience: conv.ToPGTextEmpty(""), LegacyCallbackUrl: false, CallbackBaseUrl: response.callbackBaseURL, ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: response.ClientID, ClientSecretEncrypted: conv.ToPGText(ciphertext), TokenEndpointAuthMethod: conv.ToPGText(response.TokenEndpointAuthMethod), Scope: scopes, ClientIDIssuedAt: issued, ClientSecretExpiresAt: expires, GrantTypes: nil, CredentialOwner: pgtype.Text{String: "", Valid: false}})
 		if err != nil {
 			return preparationResult(b, currentIssuer, client, PreparationStateIndeterminate), err
 		}
@@ -310,6 +334,9 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 	}
 	if err := s.auditIdentityChainingTransition(saveCtx, tx, before, b, client); err != nil {
 		return nil, err
+	}
+	if err := authclientbackfill.SyncEMARegistrations(saveCtx, tx, b.OrganizationID, []uuid.UUID{claim.RemoteSessionClientID.UUID, b.RemoteSessionClientID.UUID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "synchronize identity chaining auth client")
 	}
 	if err = tx.Commit(saveCtx); err != nil {
 		return preparationResult(claim, issuer, emptyClient, PreparationStateIndeterminate), err

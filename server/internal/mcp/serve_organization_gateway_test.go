@@ -3,6 +3,8 @@ package mcp_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -19,11 +21,14 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -33,6 +38,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	testrepo "github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -85,6 +91,13 @@ func seedOrganizationGateway(t *testing.T, ctx context.Context, ti *testInstance
 	subject := urn.NewUserSubject(userID)
 	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, mcpServerBySlug(t, ctx, ti, *authCtx.ProjectID, grantedSlug).String())
 
+	featureQuery := featuresrepo.New(ti.conn)
+	setting := featuresrepo.EnableFeatureParams{OrganizationID: authCtx.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureOrganizationGatewayDisabled)}
+	_, err := featureQuery.EnableFeature(ctx, setting)
+	require.NoError(t, err)
+	_, err = featureQuery.DeleteFeature(ctx, featuresrepo.DeleteFeatureParams(setting))
+	require.NoError(t, err)
+
 	return organizationGatewayFixture{
 		organizationSlug: authCtx.OrganizationSlug,
 		projectSlug:      *authCtx.ProjectSlug,
@@ -107,6 +120,42 @@ func mintOrganizationGatewayBearer(t *testing.T, ti *testInstance, fx organizati
 	})
 	require.NoError(t, err)
 	persistTestUserSession(t, ti, fx.issuerID, fx.subject, jti)
+	return token
+}
+
+// mintOrganizationGatewayBearerWithPolicy mints an organization gateway bearer
+// whose session carries the connection's consent policy.
+func mintOrganizationGatewayBearerWithPolicy(t *testing.T, ctx context.Context, ti *testInstance, fx organizationGatewayFixture, mode metamcp.DiscoveryMode) string {
+	t.Helper()
+
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, fx.organizationSlug, "mcp/gateway")
+	require.NoError(t, err)
+	policy, err := json.Marshal(&toolfilter.SessionPolicy{
+		Resource:  "meta_mcp_server:" + endpoint.MetaMcpServerID.UUID.String(),
+		Selection: nil,
+		Gateway:   &toolfilter.GatewayOptions{DiscoveryMode: &mode},
+	})
+	require.NoError(t, err)
+	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
+		Subject:  fx.subject,
+		Audience: ti.serverURL.String() + "/mcp/gateway/" + fx.organizationSlug,
+		Issuer:   ti.serverURL.String() + "/mcp/gateway/" + fx.organizationSlug,
+		Lifetime: time.Hour,
+	})
+	require.NoError(t, err)
+	now := time.Now()
+	_, err = usersessionsrepo.New(ti.conn).CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{
+		UserSessionIssuerID: fx.issuerID,
+		UserSessionClientID: uuid.NullUUID{},
+		SubjectUrn:          fx.subject,
+		Jti:                 jti,
+		RefreshTokenHash:    conv.ToPGText("test-bearer-" + uuid.NewString()),
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(24 * time.Hour), Valid: true},
+		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
+		ToolSelection:       policy,
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
 	return token
 }
 
@@ -148,9 +197,9 @@ func TestServeOrganizationGateway_ListsServersTheUserCanReach(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	// Members span projects, so every slug is qualified by its project's.
-	require.Contains(t, w.Body.String(), fx.projectSlug+"."+fx.granted)
-	require.Contains(t, w.Body.String(), fx.projectSlug+"."+fx.open)
+	// Slugs are plain unless another project's member shares one.
+	require.Contains(t, w.Body.String(), `"slug":"`+fx.granted+`"`)
+	require.Contains(t, w.Body.String(), `"slug":"`+fx.open+`"`)
 	require.NotContains(t, w.Body.String(), fx.denied)
 }
 
@@ -200,6 +249,38 @@ func TestServeOrganizationGateway_UnauthenticatedIsChallenged(t *testing.T) {
 
 // Slugs are unique per project, so two projects may each hold a server with
 // the same slug. Both must be listed, each under its own project's name.
+func TestServeOrganizationGateway_DirectConnectionListsMemberTools(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedOrganizationGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	decoy := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
+	hosted := seedHostedMetaMember(t, ctx, ti, decoy.ID, "Hosted tools", 3, mcpservers.VisibilityPublic, "alpha")
+	listTools := makeMetaRPCBody(t, "tools/list", map[string]any{})
+
+	// A connection without a choice stays Progressive.
+	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, mintOrganizationGatewayBearer(t, ti, fx), listTools)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), `"name":"list_servers"`)
+	require.NotContains(t, w.Body.String(), hosted.slug+"--alpha")
+
+	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeDirect)
+	w, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, listTools)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), `"name":"`+hosted.slug+`--alpha"`)
+	require.NotContains(t, w.Body.String(), `"name":"list_servers"`)
+
+	w, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": hosted.slug + "--alpha", "arguments": map[string]any{},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.NotContains(t, w.Body.String(), "unknown tool")
+}
+
 func TestServeOrganizationGateway_SameSlugInTwoProjects(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
@@ -304,7 +385,7 @@ func TestServeConsentAction_OrganizationGatewayConnectsAnotherProjectsClient(t *
 	require.NoError(t, err)
 	require.Equal(t, client, login.RemoteSessionClientID)
 	require.Equal(t, otherProject.ID, login.ProjectID, "the login runs in the project that owns the client")
-	require.Equal(t, "mcp/gateway", login.RouteBase, "the login returns to the gateway's consent page")
+	require.Equal(t, mcproute.OrganizationGateway, login.RouteBase, "the login returns to the gateway's consent page")
 	require.Equal(t, fx.organizationSlug, login.McpSlug)
 }
 
@@ -360,7 +441,7 @@ func TestOrganizationGatewayRoutes_ShadowedEndpointKeepsItsRoutes(t *testing.T) 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	w := postRegistration(t, router, "/mcp/gateway/register")
 	require.Equal(t, http.StatusNotFound, w.Code, "without such an endpoint the path names an organization")
@@ -377,6 +458,219 @@ func TestOrganizationGatewayRoutes_ShadowedEndpointKeepsItsRoutes(t *testing.T) 
 // and a reachable server's connect page shows the connection behind it: a
 // client whose only servers are hidden from them stays off every page, along
 // with the service behind it.
+func TestServeConsent_OrganizationGatewayPicksTools(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mode metamcp.DiscoveryMode
+		all  bool
+	}{
+		{metamcp.DiscoveryModeProgressive, false},
+		{metamcp.DiscoveryModeCode, false},
+		{metamcp.DiscoveryModeCode, true},
+	} {
+		t.Run(fmt.Sprintf("%s/all=%t", tc.mode, tc.all), func(t *testing.T) {
+			t.Parallel()
+			testOrganizationGatewayPicksTools(t, tc.mode, tc.all)
+		})
+	}
+}
+
+func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode, all bool) {
+	t.Helper()
+	ctx, ti := newTestMCPService(t)
+	fx := seedOrganizationGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	decoy := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
+	hosted := seedHostedMetaMember(t, ctx, ti, decoy.ID, "Hosted tools", 3, mcpservers.VisibilityPrivate, "alpha", "beta")
+	setToolsetMcpPrivate(t, ctx, ti, hosted.toolsetID, *authCtx.ProjectID)
+	upstream := newCatalogUpstream(t, 2)
+	remoteID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, decoy.ID, "Remote", "remote-counted", 4, upstream.url)
+	require.NoError(t, testrepo.New(ti.conn).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{ID: remoteID, ProjectID: *authCtx.ProjectID, Visibility: mcpservers.VisibilityPrivate}))
+	for _, id := range []uuid.UUID{hosted.serverID, hosted.toolsetID, remoteID} {
+		seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, fx.subject.ID, id.String())
+	}
+	if mode == metamcp.DiscoveryModeCode {
+		mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(ctx context.Context, code string, host codemode.Host) (*codemode.ExecutionResult, error) {
+			enableCodeMode(t, ctx, ti)
+			if code != "discover" {
+				result, err := host.Call(ctx, code, json.RawMessage(`{}`))
+				if err != nil {
+					return &codemode.ExecutionResult{Error: &codemode.ExecutionError{Code: "tool_unavailable", Message: err.Error()}}, nil
+				}
+				raw, err := json.Marshal(result)
+				require.NoError(t, err)
+				return &codemode.ExecutionResult{Value: raw}, nil
+			}
+			servers, err := host.Servers(ctx, codemode.PageArgs{})
+			require.NoError(t, err)
+			require.Contains(t, servers.Items, codemode.Server{Slug: hosted.slug, Name: "Hosted tools"})
+			require.Contains(t, servers.Items, codemode.Server{Slug: "remote-counted", Name: "Remote"})
+			page, err := host.Search(ctx, codemode.SearchArgs{Query: ""})
+			require.NoError(t, err)
+			require.False(t, page.Incomplete)
+			paths := make([]string, 0, len(page.Items))
+			for _, item := range page.Items {
+				paths = append(paths, item.Path)
+			}
+			require.Contains(t, paths, hosted.slug+"--alpha")
+			require.Contains(t, paths, "remote-counted--tool_000")
+			if !all {
+				require.NotContains(t, paths, hosted.slug+"--beta")
+				require.NotContains(t, paths, "remote-counted--tool_001")
+			}
+			for _, path := range []string{hosted.slug + "--alpha", "remote-counted--tool_000"} {
+				described, err := host.Describe(ctx, path)
+				require.NoError(t, err)
+				require.Contains(t, string(described.Definition), `"inputSchema"`)
+			}
+			return &codemode.ExecutionResult{Value: json.RawMessage(`true`)}, nil
+		}})
+	}
+	// The browser request carries identity, while admission loads persisted grants.
+	caller := contextvalues.SetAuthContext(t.Context(), authCtx)
+	client, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
+		UserSessionIssuerID:     fx.issuerID,
+		ClientID:                "org-picker-" + uuid.NewString()[:8],
+		ClientName:              "org picker",
+		RedirectUris:            []string{"http://localhost:3000/callback"},
+		TokenEndpointAuthMethod: "none",
+	})
+	require.NoError(t, err)
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, testenv.NewLogger(t), fx.organizationSlug, "mcp/gateway")
+	require.NoError(t, err)
+	pkce := sha256.Sum256([]byte(gatewayConsentVerifier))
+	stateID := uuid.NewString()
+	csrfToken := "csrf-" + uuid.NewString()
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:                  stateID,
+		UserSessionIssuerID: fx.issuerID,
+		Endpoint: mcp.EndpointRef{
+			McpSlug:         endpoint.Slug,
+			RouteBase:       endpoint.RouteBase,
+			MetaMcpServerID: endpoint.MetaMcpServerID,
+			CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		},
+		ClientID:            client.ClientID,
+		RedirectURI:         client.RedirectUris[0],
+		State:               "client-state",
+		CodeChallenge:       base64.RawURLEncoding.EncodeToString(pkce[:]),
+		CodeChallengeMethod: "S256",
+		CSRFToken:           csrfToken,
+		Subject:             &fx.subject,
+		CreatedAt:           time.Now(),
+	}))
+
+	page := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeConsent(page, httptest.NewRequest(http.MethodGet, "/mcp/gateway/"+fx.organizationSlug+"/connect?state="+stateID, nil).WithContext(caller), endpoint))
+	require.Equal(t, http.StatusOK, page.Code)
+	require.Contains(t, page.Body.String(), "consent-tools-root", "organization gateway connections can pick tools")
+
+	inventory := gatewayInventoryFromPage(t, page.Body.String())
+	attempt := inventory.Attempt
+	names := make([]string, 0, len(inventory.Tools))
+	for _, tool := range inventory.Tools {
+		names = append(names, tool.Name)
+	}
+	require.Contains(t, names, hosted.slug+"--alpha")
+	require.Contains(t, names, hosted.slug+"--beta")
+	require.Contains(t, names, "remote-counted--tool_000")
+
+	form := url.Values{}
+	form.Set("state", stateID)
+	form.Set("csrf_token", csrfToken)
+	form.Set("action", "approve")
+	form.Set("tool_inventory_id", attempt)
+	form.Set("discovery_mode", string(mode))
+	form.Set("tool_catalog_mode", string(toolfilter.CatalogModeCached))
+	form.Set("tool_filtering", "off")
+	if !all {
+		form.Set("tool_filtering", "on")
+		form.Add("tools", hosted.slug+"--alpha")
+		if mode == metamcp.DiscoveryModeCode {
+			form.Add("tools", "remote-counted--tool_000")
+		}
+	}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/gateway/"+fx.organizationSlug+"/connect", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	approve := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeConsent(approve, req.WithContext(ctx), endpoint))
+	require.Equal(t, http.StatusSeeOther, approve.Code, approve.Body.String())
+	location, err := url.Parse(approve.Header().Get("Location"))
+	require.NoError(t, err)
+	code := location.Query().Get("code")
+	grantCache := cache.NewTypedObjectCache[mcp.UserSessionGrant](ti.logger, ti.cacheAdapter, cache.SuffixNone)
+	grant, err := grantCache.Get(ctx, "gatewayCatalogGrant:"+fx.issuerID.String()+":"+code)
+	require.NoError(t, err)
+	require.NotNil(t, grant.GatewayPolicy)
+	raw, err := json.Marshal(grant.GatewayPolicy)
+	require.NoError(t, err)
+	policy, err := toolfilter.ParseSessionPolicy(raw)
+	require.NoError(t, err)
+	if all {
+		require.Nil(t, policy.Selection)
+	} else {
+		require.NotNil(t, policy.Selection)
+		require.Equal(t, "meta_mcp_server:"+endpoint.MetaMcpServerID.UUID.String(), policy.Selection.Resource)
+		require.True(t, policy.Selection.AllowsName(hosted.slug+"--alpha"))
+		require.False(t, policy.Selection.AllowsName(hosted.slug+"--beta"))
+	}
+	require.NotNil(t, policy.Catalog)
+	tokenForm := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {client.ClientID}, "redirect_uri": {client.RedirectUris[0]}, "code_verifier": {gatewayConsentVerifier}}
+	tokenRequest := httptest.NewRequest(http.MethodPost, "/mcp/gateway/"+fx.organizationSlug+"/token", strings.NewReader(tokenForm.Encode())).WithContext(ctx)
+	tokenRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	issued := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeToken(issued, tokenRequest, endpoint))
+	require.Equal(t, http.StatusOK, issued.Code, issued.Body.String())
+	var tokens struct {
+		AccessToken string `json:"access_token"`
+	}
+	require.NoError(t, json.Unmarshal(issued.Body.Bytes(), &tokens))
+	tokenCalls := seedExpiredCatalogCredential(t, ctx, ti, fx.issuerID, fx.subject)
+	before := upstream.requests.Load()
+	namesToCall := []string{"list_servers", "describe_server", "connection_status"}
+	if mode == metamcp.DiscoveryModeCode {
+		namesToCall = []string{"execute"}
+	}
+	for _, name := range namesToCall {
+		arguments := map[string]any{}
+		if name == "execute" {
+			arguments["code"] = "discover"
+		}
+		if name == "describe_server" {
+			arguments["server"] = hosted.slug
+		}
+		body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": name, "arguments": arguments})
+		listed, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, tokens.AccessToken, body)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
+		require.NotContains(t, listed.Body.String(), `"isError":true`)
+	}
+	require.Equal(t, before, upstream.requests.Load(), "organization gateway discovery reuses the consent catalog")
+	require.Zero(t, tokenCalls.Load(), "organization gateway discovery never refreshes credentials")
+	if mode == metamcp.DiscoveryModeCode {
+		upstream.future.Store(true)
+		// A tool added after consent is never callable; one the upstream
+		// already had is callable only if the consent selected it.
+		refused := []string{"remote-counted--tool_002"}
+		if !all {
+			refused = append(refused, "remote-counted--tool_001")
+		}
+		for _, path := range refused {
+			body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": path}})
+			rejected, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, tokens.AccessToken, body)
+			require.NoError(t, err)
+			require.Contains(t, rejected.Body.String(), `"isError":true`, path)
+			require.Equal(t, before, upstream.requests.Load(), path)
+		}
+		body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "remote-counted--tool_000"}})
+		called, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, tokens.AccessToken, body)
+		require.NoError(t, err)
+		require.Contains(t, called.Body.String(), "executed live")
+		require.EqualValues(t, 1, upstream.calls.Load())
+	}
+}
+
 func TestServeConsent_OrganizationGatewayListsOnlyReachableServersClients(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
@@ -427,7 +721,7 @@ func TestServeConsent_OrganizationGatewayListsOnlyReachableServersClients(t *tes
 		return w.Body.String()
 	}
 
-	grantedServer := fx.projectSlug + "." + fx.granted
+	grantedServer := fx.granted
 	page := render("")
 	require.Contains(t, page, `data-gateway-server="`+grantedServer+`"`)
 	require.NotContains(t, page, fx.denied)
@@ -437,7 +731,7 @@ func TestServeConsent_OrganizationGatewayListsOnlyReachableServersClients(t *tes
 	require.Contains(t, page, reachable)
 	require.NotContains(t, page, hidden)
 
-	page = render("&server=" + url.QueryEscape(fx.projectSlug+"."+fx.denied))
+	page = render("&server=" + url.QueryEscape(fx.denied))
 	require.Contains(t, page, "data-gateway-focus-unavailable", "a hidden server has no connect page")
 	require.NotContains(t, page, hidden)
 
@@ -504,7 +798,7 @@ func TestServeOrganizationGateway_ConnectionStatusLinksItsConnectPage(t *testing
 	for _, server := range structured.StructuredContent.Servers {
 		slugs = append(slugs, server.Slug)
 	}
-	require.ElementsMatch(t, []string{fx.projectSlug + "." + fx.granted, fx.projectSlug + "." + fx.open}, slugs)
+	require.ElementsMatch(t, []string{fx.granted, fx.open}, slugs)
 }
 
 // Turning the gateway off answers 404 on its MCP endpoint and its sign-in
@@ -516,7 +810,7 @@ func TestServeOrganizationGateway_TurnedOffIsNotFound(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 	metadataPath := "/.well-known/oauth-protected-resource/mcp/gateway/" + fx.organizationSlug
 	getMetadata := func() int {
 		w := httptest.NewRecorder()
@@ -544,4 +838,56 @@ func TestServeOrganizationGateway_TurnedOffIsNotFound(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Equal(t, http.StatusOK, getMetadata())
+}
+
+func TestOrganizationGatewayConsentLockdownBlocksCaptureAndChecks(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedOrganizationGateway(t, ctx, ti)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	decoy := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
+	upstream := newCatalogUpstream(t, 1)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, decoy.ID, "Remote", "lockdown-remote", 1, upstream.url)
+	client, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{UserSessionIssuerID: fx.issuerID, ClientID: "lockdown-" + uuid.NewString(), ClientName: "Fixture", RedirectUris: []string{"http://localhost:3000/callback"}, TokenEndpointAuthMethod: "none"})
+	require.NoError(t, err)
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, fx.organizationSlug, "mcp/gateway")
+	require.NoError(t, err)
+	stateID, csrf := seedGatewayConsentChallenge(t, ctx, ti, fx.issuerID, client, endpoint.MetaMcpServerID.UUID, fx.organizationSlug)
+	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+	require.NoError(t, err)
+	state.Endpoint.RouteBase = mcproute.OrganizationGateway
+	state.Subject = &fx.subject
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+	path := "/mcp/gateway/" + fx.organizationSlug + "/connect"
+	page := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeConsent(page, httptest.NewRequest(http.MethodGet, path+"?state="+stateID, nil).WithContext(ctx), endpoint))
+	first := gatewayInventoryFromPage(t, page.Body.String())
+	before := upstream.requests.Load()
+	domain, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{OrganizationID: auth.ActiveOrganizationID, Domain: "gateway.example.test", ProvisionerKind: "ingress", IpAllowlist: []string{"203.0.113.0/24"}})
+	require.NoError(t, err)
+	_, err = customdomainsrepo.New(ti.conn).SetCustomDomainVerified(ctx, domain.ID)
+	require.NoError(t, err)
+	_, err = customdomainsrepo.New(ti.conn).ActivateVerifiedCustomDomain(ctx, customdomainsrepo.ActivateVerifiedCustomDomainParams{ID: domain.ID, IngressName: pgtype.Text{String: "fixture", Valid: true}, CertSecretName: pgtype.Text{String: "fixture-cert", Valid: true}, ProvisionerKind: "ingress"})
+	require.NoError(t, err)
+	page = httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeConsent(page, httptest.NewRequest(http.MethodGet, path+"?state="+stateID, nil).WithContext(ctx), endpoint))
+	require.Contains(t, page.Body.String(), "Reconnect your AI client")
+	require.Contains(t, page.Body.String(), `href="https://gateway.example.test/mcp/gateway/`+fx.organizationSlug+`"`)
+	var captured any
+	require.Error(t, ti.cacheAdapter.Get(ctx, "consentToolInventory:"+stateID+":gateway:", &captured), "lockdown invalidates an older tab's capture")
+	for _, action := range []string{"identity_chaining_check", "validate", "approve"} {
+		form := url.Values{"state": {stateID}, "csrf_token": {csrf}, "action": {action}, "tool_inventory_id": {first.Attempt}, "tool_catalog_mode": {"cached"}, "tool_filtering": {"off"}}
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode())).WithContext(ctx)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		var err error
+		if action == "approve" {
+			err = ti.service.ServeConsent(httptest.NewRecorder(), req, endpoint)
+		} else {
+			err = ti.service.ServeConsentAction(httptest.NewRecorder(), req, endpoint)
+		}
+		var denied *oops.ShareableError
+		require.ErrorAs(t, err, &denied)
+		require.Equal(t, oops.CodeForbidden, denied.Code)
+	}
+	require.Equal(t, before, upstream.requests.Load(), "no discovery or connection probes from the locked-down origin")
 }

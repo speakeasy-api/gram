@@ -19,6 +19,8 @@ import {
   PlugZapIcon,
   ListChecksIcon,
   ChartColumnStackedIcon,
+  ArrowRightLeftIcon,
+  ActivityIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -94,6 +96,25 @@ export const ADMIN_NAV_GROUPS = [
         label: "Remote Session Issuers",
         keywords: "oauth identity providers issuers",
         icon: KeyRoundIcon,
+      },
+      {
+        to: "/upstream-oauth-migration",
+        label: "Upstream OAuth migration",
+        keywords: "oauth clients associations credentials backfill migrate",
+        icon: KeyRoundIcon,
+      },
+      {
+        to: "/external-mcp-migration",
+        label: "External MCP migration",
+        keywords: "external mcp attachments remote servers migrate cutover",
+        icon: ArrowRightLeftIcon,
+      },
+      {
+        to: "/fleet-health",
+        label: "Fleet health",
+        keywords:
+          "hook clients curl binary versions sessions inference device agents speakeasyd rollout",
+        icon: ActivityIcon,
       },
       {
         to: "/mcp-setup",

@@ -30,7 +30,7 @@ function route(title: string, url: string): AppRoute {
 const routes = {
   mcpSessions: route("MCP Sessions", "mcp-sessions"),
   remoteIdentityProviders: route(
-    "Remote Identity Providers",
+    "Authorization Servers",
     "remote-identity-providers",
   ),
   agents: route("Agent Identity", "agent-management"),
@@ -44,7 +44,11 @@ const routes = {
   dashboards: route("Dashboards", "dashboards"),
   deployments: route("Deployments", "deployments"),
   detectionRules: route("Detection Rules", "detection-rules"),
-  identities: route("Identities", "identities"),
+  identities: {
+    ...route("Identities", "identities"),
+    people: route("People", "identities/people"),
+    agents: route("Agents", "identities/agents"),
+  },
   environments: route("Environments", "environments"),
   home: route("Home", ""),
   insights: route("Insights", "insights"),
@@ -100,10 +104,6 @@ beforeEach(() => {
     data: { signalsIntelligenceEnabled: false },
   };
   testState.featureFlags = {
-    [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
-    [FEATURE_FLAGS.assistants]: unavailableFeatureFlag("loading"),
-    [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag("loading"),
-    [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.explore]: unavailableFeatureFlag("loading"),
   };
 });
@@ -133,20 +133,26 @@ describe("useProjectNavRoutes", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
     expect(result.current.map((entry) => entry.route)).toEqual(
       expect.arrayContaining([
-        routes.agents,
+        routes.identities.agents,
         routes.mcpSessions,
         routes.remoteIdentityProviders,
       ]),
     );
   });
 
-  it("includes Agent Identity for owners without requiring role grants", () => {
+  it("lists the two rosters and keeps the old agents page out of nav", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
-    const agents = result.current.find(
-      (entry) => entry.route === routes.agents,
-    );
 
-    expect(agents?.scope).toEqual([]);
+    expect(
+      result.current.find((entry) => entry.route === routes.agents),
+    ).toBeUndefined();
+    expect(
+      result.current.find((entry) => entry.route === routes.identities.people)
+        ?.scope,
+    ).toEqual(["project:read"]);
+    expect(
+      result.current.find((entry) => entry.route === routes.identities.agents),
+    ).toBeTruthy();
   });
 
   it("uses the selected project's read grant for MCP Sessions", () => {
@@ -160,12 +166,22 @@ describe("useProjectNavRoutes", () => {
     expect(sessions()?.resourceId).toBe("project_b");
   });
 
+  it("keeps Agent Sessions discoverable for members who can read their own history", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const sessions = result.current.find(
+      (entry) => entry.route === routes.agentSessions,
+    );
+    // Command K registers these routes as page actions. Requiring chat:read
+    // here would hide the search destination from owners without that grant.
+    expect(sessions?.scope).toEqual(["project:read"]);
+  });
+
   it("lists Identity before MCP Gateway, Security and Policy, and Observability", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
     const navRoutes = result.current.map((entry) => entry.route);
     expect(navRoutes.slice(2, 6)).toEqual([
-      routes.identities,
-      routes.agents,
+      routes.identities.people,
+      routes.identities.agents,
       routes.mcpSessions,
       routes.remoteIdentityProviders,
     ]);
@@ -221,21 +237,17 @@ describe("useProjectNavRoutes", () => {
   });
 
   it.each(["loading", "missing", "error"] as const)(
-    "preserves opt-in and opt-out navigation while flags are %s",
+    "keeps standard navigation while rollout flags are %s",
     (status) => {
       testState.featureFlags = {
-        [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
-        [FEATURE_FLAGS.assistants]: unavailableFeatureFlag(status),
-        [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag(status),
-        [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.explore]: unavailableFeatureFlag(status),
       };
 
       const { result } = renderHook(() => useProjectNavRoutes());
       const navRoutes = result.current.map((entry) => entry.route);
 
-      expect(navRoutes).not.toContain(routes.assistants);
-      expect(navRoutes).not.toContain(routes.watchdog);
+      expect(navRoutes).toContain(routes.assistants);
+      expect(navRoutes).toContain(routes.watchdog);
       expect(navRoutes).not.toContain(routes.explore);
       expect(navRoutes).toContain(routes.deployments);
       expect(navRoutes).toContain(routes.riskEvents);
@@ -258,12 +270,17 @@ describe("useProjectNavRoutes", () => {
     expect(shownRoutes).toContain(routes.dashboards);
   });
 
+  it("requires organization admin for Watchdog navigation, matching its page", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const watchdog = result.current.find(
+      (entry) => entry.route === routes.watchdog,
+    );
+
+    expect(watchdog?.scope).toEqual(["org:admin"]);
+  });
+
   it("uses resolved values for feature-gated navigation", () => {
     testState.featureFlags = {
-      [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
-      [FEATURE_FLAGS.assistants]: { status: "enabled" },
-      [FEATURE_FLAGS.deploymentsPage]: { status: "disabled" },
-      [FEATURE_FLAGS.riskWatchdog]: { status: "enabled" },
       [FEATURE_FLAGS.explore]: { status: "enabled" },
     };
 
@@ -273,13 +290,11 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes).toContain(routes.assistants);
     expect(navRoutes).toContain(routes.watchdog);
     expect(navRoutes).toContain(routes.explore);
-    expect(navRoutes).not.toContain(routes.deployments);
+    expect(navRoutes).toContain(routes.deployments);
     expect(navRoutes).toContain(routes.riskEvents);
   });
 
   it("uses assistant read on the active project for assistant surfaces", () => {
-    testState.featureFlags[FEATURE_FLAGS.assistants] = { status: "enabled" };
-
     const { result } = renderHook(() => useProjectNavRoutes());
     const assistantRoutes = result.current.filter(
       (entry) =>

@@ -941,6 +941,240 @@ func DecodeRevokeKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
+// BuildUpdateKeyPolicyRequest instantiates a HTTP request object with method
+// and path set to call the "keys" service "updateKeyPolicy" endpoint
+func (c *Client) BuildUpdateKeyPolicyRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateKeyPolicyKeysPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("keys", "updateKeyPolicy", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateKeyPolicyRequest returns an encoder for requests sent to the
+// keys updateKeyPolicy server.
+func EncodeUpdateKeyPolicyRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*keys.UpdateKeyPolicyPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("keys", "updateKeyPolicy", "*keys.UpdateKeyPolicyPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewUpdateKeyPolicyRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("keys", "updateKeyPolicy", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateKeyPolicyResponse returns a decoder for responses returned by
+// the keys updateKeyPolicy endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeUpdateKeyPolicyResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateKeyPolicyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateKeyPolicyResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			res := NewUpdateKeyPolicyKeyOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateKeyPolicyUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			return nil, NewUpdateKeyPolicyUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateKeyPolicyForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			return nil, NewUpdateKeyPolicyForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateKeyPolicyBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			return nil, NewUpdateKeyPolicyBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateKeyPolicyNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			return nil, NewUpdateKeyPolicyNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateKeyPolicyConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			return nil, NewUpdateKeyPolicyConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateKeyPolicyUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			return nil, NewUpdateKeyPolicyUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateKeyPolicyInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			return nil, NewUpdateKeyPolicyInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateKeyPolicyInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+				}
+				err = ValidateUpdateKeyPolicyInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+				}
+				return nil, NewUpdateKeyPolicyInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateKeyPolicyUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+				}
+				err = ValidateUpdateKeyPolicyUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+				}
+				return nil, NewUpdateKeyPolicyUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("keys", "updateKeyPolicy", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateKeyPolicyGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			return nil, NewUpdateKeyPolicyGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("keys", "updateKeyPolicy", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildVerifyKeyRequest instantiates a HTTP request object with method and
 // path set to call the "keys" service "verifyKey" endpoint
 func (c *Client) BuildVerifyKeyRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1194,13 +1428,62 @@ func marshalKeysAgentPolicyGrantFormToAgentPolicyGrantFormRequestBody(v *keys.Ag
 // *keys.AgentPolicySelector.
 func marshalKeysAgentPolicySelectorToAgentPolicySelectorRequestBody(v *keys.AgentPolicySelector) *AgentPolicySelectorRequestBody {
 	res := &AgentPolicySelectorRequestBody{
-		ResourceKind:   v.ResourceKind,
-		ResourceID:     v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
+		ResourceKind:    v.ResourceKind,
+		ResourceID:      v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		UpstreamClient:  v.UpstreamClient,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
+	}
+
+	return res
+}
+
+// marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantRequestBody builds a value of
+// type *APIKeyPolicyGrantRequestBody from a value of type
+// *keys.APIKeyPolicyGrant.
+func marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantRequestBody(v *keys.APIKeyPolicyGrant) *APIKeyPolicyGrantRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &APIKeyPolicyGrantRequestBody{
+		Scope: v.Scope,
+	}
+	if v.Selector != nil {
+		res.Selector = marshalKeysAPIKeyPolicySelectorToAPIKeyPolicySelectorRequestBody(v.Selector)
+	}
+
+	return res
+}
+
+// marshalKeysAPIKeyPolicySelectorToAPIKeyPolicySelectorRequestBody builds a
+// value of type *APIKeyPolicySelectorRequestBody from a value of type
+// *keys.APIKeyPolicySelector.
+func marshalKeysAPIKeyPolicySelectorToAPIKeyPolicySelectorRequestBody(v *keys.APIKeyPolicySelector) *APIKeyPolicySelectorRequestBody {
+	res := &APIKeyPolicySelectorRequestBody{
+		ResourceKind: v.ResourceKind,
+		ResourceID:   v.ResourceID,
+		ProjectID:    v.ProjectID,
+		ClientType:   v.ClientType,
+	}
+
+	return res
+}
+
+// marshalKeysAgentKeyAuthClientChoiceToAgentKeyAuthClientChoiceRequestBody
+// builds a value of type *AgentKeyAuthClientChoiceRequestBody from a value of
+// type *keys.AgentKeyAuthClientChoice.
+func marshalKeysAgentKeyAuthClientChoiceToAgentKeyAuthClientChoiceRequestBody(v *keys.AgentKeyAuthClientChoice) *AgentKeyAuthClientChoiceRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &AgentKeyAuthClientChoiceRequestBody{
+		McpServerID:  v.McpServerID,
+		AuthClientID: v.AuthClientID,
 	}
 
 	return res
@@ -1229,13 +1512,62 @@ func marshalAgentPolicyGrantFormRequestBodyToKeysAgentPolicyGrantForm(v *AgentPo
 // *AgentPolicySelectorRequestBody.
 func marshalAgentPolicySelectorRequestBodyToKeysAgentPolicySelector(v *AgentPolicySelectorRequestBody) *keys.AgentPolicySelector {
 	res := &keys.AgentPolicySelector{
-		ResourceKind:   v.ResourceKind,
-		ResourceID:     v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
+		ResourceKind:    v.ResourceKind,
+		ResourceID:      v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		UpstreamClient:  v.UpstreamClient,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
+	}
+
+	return res
+}
+
+// marshalAPIKeyPolicyGrantRequestBodyToKeysAPIKeyPolicyGrant builds a value of
+// type *keys.APIKeyPolicyGrant from a value of type
+// *APIKeyPolicyGrantRequestBody.
+func marshalAPIKeyPolicyGrantRequestBodyToKeysAPIKeyPolicyGrant(v *APIKeyPolicyGrantRequestBody) *keys.APIKeyPolicyGrant {
+	if v == nil {
+		return nil
+	}
+	res := &keys.APIKeyPolicyGrant{
+		Scope: v.Scope,
+	}
+	if v.Selector != nil {
+		res.Selector = marshalAPIKeyPolicySelectorRequestBodyToKeysAPIKeyPolicySelector(v.Selector)
+	}
+
+	return res
+}
+
+// marshalAPIKeyPolicySelectorRequestBodyToKeysAPIKeyPolicySelector builds a
+// value of type *keys.APIKeyPolicySelector from a value of type
+// *APIKeyPolicySelectorRequestBody.
+func marshalAPIKeyPolicySelectorRequestBodyToKeysAPIKeyPolicySelector(v *APIKeyPolicySelectorRequestBody) *keys.APIKeyPolicySelector {
+	res := &keys.APIKeyPolicySelector{
+		ResourceKind: v.ResourceKind,
+		ResourceID:   v.ResourceID,
+		ProjectID:    v.ProjectID,
+		ClientType:   v.ClientType,
+	}
+
+	return res
+}
+
+// marshalAgentKeyAuthClientChoiceRequestBodyToKeysAgentKeyAuthClientChoice
+// builds a value of type *keys.AgentKeyAuthClientChoice from a value of type
+// *AgentKeyAuthClientChoiceRequestBody.
+func marshalAgentKeyAuthClientChoiceRequestBodyToKeysAgentKeyAuthClientChoice(v *AgentKeyAuthClientChoiceRequestBody) *keys.AgentKeyAuthClientChoice {
+	if v == nil {
+		return nil
+	}
+	res := &keys.AgentKeyAuthClientChoice{
+		McpServerID:  v.McpServerID,
+		AuthClientID: v.AuthClientID,
 	}
 
 	return res
@@ -1286,13 +1618,45 @@ func unmarshalAgentDelegatedGrantResponseBodyToKeysAgentDelegatedGrant(v *AgentD
 // *AgentPolicySelectorResponseBody.
 func unmarshalAgentPolicySelectorResponseBodyToKeysAgentPolicySelector(v *AgentPolicySelectorResponseBody) *keys.AgentPolicySelector {
 	res := &keys.AgentPolicySelector{
-		ResourceKind:   *v.ResourceKind,
-		ResourceID:     *v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
+		ResourceKind:    *v.ResourceKind,
+		ResourceID:      *v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		UpstreamClient:  v.UpstreamClient,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
+	}
+
+	return res
+}
+
+// unmarshalAPIKeyPolicyGrantResponseBodyToKeysAPIKeyPolicyGrant builds a value
+// of type *keys.APIKeyPolicyGrant from a value of type
+// *APIKeyPolicyGrantResponseBody.
+func unmarshalAPIKeyPolicyGrantResponseBodyToKeysAPIKeyPolicyGrant(v *APIKeyPolicyGrantResponseBody) *keys.APIKeyPolicyGrant {
+	if v == nil {
+		return nil
+	}
+	res := &keys.APIKeyPolicyGrant{
+		Scope: *v.Scope,
+	}
+	res.Selector = unmarshalAPIKeyPolicySelectorResponseBodyToKeysAPIKeyPolicySelector(v.Selector)
+
+	return res
+}
+
+// unmarshalAPIKeyPolicySelectorResponseBodyToKeysAPIKeyPolicySelector builds a
+// value of type *keys.APIKeyPolicySelector from a value of type
+// *APIKeyPolicySelectorResponseBody.
+func unmarshalAPIKeyPolicySelectorResponseBodyToKeysAPIKeyPolicySelector(v *APIKeyPolicySelectorResponseBody) *keys.APIKeyPolicySelector {
+	res := &keys.APIKeyPolicySelector{
+		ResourceKind: *v.ResourceKind,
+		ResourceID:   *v.ResourceID,
+		ProjectID:    v.ProjectID,
+		ClientType:   v.ClientType,
 	}
 
 	return res
@@ -1322,6 +1686,16 @@ func unmarshalKeyResponseBodyToKeysKey(v *KeyResponseBody) *keys.Key {
 	}
 	if v.DelegatedGrants != nil {
 		res.DelegatedGrants = unmarshalAgentDelegatedPolicyResponseBodyToKeysAgentDelegatedPolicy(v.DelegatedGrants)
+	}
+	if v.PolicyGrants != nil {
+		res.PolicyGrants = make([]*keys.APIKeyPolicyGrant, len(v.PolicyGrants))
+		for i, val := range v.PolicyGrants {
+			if val == nil {
+				res.PolicyGrants[i] = nil
+				continue
+			}
+			res.PolicyGrants[i] = unmarshalAPIKeyPolicyGrantResponseBodyToKeysAPIKeyPolicyGrant(val)
+		}
 	}
 
 	return res

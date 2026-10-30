@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -264,6 +265,15 @@ func openClickhouseClient(ctx context.Context, logger *slog.Logger, opts clickho
 		},
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60, // query timeout
+			// Async inserts that leave the wait to the connection are
+			// fire-and-forget: they ack once queued rather than once
+			// committed. Tests set 1 on their connection to read their own
+			// writes. ClickHouse defaults async_insert to 1 since 26.2, so an
+			// insert that sends no async settings is fire-and-forget here too:
+			// every insert must state its posture (async_insert=0, or
+			// async_insert=1 with an explicit wait_for_async_insert=1 when it
+			// must read its own writes).
+			"wait_for_async_insert": 0,
 		},
 		MaxOpenConns: opts.maxOpenConns,
 		MaxIdleConns: opts.maxIdleConns,
@@ -514,6 +524,14 @@ func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, 
 	}, nil
 }
 
+// newFeatureFlags returns PostHog, or the CSV-backed in-memory provider in local dev.
+func newFeatureFlags(ctx context.Context, c *cli.Context, logger *slog.Logger, posthogClient feature.Provider) feature.Provider {
+	if c.String("environment") == "local" {
+		return newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
+	}
+	return posthogClient
+}
+
 func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath string) *feature.InMemory {
 	inmem := &feature.InMemory{}
 	// Local dev has no Presidio HTTP analyzer, so realtime scans must take the
@@ -521,6 +539,9 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	inmem.SetFlag(feature.FlagRiskEnforcementPubsub, feature.AnyDistinctID, true)
 	// The issuer kill switch fails closed when unset, so local dev sets it off.
 	inmem.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, feature.AnyDistinctID, false)
+	// The dashboard shows every flag on in local dev, so the server lets local
+	// orgs create tool approval policies too. A CSV row can still turn it off.
+	inmem.SetFlag(feature.FlagToolApprovals, feature.AnyDistinctID, true)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
@@ -645,13 +666,26 @@ func newBillingProvider(
 	}
 }
 
+var stripePublishableKeyPattern = regexp.MustCompile(`^pk_(test|live)_[A-Za-z0-9]+$`)
+
 func newStripeClient(
 	ctx context.Context,
 	logger *slog.Logger,
 	guardianPolicy *guardian.Policy,
 	c *cli.Context,
 ) (stripeclient.Client, error) {
+	publishableKey := c.String("stripe-publishable-key")
+	if stripeclient.IsConfigured(publishableKey) && !stripePublishableKeyPattern.MatchString(publishableKey) {
+		return nil, errors.New("invalid Stripe publishable key format")
+	}
 	apiKey := c.String("stripe-api-key")
+	apiKeyParts := strings.SplitN(apiKey, "_", 3)
+	if stripeclient.IsConfigured(publishableKey) && len(apiKeyParts) == 3 &&
+		(apiKeyParts[0] == "sk" || apiKeyParts[0] == "rk") &&
+		(apiKeyParts[1] == "test" || apiKeyParts[1] == "live") &&
+		!strings.HasPrefix(publishableKey, "pk_"+apiKeyParts[1]+"_") {
+		return nil, errors.New("mismatched Stripe API and publishable key modes")
+	}
 	if !stripeclient.IsConfigured(apiKey) {
 		if c.String("environment") == "local" {
 			logger.WarnContext(ctx, "using stub Stripe client: Stripe not configured")
@@ -676,6 +710,7 @@ func newStripeClient(
 		guardianPolicy,
 		apiKey,
 		c.String("stripe-webhook-secret"),
+		publishableKey,
 		catalog,
 	), nil
 }
@@ -1442,6 +1477,18 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "llmAnalysis", pub: llmAnalysis})
 
+	toolCallAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.ToolCallAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for tool call analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "toolCallAnalysis", pub: toolCallAnalysis})
+
+	accountIdentityAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.AccountIdentityAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for account identity analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "accountIdentityAnalysis", pub: accountIdentityAnalysis})
+
 	riskFindings, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.Finding{})
 	if err != nil {
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
@@ -1546,6 +1593,8 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		PromptPolicyAnalysis:    promptPolicyAnalysis,
 		CustomRulesAnalysis:     customRulesAnalysis,
 		LLMAnalysis:             llmAnalysis,
+		ToolCallAnalysis:        toolCallAnalysis,
+		AccountIdentityAnalysis: accountIdentityAnalysis,
 		RiskFindings:            riskFindings,
 		MeterReadings:           meterReadings,
 		TelemetryLogs:           telemetryLogs,

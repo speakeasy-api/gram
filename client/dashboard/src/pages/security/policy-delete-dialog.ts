@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import {
   DETECTION_RULES,
@@ -99,8 +100,9 @@ export function getPolicyDeleteRuleActionLabel(policy: RiskPolicy): string {
     warn: "warn",
     block: "block",
     quarantine: "quarantine",
+    require_approval: "require approval",
   };
-  return labels[policy.action];
+  return enumPresentation(labels, policy.action, "unknown");
 }
 
 export function getPolicyDeleteImpactText(

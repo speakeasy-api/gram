@@ -62,6 +62,8 @@ This produces migrations in **two flavors** that must always stay in sync:
 
 **No semicolons in `COMMENT '...'` strings.** golang-migrate splits statements naively, so a semicolon inside a column/table comment breaks its parser and the local migrations fail to replay. Rephrase the comment instead.
 
+**No backfills in migrations.** Migrations ship DDL only: tables, views, materialized views and their grants. Populating a new table or materialized view from existing rows is an operator step that a human runs outside Atlas, in chunks. A backfill statement inside a migration can take down the replica executing it, and the file then stays partially applied and blocks every later migration.
+
 Three CI checks guard this on every PR:
 
 - **atlas-lint** — runs the Atlas migration linter, plus a porcelain check that migrations were generated and are up to date with both the Postgres and ClickHouse schemas. If you edited `schema.sql` without running `mise run clickhouse:diff`, this fails.
@@ -85,7 +87,7 @@ The pre-aggregated **materialized views are the default read path** for anything
 - arbitrary user-supplied attribute-path filters (e.g. `@user.region`) that a fixed-column summary cannot express,
 - an event shape not yet captured by any summary (e.g. traceless trigger events).
 
-**Why it matters:** raw `telemetry_logs` reads are full-range table scans with per-row JSON extraction; the summary views are pre-aggregated and cheap. A filter dropdown, summary card, count, or default list that scans raw logs on every page load is a **performance bug** — the unified Tool Logs page regressed exactly this way before being moved back onto `trace_summaries`. If a summary is missing a column you need, prefer **extending the MV (+ a backfill migration)** over falling back to a raw-log scan.
+**Why it matters:** raw `telemetry_logs` reads are full-range table scans with per-row JSON extraction; the summary views are pre-aggregated and cheap. A filter dropdown, summary card, count, or default list that scans raw logs on every page load is a **performance bug** — the unified Tool Logs page regressed exactly this way before being moved back onto `trace_summaries`. If a summary is missing a column you need, prefer **extending the MV (+ an operator-run backfill, see "No backfills in migrations")** over falling back to a raw-log scan.
 
 **Reading `trace_summaries`** (one row per `trace_id`, `AggregatingMergeTree`): `GROUP BY trace_id`, use `*Merge` combinators for `AggregateFunction` columns (`anyIfMerge(http_status_code)`) and plain `any()`/`min()`/`sum()`/`max()` for `SimpleAggregateFunction` columns. Tool calls carry a real `trace_id` (recorded by the gateway in `ToolProxy.Do`), so hosted MCP, shadow MCP, skill, and local tool events are all present in the view.
 
@@ -142,8 +144,9 @@ When asked to add a new ClickHouse query to the telemetry package:
 - Use the target package's existing ClickHouse fixture pattern (`testenv.Launch` or `testenv.NewTestClickhouse`) and a real ClickHouse container.
 - For `async_insert=0`, read directly after the insert.
 - For `async_insert=1, wait_for_async_insert=1`, read directly after the insert returns.
-- For `async_insert=1, wait_for_async_insert=0`, call `testenv.FlushClickHouseAsyncInserts(t, conn)` after the application issues the write and before reading. Synchronize any application goroutine first; do not use `time.Sleep` or polling to wait for the async queue.
-- Do not use `clickhouse.WithAsync(false)` to request synchronous insertion: it enables fire-and-forget async inserts. Omit async options or set `async_insert=0` explicitly.
+- For fire-and-forget writes, set only `async_insert=1` on the query and leave `wait_for_async_insert` to the connection: production sets 0, and the test connection sets 1, so tests read directly after the insert returns. Synchronize any application goroutine that issues the write before reading. Never pin `wait_for_async_insert=0` per query; it overrides the test connection and makes reads race the async queue. Do not flush the queue with `SYSTEM FLUSH ASYNC INSERT QUEUE` as a barrier (it can miss batches already dequeued for a background flush), and do not use `time.Sleep` or polling, which only hides the race.
+- Every insert states its async posture. ClickHouse defaults `async_insert` to 1 since 26.2, so an insert that sends no async settings inherits it plus the server connection's `wait_for_async_insert=0` and becomes fire-and-forget in production, while tests (connection `async_insert=0`) never notice. Use `async_insert=0`, or `async_insert=1` with `wait_for_async_insert=1` when the caller reads its own writes. Use `async_insert=0` when a table has CHECK constraints whose violations the caller reports per insert: an async flush merges rows from many queries into one block, so one writer's bad row fails every insert in that flush.
+- Do not use `clickhouse.WithAsync(false)` to request synchronous insertion: it enables fire-and-forget async inserts. Set `async_insert=0` explicitly instead; omitting async options is fire-and-forget on the server connection too.
 - Use table-driven tests with descriptive `it`-prefix names and helper functions for test data insertion.
 
 See `server/internal/telemetry/README.md` for comprehensive documentation.

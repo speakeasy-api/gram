@@ -36,7 +36,7 @@ func TestListChatsToolDeclaresBothAudiencesAndAdminAuthorization(t *testing.T) {
 	require.NoError(t, json.Unmarshal(descriptor.InputSchema, &schema))
 	properties, ok := schema["properties"].(map[string]any)
 	require.True(t, ok)
-	require.ElementsMatch(t, []string{"project_id", "project_slug", "window", "risk", "source", "assistant_id", "user_reference", "limit", "cursor"}, keysOf(properties))
+	require.ElementsMatch(t, []string{"project_id", "project_slug", "window", "risk", "source", "assistant_id", "agent_id", "user_reference", "limit", "cursor"}, keysOf(properties))
 }
 
 func TestListChatsToolServesAPage(t *testing.T) {

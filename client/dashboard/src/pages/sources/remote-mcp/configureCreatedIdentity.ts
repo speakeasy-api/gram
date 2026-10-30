@@ -1,7 +1,13 @@
-import { isNotFoundError } from "@/lib/errors";
+import { requireKnownEnumValue } from "@/lib/enum";
+import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
+import { isForbiddenError, isNotFoundError } from "@/lib/errors";
 import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import { serverIdentityAuthMethod } from "@/lib/remote-identity/model/clientConfiguration";
+import {
+  bindServiceAccountClient,
+  type ServiceAccountClientSpec,
+} from "@/lib/remote-identity/drafts/useServiceAccountClientDraft";
 import type { Gram } from "@gram/client";
 import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import type { CommitServerIdentityConfigurationResult } from "@gram/client/models/components/commitserveridentityconfigurationresult.js";
@@ -21,8 +27,11 @@ type ConfigureCreatedIdentityInput = {
   mcpServer: McpServer;
   identityMode: RemoteMcpCreationIdentity;
   agentAuthorization?: string;
-  /** The server's issuer is organization-owned, so a project may not set it up. */
-  organizationOwnedUserSessionIssuer?: boolean;
+  /**
+   * An OAuth service account client to bind instead of a static credential.
+   * Takes precedence over agentAuthorization.
+   */
+  serviceAccountClient?: ServiceAccountClientSpec;
   options?: RequestOptions;
 };
 
@@ -47,7 +56,7 @@ export async function configureCreatedRemoteMcpIdentity({
   mcpServer,
   identityMode,
   agentAuthorization,
-  organizationOwnedUserSessionIssuer = false,
+  serviceAccountClient,
   options,
 }: ConfigureCreatedIdentityInput): Promise<ConfigureCreatedIdentityResult> {
   if (identityMode === "none") {
@@ -65,13 +74,43 @@ export async function configureCreatedRemoteMcpIdentity({
     }
   }
 
+  if (identityMode === "agent" && serviceAccountClient) {
+    try {
+      await bindServiceAccountClient(
+        client,
+        serviceAccountClient,
+        mcpServer.toolsetId ?? mcpServer.id,
+        options,
+      );
+    } catch {
+      return setupRequired(
+        mcpServer,
+        identityMode,
+        `Couldn't connect the server to ${serviceAccountClient.issuerName}. Finish the Service Account in Settings > Identity.`,
+      );
+    }
+
+    try {
+      return configured(
+        await setMcpServerVisibility(client, mcpServer, "private", options),
+        identityMode,
+      );
+    } catch {
+      return setupRequired(
+        mcpServer,
+        identityMode,
+        "Service Account was configured, but the server could not be enabled. Enable it from Settings.",
+      );
+    }
+  }
+
   if (identityMode === "agent") {
     const authorization = agentAuthorization?.trim();
     if (!authorization) {
       return setupRequired(
         mcpServer,
         identityMode,
-        "Add a Service Account credential in Settings > Identity.",
+        "Add a shared credential in Settings > Identity.",
       );
     }
     try {
@@ -92,7 +131,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Service Account could not be configured. Add the credential in Settings > Identity.",
+        "The shared credential could not be configured. Add it in Settings > Identity.",
       );
     }
 
@@ -105,19 +144,9 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Service Account was configured, but the server could not be enabled. Enable it from Settings.",
+        "The shared credential was configured, but the server could not be enabled. Enable it from Settings.",
       );
     }
-  }
-
-  // Only User Identity touches the session issuer, and an organization-owned
-  // one is not a project's to set up.
-  if (organizationOwnedUserSessionIssuer) {
-    return setupRequired(
-      mcpServer,
-      identityMode,
-      "Organization user session issuers are configured by organization administrators.",
-    );
   }
 
   if (!mcpServer.userSessionIssuerId) {
@@ -159,7 +188,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Existing identity providers could not be checked. Configure User Identity in Settings > Identity.",
+        "Existing authorization servers could not be checked. Configure User Identity in Settings > Identity.",
       );
     }
     provider = null;
@@ -172,7 +201,7 @@ export async function configureCreatedRemoteMcpIdentity({
     return setupRequired(
       mcpServer,
       identityMode,
-      "The matching identity provider is missing OAuth endpoints. Update it in Remote Identity Providers.",
+      "The matching authorization server is missing OAuth endpoints. Update it in Authorization Servers.",
     );
   }
 
@@ -244,11 +273,13 @@ export async function configureCreatedRemoteMcpIdentity({
       undefined,
       options,
     );
-  } catch {
+  } catch (error) {
     return setupRequired(
       mcpServer,
       identityMode,
-      "User Identity could not be configured. Open Settings > Identity to finish setup.",
+      isForbiddenError(error)
+        ? "This server shares its sign-in client with other projects. An organization admin can finish setup in Settings > Identity."
+        : "User Identity could not be configured. Open Settings > Identity to finish setup.",
     );
   }
 
@@ -268,7 +299,7 @@ export async function configureCreatedRemoteMcpIdentity({
     return setupRequired(
       mcpServer,
       identityMode,
-      "The identity provider needs its client registered by hand. Finish setup in Settings > Identity.",
+      "The authorization server needs its client registered by hand. Finish setup in Settings > Identity.",
       result,
     );
   }
@@ -350,8 +381,8 @@ function commitFailureMessage(
   if (result.failure) {
     const outcome =
       result.failure.outcome === "unreachable"
-        ? "The identity provider was unreachable"
-        : "The identity provider refused registration";
+        ? "The authorization server was unreachable"
+        : "The authorization server refused registration";
     return `${outcome}. Configure User Identity in Settings > Identity.`;
   }
   return "Automatic client registration is unavailable. Configure User Identity in Settings > Identity.";
@@ -372,7 +403,10 @@ async function setMcpServerVisibility(
         toolsetId: mcpServer.toolsetId ?? undefined,
         environmentId: mcpServer.environmentId ?? undefined,
         toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
-        visibility,
+        visibility: requireKnownEnumValue(
+          KnownUpdateMcpServerFormVisibility,
+          visibility,
+        ),
       },
     },
     undefined,

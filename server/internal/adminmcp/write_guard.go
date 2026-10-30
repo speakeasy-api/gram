@@ -20,6 +20,10 @@ const (
 type WriteOperation string
 
 const (
+	// OperationCurateRegistryPromotionCandidate changes staff review status for an unpublished candidate.
+	OperationCurateRegistryPromotionCandidate     WriteOperation = "curate_registry_promotion_candidate"
+	OperationRetryRegistryPromotionDocs           WriteOperation = "retry_registry_promotion_docs"
+	OperationPromoteRegistryCandidate             WriteOperation = "promote_registry_candidate"
 	OperationSetOrganizationFeature               WriteOperation = "set_organization_feature"
 	OperationSetOrganizationWhitelist             WriteOperation = "set_organization_whitelist"
 	OperationAssignOrganizationOnboardingPlaybook WriteOperation = "assign_organization_onboarding_playbook"
@@ -36,6 +40,9 @@ const (
 
 // AllWriteOperations is the complete allowlist, in a stable order.
 var AllWriteOperations = []WriteOperation{
+	OperationCurateRegistryPromotionCandidate,
+	OperationRetryRegistryPromotionDocs,
+	OperationPromoteRegistryCandidate,
 	OperationSetOrganizationFeature,
 	OperationSetOrganizationWhitelist,
 	OperationAssignOrganizationOnboardingPlaybook,
@@ -77,7 +84,7 @@ type WriteConfig struct {
 // ParseWriteOperations reads a comma-separated operation list. Unknown names
 // are an error so a typo cannot silently leave an operation disabled or enabled.
 func ParseWriteOperations(raw string) (map[WriteOperation]bool, error) {
-	operations := map[WriteOperation]bool{}
+	operations := make(map[WriteOperation]bool)
 	for name := range strings.SplitSeq(raw, ",") {
 		name = strings.TrimSpace(name)
 		if name == "" {
@@ -96,7 +103,7 @@ func ParseWriteOperations(raw string) (map[WriteOperation]bool, error) {
 // keep this consent allowlist aligned with the operation registry.
 func (op WriteOperation) implemented() bool {
 	switch op {
-	case OperationSetOrganizationFeature, OperationSetOrganizationWhitelist, OperationAssignOrganizationOnboardingPlaybook,
+	case OperationCurateRegistryPromotionCandidate, OperationRetryRegistryPromotionDocs, OperationPromoteRegistryCandidate, OperationSetOrganizationFeature, OperationSetOrganizationWhitelist, OperationAssignOrganizationOnboardingPlaybook,
 		OperationSetChatAnalysisSettings, OperationExtendOrganizationTrial,
 		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationUploadPlatformImage:
 		return true

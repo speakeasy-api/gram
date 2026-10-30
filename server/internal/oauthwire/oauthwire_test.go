@@ -62,9 +62,7 @@ func TestValidateResourceIndicators_RejectsUppercaseSchemeAndHost(t *testing.T) 
 
 func TestValidateResourceIndicators_RejectsDifferentRouteBase(t *testing.T) {
 	t.Parallel()
-	// /mcp and /x/mcp can front the same server but mint different audiences
-	// (urn:toolset vs urn:user-session-issuer), so they are never equivalent
-	// resource identifiers.
+	// A different route base is never an equivalent resource identifier.
 	requireInvalidTarget(t, oauthwire.ValidateResourceIndicators([]string{"https://acme.example.com/x/mcp/support-bot"}, canonicalResource))
 }
 
@@ -124,4 +122,40 @@ func TestResourceIndicatorsFrom_DistinguishesAbsentFromEmpty(t *testing.T) {
 	// extraction or the later ones would go unvalidated.
 	repeated := url.Values{"resource": []string{canonicalResource, "https://evil.example.com/mcp/support-bot"}}
 	require.Len(t, oauthwire.ResourceIndicatorsFrom(repeated), 2)
+}
+
+func TestMayAutoRedirectBeforeAuthentication(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		uri     string
+		allowed bool
+	}{
+		{"http://127.0.0.1/cb", true},
+		{"https://127.0.0.1:54321/cb", true},
+		{"http://[::1]:54321/cb", true},
+		{"https://[::1]/cb", true},
+		{"http://localhost:54321/cb", true},
+		{"https://LOCALHOST/cb?keep=value", true},
+		{"https://client.example/cb", false},
+		{"http://localhost.example/cb", false},
+		{"https://localhost./cb", false},
+		{"http://127.0.0.2/cb", false},
+		{"http://127.1/cb", false},
+		{"http://2130706433/cb", false},
+		{"http://[::ffff:127.0.0.1]/cb", false},
+		{"https://localhost@client.example/cb", false},
+		{"https://client.example@localhost/cb", false},
+		{"https://localhost/cb#fragment", false},
+		{"com.example.app://localhost/cb", false},
+		{"https:localhost", false},
+		{"//localhost/cb", false},
+		{"https://localhost\\@client.example/cb", false},
+		{"https://localhost:bad/cb", false},
+		{"", false},
+	} {
+		t.Run(tc.uri, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.allowed, oauthwire.MayAutoRedirectBeforeAuthentication(tc.uri))
+		})
+	}
 }

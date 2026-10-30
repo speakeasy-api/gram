@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -88,6 +89,9 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeUnexpected, err, "lock provisioning writer scope")
+	}
 	if err := requireLiveProjectForActiveOrganization(ctx, tx, authCtx); err != nil {
 		return RemoteMCPProvisioningResult{}, err
 	}
@@ -100,9 +104,6 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 		return RemoteMCPProvisioningResult{}, err
 	}
 
-	if err := mcpservers.VerifyLiveRemoteMCPSourceInTransaction(ctx, tx, *authCtx.ProjectID, remote.ID); err != nil {
-		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeUnexpected, err, "verify remote MCP source")
-	}
 	mcpServer, err := mcpservers.CreateMCPServerInTransaction(ctx, tx, s.audit, mcpservers.MCPServerTransactionInput{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		ProjectID:             *authCtx.ProjectID,
@@ -158,7 +159,38 @@ func remoteMCPDisplayName(rawURL string, name pgtype.Text) string {
 // matching audit event. Both dashboard workflows use it so their source records
 // cannot diverge while the atomic workflow adds its linked MCP server.
 func createRemoteMCPSource(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, input remoteMCPSourceInput) (repo.RemoteMcpServer, error) {
-	if tx == nil || auditLogger == nil || authCtx == nil || authCtx.ProjectID == nil {
+	if authCtx == nil || authCtx.ProjectID == nil {
+		return repo.RemoteMcpServer{}, oops.E(oops.CodeBadRequest, nil, "invalid remote MCP source input")
+	}
+	return CreateRemoteMCPSourceInTransaction(ctx, tx, auditLogger, RemoteMCPSourceTransactionInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		ActorUserID:    authCtx.UserID,
+		ActorEmail:     authCtx.Email,
+		Name:           input.Name,
+		URL:            input.URL,
+		TransportType:  input.TransportType,
+	})
+}
+
+// RemoteMCPSourceTransactionInput names the project and actor a remote MCP
+// source is created for when the caller has no request auth context, such as
+// a staff migration acting on a customer project.
+type RemoteMCPSourceTransactionInput struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ActorUserID    string
+	ActorEmail     *string
+	Name           *string
+	URL            string
+	TransportType  string
+}
+
+// CreateRemoteMCPSourceInTransaction creates the remote_mcp_servers row and its
+// audit event in the caller's transaction. It neither probes the upstream nor
+// creates an issuer or client.
+func CreateRemoteMCPSourceInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input RemoteMCPSourceTransactionInput) (repo.RemoteMcpServer, error) {
+	if tx == nil || auditLogger == nil || input.ProjectID == uuid.Nil || input.OrganizationID == "" {
 		return repo.RemoteMcpServer{}, oops.E(oops.CodeBadRequest, nil, "invalid remote MCP source input")
 	}
 	remoteID, err := uuid.NewV7()
@@ -171,7 +203,7 @@ func createRemoteMCPSource(ctx context.Context, tx pgx.Tx, auditLogger *audit.Lo
 	}
 	remote, err := repo.New(tx).CreateServer(ctx, repo.CreateServerParams{
 		ID:            remoteID,
-		ProjectID:     *authCtx.ProjectID,
+		ProjectID:     input.ProjectID,
 		Name:          normalizedRemoteMCPSourceName(input.Name),
 		Slug:          conv.ToPGText(remoteSlug),
 		TransportType: input.TransportType,
@@ -185,10 +217,10 @@ func createRemoteMCPSource(ctx context.Context, tx pgx.Tx, auditLogger *audit.Lo
 		return repo.RemoteMcpServer{}, oops.E(oops.CodeUnexpected, err, "create remote MCP server")
 	}
 	if err := auditLogger.LogRemoteMcpServerCreate(ctx, tx, audit.LogRemoteMcpServerCreateEvent{
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ProjectID:          *authCtx.ProjectID,
-		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:   authCtx.Email,
+		OrganizationID:     input.OrganizationID,
+		ProjectID:          input.ProjectID,
+		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID),
+		ActorDisplayName:   input.ActorEmail,
 		ActorSlug:          nil,
 		RemoteMcpServerURN: urn.NewRemoteMcpServer(remote.ID),
 		RemoteMcpServerURL: remote.Url,

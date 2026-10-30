@@ -26,8 +26,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -303,9 +303,6 @@ func TestCreateMCPFromFunctionsReportsTheFirstServerJoiningTheDefaultPlugin(t *t
 	t.Parallel()
 	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_create_from_functions_first_server")
 	ctx = fixture.createFromFunctionsContext(ctx)
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagHostedMCPServerKeyWrites, feature.AnyDistinctID, true)
-	fixture.service.WithFeatureProvider(flags)
 	// Leave the organization with no enabled server, so the next is its first.
 	disableFixtureServer(t, ctx, fixture)
 
@@ -350,21 +347,10 @@ func TestCreateMCPFromFunctionsReportsTheFirstServerJoiningTheDefaultPlugin(t *t
 	require.Equal(t, "not_requested", second.PublicationRequest)
 }
 
-// disableFixtureServer disables the fixture's server through the hosted mirror, as the dashboard does.
+// disableFixtureServer disables the fixture's canonical hosted server, as the dashboard does.
 func disableFixtureServer(t *testing.T, ctx context.Context, fixture toolExposureFixture) {
 	t.Helper()
-	tx, err := fixture.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction for the hosted mirror write.
-	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := toolsetsrepo.New(tx)
-	require.NoError(t, q.SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
-		McpEnabled: false, ID: fixture.toolsetID, ProjectID: fixture.project.ID,
-	}))
-	toolset, err := q.GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: fixture.toolsetID, ProjectID: fixture.project.ID})
-	require.NoError(t, err)
-	_, err = hostedmcp.Sync(ctx, tx, audit.NewLogger(), hostedmcp.SystemActor("test"), toolset, nil)
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit(ctx))
+	testenv.SetHostedMCP(t, ctx, fixture.conn, fixture.project.ID, fixture.toolsetID, testenv.HostedMCP{Visibility: "disabled"})
 }
 
 type recordingPublishSignaler struct{ projects []uuid.UUID }
@@ -576,11 +562,21 @@ func TestCreateMCPFromFunctionsMatchesTheDashboardSequence(t *testing.T) {
 	require.NoError(t, err)
 	dashboardToolset, err := toolsetRows.GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: dashboardToolsetID, ProjectID: fixture.project.ID})
 	require.NoError(t, err)
-	require.Equal(t, dashboardToolset.McpEnabled, toolToolset.McpEnabled)
+	toolCanonical, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolToolset.ID, ProjectID: fixture.project.ID})
+	require.NoError(t, err)
+	dashboardCanonical, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: dashboardToolset.ID, ProjectID: fixture.project.ID})
+	require.NoError(t, err)
+	require.Equal(t, dashboardCanonical.Visibility, toolCanonical.Visibility, "the toolsets' canonical servers are hosted alike")
 	require.Equal(t, dashboardToolset.DefaultEnvironmentSlug, toolToolset.DefaultEnvironmentSlug)
 	require.Equal(t, dashboardToolset.Description, toolToolset.Description)
 	require.Equal(t, dashboardToolset.ToolSelectionMode, toolToolset.ToolSelectionMode)
-	require.Regexp(t, "^"+orgSlug+"-", toolToolset.McpSlug.String)
+	toolAlias, err := legacyalias.Get(ctx, fixture.conn, fixture.project.ID, toolToolset.ID)
+	require.NoError(t, err)
+	require.Equal(t, legacyalias.None(), toolAlias, "the toolset has no legacy alias")
+	toolEndpoints, err := mcpendpointsrepo.New(fixture.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: fixture.project.ID, McpServerID: toolToolset.ID})
+	require.NoError(t, err)
+	require.Len(t, toolEndpoints, 1, "the canonical server gets one platform endpoint")
+	require.Regexp(t, "^"+orgSlug+"-", toolEndpoints[0].Slug)
 
 	toolExposure, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, toolRow.ID)
 	require.NoError(t, err)
@@ -628,34 +624,4 @@ func TestCreateMCPFromFunctionsUnavailableRegistrationMatchesLiveManifest(t *tes
 		"idempotency_key": uuid.NewString(), "confirmed": true,
 	})
 	require.Contains(t, refusal, "Creating an MCP server from a project's functions")
-}
-
-// With the server-key rollout off, the Default plugin entry keeps the toolset key phase A pods write.
-func TestCreateMCPFromFunctionsDefaultPluginEntryFlagOffKeepsToolsetKey(t *testing.T) {
-	t.Parallel()
-	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_create_from_functions_flag_off")
-	ctx = fixture.createFromFunctionsContext(ctx)
-	off := &feature.InMemory{}
-	off.SetFlag(feature.FlagHostedMCPServerKeyWrites, feature.AnyDistinctID, false)
-	fixture.service.WithFeatureProvider(off)
-	disableFixtureServer(t, ctx, fixture)
-
-	input := fixture.createInput("First Desk", fixture.tools[0])
-	input.Confirmed = true
-	created, err := fixture.service.CreateMCPFromFunctions(ctx, fixture.principal, input)
-	require.NoError(t, err)
-	require.True(t, created.AddedToDefaultPlugin)
-
-	defaultPlugin, err := pluginsrepo.New(fixture.conn).GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{
-		OrganizationID: fixture.principal.OrganizationID, ProjectID: fixture.project.ID,
-	})
-	require.NoError(t, err)
-	members, err := pluginsrepo.New(fixture.conn).ListPluginServers(ctx, defaultPlugin.ID)
-	require.NoError(t, err)
-	toolsetID := uuid.MustParse(created.Exposure.ToolsetID)
-	joined := false
-	for _, member := range members {
-		joined = joined || member.ToolsetID == uuid.NullUUID{UUID: toolsetID, Valid: true}
-	}
-	require.True(t, joined, "the new tool list is in the Default plugin under its toolset")
 }

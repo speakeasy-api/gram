@@ -57,7 +57,7 @@ func TestToolsCallKillswitchRunsBeforeRejectingUserPolicy(t *testing.T) {
 	)
 	p.UserRequestInterceptors = []proxy.UserRequestInterceptor{policy}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/server", strings.NewReader(`{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"protected","arguments":{}}}`))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", strings.NewReader(`{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"protected","arguments":{}}}`))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
@@ -116,7 +116,7 @@ func TestToolsCallKillswitchStopsProtectedAndUpstreamWork(t *testing.T) {
 				NewToolsCallKillswitchInterceptor(checkpoint, "organization-id", "server-id", testenv.NewLogger(t)),
 				protectedWork,
 			)
-			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/server", strings.NewReader(`{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"protected","arguments":{}}}`))
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", strings.NewReader(`{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"protected","arguments":{}}}`))
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Accept", "application/json, text/event-stream")
 			rr := httptest.NewRecorder()
@@ -162,7 +162,7 @@ func TestToolsCallKillswitchRejectsMalformedParamsAfterCheckpoint(t *testing.T) 
 		`{"jsonrpc":"2.0","id":7,"method":"tools/call"}`,
 	}
 	for _, body := range bodies {
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/server", strings.NewReader(body))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json, text/event-stream")
 		rr := httptest.NewRecorder()
@@ -216,7 +216,7 @@ func TestToolsCallKillswitchEvaluatesAmbiguousStrictSessionCalls(t *testing.T) {
 		`{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"protected"},"params":[]}`,
 	}
 	for i, body := range bodies {
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/server", strings.NewReader(body))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json, text/event-stream")
 		rr := httptest.NewRecorder()
@@ -275,7 +275,7 @@ func TestToolsCallKillswitchEvaluatesAmbiguousCallsWithoutSessionSelection(t *te
 		},
 	}
 	for i, body := range bodies {
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/server", strings.NewReader(body))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json, text/event-stream")
 		rr := httptest.NewRecorder()
@@ -306,7 +306,7 @@ func TestToolsCallKillswitchDeniesExistingSessionOnNextCall(t *testing.T) {
 
 	checkpoint := &fakeKillswitchCheckpoint{disposition: killswitches.NewContinueDisposition()}
 	p := newKillswitchTestProxy(t, upstream.URL, NewToolsCallKillswitchInterceptor(checkpoint, "organization-id", "server-id", testenv.NewLogger(t)))
-	initialize := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/server", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
+	initialize := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
 	initialize.Header.Set("Content-Type", "application/json")
 	initialize.Header.Set("Accept", "application/json, text/event-stream")
 	initializeResponse := httptest.NewRecorder()
@@ -318,7 +318,7 @@ func TestToolsCallKillswitchDeniesExistingSessionOnNextCall(t *testing.T) {
 	match, err := killswitches.NewMatchedDenialDisposition("Session calls paused.")
 	require.NoError(t, err)
 	checkpoint.disposition = match
-	call := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/server", strings.NewReader(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"protected","arguments":{}}}`))
+	call := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", strings.NewReader(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"protected","arguments":{}}}`))
 	call.Header.Set("Content-Type", "application/json")
 	call.Header.Set("Accept", "application/json, text/event-stream")
 	call.Header.Set("Mcp-Session-Id", "existing-session")
@@ -346,7 +346,7 @@ func TestToolsCallKillswitchExcludesOtherMethods(t *testing.T) {
 		`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`,
 		`{"jsonrpc":"2.0","id":1,"method":"resources/list","params":{}}`,
 	} {
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/server", strings.NewReader(body))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json, text/event-stream")
 		require.NoError(t, p.Post(httptest.NewRecorder(), req))

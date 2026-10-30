@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/Badge";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
 import { Info } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { AgentIdentityRow } from "@/lib/remote-identity";
 import { IdentityExplainerCallout } from "@/lib/remote-identity";
 import { identityModeCards } from "@/lib/remote-identity";
@@ -26,6 +26,7 @@ export function CreationIdentityChoice({
   authenticationRequired,
   canCreateIdentity,
   rbacLoading,
+  serviceAccountPanel,
 }: {
   value: CreationIdentityMode;
   onChange: (mode: CreationIdentityMode) => void;
@@ -36,6 +37,12 @@ export function CreationIdentityChoice({
   authenticationRequired: boolean;
   canCreateIdentity: boolean;
   rbacLoading: boolean;
+  /**
+   * The full Service Account choice — static credentials and OAuth clients —
+   * from callers that can bind an OAuth client once the server exists.
+   * Replaces the static-only credential form.
+   */
+  serviceAccountPanel?: ReactNode;
 }): JSX.Element {
   const [explainerOpen, setExplainerOpen] = useState(false);
 
@@ -95,7 +102,9 @@ export function CreationIdentityChoice({
         ))}
       </RadioCardGroup>
 
-      {value === "agent" ? (
+      {value === "agent" && serviceAccountPanel ? (
+        <div className="pt-2">{serviceAccountPanel}</div>
+      ) : value === "agent" ? (
         <AgentIdentityRow
           draft={credential}
           disabled={false}
@@ -112,8 +121,9 @@ export function CreationIdentityChoice({
 
       {value === "user" && !rbacLoading && !canCreateIdentity ? (
         <Alert variant="warning" dismissible={false}>
-          User Identity creates an identity provider and requires project:write.
-          Choose another identity mode or ask a project administrator.
+          User Identity creates an authorization server and requires
+          project:write. Choose another identity mode or ask a project
+          administrator.
         </Alert>
       ) : null}
     </div>

@@ -47,8 +47,8 @@ VALUES (@organization_id, @project_id, 'Default', 'default', true)
 RETURNING id;
 
 -- name: RolesInsertEveryonePluginAssignment :exec
-INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES (@plugin_id, @organization_id, '*');
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn, install_mode)
+VALUES (@plugin_id, @organization_id, '*', 'available');
 
 -- Every role (the tenant's custom ones, then the global ones) with the plugin
 -- slug it maps to. The slug matches conv.ToSlug, including Go's ASCII-only
@@ -78,8 +78,8 @@ VALUES (@organization_id, @project_id, @name, @slug, true)
 RETURNING id;
 
 -- name: RolesInsertRolePluginAssignment :exec
-INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES (@plugin_id, @organization_id, @principal_urn)
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn, install_mode)
+VALUES (@plugin_id, @organization_id, @principal_urn, 'default')
 ON CONFLICT (plugin_id, principal_urn) DO NOTHING;
 
 -- The Read-only Tools role is the disposition case: it reaches every server,
@@ -146,6 +146,39 @@ WHERE organization_id = @organization_id AND slack_user_id IN ('U0DEMO00001', 'U
 -- name: RolesDeleteDirectoryRoleMappings :exec
 DELETE FROM directory_role_mappings WHERE organization_id = @organization_id;
 
+-- name: RolesDeleteDirectoryReviewItems :exec
+DELETE FROM directory_review_items WHERE organization_id = @organization_id;
+
+-- name: RolesDeleteDirectoryReviewOrgState :exec
+DELETE FROM directory_review_org_states WHERE organization_id = @organization_id;
+
+-- name: RolesDeleteDirectoryReviewOptOuts :exec
+DELETE FROM directory_review_attribute_opt_outs WHERE organization_id = @organization_id;
+
+-- Starts directory review now: groups created before this are offered in
+-- bulk setup, groups created after it are raised for review. Review emails
+-- are off: the seeded items are recreated on every reseed, so they would
+-- otherwise email the organization's admins each day.
+-- name: RolesInsertDirectoryReviewOrgState :exec
+INSERT INTO directory_review_org_states (organization_id, baseline_at, emails_disabled_at)
+VALUES (@organization_id::text, clock_timestamp(), clock_timestamp());
+
+-- A group first seen after review started.
+-- name: RolesInsertNewDirectoryGroup :exec
+INSERT INTO directory_groups
+  (organization_id, workos_directory_group_id, name, workos_created_at, workos_updated_at)
+VALUES (@organization_id::text, @group_prefix::text || @slug::text, @name::text, now(), now());
+
+-- name: RolesInsertDirectoryReviewGroupItem :exec
+INSERT INTO directory_review_items (organization_id, kind, directory_group_id, occurrence, state)
+SELECT @organization_id::text, @kind::text, dg.id, 1, 'pending'
+FROM directory_groups dg
+WHERE dg.organization_id = @organization_id::text AND dg.name = @group_name::text;
+
+-- name: RolesInsertDirectoryReviewAttributeItem :exec
+INSERT INTO directory_review_items (organization_id, kind, attribute_key, attribute_value, occurrence, state)
+VALUES (@organization_id::text, @kind::text, @attribute_key::text, @attribute_value::text, 1, 'pending');
+
 -- name: RolesDeleteDirectoryGroupMemberships :exec
 DELETE FROM directory_user_group_memberships WHERE directory_group_id IN
   (SELECT id FROM directory_groups WHERE organization_id = @organization_id);
@@ -164,11 +197,23 @@ INSERT INTO directory_groups
 SELECT @organization_id::text, @group_prefix::text || replace(lower(t), ' ', '-'), t, now(), now()
 FROM (SELECT DISTINCT unnest(@teams::text[]) AS t) g;
 
+-- A group the directory has since deleted. Its mapping stays and grants
+-- nothing, so the mappings page shows it as a missing source.
+-- name: RolesInsertDeletedDirectoryGroup :exec
+INSERT INTO directory_groups
+  (organization_id, workos_directory_group_id, name, workos_created_at,
+   workos_updated_at, workos_deleted_at, deleted_at)
+VALUES (@organization_id::text, @group_prefix::text || @slug::text, @name::text,
+        now() - interval '60 days', now() - interval '3 days',
+        now() - interval '3 days', now() - interval '3 days');
+
 -- name: RolesInsertDirectoryUser :exec
+-- user_id is NULL for directory people who have not signed in yet.
 INSERT INTO directory_users
-  (organization_id, user_id, workos_directory_user_id, email, attributes,
-   workos_created_at, workos_updated_at)
-VALUES (@organization_id, @user_id::text, @workos_directory_user_id, @email::text,
+  (organization_id, user_id, workos_directory_user_id, email, first_name,
+   last_name, attributes, workos_created_at, workos_updated_at)
+VALUES (@organization_id, sqlc.narg(user_id)::text, @workos_directory_user_id,
+        @email::text, sqlc.narg(first_name)::text, sqlc.narg(last_name)::text,
         jsonb_build_object(
           'division_name', @division_name::text,
           'department_name', @department_name::text,
@@ -226,10 +271,33 @@ VALUES (@organization_id, @user_id::text, @provider, @external_org_id::text,
 INSERT INTO device_owners (organization_id, provider, device_id, linked_user_id)
 VALUES (@organization_id, 'anthropic', @device_id, @linked_user_id::text);
 
+-- name: RolesDeleteDeviceAgentStateReports :exec
+DELETE FROM device_agent_state_reports WHERE organization_id = @organization_id;
+
+-- served_etag is the policy etag the user's last poll was served; NULL for an
+-- agent that has not polled since the column existed.
 -- name: RolesInsertDeviceAgentSync :exec
-INSERT INTO device_agent_syncs (organization_id, email, first_seen_at, last_seen_at)
+INSERT INTO device_agent_syncs
+  (organization_id, email, first_seen_at, last_seen_at, served_etag,
+   served_etag_changed_at)
 VALUES (@organization_id, @email, now() - interval '9 days',
-        now() - (@last_seen_ago::text)::interval);
+        now() - (@last_seen_ago::text)::interval, sqlc.narg(served_etag)::text,
+        CASE WHEN sqlc.narg(served_etag)::text IS NULL THEN NULL
+             ELSE now() - interval '2 days' END);
+
+-- name: RolesInsertDeviceAgentStateReport :exec
+INSERT INTO device_agent_state_reports
+  (organization_id, email, serial_number, hostname, schema_version,
+   generated_at, reported_at, applied_etag, applied_at, enforcement_halted,
+   tools, degraded_tool_count, drift_counting_since, speakeasyd_version,
+   speakeasy_version, os, arch, auto_update, update_channel)
+VALUES (@organization_id, @email, @serial_number::text, @hostname::text, 1,
+        now() - (@reported_ago::text)::interval,
+        now() - (@reported_ago::text)::interval,
+        @applied_etag::text, now() - (@applied_ago::text)::interval, FALSE,
+        @tools::jsonb, @degraded_tool_count::integer,
+        now() - interval '9 days', @speakeasyd_version::text,
+        @speakeasyd_version::text, 'darwin', 'arm64', 'automatic', 'stable');
 
 -- name: RolesDeleteAIScanTargets :exec
 DELETE FROM ai_scan_targets WHERE organization_id = @organization_id;

@@ -1,14 +1,4 @@
-const STORAGE_KEY = "gram-rbac-dev-override";
-
-type ScopeState = {
-  enabled: boolean;
-  resources: string[] | null; // null = unrestricted, string[] = specific resource IDs
-};
-
-type OverrideState = {
-  enabled: boolean;
-  scopes: Record<string, ScopeState>;
-};
+import { loadState } from "@/pages/platform-admin/rbac-override-state";
 
 /**
  * Returns the X-Gram-Scope-Override header value if the dev override is active,
@@ -24,9 +14,7 @@ export function getRBACScopeOverrideHeader(
 ): string | null {
   if (!allowed) return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const state: OverrideState = JSON.parse(raw);
+    const state = loadState();
     if (!state.enabled) return null;
     const parts = Object.entries(state.scopes)
       .filter(([, s]) => {
@@ -41,7 +29,9 @@ export function getRBACScopeOverrideHeader(
         }
         return scope;
       });
-    return parts.length > 0 ? parts.join(",") : null;
+    // The backend treats an absent/empty header as no override. An unknown,
+    // nonempty scope produces zero matching grants instead of restoring access.
+    return parts.length > 0 ? parts.join(",") : "rbac-override:none";
   } catch {
     return null;
   }

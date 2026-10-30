@@ -1,3 +1,5 @@
+import { enumPresentation } from "@/lib/enum";
+import { TOOL_ANNOTATIONS } from "@/components/tool-selection/annotations";
 import {
   ToolSelectionPanel,
   type ToolSelectionServer,
@@ -353,7 +355,12 @@ function ToolNarrowing({
     (narrowing.disposition ? [narrowing.disposition] : []);
   return (
     <fieldset
-      disabled={disabled}
+      disabled={
+        disabled ||
+        selectedAnnotations.some(
+          (value) => !TOOL_ANNOTATIONS.some((known) => known === value),
+        )
+      }
       className="min-w-0 space-y-2 sm:col-span-2"
       aria-label={`Fine-tune ${grant.scope}`}
     >
@@ -376,7 +383,9 @@ function ToolNarrowing({
             ? "annotations"
             : "tools"
         }
-        selectedAnnotations={selectedAnnotations}
+        selectedAnnotations={TOOL_ANNOTATIONS.filter((value) =>
+          selectedAnnotations.includes(value),
+        )}
         selectedTools={selectedTools.map((toolName) => ({
           serverId: server?.id ?? "",
           toolName,
@@ -474,7 +483,13 @@ function PinnedDimensionChips({
     value !== undefined && value !== ANY_RESOURCE;
   if (pinned(selector.tool)) chips.push(`tool: ${selector.tool}`);
   if (pinned(selector.disposition) && selector.disposition)
-    chips.push(DISPOSITION_LABELS[selector.disposition]);
+    chips.push(
+      enumPresentation(
+        DISPOSITION_LABELS,
+        selector.disposition,
+        "Unknown annotation",
+      ),
+    );
   if (pinned(selector.projectId)) chips.push("one project");
   if (pinned(selector.serverUrl)) chips.push(`server: ${selector.serverUrl}`);
   if (pinned(selector.serverIdentity))

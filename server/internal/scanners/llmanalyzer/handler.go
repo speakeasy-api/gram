@@ -94,7 +94,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 		h.disabledOnce.Do(func() {
 			h.logger.WarnContext(ctx, "LLM analyzer disabled: GRAM_RISK_LLM_URL empty; acking analysis requests without findings; batch routing falls back to the legacy engines under this config, so this ack is only a safety net for in-flight requests")
 		})
-		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, scanners.AsyncScanOutcomeDisabled, scanners.AsyncShadowGateReasonNotGated)
+		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanOutcomeDisabled)
 		return nil
 	}
 
@@ -114,7 +114,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 			attr.SlogRiskScanRequestID(m.GetRequestId()),
 			attr.SlogOrganizationID(m.GetOrganizationId()),
 		)
-		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, scanners.AsyncScanOutcomeScanError, scanners.AsyncShadowGateReasonNotGated)
+		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanOutcomeScanError)
 		return nil
 	}
 	result := analysis.Result
@@ -166,7 +166,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 		}
 	}
 	if err != nil {
-		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, scanners.AsyncScanOutcomePublishError, scanners.AsyncShadowGateReasonNotGated)
+		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanOutcomePublishError)
 		return err
 	}
 
@@ -174,7 +174,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 	if m.GetShadow() {
 		outcome = scanners.AsyncScanOutcomeShadowPublished
 	}
-	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, outcome, scanners.AsyncShadowGateReasonNotGated)
+	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, outcome)
 	return nil
 }
 

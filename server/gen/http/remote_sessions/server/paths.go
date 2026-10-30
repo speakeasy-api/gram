@@ -7,6 +7,16 @@
 
 package server
 
+// BeginBindingRefreshRemoteSessionsPath returns the URL path to the remoteSessions service beginBindingRefresh HTTP endpoint.
+func BeginBindingRefreshRemoteSessionsPath() string {
+	return "/rpc/remoteSessions.beginBindingRefresh"
+}
+
+// CompleteBindingRefreshRemoteSessionsPath returns the URL path to the remoteSessions service completeBindingRefresh HTTP endpoint.
+func CompleteBindingRefreshRemoteSessionsPath() string {
+	return "/rpc/remoteSessions.completeBindingRefresh"
+}
+
 // ListBindingsRemoteSessionsPath returns the URL path to the remoteSessions service listBindings HTTP endpoint.
 func ListBindingsRemoteSessionsPath() string {
 	return "/rpc/remoteSessions.listBindings"
@@ -30,6 +40,16 @@ func CommitServerIdentityConfigurationRemoteSessionsPath() string {
 // GetServerIdentityImpactRemoteSessionsPath returns the URL path to the remoteSessions service getServerIdentityImpact HTTP endpoint.
 func GetServerIdentityImpactRemoteSessionsPath() string {
 	return "/rpc/remoteSessions.getServerIdentityImpact"
+}
+
+// ListServerClientAssociationsRemoteSessionsPath returns the URL path to the remoteSessions service listServerClientAssociations HTTP endpoint.
+func ListServerClientAssociationsRemoteSessionsPath() string {
+	return "/rpc/remoteSessions.listServerClientAssociations"
+}
+
+// DetachServerClientAssociationRemoteSessionsPath returns the URL path to the remoteSessions service detachServerClientAssociation HTTP endpoint.
+func DetachServerClientAssociationRemoteSessionsPath() string {
+	return "/rpc/remoteSessions.detachServerClientAssociation"
 }
 
 // ListRemoteSessionsRemoteSessionsPath returns the URL path to the remoteSessions service listRemoteSessions HTTP endpoint.

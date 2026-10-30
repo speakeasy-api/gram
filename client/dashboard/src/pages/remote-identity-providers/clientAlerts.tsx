@@ -36,7 +36,7 @@ export function LegacyCallbackAlert({
   const current = callbackUrl;
 
   return (
-    <Alert variant="warning" dismissible={false} alignTop className={className}>
+    <Alert variant="warning" dismissible={false} className={className}>
       <div className="flex flex-col items-start gap-3">
         <span>
           This app was registered with the{" "}
@@ -63,8 +63,8 @@ export function LegacyCallbackAlert({
         description={
           <>
             Sign-ins will send <span className="font-mono">{current}</span>. If
-            that URL is not registered with the identity provider yet, sign-ins
-            will fail until it is.
+            that URL is not registered with the authorization server yet,
+            sign-ins will fail until it is.
           </>
         }
         confirmLabel="Migrate"

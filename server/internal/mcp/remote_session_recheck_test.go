@@ -255,6 +255,9 @@ func TestRemoteSessionRecheck_UnusableEndpointDoesNotShadowLiveSibling(t *testin
 			prefix := "aim261-shadow-" + visibility
 			ctx, fx := seedStandaloneValidationFixture(t, prefix)
 			makeKeepaliveShaped(t, ctx, fx, prefix)
+			// The live server is configured before its sibling shares the
+			// issuer, as an organization migrated with one server would be.
+			fx.ti.service.migrate(ctx)
 			projectID := fx.endpoint.ProjectID
 			endpoints := mcpendpoints_repo.New(fx.ti.conn)
 
@@ -403,7 +406,7 @@ func seedTunneledRecheckFixture(t *testing.T, prefix, identifier string, callerI
 	if len(callerIssuers) > 0 {
 		callerIssuer = callerIssuers[0]
 	}
-	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), provider, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{ValidationTimeout: validationProbeTimeout, RecheckInterval: recheckTestInterval}, testenv.NewTracerProvider(t), nil, callerIssuer)
+	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), provider, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{ValidationTimeout: validationProbeTimeout, RecheckInterval: recheckTestInterval}, testenv.NewTracerProvider(t), nil, callerIssuer, "")
 	projectID, orgID := consentTestTenant(t, ctx)
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	serverID, tunnelID := createPrivateTunneledServer(t, ctx, ti, projectID, shared, prefix+"-server", identifier)

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -51,11 +52,28 @@ type sessionPolicyEntry struct {
 
 	// Refreshable records whether issuance included an actual refresh token.
 	Refreshable bool `json:"refreshable"`
+
+	// CredentialID is the credential the session row belongs to, which
+	// refresh rotation keeps.
+	CredentialID uuid.UUID `json:"credential_id"`
+}
+
+// sessionPolicy is a validated session's immutable issuance policy.
+type sessionPolicy struct {
+	// selection is the consent-screen tool policy, nil for all tools.
+	selection *toolfilter.SessionPolicy
+
+	// refreshable reports that issuance included an actual refresh token.
+	refreshable bool
+
+	// credentialID is the credential the session row belongs to.
+	credentialID uuid.UUID
 }
 
 func sessionPolicyCacheKey(issuerID, jti string) string {
-	// The version excludes tool-selection-only entries from older servers.
-	return "sessionPolicy:v1:" + issuerID + ":" + jti
+	// The version excludes entries from older servers that lack fields this
+	// one reads.
+	return "sessionPolicy:v2:" + issuerID + ":" + jti
 }
 
 // CacheKey implements cache.CacheableObject.
@@ -71,9 +89,11 @@ func (e sessionPolicyEntry) TTL() time.Duration { return sessionPolicyTTL }
 
 // endpointToolSelectionResource is the server-authored identity a consent
 // selection binds to: the fronting mcp_server when there is one, else the
-// toolset. Empty when the endpoint has neither, as with meta-MCP.
+// toolset or gateway. Empty when the endpoint has no stored resource.
 func endpointToolSelectionResource(endpoint *ResolvedMcpEndpoint) string {
 	switch {
+	case endpoint.MetaMcpServerID.Valid:
+		return "meta_mcp_server:" + endpoint.MetaMcpServerID.UUID.String()
 	case endpoint.McpServerID.Valid:
 		return "mcp_server:" + endpoint.McpServerID.UUID.String()
 	case endpoint.ToolsetID.Valid:
@@ -97,45 +117,54 @@ func endpointAcceptsToolSelectionResource(endpoint *ResolvedMcpEndpoint, resourc
 	return endpoint.McpServerID.Valid && endpoint.ToolsetID.Valid && resource == "toolset:"+endpoint.ToolsetID.UUID.String()
 }
 
+// liveSessionPolicyKey bypasses the short-lived HTTP policy cache during code callbacks.
+type liveSessionPolicyKey struct{}
+
 // loadSessionPolicy resolves tool selection and refreshability for a validated
 // session JTI. The selection is nil for an all-tools session. Any error means the request
 // must be rejected: missing row (a live jti always has one — refresh
 // rotation revokes the old jti before soft-deleting its row), database
 // failure, or a malformed stored policy.
-func (s *Service) loadSessionPolicy(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (*toolfilter.SessionSelection, bool, error) {
+func (s *Service) loadSessionPolicy(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (sessionPolicy, error) {
 	issuerID := endpoint.UserSessionIssuerID.String()
 
-	var raw []byte
-	var refreshable bool
-	if cached, err := s.sessionPolicyCache.Get(ctx, sessionPolicyCacheKey(issuerID, jti)); err == nil {
-		raw = cached.Selection
-		refreshable = cached.Refreshable
-	} else {
+	var entry sessionPolicyEntry
+	live, _ := ctx.Value(liveSessionPolicyKey{}).(bool)
+	cachedPolicy := false
+	if !live {
+		if cached, err := s.sessionPolicyCache.Get(ctx, sessionPolicyCacheKey(issuerID, jti)); err == nil {
+			entry = cached
+			cachedPolicy = true
+		}
+	}
+	if !cachedPolicy {
 		row, derr := usersessions_repo.New(s.db).GetUserSessionPolicyByJTI(ctx, usersessions_repo.GetUserSessionPolicyByJTIParams{
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
 			Jti:                 jti,
 		})
 		if derr != nil {
 			if errors.Is(derr, pgx.ErrNoRows) {
-				return nil, false, fmt.Errorf("user session row not found for jti")
+				return sessionPolicy{}, fmt.Errorf("user session row not found for jti")
 			}
-			return nil, false, fmt.Errorf("load session policy: %w", derr)
+			return sessionPolicy{}, fmt.Errorf("load session policy: %w", derr)
 		}
-		raw = row.ToolSelection
-		refreshable = row.Refreshable
-		if cerr := s.sessionPolicyCache.Store(ctx, sessionPolicyEntry{
-			IssuerID:    issuerID,
-			JTI:         jti,
-			Selection:   raw,
-			Refreshable: refreshable,
-		}); cerr != nil {
-			s.logger.WarnContext(ctx, "cache session policy", attr.SlogError(cerr))
+		entry = sessionPolicyEntry{
+			IssuerID:     issuerID,
+			JTI:          jti,
+			Selection:    row.ToolSelection,
+			Refreshable:  row.Refreshable,
+			CredentialID: row.CredentialID,
+		}
+		if !live {
+			if cerr := s.sessionPolicyCache.Store(ctx, entry); cerr != nil {
+				s.logger.WarnContext(ctx, "cache session policy", attr.SlogError(cerr))
+			}
 		}
 	}
 
-	sel, err := toolfilter.ParseSessionSelection(raw)
+	sel, err := toolfilter.ParseSessionPolicy(entry.Selection)
 	if err != nil {
-		return nil, false, fmt.Errorf("parse stored tool selection: %w", err)
+		return sessionPolicy{}, fmt.Errorf("parse stored tool selection: %w", err)
 	}
-	return sel, refreshable, nil
+	return sessionPolicy{selection: sel, refreshable: entry.Refreshable, credentialID: entry.CredentialID}, nil
 }

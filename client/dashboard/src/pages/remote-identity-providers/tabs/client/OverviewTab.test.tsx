@@ -17,6 +17,7 @@ import { OverviewTab } from "./OverviewTab";
 
 const mutation = vi.hoisted(() => ({
   mutate: vi.fn(),
+  mutateAsync: vi.fn(),
   onSuccess: undefined as ((saved: unknown) => Promise<void>) | undefined,
 }));
 const auth = vi.hoisted(() => ({ isPlatformAdmin: false, isOrgAdmin: true }));
@@ -76,8 +77,14 @@ vi.mock(
     useUpdateOrganizationRemoteSessionClientMutation: (options: {
       onSuccess: (saved: unknown) => Promise<void>;
     }) => {
-      mutation.onSuccess = options.onSuccess;
-      return { mutate: mutation.mutate, isPending: false };
+      // The card also holds a rename mutation whose onSuccess ignores the
+      // saved client; keep the form's handler, which reads it.
+      if (options.onSuccess.length > 0) mutation.onSuccess = options.onSuccess;
+      return {
+        mutate: mutation.mutate,
+        mutateAsync: mutation.mutateAsync,
+        isPending: false,
+      };
     },
   }),
 );
@@ -90,10 +97,39 @@ vi.mock(
     invalidateAllOrganizationRemoteSessionClient: vi.fn(),
   }),
 );
+vi.mock(
+  "@gram/client/react-query/organizationRemoteSessionClients.js",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@gram/client/react-query/organizationRemoteSessionClients.js")
+    >()),
+    invalidateAllOrganizationRemoteSessionClients: vi.fn(),
+  }),
+);
+vi.mock(
+  "@gram/client/react-query/organizationRemoteSessionClientSessions.js",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@gram/client/react-query/organizationRemoteSessionClientSessions.js")
+    >()),
+    invalidateAllOrganizationRemoteSessionClientSessions: vi.fn(),
+  }),
+);
 vi.mock("./KeySetField", () => ({ KeySetField: () => <div>key set</div> }));
 vi.mock("../../clientDialogs", () => ({
   DeleteClientDialog: () => <div>delete dialog</div>,
   RotateClientDialog: () => <div>rotate dialog</div>,
+  ChangeClientIdDialog: ({
+    newClientId,
+    onConfirm,
+  }: {
+    newClientId: string;
+    onConfirm: () => void;
+  }) => (
+    <button type="button" onClick={onConfirm}>
+      Confirm change to {newClientId}
+    </button>
+  ),
 }));
 vi.mock(
   "../../../mcp/x/tabs/settings/sections/authentication/IssuerFormFields",
@@ -243,11 +279,13 @@ function openScopes() {
   fireEvent.click(screen.getByText("Discovered at sign-in"));
 }
 
-describe("client overview identity provider card", () => {
+describe("client overview authorization server card", () => {
   it("shows the issuer's metadata and links to its page", () => {
     renderTab();
 
-    const link = screen.getByRole("link", { name: "View identity provider" });
+    const link = screen.getByRole("link", {
+      name: "View authorization server",
+    });
     expect(link.getAttribute("href")).toBe("/rip/issuer-1/overview");
     expect(screen.getByText("Example IdP")).toBeTruthy();
     expect(
@@ -292,9 +330,9 @@ describe("client overview identity provider card", () => {
   it("omits the card when the issuer failed to load", () => {
     const { container } = renderTab({ issuer: undefined });
 
-    expect(screen.queryByText("View identity provider")).toBeNull();
+    expect(screen.queryByText("View authorization server")).toBeNull();
     expect(container.querySelector(".skeleton")).toBeNull();
-    expect(screen.getByText("Client")).toBeTruthy();
+    expect(screen.getByTitle("Rename client")).toBeTruthy();
   });
 
   it("keeps the card while the issuer loads", () => {
@@ -304,9 +342,9 @@ describe("client overview identity provider card", () => {
     });
 
     // The card holds its place with a skeleton until the issuer arrives.
-    expect(screen.queryByText("View identity provider")).toBeNull();
+    expect(screen.queryByText("View authorization server")).toBeNull();
     expect(container.querySelector(".skeleton")).not.toBeNull();
-    expect(screen.getByText("Client")).toBeTruthy();
+    expect(screen.getByTitle("Rename client")).toBeTruthy();
   });
 });
 
@@ -450,10 +488,106 @@ describe("client overview read-only access", () => {
 });
 
 describe("client overview settings", () => {
-  it("shows the client ID read-only at the top of the card", () => {
+  it("shows a CIMD client's generated client ID read-only", () => {
+    renderTab({
+      client: client(undefined, {
+        clientId: "https://app.example.com/cimd/client-1",
+        clientIdMetadataUri: "https://app.example.com/cimd/client-1",
+      }),
+    });
+
+    expect(field("Client ID").textContent).toContain(
+      "https://app.example.com/cimd/client-1",
+    );
+    expect(screen.queryByRole("textbox", { name: "Client ID" })).toBeNull();
+  });
+
+  it("omits an unchanged client ID without asking to confirm", () => {
     renderTab();
 
-    expect(field("Client ID").textContent).toContain("upstream-client");
+    expect(
+      (screen.getByRole("textbox", { name: "Client ID" }) as HTMLInputElement)
+        .value,
+    ).toBe("upstream-client");
+    save();
+
+    expect(screen.queryByText(/Confirm change/)).toBeNull();
+    expect(lastSaved().clientId).toBeUndefined();
+  });
+
+  it("confirms before saving a corrected client ID", () => {
+    renderTab();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Client ID" }), {
+      target: { value: "  corrected-client  " },
+    });
+    save();
+
+    expect(mutation.mutate).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Confirm change to corrected-client",
+      }),
+    );
+    expect(lastSaved().clientId).toBe("corrected-client");
+  });
+
+  it("blocks saving an empty client ID", () => {
+    renderTab();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Client ID" }), {
+      target: { value: "  " },
+    });
+
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Save changes",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it("renames from the header, trimmed, on its own request", async () => {
+    mutation.mutateAsync.mockResolvedValue({});
+    renderTab();
+
+    fireEvent.click(screen.getByTitle("Rename client"));
+    const input = screen.getByLabelText("Name");
+    expect((input as HTMLInputElement).value).toBe("");
+    fireEvent.change(input, { target: { value: "  Production login  " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await vi.waitFor(() =>
+      expect(mutation.mutateAsync).toHaveBeenLastCalledWith({
+        request: {
+          updateRemoteSessionClientForm: {
+            id: "client-1",
+            displayName: "Production login",
+          },
+        },
+      }),
+    );
+    save();
+    expect(lastSaved().displayName).toBeUndefined();
+  });
+
+  it("clears a name with an empty string", async () => {
+    mutation.mutateAsync.mockResolvedValue({});
+    renderTab({ client: client(undefined, { displayName: "Old name" }) });
+
+    expect(screen.getByText("Old name")).toBeTruthy();
+    fireEvent.click(screen.getByTitle("Rename client"));
+    const input = screen.getByLabelText("Name");
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await vi.waitFor(() =>
+      expect(
+        mutation.mutateAsync.mock.lastCall![0].request
+          .updateRemoteSessionClientForm.displayName,
+      ).toBe(""),
+    );
   });
 
   it("saves a trimmed audience", () => {
@@ -478,7 +612,10 @@ describe("client overview settings", () => {
     expect(lastSaved().audience).toBeUndefined();
 
     await act(async () => {
-      await mutation.onSuccess?.({ audience: "old-aud" });
+      await mutation.onSuccess?.({
+        audience: "old-aud",
+        clientId: "upstream-client",
+      });
     });
     expect((screen.getByLabelText("Audience") as HTMLInputElement).value).toBe(
       "old-aud",

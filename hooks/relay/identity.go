@@ -18,6 +18,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/speakeasy-api/agenthooks"
@@ -45,7 +46,64 @@ func resolveUserEmail(ctx context.Context, typed any) string {
 }
 
 func deviceAgentEmail(ctx context.Context) string {
+	return deviceIdentityFor(ctx).Email
+}
+
+// deviceIdentity is what the device agent reports about this box: the managed
+// user's email for attribution and, on a headless workload box (ADR-0025,
+// contract C8), the argv that mints its hooks token.
+type deviceIdentity struct {
+	Email          string
+	Workload       bool
+	HooksTokenArgv []string
+	// Known is set when a device agent answered at all, so a caller can tell
+	// "not a workload box" from "could not ask".
+	Known bool
+}
+
+// deviceIdentityTTL bounds how long one lookup serves, so an event runs identity
+// at most once and a serve process still picks up enrollment changes.
+const deviceIdentityTTL = 30 * time.Second
+
+var deviceIdentityMemo struct {
+	sync.Mutex
+	key string
+	at  time.Time
+	id  deviceIdentity
+}
+
+// deviceIdentityFor returns the memoized identity for the current device-agent
+// lookup inputs. The key covers everything that changes where the lookup goes,
+// so a changed environment never reads a stale answer.
+func deviceIdentityFor(ctx context.Context) deviceIdentity {
+	key := strings.Join(deviceAgentCommands(), "\x00") + "\x01" + agentSocketPath() + "\x01" + Env("DEVICE_AGENT_COMMANDS")
+	deviceIdentityMemo.Lock()
+	if deviceIdentityMemo.key == key && nowFunc().Sub(deviceIdentityMemo.at) < deviceIdentityTTL {
+		id := deviceIdentityMemo.id
+		deviceIdentityMemo.Unlock()
+		return id
+	}
+	deviceIdentityMemo.Unlock()
+	// The lookup runs unlocked: concurrent events must not queue behind a slow
+	// device agent and spend their gating budget waiting. Racing lookups are
+	// harmless; the last one stored wins.
+	id := lookupDeviceIdentity(ctx)
+	deviceIdentityMemo.Lock()
+	deviceIdentityMemo.key, deviceIdentityMemo.at, deviceIdentityMemo.id = key, nowFunc(), id
+	deviceIdentityMemo.Unlock()
+	return id
+}
+
+// resetDeviceIdentityMemo forgets the memoized identity; tests use it.
+func resetDeviceIdentityMemo() {
+	deviceIdentityMemo.Lock()
+	defer deviceIdentityMemo.Unlock()
+	deviceIdentityMemo.key, deviceIdentityMemo.at, deviceIdentityMemo.id = "", time.Time{}, deviceIdentity{}
+}
+
+func lookupDeviceIdentity(ctx context.Context) deviceIdentity {
 	timeout := tenthsDuration("DEVICE_AGENT_TIMEOUT_TENTHS", 15)
+	var found deviceIdentity
 	for _, name := range deviceAgentCommands() {
 		name = strings.TrimSpace(name)
 		if name == "" {
@@ -57,17 +115,37 @@ func deviceAgentEmail(ctx context.Context) string {
 		if err != nil {
 			continue
 		}
-		if email := identityOutputEmail(output); email != "" {
-			return email
+		found.Known = true
+		id := identityOutput(output)
+		if id.Workload || id.Email != "" {
+			id.Known = true
+			return id
 		}
 	}
 	// Rescue tier: a daemon running from a location the exec chain can't
 	// guess still owns a socket at a fixed per-OS path — ask it directly.
 	// The env override is a real off switch and silences this tier too.
 	if Env("DEVICE_AGENT_COMMANDS") != "" {
-		return ""
+		return found
 	}
-	return socketIdentityEmail(ctx)
+	if id, ok := socketIdentity(ctx); ok {
+		return id
+	}
+	return found
+}
+
+// identityOutput parses `speakeasyd identity` output: a bare email, or a JSON
+// document that may also carry the workload fields.
+func identityOutput(output []byte) deviceIdentity {
+	id := deviceIdentity{Email: identityOutputEmail(output)}
+	var workload struct {
+		Workload       bool     `json:"workload"`
+		HooksTokenArgv []string `json:"hooks_token_argv"`
+	}
+	if json.Unmarshal(output, &workload) == nil && workload.Workload {
+		id.Workload, id.HooksTokenArgv = true, workload.HooksTokenArgv
+	}
+	return id
 }
 
 // socketAgentTimeout bounds the whole socket-rescue request. Only a *hung*
@@ -82,9 +160,16 @@ const socketAgentTimeout = 150 * time.Millisecond
 // config files per call, while the daemon serves its boot-time snapshot —
 // exec is fresher whenever both are available. One attempt, no retry.
 func socketIdentityEmail(ctx context.Context) string {
+	id, _ := socketIdentity(ctx)
+	return id.Email
+}
+
+// socketIdentity is socketIdentityEmail's full answer, workload fields
+// included. ok is false when no usable document came back.
+func socketIdentity(ctx context.Context) (deviceIdentity, bool) {
 	socket := agentSocketPath()
 	if socket == "" {
-		return ""
+		return deviceIdentity{}, false
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, socketAgentTimeout)
 	defer cancel()
@@ -100,34 +185,43 @@ func socketIdentityEmail(ctx context.Context) string {
 	}}
 	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, "http://speakeasy-agent/v1/identity", nil)
 	if err != nil {
-		return ""
+		return deviceIdentity{}, false
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return ""
+		return deviceIdentity{}, false
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return ""
+		return deviceIdentity{}, false
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
 	if err != nil {
-		return ""
+		return deviceIdentity{}, false
 	}
 	var identity struct {
-		V        int    `json:"v"`
-		Enrolled bool   `json:"enrolled"`
-		Email    string `json:"email"`
+		V              int      `json:"v"`
+		Enrolled       bool     `json:"enrolled"`
+		Email          string   `json:"email"`
+		Workload       bool     `json:"workload"`
+		HooksTokenArgv []string `json:"hooks_token_argv"`
 	}
 	if json.Unmarshal(body, &identity) != nil {
-		return ""
+		return deviceIdentity{}, false
 	}
 	// Contract rule: a document version newer than we understand is
 	// unreadable, same as the exec path's consumers.
-	if identity.V > 1 || !identity.Enrolled || !validEmail(identity.Email) {
-		return ""
+	if identity.V > 1 {
+		return deviceIdentity{}, false
 	}
-	return identity.Email
+	id := deviceIdentity{Email: "", Workload: identity.Workload, HooksTokenArgv: nil, Known: true}
+	if identity.Workload {
+		id.HooksTokenArgv = identity.HooksTokenArgv
+	}
+	if identity.Enrolled && validEmail(identity.Email) {
+		id.Email = identity.Email
+	}
+	return id, true
 }
 
 // agentSocketPath mirrors the device agent's api.SocketPath, including the
@@ -172,8 +266,15 @@ func deviceAgentCommands() []string {
 		}
 	case "windows":
 	default:
+		// The dashboard's Linux setup installs into the agent's XDG state
+		// folder, written as ~/.local/state so it ignores XDG_STATE_HOME; an
+		// absolute XDG_STATE_HOME is probed too for installs that honour it.
+		if stateHome := strings.TrimSpace(os.Getenv("XDG_STATE_HOME")); filepath.IsAbs(stateHome) {
+			candidates = append(candidates, filepath.Join(stateHome, "speakeasy", "bin", "speakeasyd"))
+		}
 		if home != "" {
 			candidates = append(candidates,
+				filepath.Join(home, ".local", "state", "speakeasy", "bin", "speakeasyd"),
 				// ~/.speakeasy is the agent's conventional dotdir on Linux
 				// (its IPC socket lives there); kept as a supported install
 				// location by maintainer decision even though no packaged
@@ -205,7 +306,9 @@ var machineWideAgentPaths = func() []string {
 	case "windows":
 		return []string{`C:\Program Files\Speakeasy\speakeasyd.exe`}
 	default:
-		return []string{"/usr/local/bin/speakeasyd"}
+		// /opt/speakeasy/bin is the root-owned, off-PATH folder for fleet
+		// installs; /usr/local/bin is where older install steps put it.
+		return []string{"/opt/speakeasy/bin/speakeasyd", "/usr/local/bin/speakeasyd"}
 	}
 }()
 

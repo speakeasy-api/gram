@@ -1,6 +1,10 @@
 import { createRoot } from "react-dom/client";
 
 import { ConsentToolsApp, type ConsentToolsAppProps } from "./ConsentToolsApp";
+import {
+  fetchConsentInventory,
+  parseGatewayInventoryBootstrap,
+} from "./consentInventory";
 import { parsePrefillBootstrap } from "./prefill";
 import "./consent-tools.css";
 
@@ -27,6 +31,14 @@ function readBootstrap(el: HTMLElement): ConsentToolsAppProps | null {
   ) {
     return null;
   }
+  let gatewayInventory: ConsentToolsAppProps["gatewayInventory"];
+  if (el.dataset["gateway"] === "true") {
+    const parsed = parseGatewayInventoryBootstrap(
+      el.dataset["gatewayInventory"],
+    );
+    if (!parsed) return null;
+    gatewayInventory = parsed;
+  }
   return {
     toolsUrl,
     state,
@@ -34,7 +46,9 @@ function readBootstrap(el: HTMLElement): ConsentToolsAppProps | null {
     formId,
     approveButtonId,
     consentEnabled: consentEnabled === "true",
+    gateway: el.dataset["gateway"] === "true",
     inventoryDeferred: inventoryDeferred === "true",
+    ...(gatewayInventory ? { gatewayInventory } : {}),
     serverName,
     prefill: parsePrefillBootstrap(el.dataset["prefill"]),
   };
@@ -50,5 +64,42 @@ if (mount) {
     // only the app enables it), so a broken bootstrap fails closed.
     mount.textContent =
       "Tool access could not be initialized. Reload the page to continue.";
+  }
+}
+
+// The checking page uses the same bounded consent transport as the picker.
+// Only the server decides whether the captured inventory matches approval.
+const reuseForm = document.getElementById("consent-reuse");
+if (reuseForm instanceof HTMLFormElement) {
+  void checkSavedConsent(reuseForm);
+}
+
+async function checkSavedConsent(form: HTMLFormElement): Promise<void> {
+  const fallback = form.dataset["fallback"];
+  const toolsUrl = form.dataset["toolsUrl"];
+  const state = form.elements.namedItem("state");
+  const csrf = form.elements.namedItem("csrf_token");
+  const inventory = form.elements.namedItem("tool_inventory_id");
+  if (
+    !fallback?.startsWith("/") ||
+    !toolsUrl?.startsWith("/") ||
+    !(state instanceof HTMLInputElement) ||
+    !(csrf instanceof HTMLInputElement) ||
+    !(inventory instanceof HTMLInputElement)
+  )
+    return;
+  try {
+    const attempt = crypto.randomUUID();
+    await fetchConsentInventory(
+      toolsUrl,
+      state.value,
+      csrf.value,
+      attempt,
+      AbortSignal.timeout(10000),
+    );
+    inventory.value = attempt;
+    form.requestSubmit();
+  } catch {
+    window.location.replace(fallback);
   }
 }

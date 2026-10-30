@@ -57,3 +57,51 @@ func TestAHPTokenCountRejectsInvalidNumbers(t *testing.T) {
 	}
 	require.Nil(t, ahpTokenCount(ahp.Optional[json.Number]{}))
 }
+
+func TestAHPUsageNormalizesCachedInput(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		input  *int
+		cached *int
+		want   *int
+	}{
+		{"cached input", new(100), new(80), new(20)},
+		{"fully cached", new(100), new(100), new(0)},
+		{"cache exceeds input", new(10), new(20), new(0)},
+		{"zero cache", new(100), new(0), new(100)},
+		{"missing cache", new(100), nil, new(100)},
+		{"missing input", nil, new(80), nil},
+		{"missing both", nil, nil, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			raw := ahpTestResponse()
+			usage, ok := raw["usage"].(map[string]any)
+			require.True(t, ok)
+			delete(usage, "inputTokens")
+			if tc.input != nil {
+				usage["inputTokens"] = *tc.input
+			}
+			if tc.cached != nil {
+				usage["cacheReadTokens"] = *tc.cached
+			}
+			usage["cacheWriteTokens"] = 7
+			data, err := json.Marshal(raw)
+			require.NoError(t, err)
+			var event ahp.ModelResponseAfterEvent
+			require.NoError(t, json.Unmarshal(data, &event))
+			payloads := ahpModelResponsePayloads(&event)
+			got := payloads[0].Data.Usage
+			require.NotNil(t, got)
+			require.Equal(t, tc.want, got.InputTokens)
+			require.Equal(t, tc.cached, got.CacheReadTokens)
+			require.Equal(t, new(7), got.CacheWriteTokens)
+			require.Equal(t, new(3), got.OutputTokens)
+			require.Equal(t, new(0.01), got.Cost)
+			for _, payload := range payloads[1:] {
+				require.Nil(t, payload.Data.Usage)
+			}
+		})
+	}
+}

@@ -366,7 +366,9 @@ type PostgresReader struct {
 	riskFindings              riskFindingsLister
 	riskFindingList           riskFindingListLister
 	chatMetadata              *ChatMetadataService
+	chatSearch                *ChatSearchService
 	organizationGateway       *OrganizationGatewayService
+	gatewaySessions           GatewaySessionManagement
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
@@ -379,14 +381,19 @@ type PostgresReader struct {
 	shadowInventory           *ShadowInventoryService
 	shadowDecisions           *ShadowDecisionService
 	shadowAI                  *ShadowAIService
+	deviceCoverage            *DeviceCoverageService
 	reviewRequests            MCPReviewRequestService
 	reviewRequestBudget       OperationBudget
 	reviewLinks               ShadowMCPReviewLinker
 	toolExposure              *MCPToolExposureService
+	gateways                  *GatewayService
+	deploymentRedeploy        *DeploymentRedeployService
+	workloadAssertionReuse    *WorkloadAssertionReuseService
 	projectLifecycle          *ProjectLifecycleService
 	analytics                 *AnalyticsService
 	widgets                   *WidgetService
 	dashboards                *DashboardsService
+	codeModeAvailable         CodeModeAvailability
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -402,7 +409,9 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		riskFindings:              nil,
 		riskFindingList:           nil,
 		chatMetadata:              nil,
+		chatSearch:                nil,
 		organizationGateway:       nil,
+		gatewaySessions:           nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
@@ -417,20 +426,43 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		shadowInventory:           nil,
 		shadowDecisions:           nil,
 		shadowAI:                  nil,
+		deviceCoverage:            nil,
 		reviewRequests:            nil,
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
 		reviewLinks:               nil,
 		toolExposure:              nil,
+		gateways:                  nil,
+		deploymentRedeploy:        nil,
+		workloadAssertionReuse:    nil,
 		projectLifecycle:          nil,
 		analytics:                 nil,
 		widgets:                   nil,
 		dashboards:                nil,
+		codeModeAvailable:         nil,
 	}
+}
+
+// WithCodeModeAvailability lets gateway connection settings report the
+// discovery mode a gateway serves while Code Mode is unavailable.
+func (r *PostgresReader) WithCodeModeAvailability(check CodeModeAvailability) *PostgresReader {
+	if r != nil {
+		r.codeModeAvailable = check
+	}
+	return r
 }
 
 func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader {
 	if r != nil {
 		r.authz = engine
+	}
+	return r
+}
+
+// WithDeploymentRedeploy composes project snapshot redeployment; without it the
+// tool retains its contract and returns a bounded unavailable refusal.
+func (r *PostgresReader) WithDeploymentRedeploy(service *DeploymentRedeployService) *PostgresReader {
+	if r != nil {
+		r.deploymentRedeploy = service
 	}
 	return r
 }
@@ -441,6 +473,15 @@ func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader
 func (r *PostgresReader) WithToolExposure(service *MCPToolExposureService) *PostgresReader {
 	if r != nil {
 		r.toolExposure = service
+	}
+	return r
+}
+
+// WithGateways composes gateway creation and membership changes. Without it
+// the tools stay in the catalogue as stable refusals rather than disappearing.
+func (r *PostgresReader) WithGateways(service *GatewayService) *PostgresReader {
+	if r != nil {
+		r.gateways = service
 	}
 	return r
 }
@@ -600,6 +641,14 @@ func (r *PostgresReader) WithChatMetadata(service *ChatMetadataService) *Postgre
 	return r
 }
 
+// WithChatSearch attaches explicitly authorized transcript search and reads.
+func (r *PostgresReader) WithChatSearch(service *ChatSearchService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.chatSearch = service
+	}
+	return r
+}
+
 // WithOrganizationGateway serves get_my_organization_gateway.
 func (r *PostgresReader) WithOrganizationGateway(service *OrganizationGatewayService) *PostgresReader {
 	if r != nil && service.valid() {
@@ -611,6 +660,14 @@ func (r *PostgresReader) WithOrganizationGateway(service *OrganizationGatewaySer
 func (r *PostgresReader) WithShadowAI(service *ShadowAIService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.shadowAI = service
+	}
+	return r
+}
+
+// WithDeviceCoverage serves the MDM coverage reads.
+func (r *PostgresReader) WithDeviceCoverage(service *DeviceCoverageService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.deviceCoverage = service
 	}
 	return r
 }
@@ -1071,10 +1128,22 @@ func inventoryQueryResult(mcps []MCP, query string, limit int) []MCP {
 	if len(mcps) == 0 {
 		return mcps
 	}
-	if mcps[0].ID == query || strings.EqualFold(mcps[0].Name, query) || strings.EqualFold(mcps[0].Slug, query) {
-		if len(mcps) == 1 || (mcps[1].ID != query && !strings.EqualFold(mcps[1].Name, query) && !strings.EqualFold(mcps[1].Slug, query)) {
+	if inventoryExactMatch(mcps[0], query) {
+		if len(mcps) == 1 || !inventoryExactMatch(mcps[1], query) {
 			return mcps[:1]
 		}
 	}
 	return mcps[:min(len(mcps), limit)]
+}
+
+// WithGatewaySessions shares the dashboard gateway connection reads.
+func (r *PostgresReader) WithGatewaySessions(service GatewaySessionManagement) *PostgresReader {
+	if r != nil {
+		r.gatewaySessions = service
+	}
+	return r
+}
+
+func inventoryExactMatch(mcp MCP, query string) bool {
+	return mcp.ID == query || strings.EqualFold(mcp.Name, query) || strings.EqualFold(mcp.Slug, query) || strings.EqualFold(mcp.Source.Reference, query)
 }

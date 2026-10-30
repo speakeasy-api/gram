@@ -122,6 +122,13 @@ type LoadChatOverviewResponseBody struct {
 	// The ID of the agent the assistant acts as, when the assistant has a
 	// dedicated agent identity
 	AssistantAgentID *string `form:"assistant_agent_id,omitempty" json:"assistant_agent_id,omitempty" xml:"assistant_agent_id,omitempty"`
+	// The ID of the agent that produced this session, recorded from the
+	// authenticated actor at capture. Set for sessions an agent drove directly,
+	// such as a channel session, which has no assistant record.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// The current name of the agent that produced this session. Absent when the
+	// agent has since been deleted, in which case agent_id is still reported.
+	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -231,6 +238,13 @@ type LoadChatResponseBody struct {
 	// The ID of the agent the assistant acts as, when the assistant has a
 	// dedicated agent identity
 	AssistantAgentID *string `form:"assistant_agent_id,omitempty" json:"assistant_agent_id,omitempty" xml:"assistant_agent_id,omitempty"`
+	// The ID of the agent that produced this session, recorded from the
+	// authenticated actor at capture. Set for sessions an agent drove directly,
+	// such as a channel session, which has no assistant record.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// The current name of the agent that produced this session. Absent when the
+	// agent has since been deleted, in which case agent_id is still reported.
+	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -2909,6 +2923,13 @@ type ChatOverviewResponseBody struct {
 	// The ID of the agent the assistant acts as, when the assistant has a
 	// dedicated agent identity
 	AssistantAgentID *string `form:"assistant_agent_id,omitempty" json:"assistant_agent_id,omitempty" xml:"assistant_agent_id,omitempty"`
+	// The ID of the agent that produced this session, recorded from the
+	// authenticated actor at capture. Set for sessions an agent drove directly,
+	// such as a channel session, which has no assistant record.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// The current name of the agent that produced this session. Absent when the
+	// agent has since been deleted, in which case agent_id is still reported.
+	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -3250,6 +3271,8 @@ func NewLoadChatOverviewResponseBody(res *chat.ChatOverview) *LoadChatOverviewRe
 		AssistantID:          res.AssistantID,
 		AssistantName:        res.AssistantName,
 		AssistantAgentID:     res.AssistantAgentID,
+		AgentID:              res.AgentID,
+		AgentName:            res.AgentName,
 		NumMessages:          res.NumMessages,
 		Source:               res.Source,
 		OriginatingClient:    res.OriginatingClient,
@@ -3301,6 +3324,8 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		AssistantID:          res.AssistantID,
 		AssistantName:        res.AssistantName,
 		AssistantAgentID:     res.AssistantAgentID,
+		AgentID:              res.AgentID,
+		AgentName:            res.AgentName,
 		NumMessages:          res.NumMessages,
 		Source:               res.Source,
 		OriginatingClient:    res.OriginatingClient,
@@ -5446,13 +5471,14 @@ func NewListSessionLinksGatewayErrorResponseBody(res *goa.ServiceError) *ListSes
 }
 
 // NewListChatsPayload builds a chat service listChats endpoint payload.
-func NewListChatsPayload(search *string, externalUserID *string, userID *string, source *string, assistantID *string, sourceKind *string, excludeSourceKind *string, hasRisk *string, accountType *string, pinned *string, minRiskScore *int, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
+func NewListChatsPayload(search *string, externalUserID *string, userID *string, source *string, assistantID *string, agentID *string, sourceKind *string, excludeSourceKind *string, hasRisk *string, accountType *string, pinned *string, minRiskScore *int, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
 	v := &chat.ListChatsPayload{}
 	v.Search = search
 	v.ExternalUserID = externalUserID
 	v.UserID = userID
 	v.Source = source
 	v.AssistantID = assistantID
+	v.AgentID = agentID
 	v.SourceKind = sourceKind
 	v.ExcludeSourceKind = excludeSourceKind
 	v.HasRisk = hasRisk

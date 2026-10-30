@@ -397,7 +397,7 @@ func TestToolsetsService_UpdateToolset_EmptyToolUrns(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
-func TestToolsetsService_UpdateToolset_McpEnabled(t *testing.T) {
+func TestToolsetsService_EnableHostedServer_AuditsToolsetUpdate(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
@@ -416,24 +416,7 @@ func TestToolsetsService_UpdateToolset_McpEnabled(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Update to enable MCP
-	result, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
-		SessionToken:           nil,
-		Slug:                   created.Slug,
-		Name:                   nil,
-		Description:            nil,
-		DefaultEnvironmentSlug: nil,
-		ToolUrns:               nil,
-		ResourceUrns:           nil,
-		PromptTemplateNames:    nil,
-		McpSlug:                nil,
-		McpIsPublic:            nil,
-		McpEnabled:             new(true),
-		CustomDomainID:         nil,
-		ProjectSlugInput:       nil,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
+	result := setHostedVisibility(t, ctx, ti, created, "private")
 	require.True(t, *result.McpEnabled)
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdate)
@@ -631,75 +614,6 @@ func TestToolsetsService_UpdateToolset_AuditLog(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
-func TestToolsetsService_UpdateToolset_ClearsExternalOAuth_AuditLog(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestToolsetsService(t)
-	ctx = withAccountType(t, ctx, "pro")
-	toolset := createMinimalPublicToolset(t, ctx, ti, "Audit Clear External OAuth Toolset")
-	attached, err := ti.service.AddExternalOAuthServer(ctx, &gen.AddExternalOAuthServerPayload{
-		SessionToken: nil,
-		ApikeyToken:  nil,
-		Slug:         toolset.Slug,
-		ExternalOauthServer: &types.ExternalOAuthServerForm{
-			Slug: externalOAuthSlug("update-detach-external-oauth"),
-			Metadata: map[string]any{
-				"issuer":         "https://example.com",
-				"token_endpoint": "https://example.com/token",
-			},
-		},
-		ProjectSlugInput: nil,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, attached)
-	require.NotNil(t, attached.ExternalOauthServer)
-
-	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetDetachExternalOAuth)
-	require.NoError(t, err)
-
-	private := false
-	updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
-		SessionToken:           nil,
-		ApikeyToken:            nil,
-		Slug:                   toolset.Slug,
-		Name:                   nil,
-		Description:            nil,
-		DefaultEnvironmentSlug: nil,
-		ToolUrns:               nil,
-		ResourceUrns:           nil,
-		PromptTemplateNames:    nil,
-		McpSlug:                nil,
-		McpEnabled:             nil,
-		McpIsPublic:            &private,
-		CustomDomainID:         nil,
-		ProjectSlugInput:       nil,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, updated)
-	require.Nil(t, updated.ExternalOauthServer)
-	require.NotNil(t, updated.McpIsPublic)
-	require.False(t, *updated.McpIsPublic)
-
-	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionToolsetDetachExternalOAuth)
-	require.NoError(t, err)
-	require.Equal(t, string(audit.ActionToolsetDetachExternalOAuth), record.Action)
-	require.Equal(t, "toolset", record.SubjectType)
-	require.Equal(t, updated.Name, record.SubjectDisplay)
-	require.Equal(t, string(updated.Slug), record.SubjectSlug)
-	require.Nil(t, record.BeforeSnapshot)
-	require.Nil(t, record.AfterSnapshot)
-
-	metadata, err := audittest.DecodeAuditData(record.Metadata)
-	require.NoError(t, err)
-	require.Equal(t, attached.ExternalOauthServer.ID, metadata["external_oauth_server_id"])
-	require.Equal(t, string(attached.ExternalOauthServer.Slug), metadata["external_oauth_server_slug"])
-	require.InDelta(t, updated.ToolsetVersion, metadata["toolset_version_after"], 0)
-
-	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetDetachExternalOAuth)
-	require.NoError(t, err)
-	require.Equal(t, beforeCount+1, afterCount)
-}
-
 func TestToolsetsService_UpdateToolset_NotFound_NoAuditLog(t *testing.T) {
 	t.Parallel()
 
@@ -734,7 +648,6 @@ func TestToolsetsService_UpdateToolset_EnableMcp_AttachesToDefaultPlugin(t *test
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
-	ti.service.WithFeatureProvider(serverKeyFlags())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -778,30 +691,12 @@ func TestToolsetsService_UpdateToolset_EnableMcp_AttachesToDefaultPlugin(t *test
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
 	require.NoError(t, err)
 
-	result, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
-		SessionToken:           nil,
-		Slug:                   second.Slug,
-		Name:                   nil,
-		Description:            nil,
-		DefaultEnvironmentSlug: nil,
-		ToolUrns:               nil,
-		ResourceUrns:           nil,
-		PromptTemplateNames:    nil,
-		McpSlug:                nil,
-		McpIsPublic:            nil,
-		McpEnabled:             new(true),
-		CustomDomainID:         nil,
-		ProjectSlugInput:       nil,
-	})
-	require.NoError(t, err)
+	result := setHostedVisibility(t, ctx, ti, second, "private")
 	require.True(t, *result.McpEnabled)
 
 	servers, err = pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)
 	require.Len(t, servers, 2)
-	for _, server := range servers {
-		require.False(t, server.ToolsetID.Valid, "re-enable stores the toolset under its canonical server")
-	}
 	require.Contains(t, []uuid.UUID{servers[0].McpServerID.UUID, servers[1].McpServerID.UUID}, uuid.MustParse(second.ID))
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
@@ -809,22 +704,7 @@ func TestToolsetsService_UpdateToolset_EnableMcp_AttachesToDefaultPlugin(t *test
 	require.Equal(t, beforeCount+1, afterCount)
 
 	// Idempotent: re-enabling an already-enabled toolset must not double-attach.
-	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
-		SessionToken:           nil,
-		Slug:                   second.Slug,
-		Name:                   nil,
-		Description:            nil,
-		DefaultEnvironmentSlug: nil,
-		ToolUrns:               nil,
-		ResourceUrns:           nil,
-		PromptTemplateNames:    nil,
-		McpSlug:                nil,
-		McpIsPublic:            nil,
-		McpEnabled:             new(true),
-		CustomDomainID:         nil,
-		ProjectSlugInput:       nil,
-	})
-	require.NoError(t, err)
+	setHostedVisibility(t, ctx, ti, second, "private")
 
 	servers, err = pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)

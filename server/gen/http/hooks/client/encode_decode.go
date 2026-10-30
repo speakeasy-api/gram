@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	hooks "github.com/speakeasy-api/gram/server/gen/hooks"
 	goahttp "goa.design/goa/v3/http"
@@ -41,6 +42,10 @@ func EncodeClaudeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		p, ok := v.(*hooks.ClaudePayload)
 		if !ok {
 			return goahttp.ErrInvalidType("hooks", "claude", "*hooks.ClaudePayload", v)
+		}
+		if p.DeviceAgentToken != nil {
+			head := *p.DeviceAgentToken
+			req.Header.Set("Authorization", head)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -284,6 +289,14 @@ func EncodeCursorRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		if !ok {
 			return goahttp.ErrInvalidType("hooks", "cursor", "*hooks.CursorPayload", v)
 		}
+		if p.DeviceAgentToken != nil {
+			head := *p.DeviceAgentToken
+			if !strings.Contains(head, " ") {
+				req.Header.Set("Authorization", "Bearer "+head)
+			} else {
+				req.Header.Set("Authorization", head)
+			}
+		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
@@ -526,6 +539,14 @@ func EncodeCodexRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.
 		if !ok {
 			return goahttp.ErrInvalidType("hooks", "codex", "*hooks.CodexPayload", v)
 		}
+		if p.DeviceAgentToken != nil {
+			head := *p.DeviceAgentToken
+			if !strings.Contains(head, " ") {
+				req.Header.Set("Authorization", "Bearer "+head)
+			} else {
+				req.Header.Set("Authorization", head)
+			}
+		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
@@ -767,6 +788,10 @@ func EncodeIngestRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		p, ok := v.(*hooks.IngestPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("hooks", "ingest", "*hooks.IngestPayload", v)
+		}
+		if p.DeviceAgentToken != nil {
+			head := *p.DeviceAgentToken
+			req.Header.Set("Authorization", head)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -1465,6 +1490,14 @@ func EncodeLogsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 		if !ok {
 			return goahttp.ErrInvalidType("hooks", "logs", "*hooks.LogsPayload", v)
 		}
+		if p.DeviceAgentToken != nil {
+			head := *p.DeviceAgentToken
+			if !strings.Contains(head, " ") {
+				req.Header.Set("Authorization", "Bearer "+head)
+			} else {
+				req.Header.Set("Authorization", head)
+			}
+		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
@@ -1689,6 +1722,14 @@ func EncodeMetricsRequest(encoder func(*http.Request) goahttp.Encoder) func(*htt
 		p, ok := v.(*hooks.MetricsPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("hooks", "metrics", "*hooks.MetricsPayload", v)
+		}
+		if p.DeviceAgentToken != nil {
+			head := *p.DeviceAgentToken
+			if !strings.Contains(head, " ") {
+				req.Header.Set("Authorization", "Bearer "+head)
+			} else {
+				req.Header.Set("Authorization", head)
+			}
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -2233,6 +2274,9 @@ func marshalHooksHookIngestDataToHookIngestDataRequestBody(v *hooks.HookIngestDa
 			res.PromptAttachments[i] = marshalHooksHookPromptAttachmentEntryToHookPromptAttachmentEntryRequestBody(val)
 		}
 	}
+	if v.DeliveryFailure != nil {
+		res.DeliveryFailure = marshalHooksHookDeliveryFailureDataToHookDeliveryFailureDataRequestBody(v.DeliveryFailure)
+	}
 
 	return res
 }
@@ -2396,6 +2440,36 @@ func marshalHooksHookPromptAttachmentEntryToHookPromptAttachmentEntryRequestBody
 	return res
 }
 
+// marshalHooksHookDeliveryFailureDataToHookDeliveryFailureDataRequestBody
+// builds a value of type *HookDeliveryFailureDataRequestBody from a value of
+// type *hooks.HookDeliveryFailureData.
+func marshalHooksHookDeliveryFailureDataToHookDeliveryFailureDataRequestBody(v *hooks.HookDeliveryFailureData) *HookDeliveryFailureDataRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookDeliveryFailureDataRequestBody{
+		FailedEventType:      string(v.FailedEventType),
+		DeliveryPhase:        string(v.DeliveryPhase),
+		Cause:                string(v.Cause),
+		StatusCode:           v.StatusCode,
+		ElapsedMs:            v.ElapsedMs,
+		Attempts:             v.Attempts,
+		Gating:               v.Gating,
+		AttemptedAt:          v.AttemptedAt,
+		BinaryVersion:        v.BinaryVersion,
+		Os:                   v.Os,
+		Arch:                 v.Arch,
+		Harness:              v.Harness,
+		HarnessVariant:       v.HarnessVariant,
+		HarnessVersion:       v.HarnessVersion,
+		FailedIdempotencyKey: v.FailedIdempotencyKey,
+		SessionID:            v.SessionID,
+		SpoolDepth:           v.SpoolDepth,
+	}
+
+	return res
+}
+
 // marshalHookIngestSourceRequestBodyToHooksHookIngestSource builds a value of
 // type *hooks.HookIngestSource from a value of type
 // *HookIngestSourceRequestBody.
@@ -2498,6 +2572,9 @@ func marshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRequ
 			}
 			res.PromptAttachments[i] = marshalHookPromptAttachmentEntryRequestBodyToHooksHookPromptAttachmentEntry(val)
 		}
+	}
+	if v.DeliveryFailure != nil {
+		res.DeliveryFailure = marshalHookDeliveryFailureDataRequestBodyToHooksHookDeliveryFailureData(v.DeliveryFailure)
 	}
 
 	return res
@@ -2657,6 +2734,36 @@ func marshalHookPromptAttachmentEntryRequestBodyToHooksHookPromptAttachmentEntry
 		TotalLines:     v.TotalLines,
 		StartLine:      v.StartLine,
 		Timestamp:      v.Timestamp,
+	}
+
+	return res
+}
+
+// marshalHookDeliveryFailureDataRequestBodyToHooksHookDeliveryFailureData
+// builds a value of type *hooks.HookDeliveryFailureData from a value of type
+// *HookDeliveryFailureDataRequestBody.
+func marshalHookDeliveryFailureDataRequestBodyToHooksHookDeliveryFailureData(v *HookDeliveryFailureDataRequestBody) *hooks.HookDeliveryFailureData {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookDeliveryFailureData{
+		FailedEventType:      hooks.HookDeliveryFailedEventType(v.FailedEventType),
+		DeliveryPhase:        hooks.HookDeliveryPhase(v.DeliveryPhase),
+		Cause:                hooks.HookDeliveryCause(v.Cause),
+		StatusCode:           v.StatusCode,
+		ElapsedMs:            v.ElapsedMs,
+		Attempts:             v.Attempts,
+		Gating:               v.Gating,
+		AttemptedAt:          v.AttemptedAt,
+		BinaryVersion:        v.BinaryVersion,
+		Os:                   v.Os,
+		Arch:                 v.Arch,
+		Harness:              v.Harness,
+		HarnessVariant:       v.HarnessVariant,
+		HarnessVersion:       v.HarnessVersion,
+		FailedIdempotencyKey: v.FailedIdempotencyKey,
+		SessionID:            v.SessionID,
+		SpoolDepth:           v.SpoolDepth,
 	}
 
 	return res

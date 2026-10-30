@@ -4,6 +4,7 @@ import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { buildLoginRedirectURL } from "@/lib/utils";
 import { formatPlatform } from "@/lib/formatPlatform";
+import { recordOrganizationSwitch } from "@/lib/organization-host";
 import { useRoutes } from "@/routes";
 import { useRiskGetBlock } from "@gram/client/react-query/riskGetBlock.js";
 import { useRiskSubmitBlockFeedbackMutation } from "@gram/client/react-query/riskSubmitBlockFeedback.js";
@@ -122,6 +123,7 @@ function BlockBody({ id }: { id: string | undefined }) {
     setIsSwitchingOrganization(true);
     try {
       await client.auth.switchScopes({ organizationId: organization.id });
+      recordOrganizationSwitch(organization.id);
       window.location.assign(routes.riskEvents.href());
     } catch {
       setIsSwitchingOrganization(false);

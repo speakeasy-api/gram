@@ -30,6 +30,8 @@ const (
 	ScopeMCPBlockedWrite         Scope = "mcp:blocked_write"
 	ScopeMCPConnect              Scope = "mcp:connect"
 	ScopeMCPBlockedConnect       Scope = "mcp:blocked_connect"
+	ScopeMCPAuth                 Scope = "mcp:auth"
+	ScopeMCPBlockedAuth          Scope = "mcp:blocked_auth"
 	ScopeEnvironmentRead         Scope = "environment:read"
 	ScopeEnvironmentBlockedRead  Scope = "environment:blocked_read"
 	ScopeEnvironmentWrite        Scope = "environment:write"
@@ -49,6 +51,7 @@ const (
 	ScopeRiskPolicyBlock         Scope = "risk_policy:block"
 	ScopeChatRead                Scope = "chat:read"
 	ScopeChatWrite               Scope = "chat:write"
+	ScopeInferenceExecute        Scope = "inference:execute"
 	ScopeLogRead                 Scope = "log:read"
 	ScopeAgentRead               Scope = "agent:read"
 	ScopeAgentWrite              Scope = "agent:write"
@@ -94,6 +97,7 @@ var adminScopes = []Scope{
 	ScopeMCPRead,
 	ScopeMCPWrite,
 	ScopeMCPConnect,
+	ScopeMCPAuth,
 	ScopeEnvironmentRead,
 	ScopeEnvironmentWrite,
 	ScopeSkillRead,
@@ -148,6 +152,8 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeMCPBlockedWrite:         scopeVisibilityInternal,
 	ScopeMCPConnect:              scopeVisibilityUserVisible,
 	ScopeMCPBlockedConnect:       scopeVisibilityInternal,
+	ScopeMCPAuth:                 scopeVisibilityUserVisible,
+	ScopeMCPBlockedAuth:          scopeVisibilityInternal,
 	ScopeEnvironmentRead:         scopeVisibilityUserVisible,
 	ScopeEnvironmentBlockedRead:  scopeVisibilityInternal,
 	ScopeEnvironmentWrite:        scopeVisibilityUserVisible,
@@ -167,6 +173,7 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
 	ScopeChatRead:                scopeVisibilityUserVisible,
 	ScopeChatWrite:               scopeVisibilityUserVisible,
+	ScopeInferenceExecute:        scopeVisibilityUserVisible,
 	ScopeLogRead:                 scopeVisibilityUserVisible,
 	ScopeAgentRead:               scopeVisibilityUserVisible,
 	ScopeAgentWrite:              scopeVisibilityUserVisible,
@@ -185,6 +192,7 @@ var memberScopes = []Scope{
 	ScopeProjectRead,
 	ScopeMCPRead,
 	ScopeMCPConnect,
+	ScopeMCPAuth,
 	ScopeSkillRead,
 	ScopeAssistantRead,
 	// environment:read is intentionally NOT a default for members: environment
@@ -254,6 +262,9 @@ func ScopeVisibilityFor(scope Scope) (string, bool) {
 // have to manage it — so "cannot connect" has to be expressible without also
 // meaning "cannot see or manage". Anything that takes a principal off a
 // server entirely writes all three.
+//
+// mcp:auth is independent of every other scope: server access, authoring and
+// administration imply no use of an auth client.
 var scopeExpansions = map[Scope][]Scope{
 	ScopeRoot:                    nil,
 	ScopeOrgRead:                 {ScopeOrgAdmin},
@@ -270,6 +281,8 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeMCPBlockedWrite:         nil,
 	ScopeMCPConnect:              {ScopeMCPRead, ScopeMCPWrite},
 	ScopeMCPBlockedConnect:       nil,
+	ScopeMCPAuth:                 nil,
+	ScopeMCPBlockedAuth:          nil,
 	ScopeEnvironmentRead:         {ScopeEnvironmentWrite},
 	ScopeEnvironmentBlockedRead:  nil,
 	ScopeEnvironmentWrite:        nil,
@@ -289,6 +302,7 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeRiskPolicyBlock:         nil,
 	ScopeChatRead:                {ScopeChatWrite},
 	ScopeChatWrite:               nil,
+	ScopeInferenceExecute:        nil,
 	ScopeLogRead:                 nil,
 	ScopeAgentRead:               nil,
 	ScopeAgentWrite:              nil,
@@ -321,6 +335,8 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeMCPBlockedWrite:         "",
 	ScopeMCPConnect:              ScopeMCPBlockedConnect,
 	ScopeMCPBlockedConnect:       "",
+	ScopeMCPAuth:                 ScopeMCPBlockedAuth,
+	ScopeMCPBlockedAuth:          "",
 	ScopeEnvironmentRead:         ScopeEnvironmentBlockedRead,
 	ScopeEnvironmentBlockedRead:  "",
 	ScopeEnvironmentWrite:        ScopeEnvironmentBlockedWrite,
@@ -340,6 +356,7 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeRiskPolicyBlock:         "",
 	ScopeChatRead:                "",
 	ScopeChatWrite:               "",
+	ScopeInferenceExecute:        "",
 	ScopeLogRead:                 "",
 	ScopeAgentRead:               "",
 	ScopeAgentWrite:              "",

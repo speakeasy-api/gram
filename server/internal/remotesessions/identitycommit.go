@@ -39,6 +39,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
@@ -67,9 +69,10 @@ var (
 	ErrIdentityInvariant = errors.New("identity: invariant violation")
 
 	// ErrIdentityOrgWideBinding marks a binding write that would reach beyond
-	// the scope's project: linking or unlinking an organization-owned client on
-	// an organization-level user session issuer, whose binding every project's
-	// MCP servers on that issuer share.
+	// the scope's project by an actor without organization admin: linking or
+	// unlinking an organization-owned client on an organization-level user
+	// session issuer, whose binding every project's MCP servers on that issuer
+	// share.
 	ErrIdentityOrgWideBinding = errors.New("identity: organization-wide binding change")
 
 	// ErrIdentityStepOrder marks a commit step run out of order, which is a
@@ -79,7 +82,7 @@ var (
 
 // OrgWideBindingMessage is the caller-facing message for
 // ErrIdentityOrgWideBinding.
-const OrgWideBindingMessage = "this MCP server shares an organization identity binding; change it from the organization's identity provider settings"
+const OrgWideBindingMessage = "this MCP server shares its sign-in client with MCP servers in other projects; changing it needs organization admin access"
 
 const (
 	agentBindingsOnReplacedClientMessage = "agents are still bound to this MCP server through its current client; unlink them before changing its Remote Identity Provider"
@@ -144,8 +147,16 @@ func (c *IdentityCommitter) SetCallbackOrigins(origins CallbackOrigins) {
 
 // newClientBaseURL is the callback_base_url recorded on a client this commit
 // creates. The DCR registration and the stored row must agree on it.
-func (c *IdentityCommit) newClientBaseURL() pgtype.Text {
-	return c.committer.origins.NewClientBaseURL(c.plan.Scope.OrganizationID != "")
+func (c *IdentityCommit) newClientBaseURL(ctx context.Context) (pgtype.Text, error) {
+	if c.callbackBaseURL != nil {
+		return *c.callbackBaseURL, nil
+	}
+	origin, err := c.committer.origins.ResolveNewClientBaseURL(ctx, c.committer.db, c.plan.Scope.OrganizationID)
+	if err != nil {
+		return pgtype.Text{}, err
+	}
+	c.callbackBaseURL = &origin
+	return origin, nil
 }
 
 // IdentityScope is the tenant and actor every read and write of a commit uses.
@@ -165,6 +176,11 @@ type IdentityScope struct {
 	// ActorIsPlatformAdmin gates the registration paths that reach a private
 	// network. mcp:write on one server is not enough to borrow a tunnel.
 	ActorIsPlatformAdmin bool
+
+	// ActorIsOrganizationAdmin gates linking and unlinking organization-owned
+	// clients on an organization-level user session issuer, which every
+	// project's servers on that issuer share.
+	ActorIsOrganizationAdmin bool
 }
 
 // IdentityPlan is what a caller wants configured. It holds only the choices
@@ -175,6 +191,12 @@ type IdentityPlan struct {
 
 	// UserSessionIssuerID is the user session issuer the client is bound to.
 	UserSessionIssuerID uuid.UUID
+
+	// MCPServerID is the MCP server being configured, which Bind associates
+	// with the bound client; uuid.Nil configures the issuer alone. The caller
+	// locks the server row before Lock, keeping the server-then-issuer lock
+	// order of MCP server updates.
+	MCPServerID uuid.UUID
 
 	// Provider is UseProvider or CreateProvider.
 	Provider ProviderChoice
@@ -392,8 +414,9 @@ type IdentityResult struct {
 // IdentityCommit is one prepared plan. Build one per request with
 // IdentityCommitter.Prepare and run its steps in order.
 type IdentityCommit struct {
-	committer *IdentityCommitter
-	plan      IdentityPlan
+	committer       *IdentityCommitter
+	callbackBaseURL *pgtype.Text
+	plan            IdentityPlan
 
 	// provider is the stored provider: read by Preflight or Register, locked
 	// by Lock, or created by Bind.
@@ -578,6 +601,13 @@ func (c *IdentityCommit) Register(ctx context.Context) (Registration, error) {
 	default:
 		return Registration{}, errors.New("identity plan has no client choice")
 	}
+	// Resolve before Begin for manual and CIMD clients too: Bind must not
+	// acquire a second pool connection while holding its transaction.
+	if reg.Method == RegistrationManual || reg.Method == RegistrationCIMD {
+		if _, err := c.newClientBaseURL(ctx); err != nil {
+			return Registration{}, err
+		}
+	}
 	c.registration = reg
 	return reg, nil
 }
@@ -605,7 +635,11 @@ func (c *IdentityCommit) register(ctx context.Context, reg Registration) (Regist
 	if c.provider.TunneledMcpServerID.Valid && !c.plan.Scope.ActorIsPlatformAdmin {
 		return reg, identityRefusal(ErrIdentityForbidden, nil, "registering through an MCP tunnel requires a platform admin")
 	}
-	response, err := RegisterDynamicClient(ctx, c.committer.policy, c.committer.tunnels, c.committer.origins.ForClient(c.newClientBaseURL()), ProxyRegisterRequest{
+	callbackBaseURL, err := c.newClientBaseURL(ctx)
+	if err != nil {
+		return reg, err
+	}
+	response, err := RegisterDynamicClient(ctx, c.committer.policy, c.committer.tunnels, c.committer.origins.ForClient(callbackBaseURL), ProxyRegisterRequest{
 		RegistrationEndpoint:    endpoint,
 		TunneledMcpServerID:     conv.PtrEmpty(tunnelBindingID(c.provider.TunneledMcpServerID)),
 		Scope:                   conv.PtrEmpty(strings.Join(c.registrationScope(policy), " ")),
@@ -686,19 +720,28 @@ func (c *IdentityCommit) registrationScope(policy RegistrationPolicy) []string {
 	if len(policy.Scope) > 0 {
 		return policy.Scope
 	}
-	resource := ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: true}
+	resource := issuerLevelResource()
 	if policy.RegistrationResource != nil {
 		resource = *policy.RegistrationResource
 	}
-	login := Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
-		IssuerScopesSupported:   c.provider.ScopesSupported,
-		IssuerScopeOverride:     c.provider.ScopeOverride,
-		IssuerOmitScopeFallback: c.provider.OmitScopeFallback.Valid && c.provider.OmitScopeFallback.Bool,
-	}
 	if create := c.plan.Provider.create; create != nil {
-		login.IssuerScopesSupported = create.ScopesSupported
-		login.IssuerScopeOverride = create.ScopeOverride
-		login.IssuerOmitScopeFallback = create.OmitScopeFallback.Valid && create.OmitScopeFallback.Bool
+		return issuerRegistrationScope(create.ScopesSupported, create.ScopeOverride, create.OmitScopeFallback, resource)
+	}
+	return issuerRegistrationScope(c.provider.ScopesSupported, c.provider.ScopeOverride, c.provider.OmitScopeFallback, resource)
+}
+
+// issuerLevelResource is a login that names no resource.
+func issuerLevelResource() ResourceScopes {
+	return ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: true}
+}
+
+// issuerRegistrationScope is what a login with no client scope requests from
+// an issuer with these settings.
+func issuerRegistrationScope(supported, override []string, omitFallback pgtype.Bool, resource ResourceScopes) []string {
+	login := Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
+		IssuerScopesSupported:   supported,
+		IssuerScopeOverride:     override,
+		IssuerOmitScopeFallback: omitFallback.Valid && omitFallback.Bool,
 	}
 	return login.RequestedScopes(resource).Scopes
 }
@@ -714,13 +757,18 @@ func (c *IdentityCommit) capabilities() providerCapabilities {
 	}
 }
 
-// Begin opens the commit's transaction. The caller may take its own locks on
-// tx.DB() before Lock; defer tx.Rollback, a no-op after Commit.
+// Begin opens the transaction and locks the complete source/server scope before
+// callers can lock an issuer or mutate OAuth associations. Defer tx.Rollback.
 func (c *IdentityCommit) Begin(ctx context.Context) (*IdentityTx, error) {
 	tx, err := c.committer.db.Begin(ctx)
 	if err != nil {
 		c.recordOrphanedRegistration(ctx)
 		return nil, fmt.Errorf("begin identity transaction: %w", err)
+	}
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, c.plan.Scope.OrganizationID, []uuid.UUID{c.plan.Scope.ProjectID}); err != nil {
+		_ = tx.Rollback(context.WithoutCancel(ctx))
+		c.recordOrphanedRegistration(ctx)
+		return nil, fmt.Errorf("lock identity writer scope: %w", err)
 	}
 	return &IdentityTx{commit: c, tx: tx, q: repo.New(tx), committed: false}, nil
 }
@@ -906,6 +954,26 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 	if err != nil {
 		return err
 	}
+	if c.plan.MCPServerID != uuid.Nil {
+		associated, err := upstreamclientsrepo.New(tx.tx).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+			OrganizationID:        c.plan.Scope.OrganizationID,
+			RemoteSessionClientID: client.ID,
+			McpServerID:           c.plan.MCPServerID,
+			ProjectID:             c.plan.Scope.ProjectID,
+		})
+		if err != nil {
+			return fmt.Errorf("associate mcp server with remote session client: %w", err)
+		}
+		if associated == 0 {
+			return identityRefusal(ErrIdentityConflict, nil, "the MCP server or its client changed while saving; retry")
+		}
+		// Begin acquired the full writer scope before the binding/association
+		// mutations. Synchronize typed clients and both OAuth and EMA copies
+		// under those locks; taking that scope here would be too late.
+		if err := authclientbackfill.SyncServerAssociations(ctx, tx.tx, c.plan.Scope.OrganizationID, c.plan.MCPServerID); err != nil {
+			return fmt.Errorf("sync mcp server auth clients: %w", err)
+		}
+	}
 	c.result = IdentityResult{
 		Provider:        c.provider,
 		Client:          client,
@@ -1010,14 +1078,15 @@ func listUserSessionIssuerClients(ctx context.Context, q *repo.Queries, projectI
 }
 
 // refuseOrgWideBinding refuses to link or unlink client when that binding is
-// shared across projects. A project-owned client is invisible to other
-// projects, so its binding only ever changes the scope's own project.
+// shared across projects and the actor is not an organization admin. A
+// project-owned client is invisible to other projects, so its binding only
+// ever changes the scope's own project.
 func (c *IdentityCommit) refuseOrgWideBinding(client repo.RemoteSessionClient) error {
-	return refuseOrgWideBinding(c.userIssuerOrgLevel, client.ProjectID)
+	return refuseOrgWideBinding(c.userIssuerOrgLevel, c.plan.Scope.ActorIsOrganizationAdmin, client.ProjectID)
 }
 
-func refuseOrgWideBinding(userIssuerOrgLevel bool, clientProjectID uuid.NullUUID) error {
-	if userIssuerOrgLevel && !clientProjectID.Valid {
+func refuseOrgWideBinding(userIssuerOrgLevel, actorIsOrganizationAdmin bool, clientProjectID uuid.NullUUID) error {
+	if userIssuerOrgLevel && !clientProjectID.Valid && !actorIsOrganizationAdmin {
 		return identityRefusal(ErrIdentityOrgWideBinding, nil, OrgWideBindingMessage)
 	}
 	return nil
@@ -1028,7 +1097,6 @@ func refuseOrgWideBinding(userIssuerOrgLevel bool, clientProjectID uuid.NullUUID
 // unaudited.
 func refuseLiveAgentBindings(ctx context.Context, q *repo.Queries, scope IdentityScope, clientID, userIssuerID uuid.UUID) error {
 	live, err := q.HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx, repo.HasLivePrincipalRemoteSessionBindingsForClientBindingParams{
-		ProjectID:             scope.ProjectID,
 		OrganizationID:        scope.OrganizationID,
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   userIssuerID,
@@ -1201,7 +1269,10 @@ func (c *IdentityCommit) createCIMDClient(ctx context.Context, tx *IdentityTx) (
 		return repo.RemoteSessionClient{}, fmt.Errorf("generate client id: %w", err)
 	}
 	policy := c.plan.Client.policy
-	callbackBaseURL := c.newClientBaseURL()
+	callbackBaseURL, err := c.newClientBaseURL(ctx)
+	if err != nil {
+		return repo.RemoteSessionClient{}, err
+	}
 	client, err := tx.q.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
 		ID:                    id,
 		ProjectID:             conv.ToNullUUID(c.plan.Scope.ProjectID),
@@ -1221,6 +1292,10 @@ func (c *IdentityCommit) createCIMDClient(ctx context.Context, tx *IdentityTx) (
 
 // createClient creates a client from provider-issued credentials.
 func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, credentials ClientCredentials) (repo.RemoteSessionClient, error) {
+	callbackBaseURL, err := c.newClientBaseURL(ctx)
+	if err != nil {
+		return repo.RemoteSessionClient{}, err
+	}
 	var secret pgtype.Text
 	if credentials.ClientSecret != "" {
 		encrypted, err := c.committer.enc.Encrypt([]byte(credentials.ClientSecret))
@@ -1253,7 +1328,7 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 		Scope:                        credentials.Scope,
 		Audience:                     conv.PtrToPGText(credentials.Audience),
 		LegacyCallbackUrl:            false,
-		CallbackBaseUrl:              c.newClientBaseURL(),
+		CallbackBaseUrl:              callbackBaseURL,
 		GrantTypes:                   nil,
 		CredentialOwner:              pgtype.Text{String: "", Valid: false},
 	})

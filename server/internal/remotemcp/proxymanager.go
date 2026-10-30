@@ -2,8 +2,10 @@ package remotemcp
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,6 +28,7 @@ import (
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolcallobserver"
+	"github.com/speakeasy-api/gram/tunnel/metrics"
 )
 
 // ProxyManager builds configured remote-MCP proxies wired up with the
@@ -42,6 +45,21 @@ type proxyBuildOptions struct {
 	recordIdentityCoverage bool
 	metaMCPServerID        string
 	headerPolicy           proxy.HeaderPolicy
+	anonymousCaller        bool
+	// authClientHeaders, when authClientSelected, are the resolved auth
+	// client's headers; the server's credential headers are not sent.
+	authClientHeaders  []proxy.ConfiguredHeader
+	authClientSelected bool
+}
+
+func newProxyBuildOptions(buildOptions []BuildOption) proxyBuildOptions {
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote, authClientHeaders: nil, authClientSelected: false, anonymousCaller: false}
+	for _, option := range buildOptions {
+		if option.apply != nil {
+			option.apply(&options)
+		}
+	}
+	return options
 }
 
 // BuildOption customizes one proxy without changing the defaults used by
@@ -66,6 +84,16 @@ func WithMetaMCPServerID(metaMCPServerID string) BuildOption {
 	}}
 }
 
+// WithAuthClientHeaders sends a resolved auth client's headers in place of the
+// server's credential headers: the server's other headers first, then the
+// client's, then the resolved bearer.
+func WithAuthClientHeaders(headers []proxy.ConfiguredHeader) BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.authClientHeaders = headers
+		options.authClientSelected = true
+	}}
+}
+
 // WithHeaderPolicy selects how configured and copied client headers are
 // filtered. Without it the proxy uses [proxy.HeaderPolicyRemote].
 func WithHeaderPolicy(policy proxy.HeaderPolicy) BuildOption {
@@ -74,7 +102,16 @@ func WithHeaderPolicy(policy proxy.HeaderPolicy) BuildOption {
 	}}
 }
 
+// WithAnonymousCaller marks the caller as admitted without a Speakeasy credential.
+// It has no effect on a private server.
+func WithAnonymousCaller() BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.anonymousCaller = true
+	}}
+}
+
 type ProxyManager struct {
+	TunnelMetrics  *metrics.Collector
 	logger         *slog.Logger
 	tracer         trace.Tracer
 	db             *pgxpool.Pool
@@ -90,7 +127,7 @@ type ProxyManager struct {
 	killswitchCheckpoint *mcptoolexecution.Checkpoint
 
 	// requestOTELCounterInterceptor emits the shared per-request census
-	// counter (mcp.request) for the remote- and tunnel-backed /x/mcp traffic,
+	// counter (mcp.request) for the remote- and tunnel-backed /mcp traffic,
 	// which never reaches the mcp package's dispatch where the hosted and
 	// platform surfaces emit it.
 	requestOTELCounterInterceptor *RequestOTELCounterInterceptor
@@ -115,6 +152,10 @@ type ProxyManager struct {
 	// protectedResources keeps each proxied server's protected resource row
 	// fresh; shared with the login path so one replica has one writer.
 	protectedResources *protectedresource.Prober
+
+	// drain is shared by every proxy this manager builds, so starting it
+	// reaches every stream relayed by this process.
+	drain *proxy.Drain
 }
 
 // NewProxyManager wires the MCP-aware proxy stack with its dependencies.
@@ -147,6 +188,7 @@ func NewProxyManager(
 	}
 
 	return &ProxyManager{
+		TunnelMetrics:                         nil,
 		logger:                                logger,
 		tracer:                                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
 		db:                                    db,
@@ -170,7 +212,17 @@ func NewProxyManager(
 		challengeScopes:                       newChallengeScopesState(),
 		afterChallengeScopes:                  nil,
 		protectedResources:                    protectedResources,
+		drain:                                 proxy.NewDrain(),
 	}
+}
+
+// StartDrain starts the shutdown drain for every stream this manager's
+// proxies relay: streams that only carry server-initiated messages end now so
+// clients reconnect to a replica that is still serving, and requests still
+// waiting on a remote MCP server after interruptAfter are answered with a
+// JSON-RPC error. Call it when the server starts shutting down.
+func (f *ProxyManager) StartDrain(interruptAfter time.Duration) {
+	f.drain.Start(interruptAfter)
 }
 
 // Build constructs a configured [*proxy.Proxy] for a single request against
@@ -213,8 +265,12 @@ func (f *ProxyManager) Build(
 	selection *toolfilter.SessionSelection,
 	options ...BuildOption,
 ) *proxy.Proxy {
+	authClientSelected := newProxyBuildOptions(options).authClientSelected
 	configured := make([]proxy.ConfiguredHeader, 0, len(headers))
 	for _, h := range headers {
+		if authClientSelected && proxy.IsCredentialHeader(h.Name, h.IsSecret, h.ValueFromRequestHeader.String != "") {
+			continue
+		}
 		configured = append(configured, proxy.ConfiguredHeader{
 			Name:                   h.Name,
 			StaticValue:            h.Value.String,
@@ -254,11 +310,9 @@ func (f *ProxyManager) BuildTarget(
 	selection *toolfilter.SessionSelection,
 	buildOptions ...BuildOption,
 ) *proxy.Proxy {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote}
-	for _, option := range buildOptions {
-		if option.apply != nil {
-			option.apply(&options)
-		}
+	options := newProxyBuildOptions(buildOptions)
+	if options.authClientSelected {
+		headers = proxy.MergeAuthClientHeaders(options.headerPolicy, headers, options.authClientHeaders)
 	}
 	if options.metaMCPServerID != "" {
 		identity.MetaMCPServerID = options.metaMCPServerID
@@ -376,12 +430,21 @@ func (f *ProxyManager) BuildTarget(
 		toolsCallResponseInterceptors = append(toolsCallResponseInterceptors, NewPlatformMCPSelectedUseInterceptor(f.platformMCPSelectedUseRecorder, identity))
 	}
 
+	var observer proxy.RequestObserver
+	if f.TunnelMetrics != nil && identity.TunneledMCPServerID != "" {
+		observer = func(method, client, outcome string, elapsed time.Duration) {
+			f.TunnelMetrics.Observe(identity.TunneledMCPServerID, identity.McpServerID, method, client, outcome, elapsed)
+		}
+	}
 	return &proxy.Proxy{
+		RequestObserver:             observer,
+		SessionClients:              nil,
 		GuardianPolicy:              f.guardianPolicy,
 		GuardianClientOptions:       nil,
 		Logger:                      logger,
 		Tracer:                      f.tracer,
 		NonStreamingTimeout:         proxy.DefaultNonStreamingTimeout,
+		Drain:                       f.drain,
 		StreamingTimeout:            proxy.DefaultStreamingTimeout,
 		Metrics:                     f.proxyMetrics,
 		MaxBufferedBodyBytes:        proxy.DefaultMaxBufferedBodyBytes,
@@ -395,6 +458,7 @@ func (f *ProxyManager) BuildTarget(
 		UpstreamResponseInterceptor: nil,
 		DisableRedirects:            false,
 		StrictToolSelection:         selection != nil,
+		AnonymousCaller:             options.anonymousCaller && visibility == mcpservers.VisibilityPublic,
 		WWWAuthenticate:             wwwAuthenticate,
 		// The census runs first so every parsed request is counted, including
 		// those a later interceptor rejects — matching the hosted dispatch,
@@ -408,6 +472,9 @@ func (f *ProxyManager) BuildTarget(
 		ToolsCallPreForwardInterceptors: toolsCallPreForwardInterceptors,
 		ToolsCallRequestInterceptors:    toolsCallReqInterceptors,
 		ToolsCallResponseInterceptors:   toolsCallResponseInterceptors,
+		// Only the log row: a call that never got a reply has nothing to
+		// bill, scan, or record as a selected use.
+		ToolsCallFailureInterceptors: []proxy.ToolsCallFailureInterceptor{clickHouseLogInterceptor},
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
 			NewToolsListPostHogEventInterceptor(f.posthog, identity, logger),
 		},
@@ -421,4 +488,13 @@ func (f *ProxyManager) BuildTarget(
 		ResourcesListRequestInterceptors:  nil,
 		ResourcesListResponseInterceptors: nil,
 	}
+}
+
+// Dispositions supplies the proxy's shared metadata resolver to gateway discovery.
+func (f *ProxyManager) Dispositions(ctx context.Context, mcpServerID, projectID string) (map[string]string, error) {
+	dispositions, err := f.toolDispositions.Dispositions(ctx, mcpServerID, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve gateway tool dispositions: %w", err)
+	}
+	return dispositions, nil
 }

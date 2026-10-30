@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -36,6 +38,26 @@ type ProposalOutput struct {
 	Replay      bool            `json:"replay"`
 	ResultCode  string          `json:"result_code,omitempty"`
 	Result      json.RawMessage `json:"result,omitempty"`
+}
+
+// proposalOutputSchema is ProposalOutput's schema with Preview and Result typed
+// as JSON objects. Inferred from the Go type, json.RawMessage reads as []byte,
+// and the SDK then rejects every object preview after the proposal is already
+// stored. An empty schema is no better: it serializes as the boolean schema
+// true, which MCP clients reject as a property schema. Every preview and
+// receipt is an encoded struct, so "object" is exact.
+var proposalOutputSchema = func() *jsonschema.Schema {
+	schema, err := jsonschema.For[ProposalOutput](&jsonschema.ForOptions{TypeSchemas: map[reflect.Type]*jsonschema.Schema{reflect.TypeFor[json.RawMessage](): {Type: "object"}}})
+	if err != nil {
+		panic(fmt.Sprintf("infer proposal output schema: %v", err))
+	}
+	return schema
+}()
+
+// addProposalTool registers a tool that returns ProposalOutput.
+func addProposalTool[In any](server *mcp.Server, tool *mcp.Tool, handler mcp.ToolHandlerFor[In, ProposalOutput]) {
+	tool.OutputSchema = proposalOutputSchema
+	mcp.AddTool(server, tool, handler)
 }
 
 func proposalOutput(proposal Proposal, replay bool, baseURL string) ProposalOutput {
@@ -217,11 +239,11 @@ func registerWriteTools(server *mcp.Server, tools *writeTools) {
 			writer.registerPrepare(server)
 		}
 	}
-	mcp.AddTool(server, &mcp.Tool{Name: "execute_admin_proposal", Title: "Execute Approved Staff Proposal", Description: "Execute an exact stored staff change once, after it was separately approved in the admin site. Takes only its proposal ID, no target or replacement arguments. A committed receipt replays without writing again."}, func(ctx context.Context, _ *mcp.CallToolRequest, input ProposalIDInput) (*mcp.CallToolResult, ProposalOutput, error) {
+	addProposalTool(server, &mcp.Tool{Name: "execute_admin_proposal", Title: "Execute Approved Staff Proposal", Description: "Execute an exact stored staff change once, after it was separately approved in the admin site. Takes only its proposal ID, no target or replacement arguments. A committed receipt replays without writing again."}, func(ctx context.Context, _ *mcp.CallToolRequest, input ProposalIDInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := tools.execute(ctx, input)
 		return nil, out, err
 	})
-	mcp.AddTool(server, &mcp.Tool{Name: "get_admin_proposal_status", Title: "Get Staff Proposal Status", Description: "Read the bounded status or committed receipt for an exact proposal owned by this staff subject and OAuth client. Does not change or approve a proposal.", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}}, func(ctx context.Context, _ *mcp.CallToolRequest, input ProposalIDInput) (*mcp.CallToolResult, ProposalOutput, error) {
+	addProposalTool(server, &mcp.Tool{Name: "get_admin_proposal_status", Title: "Get Staff Proposal Status", Description: "Read the bounded status or committed receipt for an exact proposal owned by this staff subject and OAuth client. Does not change or approve a proposal.", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}}, func(ctx context.Context, _ *mcp.CallToolRequest, input ProposalIDInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := tools.status(ctx, input)
 		return nil, out, err
 	})
@@ -258,6 +280,11 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 		OperationCreateRegistryEntry:                  &registryEntryWriter{store: store, registry: registry, writes: writes, baseURL: oauth.Resource()},
 	})
 	tools.uploads = deps.ImageUploads
+	if runtime.catalogPromotions != nil {
+		tools.writers[OperationCurateRegistryPromotionCandidate] = &catalogCurationWriter{store: store, writes: writes, baseURL: oauth.Resource(), mutator: runtime.catalogPromotions, now: time.Now}
+		tools.writers[OperationRetryRegistryPromotionDocs] = &catalogDocsRetryWriter{store: store, writes: writes, baseURL: oauth.Resource(), mutator: runtime.catalogPromotions, now: time.Now}
+		tools.writers[OperationPromoteRegistryCandidate] = &catalogPromotionWriter{store: store, writes: writes, baseURL: oauth.Resource(), mutator: runtime.catalogPromotions, now: time.Now}
+	}
 	for _, op := range writes.EnabledOperations() {
 		if !tools.implements(op) {
 			return fmt.Errorf("admin MCP write operation %q is not implemented", op)

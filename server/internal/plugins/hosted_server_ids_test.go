@@ -8,7 +8,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -34,18 +33,11 @@ func TestPluginsService_HostedEntriesReportBothIDs(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestPluginsService(t)
 
-	serverKeyed := createTestToolset(t, ctx, ti.conn, "server-keyed")
-	createCanonicalWrapper(t, ctx, ti, serverKeyed, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, serverKeyed.McpSlug.String)
-	toolsetKeyed := createTestToolset(t, ctx, ti.conn, "toolset-keyed")
-	createCanonicalWrapper(t, ctx, ti, toolsetKeyed, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, toolsetKeyed.McpSlug.String)
-	unwrapped := createTestToolset(t, ctx, ti.conn, "unwrapped")
-	deletedWrapper := createTestToolset(t, ctx, ti.conn, "deleted-wrapper")
-	createCanonicalWrapper(t, ctx, ti, deletedWrapper, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
-	_, err := mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: deletedWrapper.ID, ProjectID: deletedWrapper.ProjectID})
-	require.NoError(t, err)
+	serverKeyed := createUnwrappedTestToolset(t, ctx, ti.conn, "server-keyed")
+	createCanonicalWrapper(t, ctx, ti, serverKeyed, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, serverKeyed.Slug)
 	fresh := createTestMcpServer(t, ctx, ti.conn, "fresh", "private")
 
-	orphaned := createTestToolset(t, ctx, ti.conn, "orphaned")
+	orphaned := createUnwrappedTestToolset(t, ctx, ti.conn, "orphaned")
 	createCanonicalWrapper(t, ctx, ti, orphaned, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Both IDs"})
@@ -56,20 +48,19 @@ func TestPluginsService_HostedEntriesReportBothIDs(t *testing.T) {
 	stored, err := pluginsrepo.New(ti.conn).ListPluginServers(ctx, uuid.MustParse(plugin.ID))
 	require.NoError(t, err)
 	require.Len(t, stored, 1)
-	require.False(t, stored[0].ToolsetID.Valid, "an mcp_server_id add stores the server key")
 	require.Equal(t, serverKeyed.ID.String(), conv.PtrValOr(added.ToolsetID, ""))
 	require.Equal(t, serverKeyed.ID.String(), conv.PtrValOr(added.McpServerID, ""))
 
-	byToolset := createTestToolset(t, ctx, ti.conn, "by-toolset")
-	createCanonicalWrapper(t, ctx, ti, byToolset, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, byToolset.McpSlug.String)
+	byToolset := createUnwrappedTestToolset(t, ctx, ti.conn, "by-toolset")
+	createCanonicalWrapper(t, ctx, ti, byToolset, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, byToolset.Slug)
 	addedByToolset, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(byToolset.ID.String()), DisplayName: conv.PtrEmpty("ByToolset"), Policy: "required"})
 	require.NoError(t, err)
 	require.Equal(t, new(byToolset.ID.String()), addedByToolset.ToolsetID)
 	require.Equal(t, new(byToolset.ID.String()), addedByToolset.McpServerID)
 
 	// An entry echoed from a read carries both ids; equal ids name the toolset, unequal ones are rejected.
-	echoed := createTestToolset(t, ctx, ti.conn, "echoed")
-	createCanonicalWrapper(t, ctx, ti, echoed, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, echoed.McpSlug.String)
+	echoed := createUnwrappedTestToolset(t, ctx, ti.conn, "echoed")
+	createCanonicalWrapper(t, ctx, ti, echoed, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, echoed.Slug)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(echoed.ID.String()), McpServerID: conv.PtrEmpty(fresh.idStr), DisplayName: conv.PtrEmpty("Mismatched"), Policy: "required"})
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
@@ -79,25 +70,22 @@ func TestPluginsService_HostedEntriesReportBothIDs(t *testing.T) {
 	require.Equal(t, new(echoed.ID.String()), addedEchoed.ToolsetID)
 	require.Equal(t, new(echoed.ID.String()), addedEchoed.McpServerID)
 
-	toolsetKeyedEntry := addToolsetKeyedEntry(t, ctx, ti, plugin.ID, toolsetKeyed.ID, "ToolsetKeyed")
-	unwrappedEntry := addToolsetKeyedEntry(t, ctx, ti, plugin.ID, unwrapped.ID, "Unwrapped")
-	addToolsetKeyedEntry(t, ctx, ti, plugin.ID, deletedWrapper.ID, "DeletedWrapper")
-	addToolsetKeyedEntry(t, ctx, ti, plugin.ID, orphaned.ID, "Orphaned")
-	// A legacy entry can outlive its toolset; its wrapper does not make it an MCP server entry.
+	_, err = pluginsrepo.New(ti.conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+		PluginID: uuid.MustParse(plugin.ID), McpServerID: uuid.NullUUID{UUID: orphaned.ID, Valid: true}, DisplayName: "Orphaned", Policy: "required", SortOrder: 0,
+	})
+	require.NoError(t, err)
+	// A wrapper whose toolset is gone no longer reports a toolset id.
 	_, err = toolsetsrepo.New(ti.conn).DeleteToolset(ctx, toolsetsrepo.DeleteToolsetParams{Slug: orphaned.Slug, ProjectID: orphaned.ProjectID})
 	require.NoError(t, err)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, McpServerID: conv.PtrEmpty(fresh.idStr), DisplayName: conv.PtrEmpty("Fresh"), Policy: "required"})
 	require.NoError(t, err)
 
 	want := map[string]backendIDs{
-		"ServerKeyed":    {toolsetID: new(serverKeyed.ID.String()), mcpServerID: new(serverKeyed.ID.String())},
-		"ToolsetKeyed":   {toolsetID: new(toolsetKeyed.ID.String()), mcpServerID: new(toolsetKeyed.ID.String())},
-		"Unwrapped":      {toolsetID: new(unwrapped.ID.String()), mcpServerID: nil},
-		"ByToolset":      {toolsetID: new(byToolset.ID.String()), mcpServerID: new(byToolset.ID.String())},
-		"Echoed":         {toolsetID: new(echoed.ID.String()), mcpServerID: new(echoed.ID.String())},
-		"DeletedWrapper": {toolsetID: new(deletedWrapper.ID.String()), mcpServerID: nil},
-		"Orphaned":       {toolsetID: new(orphaned.ID.String()), mcpServerID: nil},
-		"Fresh":          {toolsetID: nil, mcpServerID: new(fresh.idStr)},
+		"ServerKeyed": {toolsetID: new(serverKeyed.ID.String()), mcpServerID: new(serverKeyed.ID.String())},
+		"ByToolset":   {toolsetID: new(byToolset.ID.String()), mcpServerID: new(byToolset.ID.String())},
+		"Echoed":      {toolsetID: new(echoed.ID.String()), mcpServerID: new(echoed.ID.String())},
+		"Orphaned":    {toolsetID: nil, mcpServerID: new(orphaned.ID.String())},
+		"Fresh":       {toolsetID: nil, mcpServerID: new(fresh.idStr)},
 	}
 
 	got, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
@@ -119,7 +107,7 @@ func TestPluginsService_HostedEntriesReportBothIDs(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, want, entryIDs(t, updated.Servers))
 
-	for name, id := range map[string]string{"ServerKeyed": added.ID, "ToolsetKeyed": toolsetKeyedEntry.ID.String(), "Unwrapped": unwrappedEntry.ID.String()} {
+	for name, id := range map[string]string{"ServerKeyed": added.ID, "ByToolset": addedByToolset.ID} {
 		updatedEntry, err := ti.service.UpdatePluginServer(ctx, &gen.UpdatePluginServerPayload{ID: id, PluginID: plugin.ID, DisplayName: name, Policy: "optional", SortOrder: 0})
 		require.NoError(t, err)
 		wantEntry := want[name]

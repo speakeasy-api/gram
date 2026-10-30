@@ -77,6 +77,7 @@ func encodeIssuerWorkloadSessionPolicy(issuerProjectID uuid.UUID, version runtim
 		PrincipalUrn: "",
 		Scope:        authz.ScopeMCPConnect,
 		Selector:     selector,
+		Inferred:     false,
 	}})
 	if err != nil {
 		return nil, fmt.Errorf("construct issuer workload session policy: %w", err)
@@ -200,9 +201,10 @@ func (s *Service) prepareWorkloadSessionContext(ctx context.Context, organizatio
 	actor := urn.NewWorkloadPrincipal(workloadIssuerID, externalSubject)
 	ctx = contextvalues.WithPrincipalCredentialAuthorization(ctx, authCtx, actor, contextvalues.PrincipalCredential{
 		// No authorizer, so admission must not require one.
-		AuthorizerUserID:       "",
-		DelegatedGrants:        credential.DelegatedGrants,
-		DelegatedGrantsVersion: credential.DelegatedGrantsVersion,
+		AuthorizerUserID:         "",
+		DelegatedGrants:          credential.DelegatedGrants,
+		DelegatedGrantsVersion:   credential.DelegatedGrantsVersion,
+		DerivesPolicyAtAdmission: false,
 	})
 	return ctx, nil
 }

@@ -25,6 +25,9 @@ const mocks = vi.hoisted(() => ({
   serverScoping: false,
   selectedServerId: "server_one",
   selectedIssuerId: undefined as string | undefined,
+  selectedKind: "Toolset",
+  selectedAuthClientId: undefined as string | undefined,
+  listChoices: vi.fn(),
   list: vi.fn(),
   create: vi.fn(),
   revoke: vi.fn(),
@@ -53,7 +56,12 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: mocks.org, projects: mocks.projects }),
   useSession: () => ({ user: { id: mocks.user } }),
 }));
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({ agents: mocks }) }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({
+    agents: mocks,
+    authClients: { listMcpServerChoices: mocks.listChoices },
+  }),
+}));
 vi.mock("@gram/client/react-query/listAPIKeys", () => ({
   useListAPIKeys: (request: unknown, security: unknown, options: object) =>
     useQuery({
@@ -153,7 +161,8 @@ vi.mock("./AgentKeyServers", () => ({
               name: "Server one",
               projectId: "project_one",
               projectSlug: "project-one",
-              kind: "Toolset",
+              kind: mocks.selectedKind,
+              authClientId: mocks.selectedAuthClientId,
               endpoints: ["https://example.test/mcp/server-one"],
             },
           ])
@@ -164,7 +173,13 @@ vi.mock("./AgentKeyServers", () => ({
     );
   },
 }));
-function KeyPage({ agent }: { agent: ManagedAgent }) {
+function KeyPage({
+  agent,
+  federated,
+}: {
+  agent: ManagedAgent;
+  federated?: boolean | "unknown";
+}) {
   const [creation, setCreation] = useState(false);
   const [busy, setBusy] = useState(false);
   return (
@@ -176,6 +191,7 @@ function KeyPage({ agent }: { agent: ManagedAgent }) {
       )}
       <AgentAPIKeys
         agent={agent}
+        federated={federated}
         creation={creation}
         onCreate={() => setCreation(true)}
         onDone={() => setCreation(false)}
@@ -235,9 +251,7 @@ function setup(current = agent) {
   };
 }
 async function beginCreate() {
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Create API key" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "Issue a key" }));
   if (!screen.queryByRole("button", { name: "Choose fixture server" })) return;
   fireEvent.click(
     screen.getByRole("button", { name: "Choose fixture server" }),
@@ -286,6 +300,9 @@ beforeEach(() => {
   mocks.serverScoping = false;
   mocks.selectedServerId = "server_one";
   mocks.selectedIssuerId = undefined;
+  mocks.selectedKind = "Toolset";
+  mocks.selectedAuthClientId = undefined;
+  mocks.listChoices.mockResolvedValue({ choices: [] });
   mocks.org = "org_example";
   mocks.user = "user_example";
   mocks.projects = [
@@ -423,14 +440,40 @@ describe("Agent API keys", () => {
       /The key was created but its secret was not returned/,
     );
     expect(screen.queryByRole("button", { name: "Create key" })).toBeNull();
-    expect(
-      (
-        screen.getByRole("button", {
-          name: "Copy API key",
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
+    // Without a secret there is nothing to copy, so the key row is absent
+    // rather than present and inert. The connect snippets still render, with a
+    // placeholder where the key goes.
+    expect(screen.queryByText("API key — shown once")).toBeNull();
+    expect(screen.getByText("Connect your agent")).toBeTruthy();
     expect(mocks.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers the gateway endpoint and the key once issuance succeeds", async () => {
+    mocks.create.mockResolvedValue({ ...key, key: "secret_example_once" });
+    setup();
+    await createWithGrant();
+
+    await screen.findByText("secret_example_once");
+    expect(screen.getByText("API key — shown once")).toBeTruthy();
+    // One endpoint for the whole agent: the snippet must carry the gateway
+    // path, not a per-server URL.
+    // Every recipe stays mounted, so the endpoint appears in each of them.
+    expect(
+      screen.getAllByText(new RegExp(`/agent-mcp/${agent.id}`)).length,
+    ).toBeGreaterThan(0);
+    // The claim this step makes is that one copy connects a runtime, so the
+    // key has to be in the snippet — not merely named by an environment
+    // variable nothing sets.
+    expect(
+      screen.getByText(/Authorization: Bearer secret_example_once/),
+    ).toBeTruthy();
+
+    // The env-var recipes name a variable, so they must also set it. Without
+    // the export line a copied recipe points at nothing.
+    expect(
+      screen.getAllByText(/export SPEAKEASY_AGENT_KEY='secret_example_once'/)
+        .length,
+    ).toBeGreaterThan(0);
   });
 
   it("requires authorize to list or issue credentials", () => {
@@ -440,7 +483,7 @@ describe("Agent API keys", () => {
     });
     expect(mocks.list).not.toHaveBeenCalled();
     expect(screen.getByText(/do not have permission/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Create API key" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Issue a key" })).toBeNull();
   });
   it.each(["suspended", "revoked"] as const)(
     "keeps list and revoke usable for %s agents but blocks issuance",
@@ -450,12 +493,12 @@ describe("Agent API keys", () => {
       expect(
         (
           screen.getByRole("button", {
-            name: "Create API key",
+            name: "Issue a key",
           }) as HTMLButtonElement
         ).disabled,
       ).toBe(true);
       expect(
-        screen.getByRole("button", { name: "Revoke API key" }),
+        screen.getByRole("button", { name: /^Revoke API key/ }),
       ).toBeTruthy();
     },
   );
@@ -465,7 +508,7 @@ describe("Agent API keys", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Create API key",
+          name: "Issue a key",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -473,7 +516,7 @@ describe("Agent API keys", () => {
   it("lists by agent and confirms revocation by credential id", async () => {
     setup();
     fireEvent.click(
-      await screen.findByRole("button", { name: "Revoke API key" }),
+      await screen.findByRole("button", { name: /^Revoke API key/ }),
     );
     expect(mocks.revoke).not.toHaveBeenCalled();
     mocks.list.mockResolvedValue({ keys: [] });
@@ -484,13 +527,15 @@ describe("Agent API keys", () => {
         expect.anything(),
       ),
     );
-    expect(await screen.findByText("No API keys yet")).toBeTruthy();
+    expect(await screen.findByText(/No key issued yet/)).toBeTruthy();
     expect(mocks.list).toHaveBeenCalledWith(
       { agentId: agent.id },
       { sessionHeaderGramSession: "" },
     );
   });
-  it("blocks header navigation during submission and the deferred post-issue refetch", async () => {
+  it("blocks header navigation during credential discovery, submission and the deferred post-issue refetch", async () => {
+    mocks.selectedKind = "Remote";
+    let finishChoices!: (value: { choices: [] }) => void;
     let finishCreate!: (value: typeof key & { key: string }) => void;
     let finishRefetch!: (value: { keys: (typeof key)[] }) => void;
     mocks.create.mockImplementationOnce(
@@ -508,7 +553,25 @@ describe("Agent API keys", () => {
         }),
     );
     fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    mocks.listChoices.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishChoices = resolve;
+        }),
+    );
     submitKey();
+    await waitFor(() => expect(finishChoices).toBeTypeOf("function"));
+    expect(
+      screen.getByRole("button", { name: "Back to agent" }),
+    ).toHaveProperty("disabled", true);
+    for (const name of ["Cancel", "Back", "Servers", "Accounts", "Access"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button).toHaveProperty("disabled", true);
+      fireEvent.click(button);
+    }
+    expect(screen.getByRole("button", { name: "Creating…" })).toBeTruthy();
+    expect(mocks.create).not.toHaveBeenCalled();
+    finishChoices({ choices: [] });
     await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
     expect(
       screen.getByRole("button", { name: "Back to agent" }),
@@ -565,6 +628,25 @@ describe("Agent API keys", () => {
       expect(screen.queryByText("secret_example_once")).toBeNull();
     },
   );
+  it("does not issue a key after switching agents during credential discovery", async () => {
+    mocks.selectedKind = "Remote";
+    let finishChoices!: (value: { choices: [] }) => void;
+    const { change } = setup();
+    await openCreate();
+    mocks.listChoices.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishChoices = resolve;
+        }),
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    submitKey();
+    await waitFor(() => expect(finishChoices).toBeTypeOf("function"));
+    change({ ...agent, id: "agent_other" });
+    finishChoices({ choices: [] });
+    await screen.findByText("Example key");
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
   it("does not reveal an in-flight creation after switching agents", async () => {
     let resolve!: (value: unknown) => void;
     mocks.create.mockImplementation(
@@ -628,11 +710,13 @@ describe("Agent API keys", () => {
     async (statusCode) => {
       mocks.list.mockRejectedValue({ statusCode });
       setup();
-      expect(await screen.findByRole("alert")).toHaveProperty(
-        "textContent",
-        expect.stringContaining("Could not load"),
-      );
-      expect(screen.queryByText("No API keys yet")).toBeNull();
+      // The panel says a failed read failed, and offers the retry. An empty
+      // list here would be a claim about the agent that we do not have.
+      expect(
+        await screen.findByText("This panel could not be loaded."),
+      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+      expect(screen.queryByText(/No key issued yet/)).toBeNull();
     },
   );
   it("explains issuance validation failures without displaying server secrets", async () => {
@@ -650,7 +734,7 @@ describe("Agent API keys", () => {
     mocks.revoke.mockRejectedValue(new Error("failed"));
     setup();
     fireEvent.click(
-      await screen.findByRole("button", { name: "Revoke API key" }),
+      await screen.findByRole("button", { name: /^Revoke API key/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Confirm revoke" }));
     expect(await screen.findByRole("alert")).toHaveProperty(
@@ -685,6 +769,46 @@ describe("Agent API keys", () => {
     expect(screen.getByRole("alert").textContent).toMatch(
       /reserved|255 Unicode characters/,
     );
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it("sends the credential chosen for a server that offers several", async () => {
+    mocks.selectedKind = "Remote";
+    mocks.selectedAuthClientId = "client_b";
+    mocks.listChoices.mockResolvedValue({
+      choices: [{ id: "client_a" }, { id: "client_b" }],
+    });
+    mocks.listDelegableGrants.mockResolvedValue([{ ...grant }]);
+    setup();
+    await createWithGrant();
+    await screen.findByText("secret_example_once");
+    expect(
+      mocks.create.mock.calls[0]?.[0].request.createKeyForm.authClientChoices,
+    ).toEqual([{ mcpServerId: "server_one", authClientId: "client_b" }]);
+  });
+  it("stays on the servers step until a credential is chosen", async () => {
+    mocks.selectedKind = "Remote";
+    mocks.listChoices.mockResolvedValue({
+      choices: [{ id: "client_a" }, { id: "client_b" }],
+    });
+    mocks.listDelegableGrants.mockResolvedValue([{ ...grant }]);
+    setup();
+    fireEvent.click(await screen.findByRole("button", { name: "Issue a key" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Choose fixture server" }),
+    );
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Choose which credential the key uses on Server one.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Choose fixture server" }),
+    ).toBeTruthy();
     expect(mocks.create).not.toHaveBeenCalled();
   });
   it("submits a trimmed name at the Unicode codepoint limit", async () => {
@@ -813,15 +937,21 @@ describe("Agent API keys", () => {
     const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
     mocks.list.mockResolvedValue({ keys: [{ ...key, expiresAt }] });
     setup();
-    const rendered = await screen.findByText(expiresAt.toLocaleString());
-    expect(rendered.getAttribute("datetime")).toBe(expiresAt.toISOString());
+    await screen.findByText(key.name);
+    const rendered = document.querySelector(
+      `time[datetime="${expiresAt.toISOString()}"]`,
+    );
+    expect(rendered).toBeTruthy();
+    // A day-precision label, and never an elapsed-time one: a 90-day key read
+    // "3 months ago" when this column was relative.
+    expect(rendered?.textContent).toContain(String(expiresAt.getFullYear()));
     expect(screen.queryByText(/ago/)).toBeNull();
   });
   it("shows loading separately from an empty list", () => {
     mocks.list.mockImplementation(() => new Promise(() => {}));
-    setup();
-    expect(screen.getByText("Loading API keys…")).toBeTruthy();
-    expect(screen.queryByText("No API keys yet")).toBeNull();
+    const { container } = setup();
+    expect(container.querySelector("[aria-busy=true]")).toBeTruthy();
+    expect(screen.queryByText(/No key issued yet/)).toBeNull();
   });
   it("requests inventory-scoped candidates and issues only selected MCP connect grants", async () => {
     mocks.serverScoping = true;
@@ -903,7 +1033,7 @@ describe("Agent API keys", () => {
       if (state === "empty") mocks.listDelegableGrants.mockResolvedValue([]);
       setup();
       fireEvent.click(
-        await screen.findByRole("button", { name: "Create API key" }),
+        await screen.findByRole("button", { name: "Issue a key" }),
       );
       fireEvent.click(
         screen.getByRole("button", { name: "Choose fixture server" }),
@@ -970,4 +1100,28 @@ describe("Agent API keys", () => {
       expect(mocks.create).toHaveBeenCalledTimes(1);
     },
   );
+});
+
+describe("the empty state, while the credential is unknown", () => {
+  it("says only that no key is issued", async () => {
+    mocks.list.mockResolvedValue({ keys: [] });
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <TooltipProvider>
+          <KeyPage agent={agent} federated="unknown" />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText("No key issued.")).toBeTruthy();
+    // Neither of the settled answers: one tells a federated agent it cannot
+    // authenticate, the other says a platform signs it in. Until the
+    // admissions read lands, both are guesses.
+    expect(screen.queryByText(/cannot authenticate/)).toBeNull();
+    expect(screen.queryByText(/platform's own tokens/)).toBeNull();
+  });
 });

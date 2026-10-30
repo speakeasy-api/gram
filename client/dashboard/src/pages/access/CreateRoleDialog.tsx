@@ -1,3 +1,4 @@
+import { isKnownResourceType } from "./types";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
@@ -15,19 +16,29 @@ import {
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
+import { collectPageItems } from "@/components/sessions/collectPageItems";
 import type { Role } from "@gram/client/models/components/role.js";
 import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
 import {
   invalidateAllMembers,
   useMembers,
 } from "@gram/client/react-query/members.js";
-import { useAgents } from "@gram/client/react-query/agents.js";
+import { queryKeyAgents } from "@gram/client/react-query/agents.js";
 import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
+import type { ListRolesResult } from "@gram/client/models/components/listrolesresult.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
+import { RoleAuthClientTypesField } from "./RoleAuthClientTypesField";
+import {
+  clientTypeGrantChanges,
+  clientTypeRulesFromRole,
+  clientTypeRulesKey,
+  type ClientTypeRules,
+} from "./roleAuthClientTypes";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowLeft, Bot, Check, ChevronRight, Loader2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
@@ -40,7 +51,10 @@ import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
 import { RoleAccessMatrix } from "./RoleAccessMatrix";
 import { useOrgMcpServers } from "./useOrgMcpServers";
 import { RoleDirectorySources } from "./RoleDirectorySources";
-import type { Scope } from "@gram/client/models/components/rolegrant.js";
+import type {
+  RoleGrant as SdkRoleGrant,
+  Scope,
+} from "@gram/client/models/components/rolegrant.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
 import type { ActivePanel, ResourceType, RoleGrant, ScopeRule } from "./types";
 import {
@@ -55,6 +69,7 @@ import {
   applyRemoveRule,
   diffGrants,
   grantsFromRole,
+  roleHoldsGrants,
   sdkGrantsFromForm,
 } from "./roleGrantTransform";
 
@@ -97,6 +112,8 @@ function getDenyPanels(
   if (resourceType && isProjectSelectableResourceType(resourceType)) {
     return allowLevel === "all" ? ["servers"] : [];
   }
+  if (resourceType === "inference")
+    return allowLevel === "all" ? ["projects"] : [];
   if (resourceType && isProjectFilteredResourceType(resourceType)) {
     if (allowLevel === "all") return ["projects", "servers"];
     return allowLevel === "project" ? ["servers"] : [];
@@ -167,6 +184,11 @@ export function CreateRoleDialog({
   const [initialName, setInitialName] = useState("");
   const [initialDescription, setInitialDescription] = useState("");
   const [initialGrantKeys, setInitialGrantKeys] = useState("");
+  const [clientTypeRules, setClientTypeRules] = useState<ClientTypeRules>(() =>
+    clientTypeRulesFromRole(undefined),
+  );
+  const [savedClientTypeRules, setSavedClientTypeRules] =
+    useState<ClientTypeRules>(() => clientTypeRulesFromRole(undefined));
   const [showMembers, setShowMembers] = useState(false);
   const [assignmentConfirmed, setAssignmentConfirmed] = useState(false);
   const [initialized, setInitialized] = useState(false);
@@ -185,10 +207,17 @@ export function CreateRoleDialog({
   const members = [...(membersData?.members ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
-  // The agent picker is optional here, so on any error (including 403 for
-  // callers without agent:read) it shows no agents instead of taking the role
-  // editor down.
-  const { data: agentsData } = useAgents(undefined, undefined, {
+  const sdk = useSdkClient();
+  // Every page of them: an agent missing from this picker cannot be given the
+  // role, and nothing on screen would say why.
+  //
+  // The picker is optional here, so on any error (including 403 for callers
+  // without agent:read) it shows no agents instead of taking the role editor
+  // down.
+  const { data: agentsData } = useQuery({
+    queryKey: [...queryKeyAgents({}), "all-pages"],
+    queryFn: ({ signal }) =>
+      collectPageItems(sdk.agents.list(undefined, undefined, { signal })),
     throwOnError: false,
   });
   // Suspended and revoked agents keep the roles they hold but cannot be given
@@ -204,7 +233,9 @@ export function CreateRoleDialog({
   const userVisibleScopeDefinitions = useMemo(
     () =>
       (scopeDefinitions ?? []).filter(
-        (scope) => scope.visibility === "user_visible",
+        (scope): scope is typeof scope & { resourceType: ResourceType } =>
+          scope.visibility === "user_visible" &&
+          isKnownResourceType(scope.resourceType),
       ),
     [scopeDefinitions],
   );
@@ -230,6 +261,8 @@ export function CreateRoleDialog({
     setInitialName(editingRole.name);
     setInitialDescription(editingRole.description);
     setInitialGrantKeys(grantKeysStringFn(roleGrants));
+    setClientTypeRules(clientTypeRulesFromRole(editingRole));
+    setSavedClientTypeRules(clientTypeRulesFromRole(editingRole));
     const assignedIds = new Set(membersWithRole(members, editingRole.id));
     setSelectedMembers(assignedIds);
     setInitialMembers(new Set(assignedIds));
@@ -256,36 +289,70 @@ export function CreateRoleDialog({
   });
 
   const submitted = useRef<{
+    clientTypeRules: ClientTypeRules;
     name: string;
     description: string;
     grantKeys: string;
+    grants: SdkRoleGrant[];
     members: Set<string>;
     agents: Set<string>;
   } | null>(null);
 
   const updateRole = useUpdateRoleMutation({
-    onSuccess: async () => {
+    onSuccess: async (role) => {
+      // The next save is worked out against the role being edited, so it has
+      // to be the role as stored now, not the list read before this save.
+      queryClient.setQueriesData<ListRolesResult>(
+        { queryKey: ["@gram/client", "access", "listRoles"] },
+        (data) =>
+          data && {
+            ...data,
+            roles: data.roles.map((r) => (r.id === role.id ? role : r)),
+          },
+      );
       await Promise.all([
         invalidateAllRoles(queryClient),
         invalidateAllResourceAudience(queryClient),
         invalidateAllMembers(queryClient),
       ]);
+      const saved = submitted.current;
+      // A save the server accepted can still leave a permission as it was, so
+      // check what it stored before saying it saved. The form keeps the
+      // change and Save stays enabled, so saving again retries it against
+      // the role as stored.
+      const grantsStored =
+        !saved ||
+        !scopeDefinitions ||
+        roleHoldsGrants(role, saved.grants, scopeDefinitions);
+      // Credential type rules are left out of the form's grants, so check
+      // them on their own against what the role stores.
+      const storedClientTypeRules = clientTypeRulesFromRole(role);
+      const clientTypesStored =
+        !saved ||
+        clientTypeRulesKey(storedClientTypeRules) ===
+          clientTypeRulesKey(saved.clientTypeRules);
+      const allStored = grantsStored && clientTypesStored;
+      if (!allStored) {
+        toast.error(
+          "Some permission changes weren't saved. Check the role and save again.",
+        );
+      }
       // On its own page the editor stays open after a save: what was saved
       // becomes the starting point, so Save waits for the next change. The
       // sheet over the roles list closes as before.
       // The baseline is what the click sent, not the form now: an edit made
       // while the save was in flight stays unsaved and keeps Save enabled.
-      const saved = submitted.current;
       if (presentation === "page" && saved) {
         setInitialName(saved.name);
         setInitialDescription(saved.description);
-        setInitialGrantKeys(saved.grantKeys);
+        if (grantsStored) setInitialGrantKeys(saved.grantKeys);
         setInitialMembers(saved.members);
         setInitialAgents(saved.agents);
-        toast.success("Role saved");
+        setSavedClientTypeRules(storedClientTypeRules);
+        if (allStored) toast.success("Role saved");
         return;
       }
-      handleClose();
+      if (allStored) handleClose();
     },
   });
 
@@ -298,6 +365,9 @@ export function CreateRoleDialog({
       isMutating,
       isEditing,
       isSystemRole,
+      clientTypesChanged:
+        clientTypeRulesKey(clientTypeRules) !==
+        clientTypeRulesKey(savedClientTypeRules),
       name,
       description,
       grants,
@@ -477,11 +547,21 @@ export function CreateRoleDialog({
         grantsFromRole(editingRole, scopeDefinitions),
         scopeDefinitions,
       );
-      const { addGrants, removeGrants } = diffGrants(initialGrants, sdkGrants);
+      const scopeChanges = diffGrants(initialGrants, sdkGrants);
+      // Removals use the role's stored selectors, so only the credential
+      // types whose rule changed are rewritten.
+      const typeChanges = clientTypeGrantChanges(editingRole, clientTypeRules);
+      const addGrants = [...scopeChanges.addGrants, ...typeChanges.addGrants];
+      const removeGrants = [
+        ...scopeChanges.removeGrants,
+        ...typeChanges.removeGrants,
+      ];
       submitted.current = {
+        clientTypeRules,
         name,
         description,
         grantKeys: grantKeysStringFn(grants),
+        grants: sdkGrants,
         members: new Set(selectedMembers),
         agents: new Set(selectedAgents),
       };
@@ -511,7 +591,10 @@ export function CreateRoleDialog({
           createRoleForm: {
             name,
             description: description.trim() || undefined,
-            grants: sdkGrants,
+            grants: [
+              ...sdkGrants,
+              ...clientTypeGrantChanges(undefined, clientTypeRules).addGrants,
+            ],
             memberIds:
               selectedMembers.size > 0
                 ? Array.from(selectedMembers)
@@ -531,6 +614,8 @@ export function CreateRoleDialog({
     setName("");
     setDescription("");
     setGrants({});
+    setClientTypeRules(clientTypeRulesFromRole(undefined));
+    setSavedClientTypeRules(clientTypeRulesFromRole(undefined));
     setSelectedMembers(new Set());
     setInitialMembers(new Set());
     setSelectedAgents(new Set());
@@ -686,6 +771,14 @@ export function CreateRoleDialog({
               markAgentIneligible={selectedAgents.size > 0}
               onEditRule={openRuleEditor}
               onRemoveRule={removeRule}
+            />
+            <RoleAuthClientTypesField
+              value={clientTypeRules}
+              onChange={(next) => {
+                setAssignmentConfirmed(false);
+                setClientTypeRules(next);
+              }}
+              disabled={isEditing && !initialized}
             />
 
             {/* ─── Who holds the role ───────────────────────────────

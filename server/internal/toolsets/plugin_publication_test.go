@@ -11,6 +11,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -96,7 +97,7 @@ func TestDeleteToolsetRequestsPublicationForWrapperBackedToolset(t *testing.T) {
 	_, err = servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolsetID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err, "creation materializes the hosted wrapper and its platform endpoint")
 	_, err = plugins.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
-		PluginID: defaultPlugin.ID, ToolsetID: uuid.NullUUID{}, McpServerID: uuid.NullUUID{UUID: toolsetID, Valid: true},
+		PluginID: defaultPlugin.ID, McpServerID: uuid.NullUUID{UUID: toolsetID, Valid: true},
 		DisplayName: "Wrapped toolset", Policy: "required", SortOrder: 0,
 	})
 	require.NoError(t, err)
@@ -137,13 +138,13 @@ func TestDeleteToolsetSkipsProjectWithoutMarketplace(t *testing.T) {
 	require.Zero(t, publicationRequests(t, ctx, ti))
 }
 
-func TestSetUserSessionIssuerRequestsPublicationWhenOAuthChanges(t *testing.T) {
+func TestHostedServerIssuerRequestsPublicationWhenOAuthChanges(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti, carried := newPublishingToolsetsService(t, true)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	newIssuer := func(slug string) string {
+	newIssuer := func(slug string) uuid.UUID {
 		issuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
 			OrganizationID:               pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true},
 			Slug:                         slug,
@@ -152,19 +153,18 @@ func TestSetUserSessionIssuerRequestsPublicationWhenOAuthChanges(t *testing.T) {
 			TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		})
 		require.NoError(t, err)
-		return issuer.ID.String()
+		return issuer.ID
 	}
 	first, second := newIssuer("publication-first"), newIssuer("publication-second")
 
-	_, err := ti.service.SetUserSessionIssuer(ctx, &gen.SetUserSessionIssuerPayload{Slug: carried.Slug, UserSessionIssuerID: &first})
-	require.NoError(t, err)
+	link := func(issuerID uuid.UUID) {
+		_, err := ti.service.UpdateHostedServer(ctx, hostedUpdate(carried, "private", func(u *mcpservers.HostedServerUpdate) {
+			u.UserSessionIssuerID = uuid.NullUUID{UUID: issuerID, Valid: true}
+		}))
+		require.NoError(t, err)
+	}
+	link(first)
 	require.Equal(t, int64(1), publicationRequests(t, ctx, ti), "linking an issuer turns the package entry into an OAuth server")
-
-	_, err = ti.service.SetUserSessionIssuer(ctx, &gen.SetUserSessionIssuerPayload{Slug: carried.Slug, UserSessionIssuerID: &second})
-	require.NoError(t, err)
+	link(second)
 	require.Equal(t, int64(1), publicationRequests(t, ctx, ti), "swapping issuers keeps the entry an OAuth server")
-
-	_, err = ti.service.SetUserSessionIssuer(ctx, &gen.SetUserSessionIssuerPayload{Slug: carried.Slug, UserSessionIssuerID: nil})
-	require.NoError(t, err)
-	require.Equal(t, int64(2), publicationRequests(t, ctx, ti))
 }

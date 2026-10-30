@@ -40,6 +40,12 @@ func (a *ahpTestAuthorizer) Authorize(ctx context.Context, key string, scheme *s
 	}
 }
 
+// AuthorizeWithHandlerProjectAccess resolves the project the way Authorize
+// does: these tests authenticate humans, whose project check stays upstream.
+func (a *ahpTestAuthorizer) AuthorizeWithHandlerProjectAccess(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
+	return a.Authorize(ctx, key, scheme)
+}
+
 func ahpRequest(t *testing.T, h http.Handler, method string, event map[string]any, effects []string, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	params := map[string]any{"protocolVersion": "draft", "event": event}
@@ -192,6 +198,68 @@ func TestAHPObservationPersistsWithoutEvaluation(t *testing.T) {
 		})
 		return err == nil && len(logs) == 1
 	}, 2*time.Second, 50*time.Millisecond, "expected the observed tool request row")
+}
+
+func TestAHPNotificationRetainsTurnID(t *testing.T) {
+	t.Parallel()
+	for _, eventType := range []string{
+		"model.request.before",
+		"user.message.outbound",
+		"context.compact.before",
+		"context.compact.after",
+		"tool.permission.resolved",
+		"tool.batch.after",
+		"model.error",
+		"turn.end",
+	} {
+		t.Run(eventType, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti, published := newTeeTestService(t)
+			ti.service.auth = &ahpTestAuthorizer{authCtx: hookAuthContext(t, ctx)}
+			scanner := &recordingRiskScanner{}
+			ti.service.riskScanner = scanner
+			h, err := ti.service.ahpHandler()
+			require.NoError(t, err)
+
+			event := ahpBoundaryEvent(eventType)
+			switch eventType {
+			case "tool.permission.resolved":
+				event = ahpToolEvent(eventType)
+				event["decision"] = "allow"
+				event["decidedBy"] = "user"
+			case "tool.batch.after":
+				event = ahpToolEvent(eventType)
+				delete(event, "tool")
+				delete(event, "call")
+				delete(event, "path")
+				event["batch"] = map[string]any{"id": uuid.NewString()}
+				call := ahpToolEvent("tool.after")
+				event["calls"] = []any{map[string]any{
+					"call": call["call"], "tool": call["tool"], "path": call["path"],
+					"execution": map[string]any{"status": "executed"}, "outcome": "ok",
+				}}
+			case "model.error":
+				delete(event, "finishReason")
+				delete(event, "items")
+				event["error"] = map[string]any{"class": "provider", "message": "example error"}
+			case "turn.end":
+				delete(event, "usage")
+				event["outcome"] = "completed"
+				event["continuationCount"] = 0
+			}
+			turnID := uuid.NewString()
+			event["turn"] = map[string]any{"id": turnID}
+			event["time"] = time.Now().UTC().Format(time.RFC3339)
+
+			w := ahpRequest(t, h, "hooks/observe", event, nil, ahpAuthHeaders)
+			require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+			ti.service.otelTeeDrains.Wait()
+			require.Zero(t, scanner.scans)
+			records := published.records()
+			require.Len(t, records, 1, "expected the actual observation handler to persist a notification")
+			require.Equal(t, turnID, teeStringAttr(t, records[0], "gram.hook.turn_id"))
+		})
+	}
 }
 
 func TestAHPToolAfterPayload(t *testing.T) {

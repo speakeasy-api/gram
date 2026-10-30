@@ -9,17 +9,19 @@ import {
 } from "@/components/ui/HoverCard";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
 import { useDetachUserSessionIssuerMutation } from "@gram/client/react-query/detachUserSessionIssuer.js";
-import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import {
+  invalidateAllServerClientAssociations,
+  useServerClientAssociations,
+} from "@gram/client/react-query/serverClientAssociations.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import {
   invalidateAllGetRemoteMcpServerScopes,
@@ -54,7 +56,6 @@ import { useAgentCredentialDraft } from "@/lib/remote-identity";
 import { RequestedScopesSummary } from "./RequestedScopesSummary";
 import { ResourceScopePinField } from "./ResourceScopePinField";
 import { useResourceScopePin } from "./resourceScopePin";
-import { IdentityChainingField } from "./IdentityChainingField";
 import { RepointedServersNotice } from "./RepointedServersNotice";
 import type { AuthTarget } from "./authTarget";
 import {
@@ -91,9 +92,12 @@ export function RemoteMcpIdentitySectionBody({
   const remoteMcpServerId = target.remoteMcpServerId ?? "";
   const queryClient = useQueryClient();
   const routes = useRoutes();
+  const organization = useOrganization();
   const { hasScope, isLoading: rbacLoading } = useRBAC();
   const canWrite =
     !rbacLoading && hasScope("mcp:write", target.permissionResourceId);
+  const organizationAdmin =
+    !rbacLoading && hasScope("org:admin", organization.id);
   const headersQuery = useRemoteMcpServerHeaders(
     { remoteMcpServerId },
     undefined,
@@ -119,17 +123,14 @@ export function RemoteMcpIdentitySectionBody({
   );
   // On an organization-level issuer, a binding to an organization-owned
   // client is shared by every project's servers on that issuer, so the server
-  // refuses to replace it from one project (ErrIdentityOrgWideBinding).
-  // Project-owned clients stay editable, so only that case locks the panel.
+  // refuses to replace it without organization admin
+  // (ErrIdentityOrgWideBinding). Project-owned clients stay editable, so only
+  // that case locks the panel, and only for someone who is not an admin.
   const organizationIssuer = userSessionIssuer?.projectId === "";
   const orgSharedClient = organizationIssuer
     ? clients.find((linked) => linked.projectId === "")
     : undefined;
-  const chainingFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
-  const chainingIssuer =
-    chainingFlag.status === "enabled"
-      ? identityChainingIssuer(userSessionIssuer)
-      : undefined;
+  const orgSharedClientLocked = !!orgSharedClient && !organizationAdmin;
   const sourceQuery = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
@@ -159,7 +160,7 @@ export function RemoteMcpIdentitySectionBody({
   // failed lookup may leave the controls open.
   const identityReadOnly =
     sharedSource ||
-    !!orgSharedClient ||
+    orgSharedClientLocked ||
     issuerLoading ||
     issuerError ||
     siblingsQuery.isLoading ||
@@ -248,6 +249,26 @@ export function RemoteMcpIdentitySectionBody({
     configured: actualMode === "user",
     enabled: identityResolved && selectedMode === "user",
   });
+  // mcp:write satisfies mcp:read, but a read block applies independently.
+  const canRead =
+    !rbacLoading && hasScope("mcp:read", target.permissionResourceId);
+  const associationsQuery = useServerClientAssociations(
+    { mcpServerId: target.permissionResourceId },
+    undefined,
+    {
+      enabled: canRead && identityResolved && selectedMode === "user",
+      throwOnError: false,
+    },
+  );
+  // Other servers using this server's client: rotating or replacing the
+  // client changes their sign-in too.
+  const connectedAssociation = associationsQuery.data?.associations.find(
+    (association) =>
+      association.remoteSessionClientId === userDraft.connectedClientId,
+  );
+  const otherServersOnClient = connectedAssociation
+    ? connectedAssociation.serverCount - 1
+    : 0;
   const agentDraft = useAgentCredentialDraft({
     remoteMcpServerId,
     authorizationHeader,
@@ -288,9 +309,6 @@ export function RemoteMcpIdentitySectionBody({
   const showScopePin = scopePinSlot && !!scopePin.data && !scopePinUnusable;
   const scopePinDirty = showScopePin && scopePin.dirty;
   // Writers get the same answer in the pin's status line when the pin shows.
-  // mcp:write satisfies mcp:read, but a read block applies independently.
-  const canRead =
-    !rbacLoading && hasScope("mcp:read", target.permissionResourceId);
   const showScopesSummary =
     canRead &&
     (!scopePinSlot || scopePinUnusable) &&
@@ -406,6 +424,7 @@ export function RemoteMcpIdentitySectionBody({
     }
     await Promise.all([
       invalidateAllRemoteSessionClients(queryClient),
+      invalidateAllServerClientAssociations(queryClient),
       invalidateAllGetRemoteMcpServerScopes(queryClient),
       invalidateSharedIssuerImpact(queryClient),
     ]);
@@ -447,7 +466,10 @@ export function RemoteMcpIdentitySectionBody({
         attachUserSessionIssuerForm: { id: selfClient.id, userSessionIssuerId },
       },
     });
-    await invalidateAllRemoteSessionClients(queryClient);
+    await Promise.all([
+      invalidateAllRemoteSessionClients(queryClient),
+      invalidateAllServerClientAssociations(queryClient),
+    ]);
   };
 
   // Switching to User commits a client; without one, removing the old
@@ -582,7 +604,7 @@ export function RemoteMcpIdentitySectionBody({
   // that card says so rather than a banner underneath the choice.
   const noneWarning =
     noneProbeStatus === "authentication-required"
-      ? "This server answers with an authentication challenge. With no identity configured, requests to it will keep failing — choose User Identity or a Service Account."
+      ? "This server answers with an authentication challenge. With no identity configured, requests to it will keep failing — choose User Identity or a shared credential."
       : null;
   const cards = identityModeCards(upstreamName);
 
@@ -642,19 +664,19 @@ export function RemoteMcpIdentitySectionBody({
               <Alert variant="warning" dismissible={false}>
                 This identity is shared by {linkedServers.length} MCP servers.
                 Editing is disabled here so one server cannot change the
-                credential used by the others. Manage linked providers and
-                clients in{" "}
+                credential used by the others. Manage linked authorization
+                servers and clients in{" "}
                 <Link
                   className="font-medium underline underline-offset-2"
                   to={routes.remoteIdentityProviders.href()}
                 >
-                  Remote Identity Providers
+                  Authorization Servers
                 </Link>
                 .
               </Alert>
             ) : null}
 
-            {orgSharedClient && !sharedSource ? (
+            {orgSharedClient && orgSharedClientLocked && !sharedSource ? (
               <Alert variant="warning" dismissible={false}>
                 This server uses a client shared by every project on the
                 organization&apos;s session issuer, so it can&apos;t be changed
@@ -698,8 +720,8 @@ export function RemoteMcpIdentitySectionBody({
             {passThroughAuthorization ? (
               <Alert variant="warning" dismissible={false}>
                 A legacy pass-through Authorization header is still configured.
-                Remove it in Custom Headers before selecting Service Account or
-                relying on Manual.
+                Remove it in Custom Headers before selecting a shared credential
+                or relying on Manual.
               </Alert>
             ) : null}
 
@@ -802,6 +824,15 @@ export function RemoteMcpIdentitySectionBody({
                   )
                 }
               />
+              {otherServersOnClient > 0 ? (
+                <Text muted small className="mt-4 block pl-[52px]">
+                  This client also signs in{" "}
+                  {otherServersOnClient === 1
+                    ? "1 other MCP server"
+                    : `${otherServersOnClient} other MCP servers`}
+                  . Changing or rotating it changes their sign-in too.
+                </Text>
+              ) : null}
               {showScopePin && scopePin.data ? (
                 // Commits with the footer's Save, like the rest of the panel.
                 <div className="mt-4 pl-[52px]">
@@ -843,15 +874,6 @@ export function RemoteMcpIdentitySectionBody({
                 </Text>
               ) : null}
             </div>
-          ) : null}
-
-          {identityResolved && chainingIssuer && sourceQuery.data?.url ? (
-            <IdentityChainingField
-              userSessionIssuer={chainingIssuer}
-              linkedClients={clients}
-              resource={sourceQuery.data.url}
-              remoteMcpServerId={remoteMcpServerId}
-            />
           ) : null}
 
           {identityResolved && selectedMode === "agent" ? (
@@ -1051,18 +1073,8 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-/** Identity chaining needs an organization issuer that trusts an identity provider sign-in client. */
-function identityChainingIssuer(
-  issuer: UserSessionIssuer | undefined,
-): UserSessionIssuer | undefined {
-  if (issuer?.projectId !== "") return undefined;
-  if (!issuer.trustedRemoteSessionIssuerId) return undefined;
-  if (!issuer.trustedRemoteSessionClientId) return undefined;
-  return issuer;
-}
-
 const UNLINK_PROVIDER_CONSEQUENCE =
-  "Saving unlinks the identity provider from this server. People who already signed in lose access through it and would have to authorize again if you switch back. The provider and its client stay available to other servers.";
+  "Saving unlinks the authorization server from this server. People who already signed in lose access through it and would have to authorize again if you switch back. The authorization server and its client stay available to other servers.";
 const REPLACE_CLIENT_CONSEQUENCE =
   "Saving replaces the client this server uses. Everyone signed in through the current one will have to sign in again. The old client stays available to other servers.";
 const REMOVE_SELF_CLIENT_CONSEQUENCE =

@@ -25,37 +25,30 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/netingress"
-	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 type mcpServerRuntime struct {
 	MCP      *mcp.Service
-	XMCP     *xmcp.Service
 	Metadata *mcpmetadata.Service
 }
 
 type mcpServerRuntimeDependencies struct {
-	Logger     *slog.Logger
-	DB         *pgxpool.Pool
-	Encryption *encryption.Client
-	MCP        *mcp.Service
-	Metadata   *mcpmetadata.Service
+	MCP      *mcp.Service
+	Metadata *mcpmetadata.Service
 }
 
 func buildMCPServerRuntime(deps mcpServerRuntimeDependencies) (*mcpServerRuntime, error) {
-	if deps.Logger == nil || deps.DB == nil || deps.Encryption == nil || deps.MCP == nil || deps.Metadata == nil {
+	if deps.MCP == nil || deps.Metadata == nil {
 		return nil, errors.New("MCP server runtime dependencies are incomplete")
 	}
 
 	return &mcpServerRuntime{
 		MCP:      deps.MCP,
-		XMCP:     xmcp.NewService(deps.Logger, deps.DB, deps.Encryption, deps.MCP),
 		Metadata: deps.Metadata,
 	}, nil
 }
@@ -220,7 +213,6 @@ func servePrivateIngress(
 	))
 	mux.Use(middleware.SessionMiddleware)
 	mcp.AttachPrivate(mux, deps.Runtime.MCP, deps.Runtime.Metadata)
-	xmcp.AttachPrivate(mux, deps.Runtime.XMCP, deps.Runtime.Metadata)
 
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
@@ -228,8 +220,8 @@ func servePrivateIngress(
 	}
 	defer func() { _ = listener.Close() }()
 
-	requestCtx, cancelRequests := context.WithCancel(ctx)
-	defer cancelRequests()
+	requestCtx, cancelRequests := context.WithCancelCause(ctx)
+	defer cancelRequests(nil)
 	server := &http.Server{
 		Addr:              address,
 		Handler:           mux,
@@ -248,7 +240,10 @@ func servePrivateIngress(
 	go func() {
 		defer close(shutdownDone)
 		<-sigctx.Done()
-		shutdownPrivateIngress(ctx, deps.Logger, server, cancelRequests, shutdownDrainTimeout)
+		// Listen streams never finish on their own, so end them first and let
+		// their clients reconnect to a replica that is still serving.
+		deps.Runtime.MCP.StartDrain(relayedRequestInterruptAfter)
+		drainHTTPServer(ctx, deps.Logger, server, cancelRequests, shutdownDrainTimeout, "failed to shutdown private network ingress listener")
 	}()
 
 	deps.Logger.InfoContext(ctx, "private network ingress listener started", attr.SlogServerAddress(listener.Addr().String()))
@@ -260,17 +255,4 @@ func servePrivateIngress(
 	}
 	<-shutdownDone
 	return nil
-}
-
-func shutdownPrivateIngress(ctx context.Context, logger *slog.Logger, server *http.Server, cancelRequests context.CancelFunc, timeout time.Duration) {
-	graceCtx, graceCancel := context.WithTimeoutCause(context.WithoutCancel(ctx), timeout, errors.New("graceful shutdown timed out"))
-	defer graceCancel()
-	defer cancelRequests()
-	if err := server.Shutdown(graceCtx); err != nil {
-		logger.ErrorContext(ctx, "failed to shutdown private network ingress listener", attr.SlogError(err))
-		cancelRequests()
-		if err := server.Close(); err != nil {
-			logger.ErrorContext(ctx, "close private network ingress connections", attr.SlogError(err))
-		}
-	}
 }

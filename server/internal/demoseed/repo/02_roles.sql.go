@@ -53,6 +53,15 @@ func (q *Queries) RolesDeleteDeviceAgentDeviceSyncs(ctx context.Context, organiz
 	return err
 }
 
+const rolesDeleteDeviceAgentStateReports = `-- name: RolesDeleteDeviceAgentStateReports :exec
+DELETE FROM device_agent_state_reports WHERE organization_id = $1
+`
+
+func (q *Queries) RolesDeleteDeviceAgentStateReports(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, rolesDeleteDeviceAgentStateReports, organizationID)
+	return err
+}
+
 const rolesDeleteDeviceAgentSyncs = `-- name: RolesDeleteDeviceAgentSyncs :exec
 DELETE FROM device_agent_syncs WHERE organization_id = $1
 `
@@ -96,6 +105,33 @@ DELETE FROM directory_groups WHERE organization_id = $1
 
 func (q *Queries) RolesDeleteDirectoryGroups(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, rolesDeleteDirectoryGroups, organizationID)
+	return err
+}
+
+const rolesDeleteDirectoryReviewItems = `-- name: RolesDeleteDirectoryReviewItems :exec
+DELETE FROM directory_review_items WHERE organization_id = $1
+`
+
+func (q *Queries) RolesDeleteDirectoryReviewItems(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, rolesDeleteDirectoryReviewItems, organizationID)
+	return err
+}
+
+const rolesDeleteDirectoryReviewOptOuts = `-- name: RolesDeleteDirectoryReviewOptOuts :exec
+DELETE FROM directory_review_attribute_opt_outs WHERE organization_id = $1
+`
+
+func (q *Queries) RolesDeleteDirectoryReviewOptOuts(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, rolesDeleteDirectoryReviewOptOuts, organizationID)
+	return err
+}
+
+const rolesDeleteDirectoryReviewOrgState = `-- name: RolesDeleteDirectoryReviewOrgState :exec
+DELETE FROM directory_review_org_states WHERE organization_id = $1
+`
+
+func (q *Queries) RolesDeleteDirectoryReviewOrgState(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, rolesDeleteDirectoryReviewOrgState, organizationID)
 	return err
 }
 
@@ -324,6 +360,34 @@ func (q *Queries) RolesInsertDefaultPlugin(ctx context.Context, arg RolesInsertD
 	return id, err
 }
 
+const rolesInsertDeletedDirectoryGroup = `-- name: RolesInsertDeletedDirectoryGroup :exec
+INSERT INTO directory_groups
+  (organization_id, workos_directory_group_id, name, workos_created_at,
+   workos_updated_at, workos_deleted_at, deleted_at)
+VALUES ($1::text, $2::text || $3::text, $4::text,
+        now() - interval '60 days', now() - interval '3 days',
+        now() - interval '3 days', now() - interval '3 days')
+`
+
+type RolesInsertDeletedDirectoryGroupParams struct {
+	OrganizationID string
+	GroupPrefix    string
+	Slug           string
+	Name           string
+}
+
+// A group the directory has since deleted. Its mapping stays and grants
+// nothing, so the mappings page shows it as a missing source.
+func (q *Queries) RolesInsertDeletedDirectoryGroup(ctx context.Context, arg RolesInsertDeletedDirectoryGroupParams) error {
+	_, err := q.db.Exec(ctx, rolesInsertDeletedDirectoryGroup,
+		arg.OrganizationID,
+		arg.GroupPrefix,
+		arg.Slug,
+		arg.Name,
+	)
+	return err
+}
+
 const rolesInsertDeviceAgentDeviceSync = `-- name: RolesInsertDeviceAgentDeviceSync :exec
 INSERT INTO device_agent_device_syncs
   (organization_id, serial_number, email, hostname, first_seen_at, last_seen_at)
@@ -350,20 +414,76 @@ func (q *Queries) RolesInsertDeviceAgentDeviceSync(ctx context.Context, arg Role
 	return err
 }
 
+const rolesInsertDeviceAgentStateReport = `-- name: RolesInsertDeviceAgentStateReport :exec
+INSERT INTO device_agent_state_reports
+  (organization_id, email, serial_number, hostname, schema_version,
+   generated_at, reported_at, applied_etag, applied_at, enforcement_halted,
+   tools, degraded_tool_count, drift_counting_since, speakeasyd_version,
+   speakeasy_version, os, arch, auto_update, update_channel)
+VALUES ($1, $2, $3::text, $4::text, 1,
+        now() - ($5::text)::interval,
+        now() - ($5::text)::interval,
+        $6::text, now() - ($7::text)::interval, FALSE,
+        $8::jsonb, $9::integer,
+        now() - interval '9 days', $10::text,
+        $10::text, 'darwin', 'arm64', 'automatic', 'stable')
+`
+
+type RolesInsertDeviceAgentStateReportParams struct {
+	OrganizationID    string
+	Email             string
+	SerialNumber      string
+	Hostname          string
+	ReportedAgo       string
+	AppliedEtag       string
+	AppliedAgo        string
+	Tools             []byte
+	DegradedToolCount int32
+	SpeakeasydVersion string
+}
+
+func (q *Queries) RolesInsertDeviceAgentStateReport(ctx context.Context, arg RolesInsertDeviceAgentStateReportParams) error {
+	_, err := q.db.Exec(ctx, rolesInsertDeviceAgentStateReport,
+		arg.OrganizationID,
+		arg.Email,
+		arg.SerialNumber,
+		arg.Hostname,
+		arg.ReportedAgo,
+		arg.AppliedEtag,
+		arg.AppliedAgo,
+		arg.Tools,
+		arg.DegradedToolCount,
+		arg.SpeakeasydVersion,
+	)
+	return err
+}
+
 const rolesInsertDeviceAgentSync = `-- name: RolesInsertDeviceAgentSync :exec
-INSERT INTO device_agent_syncs (organization_id, email, first_seen_at, last_seen_at)
+INSERT INTO device_agent_syncs
+  (organization_id, email, first_seen_at, last_seen_at, served_etag,
+   served_etag_changed_at)
 VALUES ($1, $2, now() - interval '9 days',
-        now() - ($3::text)::interval)
+        now() - ($3::text)::interval, $4::text,
+        CASE WHEN $4::text IS NULL THEN NULL
+             ELSE now() - interval '2 days' END)
 `
 
 type RolesInsertDeviceAgentSyncParams struct {
 	OrganizationID string
 	Email          string
 	LastSeenAgo    string
+	ServedEtag     pgtype.Text
 }
 
+// served_etag is the policy etag the user's last poll was served; NULL for an
+// agent that has not polled since the column existed.
 func (q *Queries) RolesInsertDeviceAgentSync(ctx context.Context, arg RolesInsertDeviceAgentSyncParams) error {
-	_, err := q.db.Exec(ctx, rolesInsertDeviceAgentSync, arg.OrganizationID, arg.Email, arg.LastSeenAgo)
+	_, err := q.db.Exec(ctx, rolesInsertDeviceAgentSync,
+		arg.OrganizationID,
+		arg.Email,
+		arg.LastSeenAgo,
+		arg.ServedEtag,
+	)
 	return err
 }
 
@@ -424,25 +544,82 @@ func (q *Queries) RolesInsertDirectoryGroups(ctx context.Context, arg RolesInser
 	return err
 }
 
+const rolesInsertDirectoryReviewAttributeItem = `-- name: RolesInsertDirectoryReviewAttributeItem :exec
+INSERT INTO directory_review_items (organization_id, kind, attribute_key, attribute_value, occurrence, state)
+VALUES ($1::text, $2::text, $3::text, $4::text, 1, 'pending')
+`
+
+type RolesInsertDirectoryReviewAttributeItemParams struct {
+	OrganizationID string
+	Kind           string
+	AttributeKey   string
+	AttributeValue string
+}
+
+func (q *Queries) RolesInsertDirectoryReviewAttributeItem(ctx context.Context, arg RolesInsertDirectoryReviewAttributeItemParams) error {
+	_, err := q.db.Exec(ctx, rolesInsertDirectoryReviewAttributeItem,
+		arg.OrganizationID,
+		arg.Kind,
+		arg.AttributeKey,
+		arg.AttributeValue,
+	)
+	return err
+}
+
+const rolesInsertDirectoryReviewGroupItem = `-- name: RolesInsertDirectoryReviewGroupItem :exec
+INSERT INTO directory_review_items (organization_id, kind, directory_group_id, occurrence, state)
+SELECT $1::text, $2::text, dg.id, 1, 'pending'
+FROM directory_groups dg
+WHERE dg.organization_id = $1::text AND dg.name = $3::text
+`
+
+type RolesInsertDirectoryReviewGroupItemParams struct {
+	OrganizationID string
+	Kind           string
+	GroupName      string
+}
+
+func (q *Queries) RolesInsertDirectoryReviewGroupItem(ctx context.Context, arg RolesInsertDirectoryReviewGroupItemParams) error {
+	_, err := q.db.Exec(ctx, rolesInsertDirectoryReviewGroupItem, arg.OrganizationID, arg.Kind, arg.GroupName)
+	return err
+}
+
+const rolesInsertDirectoryReviewOrgState = `-- name: RolesInsertDirectoryReviewOrgState :exec
+INSERT INTO directory_review_org_states (organization_id, baseline_at, emails_disabled_at)
+VALUES ($1::text, clock_timestamp(), clock_timestamp())
+`
+
+// Starts directory review now: groups created before this are offered in
+// bulk setup, groups created after it are raised for review. Review emails
+// are off: the seeded items are recreated on every reseed, so they would
+// otherwise email the organization's admins each day.
+func (q *Queries) RolesInsertDirectoryReviewOrgState(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, rolesInsertDirectoryReviewOrgState, organizationID)
+	return err
+}
+
 const rolesInsertDirectoryUser = `-- name: RolesInsertDirectoryUser :exec
 INSERT INTO directory_users
-  (organization_id, user_id, workos_directory_user_id, email, attributes,
-   workos_created_at, workos_updated_at)
-VALUES ($1, $2::text, $3, $4::text,
+  (organization_id, user_id, workos_directory_user_id, email, first_name,
+   last_name, attributes, workos_created_at, workos_updated_at)
+VALUES ($1, $2::text, $3,
+        $4::text, $5::text, $6::text,
         jsonb_build_object(
-          'division_name', $5::text,
-          'department_name', $6::text,
-          'job_title', $7::text,
-          'employee_type', $8::text,
-          'cost_center_name', $9::text),
+          'division_name', $7::text,
+          'department_name', $8::text,
+          'job_title', $9::text,
+          'employee_type', $10::text,
+          'cost_center_name', $11::text),
         now(), now())
 `
 
 type RolesInsertDirectoryUserParams struct {
 	OrganizationID        string
-	UserID                string
+	UserID                pgtype.Text
 	WorkosDirectoryUserID string
 	Email                 string
+	FirstName             pgtype.Text
+	LastName              pgtype.Text
 	DivisionName          string
 	DepartmentName        string
 	JobTitle              string
@@ -450,12 +627,15 @@ type RolesInsertDirectoryUserParams struct {
 	CostCenterName        string
 }
 
+// user_id is NULL for directory people who have not signed in yet.
 func (q *Queries) RolesInsertDirectoryUser(ctx context.Context, arg RolesInsertDirectoryUserParams) error {
 	_, err := q.db.Exec(ctx, rolesInsertDirectoryUser,
 		arg.OrganizationID,
 		arg.UserID,
 		arg.WorkosDirectoryUserID,
 		arg.Email,
+		arg.FirstName,
+		arg.LastName,
 		arg.DivisionName,
 		arg.DepartmentName,
 		arg.JobTitle,
@@ -466,8 +646,8 @@ func (q *Queries) RolesInsertDirectoryUser(ctx context.Context, arg RolesInsertD
 }
 
 const rolesInsertEveryonePluginAssignment = `-- name: RolesInsertEveryonePluginAssignment :exec
-INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES ($1, $2, '*')
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn, install_mode)
+VALUES ($1, $2, '*', 'available')
 `
 
 type RolesInsertEveryonePluginAssignmentParams struct {
@@ -560,6 +740,30 @@ func (q *Queries) RolesInsertMDMDevice(ctx context.Context, arg RolesInsertMDMDe
 	return err
 }
 
+const rolesInsertNewDirectoryGroup = `-- name: RolesInsertNewDirectoryGroup :exec
+INSERT INTO directory_groups
+  (organization_id, workos_directory_group_id, name, workos_created_at, workos_updated_at)
+VALUES ($1::text, $2::text || $3::text, $4::text, now(), now())
+`
+
+type RolesInsertNewDirectoryGroupParams struct {
+	OrganizationID string
+	GroupPrefix    string
+	Slug           string
+	Name           string
+}
+
+// A group first seen after review started.
+func (q *Queries) RolesInsertNewDirectoryGroup(ctx context.Context, arg RolesInsertNewDirectoryGroupParams) error {
+	_, err := q.db.Exec(ctx, rolesInsertNewDirectoryGroup,
+		arg.OrganizationID,
+		arg.GroupPrefix,
+		arg.Slug,
+		arg.Name,
+	)
+	return err
+}
+
 const rolesInsertRoleAssignment = `-- name: RolesInsertRoleAssignment :exec
 INSERT INTO organization_role_assignments
   (organization_id, workos_user_id, user_id, role_urn, workos_updated_at)
@@ -609,8 +813,8 @@ func (q *Queries) RolesInsertRolePlugin(ctx context.Context, arg RolesInsertRole
 }
 
 const rolesInsertRolePluginAssignment = `-- name: RolesInsertRolePluginAssignment :exec
-INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES ($1, $2, $3)
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn, install_mode)
+VALUES ($1, $2, $3, 'default')
 ON CONFLICT (plugin_id, principal_urn) DO NOTHING
 `
 

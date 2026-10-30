@@ -1,4 +1,36 @@
+import {
+  buildAdminCurateRegistryPromotionCandidateMutation,
+  type AdminCurateRegistryPromotionCandidateMutationData,
+  type AdminCurateRegistryPromotionCandidateMutationError,
+  type AdminCurateRegistryPromotionCandidateMutationVariables,
+} from "@gram/admin-client/react-query/adminCurateRegistryPromotionCandidate";
+import {
+  buildAdminRetryRegistryPromotionDocsMutation,
+  type AdminRetryRegistryPromotionDocsMutationData,
+  type AdminRetryRegistryPromotionDocsMutationError,
+  type AdminRetryRegistryPromotionDocsMutationVariables,
+} from "@gram/admin-client/react-query/adminRetryRegistryPromotionDocs";
+import type {
+  AdminPromoteRegistryCandidateMutationData,
+  AdminPromoteRegistryCandidateMutationError,
+  AdminPromoteRegistryCandidateMutationVariables,
+} from "@gram/admin-client/react-query/adminPromoteRegistryCandidate";
+import { buildAdminListRegistryPromotionCandidatesQuery } from "@gram/admin-client/react-query/adminListRegistryPromotionCandidates.core";
+import { buildAdminGetRegistryPromotionCandidateMutation } from "@gram/admin-client/react-query/adminGetRegistryPromotionCandidate";
+import { buildAdminPromoteRegistryCandidateMutation } from "@gram/admin-client/react-query/adminPromoteRegistryCandidate";
+import type { AdminListRegistryPromotionCandidatesRequest } from "@gram/admin-client/models/operations/adminlistregistrypromotioncandidates";
+import type { GetRegistryPromotionCandidateRequestBody } from "@gram/admin-client/models/components/getregistrypromotioncandidaterequestbody";
 import type { AdminInferenceKey } from "@gram/admin-client/models/components/admininferencekey";
+import { buildAdminGetUpstreamOAuthMigrationStatusQuery } from "@gram/admin-client/react-query/adminGetUpstreamOAuthMigrationStatus.core";
+import { buildAdminListUpstreamOAuthMigrationOrganizationsQuery } from "@gram/admin-client/react-query/adminListUpstreamOAuthMigrationOrganizations.core";
+import { buildAdminRunUpstreamOAuthMigrationMutation } from "@gram/admin-client/react-query/adminRunUpstreamOAuthMigration";
+import { buildAdminEnableUpstreamAuthEnforcementMutation } from "@gram/admin-client/react-query/adminEnableUpstreamAuthEnforcement";
+import { buildAdminBackfillMcpAuthGrantsMutation } from "@gram/admin-client/react-query/adminBackfillMcpAuthGrants";
+import type { AdminBackfillMCPAuthGrantsResult } from "@gram/admin-client/models/components/adminbackfillmcpauthgrantsresult";
+import { buildAdminDisableUpstreamAuthEnforcementMutation } from "@gram/admin-client/react-query/adminDisableUpstreamAuthEnforcement";
+import type { AdminUpstreamOAuthMigrationOrganizations } from "@gram/admin-client/models/components/adminupstreamoauthmigrationorganizations";
+import type { AdminUpstreamOAuthMigrationRun } from "@gram/admin-client/models/components/adminupstreamoauthmigrationrun";
+import type { AdminUpstreamOAuthMigrationStatus } from "@gram/admin-client/models/components/adminupstreamoauthmigrationstatus";
 import { buildAdminGetInferenceKeysQuery } from "@gram/admin-client/react-query/adminGetInferenceKeys.core";
 import type { AdminInferenceKeyRepairResult } from "@gram/admin-client/models/components/admininferencekeyrepairresult";
 import { buildAdminRepairInferenceKeyMutation } from "@gram/admin-client/react-query/adminRepairInferenceKey";
@@ -40,6 +72,15 @@ import { buildAdminDescribeMcpServerHealthQuery } from "@gram/admin-client/react
 import { buildAdminGetMcpServerToolCallsQuery } from "@gram/admin-client/react-query/adminGetMcpServerToolCalls.core";
 import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
 import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
+import { buildAdminListExternalMcpMigrationCandidatesQuery } from "@gram/admin-client/react-query/adminListExternalMcpMigrationCandidates.core";
+import {
+  buildAdminPreviewExternalMcpMigrationMutation,
+  type AdminPreviewExternalMcpMigrationMutationVariables,
+} from "@gram/admin-client/react-query/adminPreviewExternalMcpMigration";
+import {
+  buildAdminMigrateExternalMcpServersMutation,
+  type AdminMigrateExternalMcpServersMutationVariables,
+} from "@gram/admin-client/react-query/adminMigrateExternalMcpServers";
 import {
   buildAdminUploadPlatformImageMutation,
   type AdminUploadPlatformImageMutationVariables,
@@ -1065,4 +1106,214 @@ export function inferenceKeysQuery(
     queryFn: (context) => redirecting(generated.queryFn(context)),
     retry: false,
   });
+}
+
+export function upstreamOAuthMigrationOrganizationsQuery(): UseQueryOptions<AdminUpstreamOAuthMigrationOrganizations> {
+  const generated = buildAdminListUpstreamOAuthMigrationOrganizationsQuery(
+    redirectingClient,
+    { retries: { strategy: "none" } },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    retry: false,
+  });
+}
+
+export function upstreamOAuthMigrationStatusQuery(
+  organizationID: string,
+): UseQueryOptions<AdminUpstreamOAuthMigrationStatus> {
+  const generated = buildAdminGetUpstreamOAuthMigrationStatusQuery(
+    redirectingClient,
+    { organizationId: organizationID },
+    { retries: { strategy: "none" } },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    retry: false,
+  });
+}
+
+const generatedRunUpstreamOAuthMigrationMutation =
+  buildAdminRunUpstreamOAuthMigrationMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+export function runUpstreamOAuthMigration(
+  organizationID: string,
+): Promise<AdminUpstreamOAuthMigrationRun> {
+  return redirecting(
+    generatedRunUpstreamOAuthMigrationMutation.mutationFn({
+      request: { organizationId: organizationID },
+    }),
+  );
+}
+
+const generatedEnableUpstreamAuthEnforcementMutation =
+  buildAdminEnableUpstreamAuthEnforcementMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+// The caller confirms what the server cannot check: the shadow evaluation
+// agrees, and the organization was told about the cross-organization denial.
+export function enableUpstreamAuthEnforcement(
+  organizationID: string,
+): Promise<AdminUpstreamOAuthMigrationStatus> {
+  return redirecting(
+    generatedEnableUpstreamAuthEnforcementMutation.mutationFn({
+      request: {
+        organizationId: organizationID,
+        shadowParityConfirmed: true,
+        crossOrganizationDenialCommunicated: true,
+      },
+    }),
+  );
+}
+
+const generatedDisableUpstreamAuthEnforcementMutation =
+  buildAdminDisableUpstreamAuthEnforcementMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+export function disableUpstreamAuthEnforcement(
+  organizationID: string,
+): Promise<AdminUpstreamOAuthMigrationStatus> {
+  return redirecting(
+    generatedDisableUpstreamAuthEnforcementMutation.mutationFn({
+      request: { organizationId: organizationID },
+    }),
+  );
+}
+
+function createAdminListExternalMcpMigrationCandidatesQuery() {
+  const generated =
+    buildAdminListExternalMcpMigrationCandidatesQuery(redirectingClient);
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+export function adminListExternalMcpMigrationCandidatesQuery(): ReturnType<
+  typeof createAdminListExternalMcpMigrationCandidatesQuery
+> {
+  return createAdminListExternalMcpMigrationCandidatesQuery();
+}
+
+export function adminPreviewExternalMcpMigration(
+  request: AdminPreviewExternalMcpMigrationMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminPreviewExternalMcpMigrationMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminPreviewExternalMcpMigrationMutation(redirectingClient).mutationFn(
+      { request },
+    ),
+  );
+}
+
+export function adminMigrateExternalMcpServers(
+  request: AdminMigrateExternalMcpServersMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminMigrateExternalMcpServersMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminMigrateExternalMcpServersMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
+}
+
+function createRegistryPromotionCandidatesQuery(
+  params: AdminListRegistryPromotionCandidatesRequest,
+) {
+  const generated = buildAdminListRegistryPromotionCandidatesQuery(
+    redirectingClient,
+    { ...params, status: params.status ?? "active" },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+function createRegistryPromotionCandidateQuery(
+  params: GetRegistryPromotionCandidateRequestBody,
+) {
+  const generated = buildAdminGetRegistryPromotionCandidateMutation(
+    redirectingClient,
+    { retries: { strategy: "none" } },
+  );
+  return queryOptions({
+    queryKey: ["registryPromotionCandidate", params],
+    queryFn: ({ signal }) =>
+      redirecting(
+        generated.mutationFn({
+          request: params,
+          options: { fetchOptions: { signal } },
+        }),
+      ),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function usePromoteRegistryCandidateMutation(): UseMutationResult<
+  AdminPromoteRegistryCandidateMutationData,
+  AdminPromoteRegistryCandidateMutationError,
+  AdminPromoteRegistryCandidateMutationVariables
+> {
+  return useMutation({
+    ...buildAdminPromoteRegistryCandidateMutation(redirectingClient, {
+      retries: { strategy: "none" },
+    }),
+    retry: false,
+  });
+}
+
+export function registryPromotionCandidatesQuery(
+  params: AdminListRegistryPromotionCandidatesRequest,
+): ReturnType<typeof createRegistryPromotionCandidatesQuery> {
+  return createRegistryPromotionCandidatesQuery(params);
+}
+export function registryPromotionCandidateQuery(
+  params: GetRegistryPromotionCandidateRequestBody,
+): ReturnType<typeof createRegistryPromotionCandidateQuery> {
+  return createRegistryPromotionCandidateQuery(params);
+}
+
+export function useRetryRegistryPromotionDocsMutation(): UseMutationResult<
+  AdminRetryRegistryPromotionDocsMutationData,
+  AdminRetryRegistryPromotionDocsMutationError,
+  AdminRetryRegistryPromotionDocsMutationVariables
+> {
+  return useMutation({
+    ...buildAdminRetryRegistryPromotionDocsMutation(redirectingClient, {
+      retries: { strategy: "none" },
+    }),
+    retry: false,
+  });
+}
+
+export function useCurateRegistryPromotionCandidateMutation(): UseMutationResult<
+  AdminCurateRegistryPromotionCandidateMutationData,
+  AdminCurateRegistryPromotionCandidateMutationError,
+  AdminCurateRegistryPromotionCandidateMutationVariables
+> {
+  return useMutation({
+    ...buildAdminCurateRegistryPromotionCandidateMutation(redirectingClient, {
+      retries: { strategy: "none" },
+    }),
+    retry: false,
+  });
+}
+
+const generatedBackfillMcpAuthGrantsMutation =
+  buildAdminBackfillMcpAuthGrantsMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+export function backfillMcpAuthGrants(): Promise<AdminBackfillMCPAuthGrantsResult> {
+  return redirecting(generatedBackfillMcpAuthGrantsMutation.mutationFn({}));
 }

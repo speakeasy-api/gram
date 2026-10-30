@@ -33,6 +33,7 @@ func encodeAgentSessionPolicy(target AgentAuthorizationTarget, version runtimepo
 			authz.SelectorKeyResourceID:   target.MCPResourceID.String(),
 			authz.SelectorKeyProjectID:    target.ProjectID.String(),
 		},
+		Inferred: false,
 	}})
 	if err != nil {
 		return nil, fmt.Errorf("construct agent session policy: %w", err)
@@ -45,7 +46,7 @@ func encodeAgentSessionPolicy(target AgentAuthorizationTarget, version runtimepo
 }
 
 func newAgentSessionCredential(target AgentAuthorizationTarget, authorizerUserID string) (agentSessionCredential, error) {
-	version := runtimepolicy.CurrentDelegatedPolicyVersion
+	version := runtimepolicy.IssuedDelegatedPolicyVersion
 	encoded, err := encodeAgentSessionPolicy(target, version)
 	if err != nil {
 		return agentSessionCredential{}, err
@@ -110,9 +111,10 @@ func (s *Service) prepareAgentSessionContext(ctx context.Context, endpoint *Reso
 	}
 	actor := urn.NewPrincipal(urn.PrincipalTypeAgent, subject.ID)
 	ctx = contextvalues.WithPrincipalCredentialAuthorization(ctx, authCtx, actor, contextvalues.PrincipalCredential{
-		AuthorizerUserID:       credential.AuthorizerUserID,
-		DelegatedGrants:        credential.DelegatedGrants,
-		DelegatedGrantsVersion: credential.DelegatedGrantsVersion,
+		AuthorizerUserID:         credential.AuthorizerUserID,
+		DelegatedGrants:          credential.DelegatedGrants,
+		DelegatedGrantsVersion:   credential.DelegatedGrantsVersion,
+		DerivesPolicyAtAdmission: false,
 	})
 	return ctx, nil
 }

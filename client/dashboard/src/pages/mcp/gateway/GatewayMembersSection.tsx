@@ -13,8 +13,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   ServerPickerSheet,
@@ -194,7 +192,9 @@ function MemberNameCell({ row }: { row: MemberRow }): JSX.Element {
       <div className="flex min-w-0 flex-col">
         {row.server ? (
           <Link
-            to={routes.mcp.x.overview.href(mcpServerRouteParam(row.server))}
+            to={routes.mcp.details.overview.href(
+              mcpServerRouteParam(row.server),
+            )}
             className="truncate font-medium hover:underline"
           >
             {name}
@@ -692,7 +692,6 @@ export function AddServersSheet({
 }): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
-  const telemetry = useTelemetry();
   const { hasScope, isLoading: permissionsLoading } = useRBAC();
   const canWrite = !permissionsLoading && hasScope("mcp:write", gatewayId);
   const canCreate = !permissionsLoading && hasScope("mcp:write", projectId);
@@ -726,13 +725,15 @@ export function AddServersSheet({
     }
     const server = candidate.server;
     const classification = classifyMemberServer(server);
-    const restriction = server.unproxiedMcpServerId
-      ? "Direct-connect servers cannot be added to a gateway."
-      : !server.slug
-        ? "A server slug is required before adding."
-        : classification === "disabled"
-          ? "Disabled: excluded until enabled."
-          : STATUS_BY_CLASSIFICATION[classification].why;
+    const restriction = server.builtinBackend
+      ? "Built-in servers cannot be added to a gateway."
+      : server.unproxiedMcpServerId
+        ? "Direct-connect servers cannot be added to a gateway."
+        : !server.slug
+          ? "A server slug is required before adding."
+          : classification === "disabled"
+            ? "Disabled: excluded until enabled."
+            : STATUS_BY_CLASSIFICATION[classification].why;
     return {
       value: key,
       label: candidateName(candidate) || "MCP server",
@@ -750,7 +751,10 @@ export function AddServersSheet({
           : "Excluded",
       description: `${server.slug || "No slug"} · ${restriction}`,
       disabled:
-        !canWrite || !server.slug || Boolean(server.unproxiedMcpServerId),
+        !canWrite ||
+        !server.slug ||
+        Boolean(server.unproxiedMcpServerId) ||
+        Boolean(server.builtinBackend),
     };
   });
   const submit = (values: string[]) =>
@@ -781,22 +785,18 @@ export function AddServersSheet({
         encodeURIComponent(gatewayId),
       allowed: canCreate,
     },
-    ...(telemetry.isFeatureEnabled(TUNNELED_MCP_FEATURE_FLAG)
-      ? [
-          {
-            label: "Reachable through a tunnel",
-            description:
-              "Connect a server running inside your own network through a tunnel.",
-            Icon: Cable,
-            group: "Recommended",
-            href:
-              routes.mcp.add.tunneled.href() +
-              "?attachToGateway=" +
-              encodeURIComponent(gatewayId),
-            allowed: canCreate,
-          },
-        ]
-      : []),
+    {
+      label: "Reachable through a tunnel",
+      description:
+        "Connect a server running inside your own network through a tunnel.",
+      Icon: Cable,
+      group: "Recommended",
+      href:
+        routes.mcp.add.tunneled.href() +
+        "?attachToGateway=" +
+        encodeURIComponent(gatewayId),
+      allowed: canCreate,
+    },
     {
       label: "From your API",
       description: "Upload an OpenAPI document to generate tools.",
@@ -820,21 +820,17 @@ export function AddServersSheet({
         encodeURIComponent(gatewayId),
       allowed: canCreate,
     },
-    ...(telemetry.isFeatureEnabled("gram-functions")
-      ? [
-          {
-            label: "Write custom code",
-            description: "Create tools with TypeScript functions.",
-            Icon: Code,
-            group: "Advanced",
-            href:
-              routes.mcp.add.function.href() +
-              "?attachToGateway=" +
-              encodeURIComponent(gatewayId),
-            allowed: canWriteProject && canCreate,
-          },
-        ]
-      : []),
+    {
+      label: "Write custom code",
+      description: "Create tools with TypeScript functions.",
+      Icon: Code,
+      group: "Advanced",
+      href:
+        routes.mcp.add.function.href() +
+        "?attachToGateway=" +
+        encodeURIComponent(gatewayId),
+      allowed: canWriteProject && canCreate,
+    },
   ];
   const creationAllowed = creationOptions.some((option) => option.allowed);
   return (

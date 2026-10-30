@@ -1,3 +1,4 @@
+import { isBillingRecoveryPath } from "@/lib/billing-recovery-path";
 import { FullPageError } from "@/components/full-page-error";
 import { GramLogo } from "@/components/gram-logo";
 import { HatchRule } from "@/components/hatch-rule";
@@ -16,7 +17,11 @@ import SwitchOrg from "@/pages/demo/SwitchOrg";
 import { useOrganizationHostMove } from "@/hooks/useOrganizationHostMove";
 import { useTrialNow } from "@/hooks/useTrialNow";
 import { getTrialLifecycleFromDates } from "@/lib/trial-status";
-import { organizationHostRedirectTarget } from "@/lib/organization-host";
+import {
+  organizationHostRedirectTarget,
+  recordOrganizationSwitch,
+  switchedRecently,
+} from "@/lib/organization-host";
 import { isGramSessionUnauthorizedError } from "@/lib/route-errors";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -224,6 +229,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
       ? organizationHostRedirectTarget(
           session.activeOrganizationDashboardUrl,
           window.location,
+          switchedRecently(session.activeOrganizationId),
         )
       : undefined;
   const movingHost = useOrganizationHostMove(
@@ -280,6 +286,11 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   if (
     session.activeOrganizationId &&
     !session.whitelisted &&
+    !isBillingRecoveryPath(
+      location.pathname,
+      location.search,
+      session.organization?.slug,
+    ) &&
     !isPath(location.pathname, "/explore-demo")
   ) {
     // The switcher wins even on the upgrade gate's own route. Someone with a
@@ -485,6 +496,7 @@ function OrganizationScopeSwitch({
 
     void request.promise
       .then(() => {
+        recordOrganizationSwitch(organizationId);
         if (cancelled) {
           clearOrganizationScopeSwitchAttempt(attempt);
           return;

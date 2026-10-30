@@ -177,6 +177,7 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		// cascade. mcp_servers in turn pins its toolset with RESTRICT, so it
 		// must still go before the toolsets delete.
 		{"delete assistant mcp servers", func() error { return s.q.OrgDeleteAssistantMCPServers(ctx, org) }},
+		{"delete catalogue promotion candidates", func() error { return s.q.OrgDeleteRegistryPromotionCandidates(ctx, org) }},
 		// Toolsets are cleared across the organization, including other
 		// projects. Clear their plugin attachments across the same scope before
 		// deleting them.
@@ -242,10 +243,14 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		{"delete policy bypass grants", func() error {
 			return s.q.OrgDeletePolicyBypassGrants(ctx, repo.OrgDeletePolicyBypassGrantsParams{OrgID: org, PolicyID: s.policySM().String()})
 		}},
-		{"delete github grants", func() error {
+		{"delete seeded direct user grants", func() error {
 			return s.q.OrgDeleteGrantsByID(ctx, repo.OrgDeleteGrantsByIDParams{
 				OrgID: org,
-				Ids:   []uuid.UUID{s.det("github-direct-grant"), s.det("github-wildcard-grant")},
+				Ids: []uuid.UUID{
+					s.det("github-direct-grant"), s.det("github-wildcard-grant"),
+					s.det("inference-owner-grant"),
+					s.det("auth-client-github-token-use"), s.det("auth-client-github-token-block"),
+				},
 			})
 		}},
 		// Workload trust is organization-scoped: an organization-tier issuer or
@@ -260,6 +265,9 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		// Sigint ownership/reference FKs use ON DELETE SET NULL with non-null
 		// columns, so every row in the org's projects, including tombstones,
 		// must be physically removed child-first before the projects delete.
+		{"delete sigint definition snapshots", func() error {
+			return s.q.OrgDeleteSigintDefinitionSnapshots(ctx, org)
+		}},
 		{"delete sigint sensor signals", func() error {
 			return s.q.OrgDeleteSigintSensorSignals(ctx, org)
 		}},
@@ -287,25 +295,7 @@ func (s *seeder) orgProject(ctx context.Context) error {
 	// by two sensors, while Draft campaign intentionally has no memberships so
 	// the incomplete authoring state remains visible. An empty criteria or
 	// instructions string is written as NULL.
-	signals := []struct{ key, name, desc, criteria string }{
-		{"api", "API", "Requests involving the public or internal API.",
-			"The conversation concerns API endpoints, requests, responses, or contracts."},
-		{"database", "Database", "Requests involving persistent data stores.",
-			"The conversation concerns queries, migrations, schemas, or database operations."},
-		{"authentication", "Authentication", "Requests involving identity and authentication.",
-			"The conversation concerns sign-in, credentials, sessions, or identity providers."},
-		{"worker", "Worker", "Requests primarily involving asynchronous workers.",
-			"The conversation concerns background jobs, queues, or worker processes."},
-		{"low", "Low", "Little or no customer impact.",
-			"The issue is cosmetic or has a straightforward workaround."},
-		{"medium", "Medium", "Noticeable but bounded customer impact.",
-			"The issue impairs a workflow but does not make the product broadly unavailable."},
-		{"high", "High", "Severe or widespread customer impact.",
-			"The issue blocks a critical workflow or affects many customers."},
-		{"launch", "Launch", "A future product launch campaign.", ""},
-		{"renewal", "Renewal", "A future customer renewal campaign.", ""},
-	}
-	for _, sig := range signals {
+	for _, sig := range demoSigintSignals {
 		if err := s.q.OrgInsertSigintCustomSignal(ctx, repo.OrgInsertSigintCustomSignalParams{
 			ID:                 s.det("sigint-signal-" + sig.key),
 			ProjectID:          proj,
@@ -352,6 +342,27 @@ func (s *seeder) orgProject(ctx context.Context) error {
 			return fmt.Errorf("insert demo sigint membership %s: %w", m.key, err)
 		}
 	}
+	for _, sensor := range demoSigintSensors {
+		if !sensor.enabled {
+			continue
+		}
+		definition, hash, err := s.sigintDemoDefinition(sensor)
+		if err != nil {
+			return err
+		}
+		if err := s.q.OrgInsertSigintDefinitionSnapshot(ctx, repo.OrgInsertSigintDefinitionSnapshotParams{
+			ProjectID: proj, SensorID: s.det("sigint-sensor-" + sensor.key), DefinitionHash: hash, Definition: definition,
+		}); err != nil {
+			return fmt.Errorf("seed sensor definition: %w", err)
+		}
+	}
+	count, err := s.q.OrgCountSigintDefinitionSnapshots(ctx, proj)
+	if err != nil {
+		return fmt.Errorf("count seeded sensor definitions: %w", err)
+	}
+	if count != 3 {
+		return fmt.Errorf("seed sensor definitions: expected three snapshots, got %d", count)
+	}
 	return nil
 }
 
@@ -366,6 +377,11 @@ func (s *seeder) orgFeaturesAndUsers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo features: %w", err)
 	}
+	// Require access review on first seed, but retain an administrator's opt-in.
+	if err := s.q.OrgInsertGatewayDisabledFeature(ctx, org); err != nil {
+		return fmt.Errorf("insert demo gateway disabled feature: %w", err)
+	}
+
 	// Unlike demo entitlements, preserve an explicit fail-closed choice on
 	// reseed.
 	if err := s.q.OrgInsertHooksFailOpenFeature(ctx, org); err != nil {
@@ -489,6 +505,27 @@ func (s *seeder) orgGlobalRoleURN(ctx context.Context, slug string) (string, err
 	default:
 		return urn, nil
 	}
+}
+
+// demoSigintSignals supplies both the current configuration and its historical
+// synthetic definitions so inspection retains the exact criteria behind readings.
+var demoSigintSignals = []struct{ key, name, desc, criteria string }{
+	{"api", "API", "Requests involving the public or internal API.",
+		"The conversation concerns API endpoints, requests, responses, or contracts."},
+	{"database", "Database", "Requests involving persistent data stores.",
+		"The conversation concerns queries, migrations, schemas, or database operations."},
+	{"authentication", "Authentication", "Requests involving identity and authentication.",
+		"The conversation concerns sign-in, credentials, sessions, or identity providers."},
+	{"worker", "Worker", "Requests primarily involving asynchronous workers.",
+		"The conversation concerns background jobs, queues, or worker processes."},
+	{"low", "Low", "Little or no customer impact.",
+		"The issue is cosmetic or has a straightforward workaround."},
+	{"medium", "Medium", "Noticeable but bounded customer impact.",
+		"The issue impairs a workflow but does not make the product broadly unavailable."},
+	{"high", "High", "Severe or widespread customer impact.",
+		"The issue blocks a critical workflow or affects many customers."},
+	{"launch", "Launch", "A future product launch campaign.", ""},
+	{"renewal", "Renewal", "A future customer renewal campaign.", ""},
 }
 
 // demoSigintSensor is one seeded signals intelligence sensor.

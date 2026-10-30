@@ -35,16 +35,21 @@ export function useCustomDomain(enabled = true): {
 export function useCustomDomains(enabled = true): {
   domains: CustomDomain[];
   isLoading: boolean;
+  isError: boolean;
   refetch: ReturnType<typeof useListDomains>["refetch"];
 } {
-  const { data, isLoading, refetch } = useListDomains(undefined, undefined, {
-    refetchOnWindowFocus: false,
-    retry: false,
-    throwOnError: false,
-    enabled,
-  });
+  const { data, isLoading, isError, refetch } = useListDomains(
+    undefined,
+    undefined,
+    {
+      refetchOnWindowFocus: false,
+      retry: false,
+      throwOnError: false,
+      enabled,
+    },
+  );
 
-  return { domains: data?.domains ?? [], isLoading, refetch };
+  return { domains: data?.domains ?? [], isLoading, isError, refetch };
 }
 
 // useMcpEndpointUrl resolves the runtime install URL for a single mcp_endpoint
@@ -140,7 +145,7 @@ export function useResolvedMcpServerUrl(
 // legacy form requires the default environment — without both there is no
 // routable MCP URL, so return undefined rather than an invalid
 // /mcp/<project>/<toolset> path.
-function mcpUrlSuffix(
+export function mcpUrlSuffix(
   project: { slug: string },
   toolset: Pick<ToolsetEntry, "slug" | "mcpSlug" | "defaultEnvironmentSlug">,
 ): string | undefined {

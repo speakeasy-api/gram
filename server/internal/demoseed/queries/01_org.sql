@@ -1,6 +1,17 @@
 -- Preflight isolation asserts, org metadata and onboarding, the scoped purge,
 -- the project, features, users, and memberships.
 
+-- name: OrgDeleteSigintDefinitionSnapshots :exec
+DELETE FROM sigint_definition_snapshots
+WHERE project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
+
+-- name: OrgInsertSigintDefinitionSnapshot :exec
+INSERT INTO sigint_definition_snapshots (project_id, sensor_id, definition_hash, definition)
+VALUES (@project_id::uuid, @sensor_id::uuid, @definition_hash, @definition::jsonb);
+
+-- name: OrgCountSigintDefinitionSnapshots :one
+SELECT count(*) FROM sigint_definition_snapshots WHERE project_id = @project_id::uuid;
+
 -- name: OrgForeignOrgExists :one
 -- workos_id is compared against this tenant's expected link rather than merely
 -- tested for NULL: the shared demo org never links to WorkOS (its constant is
@@ -24,8 +35,8 @@ SELECT EXISTS (
 -- (Logs page and other EnterpriseGate features). Demo identity is carried by
 -- the fixed org id (constants.DemoOrganizationID) — NOT by account type, which
 -- the auth callback overwrites anyway.
-INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted)
-VALUES (@org_id::text, @org_name::text, @org_slug::text, 'enterprise', TRUE)
+INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted, scim_enabled)
+VALUES (@org_id::text, @org_name::text, @org_slug::text, 'enterprise', TRUE, TRUE)
 ON CONFLICT (id) DO UPDATE
   -- whitelisted is repaired, not just set on insert: a developer who logged
   -- in before seeding already has this row, created un-whitelisted by the
@@ -33,7 +44,8 @@ ON CONFLICT (id) DO UPDATE
   -- gate.
   SET name = EXCLUDED.name, slug = EXCLUDED.slug,
       gram_account_type = EXCLUDED.gram_account_type,
-      whitelisted = EXCLUDED.whitelisted;
+      whitelisted = EXCLUDED.whitelisted,
+      scim_enabled = EXCLUDED.scim_enabled;
 
 -- name: OrgUpsertOnboarding :exec
 INSERT INTO organization_onboarding (organization_id, preset, mdm_vendor, mdm_vendor_name)
@@ -58,6 +70,9 @@ VALUES
 
 -- name: OrgDeleteKillswitchOperations :exec
 DELETE FROM killswitch_operations WHERE organization_id = @org_id::text;
+
+-- name: OrgDeleteRegistryPromotionCandidates :exec
+DELETE FROM registry_promotion_candidates WHERE organization_id = @org_id::text;
 
 -- name: OrgDeleteKillswitchPrescriptions :exec
 DELETE FROM killswitch_prescriptions WHERE organization_id = @org_id::text;
@@ -283,6 +298,16 @@ VALUES
 INSERT INTO organization_features (organization_id, feature_name)
 SELECT @org_id::text, f
 FROM unnest(@features::text[]) AS f
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
+
+-- name: OrgInsertGatewayDisabledFeature :exec
+-- Start with access review required, preserving an explicit opt-in on reseed.
+INSERT INTO organization_features (organization_id, feature_name)
+SELECT @org_id::text, 'organization_gateway_disabled'
+WHERE NOT EXISTS (
+  SELECT 1 FROM organization_features
+  WHERE organization_id = @org_id::text AND feature_name = 'organization_gateway_disabled'
+)
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
 
 -- name: OrgInsertHooksFailOpenFeature :exec

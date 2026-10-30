@@ -26,7 +26,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 	signinsrepo "github.com/speakeasy-api/gram/server/internal/signins/repo"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -166,7 +165,7 @@ type linkedTokens struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-func runSignInLinkIDPCallback(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset) mcp.AuthnChallengeState {
+func runSignInLinkIDPCallback(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset) mcp.AuthnChallengeState {
 	t.Helper()
 
 	challengeID := uuid.NewString()
@@ -200,7 +199,7 @@ func runSignInLinkIDPCallback(t *testing.T, ctx context.Context, ti *testInstanc
 	return rotated
 }
 
-func exchangeLinkedCode(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, client usersessions_repo.UserSessionClient, userID string, signInID *uuid.UUID) linkedTokens {
+func exchangeLinkedCode(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, client usersessions_repo.UserSessionClient, userID string, signInID *uuid.UUID) linkedTokens {
 	t.Helper()
 
 	verifier := "verifier-" + uuid.NewString()
@@ -232,7 +231,7 @@ func exchangeLinkedCode(t *testing.T, ctx context.Context, ti *testInstance, too
 	return tokens
 }
 
-func sessionForAccessToken(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, accessToken string) usersessions_repo.UserSession {
+func sessionForAccessToken(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, accessToken string) usersessions_repo.UserSession {
 	t.Helper()
 
 	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(accessToken, urn.NewToolset(toolset.ID).String())
@@ -246,7 +245,7 @@ func sessionForAccessToken(t *testing.T, ctx context.Context, ti *testInstance, 
 	return session
 }
 
-func redeemLinkedCode(t *testing.T, ti *testInstance, toolset toolsets_repo.Toolset, client usersessions_repo.UserSessionClient, code, verifier string) *httptest.ResponseRecorder {
+func redeemLinkedCode(t *testing.T, ti *testInstance, toolset hostedToolset, client usersessions_repo.UserSessionClient, code, verifier string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	form := url.Values{}
@@ -258,7 +257,7 @@ func redeemLinkedCode(t *testing.T, ti *testInstance, toolset toolsets_repo.Tool
 	return postForm(t, ti, toolset.McpSlug.String, "token", form)
 }
 
-func storeLinkedGrant(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, client usersessions_repo.UserSessionClient, userID string, signInID *uuid.UUID) (code, verifier string) {
+func storeLinkedGrant(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, client usersessions_repo.UserSessionClient, userID string, signInID *uuid.UUID) (code, verifier string) {
 	t.Helper()
 
 	verifier = "verifier-" + uuid.NewString()
@@ -643,7 +642,7 @@ func TestHandleIDPCallback_ARevokedSignInAfterTheFreshLoginEndsTheFlow(t *testin
 
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr, "the flow stops here rather than at invalid_grant")
-	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
 func TestHandleToken_HumanRefreshReplayRefusesARevokedSignIn(t *testing.T) {

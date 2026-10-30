@@ -1,6 +1,13 @@
+import { useOAuthPopup } from "@/components/sessions/useOAuthPopup";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { IdentityAvatar } from "@/components/identity-avatar";
 import { sessionAccountLabel } from "@/components/sessions/session-account-identity";
-import { useEffect, useState, type JSX } from "react";
-import { useQueries } from "@tanstack/react-query";
+import {
+  connectionLifetime,
+  connectionLifetimeLabel,
+} from "@/components/sessions/connection-lifetime";
+import { useEffect, useRef, useState, type JSX } from "react";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { Button } from "@/components/ui/Button";
@@ -8,7 +15,13 @@ import { Text } from "@/components/ui/Text";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
-import { Server, CheckCircle2, ExternalLink } from "lucide-react";
+import {
+  Server,
+  CheckCircle2,
+  LockKeyhole,
+  AlertTriangle,
+  RefreshCw,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   internalMcpUrl,
@@ -27,6 +40,7 @@ import type { ManagedAgent } from "@gram/client/models/components/managedagent.j
 
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import { narrowGrantsToServers } from "./agent-key-server-grants";
+import { KeyCredentialChoice } from "./credentials/KeyCredentialChoice";
 export interface KeyServer {
   id: string;
   resourceId: string;
@@ -39,6 +53,8 @@ export interface KeyServer {
   endpoints?: string[];
   connectUrl?: string;
   unavailable?: boolean;
+  /** The shared credential the key uses on a server that offers several. */
+  authClientId?: string;
 }
 
 export function AgentKeyServers({
@@ -259,6 +275,13 @@ export function AgentKeyServers({
     return <Text>Loading MCP servers…</Text>;
   return (
     <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">Choose servers</h2>
+        <Text small muted>
+          The MCP servers this key may reach. The agent's gateway serves exactly
+          these.
+        </Text>
+      </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex-1 sm:max-w-sm">
           <Input
@@ -278,42 +301,62 @@ export function AgentKeyServers({
           const checked = selected.some((s) => s.id === server.id);
           const unavailable = !server.projectSlug || server.unavailable;
           return (
-            <label
-              key={server.id}
-              className={cn(
-                "flex items-center gap-4 p-4 transition-colors",
-                checked ? "bg-accent/50" : "hover:bg-muted/40",
-                unavailable || pending
-                  ? "cursor-not-allowed"
-                  : "cursor-pointer",
-              )}
-            >
-              <Checkbox
-                aria-label={server.name}
-                checked={checked}
-                disabled={pending || unavailable}
-                onCheckedChange={() => void toggle(server)}
-              />
-              <Server
-                aria-hidden="true"
-                className="text-muted-foreground size-5 shrink-0"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">
-                  {server.name}
-                </span>
-                <Text as="span" small muted>
-                  {projects.get(server.projectId)?.name ??
-                    "Project unavailable"}
-                </Text>
-                {server.kind === "Unproxied" && (
-                  <Text as="span" small muted className="block">
-                    This server doesn’t accept Speakeasy API keys.
-                  </Text>
+            <div key={server.id} className={cn(checked && "bg-accent/50")}>
+              <label
+                className={cn(
+                  "flex items-center gap-4 p-4 transition-colors",
+                  !checked && "hover:bg-muted/40",
+                  unavailable || pending
+                    ? "cursor-not-allowed"
+                    : "cursor-pointer",
                 )}
-              </span>
-              {unavailable && <Badge variant="neutral">Unavailable</Badge>}
-            </label>
+              >
+                <Checkbox
+                  aria-label={server.name}
+                  checked={checked}
+                  disabled={pending || unavailable}
+                  onCheckedChange={() => void toggle(server)}
+                />
+                <Server
+                  aria-hidden="true"
+                  className="text-muted-foreground size-5 shrink-0"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">
+                    {server.name}
+                  </span>
+                  <Text as="span" small muted>
+                    {projects.get(server.projectId)?.name ??
+                      "Project unavailable"}
+                  </Text>
+                  {server.kind === "Unproxied" && (
+                    <Text as="span" small muted className="block">
+                      This server doesn’t accept Speakeasy API keys.
+                    </Text>
+                  )}
+                </span>
+                {unavailable && <Badge variant="neutral">Unavailable</Badge>}
+              </label>
+              {checked &&
+                (server.kind === "Remote" || server.kind === "Tunneled") && (
+                  <div className="px-4 pb-4 pl-[4.25rem]">
+                    <KeyCredentialChoice
+                      serverId={server.id}
+                      serverName={server.name}
+                      value={
+                        selected.find((s) => s.id === server.id)?.authClientId
+                      }
+                      onChange={(authClientId) =>
+                        onChange(
+                          selected.map((s) =>
+                            s.id === server.id ? { ...s, authClientId } : s,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
+                )}
+            </div>
           );
         })}
         {visibleServers.length === 0 && (
@@ -344,18 +387,25 @@ export function AgentKeyServers({
   );
 }
 
-function ServerAccounts({
+export function ServerAccounts({
   agent,
   servers,
   onReady,
+  compact = false,
 }: {
   agent: ManagedAgent;
+  compact?: boolean;
   servers: KeyServer[];
   onReady: (ready: boolean) => void;
-}) {
+}): JSX.Element | null {
   const organization = useOrganization();
   const { user } = useSession();
   const sdk = useSdkClient();
+  const queryClient = useQueryClient();
+  const { data: members } = useMembers(undefined, undefined, {
+    retry: false,
+    throwOnError: false,
+  });
   const required = [
     ...new Map(
       servers
@@ -364,10 +414,18 @@ function ServerAccounts({
     ).values(),
   ];
   const [pending, setPending] = useState(false);
+  const refreshAttempt = useRef<
+    | {
+        attemptId: string;
+        server: KeyServer;
+      }
+    | undefined
+  >(undefined);
   const [error, setError] = useState(false);
   const attachBinding = useRemoteSessionsAttachBindingMutation();
   const detachBinding = useRemoteSessionsDetachBindingMutation();
   const ownerScope = { organizationId: organization.id, userId: user.id };
+  const canManage = agent.permissions.write;
   const requests = required.map((server) => ({
     gramProject: server.projectSlug,
     principalId: agent.id,
@@ -428,6 +486,38 @@ function ServerAccounts({
       clients: clientsQueries[index]?.data ?? [],
     })),
   };
+  const refetchAccounts = useRef(query.refetch);
+  refetchAccounts.current = query.refetch;
+  const connectionPopup = useOAuthPopup(async (reason) => {
+    const attempt =
+      reason === "popup-closed" ? refreshAttempt.current : undefined;
+    if (attempt) {
+      refreshAttempt.current = undefined;
+      setPending(true);
+      try {
+        await sdk.remoteSessions.completeBindingRefresh({
+          gramProject: attempt.server.projectSlug,
+          completeBindingRefreshRequestBody: {
+            principalId: agent.id,
+            userSessionIssuerId: attempt.server.issuerId!,
+            attemptId: attempt.attemptId,
+          },
+        });
+      } catch {
+        setError(true);
+      } finally {
+        setPending(false);
+      }
+    }
+    await refetchAccounts.current();
+    await queryClient.invalidateQueries({ queryKey: ["owner-connections"] });
+  });
+  // A row earns a card when it asks for an account, or when it still holds a
+  // binding whose authorization is gone: that binding blocks `ready`, and
+  // disconnecting it is the only way past, so the row has to stay on screen.
+  const shows = (row: (typeof query.data)[number]) =>
+    row.clients.length > 0 ||
+    row.bindings.some((binding) => binding.remoteSession === undefined);
   const ready =
     query.isSuccess &&
     !query.isFetching &&
@@ -435,21 +525,47 @@ function ServerAccounts({
     !pending &&
     query.data.every(
       (row) =>
-        row.bindings.every((binding) => binding.remoteSession !== undefined) &&
+        row.bindings.every(
+          (binding) =>
+            binding.remoteSession !== undefined &&
+            connectionLifetime(binding.remoteSession).kind !== "ended",
+        ) &&
         row.clients.every((client) =>
           row.bindings.some(
             (binding) =>
               binding.remoteSession !== undefined &&
               binding.remoteSessionClientId === client.id &&
-              row.candidates.some(
-                (candidate) => candidate.id === binding.remoteSessionId,
-              ),
+              connectionLifetime(binding.remoteSession).kind !== "ended",
           ),
         ),
     );
   useEffect(() => {
     onReady(ready);
   }, [ready, onReady]);
+  function reauthenticate(server: KeyServer, bindingId: string): void {
+    setError(false);
+    connectionPopup.open(async () => {
+      setPending(true);
+      try {
+        const { attemptId } = await sdk.remoteSessions.beginBindingRefresh({
+          gramProject: server.projectSlug,
+          beginBindingRefreshRequestBody: {
+            principalId: agent.id,
+            userSessionIssuerId: server.issuerId!,
+            bindingId,
+          },
+        });
+        const url = new URL(server.connectUrl!);
+        url.searchParams.set("binding_refresh_attempt", attemptId);
+        refreshAttempt.current = { attemptId, server };
+        return url.toString();
+      } catch (cause) {
+        setError(true);
+        setPending(false);
+        throw cause;
+      }
+    });
+  }
   async function attach(server: KeyServer, sessionId: string) {
     setPending(true);
     setError(false);
@@ -465,6 +581,7 @@ function ServerAccounts({
         },
       });
       await query.refetch();
+      await queryClient.invalidateQueries({ queryKey: ["owner-connections"] });
     } catch {
       setError(true);
     } finally {
@@ -486,6 +603,7 @@ function ServerAccounts({
         },
       });
       await query.refetch();
+      await queryClient.invalidateQueries({ queryKey: ["owner-connections"] });
     } catch {
       setError(true);
     } finally {
@@ -494,15 +612,19 @@ function ServerAccounts({
   }
   return (
     <div className="space-y-4">
-      <Text>
-        Choose a connected account, or connect a new one in a separate tab and
-        refresh this list.
-      </Text>
-      {required.length > 0 && (
-        <Text small muted>
-          Accounts are connected to the agent, not just this key. They stay
-          connected if you cancel and can be used by its other keys.
-        </Text>
+      {!compact && (
+        <div>
+          <h2 className="text-lg font-semibold">Connect accounts</h2>
+          {/* Only the case in front of the user is described: the step says
+            either what to connect, or that there is nothing to connect. */}
+          <Text small muted>
+            {/* An issuer-backed server still needs no account until it asks for
+              one, so the sentence follows what the rows actually show. */}
+            {query.data.every((row) => row.clients.length === 0)
+              ? "None of the servers you chose need one. Continue."
+              : "Choose a connected account or sign in to connect one. Each connection is shared by this agent’s keys."}
+          </Text>
+        </div>
       )}
       {query.isLoading && <Text>Checking required accounts…</Text>}
       {query.isError && (
@@ -510,37 +632,142 @@ function ServerAccounts({
           Could not verify account requirements. Refresh before continuing.
         </Text>
       )}
-      {required.length === 0 && (
-        <Text>No account connection needed for these servers.</Text>
-      )}
-      {query.data?.map((row) => (
+      {/* A server that asks for nothing gets no card of its own; the sentence
+          above already covers it, and an empty card reads as unfinished. */}
+      {query.data?.filter(shows).map((row) => (
         <section
           key={`${row.server.projectId}:${row.server.issuerId}`}
-          className="border-border space-y-4 border p-5"
+          className={
+            compact ? "space-y-3" : "border-border space-y-4 border p-5"
+          }
         >
-          <div className="flex items-center gap-2">
-            <Server
-              aria-hidden="true"
-              className="text-muted-foreground size-4"
-            />
-            <h3 className="text-sm font-medium">{row.server.name}</h3>
-          </div>
-          {row.server.connectUrl && (
-            <a
-              href={row.server.connectUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary inline-flex items-center gap-1.5 text-sm font-medium underline underline-offset-4"
-            >
-              Connect an account
-              <ExternalLink aria-hidden="true" className="size-3.5" />
-            </a>
+          {!compact && (
+            <div className="flex items-center gap-2">
+              <Server
+                aria-hidden="true"
+                className="text-muted-foreground size-4"
+              />
+              <h3 className="text-sm font-medium">{row.server.name}</h3>
+            </div>
           )}
-          {row.clients.length === 0 && (
+          {!canManage && row.clients.length > 0 && (
             <Text small muted>
-              No account connection needed.
+              You need permission to edit this agent to change its connections.
             </Text>
           )}
+          {canManage &&
+            row.server.connectUrl &&
+            row.clients.some(
+              (client) =>
+                !row.bindings.some(
+                  (binding) => binding.remoteSessionClientId === client.id,
+                ),
+            ) && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  connectionPopup.open(row.server.connectUrl!);
+                }}
+              >
+                Connect an account
+              </Button>
+            )}
+          {row.bindings
+            .filter((binding) => binding.remoteSession)
+            .map((binding) => {
+              const session = binding.remoteSession!;
+              const mine = session.subjectUrn === `user:${user.id}`;
+              const locked = !mine;
+              const expired = connectionLifetime(session).kind === "ended";
+              const label =
+                session.subjectDisplayName ||
+                session.subjectEmail ||
+                "Another member";
+              return (
+                <div
+                  key={binding.id}
+                  className={cn(
+                    "flex flex-wrap items-center gap-3",
+                    compact ? "py-1" : "border p-3",
+                    locked && "text-muted-foreground",
+                    !compact && locked && "bg-muted/40",
+                    !compact &&
+                      expired &&
+                      "border-warning-softest bg-warning-softest/30",
+                  )}
+                >
+                  <IdentityAvatar
+                    label={label}
+                    className={compact ? "hidden" : "size-7"}
+                    textClassName="text-xs"
+                    src={
+                      mine
+                        ? user.photoUrl
+                        : members?.members.find(
+                            (member) =>
+                              `user:${member.id}` === session.subjectUrn,
+                          )?.photoUrl
+                    }
+                  />
+                  <div className="min-w-0 flex-1">
+                    <Text
+                      small
+                      muted={locked}
+                      className="flex items-center gap-1.5 text-sm"
+                    >
+                      {locked && (
+                        <LockKeyhole className="size-3.5" aria-hidden="true" />
+                      )}
+                      {mine ? "Your connection" : `${label}'s connection`}
+                    </Text>
+                    <Text
+                      small
+                      muted={!expired}
+                      className={
+                        expired
+                          ? "text-default-warning mt-1 flex items-center gap-1.5 text-xs"
+                          : "mt-1 text-xs"
+                      }
+                    >
+                      {expired && (
+                        <AlertTriangle
+                          aria-hidden="true"
+                          className="size-3.5"
+                        />
+                      )}
+                      {expired ? "Expired · " : ""}
+                      {connectionLifetimeLabel(connectionLifetime(session))}
+                    </Text>
+                  </div>
+                  {canManage && mine && expired && row.server.connectUrl && (
+                    <Button
+                      size="sm"
+                      disabled={pending || query.isFetching}
+                      onClick={() => {
+                        reauthenticate(row.server, binding.id);
+                      }}
+                    >
+                      Reauthenticate
+                    </Button>
+                  )}
+                  {!canManage ? (
+                    <LockKeyhole
+                      className="size-4"
+                      aria-label="Read-only connection"
+                    />
+                  ) : (
+                    <Button
+                      variant="tertiary"
+                      size="sm"
+                      disabled={pending || query.isFetching}
+                      onClick={() => void detach(row.server, binding.id)}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
           {row.bindings
             .filter((binding) => !binding.remoteSession)
             .map((binding) => (
@@ -555,7 +782,11 @@ function ServerAccounts({
                 <Button
                   variant="secondary"
                   disabled={
-                    pending || error || query.isFetching || query.isError
+                    !canManage ||
+                    pending ||
+                    error ||
+                    query.isFetching ||
+                    query.isError
                   }
                   onClick={() => void detach(row.server, binding.id)}
                 >
@@ -563,7 +794,7 @@ function ServerAccounts({
                 </Button>
               </div>
             ))}
-          {row.clients.map((client, clientIndex) => (
+          {(canManage ? row.clients : []).map((client, clientIndex) => (
             <div key={client.id} className="space-y-2">
               {row.clients.length > 1 && (
                 <Text small muted>
@@ -571,7 +802,14 @@ function ServerAccounts({
                 </Text>
               )}
               {row.candidates
-                .filter((c) => c.remoteSessionClientId === client.id)
+                .filter(
+                  (c) =>
+                    c.remoteSessionClientId === client.id &&
+                    (!compact ||
+                      !row.bindings.some(
+                        (b) => b.remoteSessionId === c.id && b.remoteSession,
+                      )),
+                )
                 .map((candidate) => {
                   const attached = row.bindings.some(
                     (b) =>
@@ -595,11 +833,17 @@ function ServerAccounts({
                             ? `Access: ${candidate.scopes.join(", ")}`
                             : "No additional access requested"}
                         </Text>
+                        <Text small muted>
+                          {connectionLifetimeLabel(
+                            connectionLifetime(candidate),
+                          )}
+                        </Text>
                       </div>
                       <Button
                         disabled={
                           attached ||
                           occupied ||
+                          connectionLifetime(candidate).kind === "ended" ||
                           pending ||
                           error ||
                           query.isFetching ||
@@ -620,41 +864,54 @@ function ServerAccounts({
                 (c) => c.remoteSessionClientId === client.id,
               ) && (
                 <Text small muted>
-                  No connected accounts yet. Connect an account, then refresh
-                  this list.
+                  No connected accounts yet. Choose Connect an account to sign
+                  in.
                 </Text>
               )}
             </div>
           ))}
         </section>
       ))}
+      {connectionPopup.blocked && (
+        <Text role="alert">
+          Allow popups for this page, then try connecting again.
+        </Text>
+      )}
       {error && (
         <Text role="alert">
           Could not confirm the account connection. Refresh to check its status
           before trying again.
         </Text>
       )}
-      <Button
-        variant="secondary"
-        disabled={pending}
-        onClick={() => {
-          setError(false);
-          void query.refetch();
-        }}
-      >
-        Refresh accounts
-      </Button>
-      {ready && (
-        <div role="status" className="flex items-center gap-2 text-sm">
-          <CheckCircle2 aria-hidden="true" className="size-4" />
-          Accounts ready.
-        </div>
-      )}
-      {required.length > 0 && (
-        <Text small muted>
-          To switch accounts, disconnect the current account from the server’s
-          Sessions page first. You’ll choose this key’s access in the next step.
-        </Text>
+      {/* Nothing to connect means nothing to refresh, confirm or switch: the
+          step keeps only the sentence that says so. A failed read reports no
+          clients at all, so it keeps the refresh the alert above asks for. */}
+      {(query.isError || (query.data.some(shows) && (!compact || !ready))) && (
+        <>
+          <Button
+            variant="tertiary"
+            size="sm"
+            aria-label="Refresh connection status"
+            title="Refresh connection status"
+            disabled={pending}
+            onClick={() => {
+              setError(false);
+              void query.refetch();
+            }}
+          >
+            <RefreshCw aria-hidden="true" className="size-4" />
+          </Button>
+          {ready && (
+            <div role="status" className="flex items-center gap-2 text-sm">
+              <CheckCircle2 aria-hidden="true" className="size-4" />
+              Accounts ready.
+            </div>
+          )}
+          <Text small muted>
+            You can assign only your own connections. Removing an assignment
+            does not disconnect that person’s account.
+          </Text>
+        </>
       )}
     </div>
   );

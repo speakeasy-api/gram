@@ -6,7 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 )
 
 // normalizeWhitespace collapses the template's formatting-driven line breaks so
@@ -22,7 +25,7 @@ func TestConsentTemplateCompletedFirstPartyConnectionAutoCloses(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Speakeasy",
 		MCPSlug:        "example",
-		MCPRouteBase:   "x/mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -58,7 +61,7 @@ func TestConsentTemplateIncompleteFirstPartyConnectionStaysOpen(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Speakeasy",
 		MCPSlug:        "example",
-		MCPRouteBase:   "x/mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -94,7 +97,7 @@ func TestConsentTemplateRendersPendingVerification(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Speakeasy",
 		MCPSlug:        "example",
-		MCPRouteBase:   "x/mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -126,6 +129,7 @@ func TestShouldAutoCloseFirstParty(t *testing.T) {
 	t.Parallel()
 
 	connected := remoteSessionCard{Connected: true}
+	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{{Connected: true, AttachmentReconnect: true}}), "an attachment refresh needs its own OAuth callback")
 	disconnected := remoteSessionCard{Connected: false}
 	expired := remoteSessionCard{Connected: false, Expired: true}
 
@@ -160,7 +164,7 @@ func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Speakeasy",
 		MCPSlug:        "example",
-		MCPRouteBase:   "mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -217,7 +221,7 @@ func TestConsentTemplateLocksAutoRefreshWhenOrganizationRequires(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Speakeasy",
 		MCPSlug:        "example",
-		MCPRouteBase:   "mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -259,7 +263,7 @@ func TestConsentTemplateShowsAutoRefreshOffWhenOrganizationDisables(t *testing.T
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Speakeasy",
 		MCPSlug:        "example",
-		MCPRouteBase:   "mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -306,7 +310,7 @@ func TestConsentTemplateOmitsAutoRefreshRowWithoutRemoteSessions(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:         "Speakeasy",
 		MCPSlug:            "example",
-		MCPRouteBase:       "mcp",
+		MCPRouteBase:       mcproute.MCP,
 		State:              "state",
 		CSRFToken:          "csrf",
 		SubjectDisplay:     "user@example.com",
@@ -330,7 +334,7 @@ func TestConsentTemplateOmitsExpiryTooltipWhenNoExpiryReported(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Speakeasy",
 		MCPSlug:        "example",
-		MCPRouteBase:   "mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -369,7 +373,7 @@ func TestConsentTemplateRendersIssuerBranding(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Example Client",
 		MCPSlug:        "example",
-		MCPRouteBase:   "mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -402,7 +406,7 @@ func TestConsentTemplateRendersIssuerLinks(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Example Client",
 		MCPSlug:        "example",
-		MCPRouteBase:   "mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -449,7 +453,7 @@ func TestConsentTemplateRendersIssuerLinksWhenNotConnected(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Example Client",
 		MCPSlug:        "example",
-		MCPRouteBase:   "mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -483,7 +487,7 @@ func TestConsentTemplateRendersOnlyPresentIssuerLinks(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Example Client",
 		MCPSlug:        "example",
-		MCPRouteBase:   "mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -514,7 +518,7 @@ func TestConsentTemplateInactiveCardDisclosesOnlyLinks(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Example Client",
 		MCPSlug:        "example",
-		MCPRouteBase:   "mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -554,7 +558,7 @@ func TestConsentTemplateOmitsDetailsWithoutLinksOrDetail(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Example Client",
 		MCPSlug:        "example",
-		MCPRouteBase:   "mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -579,7 +583,7 @@ func TestConsentTemplateOmitsLogoWhenIssuerUnbranded(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Example Client",
 		MCPSlug:        "example",
-		MCPRouteBase:   "mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "state",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "user@example.com",
@@ -637,7 +641,7 @@ func TestConsentTemplateDisabledWithoutIslandWhenConsentDisabled(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:      "Demo",
 		MCPSlug:         "example",
-		MCPRouteBase:    "mcp",
+		MCPRouteBase:    mcproute.MCP,
 		State:           "state",
 		CSRFToken:       "csrf",
 		SubjectDisplay:  "user@example.com",
@@ -665,7 +669,7 @@ func TestConsentTemplateToolAccessIsland(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:            "Demo",
 		MCPSlug:               "example",
-		MCPRouteBase:          "mcp",
+		MCPRouteBase:          mcproute.MCP,
 		State:                 "state",
 		CSRFToken:             "csrf",
 		SubjectDisplay:        "user@example.com",
@@ -717,7 +721,7 @@ func TestConsentTemplateAgentSelectionShowsFixedPolicyAndSetupOnly(t *testing.T)
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:            "Demo",
 		MCPSlug:               "example",
-		MCPRouteBase:          "mcp",
+		MCPRouteBase:          mcproute.MCP,
 		State:                 "state",
 		CSRFToken:             "csrf",
 		SubjectDisplay:        "user@example.com",
@@ -764,7 +768,7 @@ func TestConsentTemplateAgentSelectionWithoutEligibleAgents(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:            "Demo",
 		MCPSlug:               "example",
-		MCPRouteBase:          "mcp",
+		MCPRouteBase:          mcproute.MCP,
 		State:                 "state",
 		CSRFToken:             "csrf",
 		SubjectDisplay:        "user@example.com",
@@ -788,7 +792,7 @@ func TestConsentTemplateAgentSelectionMarksSelfOnlyReadinessHint(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:            "Demo",
 		MCPSlug:               "example",
-		MCPRouteBase:          "mcp",
+		MCPRouteBase:          mcproute.MCP,
 		State:                 "state",
 		CSRFToken:             "csrf",
 		SubjectDisplay:        "user@example.com",
@@ -812,7 +816,7 @@ func TestConsentTemplateToolAccessOmittedOnFirstParty(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:      "Demo",
 		MCPSlug:         "example",
-		MCPRouteBase:    "mcp",
+		MCPRouteBase:    mcproute.MCP,
 		State:           "state",
 		CSRFToken:       "csrf",
 		SubjectDisplay:  "user@example.com",
@@ -836,7 +840,7 @@ func TestConsentTemplateFirstPartyNoCardCopy(t *testing.T) {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:         "Speakeasy",
 		MCPSlug:            "example",
-		MCPRouteBase:       "mcp",
+		MCPRouteBase:       mcproute.MCP,
 		State:              "state",
 		CSRFToken:          "csrf",
 		SubjectDisplay:     "user@example.com",
@@ -862,7 +866,7 @@ func TestConsentTemplateOffersIdentityReconnect(t *testing.T) {
 		err := consentTemplate.Execute(&page, consentTemplateData{
 			ClientName:     "Speakeasy",
 			MCPSlug:        "example",
-			MCPRouteBase:   "mcp",
+			MCPRouteBase:   mcproute.MCP,
 			State:          "state",
 			CSRFToken:      "csrf",
 			SubjectDisplay: "user@example.com",
@@ -885,7 +889,7 @@ func TestConsentTemplateOffersIdentityReconnect(t *testing.T) {
 	with := renderCard(true)
 	require.Contains(t, with, "Reconnect to add account details")
 	require.Contains(t, with, "> Reconnect </button>")
-	require.Contains(t, with, "Connected")
+	require.Contains(t, with, "Service connected")
 
 	without := renderCard(false)
 	require.NotContains(t, without, "Reconnect to add account details")
@@ -902,7 +906,7 @@ func TestConsentTemplateShowsConnectedIdentity(t *testing.T) {
 		err := consentTemplate.Execute(&page, consentTemplateData{
 			ClientName:         "Example Client",
 			MCPSlug:            "example",
-			MCPRouteBase:       "mcp",
+			MCPRouteBase:       mcproute.MCP,
 			State:              "state",
 			CSRFToken:          "csrf",
 			SubjectDisplay:     "user@example.com",
@@ -928,8 +932,8 @@ func TestConsentTemplateShowsConnectedIdentity(t *testing.T) {
 
 func TestConsentTemplateAgentConnectionsRemainVisibleAndUseResolvedRoute(t *testing.T) {
 	t.Parallel()
-	for _, routeBase := range []string{"mcp", "x/mcp"} {
-		t.Run(routeBase, func(t *testing.T) {
+	for _, routeBase := range []mcproute.Base{mcproute.MCP, mcproute.OrganizationGateway} {
+		t.Run(routeBase.String(), func(t *testing.T) {
 			t.Parallel()
 			var page bytes.Buffer
 			require.NoError(t, consentTemplate.Execute(&page, consentTemplateData{
@@ -939,7 +943,7 @@ func TestConsentTemplateAgentConnectionsRemainVisibleAndUseResolvedRoute(t *test
 				RemoteSessionCards: []remoteSessionCard{{ClientID: "provider", IssuerDisplay: "Provider"}},
 			}))
 			html := normalizeWhitespace(page.String())
-			require.Contains(t, html, `data-action-url="/`+routeBase+`/example/connect/remote-session"`)
+			require.Contains(t, html, `data-action-url="/`+routeBase.String()+`/example/connect/remote-session"`)
 			require.Contains(t, html, `data-remote-client="provider"`)
 			require.Contains(t, html, "The agent's tool policy is never changed here.")
 			require.Contains(t, html, "data-agent-access")
@@ -966,4 +970,122 @@ func TestConsentTemplateAgentAccessUsesExistingProviderCard(t *testing.T) {
 	require.NotContains(t, html, "Agent service connections")
 	require.NotContains(t, html, "data-agent-connection-list")
 	require.Contains(t, html, `value="disconnect"`)
+}
+
+func TestConsentTemplateRendersUpstreamCredentialPicker(t *testing.T) {
+	t.Parallel()
+
+	shared, personal := uuid.New(), uuid.New()
+	render := func(auth *consentServerAuth) string {
+		var page bytes.Buffer
+		require.NoError(t, consentTemplate.Execute(&page, consentTemplateData{
+			ClientName: "Example client", MCPSlug: "example", MCPRouteBase: mcproute.MCP,
+			State: "state", CSRFToken: "csrf", SubjectDisplay: "user@example.com",
+			ScriptURL: "/mcp/consent-page-test.js", ConsentEnabled: auth.Approvable(), UpstreamAuth: auth,
+		}))
+		return normalizeWhitespace(page.String())
+	}
+
+	page := render(&consentServerAuth{ServerID: uuid.New(), Status: consentAuthChoose, Options: []consentAuthClientOption{
+		{ID: shared, Name: "Engineering token", Type: authClientTypeStaticCredential, State: consentClientReady, Selected: true},
+		{ID: personal, Name: "Own account", Type: authClientTypeRemoteSession, State: consentClientConnect},
+	}})
+	require.Contains(t, page, "Sign in to the service as")
+	require.Contains(t, page, `name="auth_client" form="consent-approve-form" value="`+shared.String()+`"`)
+	require.Contains(t, page, "the service records your actions as this shared identity")
+	require.Contains(t, page, "Connect your account below to choose this.")
+	require.Regexp(t, `value="`+personal.String()+`"[^>]*disabled`, page, "an option that needs connecting cannot be picked")
+
+	reconnect, setup := uuid.New(), uuid.New()
+	page = render(&consentServerAuth{ServerID: uuid.New(), Status: consentAuthChoose, Options: []consentAuthClientOption{
+		{ID: shared, Name: "Engineering token", Type: authClientTypeStaticCredential, State: consentClientReady, Selected: true},
+		{ID: reconnect, Name: "Own account", Type: authClientTypeRemoteSession, State: consentClientReconnect},
+		{ID: setup, Name: "Identity provider", Type: authClientTypeEMA, State: consentClientSetup},
+	}})
+	require.Contains(t, page, "Reconnect your account below to choose this.")
+	require.Contains(t, page, "Not set up yet. Ask an administrator.")
+	require.Regexp(t, `value="`+reconnect.String()+`"[^>]*disabled`, page, "an option that needs reconnecting cannot be picked")
+	require.Regexp(t, `value="`+setup.String()+`"[^>]*disabled`, page, "an option that is not set up cannot be picked")
+
+	page = render(&consentServerAuth{ServerID: uuid.New(), Status: consentAuthChoose, Options: []consentAuthClientOption{
+		{ID: shared, Name: "Engineering token", Type: authClientTypeStaticCredential, State: consentClientReady, Selected: true},
+	}})
+	require.NotContains(t, page, "Sign in to the service as", "a single option needs no picker")
+	require.Contains(t, page, `<input type="hidden" name="auth_client" form="consent-approve-form" value="`+shared.String()+`" />`)
+}
+
+func TestConsentTemplateExplainsWhyThePersonCannotApproveForThemselves(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:        "Example client",
+		MCPSlug:           "example",
+		MCPRouteBase:      mcproute.MCP,
+		State:             "state",
+		CSRFToken:         "csrf",
+		SubjectDisplay:    "user@example.com",
+		ScriptURL:         "/mcp/consent-page-test.js",
+		ConsentEnabled:    false,
+		SelfApprovalError: &consentApprovalError{Message: "You don't have access to any of the ways this server signs in.", ActionURL: "https://example.com/request-access", ActionLabel: "Request access"},
+	})
+	require.NoError(t, err)
+
+	html := normalizeWhitespace(page.String())
+	require.NotContains(t, html, "Connect a service above to enable access.")
+	require.Contains(t, html, `<div role="alert" data-agent-self-only data-self-approval-error`, "hidden once the page approves for an agent")
+	require.Contains(t, html, "You don&#39;t have access to any of the ways this server signs in.")
+	require.Contains(t, html, `<a class="underline" href="https://example.com/request-access">Request access</a>`)
+}
+
+func TestConsentTemplateCodeChoiceAndStoredDefault(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name                     string
+		discovery, code, offered bool
+	}{
+		{name: "available", discovery: true, code: true, offered: true},
+		{name: "runtime unavailable", discovery: true, code: false, offered: false},
+		{name: "no choice offered", discovery: false, code: false, offered: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var page bytes.Buffer
+			require.NoError(t, consentTemplate.Execute(&page, consentTemplateData{
+				ConsentEnabled: true, ShowDiscoveryMode: tc.discovery, ShowCodeMode: tc.code, GatewayDefaultMode: "Code Mode",
+			}))
+			html := normalizeWhitespace(page.String())
+			require.Equal(t, tc.discovery, strings.Contains(html, `<option value="">Gateway default (Code Mode)</option>`))
+			require.Contains(t, html, `<dt class="text-eyebrow">Tool discovery</dt>`)
+			require.Equal(t, !tc.discovery, strings.Contains(html, `>Code Mode (gateway default). Connections without an override follow this setting.</dd>`))
+			require.Equal(t, tc.offered, strings.Contains(html, `<option value="code_mode">Code Mode</option>`))
+			require.Equal(t, tc.offered, strings.Contains(html, `Code Mode exposes one execute tool`))
+		})
+	}
+}
+
+func TestConsentTemplatePrefillsStoredCodeModeOnlyWhenOffered(t *testing.T) {
+	t.Parallel()
+	for _, code := range []bool{true, false} {
+		var page bytes.Buffer
+		require.NoError(t, consentTemplate.Execute(&page, consentTemplateData{
+			ConsentEnabled: true, ShowDiscoveryMode: true, ShowCodeMode: code, PrefillDiscoveryMode: "code_mode", CodeModeUnavailable: !code,
+		}))
+		html := normalizeWhitespace(page.String())
+		require.Equal(t, code, strings.Contains(html, `<option value="code_mode" selected>Code Mode</option>`))
+		require.NotContains(t, html, `value="progressive" selected`)
+		require.NotContains(t, html, `value="direct" selected`)
+		require.Equal(t, !code, strings.Contains(html, "The code runtime is unavailable. Progressive discovery is available for this connection."))
+	}
+}
+
+func TestConsentTemplateOffersAttachmentReconnect(t *testing.T) {
+	t.Parallel()
+	var page bytes.Buffer
+	card := remoteSessionCard{ClientID: "client-id", Connected: true, AttachmentReconnect: true}
+	require.NoError(t, consentTemplate.Execute(&page, consentTemplateData{FirstParty: true, RemoteSessionCards: []remoteSessionCard{card}}))
+	html := normalizeWhitespace(page.String())
+	require.Contains(t, html, "Sign in again to choose the account for this agent")
+	require.Contains(t, html, "> Reconnect </button>")
+	require.NotContains(t, html, "data-auto-close")
 }

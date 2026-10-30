@@ -2,18 +2,19 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@/contexts/Sdk", () => ({
-  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+const routeSlugs = vi.hoisted(() => ({
+  orgSlug: "org",
+  projectSlug: "project" as string | undefined,
 }));
+vi.mock("@/contexts/Sdk", () => ({ useSlugs: () => routeSlugs }));
 
 import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
-import AccessHubRedirect from "./pages/workload-identities/AccessHubRedirect";
 import {
   ShadowAISectionRedirect,
   ShadowMCPIndexRedirect,
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
-import { orgRoutePaths, useOrgRoutes, useRoutes } from "./routes";
+import { orgRoutePaths, useRoutes } from "./routes";
 
 function GuideHref(): JSX.Element {
   const routes = useRoutes();
@@ -25,7 +26,11 @@ function ProjectRouteHrefs(): JSX.Element {
   return (
     <output data-testid="project-route-hrefs">
       {Object.values(routes)
-        .map((route) => route.href())
+        .map((route) =>
+          route === routes.toolset
+            ? route.href("example-toolset")
+            : route.href(),
+        )
         .join("\n")}
     </output>
   );
@@ -252,64 +257,6 @@ describe("organization routes", () => {
   });
 });
 
-describe("Access Hub", () => {
-  function AccessHubHrefs(): JSX.Element {
-    const orgRoutes = useOrgRoutes();
-    return (
-      <output data-testid="access-hub-hrefs">
-        {[
-          orgRoutes.workloadIssuers.href(),
-          orgRoutes.workloadIssuers.issuerDetail.href("issuer-1"),
-        ].join("\n")}
-      </output>
-    );
-  }
-
-  it("lists its detail page among the organization route paths", () => {
-    expect(orgRoutePaths).toContain("access-hub/:issuerId");
-  });
-
-  it("is an organization route with no project in its path", () => {
-    expect(orgRoutePaths).toContain("access-hub");
-    render(
-      <MemoryRouter initialEntries={["/org"]}>
-        <AccessHubHrefs />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByTestId("access-hub-hrefs").textContent).toBe(
-      "/org/access-hub\n/org/access-hub/issuer-1",
-    );
-  });
-
-  it.each([
-    ["/org/projects/project/access-hub", "/org/access-hub"],
-    [
-      "/org/projects/project/access-hub/issuer-1?tab=machines#rules",
-      "/org/access-hub/issuer-1?tab=machines#rules",
-    ],
-    ["/org/projects/project/workload-identities", "/org/access-hub"],
-  ])("redirects the project URL %s", async (source, destination) => {
-    const { container } = render(
-      <MemoryRouter initialEntries={[source]}>
-        <Routes>
-          <Route
-            path="/:orgSlug/projects/:projectSlug/access-hub/*"
-            element={<AccessHubRedirect />}
-          />
-          <Route
-            path="/:orgSlug/projects/:projectSlug/workload-identities"
-            element={<AccessHubRedirect />}
-          />
-          <Route path="/:orgSlug/access-hub/*" element={<LocationPath />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await within(container).findByText(destination)).toBeTruthy();
-  });
-});
-
 it("lists nested organization pages at every depth, under their parents", () => {
   expect(orgRoutePaths).toContain("signing-keys/:setId");
   expect(orgRoutePaths).toContain("signing-keys/:setId/overview");
@@ -323,4 +270,28 @@ it("removes platform issuer management while preserving tenant and other admin r
   expect(orgRoutePaths).toContain("remote-identity-providers/*");
   expect(orgRoutePaths).toContain("platform-admin");
   expect(orgRoutePaths).toContain("platform-admin/openrouter-keys");
+});
+
+function OrganizationConnectionsHref(): JSX.Element {
+  const routes = useRoutes({ projectSlug: "default" });
+  return (
+    <output data-testid="org-connections">
+      {routes.mcp.organizationGateway.href()}?tab=connections
+    </output>
+  );
+}
+it("builds organization connections from an org-only route using an explicit project", () => {
+  routeSlugs.projectSlug = undefined;
+  try {
+    render(
+      <MemoryRouter initialEntries={["/org/settings"]}>
+        <OrganizationConnectionsHref />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("org-connections").textContent).toBe(
+      "/org/projects/default/mcp/organization-gateway?tab=connections",
+    );
+  } finally {
+    routeSlugs.projectSlug = "project";
+  }
 });

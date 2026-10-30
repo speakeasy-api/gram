@@ -87,7 +87,11 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 	if req.clientMode == serverIdentityClientModeAuto {
 		registrationResource = s.registrationResource(ctx, logger, *authCtx.ProjectID, authCtx.ActiveOrganizationID, target.ID)
 	}
-	plan := req.plan(authCtx, target, registrationResource)
+	orgAdmin, err := s.actorIsOrganizationAdmin(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check organization admin access").LogError(ctx, logger)
+	}
+	plan := req.plan(authCtx, orgAdmin, target, registrationResource)
 	commit := s.identity.Prepare(plan)
 	if err := commit.Preflight(ctx); err != nil {
 		return nil, identityOopsError(err, "check identity configuration").LogError(ctx, logger)
@@ -172,6 +176,18 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 	return target, nil
 }
 
+// actorIsOrganizationAdmin reports whether the caller holds organization admin,
+// which the organization's own client settings require and which lets a
+// project-level commit change bindings every project on an organization-level
+// user session issuer shares.
+func (s *Service) actorIsOrganizationAdmin(ctx context.Context, organizationID string) (bool, error) {
+	admin, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: authz.ResourceKindOrg, ResourceID: organizationID, Dimensions: nil})
+	if err != nil {
+		return false, fmt.Errorf("evaluate organization admin: %w", err)
+	}
+	return admin, nil
+}
+
 // checkServerIdentityRequest checks what only this flow knows about: the MCP
 // server must be directly Remote MCP-backed, and a new provider's form and
 // logo must be valid.
@@ -234,7 +250,7 @@ func (s *Service) registrationResource(ctx context.Context, logger *slog.Logger,
 // plan describes the request as an identity plan: the server's current
 // clients are replaced by the requested one. registrationResource is what a
 // registered client without scopes will discover at login.
-func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target mcpserversrepo.McpServer, registrationResource *ResourceScopes) IdentityPlan {
+func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, orgAdmin bool, target mcpserversrepo.McpServer, registrationResource *ResourceScopes) IdentityPlan {
 	provider := UseProvider(r.providerID)
 	if r.createProvider != nil {
 		provider = CreateProvider(createServerIdentityProviderParams(*authCtx.ProjectID, authCtx.ActiveOrganizationID, r.createProvider, r.logoAssetID))
@@ -272,9 +288,11 @@ func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target m
 			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 			ActorDisplayName: authCtx.Email,
 			// Gates tunnel-bound registration, which reaches a private network.
-			ActorIsPlatformAdmin: authCtx.IsAdmin,
+			ActorIsPlatformAdmin:     authCtx.IsAdmin,
+			ActorIsOrganizationAdmin: orgAdmin,
 		},
 		UserSessionIssuerID: target.UserSessionIssuerID.UUID,
+		MCPServerID:         target.ID,
 		Provider:            provider,
 		Client:              client,
 		Bound:               ReplaceBound,
@@ -333,9 +351,9 @@ func identityOopsError(err error, message string) *oops.ShareableError {
 		code = oops.CodeNotFound
 	case errors.Is(refusal.Kind, ErrIdentityInvalid):
 		code = oops.CodeBadRequest
-	case errors.Is(refusal.Kind, ErrIdentityForbidden):
+	case errors.Is(refusal.Kind, ErrIdentityForbidden), errors.Is(refusal.Kind, ErrIdentityOrgWideBinding):
 		code = oops.CodeForbidden
-	case errors.Is(refusal.Kind, ErrIdentityConflict), errors.Is(refusal.Kind, ErrIdentityOrgWideBinding):
+	case errors.Is(refusal.Kind, ErrIdentityConflict):
 		code = oops.CodeConflict
 	case errors.Is(refusal.Kind, ErrIdentityInvariant):
 		code = oops.CodeInvariantViolation

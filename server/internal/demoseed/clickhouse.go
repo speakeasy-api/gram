@@ -18,10 +18,15 @@ func (s *seeder) runClickHouse(ctx context.Context, ch driver.Conn) error {
 	// lightweight_deletes_sync=2 waits for ALL replicas (prod ClickHouse Cloud
 	// is replicated; =1 would let the re-insert race a delete still running on
 	// another replica). The base client caps max_execution_time at 60s, which
-	// prod-sized telemetry_logs deletes can exceed — raise it here.
+	// prod-sized telemetry_logs deletes can exceed — raise it here. Inserts are
+	// acknowledged: without an explicit posture they would inherit ClickHouse's
+	// default async_insert=1 and the server connection's
+	// wait_for_async_insert=0, and the postflight checks would race the seed.
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
 		"lightweight_deletes_sync": 2,
 		"max_execution_time":       600,
+		"async_insert":             1,
+		"wait_for_async_insert":    1,
 	}))
 
 	phases := []struct {
@@ -32,6 +37,7 @@ func (s *seeder) runClickHouse(ctx context.Context, ch driver.Conn) error {
 		{"clickhouse detections and findings", s.chDetectionsAndFindings},
 		{"clickhouse events and postflight", s.chEventsAndPostflight},
 		{"clickhouse sensor readings", s.chSigintReadings},
+		{"clickhouse tunnel metrics", s.chTunnelMetrics},
 	}
 	for _, p := range phases {
 		start := time.Now()

@@ -10,12 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/testsuite"
 
-	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
-	"github.com/speakeasy-api/gram/server/internal/metering"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -92,23 +90,6 @@ func seedAccountChatWithAccount(t *testing.T, conn *pgxpool.Pool, td testData, a
 	return chatID, externalAccountUUID
 }
 
-// setAccountEmail fills the account's email through the same ingest upsert
-// the OTEL path uses (COALESCE fills a previously-unknown field).
-func setAccountEmail(t *testing.T, conn *pgxpool.Pool, td testData, externalAccountUUID, email string) {
-	t.Helper()
-	_, err := hooksrepo.New(conn).UpsertUserAccount(t.Context(), hooksrepo.UpsertUserAccountParams{
-		OrganizationID:      td.orgID,
-		Provider:            "anthropic",
-		ExternalAccountUuid: externalAccountUUID,
-		UserID:              pgtype.Text{},
-		ExternalOrgID:       pgtype.Text{},
-		ExternalAccountID:   pgtype.Text{},
-		Email:               pgtype.Text{String: email, Valid: true},
-		AccountType:         pgtype.Text{},
-	})
-	require.NoError(t, err)
-}
-
 func seedChatMessage(t *testing.T, conn *pgxpool.Pool, td testData, chatID uuid.UUID) uuid.UUID {
 	t.Helper()
 	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
@@ -121,7 +102,7 @@ func seedChatMessage(t *testing.T, conn *pgxpool.Pool, td testData, chatID uuid.
 	return msgID
 }
 
-func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, findingsPub gcp.Publisher[*riskv1.Finding]) *risk_analysis.AnalyzeBatch {
+func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, accountIdentityPub gcp.Publisher[*riskv1.AccountIdentityAnalysis]) *risk_analysis.AnalyzeBatch {
 	t.Helper()
 	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
@@ -129,23 +110,16 @@ func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, findingsPu
 		testenv.NewMeterProvider(t),
 		conn,
 		nil,
-		&risk_analysis.StubPIIScanner{},
-		nil,
-		nil,
-		nil,
-		nil,
 		nil,
 		newPresidioPub(),
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(), newLLMPub(),
-		findingsPub,
-		mustCustomRuleScanner(t, nil),
+		newCustomRulesPub(),
+		newLLMPub(),
+		newToolCallPub(),
+		accountIdentityPub,
 		mustCELEngine(t),
-		nil,
-		nil,
-		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		false,
 	)
 	require.NoError(t, err)
@@ -169,43 +143,7 @@ func runAccountIdentityBatch(t *testing.T, ab *risk_analysis.AnalyzeBatch, td te
 	require.NoError(t, err)
 }
 
-func accountIdentityFindings(t *testing.T, conn *pgxpool.Pool, td testData, policyID uuid.UUID) []testrepo.RiskResult {
-	t.Helper()
-	rows, err := testrepo.New(conn).ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
-		ProjectID:    td.projectID,
-		RiskPolicyID: policyID,
-	})
-	require.NoError(t, err)
-	var out []testrepo.RiskResult
-	for _, row := range rows {
-		if row.Source == "account_identity" && row.Found {
-			out = append(out, row)
-		}
-	}
-	return out
-}
-
-func TestAnalyzeBatch_AccountIdentityPersonalAccountOnePerChat(t *testing.T) {
-	t.Parallel()
-	conn := cloneDB(t)
-	td := seedTestData(t, conn, true)
-	policyID, policyVersion := seedAccountIdentityPolicy(t, conn, td, nil, nil)
-
-	chatID := seedAccountChat(t, conn, td, "personal", "jane@gmail.com")
-	msg1 := seedChatMessage(t, conn, td, chatID)
-	msg2 := seedChatMessage(t, conn, td, chatID)
-
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1, msg2})
-
-	findings := accountIdentityFindings(t, conn, td, policyID)
-	require.Len(t, findings, 1, "session-scoped finding should be emitted once per chat, not per message")
-	assert.Equal(t, "identity.personal_account", findings[0].RuleID.String)
-	assert.Equal(t, "jane@gmail.com", findings[0].Match.String)
-	assert.Contains(t, []uuid.UUID{msg1, msg2}, findings[0].ChatMessageID.UUID)
-}
-
-func TestAnalyzeBatch_AccountIdentityPublishesFindingsToTopic(t *testing.T) {
+func TestAnalyzeBatch_AccountIdentityPublishesAnalysisRequest(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
@@ -214,296 +152,20 @@ func TestAnalyzeBatch_AccountIdentityPublishesFindingsToTopic(t *testing.T) {
 	chatID := seedAccountChat(t, conn, td, "personal", "jane@gmail.com")
 	msg1 := seedChatMessage(t, conn, td, chatID)
 
-	pub, published := capturingFindingsPub(t)
+	pub, published := capturingAccountIdentityPub(t)
 	ab := newAccountIdentityAnalyzeBatch(t, conn, pub)
 	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
 
-	// The batch path has no stream publisher for account_identity, so it must
-	// mirror the finding onto the findings topic itself (the ClickHouse
-	// risk_findings writer consumes it).
 	require.Len(t, *published, 1)
-	finding := (*published)[0]
-	assert.Equal(t, "account_identity", finding.GetSource())
-	assert.Equal(t, "identity.personal_account", finding.GetRuleId())
-	assert.Equal(t, "jane@gmail.com", finding.GetMatch())
-	assert.Equal(t, td.orgID, finding.GetOrganizationId())
-	assert.Equal(t, td.projectID.String(), finding.GetProjectId())
-	assert.Equal(t, policyID.String(), finding.GetRiskPolicyId())
-	assert.Equal(t, policyVersion, finding.GetRiskPolicyVersion())
-	assert.Equal(t, msg1.String(), finding.GetChatMessageId())
-	firstID, err := uuid.Parse(finding.GetId())
-	require.NoError(t, err)
-
-	// Re-analyzing the same message replaces the Postgres row and republishes;
-	// the deterministic finding id must not change, so ClickHouse's
-	// uniqExact(id) reads dedupe the redundant append.
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
-	require.Len(t, *published, 2)
-	assert.Equal(t, firstID.String(), (*published)[1].GetId())
-}
-
-func TestAnalyzeBatch_AccountIdentityDedupesAcrossBatches(t *testing.T) {
-	t.Parallel()
-	conn := cloneDB(t)
-	td := seedTestData(t, conn, true)
-	policyID, policyVersion := seedAccountIdentityPolicy(t, conn, td, nil, nil)
-
-	chatID := seedAccountChat(t, conn, td, "personal", "jane@gmail.com")
-	msg1 := seedChatMessage(t, conn, td, chatID)
-	msg2 := seedChatMessage(t, conn, td, chatID)
-
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
-	require.Len(t, accountIdentityFindings(t, conn, td, policyID), 1)
-
-	// A later batch of the same session must not add a second finding.
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg2})
-	require.Len(t, accountIdentityFindings(t, conn, td, policyID), 1)
-
-	// Re-analyzing the message that carries the finding rewrites it in place
-	// (the writer deletes and re-inserts results for in-batch messages).
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
-	findings := accountIdentityFindings(t, conn, td, policyID)
-	require.Len(t, findings, 1)
-	assert.Equal(t, msg1, findings[0].ChatMessageID.UUID)
-}
-
-func TestAnalyzeBatch_AccountIdentityEnrichesMatchWhenEmailLearnedLater(t *testing.T) {
-	t.Parallel()
-	conn := cloneDB(t)
-	td := seedTestData(t, conn, true)
-	policyID, policyVersion := seedAccountIdentityPolicy(t, conn, td, nil, nil)
-
-	// Account classified personal before its email is known (email rides on
-	// later api_request logs).
-	chatID, externalAccountUUID := seedAccountChatWithAccount(t, conn, td, "personal", "")
-	msg1 := seedChatMessage(t, conn, td, chatID)
-	msg2 := seedChatMessage(t, conn, td, chatID)
-
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
-
-	// First batch flags the personal account with no email yet: generic
-	// description, empty match.
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
-	findings := accountIdentityFindings(t, conn, td, policyID)
-	require.Len(t, findings, 1)
-	assert.Equal(t, "identity.personal_account", findings[0].RuleID.String)
-	assert.Empty(t, findings[0].Match.String)
-	assert.Equal(t, "Session authenticated with a personal AI account.", findings[0].Description.String)
-
-	// The email arrives, then a later batch of the same session runs. Dedupe
-	// drops the re-emit, so the finding recorded on msg1 must be enriched in
-	// place rather than left generic.
-	setAccountEmail(t, conn, td, externalAccountUUID, "jane@gmail.com")
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg2})
-
-	findings = accountIdentityFindings(t, conn, td, policyID)
-	require.Len(t, findings, 1, "enrichment must update in place, not add a second finding")
-	assert.Equal(t, msg1, findings[0].ChatMessageID.UUID)
-	assert.Equal(t, "jane@gmail.com", findings[0].Match.String)
-	assert.Equal(t, `Session authenticated with the personal AI account "jane@gmail.com".`, findings[0].Description.String)
-}
-
-func TestAnalyzeBatch_AccountIdentityEnrichmentFillsMatchOnce(t *testing.T) {
-	t.Parallel()
-	conn := cloneDB(t)
-	td := seedTestData(t, conn, true)
-	policyID, policyVersion := seedAccountIdentityPolicy(t, conn, td, nil, nil)
-
-	chatID, externalAccountUUID := seedAccountChatWithAccount(t, conn, td, "personal", "")
-	msg1 := seedChatMessage(t, conn, td, chatID)
-	msg2 := seedChatMessage(t, conn, td, chatID)
-	msg3 := seedChatMessage(t, conn, td, chatID)
-
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
-
-	// Record the generic (empty-match) finding, then enrich it once the email
-	// is learned.
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
-	setAccountEmail(t, conn, td, externalAccountUUID, "jane@gmail.com")
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg2})
-	require.Equal(t, "jane@gmail.com", accountIdentityFindings(t, conn, td, policyID)[0].Match.String)
-
-	// The account's email is later replaced. Enrichment only fills a still-empty
-	// match, so the already-populated finding must NOT be rewritten — the backfill
-	// is fill-once and idempotent, never churning or clobbering recorded detail.
-	// (Without the empty-match guard this would overwrite with the new value.)
-	setAccountEmail(t, conn, td, externalAccountUUID, "jane.doe@corp.com")
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg3})
-
-	findings := accountIdentityFindings(t, conn, td, policyID)
-	require.Len(t, findings, 1)
-	assert.Equal(t, "jane@gmail.com", findings[0].Match.String, "populated match must not be overwritten")
-	assert.Equal(t, `Session authenticated with the personal AI account "jane@gmail.com".`, findings[0].Description.String)
-}
-
-func TestAnalyzeBatch_AccountIdentityVersionBumpReemits(t *testing.T) {
-	t.Parallel()
-	conn := cloneDB(t)
-	td := seedTestData(t, conn, true)
-	policyID, policyVersion := seedAccountIdentityPolicy(t, conn, td, nil, nil)
-
-	chatID := seedAccountChat(t, conn, td, "personal", "jane@gmail.com")
-	msg1 := seedChatMessage(t, conn, td, chatID)
-	msg2 := seedChatMessage(t, conn, td, chatID)
-
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
-	require.Len(t, accountIdentityFindings(t, conn, td, policyID), 1)
-
-	// Findings dedupe within a policy version; a bumped version re-emits.
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion+1, []uuid.UUID{msg2})
-	require.Len(t, accountIdentityFindings(t, conn, td, policyID), 2)
-}
-
-func TestAnalyzeBatch_AccountIdentityUnapprovedDomainMatrix(t *testing.T) {
-	t.Parallel()
-	conn := cloneDB(t)
-	td := seedTestData(t, conn, true)
-	policyID, policyVersion := seedAccountIdentityPolicy(t, conn, td, []string{"acme.com"}, nil)
-
-	cases := []struct {
-		accountType string
-		email       string
-		wantRules   []string
-	}{
-		{"team", "alice@acme.com", nil},
-		{"team", "DAVE@ACME.COM", nil},
-		{"team", "bob@other.com", []string{"identity.unapproved_domain"}},
-		// Exact-match semantics: subdomains must be listed explicitly.
-		{"team", "carol@mail.acme.com", []string{"identity.unapproved_domain"}},
-		{"personal", "eve@acme.com", []string{"identity.personal_account"}},
-		{"personal", "frank@other.com", []string{"identity.personal_account", "identity.unapproved_domain"}},
-	}
-
-	msgByEmail := make(map[uuid.UUID]string)
-	var messageIDs []uuid.UUID
-	for _, tc := range cases {
-		chatID := seedAccountChat(t, conn, td, tc.accountType, tc.email)
-		msgID := seedChatMessage(t, conn, td, chatID)
-		msgByEmail[msgID] = tc.email
-		messageIDs = append(messageIDs, msgID)
-	}
-
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, messageIDs)
-
-	rulesByEmail := make(map[string][]string)
-	for _, finding := range accountIdentityFindings(t, conn, td, policyID) {
-		email := msgByEmail[finding.ChatMessageID.UUID]
-		rulesByEmail[email] = append(rulesByEmail[email], finding.RuleID.String)
-		assert.Equal(t, email, finding.Match.String)
-	}
-
-	for _, tc := range cases {
-		assert.ElementsMatch(t, tc.wantRules, rulesByEmail[tc.email], "email %s", tc.email)
-	}
-}
-
-func TestAnalyzeBatch_AccountIdentityEmptyDomainListInert(t *testing.T) {
-	t.Parallel()
-	conn := cloneDB(t)
-	td := seedTestData(t, conn, true)
-	policyID, policyVersion := seedAccountIdentityPolicy(t, conn, td, nil, nil)
-
-	// Team account with an arbitrary email: without a configured domain list
-	// the unapproved_domain rule stays inert.
-	chatID := seedAccountChat(t, conn, td, "team", "bob@other.com")
-	msgID := seedChatMessage(t, conn, td, chatID)
-
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msgID})
-
-	require.Empty(t, accountIdentityFindings(t, conn, td, policyID))
-}
-
-func TestAnalyzeBatch_AccountIdentityUnattributedChatEmitsNothing(t *testing.T) {
-	t.Parallel()
-	conn := cloneDB(t)
-	td := seedTestData(t, conn, true)
-	policyID, policyVersion := seedAccountIdentityPolicy(t, conn, td, []string{"acme.com"}, nil)
-
-	// td.chatID has no user_account_id: no identity, no finding.
-	msgID := seedChatMessage(t, conn, td, td.chatID)
-
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msgID})
-
-	require.Empty(t, accountIdentityFindings(t, conn, td, policyID))
-}
-
-func TestAnalyzeBatch_AccountIdentityDisabledRuleFiltered(t *testing.T) {
-	t.Parallel()
-	conn := cloneDB(t)
-	td := seedTestData(t, conn, true)
-	policyID, policyVersion := seedAccountIdentityPolicy(t, conn, td, nil, []string{"identity.personal_account"})
-
-	chatID := seedAccountChat(t, conn, td, "personal", "jane@gmail.com")
-	msgID := seedChatMessage(t, conn, td, chatID)
-
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msgID})
-
-	require.Empty(t, accountIdentityFindings(t, conn, td, policyID))
-}
-
-func TestAnalyzeBatch_AccountIdentityHonorsExclusions(t *testing.T) {
-	t.Parallel()
-	conn := cloneDB(t)
-	td := seedTestData(t, conn, true)
-	policyID, policyVersion := seedAccountIdentityPolicy(t, conn, td, nil, nil)
-
-	// A rule_id exclusion must suppress the session-scoped finding even
-	// though it bypasses message scoping.
-	_, err := riskrepo.New(conn).CreateRiskExclusion(t.Context(), riskrepo.CreateRiskExclusionParams{
-		ProjectID:      td.projectID,
-		OrganizationID: td.orgID,
-		RiskPolicyID:   uuid.NullUUID{UUID: policyID, Valid: true},
-		MatchType:      "rule_id",
-		MatchValue:     "identity.personal_account",
-		RuleIDFilter:   pgtype.Text{},
-		SourceFilter:   pgtype.Text{},
-		Enabled:        true,
-	})
-	require.NoError(t, err)
-
-	chatID := seedAccountChat(t, conn, td, "personal", "jane@gmail.com")
-	msgID := seedChatMessage(t, conn, td, chatID)
-
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msgID})
-
-	require.Empty(t, accountIdentityFindings(t, conn, td, policyID))
-}
-
-func TestAnalyzeBatch_AccountIdentityLateFieldEmitsRemainingRule(t *testing.T) {
-	t.Parallel()
-	conn := cloneDB(t)
-	td := seedTestData(t, conn, true)
-	policyID, policyVersion := seedAccountIdentityPolicy(t, conn, td, []string{"acme.com"}, nil)
-
-	// Identity fields arrive incrementally: the account is classified personal
-	// before its email is known, so batch 1 can only fire the personal rule.
-	chatID, accountUUID := seedAccountChatWithAccount(t, conn, td, "personal", "")
-	msg1 := seedChatMessage(t, conn, td, chatID)
-	msg2 := seedChatMessage(t, conn, td, chatID)
-
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
-	findings := accountIdentityFindings(t, conn, td, policyID)
-	require.Len(t, findings, 1)
-	require.Equal(t, "identity.personal_account", findings[0].RuleID.String)
-
-	// The email lands later (ingest upserts fill fields as batches carry them).
-	// Dedupe is per rule, so the next batch must still emit the domain rule —
-	// without duplicating the personal rule.
-	setAccountEmail(t, conn, td, accountUUID, "jane@gmail.com")
-
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg2})
-	findings = accountIdentityFindings(t, conn, td, policyID)
-	require.Len(t, findings, 2)
-	rules := []string{findings[0].RuleID.String, findings[1].RuleID.String}
-	require.ElementsMatch(t, []string{"identity.personal_account", "identity.unapproved_domain"}, rules)
+	request := (*published)[0]
+	assert.Equal(t, "personal", request.GetAccountType())
+	assert.Equal(t, "jane@gmail.com", request.GetEmail())
+	assert.Equal(t, td.orgID, request.GetOrganizationId())
+	assert.Equal(t, td.projectID.String(), request.GetProjectId())
+	assert.Equal(t, policyID.String(), request.GetRiskPolicyId())
+	assert.Equal(t, policyVersion, request.GetRiskPolicyVersion())
+	assert.Equal(t, chatID.String(), request.GetChatId())
+	assert.Equal(t, msg1.String(), request.GetChatMessageId())
 }
 
 func TestWithApprovedEmailDomains_PreservesPresidioConfig(t *testing.T) {

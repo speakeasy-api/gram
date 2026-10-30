@@ -3,9 +3,12 @@ package authz
 import (
 	"context"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // WorkloadSessionAdmission contains the policy sets a workload session acts
@@ -29,6 +32,10 @@ type WorkloadSessionAdmission struct {
 
 	// Owner is the current owner's live effective policy O.
 	Owner []Grant
+
+	// LegacyAuthCeiling is set when Ceiling predates version 5 and its auth
+	// client ceiling was derived from server access.
+	LegacyAuthCeiling bool
 }
 
 // WorkloadSessionAdmitter supplies application-owned workload admission without
@@ -45,12 +52,57 @@ func (e *Engine) AdmitWorkloadSession(ctx context.Context) (context.Context, err
 	if err != nil {
 		return ctx, err
 	}
+	return withWorkloadSessionAdmission(ctx, admission)
+}
+
+// WorkloadSessionTxAdmitter admits workload sessions on a caller-owned transaction.
+type WorkloadSessionTxAdmitter func(context.Context, pgx.Tx) (WorkloadSessionAdmission, error)
+
+// AdmitWorkloadSessionInTx fails closed without transaction-bound admission.
+// The caller owns a REPEATABLE READ or SERIALIZABLE transaction and its lifecycle.
+// This never falls back to pool-backed admission while the transaction is held.
+func (e *Engine) AdmitWorkloadSessionInTx(ctx context.Context, tx pgx.Tx) (context.Context, error) {
+	if e.admitWorkloadSessionInTx == nil {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	admission, err := e.admitWorkloadSessionInTx(ctx, tx)
+	if err != nil {
+		return ctx, err
+	}
+	return withWorkloadSessionAdmission(ctx, admission)
+}
+
+// withWorkloadSessionAdmission installs a freshly verified, application-owned
+// admission, including all three independent policy sets. Callers must never
+// supply cached or client-controlled admission results.
+func withWorkloadSessionAdmission(ctx context.Context, admission WorkloadSessionAdmission) (context.Context, error) {
 	// An admission naming no agent authorizes nothing. Checked here as well as
 	// in the admitter so a future admitter cannot widen the boundary by
 	// returning a zero value.
 	if admission.AgentPrincipal == "" || admission.OwnerUserID == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
+	principal, err := urn.ParsePrincipal(admission.AgentPrincipal)
+	if err != nil || principal.Type != urn.PrincipalTypeAgent {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	agentID, err := uuid.Parse(principal.ID)
+	if err != nil || agentID == uuid.Nil {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	ctx = context.WithValue(ctx, admittedWorkloadAgentKey{}, agentID)
+	// Record the agent whose policy was admitted, so every later use reads this
+	// one value instead of resolving the assignment again.
+	ctx = contextvalues.WithWorkloadAgent(ctx, principal)
 	ctx = contextvalues.WithPrincipalCredentialOwner(ctx, admission.OwnerUserID)
-	return admittedPoliciesToContext(ctx, admission.Ceiling, admission.Agent, admission.Owner), nil
+	return admittedPoliciesToContext(ctx, RepresentedUserPolicy{UserID: "", Policy: nil}, admission.LegacyAuthCeiling, admission.Ceiling, admission.Agent, admission.Owner), nil
 }
+
+// AdmittedWorkloadAgent returns the agent resolved by live workload admission,
+// not an identity inferred from the credential owner or caller input.
+func AdmittedWorkloadAgent(ctx context.Context) (uuid.UUID, bool) {
+	id, ok := ctx.Value(admittedWorkloadAgentKey{}).(uuid.UUID)
+	return id, ok && id != uuid.Nil
+}
+
+type admittedWorkloadAgentKey struct{}

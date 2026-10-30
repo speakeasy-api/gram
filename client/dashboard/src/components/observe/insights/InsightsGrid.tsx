@@ -13,11 +13,20 @@ import {
   RankedList,
   type RankedRow,
 } from "@/components/observe/insights/RankedList";
+import { useObserveLogsLink } from "@/components/observe/observeDeepLink";
 import {
-  useObserveLogsLink,
-  type ObserveDeepLinkScope,
-} from "@/components/observe/observeDeepLink";
+  SKILL_LOAD_CHANNEL_LABELS,
+  splitLoads,
+  splitSkillLoads,
+  type SkillLoadChannel,
+} from "@/components/observe/skillLoadChannel";
 import { buildToolUsageTimeSeries } from "@/components/observe/toolUsageTimeSeriesChartData";
+import { cn } from "@/lib/utils";
+import { Link } from "react-router";
+import { targetScope } from "./targetScope";
+import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
+import { actingPrincipalText } from "@/components/ui/ActingPrincipal/text";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import type { ToolUsageClientSummary } from "@gram/client/models/components/toolusageclientsummary.js";
 import type { ToolUsageTargetSummary } from "@gram/client/models/components/toolusagetargetsummary.js";
@@ -29,6 +38,32 @@ import { useEffect, useMemo, useState } from "react";
 
 type SectionState = { pending: boolean; error: boolean };
 
+/**
+ * Skill load counts split by channel. Present only where skills are served over
+ * MCP; without it the skill card stays a single total, as it was before skills
+ * could arrive any other way.
+ *
+ * The KPI reads skill-scoped totals, not the target ranking: that ranking is
+ * capped across every target type, so busy servers can push skills out of it.
+ * `hookBySkill` is the hook-only ranking; `complete` says it was not cut off,
+ * so a skill missing from it had no hook loads.
+ */
+export type SkillChannelCounts = {
+  total: SectionState & { value: number };
+  hookTotal: SectionState & { value: number };
+  hookBySkill: SectionState & {
+    counts: ReadonlyMap<string, number>;
+    complete: boolean;
+  };
+};
+
+// The MCP part is the stronger fill: it is the served path these cards exist to
+// show, and the two parts must differ in lightness, not hue alone.
+const SKILL_CHANNEL_OPACITY: Record<SkillLoadChannel, number> = {
+  mcp: 0.35,
+  hook: 0.12,
+};
+
 const SERVER_TARGET_TYPES = new Set([
   "hosted_mcp_server",
   "tunneled_mcp_server",
@@ -38,24 +73,6 @@ const SERVER_TARGET_TYPES = new Set([
 
 function percent(rate: number): string {
   return `${(rate * 100).toFixed(1)}%`;
-}
-
-function targetScope(target: ToolUsageTargetSummary): ObserveDeepLinkScope {
-  switch (target.targetType) {
-    case "hosted_mcp_server":
-      return { target: { type: "hosted", id: target.targetId } };
-    case "meta_mcp_server":
-      return { target: { type: "gateway", id: target.targetId } };
-    case "shadow_mcp_server":
-      return { target: { type: "shadow", id: target.targetId } };
-    case "tunneled_mcp_server":
-      return { target: { type: "shadow", id: target.targetId } };
-    case "skill":
-      return { targetTypes: ["skill"] };
-    case "local_tool":
-    default:
-      return { targetTypes: ["local_tool"] };
-  }
 }
 
 /**
@@ -78,6 +95,7 @@ export function InsightsGrid({
   to,
   serverNameMappings,
   status,
+  skillChannels,
   onRangeSelect,
 }: {
   totals: ToolUsageTotals | undefined;
@@ -97,6 +115,7 @@ export function InsightsGrid({
     targetToolBreakdown: SectionState;
     targetTimeSeries: SectionState;
   };
+  skillChannels?: SkillChannelCounts;
   onRangeSelect?: (from: Date, to: Date) => void;
 }): JSX.Element {
   const logsLink = useObserveLogsLink();
@@ -218,6 +237,23 @@ export function InsightsGrid({
       .map(([, count]) => count);
   }, [timeSeries]);
 
+  // Agent names are not on a usage row — it carries "agent:<uuid>" and
+  // nothing else — so the inventory is read once for the card rather than per
+  // row. Asked for only when a row on screen actually names an agent.
+  const agents = useReadableAgents(
+    users.some((user) => user.userKind === "agent_id"),
+  );
+  const agentsById = useMemo(
+    () =>
+      new Map(
+        (agents.isError ? [] : (agents.data ?? [])).map((agent) => [
+          agent.id,
+          agent,
+        ]),
+      ),
+    [agents.data, agents.isError],
+  );
+
   const servers = targets.filter((target) =>
     SERVER_TARGET_TYPES.has(target.targetType),
   );
@@ -247,12 +283,45 @@ export function InsightsGrid({
       }),
     }));
 
-  const skillRows: RankedRow[] = skills.map((target) => ({
-    id: `skill:${target.targetId}`,
-    label: target.targetLabel,
-    value: Number(target.eventCount),
-    href: logsLink({ targetTypes: ["skill"], toolName: target.targetId }),
-  }));
+  // The split is a refinement of the totals: until the hook-only reads land,
+  // or if they fail, the cards fall back to the single total rather than
+  // blanking what the primary reads already answered.
+  const sectionReady = (section: SectionState) =>
+    !section.pending && !section.error;
+  const skillTotalSplit =
+    skillChannels &&
+    sectionReady(skillChannels.total) &&
+    sectionReady(skillChannels.hookTotal)
+      ? splitLoads(skillChannels.total.value, skillChannels.hookTotal.value)
+      : undefined;
+  const skillSplitBySkill =
+    skillChannels && sectionReady(skillChannels.hookBySkill)
+      ? splitSkillLoads(
+          skills.map((target) => ({
+            targetId: target.targetId,
+            eventCount: Number(target.eventCount),
+          })),
+          skillChannels.hookBySkill.counts,
+          skillChannels.hookBySkill.complete,
+        )
+      : undefined;
+
+  const skillRows: RankedRow[] = skills.map((target) => {
+    const split = skillSplitBySkill?.get(target.targetId);
+    return {
+      id: `skill:${target.targetId}`,
+      label: target.targetLabel,
+      value: Number(target.eventCount),
+      href: logsLink({ targetTypes: ["skill"], toolName: target.targetId }),
+      segments: split
+        ? (["mcp", "hook"] as const).map((channel) => ({
+            value: split[channel],
+            color: cardColors.skills,
+            opacity: SKILL_CHANNEL_OPACITY[channel],
+          }))
+        : undefined,
+    };
+  });
 
   const clientRows: RankedRow[] = clients.map((client) => ({
     id: `client:${client.clientKey}`,
@@ -261,14 +330,43 @@ export function InsightsGrid({
     href: logsLink({ clientKey: client.clientKey }),
   }));
 
-  const userRows: RankedRow[] = users.map((user) => ({
-    id: `user:${user.userKey}`,
-    label: user.userLabel,
-    value: Number(user.eventCount),
-    href: logsLink({
-      userEmail: user.userKind === "email" ? user.userKey : undefined,
-    }),
-  }));
+  const userRows: RankedRow[] = users.map((user) => {
+    // An agent's label arrives as the raw string "agent:<uuid>", so the name
+    // comes from the inventory read above and the row is drawn by the shared
+    // renderer — the same face and the same wording every other surface uses,
+    // instead of this card's own "Agent 1a2b3c4d".
+    const agent =
+      user.userKind === "agent_id" ? agentsById.get(user.userKey) : undefined;
+    return {
+      id: `user:${user.userKey}`,
+      label:
+        user.userKind === "agent_id"
+          ? actingPrincipalText({ id: user.userKey, name: agent?.name })
+          : user.userLabel,
+      ...(user.userKind === "agent_id"
+        ? {
+            content: (
+              <ActingPrincipal
+                agent={{ id: user.userKey, name: agent?.name }}
+                // Linked only once the agent resolved: an id read off a
+                // telemetry row is not proof the reader may open that agent.
+                // No authorizer either — telemetry attributes a call to one
+                // principal, so naming a person would invent a delegation.
+                linked={Boolean(agent)}
+              />
+            ),
+          }
+        : {}),
+      value: Number(user.eventCount),
+      // Only an email narrows the logs. Linking an agent row to an
+      // unfiltered page looked like a drill-down that silently did nothing,
+      // so it does not link at all.
+      href:
+        user.userKind === "email"
+          ? logsLink({ userEmail: user.userKey })
+          : undefined,
+    };
+  });
 
   // Tools are ranked across every target: "which tool is busiest" is a question
   // about the catalog, not about one server's slice of it.
@@ -292,7 +390,12 @@ export function InsightsGrid({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div
+        className={cn(
+          "grid grid-cols-2 gap-4",
+          skillChannels ? "lg:grid-cols-5" : "lg:grid-cols-4",
+        )}
+      >
         <InsightCard
           title="Tool calls"
           href={logsLink()}
@@ -334,8 +437,11 @@ export function InsightsGrid({
           />
         </InsightCard>
 
+        {/* "Callers", not "people": `uniqueUsers` counts distinct calling
+            identities, and an agent is one of them. The old title reported
+            a machine as a member of staff. */}
         <InsightCard
-          title="People"
+          title="Callers"
           href={logsLink()}
           loading={status.totals.pending}
           error={status.totals.error}
@@ -343,9 +449,28 @@ export function InsightsGrid({
           <MetricSpark
             value={(Number(totals?.uniqueUsers) || 0).toLocaleString()}
             series={[]}
-            caption="active in this window"
+            caption="people and agents active in this window"
           />
         </InsightCard>
+
+        {skillChannels && (
+          <InsightCard
+            title="Skill loads"
+            href={logsLink({ targetTypes: ["skill"] })}
+            loading={skillChannels.total.pending}
+            error={skillChannels.total.error}
+          >
+            <MetricSpark
+              value={skillChannels.total.value.toLocaleString()}
+              series={[]}
+              caption={
+                skillTotalSplit
+                  ? `${skillTotalSplit.mcp.toLocaleString()} over MCP · ${skillTotalSplit.hook.toLocaleString()} from hooks`
+                  : undefined
+              }
+            />
+          </InsightCard>
+        )}
       </div>
 
       <InsightCard
@@ -420,6 +545,44 @@ export function InsightsGrid({
           loading={status.targets.pending}
           error={status.targets.error}
         >
+          {skillRows.some((row) => row.segments) && (
+            <div className="text-muted-foreground -mt-1 flex items-center gap-3 text-xs">
+              {(["mcp", "hook"] as const).map((channel) => {
+                const swatch = (
+                  <span
+                    aria-hidden
+                    className="size-2.5"
+                    style={{
+                      backgroundColor: cardColors.skills,
+                      opacity: SKILL_CHANNEL_OPACITY[channel] * 2,
+                    }}
+                  />
+                );
+                const href = logsLink({
+                  targetTypes: ["skill"],
+                  loadedVia: channel,
+                });
+                return href ? (
+                  <Link
+                    key={channel}
+                    to={href}
+                    className="hover:text-foreground inline-flex items-center gap-1 no-underline hover:underline"
+                  >
+                    {swatch}
+                    {SKILL_LOAD_CHANNEL_LABELS[channel]}
+                  </Link>
+                ) : (
+                  <span
+                    key={channel}
+                    className="inline-flex items-center gap-1"
+                  >
+                    {swatch}
+                    {SKILL_LOAD_CHANNEL_LABELS[channel]}
+                  </span>
+                );
+              })}
+            </div>
+          )}
           <RankedList
             color={cardColors.skills}
             rows={skillRows}
@@ -428,7 +591,9 @@ export function InsightsGrid({
         </InsightCard>
 
         <InsightCard
-          title="Busiest people"
+          // "Callers", not "people": an agent ranks here too, and the card
+          // counted it as a person because the title said so.
+          title="Busiest callers"
           href={logsLink()}
           loading={status.users.pending}
           error={status.users.error}

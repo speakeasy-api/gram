@@ -22,6 +22,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -372,7 +373,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 		}
 		subject := sess.SubjectUrn
 		// A synthetic first-party state: the probe reads only the subject, the id it keys its session on, and the endpoint.
-		state := AuthnChallengeState{FederatedBinding: nil, DelegationRetryUsed: false,
+		state := AuthnChallengeState{WorkloadReconnect: nil, ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
 			Browser:                  nil,
 			Federation:               nil,
 			ID:                       "keepalive:" + sess.ID.String(),
@@ -393,6 +394,8 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			Subject:                  &subject,
 			CreatedAt:                now,
 			FirstParty:               true,
+			BindingRefreshAttemptID:  "",
+			ReauthenticateClientID:   uuid.Nil,
 			AutoConnectDone:          false,
 			FocusServer:              "",
 		}
@@ -445,7 +448,7 @@ func (s *Service) placeRemoteSessionRecheck(ctx context.Context, logger *slog.Lo
 		IsPublic:        nil,
 		ToolsetID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		McpSlug:         placement.Slug,
-		RouteBase:       "mcp",
+		RouteBase:       mcproute.MCP,
 
 		SharedAuthorizationServer: false,
 		UseAuthenticationHost:     nil,
@@ -453,7 +456,7 @@ func (s *Service) placeRemoteSessionRecheck(ctx context.Context, logger *slog.Lo
 	if placement.OrganizationGateway {
 		// Addressed by organization slug; the synthetic id is what the
 		// resolver checks the ref against.
-		ref.RouteBase = organizationGatewayRouteBase
+		ref.RouteBase = mcproute.OrganizationGateway
 		ref.MetaMcpServerID = uuid.NullUUID{UUID: organizationGatewayID(organizationID), Valid: true}
 	}
 	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, ref)

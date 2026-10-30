@@ -22,16 +22,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 type agentConsentFixture struct {
-	toolset toolsetsrepo.Toolset
+	toolset hostedToolset
 	client  usersessionsrepo.UserSessionClient
 	stateID string
 	csrf    string
@@ -66,7 +66,7 @@ func newAgentConsentFixture(t *testing.T, ctx context.Context, ti *testInstance)
 		AgentAuthorizationTarget: &target,
 		Endpoint: mcp.EndpointRef{
 			McpSlug:   toolset.McpSlug.String,
-			RouteBase: "mcp",
+			RouteBase: mcproute.MCP,
 		},
 		ClientID:            client.ClientID,
 		RedirectURI:         client.RedirectUris[0],

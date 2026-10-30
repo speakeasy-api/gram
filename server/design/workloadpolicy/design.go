@@ -18,7 +18,8 @@ import (
 var _ = Service("workloadIdentities", func() {
 	Description("Configure which workloads an organization recognises as its own: the issuers it trusts, the subjects those issuers may present, and the agent each admitted workload inherits its policy from.")
 	// The trust policy belongs to the organization, so a dashboard session
-	// needs no project. An API key is issued to a project and keeps naming one.
+	// needs no project. An explicit project header is validated by the service.
+	// An API key is issued to a project and keeps naming one.
 	Security(security.Session)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
@@ -50,7 +51,7 @@ var _ = Service("workloadIdentities", func() {
 	})
 
 	Method("listPlatforms", func() {
-		Description("List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.")
+		Description("List the platforms the catalog offers to trust without looking anything up, each with the policy that trusting it writes: the issuer and signing keys it is recognised by, the values the operator supplies, and the access rule it produces. How the setup is explained belongs to the dashboard. The same for every organization. Requires workload:read.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -147,7 +148,7 @@ var _ = Service("workloadIdentities", func() {
 	})
 
 	Method("updateIssuer", func() {
-		Description("Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.")
+		Description("Edit a trusted issuer's name, description, tags, JWKS URI, or assertion reuse setting. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.")
 
 		Payload(func() {
 			Extend(UpdateWorkloadIssuerForm)
@@ -278,6 +279,88 @@ var _ = Service("workloadIdentities", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "withdrawSubject")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WithdrawWorkloadSubject"}`)
 	})
+
+	Method("createDeviceJoinToken", func() {
+		Description("Create a single-use join token that enrolls one headless box with no platform identity as a workload assigned to an agent. The token is returned once and only its hash is kept. Only a person can create one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the agent or agent:authorize on it, since an enrolled box acts under the agent's policy.")
+
+		Payload(func() {
+			Attribute("agent_id", String, "The agent the enrolled device inherits its policy from.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("expires_in_seconds", Int, "How long the token stays redeemable. Defaults to one hour.", func() {
+				Minimum(60)
+				Maximum(86400)
+				Default(3600)
+			})
+			Required("agent_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(WorkloadDeviceJoinToken)
+
+		HTTP(func() {
+			POST("/rpc/workloadIdentities.createDeviceJoinToken")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createWorkloadDeviceJoinToken")
+		Meta("openapi:extension:x-speakeasy-name-override", "createDeviceJoinToken")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateWorkloadDeviceJoinToken"}`)
+	})
+
+	Method("registerDevice", func() {
+		Description("Enroll a device with its public key, redeeming a join token. No session or API key: the single-use join token is the credential, and an unknown, expired, or already redeemed token returns 401. A key already registered to another device returns 409, and an agent whose policy no longer grants org:device_agent_sync returns a failed precondition without spending the token. In one transaction the device's key is registered, the device is admitted under the organization's Speakeasy device issuer, and it is assigned the token's agent.")
+
+		NoSecurity()
+
+		Payload(func() {
+			Attribute("join_token", String, "The join token from createDeviceJoinToken.", func() {
+				MinLength(1)
+				MaxLength(512)
+			})
+			Attribute("public_jwk", MapOf(String, Any), "The device's public signing key as a JWK: EC P-256 (ES256) or OKP Ed25519 (EdDSA). Private key material is refused.")
+			Attribute("hostname", String, "The device's hostname, shown to administrators. Self-reported.", func() {
+				MaxLength(255)
+			})
+			Attribute("serial", String, "The device's serial number, shown to administrators. Self-reported.", func() {
+				MaxLength(255)
+			})
+			Required("join_token", "public_jwk")
+		})
+
+		Result(WorkloadDeviceRegistration)
+
+		HTTP(func() {
+			POST("/rpc/workloadIdentities.registerDevice")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "registerWorkloadDevice")
+		Meta("openapi:extension:x-speakeasy-name-override", "registerDevice")
+	})
+})
+
+var WorkloadDeviceJoinToken = Type("WorkloadDeviceJoinToken", func() {
+	Attribute("token", String, "The join token. Shown once; only its hash is stored.")
+	Attribute("expires_at", String, "When the token stops being redeemable.", func() {
+		Format(FormatDateTime)
+	})
+	Required("token", "expires_at")
+})
+
+var WorkloadDeviceRegistration = Type("WorkloadDeviceRegistration", func() {
+	Attribute("device_subject", String, "The device's workload subject, device:<uuid>. Its assertions carry this as sub.")
+	Attribute("issuer", String, "The issuer its assertions carry as iss.")
+	Attribute("agent_id", String, "The agent the device inherits its policy from.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("organization_id", String, "The organization the device enrolled in.")
+	Required("device_subject", "issuer", "agent_id", "organization_id")
 })
 
 var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
@@ -298,10 +381,11 @@ var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
 	Attribute("jwks_uri", String, "Where the issuer publishes the keys its assertions are signed with. Must be an https URL on a fully qualified domain name.", func() {
 		Format(FormatURI)
 	})
+	Attribute("allow_assertion_reuse", Boolean, "Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Defaults to false. Tokens without replay identifiers retain existing exact-token compatibility.")
 	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Checked when a wildcard rule is admitted and again on every lookup, so clearing it makes wildcard rules already written inert immediately.")
 	Attribute("description", String, "What the platform is and what runs on it, in the operator's words. Trimmed on write; blank is stored as none. At most 500 characters after trimming.")
 	Attribute("tags", ArrayOf(String), "Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.")
-	Attribute("project_scoped", Boolean, "Register the issuer for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.", func() {
+	Attribute("project_scoped", Boolean, "Register the issuer for the selected project alone rather than the whole organization. Requires an explicitly selected project via the Gram-Project header or a project-bound API key. Dashboard sessions require access to that project. Defaults to false.", func() {
 		Default(false)
 	})
 
@@ -328,6 +412,8 @@ var UpdateWorkloadIssuerForm = Type("UpdateWorkloadIssuerForm", func() {
 		Meta("struct:tag:json", "tags,omitzero")
 	})
 
+	Attribute("allow_assertion_reuse", Boolean, "Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Omit to preserve the current setting; false disables this opt-in. Tokens without replay identifiers retain existing exact-token compatibility.")
+
 	Required("id")
 })
 
@@ -349,7 +435,7 @@ var AdmitWorkloadSubjectForm = Type("AdmitWorkloadSubjectForm", func() {
 	Attribute("agent_id", String, "The agent whose policy the admitted workload inherits.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("project_scoped", Boolean, "Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.", func() {
+	Attribute("project_scoped", Boolean, "Admit the subject for the selected project alone rather than the whole organization. Requires an explicitly selected project via the Gram-Project header or a project-bound API key. Dashboard sessions require access to that project. Defaults to false.", func() {
 		Default(false)
 	})
 
@@ -389,6 +475,7 @@ var WorkloadIssuer = Type("WorkloadIssuer", func() {
 	Attribute("issuer", String, "The issuer identifier the assertion's iss claim must carry.")
 	Attribute("jwks_uri", String, "Where the issuer publishes its signing keys.")
 	Attribute("description", String, "What the platform is and what runs on it. Empty rather than absent where none is set.")
+	Attribute("allow_assertion_reuse", Boolean, "Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Defaults to false. Tokens without replay identifiers retain existing exact-token compatibility.")
 	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule.")
 	Attribute("tags", ArrayOf(String), "Free-form labels for grouping and filtering trusted platforms. Empty rather than absent where none are set.")
 	Attribute("created_at", String, func() {
@@ -398,7 +485,7 @@ var WorkloadIssuer = Type("WorkloadIssuer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "organization_id", "project_id", "name", "issuer", "jwks_uri", "description", "allow_wildcard_admission", "tags", "created_at", "updated_at")
+	Required("id", "organization_id", "project_id", "name", "issuer", "jwks_uri", "description", "allow_wildcard_admission", "allow_assertion_reuse", "tags", "created_at", "updated_at")
 })
 
 var WorkloadAdmission = Type("WorkloadAdmission", func() {
@@ -482,42 +569,8 @@ var WorkloadPlatformSubject = Type("WorkloadPlatformSubject", func() {
 	Required("template", "wildcard")
 })
 
-var WorkloadPlatformBlock = Type("WorkloadPlatformBlock", func() {
-	Description("One piece of a guided setup step. Which fields are set depends on type; the rest are empty.")
-
-	Attribute("type", String, "The kind of content.", func() {
-		Enum("text", "image", "link", "field", "subject_rule", "agent_picker", "tags", "computed_status", "computed", "checklist_item")
-	})
-	Attribute("markdown", String, "A text block's Markdown, or what a checklist item without a value asks the operator to do. Raw HTML in it must not be rendered.")
-	Attribute("src", String, "An image's path on the dashboard's origin.")
-	Attribute("alt", String, "An image's alternative text.")
-	Attribute("caption", String, "Shown under an image.")
-	Attribute("href", String, "A link's https target.")
-	Attribute("label", String, "A link's or computed value's label, or the console field or control a checklist item names.")
-	Attribute("variable", String, "The variable key a field collects.")
-	Attribute("value", String, "The value a computed block or checklist item shows.", func() {
-		Enum("", "token_endpoint", "issuer_url", "mcp_host")
-	})
-	Attribute("help", String, "Shown under a computed value or checklist item.")
-
-	Required("type", "markdown", "src", "alt", "caption", "href", "label", "variable", "value", "help")
-})
-
-var WorkloadPlatformStep = Type("WorkloadPlatformStep", func() {
-	Description("One screen of a guided setup.")
-
-	Attribute("id", String, "Stable within the platform; used in the dashboard URL.")
-	Attribute("title", String, "Heads the step.")
-	Attribute("phase", String, "collect steps gather values, the create step writes the rows, connect steps describe the platform's side.", func() {
-		Enum("collect", "create", "connect")
-	})
-	Attribute("blocks", ArrayOf(WorkloadPlatformBlock), "Rendered in order.")
-
-	Required("id", "title", "phase", "blocks")
-})
-
 var WorkloadPlatform = Type("WorkloadPlatform", func() {
-	Description("A platform the catalog offers to trust, with what the operator supplies and the guided setup that connects it.")
+	Description("A platform the catalog offers to trust, with what the operator supplies to connect it. How the setup is explained belongs to the dashboard, not to this policy.")
 
 	Attribute("key", String, "Identifies the entry permanently.")
 	Attribute("display_name", String, "What the operator sees.")
@@ -528,9 +581,8 @@ var WorkloadPlatform = Type("WorkloadPlatform", func() {
 	Attribute("jwks_uri", WorkloadPlatformConstant, "Where it publishes its signing keys.")
 	Attribute("variables", ArrayOf(WorkloadPlatformVariable), "What the operator supplies.")
 	Attribute("subject", WorkloadPlatformSubject, "The access rule it produces.")
-	Attribute("steps", ArrayOf(WorkloadPlatformStep), "The guided setup. Empty for a platform without one, which is listed as coming soon and cannot be opened.")
 
-	Required("key", "display_name", "description", "icon", "enabled", "issuer", "jwks_uri", "variables", "subject", "steps")
+	Required("key", "display_name", "description", "icon", "enabled", "issuer", "jwks_uri", "variables", "subject")
 })
 
 var WorkloadPlatformCatalog = Type("WorkloadPlatformCatalog", func() {
