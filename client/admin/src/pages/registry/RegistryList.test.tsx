@@ -57,7 +57,8 @@ it("bounds pages, sends search and publication filters, resets cursor and shows 
         );
       }),
   );
-  await renderWithApp(<RegistryList />);
+  const { router } = await renderWithApp(<RegistryList />);
+  const replaceHistory = vi.spyOn(router.history, "replace");
   expect(
     screen.getByRole("heading", { name: "MCP Registry", level: 1 }),
   ).toBeTruthy();
@@ -79,6 +80,8 @@ it("bounds pages, sends search and publication filters, resets cursor and shows 
     ),
   );
   expect(screen.getByText("Page 2")).toBeTruthy();
+  expect(replaceHistory).toHaveBeenCalled();
+  replaceHistory.mockRestore();
   await waitFor(() =>
     expect(
       (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)

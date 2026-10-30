@@ -65,6 +65,7 @@ export function RegistryList(): JSX.Element {
   const setCursors = (next: string[]): void => {
     void navigate({
       to: ".",
+      replace: true,
       search: (previous) => ({
         ...previous,
         cursors: next.length ? next : undefined,
