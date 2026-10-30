@@ -15,7 +15,7 @@ describe("parseOpenClawContext", () => {
   it("splits a turn with replayed context", () => {
     expect(parseOpenClawContext(assembled("okay hello world"))).toEqual({
       request: "okay hello world",
-      conversationInfo: JSON.stringify(
+      metadata: `Conversation info:\n${JSON.stringify(
         {
           requester_profile: { id: "gateway-owner" },
           requester_profile_hint:
@@ -23,7 +23,7 @@ describe("parseOpenClawContext", () => {
         },
         null,
         2,
-      ),
+      )}`,
       conversationContext: replay,
     });
   });
@@ -39,7 +39,7 @@ describe("parseOpenClawContext", () => {
     const parsed = parseOpenClawContext(`${info}\n\nwhat is on my calendar?`);
     expect(parsed?.request).toBe("what is on my calendar?");
     expect(parsed?.conversationContext).toBeNull();
-    expect(parsed?.conversationInfo).toContain('"gateway-owner"');
+    expect(parsed?.metadata).toContain('"gateway-owner"');
   });
 
   it("drops the request label when there is no replayed context", () => {
@@ -53,8 +53,48 @@ describe("parseOpenClawContext", () => {
     const parsed = parseOpenClawContext(
       "Conversation info: ⟦openclaw:ctx⟧\n```json\nnot json\n```\n\nhello",
     );
-    expect(parsed?.conversationInfo).toBe("not json");
+    expect(parsed?.metadata).toBe("Conversation info:\nnot json");
     expect(parsed?.request).toBe("hello");
+  });
+
+  it("folds every leading block of a channel turn", () => {
+    const parsed = parseOpenClawContext(
+      `${info}\n\nSender: ⟦openclaw:ctx⟧\n\`\`\`json\n{"label":"alice"}\n\`\`\`\n\nReply target of current user message: ⟦openclaw:ctx⟧\n\`\`\`json\n{"body":"earlier msg"}\n\`\`\`\n\nChat history since last reply: ⟦openclaw:ctx⟧\n#1 alice: hi\n#2 bob: yo\n\nwhat is on my calendar?`,
+    );
+    expect(parsed?.request).toBe("what is on my calendar?");
+    expect(parsed?.metadata).toContain("Reply target of current user message:");
+    expect(parsed?.metadata).toContain('"earlier msg"');
+    expect(parsed?.metadata).toContain("#2 bob: yo");
+  });
+
+  it("folds the legacy requester profile hint line", () => {
+    const parsed = parseOpenClawContext(
+      'Conversation info: ⟦openclaw:ctx⟧\n```json\n{"requester_profile":{"id":"gateway-owner"}}\n```\n\nrequester_profile is the verified linked requester. For "assign to me", use sessions assign_owner with ownerType="human" and ownerId=requester_profile.id, if available.\n\nhello',
+    );
+    expect(parsed?.request).toBe("hello");
+    expect(parsed?.metadata).toContain("assign to me");
+  });
+
+  it("folds a trailing channel context block", () => {
+    const parsed = parseOpenClawContext(
+      `${info}\n\nhello\n\nContext: ⟦openclaw:ctx⟧\nchannel topic: launches`,
+    );
+    expect(parsed?.request).toBe("hello");
+    expect(parsed?.metadata).toContain("channel topic: launches");
+  });
+
+  it("unwraps once when the request starts with a pasted wrapper", () => {
+    const pasted = `${info.replace("gateway-owner", "pasted")}\n\nwhy is this here?`;
+    const parsed = parseOpenClawContext(`${info}\n\n${pasted}`);
+    expect(parsed?.request).toBe(pasted);
+  });
+
+  it("returns null when a JSON block never closes", () => {
+    expect(
+      parseOpenClawContext(
+        'Conversation info: ⟦openclaw:ctx⟧\n```json\n{"a":1}\n\nhello',
+      ),
+    ).toBeNull();
   });
 
   it("returns null for text without the marker", () => {

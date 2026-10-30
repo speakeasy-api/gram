@@ -461,7 +461,7 @@ function UserMessageRow({
   if (openClaw) {
     envelope = [
       harnessEnvelope,
-      openClaw.conversationInfo,
+      openClaw.metadata,
       openClaw.conversationContext,
     ]
       .filter(Boolean)
