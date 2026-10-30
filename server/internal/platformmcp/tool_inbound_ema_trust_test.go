@@ -823,6 +823,27 @@ func TestInboundEMATrustGetMarksUnreadableProviderUnavailable(t *testing.T) {
 	require.Contains(t, output.NextStep, untrustInboundEMAProviderToolName)
 }
 
+func TestInboundEMATrustGetUnreadableFederatedProviderPointsToDashboard(t *testing.T) {
+	t.Parallel()
+	f := newInboundEMAFixture(t, 1)
+	f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID = new(uuid.NewString())
+	f.users.issuers[f.issuerID].TrustedRemoteSessionClientID = new(uuid.NewString())
+	f.remote.getErr = errors.New("read failed")
+
+	output, err := f.service.Get(t.Context(), f.principal)
+	require.NoError(t, err)
+	require.Len(t, output.Issuers, 1)
+	require.True(t, output.Issuers[0].TrustedIdentityProviderUnavailable)
+	require.True(t, output.Issuers[0].FederatedBrowserSignIn)
+	require.NotContains(t, output.NextStep, untrustInboundEMAProviderToolName)
+	require.Contains(t, output.NextStep, "dashboard")
+
+	_, err = f.service.Untrust(t.Context(), f.principal, UntrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID})
+	var refusal *InboundEMATrustRefusalError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, inboundEMARefusalBrowserSignIn, refusal.Code)
+}
+
 func TestInboundEMAUntrustRemovesTrustWhenProviderIsUnreadable(t *testing.T) {
 	t.Parallel()
 	f := newInboundEMAFixture(t, 1)
