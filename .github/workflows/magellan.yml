@@ -1,5 +1,14 @@
-# Magellan: a nightly agent that explores the dashboard and files the bugs it
-# can prove as Linear Triage issues. See e2e/magellan/README.md.
+# Magellan: a nightly agent that explores the production dashboard as a bot
+# user in a dedicated integration org, and files the bugs it can prove as
+# Linear Triage issues. See e2e/magellan/README.md.
+#
+# The repo is public, so this workflow uploads no artifacts and logs no
+# findings: screenshots and detail go to Linear only.
+#
+# Setup, in the `magellan` environment:
+# - vars:    MAGELLAN_SITE_URL (e.g. https://app.speakeasy.com), MAGELLAN_ORG
+# - secrets: MAGELLAN_SESSION (the bot's `gram_session`), ANTHROPIC_API_KEY,
+#            MAGELLAN_LINEAR_API_KEY
 name: Magellan
 
 on:
@@ -13,24 +22,47 @@ on:
         type: boolean
         default: true
   schedule:
-    # Weeknights, after the day's merges.
+    # Explore on weeknights, after the day's merges.
     - cron: "0 3 * * 2-6"
+    # Keep the bot's session alive. It expires after 72h without use, and
+    # the weekend gap alone is about that long.
+    - cron: "0 15 * * *"
 
 permissions:
   contents: read
 
 concurrency:
-  group: magellan
+  group: magellan-${{ github.event.schedule || 'dispatch' }}
   cancel-in-progress: false
 
 jobs:
-  magellan:
-    name: magellan
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 90
-    env:
-      GOMAXPROCS: 8
-      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
+  keepalive:
+    name: keepalive
+    if: github.event.schedule == '0 15 * * *'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    environment: magellan
+    timeout-minutes: 5
+    steps:
+      # Any authenticated call slides the session's 72h expiry. A failure
+      # here means the session is gone and someone has to capture a new one.
+      - name: Refresh the bot session
+        env:
+          SITE_URL: ${{ vars.MAGELLAN_SITE_URL }}
+          SESSION: ${{ secrets.MAGELLAN_SESSION }}
+        run: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Gram-Session: $SESSION" "${SITE_URL%/}/rpc/auth.info")
+          if [ "$status" != 200 ]; then
+            echo "::error::The Magellan bot session is no longer valid (auth.info returned $status). Capture a new one; see e2e/magellan/README.md."
+            exit 1
+          fi
+
+  explore:
+    name: explore
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 3 * * 2-6'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    environment: magellan
+    timeout-minutes: 75
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
@@ -46,24 +78,8 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
-      - name: Restore Go module cache
-        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
-
-      # Same answers as wake-stack-e2e.yml: zero must not prompt on a runner.
-      - name: Answer zero's questions before it asks them
-        run: |
-          cat > mise.local.toml <<'TOML'
-          [env]
-          CLICKHOUSE_MIGRATION_ENGINE = "golang-migrate"
-          TOML
-
-      - name: Give the seed someone to be
-        run: |
-          git config user.email "magellan@example.com"
-          git config user.name "Magellan"
-
-      - name: Boot the stack
-        run: ./zero --agent
+      - name: Install the browser
+        run: mise run playwright:install-browser
 
       - name: Install Claude Code
         run: curl -fsSL https://claude.ai/install.sh | bash
@@ -71,6 +87,9 @@ jobs:
       - name: Explore
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MAGELLAN_SITE_URL: ${{ vars.MAGELLAN_SITE_URL }}
+          MAGELLAN_ORG: ${{ vars.MAGELLAN_ORG }}
+          MAGELLAN_SESSION: ${{ secrets.MAGELLAN_SESSION }}
           SINCE: ${{ inputs.since || '24 hours ago' }}
         run: PATH="$HOME/.local/bin:$PATH" mise run magellan:explore --since "$SINCE"
 
@@ -85,12 +104,3 @@ jobs:
           else
             mise run magellan:file --run-url "$RUN_URL"
           fi
-
-      - name: Upload run
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: magellan
-          path: e2e/.magellan
-          retention-days: 30
-          if-no-files-found: ignore

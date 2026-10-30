@@ -5,7 +5,7 @@
 //USAGE arg "[run_dir]" help="A run directory under e2e/.magellan; defaults to the latest"
 //USAGE flag "--file" help="Create the issues. Without it, print what would be filed"
 //USAGE flag "--team <key>" default="DES" help="Linear team key for new issues"
-//USAGE flag "--run-url <url>" help="Link to the CI run that holds the screenshots"
+//USAGE flag "--run-url <url>" help="Link to the CI run, added to each issue"
 
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
@@ -29,6 +29,9 @@ const env = process.env;
 const shouldFile = env["usage_file"] === "true";
 const teamKey = env["usage_team"] ?? "DES";
 const runURL = env["usage_run_url"];
+// CI logs are public; findings can describe unfixed bugs in production. In CI,
+// log only identifiers and keep the detail in Linear.
+const quiet = Boolean(env["CI"]);
 
 // Linear priority: 2 high, 3 medium, 4 low.
 const priority = { high: 2, medium: 3, low: 4 } as const;
@@ -49,7 +52,7 @@ function fingerprint(f: Finding): string {
   return `magellan-${createHash("sha256").update(key).digest("hex").slice(0, 12)}`;
 }
 
-function describe(f: Finding, id: string): string {
+function describe(f: Finding, id: string, screenshotURL?: string): string {
   return [
     `Found by Magellan, the nightly dashboard explorer. Evidence-backed: it reproduced twice from a fresh page load.`,
     ``,
@@ -67,9 +70,8 @@ function describe(f: Finding, id: string): string {
     "```",
     f.evidence,
     "```",
-    runURL
-      ? `Screenshot \`${f.screenshot ?? "none"}\` is in the [run artifacts](${runURL}).`
-      : "",
+    screenshotURL ? `\n![${f.screenshot}](${screenshotURL})` : "",
+    runURL ? `\n[Run](${runURL})` : "",
     ...(f.story
       ? [
           ``,
@@ -84,6 +86,38 @@ function describe(f: Finding, id: string): string {
     ``,
     `<sub>${id}</sub>`,
   ].join("\n");
+}
+
+// Screenshots go to Linear's private storage, not to CI artifacts: the repo is
+// public, and remote runs see a real org.
+async function uploadScreenshot(file: string): Promise<string | undefined> {
+  const data = await fs.readFile(file).catch(() => undefined);
+  if (!data) return undefined;
+  const { fileUpload } = await linear<{
+    fileUpload: {
+      uploadFile: {
+        uploadUrl: string;
+        assetUrl: string;
+        headers: { key: string; value: string }[];
+      };
+    };
+  }>(
+    `mutation($size: Int!, $name: String!) { fileUpload(contentType: "image/png", filename: $name, size: $size) {
+      uploadFile { uploadUrl assetUrl headers { key value } } } }`,
+    { size: data.length, name: path.basename(file) },
+  );
+  const { uploadUrl, assetUrl, headers } = fileUpload.uploadFile;
+  const res = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "image/png",
+      "Cache-Control": "public, max-age=31536000",
+      ...Object.fromEntries(headers.map((h) => [h.key, h.value])),
+    },
+    body: data,
+  });
+  if (!res.ok) throw new Error(`Linear upload: ${res.status}`);
+  return assetUrl;
 }
 
 async function linear<T>(query: string, variables: object): Promise<T> {
@@ -129,9 +163,12 @@ async function main() {
   for (const f of findings) {
     const id = fingerprint(f);
     const title = `[Magellan] ${f.title}`;
+    const label = quiet ? id : title;
     if (!shouldFile) {
-      console.log(`\n--- would file (${f.severity}, ${id}): ${title}`);
-      console.log(describe(f, id));
+      console.log(
+        `\n--- would file (${f.severity}, ${id})${quiet ? "" : `: ${title}`}`,
+      );
+      if (!quiet) console.log(describe(f, id));
       continue;
     }
 
@@ -143,7 +180,7 @@ async function main() {
     );
     const existing = searchIssues.nodes[0];
     if (existing) {
-      console.log(`seen   ${existing.identifier} ${title}`);
+      console.log(`seen   ${existing.identifier} ${label}`);
       continue;
     }
 
@@ -156,14 +193,18 @@ async function main() {
           teamId,
           ...(triageStateId ? { stateId: triageStateId } : {}),
           title,
-          description: describe(f, id),
+          description: describe(
+            f,
+            id,
+            f.screenshot
+              ? await uploadScreenshot(path.join(runDir, f.screenshot))
+              : undefined,
+          ),
           priority: priority[f.severity],
         },
       },
     );
-    console.log(
-      `filed  ${issueCreate.issue.identifier} ${title} ${issueCreate.issue.url}`,
-    );
+    console.log(`filed  ${issueCreate.issue.identifier} ${label}`);
   }
 }
 

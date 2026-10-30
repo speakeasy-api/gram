@@ -4,12 +4,14 @@ yourself: you write findings to a file, and a script files them.
 
 ## Setup
 
-- The dashboard is at `$GRAM_SITE_URL`. Drive it with
-  `mise run playwright -s=magellan <command>` (see the `gram-playwright-cli`
-  skill). Log in with the "Log in" button. Close the session when done.
-- After every page load and every action, check
-  `mise run playwright -s=magellan console error` and
-  `mise run playwright -s=magellan requests` for failed `/rpc/` calls.
+- The dashboard is at `{{SITE_URL}}`. Drive it with `{{PW}} <command>` (see
+  the `gram-playwright-cli` skill for the commands). Close the session when
+  done.
+- {{LOGIN}}
+- Stay inside the org `{{ORG}}`: every page you open is under
+  `{{SITE_URL}}/{{ORG}}`.
+- After every page load and every action, check `{{PW}} console error` and
+  `{{PW}} requests` for failed `/rpc/` calls.
 - The run directory is `{{RUN_DIR}}`. Save screenshots there.
 - Spend at most {{BUDGET}} minutes.
 
@@ -44,15 +46,25 @@ Only report what has hard evidence:
 Opinions about layout, copy, or taste are not findings. Put them in
 `{{RUN_DIR}}/notes.md` as one line each.
 
+A feature that is off for this org, or a permission this user lacks, is not
+a finding — unless the page gives no explanation at all.
+
 Before you write a finding, reproduce it a second time from a fresh page
 load. If it does not reproduce, drop it.
 
 ## Rules
 
+This may be production. Real people may share the org.
+
 - Name anything you create `Magellan <unix-time>`. Never edit or delete data
   you did not create.
-- Never send anything outside the stack: no invites, emails, or external
-  installs that need credentials.
+- Before you finish, delete everything you created. List what you could not
+  delete in `{{RUN_DIR}}/notes.md`.
+- Never change org-level settings: members, roles, billing, SSO, domains,
+  API keys, or anything under org settings. Look, do not submit.
+- Never send anything outside the product: no invites, emails, Slack
+  messages, or external installs that need credentials. Do not make an MCP
+  server public.
 - Do not change any file outside `{{RUN_DIR}}`.
 
 ## Output
