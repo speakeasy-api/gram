@@ -65,6 +65,15 @@ func TestGuideScenarios(t *testing.T) {
 			require.Contains(t, d.trace(), "legacy broad grant", "a project-wide connect row is honored as legacy")
 		}
 		require.False(t, gsDecide(t, MCPServerConnect, gsRefSO, row).Allowed, "another project")
+
+		orgWide := gsRow("role:a", authz.ScopeMCPConnect, authz.Selector{"resource_kind": "mcp", "resource_id": "*"})
+		for _, server := range []MCPServerRef{gsRefS1, gsRefSO} {
+			d := gsDecide(t, MCPServerConnect, server, orgWide)
+			require.True(t, d.Allowed, server.ID)
+			require.Contains(t, d.trace(), "legacy broad grant")
+		}
+		// Switched off, the legacy check allows the same row.
+		require.True(t, authz.GrantsSatisfy([]authz.Grant{row}, authz.MCPCheck(authz.ScopeMCPConnect, gsS1, gsPA)))
 	})
 
 	t.Run("2 manage one server, which includes viewing it", func(t *testing.T) {
@@ -75,6 +84,11 @@ func TestGuideScenarios(t *testing.T) {
 		require.False(t, gsDecide(t, MCPServerConnect, gsRefS1, row).Allowed, "managing is not using")
 		require.False(t, gsDecide(t, MCPServerEdit, gsRefS2, row).Allowed)
 		require.False(t, gsDecide(t, MCPServerRead, gsRefS2, row).Allowed)
+
+		wrongProject := gsRow("role:a", authz.ScopeMCPWrite, authz.Selector{"resource_kind": "mcp", "resource_id": gsS1, "project_id": gsPO})
+		for _, permission := range []MCPServerPermission{MCPServerRead, MCPServerEdit, MCPServerConnect} {
+			require.False(t, gsDecide(t, permission, gsRefS1, wrongProject).Allowed, "narrowing to the wrong project: %s", permission)
+		}
 	})
 
 	t.Run("3 a block from one role beats an allow from another", func(t *testing.T) {
@@ -88,6 +102,18 @@ func TestGuideScenarios(t *testing.T) {
 		blocked := gsDecide(t, MCPServerConnect, gsRefSC, rows...)
 		require.False(t, blocked.Allowed)
 		require.Contains(t, blocked.trace(), "withdrawn by a matching block")
+
+		onUser := []authz.Grant{rows[0], gsRow(fxUser, authz.ScopeMCPBlockedConnect, authz.Selector{"resource_kind": "mcp", "resource_id": gsSC})}
+		require.False(t, gsDecide(t, MCPServerConnect, gsRefSC, onUser...).Allowed, "the block's principal is not consulted")
+		require.True(t, gsDecide(t, MCPServerConnect, gsRefS1, onUser...).Allowed)
+
+		direct := append(rows, gsRow(fxUser, authz.ScopeMCPConnect, authz.Selector{"resource_kind": "mcp", "resource_id": gsSC}))
+		require.False(t, gsDecide(t, MCPServerConnect, gsRefSC, direct...).Allowed, "a direct allow does not outrank the block")
+
+		projectBlock := []authz.Grant{rows[0], gsRow("role:b", authz.ScopeMCPBlockedConnect, authz.Selector{"resource_kind": "mcp", "resource_id": "*", "project_id": gsPA})}
+		for _, server := range []MCPServerRef{gsRefS1, gsRefS2, gsRefSC} {
+			require.False(t, gsDecide(t, MCPServerConnect, server, projectBlock...).Allowed, server.ID)
+		}
 	})
 
 	t.Run("4 every server, read-only tools", func(t *testing.T) {
@@ -104,6 +130,9 @@ func TestGuideScenarios(t *testing.T) {
 		// disposition, which MCPToolCallCheck leaves out of the check.
 		require.True(t, authz.GrantsSatisfy([]authz.Grant{row}, authz.MCPToolCallCheck(gsS1, authz.MCPToolCallDimensions{Tool: "unannotated", Disposition: "", ProjectID: gsPA})))
 		require.False(t, authz.GrantsSatisfy([]authz.Grant{row}, authz.MCPToolCallCheck(gsS1, authz.MCPToolCallDimensions{Tool: "delete_all", Disposition: authz.DispositionDestructive, ProjectID: gsPA})))
+
+		apiKeyRow := gsRow("api_key:key_1", authz.ScopeMCPConnect, authz.Selector{"resource_kind": "mcp", "resource_id": "*", "disposition": authz.DispositionReadOnly})
+		require.False(t, gsDecide(t, MCPServerConnect, gsRefS1, apiKeyRow).Allowed, "a strict row needs every fact")
 	})
 
 	t.Run("5 one server, one tool", func(t *testing.T) {
@@ -113,5 +142,9 @@ func TestGuideScenarios(t *testing.T) {
 		require.False(t, gsDecide(t, MCPServerConnect, gsRefS2, row).Allowed)
 		require.Equal(t, relschema.Allowed, gsDecideTool(t, gsRefS1, map[string]string{"tool": "tool_a"}, row).Outcome)
 		require.Equal(t, relschema.Denied, gsDecideTool(t, gsRefS1, map[string]string{"tool": "tool_b"}, row).Outcome)
+
+		withBlock := []authz.Grant{row, gsRow("role:b", authz.ScopeMCPBlockedConnect, authz.Selector{"resource_kind": "mcp", "resource_id": gsS1, "tool": "tool_a"})}
+		require.True(t, gsDecide(t, MCPServerConnect, gsRefS1, withBlock...).Allowed, "a tool-limited block never withdraws the whole server")
+		require.Equal(t, relschema.Denied, gsDecideTool(t, gsRefS1, map[string]string{"tool": "tool_a"}, withBlock...).Outcome)
 	})
 }
