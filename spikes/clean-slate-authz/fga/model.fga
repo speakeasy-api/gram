@@ -1,0 +1,88 @@
+model
+  schema 1.1
+
+type user
+  relations
+    define organization: [organization]
+    define member_group: [group]
+    define protected: [user:*]
+    define activity_reviewer: user_activity_reviewer from member_group or user_activity_reviewer from organization
+    define review_activity: (activity_reviewer but not protected) or user_protected_reviewer from organization
+
+type api_key
+
+type group
+  relations
+    define member: [user]
+    define user_activity_reviewer: [user, role#assignee]
+
+type role
+  relations
+    define assignee: [user, agent, group#member, organization#member]
+
+type organization
+  relations
+    define member: [user]
+    define agent_creator: [user, role#assignee]
+    define access_admin: [user, role#assignee]
+    define create_agent: agent_creator
+    define manage_access: access_admin
+    define user_activity_reviewer: [user, role#assignee]
+    define user_protected_reviewer: [user, user with not_expired, role#assignee]
+    define project_viewer: [user, role#assignee, group#member, organization#member]
+    define project_writer: [user, role#assignee, group#member]
+    define mcp_server_editor: [user, role#assignee, group#member]
+    define mcp_server_viewer: [user, role#assignee, group#member, organization#member]
+    define mcp_server_connector: [user, agent, api_key, role#assignee, group#member, organization#member, user with mcp_tools, agent with mcp_tools, role#assignee with mcp_tools]
+    define mcp_server_connect_blocked: [user, agent, role#assignee, group#member, organization#member, user with mcp_tools, agent with mcp_tools, role#assignee with mcp_tools]
+    define agent_manager: [user, role#assignee]
+    define agent_viewer: [user, role#assignee]
+
+type project
+  relations
+    define organization: [organization]
+    define viewer: [user, role#assignee, group#member, organization#member] or project_viewer from organization
+    define writer: [user, role#assignee, group#member] or project_writer from organization
+    define write: writer
+    define read: viewer or write
+    define mcp_server_editor: [user, role#assignee, group#member] or mcp_server_editor from organization
+    define mcp_server_viewer: [user, role#assignee, group#member, organization#member] or mcp_server_viewer from organization
+    define mcp_server_connector: [user, agent, api_key, role#assignee, group#member, organization#member, user with mcp_tools, agent with mcp_tools, role#assignee with mcp_tools] or mcp_server_connector from organization
+    define mcp_server_connect_blocked: [user, agent, role#assignee, group#member, organization#member, user with mcp_tools, agent with mcp_tools, role#assignee with mcp_tools] or mcp_server_connect_blocked from organization
+    define agent_manager: [user, role#assignee] or agent_manager from organization
+    define agent_viewer: [user, role#assignee] or agent_viewer from organization
+
+type mcp_server
+  relations
+    define project: [project]
+    define editor: [user, role#assignee, group#member] or mcp_server_editor from project
+    define viewer: [user, role#assignee, group#member, organization#member] or mcp_server_viewer from project
+    define connector: [user, agent, api_key, role#assignee, group#member, organization#member, user with mcp_tools, agent with mcp_tools, api_key with mcp_tools, role#assignee with mcp_tools] or mcp_server_connector from project
+    define connect_blocked: [user, agent, role#assignee, group#member, organization#member, user with mcp_tools, agent with mcp_tools, role#assignee with mcp_tools] or mcp_server_connect_blocked from project
+    define edit: editor
+    define read: viewer or edit
+    define connect: connector but not connect_blocked
+
+type agent
+  relations
+    define project: [project]
+    define owner: [user]
+    define manager: [user, role#assignee] or agent_manager from project
+    define viewer: [user, role#assignee] or agent_viewer from project
+    define manage: owner or manager
+    define read: manage or viewer
+    define review_activity: review_activity from owner
+
+type chat
+  relations
+    define author: [user]
+    define agent: [agent]
+    define read: author or manage from agent or review_activity from author or review_activity from agent
+
+condition mcp_tools(tool: string, disposition: string, tools: list<string>, dispositions: list<string>) {
+  (size(tools) == 0 || tool in tools) && (size(dispositions) == 0 || disposition in dispositions)
+}
+
+condition not_expired(current_time: timestamp, expires_at: timestamp) {
+  current_time < expires_at
+}
