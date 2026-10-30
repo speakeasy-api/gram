@@ -1,3 +1,4 @@
+import { MemoryRouter } from "react-router";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emptySession } from "@/contexts/Auth";
@@ -47,6 +48,7 @@ const gatedOrg = (trial: { startedAt: Date; endsAt: Date } | null) => ({
   trial,
   whitelisted: false,
   activeOrganizationId: "org-under-test",
+  organization: { ...emptySession.organization, slug: "test-org" },
 });
 
 const expiredTrial = {
@@ -75,7 +77,11 @@ describe("LockoutPaygCheckoutPanel", () => {
   ])("offers checkout to a gated admin with %s", (_name, trial) => {
     mocks.sessionData.mockReturnValue(gatedOrg(trial));
 
-    render(<LockoutPaygCheckoutPanel />);
+    render(
+      <MemoryRouter>
+        <LockoutPaygCheckoutPanel />
+      </MemoryRouter>,
+    );
 
     expect(cta()).not.toBeNull();
     expect(mocks.hasScope).toHaveBeenCalledWith("org:admin");
@@ -84,7 +90,11 @@ describe("LockoutPaygCheckoutPanel", () => {
   it("renders nothing for a member without org:admin", () => {
     mocks.hasScope.mockReturnValue(false);
 
-    const { container } = render(<LockoutPaygCheckoutPanel />);
+    const { container } = render(
+      <MemoryRouter>
+        <LockoutPaygCheckoutPanel />
+      </MemoryRouter>,
+    );
 
     expect(container.firstChild).toBeNull();
   });
@@ -97,7 +107,11 @@ describe("LockoutPaygCheckoutPanel", () => {
       whitelisted: true,
     });
 
-    const { container } = render(<LockoutPaygCheckoutPanel />);
+    const { container } = render(
+      <MemoryRouter>
+        <LockoutPaygCheckoutPanel />
+      </MemoryRouter>,
+    );
 
     expect(container.firstChild).toBeNull();
   });
@@ -106,7 +120,11 @@ describe("LockoutPaygCheckoutPanel", () => {
   it("renders nothing until the session resolves", () => {
     mocks.sessionData.mockReturnValue(null);
 
-    const { container } = render(<LockoutPaygCheckoutPanel />);
+    const { container } = render(
+      <MemoryRouter>
+        <LockoutPaygCheckoutPanel />
+      </MemoryRouter>,
+    );
 
     expect(container.firstChild).toBeNull();
   });
@@ -121,14 +139,26 @@ describe("LockoutPaygCheckoutPanel", () => {
   ])("renders nothing when the flag is %s", (_name, result) => {
     mocks.flagResult.mockReturnValue(result);
 
-    const { container } = render(<LockoutPaygCheckoutPanel />);
+    const { container } = render(
+      <MemoryRouter>
+        <LockoutPaygCheckoutPanel />
+      </MemoryRouter>,
+    );
 
     expect(container.firstChild).toBeNull();
   });
 
   it("only calls the checkout endpoint on click", () => {
-    render(<LockoutPaygCheckoutPanel />);
+    render(
+      <MemoryRouter>
+        <LockoutPaygCheckoutPanel />
+      </MemoryRouter>,
+    );
 
     expect(mocks.mutate).not.toHaveBeenCalled();
   });
 });
+
+vi.mock("@/components/ui/hooks/useConfig", () => ({
+  useConfig: () => ({ theme: "light" }),
+}));

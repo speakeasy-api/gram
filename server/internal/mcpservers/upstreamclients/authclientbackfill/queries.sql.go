@@ -29,6 +29,21 @@ func (q *Queries) BindClientIssuerFixture(ctx context.Context, arg BindClientIss
 	return err
 }
 
+const clearEMABindingClientFixture = `-- name: ClearEMABindingClientFixture :exec
+UPDATE remote_session_ema_bindings SET state = 'manual_setup_required', remote_session_client_id = NULL
+WHERE id = $1 AND project_id = $2
+`
+
+type ClearEMABindingClientFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ClearEMABindingClientFixture(ctx context.Context, arg ClearEMABindingClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, clearEMABindingClientFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
 const countServerSelectionsFixture = `-- name: CountServerSelectionsFixture :one
 SELECT count(*) FROM upstream_client_selections WHERE mcp_server_id = $1
 `
@@ -247,6 +262,8 @@ ON CONFLICT (id) DO UPDATE
 SET deleted_at = NULL, updated_at = clock_timestamp()
 WHERE mcp_auth_clients.deleted
   AND mcp_auth_clients.source = 'backfill'
+  AND mcp_auth_clients.organization_id = EXCLUDED.organization_id
+  AND mcp_auth_clients.project_id IS NOT DISTINCT FROM EXCLUDED.project_id
   AND mcp_auth_clients.client_type = EXCLUDED.client_type
 `
 
@@ -425,6 +442,54 @@ func (q *Queries) GetAuthClientState(ctx context.Context, arg GetAuthClientState
 	return i, err
 }
 
+const getEMABindingLockScope = `-- name: GetEMABindingLockScope :one
+SELECT b.project_id, b.remote_session_issuer_id, b.remote_session_client_id
+FROM remote_session_ema_bindings b
+JOIN projects p ON p.id = b.project_id AND p.organization_id = b.organization_id
+WHERE b.id = $1::uuid AND b.organization_id = $2::text
+`
+
+type GetEMABindingLockScopeParams struct {
+	BindingID      uuid.UUID
+	OrganizationID string
+}
+
+type GetEMABindingLockScopeRow struct {
+	ProjectID             uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	RemoteSessionClientID uuid.NullUUID
+}
+
+func (q *Queries) GetEMABindingLockScope(ctx context.Context, arg GetEMABindingLockScopeParams) (GetEMABindingLockScopeRow, error) {
+	row := q.db.QueryRow(ctx, getEMABindingLockScope, arg.BindingID, arg.OrganizationID)
+	var i GetEMABindingLockScopeRow
+	err := row.Scan(&i.ProjectID, &i.RemoteSessionIssuerID, &i.RemoteSessionClientID)
+	return i, err
+}
+
+const getEMAClientAdministratorStateFixture = `-- name: GetEMAClientAdministratorStateFixture :one
+SELECT deleted, enabled, source FROM mcp_auth_clients
+WHERE id = $1 AND organization_id = $2
+`
+
+type GetEMAClientAdministratorStateFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type GetEMAClientAdministratorStateFixtureRow struct {
+	Deleted bool
+	Enabled bool
+	Source  string
+}
+
+func (q *Queries) GetEMAClientAdministratorStateFixture(ctx context.Context, arg GetEMAClientAdministratorStateFixtureParams) (GetEMAClientAdministratorStateFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getEMAClientAdministratorStateFixture, arg.ID, arg.OrganizationID)
+	var i GetEMAClientAdministratorStateFixtureRow
+	err := row.Scan(&i.Deleted, &i.Enabled, &i.Source)
+	return i, err
+}
+
 const getEMADeletedFixture = `-- name: GetEMADeletedFixture :one
 SELECT deleted FROM mcp_auth_client_emas WHERE auth_client_id = $1
 `
@@ -461,6 +526,25 @@ func (q *Queries) GetEMAFixture(ctx context.Context, authClientID uuid.UUID) (Ge
 		&i.RequestedScopes,
 	)
 	return i, err
+}
+
+const getEMALinkSourceFixture = `-- name: GetEMALinkSourceFixture :one
+SELECT source FROM mcp_server_auth_clients
+WHERE auth_client_id = $1 AND mcp_server_id = $2 AND project_id = $3
+ORDER BY updated_at DESC LIMIT 1
+`
+
+type GetEMALinkSourceFixtureParams struct {
+	AuthClientID uuid.UUID
+	McpServerID  uuid.UUID
+	ProjectID    uuid.UUID
+}
+
+func (q *Queries) GetEMALinkSourceFixture(ctx context.Context, arg GetEMALinkSourceFixtureParams) (string, error) {
+	row := q.db.QueryRow(ctx, getEMALinkSourceFixture, arg.AuthClientID, arg.McpServerID, arg.ProjectID)
+	var source string
+	err := row.Scan(&source)
+	return source, err
 }
 
 const getRequiresUpstreamAuthFixture = `-- name: GetRequiresUpstreamAuthFixture :one
@@ -750,8 +834,9 @@ LEFT JOIN LATERAL (
     AND rp.deleted IS FALSE
     AND rp.metadata_fetched_at IS NOT NULL
     AND rp.metadata_last_error IS NULL
-    AND (rtrim(rp.resource_identifier, '/') = rtrim(r.url, '/')
-         OR rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/'))
+    AND (rp.resource_identifier = r.url
+         OR (rtrim(rp.resource_identifier, '/') <> rtrim(r.url, '/')
+             AND rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/')))
   ORDER BY rp.metadata_fetched_at DESC, rp.id
   LIMIT 1
 ) AS rp ON TRUE
@@ -782,16 +867,16 @@ WHERE s.id = $3::uuid
            ))
       AND b.remote_session_issuer_id = e.remote_session_issuer_id
       AND b.remote_session_client_id = e.remote_session_client_id
-      AND rtrim(b.resource, '/') = rtrim(e.resource, '/')
+      AND b.resource = e.resource
       AND b.state = 'ready'
       AND (
         (r.id IS NOT NULL AND (
-          (rp.id IS NOT NULL AND rtrim(rp.resource_identifier, '/') = rtrim(b.resource, '/'))
-          OR (rp.id IS NULL AND rtrim(r.url, '/') = rtrim(b.resource, '/'))
+          (rp.id IS NOT NULL AND rp.resource_identifier = b.resource)
+          OR (rp.id IS NULL AND r.url = b.resource)
         ))
         OR (t.id IS NOT NULL
             AND s.remote_session_issuer_id = b.remote_session_issuer_id
-            AND rtrim(t.resource_identifier, '/') = rtrim(b.resource, '/'))
+            AND t.resource_identifier = b.resource)
       )
   )
   AND NOT EXISTS (
@@ -881,7 +966,7 @@ WHERE s.id = $3::uuid
                    AND db.project_id = gs.project_id
                    AND db.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND db.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(db.resource, '/') = rtrim(gx.resource, '/')
+                   AND db.resource = gx.resource
                    AND db.state = 'ready'
                    AND db.user_session_issuer_id = gs.user_session_issuer_id
                )
@@ -891,7 +976,7 @@ WHERE s.id = $3::uuid
                    AND gb.project_id = gs.project_id
                    AND gb.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND gb.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(gb.resource, '/') = rtrim(gx.resource, '/')
+                   AND gb.resource = gx.resource
                    AND gb.state = 'ready'
                    AND gb.user_session_issuer_id = (
                      -- The gateways' issuer, as ListEMABindingServers reads it.
@@ -1121,14 +1206,17 @@ LEFT JOIN LATERAL (
 WHERE a.deleted IS FALSE
   AND a.id > $1::uuid
   AND a.organization_id = $2::text
+  AND ($3::uuid[] IS NULL
+       OR a.mcp_server_id = ANY($3::uuid[]))
 ORDER BY a.id
-LIMIT $3::int
+LIMIT $4::int
 `
 
 type ListAuthClientBackfillCandidatesParams struct {
-	Cursor         uuid.UUID
-	OrganizationID string
-	PageSize       int32
+	Cursor           uuid.UUID
+	OrganizationID   string
+	OnlyMcpServerIds []uuid.UUID
+	PageSize         int32
 }
 
 type ListAuthClientBackfillCandidatesRow struct {
@@ -1160,8 +1248,17 @@ type ListAuthClientBackfillCandidatesRow struct {
 // the server already offers that auth client; link_detached that an
 // administrator detached the client's backfilled auth client from the server,
 // so the backfill must not link it again.
+//
+// only_mcp_server_ids narrows the rows to those servers' associations, for an
+// association write that records its own servers' clients; NULL reads every
+// server in the organization.
 func (q *Queries) ListAuthClientBackfillCandidates(ctx context.Context, arg ListAuthClientBackfillCandidatesParams) ([]ListAuthClientBackfillCandidatesRow, error) {
-	rows, err := q.db.Query(ctx, listAuthClientBackfillCandidates, arg.Cursor, arg.OrganizationID, arg.PageSize)
+	rows, err := q.db.Query(ctx, listAuthClientBackfillCandidates,
+		arg.Cursor,
+		arg.OrganizationID,
+		arg.OnlyMcpServerIds,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1273,7 +1370,7 @@ func (q *Queries) ListAuthClientHeadersFixture(ctx context.Context, authClientID
 }
 
 const listAuthClientSummariesFixture = `-- name: ListAuthClientSummariesFixture :many
-SELECT id, client_type, project_id, name, deleted
+SELECT id, client_type, project_id, name, deleted, enabled
 FROM mcp_auth_clients
 WHERE organization_id = $1
 ORDER BY id
@@ -1285,6 +1382,7 @@ type ListAuthClientSummariesFixtureRow struct {
 	ProjectID  uuid.NullUUID
 	Name       string
 	Deleted    bool
+	Enabled    bool
 }
 
 func (q *Queries) ListAuthClientSummariesFixture(ctx context.Context, organizationID string) ([]ListAuthClientSummariesFixtureRow, error) {
@@ -1302,6 +1400,7 @@ func (q *Queries) ListAuthClientSummariesFixture(ctx context.Context, organizati
 			&i.ProjectID,
 			&i.Name,
 			&i.Deleted,
+			&i.Enabled,
 		); err != nil {
 			return nil, err
 		}
@@ -1714,7 +1813,7 @@ SELECT b.id AS binding_id,
        b.user_session_issuer_id,
        b.remote_session_issuer_id,
        b.resource AS exact_resource,
-       rtrim(b.resource, '/')::text AS resource,
+       b.resource::text AS resource,
        b.requested_scopes,
        b.remote_session_client_id::uuid AS remote_session_client_id,
        rsi.name AS issuer_name,
@@ -1741,8 +1840,31 @@ LEFT JOIN remote_session_issuers AS rsi
 WHERE b.organization_id = $1::text
   AND b.state = 'ready'
   AND b.remote_session_client_id IS NOT NULL
+  AND ($2::uuid IS NULL OR EXISTS (
+    SELECT 1 FROM remote_session_ema_bindings AS selected
+    WHERE selected.id = $2::uuid
+      AND selected.organization_id = b.organization_id
+      AND selected.remote_session_issuer_id = b.remote_session_issuer_id
+      AND selected.remote_session_client_id = b.remote_session_client_id
+      AND selected.resource = b.resource
+  ))
+  AND ($3::uuid IS NULL OR EXISTS (
+    SELECT 1 FROM remote_session_ema_bindings AS selected
+    WHERE selected.project_id = $3::uuid
+      AND selected.organization_id = b.organization_id
+      AND selected.state = 'ready'
+      AND selected.remote_session_issuer_id = b.remote_session_issuer_id
+      AND selected.remote_session_client_id = b.remote_session_client_id
+      AND selected.resource = b.resource
+  ))
 ORDER BY b.id
 `
+
+type ListEMABackfillBindingsParams struct {
+	OrganizationID string
+	OnlyBindingID  uuid.NullUUID
+	OnlyProjectID  uuid.NullUUID
+}
 
 type ListEMABackfillBindingsRow struct {
 	BindingID             uuid.UUID
@@ -1758,11 +1880,11 @@ type ListEMABackfillBindingsRow struct {
 }
 
 // The organization's ready, client-bound identity chaining bindings in live
-// projects, as the runtime selects them, with the exact and trimmed resource.
+// projects, with the exact resource used for grouping and stable typed keys.
 // in_reach reports that the binding's registration and its issuer are live
 // and belong to the binding's project, its organization or the platform.
-func (q *Queries) ListEMABackfillBindings(ctx context.Context, organizationID string) ([]ListEMABackfillBindingsRow, error) {
-	rows, err := q.db.Query(ctx, listEMABackfillBindings, organizationID)
+func (q *Queries) ListEMABackfillBindings(ctx context.Context, arg ListEMABackfillBindingsParams) ([]ListEMABackfillBindingsRow, error) {
+	rows, err := q.db.Query(ctx, listEMABackfillBindings, arg.OrganizationID, arg.OnlyBindingID, arg.OnlyProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -1851,8 +1973,9 @@ LEFT JOIN LATERAL (
     AND rp.deleted IS FALSE
     AND rp.metadata_fetched_at IS NOT NULL
     AND rp.metadata_last_error IS NULL
-    AND (rtrim(rp.resource_identifier, '/') = rtrim(r.url, '/')
-         OR rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/'))
+    AND (rp.resource_identifier = r.url
+         OR (rtrim(rp.resource_identifier, '/') <> rtrim(r.url, '/')
+             AND rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/')))
   ORDER BY rp.metadata_fetched_at DESC, rp.id
   LIMIT 1
 ) AS rp ON TRUE
@@ -1862,12 +1985,12 @@ WHERE b.id = $1::uuid
   AND b.remote_session_client_id IS NOT NULL
   AND (
     (r.id IS NOT NULL AND (
-      (rp.id IS NOT NULL AND rtrim(rp.resource_identifier, '/') = rtrim(b.resource, '/'))
-      OR (rp.id IS NULL AND rtrim(r.url, '/') = rtrim(b.resource, '/'))
+      (rp.id IS NOT NULL AND rp.resource_identifier = b.resource)
+      OR (rp.id IS NULL AND r.url = b.resource)
     ))
     OR (t.id IS NOT NULL
         AND s.remote_session_issuer_id = b.remote_session_issuer_id
-        AND rtrim(t.resource_identifier, '/') = rtrim(b.resource, '/'))
+        AND t.resource_identifier = b.resource)
   )
 ORDER BY s.id
 `
@@ -1884,6 +2007,8 @@ type ListEMABindingServersRow struct {
 	Match       string
 }
 
+// Resource identity is byte-exact. Metadata location normalization may locate
+// a distinct parent resource, but must not alias slash-distinct resources.
 // The live servers a ready binding reaches, as the runtime matches them: in
 // the binding's project and signed in through its user session issuer, either
 // directly or as the issuer of the organization and project gateways, which
@@ -1931,6 +2056,7 @@ JOIN mcp_auth_clients AS ac
  AND ac.client_type = 'ema'
  AND ac.source = 'backfill'
 JOIN mcp_servers AS s ON s.id = l.mcp_server_id AND s.project_id = l.project_id AND s.deleted IS FALSE
+JOIN projects AS p ON p.id = s.project_id AND p.organization_id = l.organization_id AND p.deleted IS FALSE
 WHERE l.auth_client_id = $1::uuid
   AND l.organization_id = $2::text
   AND l.deleted IS FALSE
@@ -1979,12 +2105,13 @@ LEFT JOIN mcp_servers AS ls
   ON ls.id = live.mcp_server_id
  AND ls.project_id = live.project_id
  AND ls.deleted IS FALSE
+ AND EXISTS (SELECT 1 FROM projects AS p WHERE p.id = ls.project_id AND p.organization_id = ac.organization_id AND p.deleted IS FALSE)
 WHERE ac.organization_id = $2::text
   AND ac.client_type = 'ema'
   AND ac.source = 'backfill'
   AND ac.deleted IS FALSE
 GROUP BY ac.id
-ORDER BY ac.id
+ORDER BY ac.remote_session_client_id, ac.id
 `
 
 type ListEMAClientsOfServersParams struct {
@@ -2013,6 +2140,72 @@ func (q *Queries) ListEMAClientsOfServers(ctx context.Context, arg ListEMAClient
 	for rows.Next() {
 		var i ListEMAClientsOfServersRow
 		if err := rows.Scan(&i.AuthClientID, &i.McpServerIds); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMAPreparationLockScope = `-- name: ListEMAPreparationLockScope :many
+WITH registrations AS (
+  SELECT c.id FROM remote_session_clients c
+  WHERE c.remote_session_issuer_id = $1::uuid
+    AND (c.project_id IN (SELECT p.id FROM projects p WHERE p.organization_id = $2::text)
+         OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $2::text)))
+), scope_projects AS (
+  SELECT $3::uuid AS id
+  UNION
+  SELECT b.project_id FROM remote_session_ema_bindings b
+  WHERE b.organization_id = $2::text AND b.remote_session_issuer_id = $1::uuid
+  UNION
+  SELECT s.project_id FROM mcp_servers s
+  JOIN mcp_server_auth_clients l ON l.mcp_server_id = s.id
+  JOIN mcp_auth_clients ac ON ac.id = l.auth_client_id
+  WHERE ac.organization_id = $2::text AND ac.client_type = 'ema'
+    AND ac.remote_session_client_id IN (SELECT id FROM registrations)
+), owned_projects AS (
+  SELECT p.id FROM projects p JOIN scope_projects sp ON sp.id = p.id
+  WHERE p.organization_id = $2::text
+)
+SELECT 'project'::text AS kind, p.id FROM owned_projects p
+UNION ALL
+SELECT 'remote'::text AS kind, r.id FROM remote_mcp_servers r WHERE r.project_id IN (SELECT id FROM owned_projects)
+UNION ALL
+SELECT 'tunneled'::text AS kind, t.id FROM tunneled_mcp_servers t WHERE t.project_id IN (SELECT id FROM owned_projects)
+UNION ALL
+SELECT 'server'::text AS kind, s.id FROM mcp_servers s WHERE s.project_id IN (SELECT id FROM owned_projects)
+ORDER BY kind, id
+`
+
+type ListEMAPreparationLockScopeParams struct {
+	IssuerID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type ListEMAPreparationLockScopeRow struct {
+	Kind string
+	ID   uuid.UUID
+}
+
+// Discover before taking registration locks, including old ownership and all
+// projects sharing this issuer's registrations. Include deleted sources and
+// servers: their old typed links and copies may still need retirement. The
+// conservative project envelope also covers a binding not yet inserted.
+func (q *Queries) ListEMAPreparationLockScope(ctx context.Context, arg ListEMAPreparationLockScopeParams) ([]ListEMAPreparationLockScopeRow, error) {
+	rows, err := q.db.Query(ctx, listEMAPreparationLockScope, arg.IssuerID, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMAPreparationLockScopeRow
+	for rows.Next() {
+		var i ListEMAPreparationLockScopeRow
+		if err := rows.Scan(&i.Kind, &i.ID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -2054,8 +2247,9 @@ LEFT JOIN LATERAL (
     AND rp.deleted IS FALSE
     AND rp.metadata_fetched_at IS NOT NULL
     AND rp.metadata_last_error IS NULL
-    AND (rtrim(rp.resource_identifier, '/') = rtrim(r.url, '/')
-         OR rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/'))
+    AND (rp.resource_identifier = r.url
+         OR (rtrim(rp.resource_identifier, '/') <> rtrim(r.url, '/')
+             AND rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/')))
   ORDER BY rp.metadata_fetched_at DESC, rp.id
   LIMIT 1
 ) AS rp ON TRUE
@@ -2064,7 +2258,7 @@ WHERE b.id = $1::uuid
   AND b.state = 'ready'
   AND b.remote_session_client_id IS NOT NULL
   AND lower(substring(r.url from '^https://[^/?#]+')) = lower(substring(b.resource from '^https://[^/?#]+'))
-  AND (rp.id IS NULL OR rtrim(rp.resource_identifier, '/') = rtrim(b.resource, '/'))
+  AND (rp.id IS NULL OR rp.resource_identifier = b.resource)
 ORDER BY s.id
 `
 
@@ -2517,7 +2711,16 @@ SELECT DISTINCT a.remote_session_client_id
 FROM mcp_server_remote_session_clients AS a
 WHERE a.organization_id = $1::text
   AND a.mcp_server_id = ANY($2::uuid[])
-ORDER BY a.remote_session_client_id
+UNION
+SELECT ac.remote_session_client_id
+FROM mcp_server_auth_clients AS l
+JOIN mcp_auth_clients AS ac ON ac.id = l.auth_client_id AND ac.organization_id = l.organization_id
+WHERE l.organization_id = $1::text
+  AND l.mcp_server_id = ANY($2::uuid[])
+  AND ac.client_type IN ('remote_session', 'service_account')
+  AND ac.source = 'backfill'
+  AND ac.remote_session_client_id IS NOT NULL
+ORDER BY remote_session_client_id
 `
 
 type ListOAuthClientsOfServersParams struct {
@@ -2838,7 +3041,7 @@ SELECT sel.id,
                    AND db.project_id = gs.project_id
                    AND db.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND db.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(db.resource, '/') = rtrim(gx.resource, '/')
+                   AND db.resource = gx.resource
                    AND db.state = 'ready'
                    AND db.user_session_issuer_id = gs.user_session_issuer_id
                )
@@ -2848,7 +3051,7 @@ SELECT sel.id,
                    AND gb.project_id = gs.project_id
                    AND gb.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND gb.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(gb.resource, '/') = rtrim(gx.resource, '/')
+                   AND gb.resource = gx.resource
                    AND gb.state = 'ready'
                    AND gb.user_session_issuer_id = (
                      -- The gateways' issuer, as ListEMABindingServers reads it.
@@ -2883,7 +3086,7 @@ SELECT sel.id,
           AND gb2.project_id = sel.project_id
           AND gb2.remote_session_issuer_id = x.remote_session_issuer_id
           AND gb2.remote_session_client_id = x.remote_session_client_id
-          AND rtrim(gb2.resource, '/') = rtrim(x.resource, '/')
+          AND gb2.resource = x.resource
           AND gb2.state = 'ready'
           AND gb2.user_session_issuer_id = (
             -- The gateways' issuer, as ListEMABindingServers reads it.
@@ -2918,7 +3121,7 @@ SELECT sel.id,
                    AND db.project_id = gs.project_id
                    AND db.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND db.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(db.resource, '/') = rtrim(gx.resource, '/')
+                   AND db.resource = gx.resource
                    AND db.state = 'ready'
                    AND db.user_session_issuer_id = gs.user_session_issuer_id
                )
@@ -2928,7 +3131,7 @@ SELECT sel.id,
                    AND gb.project_id = gs.project_id
                    AND gb.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND gb.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(gb.resource, '/') = rtrim(gx.resource, '/')
+                   AND gb.resource = gx.resource
                    AND gb.state = 'ready'
                    AND gb.user_session_issuer_id = (
                      -- The gateways' issuer, as ListEMABindingServers reads it.
@@ -3560,8 +3763,9 @@ WHERE s.id = ANY($2::uuid[])
         AND rp.deleted IS FALSE
         AND rp.metadata_fetched_at IS NOT NULL
         AND rp.metadata_last_error IS NULL
-        AND (rtrim(rp.resource_identifier, '/') = rtrim(r.url, '/')
-             OR rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/'))
+        AND (rp.resource_identifier = r.url
+             OR (rtrim(rp.resource_identifier, '/') <> rtrim(r.url, '/')
+             AND rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/')))
       ORDER BY rp.metadata_fetched_at DESC, rp.id
       LIMIT 1
     ) AS rp ON TRUE
@@ -3590,12 +3794,12 @@ WHERE s.id = ANY($2::uuid[])
       ))
       AND (
         (r.id IS NOT NULL AND (
-          (rp.id IS NOT NULL AND rtrim(rp.resource_identifier, '/') = rtrim(b.resource, '/'))
-          OR (rp.id IS NULL AND rtrim(r.url, '/') = rtrim(b.resource, '/'))
+          (rp.id IS NOT NULL AND rp.resource_identifier = b.resource)
+          OR (rp.id IS NULL AND r.url = b.resource)
         ))
         OR (t.id IS NOT NULL
             AND s.remote_session_issuer_id = b.remote_session_issuer_id
-            AND rtrim(t.resource_identifier, '/') = rtrim(b.resource, '/'))
+            AND t.resource_identifier = b.resource)
       )
   ))
 ORDER BY s.id
@@ -3824,6 +4028,145 @@ func (q *Queries) LockAttachmentUpstreamIssuer(ctx context.Context, arg LockAtta
 	return err
 }
 
+const lockEMACopyClient = `-- name: LockEMACopyClient :exec
+SELECT ac.id FROM mcp_auth_clients ac
+WHERE ac.id = $1::uuid AND ac.organization_id = $2::text
+FOR UPDATE OF ac
+`
+
+type LockEMACopyClientParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+// Administrator mutations lock the typed client before its links.
+func (q *Queries) LockEMACopyClient(ctx context.Context, arg LockEMACopyClientParams) error {
+	_, err := q.db.Exec(ctx, lockEMACopyClient, arg.AuthClientID, arg.OrganizationID)
+	return err
+}
+
+const lockEMAGatewayReachReader = `-- name: LockEMAGatewayReachReader :exec
+SELECT pg_advisory_xact_lock_shared(hashtextextended('authclient-ema-gateway-reach:' || $1::text, 0))
+`
+
+// Hold before discovering projects or taking project/source locks. Shared
+// acquisition permits unrelated preparation and normal writers to proceed.
+func (q *Queries) LockEMAGatewayReachReader(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockEMAGatewayReachReader, organizationID)
+	return err
+}
+
+const lockEMAGatewayReachWriter = `-- name: LockEMAGatewayReachWriter :exec
+SELECT pg_advisory_xact_lock(hashtextextended('authclient-ema-gateway-reach:' || $1::text, 0))
+`
+
+// A setting change must exclude first preparations before discovering their
+// project set, including when no gateway bindings have committed yet.
+func (q *Queries) LockEMAGatewayReachWriter(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockEMAGatewayReachWriter, organizationID)
+	return err
+}
+
+const lockEMAPreparationServer = `-- name: LockEMAPreparationServer :exec
+SELECT s.id FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id
+WHERE s.id = $1::uuid AND p.organization_id = $2::text
+FOR UPDATE OF s
+`
+
+type LockEMAPreparationServerParams struct {
+	ServerID       uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockEMAPreparationServer(ctx context.Context, arg LockEMAPreparationServerParams) error {
+	_, err := q.db.Exec(ctx, lockEMAPreparationServer, arg.ServerID, arg.OrganizationID)
+	return err
+}
+
+const lockEMAProjectScope = `-- name: LockEMAProjectScope :exec
+SELECT pg_advisory_xact_lock(hashtextextended('authclient-ema-scope:' || $1::text || ':' || p.id::text, 0))
+FROM projects p WHERE p.id = $2::uuid AND p.organization_id = $1::text
+`
+
+type LockEMAProjectScopeParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Serializes scope discovery with creation/retargeting, including an empty
+// project. All normal preparation and source/server preflights take these
+// gates in project UUID order before acquiring any source rows.
+func (q *Queries) LockEMAProjectScope(ctx context.Context, arg LockEMAProjectScopeParams) error {
+	_, err := q.db.Exec(ctx, lockEMAProjectScope, arg.OrganizationID, arg.ProjectID)
+	return err
+}
+
+const lockEMARegistrationForSync = `-- name: LockEMARegistrationForSync :one
+SELECT c.id
+FROM remote_session_clients AS c
+WHERE (EXISTS (
+  SELECT 1 FROM remote_session_ema_bindings AS b
+  JOIN projects AS p ON p.id = b.project_id
+    AND p.organization_id = b.organization_id AND p.deleted IS FALSE
+  WHERE b.id = $1::uuid
+    AND b.organization_id = $2::text
+    AND b.remote_session_client_id = c.id
+    AND (c.project_id = b.project_id
+         OR (c.project_id IS NULL AND c.organization_id = b.organization_id)
+         OR (c.project_id IS NULL AND c.organization_id IS NULL))
+) OR EXISTS (
+  SELECT 1 FROM mcp_auth_clients AS ac
+  WHERE ac.id = $3::uuid
+    AND ac.organization_id = $2::text
+    AND ac.client_type = 'ema'
+    AND ac.remote_session_client_id = c.id
+    AND (c.project_id IS NULL OR EXISTS (
+      SELECT 1 FROM projects AS p WHERE p.id = c.project_id
+        AND p.organization_id = ac.organization_id
+    ))
+    AND (c.project_id IS NOT NULL OR c.organization_id IS NULL
+         OR c.organization_id = ac.organization_id)
+))
+FOR NO KEY UPDATE OF c
+`
+
+type LockEMARegistrationForSyncParams struct {
+	BindingID      uuid.NullUUID
+	OrganizationID string
+	AuthClientID   uuid.NullUUID
+}
+
+// Serialize EMA binding and credential-copy decisions on their registration.
+// The caller must read bindings and links again after taking this lock. Lock
+// strength allows concurrent binding inserts' foreign-key checks to finish.
+// Existing typed clients can lock registrations in deleted projects so stale
+// credential copies can be retired; live-owner queries decide serving reach.
+func (q *Queries) LockEMARegistrationForSync(ctx context.Context, arg LockEMARegistrationForSyncParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockEMARegistrationForSync, arg.BindingID, arg.OrganizationID, arg.AuthClientID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockOAuthRegistrationSyncScope = `-- name: LockOAuthRegistrationSyncScope :exec
+SELECT pg_advisory_xact_lock(hashtextextended('oauth-authclient-sync:' || $1::text || ':' || registration_id::text, 0))
+FROM unnest($2::uuid[]) AS registration_id
+ORDER BY registration_id
+`
+
+type LockOAuthRegistrationSyncScopeParams struct {
+	OrganizationID  string
+	RegistrationIds []uuid.UUID
+}
+
+// A registration gate also covers prospective typed clients with no row yet.
+// Ordered gates precede typed client locks and every server-link mutation.
+func (q *Queries) LockOAuthRegistrationSyncScope(ctx context.Context, arg LockOAuthRegistrationSyncScopeParams) error {
+	_, err := q.db.Exec(ctx, lockOAuthRegistrationSyncScope, arg.OrganizationID, arg.RegistrationIds)
+	return err
+}
+
 const lockOrganizationBackfill = `-- name: LockOrganizationBackfill :exec
 SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || $1::text))
 `
@@ -3953,6 +4296,29 @@ FOR SHARE OF t
 // LockSelectionRemoteSource for a tunneled source.
 func (q *Queries) LockSelectionTunneledSource(ctx context.Context, mcpServerID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, lockSelectionTunneledSource, mcpServerID)
+	return err
+}
+
+const lockServerOAuthClientsForSync = `-- name: LockServerOAuthClientsForSync :exec
+SELECT ac.id FROM mcp_auth_clients AS ac
+WHERE ac.organization_id = $1::text
+  AND ac.source = 'backfill'
+  AND ac.client_type IN ('remote_session', 'service_account')
+  AND (ac.remote_session_client_id = ANY($2::uuid[])
+    OR EXISTS (SELECT 1 FROM mcp_server_auth_clients AS l
+    WHERE l.auth_client_id = ac.id AND l.organization_id = ac.organization_id
+      AND l.mcp_server_id = ANY($3::uuid[])))
+ORDER BY ac.id FOR UPDATE OF ac
+`
+
+type LockServerOAuthClientsForSyncParams struct {
+	OrganizationID  string
+	RegistrationIds []uuid.UUID
+	McpServerIds    []uuid.UUID
+}
+
+func (q *Queries) LockServerOAuthClientsForSync(ctx context.Context, arg LockServerOAuthClientsForSyncParams) error {
+	_, err := q.db.Exec(ctx, lockServerOAuthClientsForSync, arg.OrganizationID, arg.RegistrationIds, arg.McpServerIds)
 	return err
 }
 
@@ -4100,8 +4466,9 @@ WHERE p.id = s.project_id
             AND rp.deleted IS FALSE
             AND rp.metadata_fetched_at IS NOT NULL
             AND rp.metadata_last_error IS NULL
-            AND (rtrim(rp.resource_identifier, '/') = rtrim(r.url, '/')
-                 OR rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/'))
+            AND (rp.resource_identifier = r.url
+                 OR (rtrim(rp.resource_identifier, '/') <> rtrim(r.url, '/')
+             AND rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/')))
           ORDER BY rp.metadata_fetched_at DESC, rp.id
           LIMIT 1
         ) AS rp ON TRUE
@@ -4130,7 +4497,7 @@ WHERE p.id = s.project_id
               AND e.deleted IS FALSE
               AND e.remote_session_issuer_id = b.remote_session_issuer_id
               AND e.remote_session_client_id = b.remote_session_client_id
-              AND rtrim(e.resource, '/') = rtrim(b.resource, '/')
+              AND e.resource = b.resource
           )
           AND (rp.id IS NULL OR rp.authorization_servers IS NULL OR EXISTS (
             SELECT 1 FROM unnest(rp.authorization_servers) AS allowed(server)
@@ -4138,12 +4505,12 @@ WHERE p.id = s.project_id
           ))
           AND (
             (r.id IS NOT NULL AND (
-              (rp.id IS NOT NULL AND rtrim(rp.resource_identifier, '/') = rtrim(b.resource, '/'))
-              OR (rp.id IS NULL AND rtrim(r.url, '/') = rtrim(b.resource, '/'))
+              (rp.id IS NOT NULL AND rp.resource_identifier = b.resource)
+              OR (rp.id IS NULL AND r.url = b.resource)
             ))
             OR (t.id IS NOT NULL
                 AND s.remote_session_issuer_id = b.remote_session_issuer_id
-                AND rtrim(t.resource_identifier, '/') = rtrim(b.resource, '/'))
+                AND t.resource_identifier = b.resource)
           )
       )))
   )
@@ -4418,7 +4785,7 @@ WITH retired AS (
         ON b.organization_id = e.organization_id
        AND b.remote_session_issuer_id = e.remote_session_issuer_id
        AND b.remote_session_client_id = e.remote_session_client_id
-       AND rtrim(b.resource, '/') = rtrim(e.resource, '/')
+       AND b.resource = e.resource
       WHERE e.auth_client_id = ac.id
         AND GREATEST(b.created_at, b.updated_at) >= $4::timestamptz
     )
@@ -4511,6 +4878,62 @@ func (q *Queries) RetireHeaderCopy(ctx context.Context, arg RetireHeaderCopyPara
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const retireServerStaleBackfillLinks = `-- name: RetireServerStaleBackfillLinks :exec
+UPDATE mcp_server_auth_clients AS target
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE target.id IN (
+  SELECT l.id
+FROM mcp_server_auth_clients AS l
+JOIN mcp_auth_clients AS ac
+  ON ac.id = l.auth_client_id
+ AND ac.organization_id = l.organization_id
+WHERE l.organization_id = $1::text
+  AND l.mcp_server_id = ANY($2::uuid[])
+  AND l.source = 'backfill'
+  AND l.deleted IS FALSE
+  AND ac.source = 'backfill'
+  AND ac.client_type IN ('remote_session', 'service_account')
+  AND (ac.deleted IS TRUE OR NOT EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS a
+    JOIN projects AS p
+      ON p.id = a.project_id
+     AND p.organization_id = a.organization_id
+     AND p.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.id = a.mcp_server_id
+     AND s.project_id = a.project_id
+     AND s.deleted IS FALSE
+    JOIN remote_session_clients AS c
+      ON c.id = a.remote_session_client_id
+     AND c.attachment_scope = a.client_attachment_scope
+     AND c.deleted IS FALSE
+    JOIN remote_session_issuers AS rsi
+      ON rsi.id = c.remote_session_issuer_id
+     AND rsi.deleted IS FALSE
+     AND (rsi.project_id = a.project_id
+          OR (rsi.project_id IS NULL AND rsi.organization_id = a.organization_id)
+          OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL))
+    WHERE a.organization_id = l.organization_id
+      AND a.mcp_server_id = l.mcp_server_id
+      AND a.remote_session_client_id = ac.remote_session_client_id
+      AND a.deleted IS FALSE
+  ))
+)
+`
+
+type RetireServerStaleBackfillLinksParams struct {
+	OrganizationID string
+	McpServerIds   []uuid.UUID
+}
+
+// Soft-deletes the links ListStaleBackfillLinks reports, rechecking the same
+// evidence.
+func (q *Queries) RetireServerStaleBackfillLinks(ctx context.Context, arg RetireServerStaleBackfillLinksParams) error {
+	_, err := q.db.Exec(ctx, retireServerStaleBackfillLinks, arg.OrganizationID, arg.McpServerIds)
+	return err
 }
 
 const retireStaleBackfillAuthClients = `-- name: RetireStaleBackfillAuthClients :many
@@ -5292,6 +5715,28 @@ type SetAuthClientEnabledFixtureParams struct {
 
 func (q *Queries) SetAuthClientEnabledFixture(ctx context.Context, arg SetAuthClientEnabledFixtureParams) error {
 	_, err := q.db.Exec(ctx, setAuthClientEnabledFixture, arg.Enabled, arg.ID)
+	return err
+}
+
+const setEMAClientAdministratorStateFixture = `-- name: SetEMAClientAdministratorStateFixture :exec
+UPDATE mcp_auth_clients SET enabled = $1, source = $2
+WHERE id = $3 AND organization_id = $4
+`
+
+type SetEMAClientAdministratorStateFixtureParams struct {
+	Enabled        bool
+	Source         string
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) SetEMAClientAdministratorStateFixture(ctx context.Context, arg SetEMAClientAdministratorStateFixtureParams) error {
+	_, err := q.db.Exec(ctx, setEMAClientAdministratorStateFixture,
+		arg.Enabled,
+		arg.Source,
+		arg.ID,
+		arg.OrganizationID,
+	)
 	return err
 }
 

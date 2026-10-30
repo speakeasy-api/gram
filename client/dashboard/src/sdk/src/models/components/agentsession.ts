@@ -5,8 +5,22 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * Who signed in: the agent itself, or a workload that federation assigns to the agent.
+ */
+export const SubjectKind = {
+  Agent: "agent",
+  Workload: "workload",
+} as const;
+/**
+ * Who signed in: the agent itself, or a workload that federation assigns to the agent.
+ */
+export type SubjectKind = OpenEnum<typeof SubjectKind>;
 
 export type AgentSession = {
   authorizerUserId?: string | undefined;
@@ -19,7 +33,19 @@ export type AgentSession = {
   lastUsedAt?: Date | undefined;
   projectId?: string | undefined;
   refreshExpiresAt: Date;
+  /**
+   * Who signed in: the agent itself, or a workload that federation assigns to the agent.
+   */
+  subjectKind: SubjectKind;
+  /**
+   * The workload's subject as its platform issued it. Set only when subject_kind is workload.
+   */
+  workloadSubject?: string | undefined;
 };
+
+/** @internal */
+export const SubjectKind$inboundSchema: z.ZodMiniType<SubjectKind, unknown> =
+  openEnums.inboundSchema(SubjectKind);
 
 /** @internal */
 export const AgentSession$inboundSchema: z.ZodMiniType<AgentSession, unknown> =
@@ -46,6 +72,8 @@ export const AgentSession$inboundSchema: z.ZodMiniType<AgentSession, unknown> =
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      subject_kind: SubjectKind$inboundSchema,
+      workload_subject: z.optional(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {
@@ -58,6 +86,8 @@ export const AgentSession$inboundSchema: z.ZodMiniType<AgentSession, unknown> =
         "last_used_at": "lastUsedAt",
         "project_id": "projectId",
         "refresh_expires_at": "refreshExpiresAt",
+        "subject_kind": "subjectKind",
+        "workload_subject": "workloadSubject",
       });
     }),
   );

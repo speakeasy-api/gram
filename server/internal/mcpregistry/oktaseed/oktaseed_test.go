@@ -3,7 +3,10 @@ package oktaseed_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	assetrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"log"
+	"net/url"
 	"os"
 	"strconv"
 	"testing"
@@ -86,6 +89,12 @@ func TestVendorsAreValidRecords(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, oktaseed.Result{Created: 0, Updated: 0, Unchanged: len(oktaseed.Vendors)}, result)
 
+	base, err := url.Parse("https://assets.example")
+	require.NoError(t, err)
+	svc.WithAssetBaseURL(base)
+	iconAsset, err := assetrepo.New(db).CreatePlatformAsset(ctx, assetrepo.CreatePlatformAssetParams{Name: "icon.svg", Url: "icon.svg", Sha256: "icon", Kind: "image", ContentType: "image/svg+xml", ContentLength: 10})
+	require.NoError(t, err)
+	icon := &mcpregistry.CatalogIcon{Src: assets.ServeImageURL(base, iconAsset.ID), MimeType: "image/svg+xml", Sizes: []string{"any"}}
 	// Staff edits survive a re-run, inside the namespace and outside it: the
 	// seed adds its own names next to the one staff added.
 	first := oktaseed.Vendors[0]
@@ -100,7 +109,14 @@ func TestVendorsAreValidRecords(t *testing.T) {
 	rawMeta, err := json.Marshal(meta)
 	require.NoError(t, err)
 	root["_meta"] = rawMeta
+	var server map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(root["server"], &server))
+	server["icons"] = json.RawMessage(`[{"src":"https://upstream.example/icon.png"}]`)
+	root["server"], err = json.Marshal(server)
+	require.NoError(t, err)
 	edited, err := json.Marshal(root)
+	require.NoError(t, err)
+	edited, err = mcpregistry.WithCatalogIcons(edited, mcpregistry.CatalogIcons{Default: icon, Dark: icon})
 	require.NoError(t, err)
 	_, err = svc.Save(ctx, e.ID, mcpregistry.Token(e), edited)
 	require.NoError(t, err)
@@ -111,6 +127,10 @@ func TestVendorsAreValidRecords(t *testing.T) {
 	e, err = svc.GetByName(ctx, first.Name)
 	require.NoError(t, err)
 	require.Contains(t, string(e.Data), "https://docs.example.test/edited")
+	require.Contains(t, string(e.Data), "https://upstream.example/icon.png")
+	icons, err := mcpregistry.ParseCatalogIcons(e.Data)
+	require.NoError(t, err)
+	require.Equal(t, mcpregistry.CatalogIcons{Default: icon, Dark: icon}, icons)
 	mapping, err := mcpregistry.ParseOktaMapping(e.Data)
 	require.NoError(t, err)
 	require.Equal(t, append([]string{"staff-added"}, first.Mapping.OINNames...), mapping.OINNames)

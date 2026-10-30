@@ -195,6 +195,12 @@ func createOrganizationIssuer(t *testing.T, ctx context.Context, ti *testInstanc
 // issuer get a derived remote issuer.
 func linkRemoteClient(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, issuerID string) uuid.UUID {
 	t.Helper()
+	issuer, _ := linkRemoteClientWithID(t, ctx, ti, organizationID, projectID, issuerID)
+	return issuer
+}
+
+func linkRemoteClientWithID(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, issuerID string) (uuid.UUID, uuid.UUID) {
+	t.Helper()
 
 	q := remoterepo.New(ti.conn)
 	slug := "clear-remote-" + uuid.NewString()[:8]
@@ -214,7 +220,7 @@ func linkRemoteClient(t *testing.T, ctx context.Context, ti *testInstance, organ
 		RemoteSessionClientID: client.ID, UserSessionIssuerID: uuid.MustParse(issuerID),
 	}))
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, organizationID, projectID, []uuid.UUID{uuid.MustParse(issuerID)}))
-	return remoteIssuer.ID
+	return remoteIssuer.ID, client.ID
 }
 
 func storedServer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, id string) mcpserversrepo.McpServer {

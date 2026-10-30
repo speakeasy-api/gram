@@ -36,6 +36,12 @@ export function isNotFoundError(error: unknown): boolean {
   return "statusCode" in error && error.statusCode === 404;
 }
 
+// isForbiddenError reports whether an SDK call failed with a 403.
+export function isForbiddenError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return "statusCode" in error && error.statusCode === 403;
+}
+
 // isExpectedAPIError reports whether the server refused a request (a 4xx), as
 // opposed to a network failure, a timeout or a server fault.
 export function isExpectedAPIError(error: unknown): boolean {

@@ -24,7 +24,7 @@ actions:
           schema:
             type: string
             format: binary
-            description: PNG, JPEG, GIF or WebP image bytes; Content-Type preserves the stored image MIME type.
+            description: PNG, JPEG, GIF, WebP or validated static SVG image bytes; Content-Type preserves the stored image MIME type.
   # Raw uploads must expose a binary body to generated browser clients.
   - target: $.paths['/admin/assets.uploadImage'].post
     update:

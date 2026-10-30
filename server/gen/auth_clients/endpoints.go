@@ -23,6 +23,10 @@ type Endpoints struct {
 	AttachAuthClientToMcpServer         goa.Endpoint
 	SetAuthClientHeaders                goa.Endpoint
 	DetachAuthClientFromMcpServer       goa.Endpoint
+	ListMcpServerAuthClientChoices      goa.Endpoint
+	ListIssuanceProfiles                goa.Endpoint
+	SetIssuanceProfile                  goa.Endpoint
+	DeleteIssuanceProfile               goa.Endpoint
 	GetMcpServerAuthentication          goa.Endpoint
 	SetMcpServerUpstreamAuthRequirement goa.Endpoint
 	GetAuthClientAudience               goa.Endpoint
@@ -41,6 +45,10 @@ func NewEndpoints(s Service) *Endpoints {
 		AttachAuthClientToMcpServer:         NewAttachAuthClientToMcpServerEndpoint(s, a.APIKeyAuth),
 		SetAuthClientHeaders:                NewSetAuthClientHeadersEndpoint(s, a.APIKeyAuth),
 		DetachAuthClientFromMcpServer:       NewDetachAuthClientFromMcpServerEndpoint(s, a.APIKeyAuth),
+		ListMcpServerAuthClientChoices:      NewListMcpServerAuthClientChoicesEndpoint(s, a.APIKeyAuth),
+		ListIssuanceProfiles:                NewListIssuanceProfilesEndpoint(s, a.APIKeyAuth),
+		SetIssuanceProfile:                  NewSetIssuanceProfileEndpoint(s, a.APIKeyAuth),
+		DeleteIssuanceProfile:               NewDeleteIssuanceProfileEndpoint(s, a.APIKeyAuth),
 		GetMcpServerAuthentication:          NewGetMcpServerAuthenticationEndpoint(s, a.APIKeyAuth),
 		SetMcpServerUpstreamAuthRequirement: NewSetMcpServerUpstreamAuthRequirementEndpoint(s, a.APIKeyAuth),
 		GetAuthClientAudience:               NewGetAuthClientAudienceEndpoint(s, a.APIKeyAuth),
@@ -57,6 +65,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.AttachAuthClientToMcpServer = m(e.AttachAuthClientToMcpServer)
 	e.SetAuthClientHeaders = m(e.SetAuthClientHeaders)
 	e.DetachAuthClientFromMcpServer = m(e.DetachAuthClientFromMcpServer)
+	e.ListMcpServerAuthClientChoices = m(e.ListMcpServerAuthClientChoices)
+	e.ListIssuanceProfiles = m(e.ListIssuanceProfiles)
+	e.SetIssuanceProfile = m(e.SetIssuanceProfile)
+	e.DeleteIssuanceProfile = m(e.DeleteIssuanceProfile)
 	e.GetMcpServerAuthentication = m(e.GetMcpServerAuthentication)
 	e.SetMcpServerUpstreamAuthRequirement = m(e.SetMcpServerUpstreamAuthRequirement)
 	e.GetAuthClientAudience = m(e.GetAuthClientAudience)
@@ -305,6 +317,146 @@ func NewDetachAuthClientFromMcpServerEndpoint(s Service, authAPIKeyFn security.A
 			return nil, err
 		}
 		return s.DetachAuthClientFromMcpServer(ctx, p)
+	}
+}
+
+// NewListMcpServerAuthClientChoicesEndpoint returns an endpoint function that
+// calls the method "listMcpServerAuthClientChoices" of service "authClients".
+func NewListMcpServerAuthClientChoicesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListMcpServerAuthClientChoicesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListMcpServerAuthClientChoices(ctx, p)
+	}
+}
+
+// NewListIssuanceProfilesEndpoint returns an endpoint function that calls the
+// method "listIssuanceProfiles" of service "authClients".
+func NewListIssuanceProfilesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListIssuanceProfilesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListIssuanceProfiles(ctx, p)
+	}
+}
+
+// NewSetIssuanceProfileEndpoint returns an endpoint function that calls the
+// method "setIssuanceProfile" of service "authClients".
+func NewSetIssuanceProfileEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetIssuanceProfilePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SetIssuanceProfile(ctx, p)
+	}
+}
+
+// NewDeleteIssuanceProfileEndpoint returns an endpoint function that calls the
+// method "deleteIssuanceProfile" of service "authClients".
+func NewDeleteIssuanceProfileEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteIssuanceProfilePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteIssuanceProfile(ctx, p)
 	}
 }
 
