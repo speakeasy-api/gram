@@ -2485,7 +2485,7 @@ type GetTimeSeriesMetricsParams struct {
 	// untagged. Ignored when HookSource is set: an explicit source filter
 	// overrides the exclusion.
 	ExcludedHookSources []string
-	GramProjectID       string
+	GramProjectIDs      []string
 	TimeStart           int64
 	TimeEnd             int64
 	IntervalSeconds     int64                 // Bucket interval in seconds
@@ -2540,7 +2540,7 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 			"if(isNaN(avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gen_ai.conversation.duration) != '')), 0, avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gen_ai.conversation.duration) != '')) AS avg_session_duration_ms",
 		).
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd).
 		GroupBy("bucket_time_unix_nano")
@@ -2629,7 +2629,7 @@ type GetToolMetricsBreakdownParams struct {
 	// untagged. Ignored when HookSource is set: an explicit source filter
 	// overrides the exclusion.
 	ExcludedHookSources []string
-	GramProjectID       string
+	GramProjectIDs      []string
 	TimeStart           int64
 	TimeEnd             int64
 	User                UserIdentity          // Optional filter - scopes to one employee across all their identities
@@ -2662,7 +2662,7 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 		"countIf(toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) / greatest(toFloat64(count(*)), 1) as failure_rate",
 	).
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd).
 		Where("startsWith(gram_urn, 'tools:')")
@@ -2756,7 +2756,7 @@ type GetOverviewSummaryParams struct {
 	// untagged. Ignored when HookSource is set: an explicit source filter
 	// overrides the exclusion.
 	ExcludedHookSources []string
-	GramProjectID       string
+	GramProjectIDs      []string
 	TimeStart           int64
 	TimeEnd             int64
 	User                UserIdentity          // Optional filter - scopes to one employee across all their identities
@@ -2852,7 +2852,7 @@ func (q *Queries) getOverviewSummaryMV(arg GetOverviewSummaryParams) squirrel.Se
 		"avgIfMerge(avg_tool_duration_ms) as avg_latency_ms",
 	).
 		From("metrics_summaries").
-		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
 		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).
 		Where("time_bucket < toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)
 }
@@ -2876,7 +2876,7 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 		"if(isNaN(avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:'))), 0, avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:'))) as avg_latency_ms",
 	).
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
 

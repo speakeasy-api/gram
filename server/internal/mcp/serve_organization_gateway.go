@@ -56,16 +56,6 @@ const OrganizationGatewayRoute = "/" + string(mcproute.OrganizationGateway) + "/
 // ProjectGatewayRoute restricts the derived gateway to one project.
 const ProjectGatewayRoute = OrganizationGatewayRoute + "/projects/{projectSlug}"
 
-// organizationGatewayNamespace derives the synthetic meta-server id an
-// organization gateway reports. There is no meta_mcp_servers row behind it,
-// so it must never be used to read one back; it exists so telemetry, session
-// records, and cached challenges group per organization.
-var organizationGatewayNamespace = uuid.MustParse("a6e17a1e-0000-4000-8000-000000000002")
-
-func organizationGatewayID(organizationID string) uuid.UUID {
-	return uuid.NewSHA1(organizationGatewayNamespace, []byte(organizationID))
-}
-
 // IsOrganizationGateway reports whether the endpoint is a derived organization
 // or project gateway rather than a stored server or gateway.
 func (e *ResolvedMcpEndpoint) IsOrganizationGateway() bool {
@@ -287,7 +277,7 @@ func (s *Service) loadOrganizationGateway(ctx context.Context, gatewaySlug strin
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "load gateway project").LogError(ctx, logger)
 		}
-		metaServer.ID = uuid.NewSHA1(organizationGatewayNamespace, []byte(organization.ID+"/projects/"+project.ID.String()))
+		metaServer.ID = orggateway.ProjectGatewayID(organization.ID, project.ID)
 		metaServer.ProjectID = project.ID
 		metaServer.Name = project.Name
 		endpoint.ProjectID = project.ID
@@ -315,7 +305,7 @@ func (s *Service) organizationGatewayRows(ctx context.Context, organization orgs
 	// Synthetic, never persisted: only the fields the meta runtime reads are
 	// meaningful; the rest are zeroed rather than invented.
 	metaServer := &metamcprepo.MetaMcpServer{
-		ID:                  organizationGatewayID(organization.ID),
+		ID:                  orggateway.GatewayID(organization.ID),
 		OrganizationID:      organization.ID,
 		ProjectID:           uuid.Nil,
 		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
