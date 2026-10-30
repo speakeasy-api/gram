@@ -540,15 +540,15 @@ func TestToolsetViewsDeriveAddressFromCanonicalServer(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// The platform endpoint wins over a custom-domain one.
+	// A live custom-domain endpoint wins over the platform one, as endpointaddr.PrimaryEndpoint picks.
 	view := getToolset(t, ctx, ti, toolset.Slug)
-	require.Equal(t, platform.Slug, string(*view.McpSlug))
-	require.Nil(t, view.CustomDomainID)
+	require.Equal(t, onDomain.Slug, string(*view.McpSlug))
+	require.Equal(t, domain.ID.String(), *view.CustomDomainID)
 	entry := listedEntry(t, ctx, ti, toolset.ID)
-	require.Equal(t, platform.Slug, string(*entry.McpSlug))
+	require.Equal(t, onDomain.Slug, string(*entry.McpSlug))
 	require.True(t, *entry.McpIsPublic)
 
-	// Without a platform endpoint the live custom-domain endpoint is the address.
+	// Without a platform endpoint the live custom-domain endpoint is still the address.
 	_, err = endpoints.DeleteMCPEndpoint(ctx, mcpendpointsrepo.DeleteMCPEndpointParams{ID: platform.ID, ProjectID: projectID})
 	require.NoError(t, err)
 	view = getToolset(t, ctx, ti, toolset.Slug)

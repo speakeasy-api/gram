@@ -24,7 +24,66 @@ const (
 	ActionToolsetUpdateOAuthProxy          Action = "toolset:update_oauth_proxy"
 	ActionToolsetDetachOAuthProxy          Action = "toolset:detach_oauth_proxy"
 	ActionToolsetMigrateToRemoteMcp        Action = "toolset:migrate_to_remote_mcp"
+	ActionToolsetMoveLegacyAlias           Action = "toolset:move_legacy_alias"
 )
+
+// ToolsetLegacyAliasAddress is a toolset's legacy /mcp/<slug> alias in an audit snapshot.
+type ToolsetLegacyAliasAddress struct {
+	// Slug is the alias slug.
+	Slug string `json:"slug"`
+
+	// CustomDomainID is the alias's custom domain; null for the platform host.
+	CustomDomainID *uuid.UUID `json:"custom_domain_id"`
+}
+
+type LogToolsetMoveLegacyAliasEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	ToolsetURN                urn.Toolset
+	ToolsetName               string
+	ToolsetSlug               string
+	LegacyAliasSnapshotBefore *ToolsetLegacyAliasAddress
+	LegacyAliasSnapshotAfter  *ToolsetLegacyAliasAddress
+}
+
+func (l *Logger) LogToolsetMoveLegacyAlias(ctx context.Context, dbtx repo.DBTX, event LogToolsetMoveLegacyAliasEvent) error {
+	action := ActionToolsetMoveLegacyAlias
+	before, err := marshalAuditPayload(event.LegacyAliasSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+	after, err := marshalAuditPayload(event.LegacyAliasSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.ToolsetURN.ID.String(),
+		SubjectType:        string(subjectTypeToolset),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.ToolsetName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.ToolsetSlug),
+
+		BeforeSnapshot: before,
+		AfterSnapshot:  after,
+		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ToolsetV1})
+}
 
 type LogToolsetCreateEvent struct {
 	OrganizationID string
