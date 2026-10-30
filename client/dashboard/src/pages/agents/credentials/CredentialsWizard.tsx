@@ -109,10 +109,11 @@ type Credential = "api-key" | "workload";
 /** Keys live 90 days unless the agent page rotates them sooner. */
 const KEY_LIFETIME_DAYS = 90;
 
-// Stopgap: an agent that may connect to servers cannot sign in to them without
-// mcp:auth, and nothing here can choose auth clients yet, so it is given all of
-// them. Replace this with an auth client selector, made an explicit choice
-// when the agent is created, and grant only the clients chosen there.
+// Stopgap (AIM-862): an agent that may connect to servers cannot sign in to
+// them without mcp:auth, and nothing here can choose auth clients yet, so it is
+// given all of them. Replace this with an auth client selector, made an
+// explicit choice when the agent is created, and grant only the clients chosen
+// there.
 const AUTH_GRANT = {
   effect: "allow",
   scope: "mcp:auth",
