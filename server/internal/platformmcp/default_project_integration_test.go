@@ -266,12 +266,36 @@ func TestInstallInstructionsUseTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, named, omitted)
 
-	// A caller without find_mcp names the server by the registration that
-	// added it and gets the same guidance.
+	_, err = invokeTool[GetMyInstallInstructionsOutput](t, actorCtx(namedPrincipal), reg, "get_my_install_instructions", map[string]any{"mcp_id": mcpID.String(), "client_family": string(OnboardingClientClaudeCode)})
+	require.Equal(t, "default_project_not_found", refusalCode(t, err))
+}
+
+// A caller without find_mcp names the server by the registration that added
+// it. The registration also names the project, so an organization without a
+// default project needs no project_id, and mcp:connect still applies.
+func TestInstallInstructionsByRegistrationID(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_install_by_registration")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	queries := platformrepo.New(conn)
+	rows, err := queries.ListPlatformMCPInventoryAuthorizationCandidates(ctx, principal.OrganizationID)
+	require.NoError(t, err)
+	var mcpID uuid.UUID
+	for _, row := range rows {
+		if row.ProjectID == project.ID {
+			mcpID = row.ID
+			break
+		}
+	}
+	require.NotEqual(t, uuid.Nil, mcpID)
+
 	registration, err := queries.CreatePlatformMCPCatalogRegistration(ctx, platformrepo.CreatePlatformMCPCatalogRegistrationParams{
-		OrganizationID:       defaultPrincipal.OrganizationID,
-		ProjectID:            defaultProject.ID,
+		OrganizationID:       principal.OrganizationID,
+		ProjectID:            project.ID,
 		SourceKind:           "catalog",
 		CatalogProvider:      "test-provider",
 		CatalogReference:     "test/install",
@@ -293,21 +317,45 @@ func TestInstallInstructionsUseTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 		McpEndpointID:          uuid.NullUUID{},
 		McpEndpointOwned:       false,
 		ID:                     registration.ID,
-		OrganizationID:         defaultPrincipal.OrganizationID,
-		ProjectID:              defaultProject.ID,
+		OrganizationID:         principal.OrganizationID,
+		ProjectID:              project.ID,
 	})
 	require.NoError(t, err)
-	registrationID := registration.ID
-	byRegistration, err := invokeTool[GetMyInstallInstructionsOutput](t, actorCtx(defaultPrincipal), reg, "get_my_install_instructions", map[string]any{"registration_id": registrationID.String(), "client_family": string(OnboardingClientClaudeCode)})
-	require.NoError(t, err)
-	require.Equal(t, omitted, byRegistration)
 
-	_, err = invokeTool[GetMyInstallInstructionsOutput](t, actorCtx(defaultPrincipal), reg, "get_my_install_instructions", map[string]any{"registration_id": uuid.NewString(), "client_family": string(OnboardingClientClaudeCode)})
+	serverURL, err := url.Parse(testCanonicalBaseURL)
+	require.NoError(t, err)
+	service := NewPluginsService(conn, allowBudget(), "install-by-registration-key").
+		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).
+		WithInstallLinks(serverURL, serverURL)
+	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	registerPluginTools(reg, service)
+
+	actorCtx := func(grants ...authz.Grant) context.Context {
+		sessionID := "session-install-by-registration-" + principal.UserID
+		actor := contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, OrganizationSlug: "example-org", SessionID: &sessionID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
+		actor = authz.GrantsToContext(actor, grants)
+		return ContextWithPrincipal(actor, principal)
+	}
+	connect := authz.NewGrant(authz.ScopeMCPConnect, mcpID.String())
+	install := func(ctx context.Context, arguments map[string]any) (GetMyInstallInstructionsOutput, error) {
+		arguments["client_family"] = string(OnboardingClientClaudeCode)
+		return invokeTool[GetMyInstallInstructionsOutput](t, ctx, reg, "get_my_install_instructions", arguments)
+	}
+
+	byRegistration, err := install(actorCtx(connect), map[string]any{"registration_id": registration.ID.String()})
+	require.NoError(t, err, "the registration's project is used, so no default project is needed")
+	require.True(t, byRegistration.Supported)
+
+	byMCP, err := install(actorCtx(connect), map[string]any{"project_id": project.ID.String(), "mcp_id": mcpID.String()})
+	require.NoError(t, err)
+	require.Equal(t, byMCP, byRegistration)
+
+	_, err = install(actorCtx(), map[string]any{"registration_id": registration.ID.String()})
+	require.Error(t, err, "mcp:connect still applies")
+
+	_, err = install(actorCtx(connect), map[string]any{"registration_id": uuid.NewString()})
 	require.Error(t, err, "an unknown registration names no server")
 
-	_, err = invokeTool[GetMyInstallInstructionsOutput](t, actorCtx(defaultPrincipal), reg, "get_my_install_instructions", map[string]any{"mcp_id": mcpID.String(), "registration_id": registrationID.String(), "client_family": string(OnboardingClientClaudeCode)})
+	_, err = install(actorCtx(connect), map[string]any{"mcp_id": mcpID.String(), "registration_id": registration.ID.String()})
 	require.Error(t, err, "exactly one target")
-
-	_, err = invokeTool[GetMyInstallInstructionsOutput](t, actorCtx(namedPrincipal), reg, "get_my_install_instructions", map[string]any{"mcp_id": mcpID.String(), "client_family": string(OnboardingClientClaudeCode)})
-	require.Equal(t, "default_project_not_found", refusalCode(t, err))
 }

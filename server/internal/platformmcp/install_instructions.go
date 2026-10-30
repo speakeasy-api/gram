@@ -65,7 +65,7 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 	if targets != 1 {
 		return GetMyInstallInstructionsOutput{}, ErrPluginProjectNotFound
 	}
-	projectID, err := s.installProjectID(ctx, principal, input.ProjectID)
+	projectID, err := s.installProjectID(ctx, principal, input)
 	if err != nil {
 		return GetMyInstallInstructionsOutput{}, err
 	}
@@ -158,14 +158,33 @@ func (s *PluginsService) memberLinkBases(ctx context.Context, organizationID str
 
 // installProjectID parses the named project ID, or resolves the organization's
 // default project when none is named.
-func (s *PluginsService) installProjectID(ctx context.Context, principal Principal, projectID string) (uuid.UUID, error) {
-	projectID = strings.TrimSpace(projectID)
+func (s *PluginsService) installProjectID(ctx context.Context, principal Principal, input GetMyInstallInstructionsInput) (uuid.UUID, error) {
+	projectID := strings.TrimSpace(input.ProjectID)
 	if projectID != "" {
 		parsed, err := uuid.Parse(projectID)
 		if err != nil {
 			return uuid.Nil, ErrPluginProjectNotFound
 		}
 		return parsed, nil
+	}
+	// A registration belongs to one project, so naming it is enough even in a
+	// project other than the default one.
+	if registrationID := strings.TrimSpace(input.RegistrationID); registrationID != "" {
+		parsed, err := uuid.Parse(registrationID)
+		if err != nil {
+			return uuid.Nil, ErrInstallTargetNotFound
+		}
+		project, err := platformrepo.New(s.db).GetPlatformMCPCatalogRegistrationProject(ctx, platformrepo.GetPlatformMCPCatalogRegistrationProjectParams{
+			ID:             parsed,
+			OrganizationID: principal.OrganizationID,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, ErrInstallTargetNotFound
+		}
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("resolve platform mcp install registration project: %w", err)
+		}
+		return project, nil
 	}
 	row, err := platformrepo.New(s.db).ResolvePlatformMCPProjectBySlug(ctx, platformrepo.ResolvePlatformMCPProjectBySlugParams{
 		OrganizationID: principal.OrganizationID,
