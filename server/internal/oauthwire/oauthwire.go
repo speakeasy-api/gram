@@ -207,6 +207,22 @@ type Error struct {
 
 func (e *Error) Error() string { return e.Code + ": " + e.Description }
 
+// IsLoopbackRedirectURI reports whether a parsed redirect URI is an RFC 8252
+// §7.3 loopback redirect: http scheme with a host of 127.0.0.1, ::1, or
+// localhost, on any port. Only a browser on the client's own machine can
+// reach one.
+func IsLoopbackRedirectURI(u *url.URL) bool {
+	if u.Scheme != "http" {
+		return false
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "127.0.0.1", "::1", "localhost":
+		return true
+	default:
+		return false
+	}
+}
+
 // ValidateRedirectURI enforces the OAuth 2.1 / RFC 8252 redirect-URI scheme
 // rules:
 //

@@ -225,15 +225,7 @@ func validateDocument(doc *Document, clientID string, clientIDURL *url.URL) (val
 // redirect matching, where RFC 8252 requires variable loopback ports to be
 // accepted for native apps.
 func IsLoopbackRedirectURI(u *url.URL) bool {
-	if u.Scheme != "http" {
-		return false
-	}
-	switch strings.ToLower(u.Hostname()) {
-	case "127.0.0.1", "::1", "localhost":
-		return true
-	default:
-		return false
-	}
+	return oauthwire.IsLoopbackRedirectURI(u)
 }
 
 // keySourceValidationError maps the shared key source sentinels onto this

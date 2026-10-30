@@ -282,7 +282,7 @@ func TestOAuthCIMD_FullFlow(t *testing.T) {
 	docHost := strings.TrimPrefix(ds.srv.URL, "https://")
 	require.Contains(t, cw.Body.String(), "Client verified from")
 	require.Contains(t, cw.Body.String(), docHost)
-	require.Contains(t, cw.Body.String(), "local address on your")
+	require.Contains(t, cw.Body.String(), "receives its authorization at a local address")
 	require.Contains(t, cw.Body.String(), "CIMD Integration Client")
 
 	// Consent POST (approve): mints the authorization code.
@@ -894,7 +894,7 @@ func TestOAuthCIMD_ConsentNoLoopbackWarningForSameOriginRedirect(t *testing.T) {
 	cw := doCIMDConsentGet(t, ti, toolset.McpSlug.String, consentLoc.Query().Get("state"))
 	require.Equal(t, http.StatusOK, cw.Code)
 	require.Contains(t, cw.Body.String(), "Client verified from")
-	require.NotContains(t, cw.Body.String(), "local address on your")
+	require.NotContains(t, cw.Body.String(), "receives its authorization at a local address")
 }
 
 // TestOAuthCIMD_LoopbackEncodedPathRejected: the variable-port exception
