@@ -3177,13 +3177,18 @@ describe("Connecting a GitHub repository", () => {
     expect(workflow.textContent).toMatch(
       /anthropics\/claude-code-action@[0-9a-f]{40}/,
     );
-    expect(
-      screen
-        .getByRole("radio", { name: "Claude Code" })
-        .getAttribute("aria-checked"),
-    ).toBe("true");
+    // The agents are chosen the way the dashboard's other setup instructions
+    // choose an AI tool: by the product's name and logo.
+    const picker = screen.getByRole("radiogroup", { name: "Workflow agent" });
+    const claude = screen.getByRole("radio", { name: "Claude Code" });
+    expect(claude.getAttribute("aria-checked")).toBe("true");
+    expect(claude.querySelector("svg")).toBeTruthy();
+    expect(picker.contains(claude)).toBe(true);
 
-    fireEvent.click(screen.getByRole("radio", { name: "Codex" }));
+    const codex = screen.getByRole("radio", { name: "OpenAI Codex" });
+    expect(codex.querySelector("svg")).toBeTruthy();
+    fireEvent.click(codex);
+    expect(codex.getAttribute("aria-checked")).toBe("true");
     expect(workflow.textContent).toMatch(/openai\/codex-action@[0-9a-f]{40}/);
     expect(workflow.textContent).toContain(
       "openai-api-key: ${{ secrets.OPENAI_API_KEY }}",

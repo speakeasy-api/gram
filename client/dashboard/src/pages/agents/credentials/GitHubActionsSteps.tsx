@@ -1,5 +1,5 @@
 import { Alert } from "@/components/ui/Alert";
-import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
+import { AgentProviderPicker } from "@/components/agent-providers/AgentProviderPicker";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -14,8 +14,7 @@ import { CodeBlock } from "./CodeBlock";
 import {
   ACTION_DOCS,
   WORKFLOW_AGENTS,
-  WORKFLOW_AGENT_KEYS,
-  isWorkflowAgent,
+  WORKFLOW_AGENT_OPTIONS,
   pluginGateways,
   pluginsForEveryAgent,
   unreachablePluginServers,
@@ -205,19 +204,12 @@ export function WorkflowStep(): JSX.Element {
         already have. The job proves who it is with its own GitHub token, so no
         Speakeasy secret is stored in GitHub.
       </p>
-      <RadioCardGroup
+      <AgentProviderPicker
         aria-label="Workflow agent"
+        providers={WORKFLOW_AGENT_OPTIONS}
         value={agent}
-        onValueChange={(value) => {
-          if (isWorkflowAgent(value)) setAgent(value);
-        }}
-        orientation="horizontal"
-        size="sm"
-      >
-        {WORKFLOW_AGENT_KEYS.map((key) => (
-          <RadioCard key={key} value={key} title={WORKFLOW_AGENTS[key].name} />
-        ))}
-      </RadioCardGroup>
+        onValueChange={setAgent}
+      />
       <p>
         Add <code>{selected.secret}</code> to your repository&apos;s Actions
         secrets for {selected.name}, then replace the example prompt with your
