@@ -12,6 +12,7 @@ import (
 )
 
 func TestProcessDeploymentRetiredAggregate(t *testing.T) {
+	t.Parallel()
 	workers := pool.New().WithErrors()
 	workers.Go(func() error { return errors.New("unrelated source failed") })
 	workers.Go(func() error { return fmt.Errorf("external attachment: %w", externalmcp.ErrCatalogSourceRetired) })
@@ -27,6 +28,7 @@ func TestProcessDeploymentRetiredAggregate(t *testing.T) {
 	require.ErrorIs(t, err, externalmcp.ErrCatalogSourceRetired)
 }
 func TestProcessDeploymentOtherErrorsUnchanged(t *testing.T) {
+	t.Parallel()
 	require.NoError(t, deploymentProcessingError(nil))
 	transient := errors.New("transient")
 	require.Same(t, transient, deploymentProcessingError(transient))

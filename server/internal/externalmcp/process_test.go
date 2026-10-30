@@ -16,6 +16,7 @@ import (
 )
 
 func TestToolExtractorRetiredPulse(t *testing.T) {
+	t.Parallel()
 	var remoteCalls atomic.Int32
 	remote := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { remoteCalls.Add(1) }))
 	defer remote.Close()

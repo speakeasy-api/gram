@@ -35,7 +35,7 @@ const (
 var (
 	errCatalogEmpty          = errors.New("catalog has no configured sources")
 	ErrCatalogSourceNotFound = errors.New("catalog source not found")
-	ErrCatalogSourceRetired  = errors.New("Pulse catalog source is retired")
+	ErrCatalogSourceRetired  = errors.New("pulse catalog source is retired")
 	ErrCatalogSourceDisabled = errors.New("catalog source is not enabled and certified")
 	ErrUnknownRegistrySource = errors.New("unknown registry source profile")
 )
