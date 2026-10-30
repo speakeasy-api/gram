@@ -1940,8 +1940,10 @@ type MigrateToGlobalIssuerResponseBody struct {
 // UploadPlatformImageResponseBody is the type of the "admin" service
 // "uploadPlatformImage" endpoint HTTP response body.
 type UploadPlatformImageResponseBody struct {
-	// The asset entry that was created in Speakeasy
+	// The uploaded platform image asset
 	Asset *AssetResponseBody `form:"asset" json:"asset" xml:"asset"`
+	// Canonical public URL for the uploaded image
+	URL string `form:"url" json:"url" xml:"url"`
 }
 
 // StartTrialResponseBody is the type of the "admin" service "startTrial"
@@ -25487,8 +25489,10 @@ func NewMigrateToGlobalIssuerResponseBody(res *admin.MigrateRemoteSessionIssuerR
 
 // NewUploadPlatformImageResponseBody builds the HTTP response body from the
 // result of the "uploadPlatformImage" endpoint of the "admin" service.
-func NewUploadPlatformImageResponseBody(res *admin.UploadImageResult) *UploadPlatformImageResponseBody {
-	body := &UploadPlatformImageResponseBody{}
+func NewUploadPlatformImageResponseBody(res *admin.AdminUploadImageResult) *UploadPlatformImageResponseBody {
+	body := &UploadPlatformImageResponseBody{
+		URL: res.URL,
+	}
 	if res.Asset != nil {
 		body.Asset = marshalAdminAssetToAssetResponseBody(res.Asset)
 	}
