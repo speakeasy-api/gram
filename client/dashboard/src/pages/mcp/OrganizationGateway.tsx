@@ -134,17 +134,21 @@ function OrganizationGatewayContent({
           {header}
           <section
             aria-label={endpointUrl ? "Gateway endpoint" : "Gateway status"}
-            className="border-border flex min-w-0 flex-col gap-4 border bg-white px-5 py-4 text-black sm:flex-row sm:items-center"
+            className="border-border flex min-w-0 flex-col gap-4 bg-card text-black dark:text-foreground border px-5 py-4 sm:flex-row sm:items-center"
           >
             <div className="min-w-0 flex-1">
               <GatewayBody gateway={gateway} isOn={isOn} />
             </div>
-            <div className="flex shrink-0 items-stretch self-end divide-x divide-black/10 border border-black/10 bg-black/5 sm:self-auto">
+            <div className="flex shrink-0 items-stretch self-end divide-black/10 border-black/10 bg-black/5 dark:divide-border dark:border-border dark:bg-muted divide-x border sm:self-auto">
               {isOn !== undefined && !!features.data && !features.error ? (
                 // Not a <label>: label activation would forward clicks on the text
                 // to the switch past RequireScope's pointer-events guard.
                 <div className="flex items-center gap-3 px-4 py-2">
-                  <Text small as="span" className="text-black/60">
+                  <Text
+                    small
+                    as="span"
+                    className="text-black/60 dark:text-muted-foreground"
+                  >
                     {isOn ? "Enabled" : "Disabled"}
                   </Text>
                   <OrganizationGatewaySwitch
@@ -164,7 +168,7 @@ function OrganizationGatewayContent({
                   text={endpointUrl}
                   size="lg"
                   tooltip="Copy endpoint"
-                  className="h-auto shrink-0 rounded-none text-black hover:bg-black/5 hover:text-black"
+                  className="h-auto shrink-0 text-black hover:bg-black/5 hover:text-black dark:text-foreground dark:hover:bg-accent dark:hover:text-foreground rounded-none"
                 />
               )}
             </div>
@@ -298,7 +302,9 @@ function GatewayBody({
 
   return (
     <div className="min-w-0 space-y-2">
-      <h2 className="text-eyebrow text-black/60">Endpoint URL</h2>
+      <h2 className="text-eyebrow text-black/60 dark:text-muted-foreground">
+        Endpoint URL
+      </h2>
       <code className="block font-mono text-sm break-all sm:text-base">
         {url}
       </code>
