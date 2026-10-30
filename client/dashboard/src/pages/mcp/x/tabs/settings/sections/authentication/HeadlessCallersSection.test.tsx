@@ -7,13 +7,15 @@ import { HeadlessCallersSection } from "./HeadlessCallersSection";
 const mocks = vi.hoisted(() => ({
   save: vi.fn(),
   profiles: [] as unknown[],
+  profilesError: false,
 }));
 
 vi.mock("@gram/client/react-query/issuanceProfiles.js", () => ({
   invalidateAllIssuanceProfiles: () => Promise.resolve(),
   useIssuanceProfiles: () => ({
-    data: { items: mocks.profiles },
-    isSuccess: true,
+    data: mocks.profilesError ? undefined : { items: mocks.profiles },
+    isSuccess: !mocks.profilesError,
+    isError: mocks.profilesError,
   }),
 }));
 
@@ -69,6 +71,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   mocks.profiles = [];
+  mocks.profilesError = false;
 });
 
 describe("HeadlessCallersSection", () => {
@@ -87,6 +90,54 @@ describe("HeadlessCallersSection", () => {
 
     expect(screen.getByText("Nightly report job")).toBeTruthy();
     expect(screen.getByText("Shared token")).toBeTruthy();
+  });
+
+  it("does not show a disabled credential as an active choice", () => {
+    mocks.profiles = [
+      {
+        id: "p-1",
+        name: "Nightly report job",
+        userSessionIssuerId: "usi-1",
+        userSessionClientId: "usc-1",
+        choices: [{ mcpServerId: "server-1", authClientId: "ac-off" }],
+        updatedAt: new Date(),
+      },
+    ];
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <HeadlessCallersSection
+          mcpServerId="server-1"
+          userSessionIssuerId="usi-1"
+          credentials={[
+            ...credentials,
+            {
+              id: "ac-off",
+              name: "Disabled token",
+              clientType: "static_credential",
+              enabled: false,
+            } as unknown as AuthClient,
+          ]}
+          canManage
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.queryByText("Disabled token")).toBeNull();
+    expect(
+      screen.getByText("A credential this server no longer offers"),
+    ).toBeTruthy();
+  });
+
+  it("says when the apps' choices could not be loaded", () => {
+    mocks.profilesError = true;
+    renderSection();
+
+    expect(
+      screen.getByText(
+        "The apps' choices could not be loaded. Refresh to try again.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/None set/)).toBeNull();
   });
 
   it("removes only this server's choice, leaving the others to the server", () => {

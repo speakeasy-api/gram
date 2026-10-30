@@ -528,7 +528,8 @@ const postflightIDIssuanceProfileChoices = `-- name: PostflightIDIssuanceProfile
 SELECT count(*)
 FROM upstream_client_selections u
 JOIN issuance_selection_profiles p
-  ON p.id = u.credential_id AND p.deleted IS FALSE
+  ON p.id = u.credential_id AND p.organization_id = u.organization_id
+ AND p.deleted IS FALSE
 JOIN mcp_auth_clients ac
   ON ac.id = u.auth_client_id AND ac.organization_id = u.organization_id
  AND ac.deleted IS FALSE AND ac.enabled
