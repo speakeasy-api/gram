@@ -45,7 +45,7 @@ func TestSharedAuthorizationServer_IDJAGWithoutRequestResourceIsRecorded(t *test
 		oauthwire.ParamAssertion: {"unused.assertion.value"},
 	})
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	require.Equal(t, "invalid_request", decodeSharedTokenResponse(t, w).Error)
+	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error)
 
 	reason := string(mcpmetrics.IDJAGRejectionFromValidator(idjag.ReasonResourceNotIndicated))
 	var idJAGLines []map[string]any
