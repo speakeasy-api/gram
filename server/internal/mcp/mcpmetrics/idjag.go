@@ -38,6 +38,9 @@ const (
 	// IDJAGRejectionResourceNotAvailable: the assertion named no resource and
 	// the resolved user lacks access to the server the request chose.
 	IDJAGRejectionResourceNotAvailable IDJAGRejectionReason = "resource_not_available"
+	// IDJAGRejectionUpstreamCredentialChoice: the requested upstream
+	// credential choice was refused.
+	IDJAGRejectionUpstreamCredentialChoice IDJAGRejectionReason = "upstream_credential_choice"
 	// IDJAGRejectionAssertionOther: the validator refused the assertion for
 	// a reason this set does not name yet.
 	IDJAGRejectionAssertionOther IDJAGRejectionReason = "assertion_other"
