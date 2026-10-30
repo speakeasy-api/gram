@@ -1,13 +1,6 @@
-import { docsUrl } from "@/components/setup-guide/guideDocs";
+import { SetupGuideAction } from "./SetupGuideLink";
 import { useSetupGuide } from "@/components/setup-guide/useSetupGuide";
 import { Text } from "@/components/ui/Text";
-import { BookOpen, ExternalLink } from "lucide-react";
-
-// text-link-primary is Moonshine's link color; the rest keeps this at the size
-// and weight of the sidebar's other inline actions.
-const ACTION =
-  "text-link-primary flex items-center gap-1 self-end text-xs font-semibold hover:underline";
-
 /**
  * The sidebar counterpart to {@link SetupGuideCallout}: same lookup, same
  * panel, sized for a nav card instead of a page banner.
@@ -34,25 +27,7 @@ export function SetupGuideCard({
       <Text variant="small" muted className="text-xs">
         This MCP server may require some additional setup.
       </Text>
-      {guide.openGuide ? (
-        <button type="button" onClick={guide.openGuide} className={ACTION}>
-          <BookOpen className="h-3.5 w-3.5" />
-          Read the guide
-        </button>
-      ) : (
-        guide.only && (
-          <a
-            href={docsUrl(guide.only)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={ACTION}
-          >
-            <BookOpen className="h-3.5 w-3.5" />
-            Read the guide
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        )
-      )}
+      <SetupGuideAction guide={guide} />
     </div>
   );
 }

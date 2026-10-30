@@ -64,6 +64,14 @@ describe("PageHeader.Actions", () => {
 });
 
 describe("PageHeader", () => {
+  it("does not reserve an empty breadcrumb row on a setup page", () => {
+    const { container } = render(<PageHeader>{null}</PageHeader>, {
+      at: "/placeholder-organization/projects/placeholder-project/mcp/example/setup",
+    });
+    expect(
+      container.querySelector('[data-slot="page-breadcrumbs"]'),
+    ).toBeNull();
+  });
   // Inference going quiet is felt on whichever page the user was working on, so
   // the banners that explain it hang off the header rather than the billing
   // page.

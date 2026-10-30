@@ -108,6 +108,9 @@ export interface ServerInstallStatus {
    * that tally results, but the dialog shows it as a next step, not an error.
    */
   setupRequired?: string;
+  identityMode?: RemoteMcpCreationIdentity;
+  /** Exact remote endpoint selected for this installed server. */
+  remoteUrl?: string;
 }
 
 interface WorkflowBase {
@@ -963,6 +966,8 @@ export function useRemoteMcpInstallWorkflow({
             result.identityConfiguration?.status === "setup-required";
           setStatusAt(index, {
             status: identitySetupRequired ? "failed" : "completed",
+            identityMode: target.identityMode,
+            remoteUrl: target.remote.url,
             mcpServerId: result.mcpServer.id,
             mcpServerParam: mcpServerRouteParam(result.mcpServer),
             mcpEndpointUrl: result.mcpEndpointUrl,

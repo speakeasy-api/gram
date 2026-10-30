@@ -5,8 +5,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   server: undefined as unknown,
   error: null as unknown,
+  canWrite: true,
 }));
 
+vi.mock("./setup/ProviderSetupPage", () => ({
+  ProviderSetupPage: ({ mcpServer }: { mcpServer: { id: string } }) => (
+    <output data-testid="setup-page">{mcpServer.id}</output>
+  ),
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: (scope: string) => scope !== "mcp:write" || mocks.canWrite,
+    hasAnyScope: (scopes: string[]) =>
+      scopes.some((scope) => scope !== "mcp:write" || mocks.canWrite),
+    hasAllScopes: (scopes: string[]) =>
+      scopes.every((scope) => scope !== "mcp:write" || mocks.canWrite),
+    isLoading: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/requestAccess.js", () => ({
+  useRequestAccessMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
 vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
   useGetMcpServer: () => ({
     data: mocks.server,
@@ -59,6 +78,7 @@ vi.mock("@/routes", () => {
       mcp: {
         href: () => "/acme/projects/default/mcp",
         details: {
+          setup: tab("setup"),
           overview: tab("overview"),
           tools: tab("tools"),
           resources: tab("resources"),
@@ -114,6 +134,7 @@ const REMOTE_SERVER = {
 };
 
 beforeEach(() => {
+  mocks.canWrite = true;
   mocks.server = REMOTE_SERVER;
   mocks.error = null;
 });
@@ -156,5 +177,20 @@ describe("MCPServerDetails path resolution", () => {
   ])("moves the retired %s tab to %s", (suffix, target) => {
     visit(`/acme/projects/default/mcp/my-server${suffix}`);
     expect(screen.getByTestId("landed").textContent).toBe(target);
+  });
+});
+
+describe("MCPServerDetails setup authorization", () => {
+  it("hands the exact server to setup for a writer", () => {
+    visit("/acme/projects/default/mcp/my-server/setup");
+    expect(screen.getByTestId("setup-page").textContent).toBe("server-1");
+  });
+  it("refuses setup without mcp:write", () => {
+    mocks.canWrite = false;
+    visit("/acme/projects/default/mcp/my-server/setup");
+    expect(screen.queryByTestId("setup-page")).toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "Access restricted" }),
+    ).toBeDefined();
   });
 });
