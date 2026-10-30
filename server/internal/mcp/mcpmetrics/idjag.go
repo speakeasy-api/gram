@@ -40,7 +40,7 @@ const (
 	IDJAGRejectionResourceNotAvailable IDJAGRejectionReason = "resource_not_available"
 	// IDJAGRejectionUpstreamCredentialChoice: the requested upstream
 	// credential choice was refused.
-	IDJAGRejectionUpstreamCredentialChoice IDJAGRejectionReason = "upstream_credential_choice"
+	IDJAGRejectionUpstreamCredentialChoice IDJAGRejectionReason = "upstream_credential_choice" //nolint:gosec // a metric reason, not a credential
 	// IDJAGRejectionAssertionOther: the validator refused the assertion for
 	// a reason this set does not name yet.
 	IDJAGRejectionAssertionOther IDJAGRejectionReason = "assertion_other"
