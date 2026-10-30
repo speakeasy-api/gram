@@ -61,12 +61,15 @@ func metaSkillMethod(req *rawRequest) bool {
 // linked to any of them is inherited by the gateway.
 //
 // The caller rules are the hosted surface's (see hostedSkillScope): only a
-// validated user session, or a request no MCP credential stamped, names a
-// recipient. Any other caller has no scope, which serves nothing without
-// resolving members.
+// credential skillRecipientUserID accepts names a recipient. Any other caller
+// has no scope, which serves nothing without resolving members.
 func (s *Service) metaSkillScope(ctx context.Context, logger *slog.Logger, metaServerID uuid.UUID, gate *metaGateContext) (mcpskills.Scope, bool, error) {
 	var scope mcpskills.Scope
-	if !gate.authenticated || gate.apiKeyID != "" || gate.userID == "" || !actsAsUser(ctx) {
+	if !gate.authenticated || gate.apiKeyID != "" {
+		return scope, false, nil
+	}
+	userID := skillRecipientUserID(ctx, gate.userID)
+	if userID == "" {
 		return scope, false, nil
 	}
 
@@ -83,7 +86,7 @@ func (s *Service) metaSkillScope(ctx context.Context, logger *slog.Logger, metaS
 		OrganizationID:     gate.organizationID,
 		Target:             target,
 		MemberMCPServerIDs: skillMemberServerIDs(gate, members),
-		UserID:             gate.userID,
+		UserID:             userID,
 	}, true, nil
 }
 
