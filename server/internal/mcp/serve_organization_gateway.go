@@ -33,10 +33,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // OrganizationGatewayRoute is the organization gateway's path, addressed by
@@ -268,13 +270,46 @@ func (s *Service) loadOrganizationGateway(ctx context.Context, gatewaySlug strin
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(organization.ID))
 
-	issuerID, unavailable, err := orggateway.Availability(ctx, s.db, organization)
+	metaServer, endpoint, unavailable, err := s.organizationGatewayRows(ctx, organization, orggateway.Availability)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization gateway issuer").LogError(ctx, logger)
 	}
 	if unavailable != orggateway.UnavailabilityNone {
 		logger.DebugContext(ctx, "organization gateway unavailable", attr.SlogReason(string(unavailable)))
 		return nil, oops.C(oops.CodeNotFound)
+	}
+
+	if scoped {
+		project, err := projectsrepo.New(s.db).GetProjectBySlug(ctx, projectsrepo.GetProjectBySlugParams{Slug: projectSlug, OrganizationID: organization.ID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load gateway project").LogError(ctx, logger)
+		}
+		metaServer.ID = uuid.NewSHA1(organizationGatewayNamespace, []byte(organization.ID+"/projects/"+project.ID.String()))
+		metaServer.ProjectID = project.ID
+		metaServer.Name = project.Name
+		endpoint.ProjectID = project.ID
+		endpoint.Slug = gatewaySlug
+	}
+	resolved := NewResolvedMcpEndpointFromMetaMcpServer(endpoint, metaServer, organization.ID, mcproute.OrganizationGateway)
+	if err := s.RequireUserSessionIssuer(ctx, resolved); err != nil {
+		return nil, err
+	}
+
+	return &organizationGateway{metaServer: metaServer, endpoint: endpoint, resolved: resolved}, nil
+}
+
+// organizationGatewayRows builds the synthetic rows an organization's gateway
+// is shaped around, or reports why availability serves the organization none.
+func (s *Service) organizationGatewayRows(ctx context.Context, organization orgsrepo.OrganizationMetadatum, availability gatewayAvailability) (*metamcprepo.MetaMcpServer, *mcpendpointsrepo.McpEndpoint, orggateway.Unavailability, error) {
+	issuerID, unavailable, err := availability(ctx, s.db, organization)
+	if err != nil {
+		return nil, nil, unavailable, fmt.Errorf("resolve organization gateway availability: %w", err)
+	}
+	if unavailable != orggateway.UnavailabilityNone {
+		return nil, nil, unavailable, nil
 	}
 
 	// Synthetic, never persisted: only the fields the meta runtime reads are
@@ -299,28 +334,11 @@ func (s *Service) loadOrganizationGateway(ctx context.Context, gatewaySlug strin
 		ProjectID: uuid.Nil,
 		Slug:      organization.Slug,
 	}
-
-	if scoped {
-		project, err := projectsrepo.New(s.db).GetProjectBySlug(ctx, projectsrepo.GetProjectBySlugParams{Slug: projectSlug, OrganizationID: organization.ID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.C(oops.CodeNotFound)
-		}
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "load gateway project").LogError(ctx, logger)
-		}
-		metaServer.ID = uuid.NewSHA1(organizationGatewayNamespace, []byte(organization.ID+"/projects/"+project.ID.String()))
-		metaServer.ProjectID = project.ID
-		metaServer.Name = project.Name
-		endpoint.ProjectID = project.ID
-		endpoint.Slug = gatewaySlug
-	}
-	resolved := NewResolvedMcpEndpointFromMetaMcpServer(endpoint, metaServer, organization.ID, mcproute.OrganizationGateway)
-	if err := s.RequireUserSessionIssuer(ctx, resolved); err != nil {
-		return nil, err
-	}
-
-	return &organizationGateway{metaServer: metaServer, endpoint: endpoint, resolved: resolved}, nil
+	return metaServer, endpoint, orggateway.UnavailabilityNone, nil
 }
+
+// gatewayAvailability is orggateway.Availability or one of its variants.
+type gatewayAvailability func(context.Context, usersessionsrepo.DBTX, orgsrepo.OrganizationMetadatum) (uuid.UUID, orggateway.Unavailability, error)
 
 // projectTokenCache resolves a derived gateway's upstream credentials one
 // member project at a time, on first use, and keeps them for the rest of the
