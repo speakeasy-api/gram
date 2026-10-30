@@ -12,6 +12,7 @@ Labels:
 ## Steps
 
 1. [The scaffolding: defining checks and injecting the client](#step-1-the-scaffolding)
+2. [Five role scenarios for MCP servers](#step-2-five-role-scenarios-for-mcp-servers)
 
 ---
 
@@ -202,3 +203,190 @@ enforcement cannot drift apart.
 - Most of the code base still calls `authz.Engine.Require` with hand-built
   checks. The scaffolding lets each operation move over on its own; it does not
   move them.
+
+---
+
+## Step 2. Five role scenarios for MCP servers
+
+Every outcome below is asserted by a test in `scenarios_test.go`. Grants are
+written as the selector stored in `principal_grants`; `S*` means "any server".
+
+| # | Scenario | Can option B express it? |
+| --- | --- | --- |
+| 1 | Role A can connect to every server in project A | **Yes**, and it works. B flags it as a legacy broad grant, because slice 1 defined `mcp:connect` per server. |
+| 2 | Role A can manage one server in project A, which also lets it view it | **Yes**, implemented. |
+| 3 | Role B blocks server C; a user in roles A and B connects to everything except C | **Yes**, implemented. |
+| 4 | Role C can connect to every server but only call read-only tools | **Partly.** The engine enforces it today, but the catalogue does not model tools, and a tool with no annotations gets through. |
+| 5 | Role D can connect to server A and call only tool A | **Yes, in the engine.** The catalogue does not model tools. |
+
+Scenarios 1 to 3 are about the connection, which goes through the catalogue.
+Scenarios 4 and 5 restrict individual tool calls. Those checks happen in the
+tool interceptors (`remotemcp/tools_call_authz_interceptor.go:95`, plus the
+tools/list filter), which call the engine directly with the tool name and its
+disposition. The catalogue is not involved in them yet.
+
+### Scenario 1. Connect to every server in project A
+
+**Implemented, with a label.**
+
+Stored grant:
+
+```
+role A   mcp:connect   {resource_id: "*", project_id: "A"}
+```
+
+Definition used: `mcp:connect` (`permissions.go`): `AllowedAnchors: {mcp}`,
+`RequiredAncestors: {project, org}`.
+
+| Request | Answer |
+| --- | --- |
+| connect to server A in project A | allowed, basis `legacy_broad_grant` |
+| connect to server C in project A | allowed, basis `legacy_broad_grant` |
+| connect to server A in project 2 | denied: the grant's `project_id` does not match the server's project |
+
+How it is decided: the connect check carries the server's verified project
+(from its row), so the `project_id` on the grant must match. The wildcard
+`resource_id` covers every server in that project.
+
+Why the label: in slice 1 the `mcp:connect` definition allows a grant to name
+one server only (`AllowedAnchors: {mcp}`), on the reading that "use" should be
+granted per server. A project-wide connect grant still allows, but every allow
+is marked `legacy_broad_grant` and logged, so it can be found and migrated. If
+"every server in a project" should be a normal grant, the change is one line,
+and the label disappears (**sketched**):
+
+```go
+AllowedAnchors: []string{authz.ResourceKindMCP, authz.ResourceKindProject},
+```
+
+### Scenario 2. Manage one server, which also grants view
+
+**Implemented.**
+
+Stored grant:
+
+```
+role A   mcp:write   {resource_id: "S1", project_id: "A"}
+```
+
+Definitions used: `mcp:write`, and `mcp:read` with `ImpliedBy: {mcp:write}`.
+
+| Request | Answer |
+| --- | --- |
+| manage (write) S1 | allowed |
+| view (read) S1 | allowed: `mcp:read` lists `mcp:write` in `ImpliedBy` |
+| connect to S1 | **denied**: `mcp:connect` has an empty `ImpliedBy`, so managing never grants use |
+| view or manage S2 | denied: the grant names S1 only |
+
+The "this also grants view" rule is the one line `ImpliedBy:
+[]authz.Scope{authz.ScopeMCPWrite}` on the `mcp:read` definition. If managing
+should also grant use, `mcp:connect` would list `mcp:write` there. Slice 1
+removed that on purpose.
+
+### Scenario 3. Block one server for a user in two roles
+
+**Implemented.**
+
+Stored grants:
+
+```
+role A   mcp:connect           {resource_id: "*", project_id: "A"}
+role B   mcp:blocked_connect   {resource_id: "C"}
+```
+
+A user who holds both roles gets the union of their grants.
+
+| Request | Answer |
+| --- | --- |
+| connect to server A | allowed (role A) |
+| connect to server C | **denied, reason `blocked`** |
+| call any tool on server A | allowed |
+| call any tool on server C | denied: the block also matches tool-call checks on C |
+| same user also holds a direct `mcp:connect {resource_id: "C"}` | still denied |
+
+How it is decided: `mcp:connect` has `ExcludedBy: mcp:blocked_connect` and
+`BlockWins: true`. The engine subtracts any matching block from the allows,
+and with `BlockWins` no allow outranks it, not even a grant made directly to
+the user. Blocks match strictly: every key on the block must be present on the
+check, so a block on C cannot leak onto other servers.
+
+### Scenario 4. Connect to every server but only call read-only tools
+
+**Partly supported. Enforced by the engine today, not modelled by the catalogue.**
+
+Stored grant:
+
+```
+role C   mcp:connect   {resource_id: "*", disposition: "read_only"}
+```
+
+| Request | Answer |
+| --- | --- |
+| connect to any server | allowed, basis `legacy_broad_grant` (wildcard connect, see scenario 1) |
+| call a tool annotated read-only | allowed |
+| call a tool annotated destructive or idempotent | denied |
+| **call a tool with no annotations** | **allowed: a gap** |
+
+How it is decided: for each tool call, the interceptor works out the tool's
+**disposition** from the annotations the MCP server declares
+(`dispositionFromAnnotations`, `mcp/rpc_tools_list.go:328`): `read_only`,
+`destructive`, `idempotent` or `open_world`, taking the first hint that is set.
+It sends that in the check, and the grant's `disposition` must match.
+
+The gaps:
+
+- **Unannotated tools pass.** A tool with no annotations has no disposition,
+  so the check leaves that key out. Allow grants match loosely: a key on the
+  grant that the check leaves out is skipped (`Selector.Matches`,
+  `authz/selector.go:67`). So the read-only grant also allows the unannotated
+  tool. The engine already closes this hole for one case, a direct grant
+  outranking a block (`authz/precedence.go:138`), but not for plain allows.
+  The test asserts the current behaviour so the gap is visible.
+- **The server declares its own annotations.** "Read-only" means what the
+  upstream server says about its tool. Speakeasy cannot verify it.
+- **The connection itself is not restricted**, which is intended: the user
+  can connect and list tools, and only the calls are filtered.
+
+How B could model it (**sketched**, not built): give `Definition` a list of
+the tool-call keys it understands, and add a tool-call builder that the
+interceptors would use instead of `authz.MCPToolCallCheck`.
+
+```go
+// permissions.go
+ToolDimensions: []string{authz.SelectorKeyTool, authz.SelectorKeyDisposition},
+
+// mcpserver.go
+func MCPToolCall(target Target, tool, disposition string) Request
+```
+
+With that in place, `prepare` could treat an unknown disposition as
+`missing_fact` (unresolved, never allows) whenever a grant constrains
+disposition. That would close the gap in one place instead of in every
+interceptor.
+
+### Scenario 5. Connect to server A and call only tool A
+
+**Supported by the engine today, not modelled by the catalogue.**
+
+Stored grant:
+
+```
+role D   mcp:connect   {resource_id: "A", tool: "tool_a"}
+```
+
+| Request | Answer |
+| --- | --- |
+| connect to server A | allowed (basis none: it names one server) |
+| connect to server C | denied |
+| call `tool_a` on server A | allowed |
+| call `tool_b` on server A | denied; tools/list also hides it |
+| call `tool_a` on server C | denied |
+
+How it is decided: the connection check has no tool, so the grant's `tool`
+key is skipped and the connection is allowed. Each tool call carries the tool
+name, which must equal `tool_a`. Tool names are matched exactly; there are no
+patterns.
+
+Same caveat as scenario 4: the catalogue does not know about tools, so the
+tool restriction relies on the interceptors building the right engine check.
+The sketch under scenario 4 would bring it into the catalogue.
