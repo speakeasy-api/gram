@@ -12,6 +12,7 @@ import { CodeBlock } from "./CodeBlock";
 import {
   ACTION_DOCS,
   WORKFLOW_AGENTS,
+  controlPlaneProblem,
   pluginsForEveryAgent,
   unreachablePluginServers,
   workflowYaml,
@@ -64,8 +65,13 @@ export function PluginsStep({
     <div className="space-y-4 text-sm">
       <p>
         The job gets {agentName || "this agent"}&apos;s plugins: their MCP
-        servers, skills and hooks. Hook events need the observability plugin
-        among them.
+        servers, skills and hooks. Speakeasy also adds its observability plugin,
+        which sends the job&apos;s hook events.
+      </p>
+      <p className="text-muted-foreground">
+        Below are the plugins assigned to <strong>Everyone</strong> in this
+        project. The list is partial: the job also gets plugins assigned to
+        roles {agentName || "the agent"} holds, and those from other projects.
       </p>
       {pending ? (
         <p className="text-muted-foreground">
@@ -84,8 +90,9 @@ export function PluginsStep({
       ) : delivered.length === 0 ? (
         <Alert variant="warning">
           <div className="text-sm">
-            No plugin in this project reaches {agentName || "this agent"}, so
-            the job gets no MCP servers and sends no hook events. On the{" "}
+            No plugin in this project is assigned to Everyone, so unless{" "}
+            {agentName || "the agent"} holds a role with plugins, the job gets
+            no MCP servers. On the{" "}
             <Link className="underline" to={routes.plugins.href()}>
               Plugins page
             </Link>
@@ -121,7 +128,6 @@ export function PluginsStep({
         </Alert>
       )}
       <p className="text-muted-foreground">
-        Plugins assigned to a role reach the agent too, once it holds that role.
         Servers that need each person to sign in do not work in a job: there is
         nobody to sign in.
       </p>
@@ -134,11 +140,13 @@ export function WorkflowStep(): JSX.Element {
   const project = useProject();
   const [agent, setAgent] = useState<WorkflowAgent>("claude");
   const selected = WORKFLOW_AGENTS[agent];
+  const controlPlaneUrl = getServerURL();
+  const unreachable = controlPlaneProblem(controlPlaneUrl);
   const yaml = workflowYaml({
     agent,
     organizationId: organization.id,
     projectSlug: project.slug,
-    controlPlaneUrl: getServerURL(),
+    controlPlaneUrl,
     buildFromSource: true,
   });
   return (
@@ -165,11 +173,17 @@ export function WorkflowStep(): JSX.Element {
         secrets for {selected.name}, then replace the example prompt with your
         task. Speakeasy access uses the job&apos;s GitHub token separately.
       </p>
-      <CodeBlock
-        value={yaml}
-        label=".github/workflows/speakeasy.yml"
-        language="yaml"
-      />
+      {yaml === null ? (
+        <Alert variant="error">
+          <div className="text-sm">{unreachable}</div>
+        </Alert>
+      ) : (
+        <CodeBlock
+          value={yaml}
+          label=".github/workflows/speakeasy.yml"
+          language="yaml"
+        />
+      )}
       <Alert variant="info">
         <div className="space-y-2 text-sm">
           <p>
@@ -191,8 +205,10 @@ export function WorkflowStep(): JSX.Element {
           to send none.
         </li>
         <li>
-          Pull requests from forks get no GitHub token, so the action skips
-          them.
+          On <code>pull_request</code>, forks get no GitHub token, and the
+          job&apos;s <code>if:</code> skips them. Don&apos;t run it on{" "}
+          <code>pull_request_target</code>: that event gives a fork&apos;s pull
+          request a token the rule admits.
         </li>
         <li>
           Keep <strong>Connect to Speakeasy</strong> before{" "}

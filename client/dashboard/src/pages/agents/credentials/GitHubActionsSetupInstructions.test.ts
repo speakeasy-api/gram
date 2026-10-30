@@ -1,12 +1,16 @@
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import { describe, expect, it } from "vitest";
 import {
+  ACTION_COMMIT,
   ACTION_DEFAULT_CONTROL_PLANE,
+  SPEAKEASYD_SOURCE_COMMIT,
+  controlPlaneProblem,
   githubActionsAgentGrants,
   pluginsForEveryAgent,
   repositoryProblem,
   unreachablePluginServers,
   workflowYaml,
+  type WorkflowAgent,
 } from "./githubActions";
 import { githubActionsSetupInstructions } from "./GitHubActionsSetupInstructions";
 import { hasPlatformSetup } from "./platformSetups";
@@ -121,25 +125,52 @@ describe("GitHub Actions setup", () => {
 
 describe("workflowYaml", () => {
   const base = {
-    agent: "claude" as const,
+    agent: "claude" as WorkflowAgent,
     organizationId: "org-123",
     projectSlug: "ci",
     controlPlaneUrl: ACTION_DEFAULT_CONTROL_PLANE,
     buildFromSource: false,
   };
 
+  /** The workflow for these options, which must have one. */
+  function workflow(options: Partial<typeof base> = {}): string {
+    const yaml = workflowYaml({ ...base, ...options });
+    if (yaml === null) throw new Error("expected a workflow");
+    return yaml;
+  }
+
+  /** Every variant the setup can print. */
+  const variants = (["claude", "codex"] as const).flatMap((agent) =>
+    [false, true].flatMap((buildFromSource) =>
+      [ACTION_DEFAULT_CONTROL_PLANE, "https://speakeasy.example.com"].map(
+        (controlPlaneUrl) =>
+          workflow({ agent, buildFromSource, controlPlaneUrl }),
+      ),
+    ),
+  );
+
   it("fills in the organization and the hook events project", () => {
-    const yaml = workflowYaml(base);
+    const yaml = workflow();
     expect(yaml).toContain("id-token: write");
-    expect(yaml).toContain("uses: speakeasy-api/device-agent-action@main");
     expect(yaml).toContain("organization-id: org-123");
     expect(yaml).toContain("project: ci");
     expect(yaml).not.toContain("control-plane-url");
     expect(yaml).not.toContain("speakeasyd-binary");
   });
 
+  it("pins the device agent action and speakeasyd's source to commits", () => {
+    const yaml = workflow({ buildFromSource: true });
+    expect(ACTION_COMMIT).toMatch(/^[0-9a-f]{40}$/);
+    expect(SPEAKEASYD_SOURCE_COMMIT).toMatch(/^[0-9a-f]{40}$/);
+    expect(yaml).toContain(
+      `uses: speakeasy-api/device-agent-action@${ACTION_COMMIT}`,
+    );
+    expect(yaml).toContain(`ref: ${SPEAKEASYD_SOURCE_COMMIT}`);
+    expect(yaml).not.toContain("@main");
+  });
+
   it("runs Claude after Speakeasy has configured its MCP servers", () => {
-    const yaml = workflowYaml(base);
+    const yaml = workflow();
     expect(yaml).toContain("uses: anthropics/claude-code-action@v1");
     expect(yaml).toContain(
       "anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}",
@@ -158,15 +189,17 @@ describe("workflowYaml", () => {
   });
 
   it("shares Codex's configuration between Speakeasy and the official action", () => {
-    const yaml = workflowYaml({ ...base, agent: "codex" });
-    expect(yaml).toContain("CODEX_HOME: ${{ runner.temp }}/speakeasy-codex");
-    expect(yaml).toContain('mkdir -p "$CODEX_HOME"');
+    const yaml = workflow({ agent: "codex" });
+    expect(yaml).toContain(
+      'echo "CODEX_HOME=$RUNNER_TEMP/speakeasy-codex" >> "$GITHUB_ENV"',
+    );
+    expect(yaml).toContain('mkdir -p "$RUNNER_TEMP/speakeasy-codex"');
     expect(yaml).toContain("npm install -g @openai/codex");
     expect(yaml).toContain("run: codex mcp list");
     expect(yaml).toContain("uses: openai/codex-action@v1");
     expect(yaml).toContain("openai-api-key: ${{ secrets.OPENAI_API_KEY }}");
     expect(yaml).toContain("codex-home: ${{ env.CODEX_HOME }}");
-    expect(yaml.indexOf("mkdir -p")).toBeLessThan(
+    expect(yaml.indexOf("GITHUB_ENV")).toBeLessThan(
       yaml.indexOf("uses: speakeasy-api/device-agent-action"),
     );
     expect(
@@ -176,31 +209,60 @@ describe("workflowYaml", () => {
     expect(yaml).not.toContain("anthropics/claude-code-action");
   });
 
-  it("skips fork pull requests before invoking an agent with a provider secret", () => {
-    for (const agent of ["claude", "codex"] as const) {
-      expect(workflowYaml({ ...base, agent })).toContain(
-        "if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false",
+  // GitHub evaluates a job's own keys before any runner exists, so the
+  // runner context is only available inside steps. A runner.temp in a
+  // job-level env makes GitHub reject the whole workflow.
+  it("uses the runner context only inside steps", () => {
+    for (const yaml of variants) {
+      const steps = yaml.indexOf("    steps:");
+      expect(steps).toBeGreaterThan(0);
+      expect(yaml.slice(0, steps)).not.toMatch(/\$\{\{\s*(runner|steps)\./);
+      expect(yaml.slice(0, steps)).not.toMatch(/^ {4}env:/m);
+    }
+  });
+
+  it("skips fork pull requests before the job starts", () => {
+    for (const yaml of variants) {
+      const lines = yaml.split("\n");
+      const job = lines.indexOf("  agent:");
+      expect(job).toBeGreaterThan(0);
+      // The job's first key, so no step of it runs for a fork.
+      expect(lines[job + 1]).toBe(
+        "    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false",
       );
+      expect(lines.indexOf("    runs-on: ubuntu-latest")).toBe(job + 2);
     }
   });
 
   it("names a deployment other than the action's default", () => {
-    const yaml = workflowYaml({
-      ...base,
+    const yaml = workflow({
       controlPlaneUrl: "https://speakeasy.example.com/",
     });
     expect(yaml).toContain("control-plane-url: https://speakeasy.example.com");
   });
 
+  it("prints no workflow for a control plane served without https", () => {
+    expect(
+      workflowYaml({
+        ...base,
+        controlPlaneUrl: "http://speakeasy.example.com",
+      }),
+    ).toBeNull();
+    expect(controlPlaneProblem("http://speakeasy.example.com")).toContain(
+      "https",
+    );
+    expect(controlPlaneProblem("https://speakeasy.example.com")).toBeNull();
+  });
+
   it("builds speakeasyd from source until a release supports it", () => {
-    const yaml = workflowYaml({ ...base, buildFromSource: true });
+    const yaml = workflow({ buildFromSource: true });
     expect(yaml).toContain("repository: speakeasy-api/device-agent");
     expect(yaml).toContain('go build -o "$RUNNER_TEMP/speakeasyd"');
     expect(yaml).toContain("speakeasyd-binary: ${{ runner.temp }}/speakeasyd");
   });
 
   it("shows placeholders while the organization or project is unknown", () => {
-    const yaml = workflowYaml({ ...base, organizationId: "", projectSlug: "" });
+    const yaml = workflow({ organizationId: "", projectSlug: "" });
     expect(yaml).toContain("organization-id: SPEAKEASY_ORGANIZATION_ID");
     expect(yaml).toContain("project: SPEAKEASY_PROJECT");
   });
@@ -215,6 +277,7 @@ function plugin(
   servers: {
     displayName: string;
     toolsetId?: string;
+    mcpServerId?: string;
     metaMcpServerId?: string;
   }[],
 ): Plugin {
@@ -263,6 +326,30 @@ describe("plugins a job receives", () => {
     expect(
       pluginsForEveryAgent([everyone, optional, roleOnly]).map((p) => p.id),
     ).toEqual(["observability"]);
+  });
+
+  it("match a server that has only an MCP server id", () => {
+    const remote = plugin(
+      "remote",
+      [{ principalUrn: "*", installMode: "required" }],
+      [
+        { displayName: "Reachable", mcpServerId: "mcp-reachable" },
+        { displayName: "Unreachable", mcpServerId: "mcp-unreachable" },
+      ],
+    );
+    expect(
+      unreachablePluginServers(
+        [remote],
+        [
+          {
+            id: "server-2",
+            resourceId: "mcp-reachable",
+            name: "Reachable",
+            mcpUrl: "https://x",
+          },
+        ],
+      ),
+    ).toEqual(["Unreachable"]);
   });
 
   it("name the servers the agent cannot use", () => {

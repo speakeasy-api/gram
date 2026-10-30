@@ -11,6 +11,20 @@ import type { SetupServer } from "./setupInstructions";
 
 const ACTION = "speakeasy-api/device-agent-action";
 export const ACTION_DOCS = `https://github.com/${ACTION}`;
+
+/**
+ * The commits the generated workflow runs, pinned rather than named by branch
+ * or tag: the job hands them its OIDC token, so a moved ref would run code
+ * nobody reviewed with the agent's access. Bump them here, together, when the
+ * action or speakeasyd changes.
+ *
+ * ACTION_COMMIT is the device agent action. SPEAKEASYD_SOURCE_COMMIT is the
+ * device-agent commit with GitHub Actions support that the workflow builds
+ * speakeasyd from, until a speakeasyd release carries it.
+ */
+export const ACTION_COMMIT = "1b4e09374058ac30d700de7f8f9f9347a34eec78";
+export const SPEAKEASYD_SOURCE_COMMIT =
+  "103ae14d8f361d31f267c09c76b5741edf2d2c84";
 export const OIDC_DOCS =
   "https://docs.github.com/en/actions/reference/security/oidc";
 
@@ -37,13 +51,6 @@ export const WORKFLOW_AGENTS = {
  * own in the workflow.
  */
 export const ACTION_DEFAULT_CONTROL_PLANE = "https://ai.speakeasy.com";
-
-/**
- * The device-agent branch with GitHub Actions support. No speakeasyd release
- * carries it yet, so the workflow builds speakeasyd from it until one does.
- */
-const SPEAKEASYD_SOURCE_REF =
-  "brad/dno-1341-da-mint-and-rotate-the-mcpconnect-credential-from-the";
 
 /** What the device agent needs from the agent, beyond its MCP servers. */
 export const DEVICE_AGENT_SYNC_SCOPE = "org:device_agent_sync";
@@ -97,9 +104,21 @@ export function repositoryName(values: Record<string, string>): string {
 }
 
 /**
- * The job's workflow. The organization ID and the hook events project are
- * filled in, and a deployment other than the action's default names itself,
- * because the token's audience is built from it.
+ * Why the action cannot talk to this control plane, or null when it can. The
+ * action refuses anything but https, since the job's token exchange crosses
+ * the network.
+ */
+export function controlPlaneProblem(controlPlaneUrl: string): string | null {
+  const controlPlane = controlPlaneUrl.replace(/\/+$/, "");
+  if (controlPlane === "" || controlPlane.startsWith("https://")) return null;
+  return `This deployment serves Speakeasy at ${controlPlane}, and the action only talks to an https control plane: the job's GitHub token would cross the network unencrypted. Serve Speakeasy over https to use GitHub Actions.`;
+}
+
+/**
+ * The job's workflow, or null where the action could not reach this
+ * deployment (see controlPlaneProblem). The organization ID and the hook
+ * events project are filled in, and a deployment other than the action's
+ * default names itself, because the token's audience is built from it.
  */
 export function workflowYaml({
   agent,
@@ -114,7 +133,8 @@ export function workflowYaml({
   controlPlaneUrl: string;
   /** Builds speakeasyd from source, until a release supports GitHub Actions. */
   buildFromSource: boolean;
-}): string {
+}): string | null {
+  if (controlPlaneProblem(controlPlaneUrl) !== null) return null;
   const controlPlane = controlPlaneUrl.replace(/\/+$/, "");
   const lines = [
     "name: Speakeasy",
@@ -129,12 +149,6 @@ export function workflowYaml({
     "    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false",
     "    runs-on: ubuntu-latest",
   ];
-  if (agent === "codex") {
-    lines.push(
-      "    env:",
-      "      CODEX_HOME: ${{ runner.temp }}/speakeasy-codex",
-    );
-  }
   lines.push(
     "    permissions:",
     "      id-token: write # lets the job request its GitHub OIDC token",
@@ -146,12 +160,18 @@ export function workflowYaml({
     "      # Install the tool and create its configuration directory before Speakeasy syncs.",
     `      - name: Install ${WORKFLOW_AGENTS[agent].name}`,
     "        run: |",
-    agent === "codex"
-      ? "          npm install -g @openai/codex"
-      : "          npm install -g @anthropic-ai/claude-code",
-    agent === "codex"
-      ? '          mkdir -p "$CODEX_HOME"'
-      : '          mkdir -p "$HOME/.claude"',
+    ...(agent === "codex"
+      ? [
+          "          npm install -g @openai/codex",
+          // runner.temp is not available in a job-level env, so later
+          // steps get CODEX_HOME through GITHUB_ENV.
+          '          echo "CODEX_HOME=$RUNNER_TEMP/speakeasy-codex" >> "$GITHUB_ENV"',
+          '          mkdir -p "$RUNNER_TEMP/speakeasy-codex"',
+        ]
+      : [
+          "          npm install -g @anthropic-ai/claude-code",
+          '          mkdir -p "$HOME/.claude"',
+        ]),
   );
   if (buildFromSource) {
     lines.push(
@@ -159,7 +179,7 @@ export function workflowYaml({
       "      - uses: actions/checkout@v7",
       "        with:",
       "          repository: speakeasy-api/device-agent",
-      `          ref: ${SPEAKEASYD_SOURCE_REF}`,
+      `          ref: ${SPEAKEASYD_SOURCE_COMMIT}`,
       "          path: .speakeasyd-src",
       "          persist-credentials: false",
       "      - uses: actions/setup-go@v7",
@@ -172,7 +192,7 @@ export function workflowYaml({
   lines.push(
     "      - name: Connect to Speakeasy",
     "        id: speakeasy",
-    `        uses: ${ACTION}@main`,
+    `        uses: ${ACTION}@${ACTION_COMMIT}`,
     "        with:",
     `          organization-id: ${organizationId || "SPEAKEASY_ORGANIZATION_ID"}`,
     `          project: ${projectSlug || "SPEAKEASY_PROJECT"} # hook events go to this project`,
