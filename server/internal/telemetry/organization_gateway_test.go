@@ -10,6 +10,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 func TestOrganizationGatewayActivity(t *testing.T) {
@@ -23,12 +24,21 @@ func TestOrganizationGatewayActivity(t *testing.T) {
 	gatewayID := orggateway.GatewayID(ti.orgID).String()
 	member := createTunneledMCPServerFixture(t, ctx, ti, tunneledMCPServerFixtureParams{name: "Member A", slug: "member-a-" + uuid.NewString()[:8]}).mcpServerID.String()
 	deleted := uuid.NewString()
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Second project",
+		Slug:           "second-" + uuid.NewString()[:8],
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
 
 	nilProject := uuid.Nil.String()
 	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: nilProject, gatewayID: gatewayID, memberID: "", tool: "list_servers", status: 200, at: at})
 	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: nilProject, gatewayID: gatewayID, memberID: "", tool: "describe_tools", status: 200, at: at})
 	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: gatewayID, memberID: member, tool: "ping", status: 200, at: at})
 	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: gatewayID, memberID: member, tool: "ping", status: 502, at: at})
+	// The gateway spans projects: a call recorded in another project of the
+	// organization counts too.
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: otherProject.ID.String(), gatewayID: gatewayID, memberID: member, tool: "ping", status: 200, at: at})
 	// A server no longer in the organization still counts as a dispatch but
 	// is left out of the breakdown.
 	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: gatewayID, memberID: deleted, tool: "ping", status: 200, at: at})
@@ -46,17 +56,17 @@ func TestOrganizationGatewayActivity(t *testing.T) {
 	require.Equal(t, int64(1), usage.Funnel.ListServers)
 	require.Equal(t, int64(0), usage.Funnel.DescribeServer)
 	require.Equal(t, int64(1), usage.Funnel.DescribeTools)
-	require.Equal(t, int64(3), usage.Funnel.ExecuteTool)
+	require.Equal(t, int64(4), usage.Funnel.ExecuteTool)
 	require.Len(t, usage.Members, 1)
 	require.Equal(t, member, usage.Members[0].McpServerID)
-	require.Equal(t, int64(2), usage.Members[0].ToolCalls)
+	require.Equal(t, int64(3), usage.Members[0].ToolCalls)
 	require.Equal(t, int64(1), usage.Members[0].ErrorCount)
 	require.NotNil(t, usage.Members[0].McpServerName)
 	require.Equal(t, "Member A", *usage.Members[0].McpServerName)
 
 	overview, err := ti.service.GetOrganizationGatewayOverview(ctx, &gen.GetOrganizationGatewayOverviewPayload{From: from, To: to, SessionToken: nil})
 	require.NoError(t, err)
-	require.Equal(t, int64(3), overview.Summary.TotalToolCalls)
+	require.Equal(t, int64(4), overview.Summary.TotalToolCalls)
 	require.Equal(t, int64(1), overview.Summary.FailedToolCalls)
 	require.NotEmpty(t, overview.TimeSeries)
 }
