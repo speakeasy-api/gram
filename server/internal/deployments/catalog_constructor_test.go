@@ -4,7 +4,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"go.opentelemetry.io/otel/trace/noop"
 	"reflect"
 	"testing"
 
@@ -25,7 +24,7 @@ func TestNewServiceKeepsNativeCatalogReader(t *testing.T) {
 	require.NoError(t, err)
 	reader := externalmcp.NewNativeRegistryReader(mcpregistry.New(nil, validator))
 	catalog := externalmcp.NewCatalogService(nil, reader)
-	service := NewService(testenv.NewLogger(t), noop.NewTracerProvider(), nil, nil, &sessions.Manager{}, nil, nil, nil, nil, nil, catalog)
+	service := NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), nil, nil, &sessions.Manager{}, nil, nil, nil, nil, nil, catalog)
 	require.Same(t, catalog, service.catalog)
 	resolved, err := service.catalog.ReaderFor(externalmcp.CatalogSource{Registry: externalmcp.Registry{ID: externalmcp.NativeCatalogRegistryID}, SourceType: "native_v1", AuthProfile: "none"})
 	require.NoError(t, err)
