@@ -87024,9 +87024,20 @@ paths:
                 name: createCustomerSession
     /rpc/usage.createStripeCheckout:
         post:
-            description: Create a Stripe Checkout link for starting PAYG billing
+            description: Create an embedded Stripe Checkout session for starting PAYG billing
             operationId: createStripeCheckout
             parameters:
+                - allowEmptyValue: true
+                  description: Appearance for new embedded Checkout sessions; existing sessions retain their original theme.
+                  in: query
+                  name: theme
+                  schema:
+                    default: light
+                    description: Appearance for new embedded Checkout sessions; existing sessions retain their original theme.
+                    enum:
+                        - light
+                        - dark
+                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -87039,7 +87050,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                type: string
+                                $ref: '#/components/schemas/StripeEmbeddedCheckout'
                     description: OK response.
                 "400":
                     content:
@@ -87802,6 +87813,97 @@ paths:
             x-speakeasy-name-override: getSpendBreakdown
             x-speakeasy-react-hook:
                 name: getSpendBreakdown
+    /rpc/usage.getStripeCheckoutStatus:
+        get:
+            description: Read the current status of a Stripe Checkout session owned by the active organization
+            operationId: getStripeCheckoutStatus
+            parameters:
+                - allowEmptyValue: true
+                  description: Stripe Checkout session identifier
+                  in: query
+                  name: session_id
+                  required: true
+                  schema:
+                    description: Stripe Checkout session identifier
+                    maxLength: 255
+                    pattern: ^cs_[A-Za-z0-9_]+$
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetStripeCheckoutStatusResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getStripeCheckoutStatus usage
+            tags:
+                - usage
+            x-speakeasy-name-override: getStripeCheckoutStatus
+            x-speakeasy-react-hook:
+                name: getStripeCheckoutStatus
     /rpc/usage.getStripeSubscription:
         get:
             description: Get the live lifecycle state of the organization's Stripe PAYG subscription
@@ -108486,6 +108588,28 @@ components:
                 - drift
                 - assistant_count
                 - prompt_injection_findings
+        GetStripeCheckoutStatusResponseBody:
+            type: object
+            properties:
+                billing_ready:
+                    type: boolean
+                    description: Whether this completed session and its own subscription are ready for billing activation; local webhook persistence is still required
+                payment_status:
+                    type: string
+                    enum:
+                        - paid
+                        - unpaid
+                        - no_payment_required
+                status:
+                    type: string
+                    enum:
+                        - open
+                        - complete
+                        - expired
+            required:
+                - status
+                - payment_status
+                - billing_ready
         GetToolUsageClientToolBreakdownResult:
             type: object
             properties:
@@ -127485,6 +127609,18 @@ components:
             required:
                 - id
                 - days
+        StripeEmbeddedCheckout:
+            type: object
+            properties:
+                client_secret:
+                    type: string
+                    description: Client secret Stripe.js uses to mount embedded Checkout
+                publishable_key:
+                    type: string
+                    description: Stripe publishable key used to load Stripe.js
+            required:
+                - client_secret
+                - publishable_key
         StripeSubscription:
             type: object
             properties:

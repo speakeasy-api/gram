@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -665,13 +666,26 @@ func newBillingProvider(
 	}
 }
 
+var stripePublishableKeyPattern = regexp.MustCompile(`^pk_(test|live)_[A-Za-z0-9]+$`)
+
 func newStripeClient(
 	ctx context.Context,
 	logger *slog.Logger,
 	guardianPolicy *guardian.Policy,
 	c *cli.Context,
 ) (stripeclient.Client, error) {
+	publishableKey := c.String("stripe-publishable-key")
+	if stripeclient.IsConfigured(publishableKey) && !stripePublishableKeyPattern.MatchString(publishableKey) {
+		return nil, errors.New("invalid Stripe publishable key format")
+	}
 	apiKey := c.String("stripe-api-key")
+	apiKeyParts := strings.SplitN(apiKey, "_", 3)
+	if stripeclient.IsConfigured(publishableKey) && len(apiKeyParts) == 3 &&
+		(apiKeyParts[0] == "sk" || apiKeyParts[0] == "rk") &&
+		(apiKeyParts[1] == "test" || apiKeyParts[1] == "live") &&
+		!strings.HasPrefix(publishableKey, "pk_"+apiKeyParts[1]+"_") {
+		return nil, errors.New("mismatched Stripe API and publishable key modes")
+	}
 	if !stripeclient.IsConfigured(apiKey) {
 		if c.String("environment") == "local" {
 			logger.WarnContext(ctx, "using stub Stripe client: Stripe not configured")
@@ -696,6 +710,7 @@ func newStripeClient(
 		guardianPolicy,
 		apiKey,
 		c.String("stripe-webhook-secret"),
+		publishableKey,
 		catalog,
 	), nil
 }

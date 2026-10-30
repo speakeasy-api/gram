@@ -49,19 +49,62 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      # Caches are ref-scoped; this workflow only tests, never publishes artifacts.
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0 # zizmor: ignore[cache-poisoning]
         with:
           minimum_release_age: 1d
           install: true
           cache: true
           env: false
-      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0 # zizmor: ignore[cache-poisoning]
         with:
           rust-src-dir: agents/code-runner
           rustflags: ""
-      - run: mise run build:monty
+      # cargo install's executable is not retained by the Rust dependency cache.
+      # Keep this after Rust setup: its post-action must save Monty before the
+      # Rust cache post-action cleans target/monty.
+      # Use an exact key: a different pinned revision must never reuse this binary.
+      - name: Cache pinned Monty installation
+        id: monty-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
+        with:
+          path: agents/code-runner/target/monty
+          key: monty-github-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.mise-tasks/build/monty.sh', 'agents/code-runner/rust-toolchain.toml') }}
+      - if: steps.monty-cache.outputs.cache-hit != 'true'
+        run: mise run build:monty
       - run: mise run build:code-runner
       - run: mise run test:code-runner
       - run: mise run lint:code-runner
-      - run: mise run test:code-runner-image
-      - run: mise run test:code-mode
+      # The local docker build task has no cross-run cache. Build/load the same
+      # Dockerfile here, retaining intermediate stages (including pinned Monty).
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Build smoke-test image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: agents/code-runner/Dockerfile
+          load: true
+          push: false
+          tags: gram-code-runner:test
+          cache-from: type=gha,scope=code-runner-validation
+          cache-to: type=gha,scope=code-runner-validation,mode=max
+      - name: Smoke-test cached image
+        # Only skip the build dependency: the smoke test itself always runs.
+        run: mise run --skip-deps test:code-runner-image
+      - name: Locate Go caches
+        run: |
+          echo "GO_BUILD_CACHE=$(go env GOCACHE)" >> "$GITHUB_ENV"
+          echo "GO_MOD_CACHE=$(go env GOMODCACHE)" >> "$GITHUB_ENV"
+      - name: Cache Go integration build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
+        with:
+          path: |
+            ${{ env.GO_BUILD_CACHE }}
+            ${{ env.GO_MOD_CACHE }}
+          key: code-mode-go-github-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', 'go.mod', 'go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            code-mode-go-github-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', 'go.mod', 'go.sum') }}-
+      # Go cannot track changes to the external Rust/Monty executables. Reuse
+      # compiled packages, but always execute the integration tests.
+      - run: mise run test:code-mode -count=1
