@@ -13,6 +13,7 @@ Labels:
 
 1. [The scaffolding: defining checks and injecting the client](#step-1-the-scaffolding)
 2. [Five role scenarios for MCP servers](#step-2-five-role-scenarios-for-mcp-servers)
+3. [The same scenarios for projects](#step-3-the-same-scenarios-for-projects)
 
 ---
 
@@ -54,8 +55,9 @@ type Definition struct {
 }
 ```
 
-All definitions live in one list, `definitions` (`permissions.go:39`). It holds
-the three MCP server permissions so far. Two safeguards keep the list honest:
+All definitions live in one list, `definitions` (`permissions.go:48`). It holds
+the three MCP server permissions and, since step 3, the two project
+permissions. Two safeguards keep the list honest:
 
 - **At startup.** `mustValidate` runs when the package loads and panics on a bad
   entry: a duplicate, a block used as a permission, a resource kind that does not
@@ -192,13 +194,14 @@ enforcement cannot drift apart.
    happens before any grant is read.
 2. **Evaluate** through the backend, which uses the grants the engine already
    loaded for this request.
-3. **Decide** (`client.go:229`). This returns allowed, or the first request
+3. **Decide** (`client.go:235`). This returns allowed, or the first request
    that failed and why. An allow that came from an old grant broader than the
    definition now permits is labelled `legacy_broad_grant`.
 
 ### Not part of step 1
 
-- Only the MCP server permissions are defined so far. Other resources would add
+- Only the MCP server permissions were defined at this step (step 3 adds
+  projects). Other resources would add
   entries to the same list and a builder file of their own.
 - Most of the code base still calls `authz.Engine.Require` with hand-built
   checks. The scaffolding lets each operation move over on its own; it does not
@@ -259,7 +262,7 @@ decision, err := catalog.NewEngineClient(s.authz).Require(ctx, requests...)
 
 #### Rule setup
 
-The definition (`authz/catalog/permissions.go:58`):
+The definition (`authz/catalog/permissions.go:67`):
 
 ```go
 {
@@ -306,9 +309,9 @@ ScopeMCPConnect: nil, // nothing else satisfies connect
    - The target is one concrete `mcp` resource, not `*`. ✓
    - Its organization `org-1` is the caller's active organization (`:180`). ✓
    - The required ancestors, project and org, are present and in `org-1`
-     (`:185`, `requiredAncestor` at `:201`). ✓
+     (`:185`, `requiredAncestor` at `:207`). ✓
    - It builds the check `{scope: mcp:connect, resource_id: srv-a, project_id: proj-a}`
-     (`:193`).
+     (`:199`).
 6. The backend calls `Engine.Require` (`authz/catalog/backend.go:34`, then
    `authz/engine.go:211`). That reaches `evaluateGrantCheck`
    (`authz/grants.go:402`):
@@ -319,11 +322,11 @@ ScopeMCPConnect: nil, // nothing else satisfies connect
      `*` matches anything, and `project_id` proj-a = proj-a. **Match.**
    - The exclusion (`authz/checks.go:136`) looks for an `mcp:blocked_connect`
      row matching strictly. There is none. **Allowed.**
-7. `decide` (`authz/catalog/client.go:229`) checks where the grant is anchored
-   (`anchoredWithin`, `permissions.go:87`). `resource_id` is `*` and
+7. `decide` (`authz/catalog/client.go:235`) checks where the grant is anchored
+   (`anchoredWithin`, `permissions.go:114`). `resource_id` is `*` and
    `project_id` is set, so it is a project-wide grant. `AllowedAnchors` is
    `{mcp}`, so the condition "the grant names one server" is **not met**, and
-   the basis is `legacy_broad_grant` (`client.go:244`).
+   the basis is `legacy_broad_grant` (`client.go:250`).
 8. `mcp/serveendpoint.go:1100` logs the legacy basis, and the request
    continues to the upstream server.
 
@@ -378,7 +381,7 @@ s.authorizeServerScopes(ctx, payload.McpServerID, func(target catalog.Target) []
 
 #### Rule setup
 
-`authz/catalog/permissions.go:40` and `:49`:
+`authz/catalog/permissions.go:49` and `:58`:
 
 ```go
 {
@@ -458,7 +461,7 @@ The same call as scenario 1 (`mcp/serveendpoint.go:1077`, `:1092`).
 
 #### Rule setup
 
-The definition names the block and makes it win (`authz/catalog/permissions.go:58`):
+The definition names the block and makes it win (`authz/catalog/permissions.go:67`):
 
 ```go
 ExcludedBy: authz.ScopeMCPBlockedConnect,
@@ -659,3 +662,309 @@ As in scenario 4, the catalogue does not take part in the tool decision.
 | call `tool_a` on `srv-a` | allowed | |
 | call `tool_b` on `srv-a` | denied; hidden from `tools/list` | `tool` mismatch |
 | call `tool_a` on `srv-c` | denied | `resource_id` mismatch |
+
+---
+
+## Step 3. The same scenarios for projects
+
+The step 2 scenarios, applied to `project:read` and `project:write`, with
+the connect-specific constraints dropped. The template is the same as step 2.
+Every outcome in the Cases tables is asserted in
+`authz/catalog/project_test.go`.
+
+Setup: organization `org-1` with projects `proj-a`, `proj-b` and `proj-c`.
+User `u-1` resolves to `user:u-1`, `user:all` and one
+`role:organization:<role>` per assigned role (`authz/engine.go:178`), and
+the engine loads their `principal_grants` rows (`authz/engine.go:196`).
+
+**What is implemented for this step:** the two project definitions and
+their builders (`authz/catalog/permissions.go:76`, `authz/catalog/project.go`),
+and two handlers that now ask through the catalogue: `GetProject` and
+`UpdateProject` in `projects/impl.go`. The other project checks, about 200
+call sites including `ListProjects`, still call the engine directly with
+hand-built checks. They reach the same answers, because the definitions
+encode today's engine rules.
+
+| # | Scenario | Status |
+| --- | --- | --- |
+| 1 | Role A can read every project | Implemented through the catalogue. |
+| 2 | Role A can write one project, which also grants read | Implemented through the catalogue. |
+| 3 | Role B blocks writing project C; a user in roles A and B writes every project except C | Implemented through the catalogue. Unlike MCP, a direct user grant still outranks the block. |
+| 4, 5 | Restricting what a project grant covers (the tool constraints) | No project equivalent: project grants accept no constraints. |
+
+---
+
+### Scenario 1. Role A can read every project
+
+**Status:** implemented through the catalogue.
+
+#### Grants
+
+| principal_urn | scope | selectors | effect |
+| --- | --- | --- | --- |
+| `role:organization:role-a` | `project:read` | `{"resource_kind": "project", "resource_id": "*"}` | NULL (allow) |
+
+#### Request
+
+`GetProject` loads the project by slug within the caller's organization, then
+asks for read on the row it loaded (`projects/impl.go:102`, `:113`):
+
+```go
+proj, err := s.repo.GetProjectBySlug(ctx, repo.GetProjectBySlugParams{Slug: slug, OrganizationID: authCtx.ActiveOrganizationID})
+// ...
+if _, err := s.authzClient.Require(ctx, catalog.ProjectRead(catalog.ProjectTarget(proj.OrganizationID, proj.ID.String()))); err != nil {
+	// a 403 is returned as 404, so callers cannot probe for project slugs
+}
+```
+
+The client is built once in the constructor, as in step 1
+(`projects/impl.go:76`):
+
+```go
+authzClient: catalog.NewEngineClient(authzEngine),
+```
+
+#### Rule setup
+
+`authz/catalog/permissions.go:76`:
+
+```go
+{
+	Name:              authz.ScopeProjectRead,
+	Resource:          authz.ResourceKindProject,
+	AllowedAnchors:    []string{authz.ResourceKindProject, authz.ResourceKindOrg}, // one project, or every project
+	RequiredAncestors: projectAncestors,                                           // {org}
+	ImpliedBy:         []authz.Scope{authz.ScopeProjectWrite},
+	ExcludedBy:        authz.ScopeProjectBlockedRead,
+	BlockWins:         false,
+},
+```
+
+The builders (`authz/catalog/project.go:8`, `:16`):
+
+```go
+func ProjectTarget(organizationID, projectID string) Target // the project, plus its organization as ancestor
+func ProjectRead(target Target) Request                     // project:read on it
+```
+
+#### Walkthrough
+
+`u-1` opens `proj-b`.
+
+1. `GetProject` (`projects/impl.go:95`) loads `proj-b` by slug, limited to
+   `org-1` (`:102`). An unknown slug, or one in another organization, is a
+   404 before any permission check.
+2. `:113` asks the client for `project:read` on `{project proj-b, org org-1}`.
+3. `prepare` (`authz/catalog/client.go:162`):
+   - `project:read` has a definition. ✓
+   - The target is one concrete project. ✓
+   - Its organization equals the caller's active organization (`:180`). ✓
+   - The required ancestor (org) is present and is `org-1` (`:185`). ✓
+   - No project ancestor is required, so the check carries no `project_id`:
+     `{scope: project:read, resource_id: proj-b}` (`:199`).
+4. The engine (`authz/grants.go:402`) expands the check to `root`,
+   `project:read` and `project:write` (`authz/access.go:92`,
+   `authz/scopes.go:280`). Role A's row: the scope is in the list,
+   `resource_kind` project = project, and `resource_id` `*` matches.
+   **Match.**
+5. There is no `project:blocked_read` row. **Allowed.**
+6. `decide` (`authz/catalog/client.go:235`): a `*` grant with no
+   `project_id` is an organization-wide anchor (`permissions.go:114`), and
+   `org` is in `AllowedAnchors`. Basis none: this is a normal grant, not a
+   legacy one.
+
+Listing projects is a different path: `ListProjects` (`projects/impl.go:241`)
+still filters with the engine directly (`s.authz.Filter`, `:280`), because the
+catalogue has no filter operation yet (**not built**). It gives the same
+answer, because the engine rules are the same.
+
+#### Cases
+
+| Request | Outcome | Why |
+| --- | --- | --- |
+| read `proj-a` or `proj-b` | allowed | `*` matches; an org-wide anchor is allowed |
+| write `proj-a` | denied, `no_grant` | `project:write` expands to nothing but itself |
+| read a project in another organization | denied, `cross_tenant` | refused in `prepare`, before grants are read |
+
+---
+
+### Scenario 2. Role A can write one project, which also grants read
+
+**Status:** implemented through the catalogue.
+
+#### Grants
+
+| principal_urn | scope | selectors | effect |
+| --- | --- | --- | --- |
+| `role:organization:role-a` | `project:write` | `{"resource_kind": "project", "resource_id": "proj-a"}` | NULL (allow) |
+
+#### Request
+
+`UpdateProject` asks for write on the caller's session project
+(`projects/impl.go:209`):
+
+```go
+if _, err := s.authzClient.Require(ctx, catalog.ProjectWrite(catalog.ProjectTarget(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()))); err != nil {
+	return nil, err
+}
+```
+
+Reading is the `GetProject` call from scenario 1.
+
+#### Rule setup
+
+`authz/catalog/permissions.go:76` and `:85`:
+
+```go
+{
+	Name:      authz.ScopeProjectRead,
+	ImpliedBy: []authz.Scope{authz.ScopeProjectWrite}, // writing lets you read
+	// ...
+},
+{
+	Name:      authz.ScopeProjectWrite,
+	ImpliedBy: nil,
+	// ...
+},
+```
+
+The engine's table, kept equal by `TestDefinitionsMatchEngine`
+(`authz/scopes.go:280`):
+
+```go
+ScopeProjectRead:  {ScopeProjectWrite},
+ScopeProjectWrite: nil,
+```
+
+#### Walkthrough
+
+`u-1` updates `proj-a`, then reads it, then tries to update `proj-b`.
+
+1. **Update `proj-a`:** `UpdateProject` (`projects/impl.go:203`) takes the
+   project from the authenticated session, not the request body, and asks for
+   `project:write` (`:209`). `prepare` passes and builds
+   `{scope: project:write, resource_id: proj-a}`. `expand()` gives `root`
+   and `project:write`. The row matches on scope and `resource_id`.
+   **Allowed.**
+2. **Read `proj-a`:** the check is `project:read`. `expand()` adds
+   `project:write` (`authz/scopes.go:280`), so the same row matches.
+   **Allowed.**
+3. **Update `proj-b`:** `resource_id` proj-a ≠ proj-b, and no other row
+   matches. **Denied, `no_grant`**, and the handler returns 403.
+
+#### Cases
+
+| Request | Outcome | Why |
+| --- | --- | --- |
+| write `proj-a` | allowed | direct scope match |
+| read `proj-a` | allowed | `project:read` expands to `project:write` |
+| write or read `proj-b` | denied, `no_grant` | `resource_id` proj-a ≠ proj-b |
+
+---
+
+### Scenario 3. Role B blocks writing project C; a user in both roles writes every project except C
+
+**Status:** implemented through the catalogue. This is where projects differ
+from MCP servers: the block yields to a grant made directly to the user.
+
+#### Grants
+
+`u-1` holds roles A and B:
+
+| principal_urn | scope | selectors | effect |
+| --- | --- | --- | --- |
+| `role:organization:role-a` | `project:write` | `{"resource_kind": "project", "resource_id": "*"}` | NULL (allow) |
+| `role:organization:role-b` | `project:blocked_write` | `{"resource_kind": "project", "resource_id": "proj-c"}` | NULL |
+
+Variation used in the Cases table, a direct grant to the user:
+
+| principal_urn | scope | selectors | effect |
+| --- | --- | --- | --- |
+| `user:u-1` | `project:write` | `{"resource_kind": "project", "resource_id": "proj-c"}` | NULL (allow) |
+
+#### Request
+
+`UpdateProject`, as in scenario 2 (`projects/impl.go:209`).
+
+#### Rule setup
+
+`authz/catalog/permissions.go:85`:
+
+```go
+{
+	Name:       authz.ScopeProjectWrite,
+	ExcludedBy: authz.ScopeProjectBlockedWrite,
+	BlockWins:  false, // a direct user grant outranks a block inherited from a role
+	// ...
+},
+```
+
+The engine's side:
+
+```go
+// authz/scopes.go:336: the block paired with each permission
+ScopeProjectWrite: ScopeProjectBlockedWrite,
+
+// authz/scopes.go:283: a read block also counts as a write block
+ScopeProjectBlockedWrite: {ScopeProjectBlockedRead},
+
+// authz/precedence.go:51: projects are not listed, so the direct-user override applies
+var blockWinsScopes = []Scope{ScopeMCPRead, ScopeMCPWrite, ScopeMCPConnect}
+```
+
+The catalogue does not model the second rule (a read block also blocks
+write). `ExcludedBy` names one block, and the agreement test does not check
+how blocks expand. The rule lives only in the engine's table.
+
+#### Walkthrough
+
+`u-1` updates `proj-c`.
+
+1. `UpdateProject` (`projects/impl.go:209`) calls `prepare`, which builds
+   `{scope: project:write, resource_id: proj-c}`.
+2. `evaluateGrantCheck` (`authz/grants.go:402`): role A's row (`*`) matches.
+   An allow exists.
+3. The exclusion (`authz/checks.go:136`, evaluated in
+   `authz/expressions.go:278`) looks for `project:blocked_write`, or anything
+   that expands to it, which includes `project:blocked_read`. It matches
+   strictly. Role B's row: `resource_id` proj-c = proj-c. **The block
+   matches.**
+4. `directOverride` (`authz/precedence.go:109`):
+   `ExclusionYieldsToDirectGrants(project:write)` (`:93`) is **true**, because
+   `project:write` is not in `blockWinsScopes`. It then looks for a grant made
+   directly to `user:u-1` on `proj-c`:
+   - **Without one** (the first grants table): none is found, the block
+     stands, and the result is `blocked` and a 403.
+   - **With one** (the variation): `user:u-1`'s row matches, so it outranks
+     the role's block, and the result is allowed.
+5. `u-1` reads `proj-c`: the read exclusion is `project:blocked_read`, and
+   the `project:blocked_write` row does not satisfy it. **Allowed.**
+
+#### Cases
+
+| Request | Outcome | Why |
+| --- | --- | --- |
+| write `proj-a` | allowed | role A's `*`; the block names proj-c |
+| write `proj-c` | denied, `blocked` | role B's block; no direct grant |
+| read `proj-c` | allowed | a write block does not withdraw read |
+| write `proj-c`, with `user:u-1`'s direct grant | **allowed** | `BlockWins: false`: a direct grant outranks a role block. MCP is the opposite. |
+| role B instead holds `project:blocked_read` on proj-c: read `proj-c` | denied, `blocked` | |
+| the same: write `proj-c` | denied, `blocked` | a read block also counts as a write block (`authz/scopes.go:283`) |
+
+---
+
+### Scenarios 4 and 5. Restricting a project grant
+
+**Status:** no project equivalent.
+
+In step 2, scenarios 4 and 5 narrowed a connect grant with `disposition` or
+`tool`. A project grant cannot be narrowed: the engine accepts only
+`resource_kind` and `resource_id` on project grants, because `project` has no
+entry in `allowedSelectorKeys` (`authz/selector.go:182`). So "read every
+project, but only some of what is inside" cannot be written as a project
+grant.
+
+That kind of narrowing would be expressed with a more specific permission on
+the thing inside the project, such as `environment:read`, `mcp:read` or
+`assistant:read`, each with its own definition. Only the MCP and project
+families are in the catalogue so far.

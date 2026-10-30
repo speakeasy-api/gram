@@ -190,7 +190,13 @@ func (c *Client) prepare(ctx context.Context, requests []Request) ([]authz.Check
 				projectID = ancestor.ID
 			}
 		}
-		checks = append(checks, authz.MCPCheck(def.Name, resource.ID, projectID))
+		// The project travels as a dimension, so a grant scoped to another
+		// project never matches.
+		var dimensions map[string]string
+		if projectID != "" {
+			dimensions = map[string]string{authz.SelectorKeyProjectID: projectID}
+		}
+		checks = append(checks, authz.Check{Scope: def.Name, ResourceKind: "", ResourceID: resource.ID, Dimensions: dimensions})
 	}
 	return checks, Decision{Outcome: OutcomeAllowed, Reason: ReasonAllowed, Basis: BasisNone, Request: Request{}, Grants: nil}, nil
 }
