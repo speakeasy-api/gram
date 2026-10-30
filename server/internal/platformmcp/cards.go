@@ -37,7 +37,7 @@ var cardShellHTML string
 // lets it through.
 //
 // Every card is a dotted panel holding the resource's tile, and beside it a
-// coloured eyebrow, a serif title, one line below it, tags and one action,
+// coloured eyebrow, a serif title, up to two lines below it, tags and one action,
 // over a Speakeasy footer.
 var cardTemplate = template.Must(template.New("card").Parse(`<article class="card">` +
 	`<div class="body">` +

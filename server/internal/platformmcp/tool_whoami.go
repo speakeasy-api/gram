@@ -12,7 +12,7 @@ import (
 const (
 	whoamiToolName        = "whoami"
 	whoamiToolTitle       = "Show Who I Am Connected As"
-	whoamiToolDescription = "Show who this session is connected as: the user (email and display name), the active organization (ID, name, slug), the user's live roles in it, and the name the connecting client registered. On an external connection it also lists the user's other organizations; to work in one of them, the user must reconnect and pick it. Use this to answer identity questions instead of guessing from other tools. Present names and email to the user, not IDs."
+	whoamiToolDescription = "Show who this session is connected as: the user (email and display name), the active organization (ID, name, slug), and the user's live roles in it. On an external connection it also gives the name the connecting client registered and lists the user's other organizations; to work in one of them, the user must reconnect and pick it. Use this to answer identity questions instead of guessing from other tools. Present names and email to the user, not IDs."
 )
 
 func registerWhoamiTool(reg *Registrar, whoami *WhoamiService) {
