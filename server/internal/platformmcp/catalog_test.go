@@ -217,8 +217,9 @@ func TestCatalogDetailsToolCountRequiresCompleteNames(t *testing.T) {
 		{"known", `[{"Name":"read"}]`, new(1)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			var details externalmcp.ServerDetails
-			require.NoError(t, json.Unmarshal([]byte(`{"RemoteURL":"https://example.test/mcp","TransportType":"streamable-http","Tools":`+tc.tools+`}`), &details))
+			t.Parallel()
+			details := externalmcp.ServerDetails{RemoteURL: "https://example.test/mcp", TransportType: "streamable-http"}
+			require.NoError(t, json.Unmarshal([]byte(tc.tools), &details.Tools))
 			got, err := projectCatalogDetails(CatalogDescriptor{}, "test/server", &details)
 			require.NoError(t, err)
 			require.Equal(t, tc.count, got.ToolCount)

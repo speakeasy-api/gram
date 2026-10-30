@@ -971,6 +971,7 @@ func TestDecodeDocument_LegacyProvenance(t *testing.T) {
 		{"explicit false survives", `{"catalogued":true,"is_latest":false}`, new(false)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			document, err := evidence.DecodeDocument([]byte(`{"identity":{"kind":"remote","artifact_ref":"https://example.com/mcp"},"provenance":`+tc.provenance+`}`), 1)
 			require.NoError(t, err)
 			require.Equal(t, "https://example.com/mcp", document.Identity.ArtifactRef)
