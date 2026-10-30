@@ -185,14 +185,17 @@ trackedFiles:
   src/funcs/authCallback.ts: {}
   src/funcs/authClientsAttachToMcpServer.ts: {}
   src/funcs/authClientsCreate.ts: {}
+  src/funcs/authClientsDeleteIssuanceProfile.ts: {}
   src/funcs/authClientsDetachFromMcpServer.ts: {}
   src/funcs/authClientsGet.ts: {}
   src/funcs/authClientsGetAudience.ts: {}
   src/funcs/authClientsGetMcpServerAuthentication.ts: {}
   src/funcs/authClientsList.ts: {}
+  src/funcs/authClientsListIssuanceProfiles.ts: {}
   src/funcs/authClientsListMcpServerChoices.ts: {}
   src/funcs/authClientsSetAudience.ts: {}
   src/funcs/authClientsSetHeaders.ts: {}
+  src/funcs/authClientsSetIssuanceProfile.ts: {}
   src/funcs/authClientsSetMcpServerUpstreamAuthRequirement.ts: {}
   src/funcs/authClientsUpdate.ts: {}
   src/funcs/authEnterDemo.ts: {}
@@ -1158,6 +1161,7 @@ trackedFiles:
   src/models/components/deleteaiscantargetresult.ts: {}
   src/models/components/deleteconfigrequestbody.ts: {}
   src/models/components/deleteglobaltoolvariationresult.ts: {}
+  src/models/components/deleteissuanceprofilerequestbody.ts: {}
   src/models/components/deleterequestbody.ts: {}
   src/models/components/deployment.ts: {}
   src/models/components/deploymentexternalmcp.ts: {}
@@ -1372,6 +1376,8 @@ trackedFiles:
   src/models/components/internalsessionissuerkey.ts: {}
   src/models/components/interruptturnrequestbody.ts: {}
   src/models/components/interruptturnresult.ts: {}
+  src/models/components/issuanceprofile.ts: {}
+  src/models/components/issuanceprofilechoice.ts: {}
   src/models/components/issuerconvergencecandidate.ts: {}
   src/models/components/issuerfieldmismatch.ts: {}
   src/models/components/issuermigratepreflight.ts: {}
@@ -1475,6 +1481,7 @@ trackedFiles:
   src/models/components/listinstancesresponsebody.ts: {}
   src/models/components/listintegrationsresult.ts: {}
   src/models/components/listinvitesresult.ts: {}
+  src/models/components/listissuanceprofilesresponsebody.ts: {}
   src/models/components/listissuerconvergencecandidatesresult.ts: {}
   src/models/components/listjsonwebkeysetsresult.ts: {}
   src/models/components/listjsonwebkeysresult.ts: {}
@@ -1896,6 +1903,7 @@ trackedFiles:
   src/models/components/setemaprovidersrequestbody.ts: {}
   src/models/components/setenabledrequestbody.ts: {}
   src/models/components/setidentityproviderconnectionsetupmethodrequestbody.ts: {}
+  src/models/components/setissuanceprofilerequestbody.ts: {}
   src/models/components/setkeyenabledrequestbody.ts: {}
   src/models/components/setmcpmetadatarequestbody.ts: {}
   src/models/components/setmcpserverupstreamauthrequirementrequestbody.ts: {}
@@ -2368,6 +2376,7 @@ trackedFiles:
   src/models/operations/deleteglobalremotesessionclient.ts: {}
   src/models/operations/deleteglobalremotesessionissuer.ts: {}
   src/models/operations/deleteglobalvariation.ts: {}
+  src/models/operations/deleteissuanceprofile.ts: {}
   src/models/operations/deletejsonwebkeyset.ts: {}
   src/models/operations/deletemcpendpoint.ts: {}
   src/models/operations/deletemcpserver.ts: {}
@@ -2687,6 +2696,7 @@ trackedFiles:
   src/models/operations/listidentityproviderconnectionapplications.ts: {}
   src/models/operations/listintegrations.ts: {}
   src/models/operations/listinvites.ts: {}
+  src/models/operations/listissuanceprofiles.ts: {}
   src/models/operations/listjsonwebkeys.ts: {}
   src/models/operations/listjsonwebkeysets.ts: {}
   src/models/operations/listlitellminstances.ts: {}
@@ -2923,6 +2933,7 @@ trackedFiles:
   src/models/operations/setdirectoryrolemappings.ts: {}
   src/models/operations/setidentityproviderconnectionsetupmethod.ts: {}
   src/models/operations/setinternalsessionissuerenabled.ts: {}
+  src/models/operations/setissuanceprofile.ts: {}
   src/models/operations/setmcpmetadata.ts: {}
   src/models/operations/setmcpservertoolmetadata.ts: {}
   src/models/operations/setmcpservertoolmetadatabatch.ts: {}
@@ -3279,6 +3290,7 @@ trackedFiles:
   src/react-query/deleteGlobalRemoteSessionClient.ts: {}
   src/react-query/deleteGlobalRemoteSessionIssuer.ts: {}
   src/react-query/deleteGlobalVariation.ts: {}
+  src/react-query/deleteIssuanceProfile.ts: {}
   src/react-query/deleteJsonWebKeySet.ts: {}
   src/react-query/deleteMcpEndpoint.ts: {}
   src/react-query/deleteMcpServer.ts: {}
@@ -3558,6 +3570,8 @@ trackedFiles:
   src/react-query/internalSessionIssuer.core.ts: {}
   src/react-query/internalSessionIssuer.ts: {}
   src/react-query/interruptAssistantTurn.ts: {}
+  src/react-query/issuanceProfiles.core.ts: {}
+  src/react-query/issuanceProfiles.ts: {}
   src/react-query/jsonWebKeySetDeletePreflight.core.ts: {}
   src/react-query/jsonWebKeySetDeletePreflight.ts: {}
   src/react-query/keysRotate.ts: {}
@@ -4033,6 +4047,7 @@ trackedFiles:
   src/react-query/setDirectoryRoleMappings.ts: {}
   src/react-query/setIdentityProviderConnectionSetupMethod.ts: {}
   src/react-query/setInternalSessionIssuerEnabled.ts: {}
+  src/react-query/setIssuanceProfile.ts: {}
   src/react-query/setMcpServerToolMetadata.ts: {}
   src/react-query/setMcpServerToolMetadataBatch.ts: {}
   src/react-query/setMcpServerUpstreamAuthRequirement.ts: {}
@@ -6174,6 +6189,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  deleteIssuanceProfile:
+    speakeasy-default-delete-issuance-profile:
+      requestBody:
+        application/json: {"id": "0fbcc866-51ea-4278-9695-ae94138a6566"}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   deleteJsonWebKeySet:
     speakeasy-default-delete-json-web-key-set:
       parameters:
@@ -10096,6 +10120,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listIssuanceProfiles:
+    speakeasy-default-list-issuance-profiles:
+      parameters:
+        query:
+          user_session_issuer_id: "ffef0364-c73e-4281-8711-8be89b029a3d"
+      responses:
+        "200":
+          application/json: {"items": [{"choices": [], "id": "13f79a81-40b8-4ccc-b717-da40bae7244f", "name": "<value>", "updated_at": "2025-04-06T07:49:15.926Z", "user_session_issuer_id": "92a472fc-bed0-43c4-abc6-92c601b1f571"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listJsonWebKeySets:
     speakeasy-default-list-json-web-key-sets:
       responses:
@@ -12883,6 +12919,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  setIssuanceProfile:
+    speakeasy-default-set-issuance-profile:
+      requestBody:
+        application/json: {"choices": [{"mcp_server_id": "7b70e322-69f7-4715-81b6-585ab4964987"}], "name": "<value>", "user_session_issuer_id": "5d2188aa-464f-42f8-8244-11bb611bf97e"}
+      responses:
+        "200":
+          application/json: {"choices": [{"mcp_server_id": "7b70e322-69f7-4715-81b6-585ab4964987"}], "id": "0dd10d8c-0328-4f1b-bf5f-0083c2c4bdde", "name": "<value>", "updated_at": "2024-11-30T22:15:13.493Z", "user_session_issuer_id": "c83d10c2-da63-4cdf-9de3-6d87cc3e9a06"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   setMcpMetadata:
     speakeasy-default-set-mcp-metadata:
       requestBody:

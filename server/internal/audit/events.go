@@ -41,6 +41,7 @@ const (
 	subjectTypeJsonWebKey                  subjectType = "json_web_key"
 	subjectTypeJsonWebKeySet               subjectType = "json_web_key_set"
 	subjectTypeInternalSessionIssuer       subjectType = "internal_session_issuer"
+	subjectTypeIssuanceSelectionProfile    subjectType = "issuance_selection_profile"
 	subjectTypeKillswitchPrescription      subjectType = "killswitch_prescription"
 	subjectTypeLiteLLMInstance             subjectType = "litellm_instance"
 	subjectTypeMcpApprovalRequest          subjectType = "mcp_approval_request"

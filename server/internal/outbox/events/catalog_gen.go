@@ -43,6 +43,7 @@ var All = []outbox.EventRegistration{
 	GcpKmsKeyV1,
 	IdentityProviderConnectionV1,
 	InternalSessionIssuerV1,
+	IssuanceSelectionProfileV1,
 	JsonWebKeySetV1,
 	JsonWebKeyV1,
 	KillswitchV1,

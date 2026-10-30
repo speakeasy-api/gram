@@ -794,6 +794,38 @@ FROM (VALUES
 JOIN organization_roles r
   ON r.organization_id = @org_id::text AND r.workos_slug = v.slug;
 
+-- An app that signs in to Linear without a browser, so it cannot pick a
+-- credential on the consent screen.
+-- name: ServersInsertHeadlessClient :exec
+INSERT INTO user_session_clients
+  (id, project_id, organization_id, user_session_issuer_id, client_id,
+   client_secret_hash, client_name, redirect_uris, client_id_issued_at,
+   token_endpoint_auth_method)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text, @issuer_id::uuid,
+   'gram_demo_client_nightly_report', NULL, 'Nightly report job',
+   ARRAY[]::text[], now() - interval '6 days', 'none');
+
+-- The credential the headless app's sessions use on one server.
+-- name: ServersInsertIssuanceProfile :exec
+INSERT INTO issuance_selection_profiles
+  (id, organization_id, project_id, user_session_issuer_id,
+   user_session_client_id, name)
+VALUES
+  (@id::uuid, @org_id::text, @project_id::uuid, @issuer_id::uuid,
+   @client_id::uuid, @name::text);
+
+-- name: ServersInsertIssuanceProfileChoice :exec
+INSERT INTO upstream_client_selections
+  (id, project_id, organization_id, credential_kind, credential_id,
+   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
+   auth_client_id, auth_client_attachment_scope, source)
+SELECT @id::uuid, @project_id::uuid, @org_id::text, 'issuance_profile',
+       @profile_id::uuid, @mcp_server_id::uuid, ac.remote_session_client_id,
+       NULL, FALSE, ac.id, ac.attachment_scope, 'issuance'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = @auth_client_id::uuid AND ac.organization_id = @org_id::text;
+
 -- name: ServersInsertOrganizationGatewayClient :exec
 INSERT INTO user_session_clients
  (id, project_id, organization_id, user_session_issuer_id, client_id, client_name,
