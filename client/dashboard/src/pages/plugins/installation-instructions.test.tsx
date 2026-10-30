@@ -4,6 +4,11 @@ import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { PublishDialog } from "./PublishDialog";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
+import {
+  CLAUDE_UNIFIED_EXPERIENCE_DOCS_URL,
+  CLAUDE_UNIFIED_EXPERIENCE_NOTE,
+  CLAUDE_UNIFIED_EXPERIENCE_STEP_TITLE,
+} from "@/lib/claude-unified-experience";
 
 vi.mock("@gram/client/react-query/marketplaceSettings", () => ({
   useMarketplaceSettings: () => ({
@@ -65,6 +70,17 @@ describe("installation instructions", () => {
         .getByRole("link", { name: "Add a marketplace or ZIP" })
         .getAttribute("href"),
     ).toBe("https://claude.com/docs/plugins/overview#find-and-add-a-plugin");
+  });
+
+  it("recommends turning off the unified Chat and Cowork experience for the organization rollout", () => {
+    const text = openProvider("Claude Cowork");
+    expect(text).toContain(CLAUDE_UNIFIED_EXPERIENCE_STEP_TITLE);
+    expect(text).toContain(CLAUDE_UNIFIED_EXPERIENCE_NOTE);
+    expect(
+      screen
+        .getByRole("link", { name: "Turn off the unified Claude experience" })
+        .getAttribute("href"),
+    ).toBe(CLAUDE_UNIFIED_EXPERIENCE_DOCS_URL);
   });
 
   it("installs Claude Code from settings for the organization or the user", () => {

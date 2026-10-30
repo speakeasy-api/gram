@@ -1,3 +1,8 @@
+import {
+  CLAUDE_UNIFIED_EXPERIENCE_DOCS_URL,
+  CLAUDE_UNIFIED_EXPERIENCE_NOTE,
+  CLAUDE_UNIFIED_EXPERIENCE_STEP_TITLE,
+} from "@/lib/claude-unified-experience";
 import { getCursorInstallCommand } from "@/lib/cursor-install-command";
 import { describe, expect, it } from "vitest";
 import { ACTIVE_AGENT_PROVIDER_IDS } from "@/components/agent-providers/agent-providers";
@@ -129,6 +134,25 @@ describe("getAgentPlatforms", () => {
     });
     expect(step).not.toHaveProperty("code");
     expect(step).not.toHaveProperty("language");
+  });
+
+  it("tells Team and Enterprise admins to keep unified Chat and Cowork off", () => {
+    const platform = AGENT_PLATFORMS.find(({ id }) => id === "claude-cowork")!;
+    const titles = platform.setupSteps.map(({ title }) => title);
+    const index = titles.indexOf(CLAUDE_UNIFIED_EXPERIENCE_STEP_TITLE);
+    expect(index).toBe(
+      titles.indexOf("Mark the observability plugin as Required") + 1,
+    );
+    expect(platform.setupSteps[index]).toMatchObject({
+      description: CLAUDE_UNIFIED_EXPERIENCE_NOTE,
+      helpLink: { url: CLAUDE_UNIFIED_EXPERIENCE_DOCS_URL },
+    });
+    expect(CLAUDE_UNIFIED_EXPERIENCE_NOTE).toContain(
+      "Organization settings → Capabilities",
+    );
+    expect(
+      platformSteps(platform, false).map(({ title }) => title),
+    ).not.toContain(CLAUDE_UNIFIED_EXPERIENCE_STEP_TITLE);
   });
 
   it("delegates Codex telemetry configuration to the device agent", () => {
