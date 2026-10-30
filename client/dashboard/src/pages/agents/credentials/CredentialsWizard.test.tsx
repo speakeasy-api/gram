@@ -1704,7 +1704,7 @@ describe("Editing an agent that already exists", () => {
     expect(mocks.deleteGrant).not.toHaveBeenCalled();
   });
 
-  it("drops an unavailable assignment whose sign-in client is gone when saving", async () => {
+  it("leaves an unavailable assignment for an explicit detach when saving", async () => {
     mocks.mcpServers.mockResolvedValue({
       mcpServers: [
         {
@@ -1732,23 +1732,16 @@ describe("Editing an agent that already exists", () => {
     ]);
     mocks.sessionClients.mockResolvedValue([]);
     mocks.detach.mockResolvedValue({});
-    editing();
+    const { onDone } = editing();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("checkbox", { name: "GitHub" });
-    fireEvent.click(await authenticationSave());
-    // Nothing can repair it, so saving removes it rather than asking the
-    // editor to find a button for it.
-    await waitFor(() =>
-      expect(mocks.detach).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detachBindingRequestBody: expect.objectContaining({
-            id: "binding_unavailable",
-          }),
-        }),
-        undefined,
-        expect.anything(),
-      ),
-    );
+    const save = await authenticationSave();
+    // The row says what is wrong; removing it is an explicit choice on the
+    // agent's Credentials page, never a side effect of saving.
+    await screen.findByRole("button", { name: /GitHub.*Requires connection/ });
+    fireEvent.click(save);
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(mocks.detach).not.toHaveBeenCalled();
   });
 
   it("creates no agent: this one already exists", async () => {

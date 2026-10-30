@@ -37,12 +37,16 @@ export function StepAuthentication({
   // Controlled so the first row opens even when the server list arrives after
   // mount; until someone toggles a row, the default tracks the list.
   const [openRows, setOpenRows] = useState<string[] | null>(null);
-  // Editing shows the agent's assigned connection while it works; otherwise
-  // the editor's own, which saving assigns, exactly as creating does.
+  // Editing shows the agent's assigned connection, unless it no longer works
+  // and the editor has a usable one: saving assigns that in its place,
+  // exactly as creating does.
   const displayedConnections = new Map(connections.byServer);
   for (const [serverId, assigned] of connections.assignedByServer ?? []) {
-    if (assigned.status === "ready" || assigned.status === "not-required")
-      displayedConnections.set(serverId, assigned);
+    const replacement =
+      assigned.status !== "ready" &&
+      assigned.status !== "not-required" &&
+      connections.byServer.get(serverId)?.status === "ready";
+    if (!replacement) displayedConnections.set(serverId, assigned);
   }
   const missing = servers.filter(
     (server) =>
