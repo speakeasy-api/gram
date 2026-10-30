@@ -2537,9 +2537,6 @@ setTimeout(() => process.exit(0), 5500)
 // commands never exit.
 func TestGenerateOpenClawShimLetsShortLivedHostsExit(t *testing.T) {
 	t.Parallel()
-	if runtime.GOOS == "windows" {
-		t.Skip("the shim runs bootstrap.ps1 on Windows; this fake daemon is a shell script")
-	}
 	nodePath, err := exec.LookPath("node")
 	require.NoError(t, err, "node is required to run the generated shim")
 	files, err := GenerateObservabilityPluginPackage(GenerateConfig{
