@@ -120,8 +120,7 @@ func TestDeleteToolsetSkipsToolsetOutsidePackages(t *testing.T) {
 		ResourceUrns: []string{},
 	})
 	require.NoError(t, err)
-	disabled, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: created.Slug, McpEnabled: new(false)})
-	require.NoError(t, err)
+	disabled := setHostedVisibility(t, ctx, ti, created, "disabled")
 	require.NotNil(t, disabled.McpEnabled)
 	require.False(t, *disabled.McpEnabled)
 	before := publicationRequests(t, ctx, ti)

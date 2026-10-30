@@ -684,8 +684,7 @@ func TestToolsetsService_UpdateToolset_EnableMcp_AttachesToDefaultPlugin(t *test
 	})
 	require.NoError(t, err)
 	require.True(t, *second.McpEnabled)
-	disabled, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: second.Slug, McpEnabled: new(false)})
-	require.NoError(t, err)
+	disabled := setHostedVisibility(t, ctx, ti, second, "disabled")
 	require.False(t, *disabled.McpEnabled)
 
 	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
