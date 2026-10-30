@@ -96,7 +96,15 @@ func (s *Service) HandleSharedAuthorizationServerMetadata(w http.ResponseWriter,
 		grantTypes = append(grantTypes, "client_credentials")
 	}
 	var grantProfiles []string
-	if issuer.idJAGConfigured && s.idJAGAdvertised(ctx, issuer.logger, issuer.organizationID, issuer.authorizationServer.issuerID) {
+	idJAGAdvertised := false
+	if issuer.idJAGConfigured {
+		// Fails closed for the same reason as the workload grant below.
+		idJAGAdvertised, err = s.idJAGAdvertised(ctx, issuer.logger, issuer.organizationID, issuer.authorizationServer.issuerID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load shared authorization server capabilities").LogError(ctx, issuer.logger)
+		}
+	}
+	if idJAGAdvertised {
 		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
 		grantProfiles = []string{oauthwire.GrantProfileIDJAG}
 	} else if s.workloadGrant != nil {
