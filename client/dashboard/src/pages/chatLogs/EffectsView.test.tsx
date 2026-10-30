@@ -21,7 +21,7 @@ afterEach(cleanup);
 const wrapped =
   'Conversation info: ⟦openclaw:ctx⟧\n```json\n{"requester_profile":{"id":"gateway-owner"}}\n```\n\nwhat is on my calendar?';
 
-function showMessage(role: "user" | "assistant") {
+function showMessage(role: "user" | "assistant", openClawSession = true) {
   const message: ChatMessage = {
     id: "turn",
     role,
@@ -38,6 +38,7 @@ function showMessage(role: "user" | "assistant") {
       riskResultsByMessage={new Map()}
       claudeToolUsageByToolUseId={new Map()}
       claudeTurnByPromptId={new Map()}
+      openClawSession={openClawSession}
     />,
   );
 }
@@ -47,6 +48,11 @@ describe("EffectsView OpenClaw preview", () => {
     showMessage("user");
     expect(screen.getByText("what is on my calendar?")).toBeTruthy();
     expect(screen.queryByText(/openclaw:ctx/)).toBeNull();
+  });
+
+  it("leaves the wrapper as typed outside an OpenClaw session", () => {
+    showMessage("user", false);
+    expect(screen.getByText(/openclaw:ctx/)).toBeTruthy();
   });
 
   it("leaves a non-user message that matches the wrapper unchanged", () => {

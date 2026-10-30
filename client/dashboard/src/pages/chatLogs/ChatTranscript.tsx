@@ -120,6 +120,10 @@ interface RowContext {
    * userId is a display label as often as an id (userLabelOverride replaces
    * it wholesale), so it cannot be keyed on. */
   ownerIdentifier?: IdentityRef | null;
+  /** True when OpenClaw captured the session. Only then is a user turn's
+   * OpenClaw context wrapper unfolded, so the same text pasted into another
+   * session stays as typed. */
+  openClawSession?: boolean;
 }
 
 type ResolvedRowContext = Required<
@@ -448,7 +452,10 @@ function UserMessageRow({
   // OpenClaw wraps the request in its requester profile and a replay of the
   // earlier conversation; show the request and fold the rest away. Search
   // matches the full stored text, so a searched row keeps it whole.
-  const openClaw = ctx.searchQuery ? null : parseOpenClawContext(rawText);
+  const openClaw =
+    ctx.openClawSession && !ctx.searchQuery
+      ? parseOpenClawContext(rawText)
+      : null;
   const text = openClaw?.request ?? rawText;
   let envelope = harnessEnvelope;
   if (openClaw) {

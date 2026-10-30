@@ -85,6 +85,8 @@ interface EffectsViewContext {
   claudeTurnByPromptId: Map<string, ClaudeTurnUsage>;
   userLabel?: string;
   userLabelOverride?: string;
+  /** True when OpenClaw captured the session; see `RowContext.openClawSession`. */
+  openClawSession?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -134,11 +136,13 @@ function CompactMessageRow({
   const hasDetailedRisk = (riskResults?.length ?? 0) > 0;
   const isUser = row.entryType === "user";
   const rawText = messageText(row.message.content);
-  // Preview the request OpenClaw wrapped, not its context. Only user turns
-  // carry the wrapper, and a flagged row keeps the full text so a finding
-  // inside the context stays highlighted.
+  // Preview the request OpenClaw wrapped, not its context. Only user turns of
+  // an OpenClaw session carry the wrapper, and a flagged row keeps the full
+  // text so a finding inside the context stays highlighted.
   const openClaw =
-    isUser && !hasDetailedRisk ? parseOpenClawContext(rawText) : null;
+    ctx.openClawSession && isUser && !hasDetailedRisk
+      ? parseOpenClawContext(rawText)
+      : null;
   const text = openClaw?.request ?? rawText;
   const flagged = rowHasRiskFlag(row) || hasDetailedRisk;
   const sensitive = hasDetailedRisk && resultsAreSensitive(riskResults!);
@@ -496,6 +500,7 @@ export function EffectsView({
   claudeTurnByPromptId,
   userLabel,
   userLabelOverride,
+  openClawSession,
   isLoading,
 }: {
   chatId: string;
@@ -505,6 +510,7 @@ export function EffectsView({
   claudeTurnByPromptId: Map<string, ClaudeTurnUsage>;
   userLabel?: string;
   userLabelOverride?: string;
+  openClawSession?: boolean;
   isLoading?: boolean;
 }): JSX.Element {
   const ctx: EffectsViewContext = useMemo(
@@ -515,6 +521,7 @@ export function EffectsView({
       claudeTurnByPromptId,
       userLabel,
       userLabelOverride,
+      openClawSession,
     }),
     [
       chatId,
@@ -523,6 +530,7 @@ export function EffectsView({
       claudeTurnByPromptId,
       userLabel,
       userLabelOverride,
+      openClawSession,
     ],
   );
 
