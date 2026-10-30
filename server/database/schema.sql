@@ -16510,8 +16510,8 @@ CREATE TABLE IF NOT EXISTS memory_memos (
   project_id uuid NOT NULL,
   -- Chat the memo was saved from, when the caller named one.
   chat_id uuid,
-  -- Who saved the memo. Exactly one is set for memos written by a person or a
-  -- Speakeasy agent; both stay NULL only for system-written memos.
+  -- Who saved the memo. At most one is set: a person or a Speakeasy agent.
+  -- Both stay NULL only for system-written memos.
   author_user_id TEXT,
   author_agent_id uuid,
   content TEXT NOT NULL,
@@ -16522,8 +16522,13 @@ CREATE TABLE IF NOT EXISTS memory_memos (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
   CONSTRAINT memory_memos_pkey PRIMARY KEY (id),
-  CONSTRAINT memory_memos_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT memory_memos_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE SET NULL,
+  -- Composite keys pin every reference to the memo's own tenant: the project
+  -- to its organization, the source chat to the memo's project and the agent
+  -- author to its organization.
+  CONSTRAINT memory_memos_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT memory_memos_chat_project_fkey FOREIGN KEY (chat_id, project_id) REFERENCES chats (id, project_id) ON DELETE SET NULL (chat_id),
+  CONSTRAINT memory_memos_author_agent_tenant_fkey FOREIGN KEY (organization_id, author_agent_id) REFERENCES agents (organization_id, id) ON DELETE SET NULL (author_agent_id),
+  CONSTRAINT memory_memos_author_check CHECK (num_nonnulls(author_user_id, author_agent_id) <= 1),
   CONSTRAINT memory_memos_content_check CHECK (content <> '' AND char_length(content) <= 4000)
 );
 
@@ -16578,9 +16583,18 @@ CREATE TABLE IF NOT EXISTS memory_digests (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT memory_digests_pkey PRIMARY KEY (id),
-  CONSTRAINT memory_digests_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT memory_digests_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT memory_digests_level_check CHECK (level IN ('day', 'week', 'month')),
-  CONSTRAINT memory_digests_period_check CHECK (period_end > period_start)
+  -- Each level covers exactly one canonical UTC period: a day, an ISO week
+  -- starting Monday, or a calendar month.
+  CONSTRAINT memory_digests_period_check CHECK (
+    (level = 'day' AND period_end = period_start + 1)
+    OR (level = 'week' AND extract(isodow FROM period_start) = 1 AND period_end = period_start + 7)
+    OR (level = 'month' AND extract(day FROM period_start) = 1 AND period_end = (period_start + interval '1 month')::date)
+  ),
+  CONSTRAINT memory_digests_tokens_check CHECK (
+    (input_tokens IS NULL OR input_tokens >= 0) AND (output_tokens IS NULL OR output_tokens >= 0)
+  )
 );
 
 COMMENT ON COLUMN memory_digests.id IS '@access: confidential';
