@@ -284,6 +284,11 @@ type ListMcpServerAuthClientChoicesResult struct {
 	// Whether the upstream needs authentication: true when the server offers at
 	// least one enabled auth client.
 	RequiresUpstreamAuth bool
+	// configured when the server offers at least one enabled auth client;
+	// setup_incomplete when no auth client was ever linked to it, live or
+	// detached, but it has a live upstream OAuth client or a credential header on
+	// its source that no auth client records yet; no_auth_required otherwise.
+	Status string
 	// The enabled shared credentials the server offers.
 	Choices []*types.AuthClientChoice
 }

@@ -10282,7 +10282,7 @@ examples:
           mcp_server_id: "8810e064-7540-4440-95fd-d8ba8e7584ab"
       responses:
         "200":
-          application/json: {"choices": [], "requires_upstream_auth": false}
+          application/json: {"choices": [], "requires_upstream_auth": false, "status": "setup_incomplete"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

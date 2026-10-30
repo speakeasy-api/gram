@@ -692,7 +692,7 @@ SELECT p.organization_id, m.project_id, m.id AS mcp_server_id, r.id AS remote_mc
   (
     -- Upstream credentials the auth client records do not cover yet: no
     -- auth client was ever linked to the server, live or detached, but it
-    -- has an upstream OAuth client or a credential header on its source.
+    -- has a live upstream OAuth client or a credential header on its source.
     NOT EXISTS (
       SELECT 1
       FROM mcp_server_auth_clients AS pend_link
@@ -704,6 +704,12 @@ SELECT p.organization_id, m.project_id, m.id AS mcp_server_id, r.id AS remote_mc
       EXISTS (
         SELECT 1
         FROM mcp_server_remote_session_clients AS pend_assoc
+        JOIN remote_session_clients AS pend_client
+          ON pend_client.id = pend_assoc.remote_session_client_id
+         AND pend_client.deleted IS FALSE
+        JOIN remote_session_issuers AS pend_issuer
+          ON pend_issuer.id = pend_client.remote_session_issuer_id
+         AND pend_issuer.deleted IS FALSE
         WHERE pend_assoc.mcp_server_id = m.id
           AND pend_assoc.project_id = m.project_id
           AND pend_assoc.organization_id = p.organization_id
@@ -712,6 +718,10 @@ SELECT p.organization_id, m.project_id, m.id AS mcp_server_id, r.id AS remote_mc
       OR EXISTS (
         SELECT 1
         FROM remote_mcp_server_headers AS pend_header
+        JOIN remote_mcp_servers AS pend_source
+          ON pend_source.id = pend_header.remote_mcp_server_id
+         AND pend_source.project_id = m.project_id
+         AND pend_source.deleted IS FALSE
         WHERE pend_header.remote_mcp_server_id = m.remote_mcp_server_id
           AND pend_header.deleted IS FALSE
           AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
@@ -719,6 +729,10 @@ SELECT p.organization_id, m.project_id, m.id AS mcp_server_id, r.id AS remote_mc
       OR EXISTS (
         SELECT 1
         FROM tunneled_mcp_server_headers AS pend_header
+        JOIN tunneled_mcp_servers AS pend_source
+          ON pend_source.id = pend_header.tunneled_mcp_server_id
+         AND pend_source.project_id = m.project_id
+         AND pend_source.deleted IS FALSE
         WHERE pend_header.tunneled_mcp_server_id = m.tunneled_mcp_server_id
           AND pend_header.deleted IS FALSE
           AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
@@ -726,8 +740,8 @@ SELECT p.organization_id, m.project_id, m.id AS mcp_server_id, r.id AS remote_mc
     )
   )::boolean AS upstream_auth_pending, m.remote_session_issuer_id,
   left(COALESCE(pr.resource_name,''),200)::text AS resource_name, left(COALESCE(pr.resource_documentation,''),2049)::text AS resource_documentation,
-  md5(m.updated_at::text || r.updated_at::text || COALESCE(h.revision, '') || COALESCE(a.revision, ''))::text AS source_revision,
-  GREATEST(m.updated_at, r.updated_at, h.updated_at, a.updated_at)::timestamptz AS changed_at,
+  md5(m.updated_at::text || r.updated_at::text || COALESCE(h.revision, '') || COALESCE(a.revision, '') || COALESCE(o.revision, ''))::text AS source_revision,
+  GREATEST(m.updated_at, r.updated_at, h.updated_at, a.updated_at, o.updated_at)::timestamptz AS changed_at,
   (COALESCE(h.header_count, 0) + COALESCE(a.header_count, 0))::bigint AS header_count
 FROM mcp_servers m
 JOIN projects p ON p.id = m.project_id
@@ -756,6 +770,13 @@ LEFT JOIN LATERAL (
   ) ah ON true
   WHERE l.mcp_server_id=m.id AND l.project_id=m.project_id AND l.organization_id=p.organization_id
 ) a ON true
+LEFT JOIN LATERAL (
+  -- Upstream OAuth associations decide upstream_auth_pending.
+  SELECT max(GREATEST(updated_at,deleted_at)) AS updated_at,
+    string_agg(id::text || updated_at::text || deleted::text, ',' ORDER BY id) AS revision
+  FROM mcp_server_remote_session_clients
+  WHERE mcp_server_id=m.id AND project_id=m.project_id AND organization_id=p.organization_id
+) o ON true
 WHERE p.organization_id = $1 AND m.project_id = $2 AND m.id = $3
   AND m.deleted IS FALSE AND r.deleted IS FALSE AND p.deleted IS FALSE
 FOR UPDATE OF m, r, p

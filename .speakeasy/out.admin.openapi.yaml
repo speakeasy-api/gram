@@ -9562,7 +9562,7 @@ components:
           description: 'Whether the upstream needs authentication: true when the server offers at least one enabled auth client.'
         status:
           type: string
-          description: configured (at least one enabled auth client), setup_incomplete (upstream credentials configured that no auth client records yet) or no_auth_required.
+          description: configured (at least one enabled auth client), setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet) or no_auth_required.
           enum:
             - configured
             - setup_incomplete
@@ -11028,7 +11028,7 @@ components:
           description: user_backed for turns run for a user the event identified, userless for turns run as the trigger's workload.
         reason:
           type: string
-          description: 'Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client (no live, enabled auth client carries its upstream OAuth client) or setup_incomplete (it has upstream credentials configured that no auth client records yet).'
+          description: 'Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client (no live, enabled auth client carries its upstream OAuth client) or setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet).'
         servers:
           type: integer
           description: Profile and server pairs with no choice for this reason.

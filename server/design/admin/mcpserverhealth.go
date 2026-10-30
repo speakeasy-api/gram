@@ -200,7 +200,7 @@ var AdminMcpServerHealthUpstreamAuth = Type("AdminMcpServerHealthUpstreamAuth", 
 	Description("Whether the server's upstream needs authentication and the auth clients it offers.")
 	Required("status", "requires_upstream_auth", "auth_clients")
 
-	Attribute("status", String, "configured (at least one enabled auth client), setup_incomplete (upstream credentials configured that no auth client records yet) or no_auth_required.", func() {
+	Attribute("status", String, "configured (at least one enabled auth client), setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet) or no_auth_required.", func() {
 		Enum("configured", "setup_incomplete", "no_auth_required")
 	})
 	Attribute("requires_upstream_auth", Boolean, "Whether the upstream needs authentication: true when the server offers at least one enabled auth client.")

@@ -101437,8 +101437,16 @@ components:
         requires_upstream_auth:
           type: boolean
           description: 'Whether the upstream needs authentication: true when the server offers at least one enabled auth client.'
+        status:
+          type: string
+          description: configured when the server offers at least one enabled auth client; setup_incomplete when no auth client was ever linked to it, live or detached, but it has a live upstream OAuth client or a credential header on its source that no auth client records yet; no_auth_required otherwise.
+          enum:
+            - configured
+            - setup_incomplete
+            - no_auth_required
       required:
         - requires_upstream_auth
+        - status
         - choices
     ListMcpServersResult:
       type: object
@@ -103767,7 +103775,7 @@ components:
           description: 'Whether the upstream needs authentication: true when the server offers at least one enabled auth client.'
         status:
           type: string
-          description: configured when the server offers at least one enabled auth client; setup_incomplete when it has upstream credentials configured that no auth client records yet; no_auth_required otherwise.
+          description: configured when the server offers at least one enabled auth client; setup_incomplete when no auth client was ever linked to it, live or detached, but it has a live upstream OAuth client or a credential header on its source that no auth client records yet; no_auth_required otherwise.
           enum:
             - configured
             - setup_incomplete

@@ -14,7 +14,7 @@ import {
 } from "./adminmcpserverhealthauthclient.js";
 
 /**
- * configured (at least one enabled auth client), setup_incomplete (upstream credentials configured that no auth client records yet) or no_auth_required.
+ * configured (at least one enabled auth client), setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet) or no_auth_required.
  */
 export const AdminMcpServerHealthUpstreamAuthStatus = {
   Configured: "configured",
@@ -22,7 +22,7 @@ export const AdminMcpServerHealthUpstreamAuthStatus = {
   NoAuthRequired: "no_auth_required",
 } as const;
 /**
- * configured (at least one enabled auth client), setup_incomplete (upstream credentials configured that no auth client records yet) or no_auth_required.
+ * configured (at least one enabled auth client), setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet) or no_auth_required.
  */
 export type AdminMcpServerHealthUpstreamAuthStatus = ClosedEnum<
   typeof AdminMcpServerHealthUpstreamAuthStatus
@@ -38,7 +38,7 @@ export type AdminMcpServerHealthUpstreamAuth = {
    */
   requiresUpstreamAuth: boolean;
   /**
-   * configured (at least one enabled auth client), setup_incomplete (upstream credentials configured that no auth client records yet) or no_auth_required.
+   * configured (at least one enabled auth client), setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet) or no_auth_required.
    */
   status: AdminMcpServerHealthUpstreamAuthStatus;
 };

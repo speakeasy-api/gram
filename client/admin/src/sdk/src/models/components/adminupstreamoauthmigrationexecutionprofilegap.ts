@@ -17,7 +17,7 @@ export type AdminUpstreamOAuthMigrationExecutionProfileGap = {
    */
   executionContext: string;
   /**
-   * Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client (no live, enabled auth client carries its upstream OAuth client) or setup_incomplete (it has upstream credentials configured that no auth client records yet).
+   * Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client (no live, enabled auth client carries its upstream OAuth client) or setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet).
    */
   reason: string;
   /**

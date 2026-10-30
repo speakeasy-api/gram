@@ -76,7 +76,7 @@ var McpServerAuthentication = Type("McpServerAuthentication", func() {
 	Attribute("project_id", String, "The MCP server's project.", func() { Format(FormatUUID) })
 	Attribute("public", Boolean, "Whether the MCP server is public.")
 	Attribute("requires_upstream_auth", Boolean, "Whether the upstream needs authentication: true when the server offers at least one enabled auth client.")
-	Attribute("status", String, "configured when the server offers at least one enabled auth client; setup_incomplete when it has upstream credentials configured that no auth client records yet; no_auth_required otherwise.", upstreamAuthStatusEnum)
+	Attribute("status", String, "configured when the server offers at least one enabled auth client; setup_incomplete when no auth client was ever linked to it, live or detached, but it has a live upstream OAuth client or a credential header on its source that no auth client records yet; no_auth_required otherwise.", upstreamAuthStatusEnum)
 	Attribute("clients", ArrayOf(AuthClient), "The auth clients the server offers.")
 
 	Required("mcp_server_id", "project_id", "public", "requires_upstream_auth", "status", "clients")
@@ -398,8 +398,9 @@ var _ = Service("authClients", func() {
 
 		Result(func() {
 			Attribute("requires_upstream_auth", Boolean, "Whether the upstream needs authentication: true when the server offers at least one enabled auth client.")
+			Attribute("status", String, "configured when the server offers at least one enabled auth client; setup_incomplete when no auth client was ever linked to it, live or detached, but it has a live upstream OAuth client or a credential header on its source that no auth client records yet; no_auth_required otherwise.", upstreamAuthStatusEnum)
 			Attribute("choices", ArrayOf(AuthClientChoice), "The enabled shared credentials the server offers.")
-			Required("requires_upstream_auth", "choices")
+			Required("requires_upstream_auth", "status", "choices")
 		})
 
 		HTTP(func() {

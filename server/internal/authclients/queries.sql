@@ -88,23 +88,6 @@ WHERE msac.organization_id = @organization_id
   AND msac.deleted IS FALSE
 ORDER BY msac.auth_client_id, ms.id;
 
--- name: LockAuthClientOfferingServers :many
-SELECT ms.id
-FROM mcp_server_auth_clients msac
-JOIN mcp_servers ms
-  ON ms.id = msac.mcp_server_id
- AND ms.project_id = msac.project_id
- AND ms.deleted IS FALSE
-JOIN projects p
-  ON p.id = ms.project_id
- AND p.organization_id = msac.organization_id
- AND p.deleted IS FALSE
-WHERE msac.organization_id = @organization_id
-  AND msac.auth_client_id = @auth_client_id
-  AND msac.deleted IS FALSE
-ORDER BY ms.id
-FOR SHARE OF ms;
-
 -- name: ListAuthClientHeaders :many
 SELECT
   h.auth_client_id,
@@ -151,7 +134,7 @@ SELECT
   (
     -- Upstream credentials the auth client records do not cover yet: no
     -- auth client was ever linked to the server, live or detached, but it
-    -- has an upstream OAuth client or a credential header on its source.
+    -- has a live upstream OAuth client or a credential header on its source.
     NOT EXISTS (
       SELECT 1
       FROM mcp_server_auth_clients AS pend_link
@@ -163,6 +146,12 @@ SELECT
       EXISTS (
         SELECT 1
         FROM mcp_server_remote_session_clients AS pend_assoc
+        JOIN remote_session_clients AS pend_client
+          ON pend_client.id = pend_assoc.remote_session_client_id
+         AND pend_client.deleted IS FALSE
+        JOIN remote_session_issuers AS pend_issuer
+          ON pend_issuer.id = pend_client.remote_session_issuer_id
+         AND pend_issuer.deleted IS FALSE
         WHERE pend_assoc.mcp_server_id = ms.id
           AND pend_assoc.project_id = ms.project_id
           AND pend_assoc.organization_id = p.organization_id
@@ -171,6 +160,10 @@ SELECT
       OR EXISTS (
         SELECT 1
         FROM remote_mcp_server_headers AS pend_header
+        JOIN remote_mcp_servers AS pend_source
+          ON pend_source.id = pend_header.remote_mcp_server_id
+         AND pend_source.project_id = ms.project_id
+         AND pend_source.deleted IS FALSE
         WHERE pend_header.remote_mcp_server_id = ms.remote_mcp_server_id
           AND pend_header.deleted IS FALSE
           AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
@@ -178,6 +171,10 @@ SELECT
       OR EXISTS (
         SELECT 1
         FROM tunneled_mcp_server_headers AS pend_header
+        JOIN tunneled_mcp_servers AS pend_source
+          ON pend_source.id = pend_header.tunneled_mcp_server_id
+         AND pend_source.project_id = ms.project_id
+         AND pend_source.deleted IS FALSE
         WHERE pend_header.tunneled_mcp_server_id = ms.tunneled_mcp_server_id
           AND pend_header.deleted IS FALSE
           AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)

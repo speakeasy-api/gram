@@ -178,7 +178,7 @@ func (s *Service) UpdateAuthClient(ctx context.Context, payload *gen.UpdateAuthC
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
-	existing, err := lockAuthClientForUpdate(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
+	existing, err := queries.LockAuthClient(ctx, repo.LockAuthClientParams{ID: clientID, OrganizationID: authCtx.ActiveOrganizationID})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "auth client not found").LogError(ctx, logger)

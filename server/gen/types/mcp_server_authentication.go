@@ -20,8 +20,9 @@ type McpServerAuthentication struct {
 	// least one enabled auth client.
 	RequiresUpstreamAuth bool
 	// configured when the server offers at least one enabled auth client;
-	// setup_incomplete when it has upstream credentials configured that no auth
-	// client records yet; no_auth_required otherwise.
+	// setup_incomplete when no auth client was ever linked to it, live or
+	// detached, but it has a live upstream OAuth client or a credential header on
+	// its source that no auth client records yet; no_auth_required otherwise.
 	Status string
 	// The auth clients the server offers.
 	Clients []*AuthClient

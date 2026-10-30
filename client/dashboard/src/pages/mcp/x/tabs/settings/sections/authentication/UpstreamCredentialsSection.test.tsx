@@ -106,6 +106,14 @@ describe("UpstreamCredentialsSection", () => {
     expect(screen.queryByText("Add credential")).toBeNull();
   });
 
+  it("never reads an unknown status as needing no authentication", () => {
+    mocks.authentication = { ...mocks.authentication, status: "future" };
+    renderSection({ remoteMcpServerId: "remote-1" });
+
+    expect(screen.getByText("Status unavailable")).toBeTruthy();
+    expect(screen.queryByText("No authentication required")).toBeNull();
+  });
+
   it("does not probe a server with no remote upstream", () => {
     renderSection({ tunneledMcpServerId: "tunnel-1" });
 

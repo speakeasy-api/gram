@@ -30,7 +30,7 @@ export async function keyCredentialChoices(
           .then((result) => ({
             pick,
             ids: result.choices.map((choice) => choice.id),
-            requiresUpstreamAuth: result.requiresUpstreamAuth,
+            noAuth: result.status === "no_auth_required",
           }))
           .catch(() => {
             throw new Error(
@@ -41,8 +41,8 @@ export async function keyCredentialChoices(
   );
   // A pick the server no longer offers counts as no pick.
   const unchosen = offered.filter(
-    ({ pick, ids, requiresUpstreamAuth }) =>
-      requiresUpstreamAuth !== false &&
+    ({ pick, ids, noAuth }) =>
+      !noAuth &&
       ids.length > 1 &&
       (!pick.authClientId || !ids.includes(pick.authClientId)),
   );
@@ -51,10 +51,10 @@ export async function keyCredentialChoices(
       `Choose which credential the key uses on ${unchosen.map(({ pick }) => pick.name).join(", ")}.`,
     );
   }
-  return offered.flatMap(({ pick, ids, requiresUpstreamAuth }) =>
+  return offered.flatMap(({ pick, ids, noAuth }) =>
     pick.authClientId && ids.includes(pick.authClientId)
       ? [{ mcpServerId: pick.id, authClientId: pick.authClientId }]
-      : requiresUpstreamAuth === false
+      : noAuth
         ? [{ mcpServerId: pick.id }]
         : [],
   );

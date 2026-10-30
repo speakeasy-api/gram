@@ -65,13 +65,24 @@ export const SIGN_IN_DETECTED_STATUS: StatusPresentation = {
   tone: "warning",
 };
 
+/** A status this dashboard does not know, never read as needing none. */
+export const UNKNOWN_STATUS: StatusPresentation = {
+  label: "Status unavailable",
+  hint: "Refresh the page to load the upstream's sign-in status.",
+  tone: "warning",
+};
+
 export const UPSTREAM_AUTH_STATUS: Record<string, StatusPresentation> = {
   configured: {
     label: "Credentials set up",
     hint: "Callers reach the upstream with one of the credentials below.",
     tone: "success",
   },
-  setup_incomplete: SIGN_IN_DETECTED_STATUS,
+  setup_incomplete: {
+    label: "Authentication setup incomplete",
+    hint: "This server signs in to the upstream in a way no credential below records yet. Add a credential for it.",
+    tone: "warning",
+  },
   no_auth_required: NO_AUTH_STATUS,
 };
 

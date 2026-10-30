@@ -363,6 +363,11 @@ type ListMcpServerAuthClientChoicesResponseBody struct {
 	// Whether the upstream needs authentication: true when the server offers at
 	// least one enabled auth client.
 	RequiresUpstreamAuth *bool `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
+	// configured when the server offers at least one enabled auth client;
+	// setup_incomplete when no auth client was ever linked to it, live or
+	// detached, but it has a live upstream OAuth client or a credential header on
+	// its source that no auth client records yet; no_auth_required otherwise.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// The enabled shared credentials the server offers.
 	Choices []*AuthClientChoiceResponseBody `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
 }
@@ -407,8 +412,9 @@ type GetMcpServerAuthenticationResponseBody struct {
 	// least one enabled auth client.
 	RequiresUpstreamAuth *bool `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
 	// configured when the server offers at least one enabled auth client;
-	// setup_incomplete when it has upstream credentials configured that no auth
-	// client records yet; no_auth_required otherwise.
+	// setup_incomplete when no auth client was ever linked to it, live or
+	// detached, but it has a live upstream OAuth client or a credential header on
+	// its source that no auth client records yet; no_auth_required otherwise.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// The auth clients the server offers.
 	Clients []*AuthClientResponseBody `form:"clients,omitempty" json:"clients,omitempty" xml:"clients,omitempty"`
@@ -428,8 +434,9 @@ type SetMcpServerUpstreamAuthRequirementResponseBody struct {
 	// least one enabled auth client.
 	RequiresUpstreamAuth *bool `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
 	// configured when the server offers at least one enabled auth client;
-	// setup_incomplete when it has upstream credentials configured that no auth
-	// client records yet; no_auth_required otherwise.
+	// setup_incomplete when no auth client was ever linked to it, live or
+	// detached, but it has a live upstream OAuth client or a credential header on
+	// its source that no auth client records yet; no_auth_required otherwise.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// The auth clients the server offers.
 	Clients []*AuthClientResponseBody `form:"clients,omitempty" json:"clients,omitempty" xml:"clients,omitempty"`
@@ -4900,6 +4907,7 @@ func NewDetachAuthClientFromMcpServerGatewayError(body *DetachAuthClientFromMcpS
 func NewListMcpServerAuthClientChoicesResultOK(body *ListMcpServerAuthClientChoicesResponseBody) *authclients.ListMcpServerAuthClientChoicesResult {
 	v := &authclients.ListMcpServerAuthClientChoicesResult{
 		RequiresUpstreamAuth: *body.RequiresUpstreamAuth,
+		Status:               *body.Status,
 	}
 	v.Choices = make([]*types.AuthClientChoice, len(body.Choices))
 	for i, val := range body.Choices {
@@ -6718,8 +6726,16 @@ func ValidateListMcpServerAuthClientChoicesResponseBody(body *ListMcpServerAuthC
 	if body.RequiresUpstreamAuth == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("requires_upstream_auth", "body"))
 	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
 	if body.Choices == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("choices", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "configured" || *body.Status == "setup_incomplete" || *body.Status == "no_auth_required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"configured", "setup_incomplete", "no_auth_required"}))
+		}
 	}
 	for _, e := range body.Choices {
 		if e != nil {

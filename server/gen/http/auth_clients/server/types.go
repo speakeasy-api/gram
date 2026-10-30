@@ -363,6 +363,11 @@ type ListMcpServerAuthClientChoicesResponseBody struct {
 	// Whether the upstream needs authentication: true when the server offers at
 	// least one enabled auth client.
 	RequiresUpstreamAuth bool `form:"requires_upstream_auth" json:"requires_upstream_auth" xml:"requires_upstream_auth"`
+	// configured when the server offers at least one enabled auth client;
+	// setup_incomplete when no auth client was ever linked to it, live or
+	// detached, but it has a live upstream OAuth client or a credential header on
+	// its source that no auth client records yet; no_auth_required otherwise.
+	Status string `form:"status" json:"status" xml:"status"`
 	// The enabled shared credentials the server offers.
 	Choices []*AuthClientChoiceResponseBody `form:"choices" json:"choices" xml:"choices"`
 }
@@ -407,8 +412,9 @@ type GetMcpServerAuthenticationResponseBody struct {
 	// least one enabled auth client.
 	RequiresUpstreamAuth bool `form:"requires_upstream_auth" json:"requires_upstream_auth" xml:"requires_upstream_auth"`
 	// configured when the server offers at least one enabled auth client;
-	// setup_incomplete when it has upstream credentials configured that no auth
-	// client records yet; no_auth_required otherwise.
+	// setup_incomplete when no auth client was ever linked to it, live or
+	// detached, but it has a live upstream OAuth client or a credential header on
+	// its source that no auth client records yet; no_auth_required otherwise.
 	Status string `form:"status" json:"status" xml:"status"`
 	// The auth clients the server offers.
 	Clients []*AuthClientResponseBody `form:"clients" json:"clients" xml:"clients"`
@@ -428,8 +434,9 @@ type SetMcpServerUpstreamAuthRequirementResponseBody struct {
 	// least one enabled auth client.
 	RequiresUpstreamAuth bool `form:"requires_upstream_auth" json:"requires_upstream_auth" xml:"requires_upstream_auth"`
 	// configured when the server offers at least one enabled auth client;
-	// setup_incomplete when it has upstream credentials configured that no auth
-	// client records yet; no_auth_required otherwise.
+	// setup_incomplete when no auth client was ever linked to it, live or
+	// detached, but it has a live upstream OAuth client or a credential header on
+	// its source that no auth client records yet; no_auth_required otherwise.
 	Status string `form:"status" json:"status" xml:"status"`
 	// The auth clients the server offers.
 	Clients []*AuthClientResponseBody `form:"clients" json:"clients" xml:"clients"`
@@ -3748,6 +3755,7 @@ func NewDetachAuthClientFromMcpServerResponseBody(res *types.AuthClient) *Detach
 func NewListMcpServerAuthClientChoicesResponseBody(res *authclients.ListMcpServerAuthClientChoicesResult) *ListMcpServerAuthClientChoicesResponseBody {
 	body := &ListMcpServerAuthClientChoicesResponseBody{
 		RequiresUpstreamAuth: res.RequiresUpstreamAuth,
+		Status:               res.Status,
 	}
 	if res.Choices != nil {
 		body.Choices = make([]*AuthClientChoiceResponseBody, len(res.Choices))

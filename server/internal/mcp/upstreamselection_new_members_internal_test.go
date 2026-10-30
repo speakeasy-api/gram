@@ -76,6 +76,12 @@ func TestRecordNewMemberChoices(t *testing.T) {
 	require.NoError(t, f.q.SetAuthClientEnabledFixture(ctx, authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: staticClient()}))
 	join(noAuth)
 
+	// An upstream OAuth client no auth client records yet.
+	pending, _ := f.server()
+	f.serverID = pending
+	f.attach()
+	join(pending)
+
 	choices := &memberChoices{
 		selector:     &upstreamSelector{service: f.service, organizationID: f.orgID, userSessionIssuerID: issuerID, credentialKind: upstreamclients.CredentialKindUserSession, credentialID: credentialID},
 		subject:      user,
@@ -83,7 +89,7 @@ func TestRecordNewMemberChoices(t *testing.T) {
 		metaServerID: validUUID(gatewayID),
 		byServer:     map[uuid.UUID]*memberTokens{},
 	}
-	members := []metaMember{member(considered), member(single), member(ambiguous), member(noAuth)}
+	members := []metaMember{member(considered), member(single), member(ambiguous), member(noAuth), member(pending)}
 	require.True(t, choices.recordNewMemberChoices(ctx, testenv.NewLogger(t), members, map[uuid.UUID]authClientResolution{}))
 
 	selection := func(serverID uuid.UUID) (authclientbackfill.GetSelectionFixtureRow, error) {
@@ -101,6 +107,8 @@ func TestRecordNewMemberChoices(t *testing.T) {
 
 	_, err = selection(ambiguous)
 	require.Error(t, err, "a new member with several ready clients is left for the person to choose")
+	_, err = selection(pending)
+	require.Error(t, err, "a new member whose upstream credentials no auth client records yet is never recorded as no-auth")
 	_, err = selection(considered)
 	require.Error(t, err, "a member present at issuance is not a new addition")
 
@@ -113,7 +121,7 @@ func TestRecordNewMemberChoices(t *testing.T) {
 	require.Equal(t, validUUID(singleClient), row.AuthClientID)
 
 	// The recorded no-auth choice serves on every request, though the server
-	// still has a header client attached.
+	// still has a disabled header client attached.
 	for range 2 {
 		served := []metaMember{member(noAuth)}
 		choices.apply(ctx, testenv.NewLogger(t), served, true)

@@ -12,7 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { AuthClient, AuthClient$inboundSchema } from "./authclient.js";
 
 /**
- * configured when the server offers at least one enabled auth client; setup_incomplete when it has upstream credentials configured that no auth client records yet; no_auth_required otherwise.
+ * configured when the server offers at least one enabled auth client; setup_incomplete when no auth client was ever linked to it, live or detached, but it has a live upstream OAuth client or a credential header on its source that no auth client records yet; no_auth_required otherwise.
  */
 export const McpServerAuthenticationStatus = {
   Configured: "configured",
@@ -20,7 +20,7 @@ export const McpServerAuthenticationStatus = {
   NoAuthRequired: "no_auth_required",
 } as const;
 /**
- * configured when the server offers at least one enabled auth client; setup_incomplete when it has upstream credentials configured that no auth client records yet; no_auth_required otherwise.
+ * configured when the server offers at least one enabled auth client; setup_incomplete when no auth client was ever linked to it, live or detached, but it has a live upstream OAuth client or a credential header on its source that no auth client records yet; no_auth_required otherwise.
  */
 export type McpServerAuthenticationStatus = OpenEnum<
   typeof McpServerAuthenticationStatus
@@ -51,7 +51,7 @@ export type McpServerAuthentication = {
    */
   requiresUpstreamAuth: boolean;
   /**
-   * configured when the server offers at least one enabled auth client; setup_incomplete when it has upstream credentials configured that no auth client records yet; no_auth_required otherwise.
+   * configured when the server offers at least one enabled auth client; setup_incomplete when no auth client was ever linked to it, live or detached, but it has a live upstream OAuth client or a credential header on its source that no auth client records yet; no_auth_required otherwise.
    */
   status: McpServerAuthenticationStatus;
 };

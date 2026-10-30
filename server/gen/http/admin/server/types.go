@@ -23547,8 +23547,9 @@ type AdminMcpServerHealthRemoteSessionsResponseBody struct {
 // AdminMcpServerHealthUpstreamAuthResponseBody is used to define fields on
 // response body types.
 type AdminMcpServerHealthUpstreamAuthResponseBody struct {
-	// configured (at least one enabled auth client), setup_incomplete (upstream
-	// credentials configured that no auth client records yet) or no_auth_required.
+	// configured (at least one enabled auth client), setup_incomplete (no auth
+	// client was ever linked to it, live or detached, but it has upstream
+	// credentials that no auth client records yet) or no_auth_required.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Whether the upstream needs authentication: true when the server offers at
 	// least one enabled auth client.
@@ -24211,8 +24212,8 @@ type AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody struct {
 	// Why there is no choice: selection_required (several clients could serve it),
 	// personal_requires_user (only a personal client serves it, and the turn has
 	// no user), no_client (no live, enabled auth client carries its upstream OAuth
-	// client) or setup_incomplete (it has upstream credentials configured that no
-	// auth client records yet).
+	// client) or setup_incomplete (no auth client was ever linked to it, live or
+	// detached, but it has upstream credentials that no auth client records yet).
 	Reason string `form:"reason" json:"reason" xml:"reason"`
 	// Profile and server pairs with no choice for this reason.
 	Servers int64 `form:"servers" json:"servers" xml:"servers"`

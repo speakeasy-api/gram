@@ -10,8 +10,8 @@ import {
   clientTypeLabel,
   otherServers,
   serverLabel,
-  NO_AUTH_STATUS,
   SIGN_IN_DETECTED_STATUS,
+  UNKNOWN_STATUS,
   UPSTREAM_AUTH_STATUS,
 } from "@/lib/auth-clients";
 import { enumPresentation } from "@/lib/enum";
@@ -119,7 +119,8 @@ export function UpstreamCredentialsSection({
                   </div>
                 ) : null}
               </AuthRow>
-              {mcpServer.userSessionIssuerId ? (
+              {mcpServer.userSessionIssuerId &&
+              query.data.requiresUpstreamAuth ? (
                 <HeadlessCallersSection
                   mcpServerId={mcpServer.id}
                   userSessionIssuerId={mcpServer.userSessionIssuerId}
@@ -184,7 +185,7 @@ function RequirementRow({
   const presentation =
     status === "no_auth_required" && probe === "authentication-required"
       ? SIGN_IN_DETECTED_STATUS
-      : enumPresentation(UPSTREAM_AUTH_STATUS, status, NO_AUTH_STATUS);
+      : enumPresentation(UPSTREAM_AUTH_STATUS, status, UNKNOWN_STATUS);
 
   return (
     <AuthRow label="Upstream sign-in" hint={presentation.hint}>

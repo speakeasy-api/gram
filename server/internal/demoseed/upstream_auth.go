@@ -25,15 +25,14 @@ import (
 //
 // The seed writes the legacy configuration natively: upstream OAuth client
 // associations and each sign-in's client choice. The typed auth clients, their
-// server links and header copies, the servers marked as requiring upstream
-// auth, the mapped credential choices, the default mcp:auth grants and the
-// assistant execution profiles are recorded by the same backfills the admin
-// migration runs, in the same order, so the seeded organization is exactly a
-// migrated organization and cannot drift from what the resolver and the
-// readiness checks expect. The project delete at the start of every run
-// cascades all of these rows away, so every run records them again. Agent
-// attachment grants name upstream_client selectors, whose writes the seed
-// treats as rolled out for the seeded organization.
+// server links and header copies, the mapped credential choices, the default
+// mcp:auth grants and the assistant execution profiles are recorded by the
+// same backfills the admin migration runs, in the same order, so the seeded
+// organization is exactly a migrated organization and cannot drift from what
+// the resolver and the readiness checks expect. The project delete at the
+// start of every run cascades all of these rows away, so every run records
+// them again. Agent attachment grants name upstream_client selectors, whose
+// writes the seed treats as rolled out for the seeded organization.
 //
 // It runs after the Postgres transaction commits, because the backfills take
 // their own organization lock and transactions. Both backfills are scoped to
