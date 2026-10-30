@@ -4,6 +4,7 @@ import { z } from "zod";
 // the crumb back to the list returns to the view as it was left. A filter at
 // its default is absent.
 const searchSchema = z.object({
+  cursors: z.array(z.string().min(1)).optional().catch(undefined),
   q: z.string().min(1).optional().catch(undefined),
   publication: z.enum(["published", "unpublished"]).optional().catch(undefined),
 });

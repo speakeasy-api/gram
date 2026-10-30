@@ -1,7 +1,10 @@
 import { fireEvent, screen, waitFor, cleanup } from "@testing-library/react";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { renderWithApp } from "@/test/harness";
+import { createRootRoute, createRoute, Outlet } from "@tanstack/react-router";
+import { RegistryEntryPage, NewRegistryEntryPage } from "./RegistryEntryPage";
+import { registrySearch } from "./registrySearch";
+import { renderRouteTree, renderWithApp } from "@/test/harness";
 import { formatRegistryJson } from "@/lib/registryJsonEditor";
 import { registryEntryQuery } from "@/lib/gramAdminClient";
 
@@ -623,3 +626,133 @@ it.each([
     expect(confirm).not.toHaveBeenCalled();
   },
 );
+
+it("waits for a stale cached entry's mount refetch before accepting its token", async () => {
+  client.setDefaultOptions({ queries: { retry: false, staleTime: 0 } });
+  let resolve!: (response: Response) => void;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      () =>
+        new Promise<Response>((done) => {
+          resolve = done;
+        }),
+    ),
+  );
+  await mount();
+  expect(screen.queryByLabelText("Record JSON")).toBeNull();
+  await waitFor(() => expect(resolve).toBeTypeOf("function"));
+  const freshToken = "2026-09-22T12:00:00.654321Z";
+  resolve(
+    new Response(
+      JSON.stringify({
+        id,
+        data_json: raw,
+        updated_at: freshToken,
+        created_at: token,
+        published: false,
+        issues: [],
+      }),
+      { headers: { "Content-Type": "application/json" } },
+    ),
+  );
+  mutations.save.mockResolvedValue(entry);
+  fireEvent.change(await screen.findByLabelText("Record JSON"), {
+    target: { value: raw + " " },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(mutations.save).toHaveBeenCalled());
+  expect(mutations.save.mock.calls[0]![0].request.updatedAt).toBe(freshToken);
+});
+
+it("lets a duplicate-name create conflict be corrected without reloading", async () => {
+  mutations.create
+    .mockRejectedValueOnce(
+      Object.assign(new Error("Duplicate name"), { statusCode: 409 }),
+    )
+    .mockResolvedValue(entry);
+  await renderWithApp(
+    <RegistryEntryEditor id={null} onClose={vi.fn<() => void>()} />,
+    {
+      queryClient: client,
+    },
+  );
+  fireEvent.change(await screen.findByLabelText("Record JSON"), {
+    target: { value: raw },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByRole("alert");
+  expect(screen.queryByRole("button", { name: "Reload" })).toBeNull();
+  fireEvent.change(screen.getByLabelText("Record JSON"), {
+    target: { value: raw.replace("demo", "another") },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(mutations.create).toHaveBeenCalledTimes(2));
+});
+
+function pageRoutes() {
+  const root = createRootRoute({ component: Outlet });
+  const registry = createRoute({
+    getParentRoute: () => root,
+    path: "registry",
+    validateSearch: registrySearch,
+    component: Outlet,
+  });
+  return root.addChildren([
+    registry.addChildren([
+      createRoute({
+        getParentRoute: () => registry,
+        path: "/",
+        component: () => <p>Registry list</p>,
+      }),
+      createRoute({
+        getParentRoute: () => registry,
+        path: "$entryId",
+        component: RegistryEntryPage,
+      }),
+      createRoute({
+        getParentRoute: () => registry,
+        path: "new",
+        component: NewRegistryEntryPage,
+      }),
+    ]),
+  ]);
+}
+
+it("returns from the entry page after only one discard confirmation", async () => {
+  const confirm = vi.fn().mockReturnValue(true);
+  vi.stubGlobal("confirm", confirm);
+  const { router } = await renderRouteTree(pageRoutes(), {
+    initialPath: `/registry/${id}?q=demo&cursors=%5B%22page-two%22%5D`,
+    queryClient: client,
+  });
+  fireEvent.change(await screen.findByLabelText("Record JSON"), {
+    target: { value: raw + " " },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  await screen.findByText("Registry list");
+  expect(confirm).toHaveBeenCalledTimes(1);
+  expect(router.state.location.pathname).toBe("/registry");
+  expect(router.state.location.search).toEqual({
+    q: "demo",
+    cursors: ["page-two"],
+  });
+});
+
+it("replaces the new-entry page with the created entry", async () => {
+  mutations.create.mockResolvedValue(entry);
+  const { router } = await renderRouteTree(pageRoutes(), {
+    initialPath: "/registry/new?q=demo",
+    queryClient: client,
+  });
+  const length = router.history.length;
+  fireEvent.change(await screen.findByLabelText("Record JSON"), {
+    target: { value: raw },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe(`/registry/${id}`),
+  );
+  expect(router.history.length).toBe(length);
+  expect(router.state.location.search).toEqual({ q: "demo" });
+});

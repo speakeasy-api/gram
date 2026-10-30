@@ -1005,7 +1005,7 @@ function createRegistryEntryQuery(id: string) {
     queryFn: async (context) => {
       const entry = await redirecting(generated.queryFn(context));
       const name = registryEntryName(entry.dataJson);
-      if (name) context.client.setQueryData(registryEntryNameKey(id), { name });
+      context.client.setQueryData(registryEntryNameKey(id), { name });
       return entry;
     },
     enabled: id !== "",

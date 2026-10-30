@@ -74,7 +74,7 @@ export function RegistryEntryEditor({
   const busy = requestBusy;
   const [conflict, setConflict] = useState(false);
   const inFlight = useRef(false);
-  if (id && !base && detail.data) {
+  if (id && !base && detail.data && !detail.isFetching && !detail.isError) {
     setBase(detail.data);
     const formatted =
       formatRegistryJson(detail.data.dataJson) ?? detail.data.dataJson;
@@ -105,8 +105,7 @@ export function RegistryEntryEditor({
     });
     queryClient.setQueryData(registryEntryQuery(entry.id).queryKey, entry);
     const name = registryEntryName(entry.dataJson);
-    if (name)
-      queryClient.setQueryData(registryEntryNameKey(entry.id), { name });
+    queryClient.setQueryData(registryEntryNameKey(entry.id), { name });
     setBase(entry);
     const formatted = formatRegistryJson(entry.dataJson) ?? entry.dataJson;
     setBaseline(formatted);
@@ -174,11 +173,6 @@ export function RegistryEntryEditor({
         );
       } else if (kind === "save" && loaded && !conflict) {
         const dataJson = text;
-        const checked = validateRegistryText(dataJson, base ?? undefined);
-        if (checked.length > 0) {
-          setIssues(checked);
-          return;
-        }
         const entry = base
           ? await save.mutateAsync({
               request: {
@@ -195,7 +189,7 @@ export function RegistryEntryEditor({
       setFailure(error);
       if (errorStatus(error) === 422)
         setServerIssues(serverValidationIssues(errorText(error), text));
-      if (errorStatus(error) === 409) setConflict(true);
+      if (errorStatus(error) === 409 && base) setConflict(true);
     } finally {
       inFlight.current = false;
       setBusy(false);

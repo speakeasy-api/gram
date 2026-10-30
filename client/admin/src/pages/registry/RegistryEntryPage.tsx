@@ -2,6 +2,11 @@ import type { JSX } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { RegistryEntryEditor } from "./RegistryEntryEditor";
 
+// Command K intentionally links the MCP Registry list, not these internal
+// mutation forms. Staff discover entries with the list's server-side search
+// and publication filters; promoting the editor from a sheet does not add a
+// global registry index to the launcher. Covered by the palette page-action
+// test and RegistryList search/link tests.
 // The editor confirms its own discard, so leaving through Cancel skips the
 // blocker rather than asking twice. Both pages keep the list's filters.
 function useBackToList(): () => void {

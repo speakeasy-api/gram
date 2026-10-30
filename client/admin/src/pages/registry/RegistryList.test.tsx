@@ -238,3 +238,33 @@ it("keeps a mid-string search edit in place while the address catches up, and fo
   await act(() => router.navigate({ to: "/registry", search: {} }));
   await waitFor(() => expect(input.value).toBe(""));
 });
+
+it("restores the cursor stack after leaving and remounting the list", async () => {
+  list.mockResolvedValue({ entries: [] });
+  const path = "/registry?q=demo&cursors=%5B%22page-two%22%5D";
+  const { unmount } = await renderWithApp(<RegistryList />, {
+    initialPath: path,
+  });
+  await waitFor(() =>
+    expect(list).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: "page-two" }),
+    ),
+  );
+  expect(screen.getByText("Page 2")).toBeTruthy();
+  unmount();
+  list.mockClear();
+  await renderWithApp(<RegistryList />, { initialPath: path });
+  await waitFor(() =>
+    expect(list).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: "page-two" }),
+    ),
+  );
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+  await waitFor(() => expect(screen.getByText("Page 1")).toBeTruthy());
+});

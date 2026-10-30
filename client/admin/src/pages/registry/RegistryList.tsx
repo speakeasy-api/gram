@@ -49,11 +49,10 @@ export function RegistryList(): JSX.Element {
   const filter = (next: RegistrySearch): void => {
     void navigate({
       to: ".",
-      search: (previous) => ({ ...previous, ...next }),
+      search: (previous) => ({ ...previous, ...next, cursors: undefined }),
       state: (previous) => ({ ...previous, registryFilter: true }),
       replace: true,
     });
-    setCursors([undefined]);
   };
   const open = (entryId: string): void => {
     void navigate({
@@ -62,7 +61,16 @@ export function RegistryList(): JSX.Element {
       search: (previous) => previous,
     });
   };
-  const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
+  const cursors = search.cursors ?? [];
+  const setCursors = (next: string[]): void => {
+    void navigate({
+      to: ".",
+      search: (previous) => ({
+        ...previous,
+        cursors: next.length ? next : undefined,
+      }),
+    });
+  };
   const page = useQuery(
     registryEntriesQuery({
       query: search.q,
@@ -204,13 +212,13 @@ export function RegistryList(): JSX.Element {
         <Button
           variant="ghost"
           size="xs"
-          disabled={cursors.length === 1 || page.isFetching}
-          onClick={() => setCursors((previous) => previous.slice(0, -1))}
+          disabled={cursors.length === 0 || page.isFetching}
+          onClick={() => setCursors(cursors.slice(0, -1))}
         >
           Previous
         </Button>
         <span className="text-muted-foreground text-sm">
-          Page {cursors.length}
+          Page {cursors.length + 1}
         </span>
         <Button
           variant="ghost"
@@ -218,7 +226,7 @@ export function RegistryList(): JSX.Element {
           disabled={!page.data?.nextCursor || page.isFetching}
           onClick={() => {
             if (page.data?.nextCursor)
-              setCursors((previous) => [...previous, page.data.nextCursor]);
+              setCursors([...cursors, page.data.nextCursor]);
           }}
         >
           Next
