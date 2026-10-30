@@ -1,0 +1,80 @@
+package memorydigest_test
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/memorydigest"
+)
+
+func TestUncoveredShowsEachPeriodAtItsMostCompressedLevel(t *testing.T) {
+	t.Parallel()
+
+	chatInDay := uuid.New()
+	chatToday := uuid.New()
+	dayInWeek := memorydigest.Digest{ID: uuid.New(), Level: memorydigest.LevelDay, PeriodStart: date(2026, 10, 5), Content: "day in covered week", ChatIDs: []uuid.UUID{chatInDay}}
+	weekInMonth := memorydigest.Digest{ID: uuid.New(), Level: memorydigest.LevelWeek, PeriodStart: date(2026, 10, 5), Content: "week in month", ChildDigestIDs: []uuid.UUID{dayInWeek.ID}}
+	month := memorydigest.Digest{ID: uuid.New(), Level: memorydigest.LevelMonth, PeriodStart: date(2026, 10, 1), Content: "October", ChildDigestIDs: []uuid.UUID{weekInMonth.ID}}
+	openWeek := memorydigest.Digest{ID: uuid.New(), Level: memorydigest.LevelWeek, PeriodStart: date(2026, 11, 2), Content: "first week of November"}
+	openDay := memorydigest.Digest{ID: uuid.New(), Level: memorydigest.LevelDay, PeriodStart: date(2026, 11, 9), Content: "Monday"}
+
+	entries := memorydigest.Uncovered(
+		[]memorydigest.Digest{openDay, dayInWeek, month, openWeek, weekInMonth},
+		[]memorydigest.ChatNote{
+			{ID: chatInDay, SummarizedAt: date(2026, 10, 5), Summary: "covered"},
+			{ID: chatToday, Title: "Retry queue", SummarizedAt: date(2026, 11, 10), Summary: "Picked queue X.\n\nMore detail."},
+		},
+	)
+
+	var ids []uuid.UUID
+	for _, e := range entries {
+		ids = append(ids, e.ID)
+	}
+	require.Equal(t, []uuid.UUID{month.ID, openWeek.ID, openDay.ID, chatToday}, ids)
+	require.Equal(t, "October 2026 (month digest)", entries[0].Heading)
+	require.Equal(t, memorydigest.SourceChat, entries[3].Kind)
+	require.Equal(t, "Chat 2026-11-10: Retry queue", entries[3].Heading)
+	require.Equal(t, "Picked queue X.", entries[3].Text)
+}
+
+func TestBudgetDropsOldestFirst(t *testing.T) {
+	t.Parallel()
+
+	var entries []memorydigest.Entry
+	for i := range 10 {
+		entries = append(entries, memorydigest.Entry{
+			Kind:    memorydigest.SourceDigest,
+			ID:      uuid.New(),
+			Heading: "h",
+			At:      date(2026, 10, 1).AddDate(0, 0, i),
+			Text:    strings.Repeat("x", 396), // 99 tokens, plus 1 for the heading
+		})
+	}
+
+	kept, dropped := memorydigest.Budget(entries, 350)
+	require.Equal(t, 7, dropped)
+	require.Equal(t, entries[7:], kept)
+
+	kept, dropped = memorydigest.Budget(entries, 10_000)
+	require.Zero(t, dropped)
+	require.Len(t, kept, 10)
+
+	kept, dropped = memorydigest.Budget(nil, 100)
+	require.Zero(t, dropped)
+	require.Empty(t, kept)
+}
+
+func TestChatSnippetIsCut(t *testing.T) {
+	t.Parallel()
+
+	entries := memorydigest.Uncovered(nil, []memorydigest.ChatNote{
+		{ID: uuid.New(), SummarizedAt: time.Now(), Summary: strings.Repeat("y", 2_000)},
+	})
+	require.Len(t, entries, 1)
+	require.Equal(t, 600, len([]rune(entries[0].Text)))
+	require.True(t, strings.HasSuffix(entries[0].Text, "…"))
+}
