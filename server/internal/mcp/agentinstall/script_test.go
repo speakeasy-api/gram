@@ -13,6 +13,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/hooks"
 )
 
 const (
@@ -89,6 +91,15 @@ func TestScriptIsValidShell(t *testing.T) {
 			require.NoError(t, err, "sh -n: %s", out)
 		})
 	}
+}
+
+// The hooks self-test must use the session id the hooks API answers without
+// recording, or every install leaves an empty session under the agent.
+func TestScriptSelfCheckUsesTheUnrecordedSession(t *testing.T) {
+	t.Parallel()
+	// The hooks API matches the whole call, not the session id alone, so the
+	// whole frame is pinned.
+	require.Contains(t, renderScript(t, testParams()), `frame='{"seq":1,"hook":"before_tool_call","event":{"toolName":"exec","toolCallId":"speakeasy-smoke-1","params":{"command":"true"}},"ctx":{"sessionId":"`+hooks.InstallCheckSessionID+`"},"timeoutMs":10000}'`)
 }
 
 // The script interpolates values into a file that runs on someone's machine,
