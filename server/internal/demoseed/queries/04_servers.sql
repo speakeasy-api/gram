@@ -397,9 +397,9 @@ VALUES
    ARRAY['code'], ARRAY['client_secret_basic'], ARRAY['S256'], TRUE,
    'Acme Identity');
 
--- The workforce sign-in is left as it is: pointing it at this fictional
--- provider would send interactive sign-in for every server on it to a
--- provider that doesn't exist. The Services pages still show these vendors.
+-- The workforce sign-in client is left unset: pointing interactive sign-in at
+-- this fictional provider would send every server on it to a provider that
+-- doesn't exist. The Services pages still show these vendors.
 -- name: ServersInsertEMAIdentityProviderClient :exec
 INSERT INTO remote_session_clients
   (id, project_id, organization_id, remote_session_issuer_id, client_id,
@@ -409,6 +409,17 @@ VALUES
    'demo-acme-identity-sign-in', 'DEMO-NOT-VALID-CIPHERTEXT',
    'client_secret_basic', ARRAY['authorization_code', 'refresh_token'],
    ARRAY['openid', 'profile', 'email']);
+
+-- Inbound EMA: the workforce issuer accepts ID-JAGs from Acme Identity. Only
+-- the issuer is linked, never the sign-in client, so interactive sign-in stays
+-- on the organization's own login.
+-- name: ServersTrustEMAIdentityProviderForInboundEMA :execrows
+UPDATE user_session_issuers
+SET trusted_remote_session_issuer_id = @ema_provider::uuid
+WHERE id = @workforce_issuer::uuid
+  AND organization_id = @org_id::text
+  AND project_id IS NULL
+  AND deleted IS FALSE;
 
 -- name: ServersInsertEMARemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES

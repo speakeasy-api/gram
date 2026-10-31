@@ -2309,6 +2309,28 @@ func (q *Queries) GetPlatformMCPCatalogRegistrationForLifecycle(ctx context.Cont
 	return i, err
 }
 
+const getPlatformMCPCatalogRegistrationProject = `-- name: GetPlatformMCPCatalogRegistrationProject :one
+SELECT project_id
+FROM platform_mcp_catalog_registrations
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+`
+
+type GetPlatformMCPCatalogRegistrationProjectParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// The project a live registration belongs to, so a caller can name the
+// server it added by registration ID alone.
+func (q *Queries) GetPlatformMCPCatalogRegistrationProject(ctx context.Context, arg GetPlatformMCPCatalogRegistrationProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPCatalogRegistrationProject, arg.ID, arg.OrganizationID)
+	var project_id uuid.UUID
+	err := row.Scan(&project_id)
+	return project_id, err
+}
+
 const getPlatformMCPConnectionForUpdate = `-- name: GetPlatformMCPConnectionForUpdate :one
 SELECT connection.id, connection.organization_id, connection.subject_urn, connection.oauth_client_id, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.authorization_expires_at, connection.reauthorization_required_at, connection.reauthorization_reason, connection.revoked_at, connection.created_at, connection.updated_at, client.client_id, client.revoked_at AS client_revoked_at
 FROM platform_mcp_connections AS connection
@@ -8279,6 +8301,22 @@ func (q *Queries) RecordPlatformMCPSetupMilestone(ctx context.Context, arg Recor
 	return err
 }
 
+const releaseInboundEMAProviderLock = `-- name: ReleaseInboundEMAProviderLock :one
+SELECT pg_advisory_unlock(hashtextextended('inbound-ema-provider:' || $1::text || ':' || $2::text, 0)) AS unlocked
+`
+
+type ReleaseInboundEMAProviderLockParams struct {
+	OrganizationID string
+	Issuer         string
+}
+
+func (q *Queries) ReleaseInboundEMAProviderLock(ctx context.Context, arg ReleaseInboundEMAProviderLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseInboundEMAProviderLock, arg.OrganizationID, arg.Issuer)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
+}
+
 const resolvePlatformMCPAssignedPluginTarget = `-- name: ResolvePlatformMCPAssignedPluginTarget :many
 SELECT
     p.id,
@@ -8924,6 +8962,25 @@ func (q *Queries) SearchPlatformChatMessages(ctx context.Context, arg SearchPlat
 		return nil, err
 	}
 	return items, nil
+}
+
+const tryAcquireInboundEMAProviderLock = `-- name: TryAcquireInboundEMAProviderLock :one
+SELECT pg_try_advisory_lock(hashtextextended('inbound-ema-provider:' || $1::text || ':' || $2::text, 0))
+`
+
+type TryAcquireInboundEMAProviderLockParams struct {
+	OrganizationID string
+	Issuer         string
+}
+
+// Serialize finding or creating an organization's identity provider record
+// for one issuer URL, so concurrent trusts never create two. Non-blocking: a
+// waiter would hold a pooled connection the holder's nested calls need.
+func (q *Queries) TryAcquireInboundEMAProviderLock(ctx context.Context, arg TryAcquireInboundEMAProviderLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, tryAcquireInboundEMAProviderLock, arg.OrganizationID, arg.Issuer)
+	var pg_try_advisory_lock bool
+	err := row.Scan(&pg_try_advisory_lock)
+	return pg_try_advisory_lock, err
 }
 
 const updatePlatformMCPCatalogRegistrationComponents = `-- name: UpdatePlatformMCPCatalogRegistrationComponents :one

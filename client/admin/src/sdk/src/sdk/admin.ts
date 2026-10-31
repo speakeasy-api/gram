@@ -148,6 +148,7 @@ import { AdminSpendBreakdownResponse } from "../models/components/adminspendbrea
 import { AdminStripeCustomer } from "../models/components/adminstripecustomer.js";
 import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
 import { AdminStripeSubscriptionCandidate } from "../models/components/adminstripesubscriptioncandidate.js";
+import { AdminUploadImageResult } from "../models/components/adminuploadimageresult.js";
 import { AdminUpstreamOAuthMigrationOrganizations } from "../models/components/adminupstreamoauthmigrationorganizations.js";
 import { AdminUpstreamOAuthMigrationRun } from "../models/components/adminupstreamoauthmigrationrun.js";
 import { AdminUpstreamOAuthMigrationStatus } from "../models/components/adminupstreamoauthmigrationstatus.js";
@@ -212,7 +213,6 @@ import { UpdateOrganizationRequestBody } from "../models/components/updateorgani
 import { UpdateRemoteSessionIssuerForm } from "../models/components/updateremotesessionissuerform.js";
 import { UpdateSignupOfferRequestBody } from "../models/components/updatesignupofferrequestbody.js";
 import { UpdateSupportMatrixRequestBody } from "../models/components/updatesupportmatrixrequestbody.js";
-import { UploadImageResult } from "../models/components/uploadimageresult.js";
 import { AdminDeleteGlobalIssuerRequest } from "../models/operations/admindeleteglobalissuer.js";
 import { AdminDescribeMcpServerHealthRequest } from "../models/operations/admindescribemcpserverhealth.js";
 import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
@@ -292,12 +292,12 @@ export class Admin extends ClientSDK {
    * uploadPlatformImage admin
    *
    * @remarks
-   * Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.
+   * Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG with local clip paths. This is a direct upload, not a staged proposal: successful uploads are publicly served immediately and remain stored.
    */
   async uploadPlatformImage(
     request: ReadableStream<Uint8Array> | Blob | ArrayBuffer | Uint8Array,
     options?: RequestOptions,
-  ): Promise<UploadImageResult> {
+  ): Promise<AdminUploadImageResult> {
     return unwrapAsync(adminUploadPlatformImage(
       this,
       request,

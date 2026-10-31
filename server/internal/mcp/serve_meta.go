@@ -108,6 +108,9 @@ type metaGateContext struct {
 	protocolVersion mcpversions.Resolution
 	// connectURL is the gateway's browser connect page; empty when ungated.
 	connectURL string
+	// skillsOverMCP memoizes the Skills extension flag for this request once
+	// it is evaluated; see metaSkillsEnabled.
+	skillsOverMCP *bool
 }
 
 // metaMembership names where a meta request's members come from. The zero
@@ -213,7 +216,10 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	if err := validateMCPRequestEnvelope(ctx, logger, prepared, oops.CodeRequestTooLarge, "meta mcp request body exceeds 1 MiB"); err != nil {
 		return err
 	}
-	if gate.catalogRef != nil && (req.Method == mcpversions.MethodToolsCall || (req.Method == mcpversions.MethodToolsList && (gate.discoveryMode == metamcp.DiscoveryModeDirect || gate.discoveryMode == metamcp.DiscoveryModeCode))) {
+	// A skills request loads the catalog too: a gateway inherits skills only
+	// from the members the connection approved. With the extension off it is
+	// rejected in dispatch, so it needs no catalog.
+	if gate.catalogRef != nil && (req.Method == mcpversions.MethodToolsCall || (req.Method == mcpversions.MethodToolsList && (gate.discoveryMode == metamcp.DiscoveryModeDirect || gate.discoveryMode == metamcp.DiscoveryModeCode)) || (metaSkillMethod(&req) && s.metaSkillsEnabled(ctx, gate))) {
 		authentication := gate.authentication
 		catalog, err := s.loadConnectionCatalog(ctx, authentication.endpoint, authentication.subject, gate.catalogRef, time.Now())
 		if errors.Is(err, errConnectionCatalogExpired) {
@@ -307,7 +313,13 @@ func (s *Service) handleMetaMCPRequest(
 		}()
 	}
 
-	if !methodAvailable(req, gate.protocolVersion, mcpversions.SupportedMetaServer(), nil) {
+	// The declared extensions are resolved only for an extension method, as
+	// on the hosted surface: the flag behind them costs a lookup.
+	var extensions []string
+	if mcpversions.KnownExtensionMethod(req.Method) {
+		extensions = s.metaExtensions(ctx, gate)
+	}
+	if !methodAvailable(req, gate.protocolVersion, mcpversions.SupportedMetaServer(), extensions) {
 		return nil, unavailableMethod(req)
 	}
 
@@ -317,7 +329,7 @@ func (s *Service) handleMetaMCPRequest(
 	case mcpversions.MethodInitialize:
 		return s.handleMetaInitialize(ctx, logger, metaServer, gate, req, gate.protocolVersion.InEffect)
 	case mcpversions.MethodServerDiscover:
-		return handleServerDiscover(ctx, logger, req.ID, describeMetaServer(metaServer, gate.discoveryMode), mcpversions.SupportedMetaServer())
+		return handleServerDiscover(ctx, logger, req.ID, describeMetaServer(metaServer, gate.discoveryMode, s.metaSkillsEnabled(ctx, gate)), mcpversions.SupportedMetaServer())
 	case mcpversions.MethodNotificationsCancelled:
 		if gate.discoveryMode == metamcp.DiscoveryModeCode {
 			return nil, s.cancelMetaCode(ctx, gate, req)
@@ -338,7 +350,16 @@ func (s *Service) handleMetaMCPRequest(
 	case mcpversions.MethodResourcesList:
 		return handleMetaResourcesList(ctx, logger, req)
 	case mcpversions.MethodResourcesRead:
+		// With the extension off a skill:// URI is an ordinary resource URI,
+		// which the gateway does not serve.
+		if uri, ok := skillResourceURI(req.Params); ok && s.metaSkillsEnabled(ctx, gate) {
+			return s.readMetaSkill(ctx, logger, metaServer.ID, gate, req, uri)
+		}
 		return handleMetaResourcesRead(ctx, logger, req)
+	case mcpversions.MethodSkillsList:
+		return s.listMetaSkills(ctx, logger, metaServer.ID, gate, req)
+	case mcpversions.MethodSkillsGet:
+		return s.getMetaSkill(ctx, logger, metaServer.ID, gate, req)
 	default:
 		return nil, unavailableMethod(req)
 	}
@@ -440,7 +461,7 @@ func (s *Service) handleMetaInitialize(
 
 	result := &result[initializeResult]{
 		ID:             req.ID,
-		Result:         describeMetaServer(metaServer, gate.discoveryMode).initializeResult(negotiated),
+		Result:         describeMetaServer(metaServer, gate.discoveryMode, s.metaSkillsEnabled(ctx, gate)).initializeResult(negotiated),
 		serverIdentity: serverInfoMetaServer,
 		cacheHints:     nil,
 	}
@@ -799,6 +820,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		// tools/call path reads it (upstream dials pin their own version).
 		protocolVersion: request.resolution,
 		connectURL:      connectURL,
+		skillsOverMCP:   nil,
 	}
 	if gatePolicy != nil {
 		gate.catalogRef = gatePolicy.Catalog

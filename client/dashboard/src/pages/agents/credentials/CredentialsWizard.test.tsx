@@ -448,6 +448,11 @@ describe("Provisioning a new agent", () => {
           projectId: "project_one",
         },
       },
+      {
+        effect: "allow",
+        scope: "mcp:auth",
+        selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
+      },
     ]);
     expect(
       mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.projectId,
@@ -1293,7 +1298,7 @@ describe("Agent project", () => {
         (form: { selector: { resourceId: string } }) =>
           form.selector.resourceId,
       ),
-    ).toEqual(["toolset_one"]);
+    ).toEqual(["toolset_one", "*"]);
   });
 
   it("saves no server the check has not answered for", async () => {
@@ -1474,7 +1479,7 @@ describe("Agent project", () => {
         (form: { selector: { resourceId: string } }) =>
           form.selector.resourceId,
       ),
-    ).toEqual(["toolset_0"]);
+    ).toEqual(["toolset_0", "*"]);
   });
 
   it("holds All servers until the check answers, and retries one that failed", async () => {
@@ -1525,6 +1530,11 @@ describe("Agent project", () => {
           projectId: "project_one",
         },
       },
+      {
+        effect: "allow",
+        scope: "mcp:auth",
+        selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
+      },
     ]);
   });
 });
@@ -1555,6 +1565,16 @@ describe("Editing an agent that already exists", () => {
     },
   ] as never;
 
+  // Agents the wizard saved hold mcp:auth beside their server grants.
+  const AUTH = {
+    id: "grant_auth",
+    effect: "allow",
+    scope: "mcp:auth",
+    selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
   function editing(over: { grants?: unknown } = {}) {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -1566,7 +1586,7 @@ describe("Editing an agent that already exists", () => {
           <CredentialsWizard
             agent={agent}
             editing
-            grants={(over.grants ?? grants) as never}
+            grants={[...((over.grants ?? grants) as never[]), AUTH] as never}
             onDone={(id) => {
               onDone(id);
             }}
@@ -2603,6 +2623,11 @@ describe("Servers that sign in as a person", () => {
           resourceId: "server_linear",
           projectId: "project_one",
         },
+      },
+      {
+        effect: "allow",
+        scope: "mcp:auth",
+        selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
       },
     ]);
     // The issuer's sign-ins are read in the server's own project, before the

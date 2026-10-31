@@ -3,13 +3,18 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -158,9 +163,118 @@ func TestAgentMemberResolvedTypeRequiresAttachment(t *testing.T) {
 	gate := &metaGateContext{agentID: uuid.New(), organizationID: f.orgID}
 	// The catalog supplies the personal client type even when the caller has
 	// not supplied one. No attachment lookup is available in this fixture.
-	pin, err := f.service.authorizeAgentMemberClient(t.Context(), gate, member, f.issuerID, validUUID(f.registration), "")
+	connection, err := f.service.authorizeAgentMemberClient(t.Context(), gate, member, f.issuerID, validUUID(f.registration), "")
 	require.Error(t, err)
-	require.Equal(t, uuid.Nil, pin)
+	require.Equal(t, uuid.Nil, connection.attachedSession)
+}
+
+// A legacy agent gateway member serves an unattached agent key from its
+// validated authorizer's own connection under the agent's own mcp:auth, and
+// an explicit attachment still serves first, pinned.
+func TestAgentMemberLegacyClientUsesTheAgentKeysAuthorizer(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "agent_member_key_authorizer")
+	require.NoError(t, err)
+	personal := personalAuthGrant()
+	connectOnly := []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)}
+	other := authz.NewGrantWithSelector(authz.ScopeMCPAuth, authz.Selector{
+		authz.SelectorKeyResourceKind: authz.ResourceKindMCPAuthClient, authz.SelectorKeyResourceID: authz.WildcardResource,
+		authz.SelectorKeyClientType: authz.AuthClientTypeRemoteSession, authz.SelectorKeyConnectionOwner: "user_other",
+	})
+	cases := []struct {
+		name     string
+		agent    []authz.Grant
+		block    bool
+		attached bool
+		allowed  bool
+	}{
+		{"the agent's mcp:auth serves its authorizer's connection without an attachment", []authz.Grant{personal}, false, false, true},
+		{"without the agent's mcp:auth it refuses", connectOnly, false, false, false},
+		{"a grant for another owner refuses", []authz.Grant{other}, false, false, false},
+		{"an owner block refuses", []authz.Grant{personal}, true, false, false},
+		{"an explicit attachment serves first, pinned", []authz.Grant{personal}, false, true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newAuthClientFixture(t, pool)
+			client := f.oauthClient(authClientTypeRemoteSession)
+			f.enforce()
+			owner := []authz.Grant{personal}
+			if tc.block {
+				owner = append(owner, authz.NewGrantWithSelector(authz.ScopeMCPBlockedAuth, authz.Selector{
+					authz.SelectorKeyResourceKind: authz.ResourceKindMCPAuthClient, authz.SelectorKeyResourceID: client.String(),
+					authz.SelectorKeyClientType: authz.AuthClientTypeRemoteSession, authz.SelectorKeyConnectionOwner: "user_owner",
+				}))
+			}
+			f.service.authz = authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), authz.EngineOpts{
+				AdmitPrincipalCredential: func(context.Context, *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
+					return authz.PrincipalCredentialAdmission{
+						OwnerUserID: "user_owner", Credential: tc.agent, Agent: tc.agent, Owner: owner,
+						Authorizer: authz.RepresentedUserPolicy{UserID: "user_owner", Policy: []authz.Grant{personal}}, LegacyAuthCeiling: false,
+					}, nil
+				},
+			})
+			f.service.authClientPermitter = mandatoryPermitter{engine: f.service.authz}
+			session := uuid.New()
+			f.service.attachedConnections = &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: session, OwnerUserID: "user_owner"}, attached: tc.attached, err: nil, asked: nil}
+			source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: session}
+			f.service.upstreamTokens = source
+			agentID := uuid.New()
+			ctx := admittedAgentContext(t, f.orgID, agentID)
+			gate := &metaGateContext{agentID: agentID, organizationID: f.orgID}
+			member := metaMember{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}
+
+			tokens, err := f.service.agentMemberClientTokens(ctx, gate, member, f.issuerID, f.registration, "")
+			if !tc.allowed {
+				require.Error(t, err)
+				require.Empty(t, source.subjects, "a refused member reads no credential")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, session, tokens[source.issuerID].RemoteSessionID)
+			require.Len(t, source.subjects, 1)
+			if tc.attached {
+				require.Equal(t, urn.NewAgentSubject(agentID), source.subjects[0], "the attachment serves its pinned connection")
+			} else {
+				require.Equal(t, urn.NewUserSubject("user_owner"), source.subjects[0], "the authorizer's own connection serves")
+			}
+		})
+	}
+}
+
+// A handback to the upstream client choice reads the connection the permit
+// was decided for: the unattached agent key's authorizer, directly and for a
+// gateway member, typed or not; any other caller keeps its own subject.
+func TestAgentKeyHandbackReadsTheAuthorizersConnection(t *testing.T) {
+	t.Parallel()
+	for _, owner := range []string{"user_owner", ""} {
+		for _, typed := range []bool{false, true} {
+			t.Run(fmt.Sprintf("owner=%q/typed=%v", owner, typed), func(t *testing.T) {
+				t.Parallel()
+				agent := urn.NewAgentSubject(uuid.New())
+				want := agent
+				if owner != "" {
+					want = urn.NewUserSubject(owner)
+				}
+				source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: uuid.New()}
+				s := &Service{upstreamTokens: source}
+				endpoint := &ResolvedMcpEndpoint{ProjectID: uuid.New(), OrganizationID: "test-org", UserSessionIssuerID: uuid.New()}
+				member := metaMember{serverID: uuid.New(), projectID: endpoint.ProjectID, slug: "member", backend: metaMemberBackendProxied,
+					chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, typedAuthClient: typed,
+					authClient: &authClientResolution{authorizerOwner: owner}}
+				_, err := s.resolveChosenMemberTokens(t.Context(), endpoint, agent, true, member)
+				require.NoError(t, err)
+				authentication := &issuerGateAuthentication{endpoint: endpoint, subject: agent, chosenClient: uuid.NullUUID{UUID: uuid.New(), Valid: true}, authorizerOwner: owner}
+				if typed {
+					authentication.authClient = &authClientResolution{authorizerOwner: owner}
+				}
+				_, err = s.resolveSelectedAccessTokens(t.Context(), authentication, true)
+				require.NoError(t, err)
+				require.Equal(t, []urn.SessionSubject{want, want}, source.subjects)
+			})
+		}
+	}
 }
 
 func TestAgentMemberRoutingPreservesAmbiguity(t *testing.T) {

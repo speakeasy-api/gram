@@ -151,12 +151,14 @@ SELECT count(*) FROM user_session_clients
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 
 -- EMA: two ready bindings, no cached credentials, and one saved provider
--- order. The workforce sign-in must not trust the fictional provider.
--- name: PostflightIDWorkforceTrustsEMAProvider :one
+-- order. The workforce issuer accepts ID-JAGs from the fictional provider
+-- without federating interactive sign-in through it.
+-- name: PostflightIDWorkforceInboundEMATrust :one
 SELECT count(*) FROM user_session_issuers
 WHERE id = @workforce_issuer::uuid
   AND organization_id = @org_id::text
-  AND trusted_remote_session_issuer_id = @ema_provider::uuid;
+  AND trusted_remote_session_issuer_id = @ema_provider::uuid
+  AND trusted_remote_session_client_id IS NULL;
 
 -- name: PostflightIDReadyEMABindings :one
 SELECT count(*) FROM remote_session_ema_bindings
@@ -304,9 +306,9 @@ WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
   AND u.mcp_server_id = @linear_server_id::uuid
   AND u.auth_client_id = @auth_client_id::uuid;
 
--- The identity-bound assistant's person-backed turns use the shared token on
--- Linear, by an administrator's choice in the profile's latest version, and
--- the token is still enabled and offered there.
+-- The identity-bound assistant's person-backed and userless turns use the
+-- shared token on Linear, by an administrator's choice in each profile's
+-- latest version, and the token is still enabled and offered there.
 -- name: PostflightIDExecutionProfileChoices :one
 SELECT count(*)
 FROM upstream_client_selections u
@@ -329,7 +331,7 @@ WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
   AND u.credential_kind = 'execution_profile_version'
   AND u.source = 'admin'
   AND p.assistant_id = @assistant_id::uuid
-  AND p.execution_context = 'user_backed'
+  AND p.execution_context IN ('user_backed', 'userless')
   AND u.mcp_server_id = @linear_server_id::uuid
   AND u.auth_client_id = @auth_client_id::uuid;
 

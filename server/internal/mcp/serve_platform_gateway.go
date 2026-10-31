@@ -131,6 +131,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 		connectURL:          connectURL,
 		consentDiagnostics:  nil,
+		skillsOverMCP:       nil,
 	}
 	params, err := json.Marshal(toolsCallParams{Name: tool, Arguments: arguments, Meta: nil})
 	if err != nil {

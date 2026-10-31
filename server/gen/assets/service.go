@@ -232,6 +232,8 @@ type ServeImageResult struct {
 	LastModified              string
 	AccessControlAllowOrigin  *string
 	CrossOriginResourcePolicy string
+	ContentSecurityPolicy     *string
+	XContentTypeOptions       *string
 }
 
 // ServeOpenAPIv3Form is the payload type of the assets service serveOpenAPIv3

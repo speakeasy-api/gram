@@ -54,7 +54,7 @@ func TestHandleToken_JWTBearerWithoutClientIsRefused(t *testing.T) {
 		"assertion":  {"header.payload.signature"},
 	})
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	require.Contains(t, w.Body.String(), "invalid_request")
+	require.Contains(t, w.Body.String(), "invalid_target")
 	require.Contains(t, w.Body.String(), "resource is required")
 }
 

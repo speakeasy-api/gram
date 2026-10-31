@@ -12527,6 +12527,9 @@ paths:
               schema:
                 format: int64
                 type: integer
+            Content-Security-Policy:
+              schema:
+                type: string
             Content-Type:
               schema:
                 type: string
@@ -12534,6 +12537,9 @@ paths:
               schema:
                 type: string
             Last-Modified:
+              schema:
+                type: string
+            X-Content-Type-Options:
               schema:
                 type: string
         "400":

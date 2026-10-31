@@ -112,6 +112,17 @@ type Credential = "api-key" | "workload";
 /** Keys live 90 days unless the agent page rotates them sooner. */
 const KEY_LIFETIME_DAYS = 90;
 
+// Stopgap (AIM-862): an agent that may connect to servers cannot sign in to
+// them without mcp:auth, and nothing here can choose auth clients yet, so it is
+// given all of them. Replace this with an auth client selector, made an
+// explicit choice when the agent is created, and grant only the clients chosen
+// there.
+const AUTH_GRANT = {
+  effect: "allow",
+  scope: "mcp:auth",
+  selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
+} as const;
+
 /** The most grants agents.checkPolicyGrants answers in one request. */
 const CHECK_BATCH_SIZE = 100;
 
@@ -729,6 +740,7 @@ export function CredentialsWizard({
         // hook events may name.
         policyGrants: [
           ...agentPolicyGrantsFromDraft(draft),
+          AUTH_GRANT,
           ...(hookEvents
             ? [hooksIngestPolicyGrant(organization.id, projectID)]
             : []),
@@ -847,6 +859,18 @@ export function CredentialsWizard({
           resourceId: server.resourceId,
           projectId: server.projectId,
         });
+      }
+      if (
+        ![...appliedPolicies.current.values()].some(
+          (grant) => grant.scope === AUTH_GRANT.scope,
+        )
+      ) {
+        const created = await createGrant.mutateAsync({
+          request: {
+            createAgentPolicyGrantForm: { agentId: agent.id, ...AUTH_GRANT },
+          },
+        });
+        appliedPolicies.current.set(created.id, created);
       }
       // Last, so a failure part-way through leaves the agent reaching more
       // than intended rather than less: the servers it is meant to keep are

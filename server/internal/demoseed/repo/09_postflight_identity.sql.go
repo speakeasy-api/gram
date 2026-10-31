@@ -346,7 +346,7 @@ WHERE u.project_id = $1::uuid AND u.deleted IS FALSE
   AND u.credential_kind = 'execution_profile_version'
   AND u.source = 'admin'
   AND p.assistant_id = $2::uuid
-  AND p.execution_context = 'user_backed'
+  AND p.execution_context IN ('user_backed', 'userless')
   AND u.mcp_server_id = $3::uuid
   AND u.auth_client_id = $4::uuid
 `
@@ -358,9 +358,9 @@ type PostflightIDExecutionProfileChoicesParams struct {
 	AuthClientID   uuid.UUID
 }
 
-// The identity-bound assistant's person-backed turns use the shared token on
-// Linear, by an administrator's choice in the profile's latest version, and
-// the token is still enabled and offered there.
+// The identity-bound assistant's person-backed and userless turns use the
+// shared token on Linear, by an administrator's choice in each profile's
+// latest version, and the token is still enabled and offered there.
 func (q *Queries) PostflightIDExecutionProfileChoices(ctx context.Context, arg PostflightIDExecutionProfileChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDExecutionProfileChoices,
 		arg.ProjectID,
@@ -1521,6 +1521,30 @@ func (q *Queries) PostflightIDWildcardAssignmentsToInactiveAgents(ctx context.Co
 	return count, err
 }
 
+const postflightIDWorkforceInboundEMATrust = `-- name: PostflightIDWorkforceInboundEMATrust :one
+SELECT count(*) FROM user_session_issuers
+WHERE id = $1::uuid
+  AND organization_id = $2::text
+  AND trusted_remote_session_issuer_id = $3::uuid
+  AND trusted_remote_session_client_id IS NULL
+`
+
+type PostflightIDWorkforceInboundEMATrustParams struct {
+	WorkforceIssuer uuid.UUID
+	OrgID           string
+	EmaProvider     uuid.UUID
+}
+
+// EMA: two ready bindings, no cached credentials, and one saved provider
+// order. The workforce issuer accepts ID-JAGs from the fictional provider
+// without federating interactive sign-in through it.
+func (q *Queries) PostflightIDWorkforceInboundEMATrust(ctx context.Context, arg PostflightIDWorkforceInboundEMATrustParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDWorkforceInboundEMATrust, arg.WorkforceIssuer, arg.OrgID, arg.EmaProvider)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDWorkforceIssuer = `-- name: PostflightIDWorkforceIssuer :one
 SELECT count(*) FROM user_session_issuers
 WHERE id = $1::uuid
@@ -1537,28 +1561,6 @@ type PostflightIDWorkforceIssuerParams struct {
 // The workforce issuer shows a shared authorization server.
 func (q *Queries) PostflightIDWorkforceIssuer(ctx context.Context, arg PostflightIDWorkforceIssuerParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDWorkforceIssuer, arg.WorkforceIssuer, arg.OrgID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const postflightIDWorkforceTrustsEMAProvider = `-- name: PostflightIDWorkforceTrustsEMAProvider :one
-SELECT count(*) FROM user_session_issuers
-WHERE id = $1::uuid
-  AND organization_id = $2::text
-  AND trusted_remote_session_issuer_id = $3::uuid
-`
-
-type PostflightIDWorkforceTrustsEMAProviderParams struct {
-	WorkforceIssuer uuid.UUID
-	OrgID           string
-	EmaProvider     uuid.UUID
-}
-
-// EMA: two ready bindings, no cached credentials, and one saved provider
-// order. The workforce sign-in must not trust the fictional provider.
-func (q *Queries) PostflightIDWorkforceTrustsEMAProvider(ctx context.Context, arg PostflightIDWorkforceTrustsEMAProviderParams) (int64, error) {
-	row := q.db.QueryRow(ctx, postflightIDWorkforceTrustsEMAProvider, arg.WorkforceIssuer, arg.OrgID, arg.EmaProvider)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

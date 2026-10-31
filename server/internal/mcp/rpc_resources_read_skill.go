@@ -43,7 +43,30 @@ func handleSkillResourceRead(
 	now time.Time,
 ) (json.RawMessage, error) {
 	scope, ok := hostedSkillScope(ctx, logger, db, payload)
+	return readServedSkill(ctx, logger, resolver, metrics, telemLogger, clientInfoStore, payload, scope, ok, req, uri, now, mcpmetrics.SurfaceHosting, serverInfoHostedToolset)
+}
 
+// readServedSkill answers resources/read for uri from the skills the scope
+// serves, recording and logging the read as handleSkillResourceRead
+// describes. payload carries the request's attribution for the logs; surface
+// and identity name the surface that answered. A surface with no scope (ok
+// false) serves no skill at any URI.
+func readServedSkill(
+	ctx context.Context,
+	logger *slog.Logger,
+	resolver *mcpskills.Resolver,
+	metrics *mcpmetrics.Metrics,
+	telemLogger *tm.Logger,
+	clientInfoStore sessionClientInfoStore,
+	payload *mcpInputs,
+	scope mcpskills.Scope,
+	ok bool,
+	req *rawRequest,
+	uri string,
+	now time.Time,
+	surface mcpmetrics.Surface,
+	identity serverInfo,
+) (json.RawMessage, error) {
 	if !ok {
 		return nil, skillNotFound(ctx, logger, mcpskills.ErrSkillNotFound, uri)
 	}
@@ -69,11 +92,11 @@ func handleSkillResourceRead(
 			attr.SlogResourceURI(entry.URI()),
 		)
 	}
-	metrics.RecordSkillRead(ctx, mcpmetrics.SurfaceHosting, mcpmetrics.SkillOriginDistribution)
+	metrics.RecordSkillRead(ctx, surface, mcpmetrics.SkillOriginDistribution)
 
 	// Whether the URI resolves at all depends on the caller's organization
 	// membership, so the content is private to the caller.
-	bs, err := marshalSkillRead(ctx, logger, req.ID, *entry, serverInfoHostedToolset)
+	bs, err := marshalSkillRead(ctx, logger, req.ID, *entry, identity)
 	if err != nil {
 		return nil, err
 	}
