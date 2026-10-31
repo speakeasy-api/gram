@@ -40,6 +40,7 @@ const mocks = vi.hoisted(() => ({
   createGrant: vi.fn(),
   deleteGrant: vi.fn(),
   agentList: vi.fn(),
+  nameCheckFails: false,
   sessions: vi.fn(),
   sessionClients: vi.fn(),
   bindings: vi.fn(),
@@ -92,9 +93,18 @@ vi.mock("@/contexts/Auth", () => ({
     user: { id: "user_owner", displayName: "Example Owner", email: "o@e.test" },
   }),
 }));
+// The name check answers as soon as a name is typed rather than after the
+// pause the page waits for.
+vi.mock("@/hooks/useDebouncedValue", () => ({
+  useDebouncedValue: <T,>(value: T) => value,
+}));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     agents: {
+      list: async () => {
+        if (mocks.nameCheckFails) throw new Error("network down");
+        return { result: { items: mocks.agentList() } };
+      },
       create: mocks.createAgent,
       listDelegableGrants: mocks.listDelegableGrants,
       checkPolicyGrants: mocks.checkPolicyGrants,
@@ -279,11 +289,22 @@ async function continueFromAuthentication() {
   fireEvent.click(next);
 }
 
+/** Continue, once the typed name has been checked and found free. */
+async function nameChecked() {
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false),
+  );
+}
+
 async function reachCredentialStep() {
   setup();
   fireEvent.change(screen.getByLabelText("Name"), {
     target: { value: "Release Bot" },
   });
+  await nameChecked();
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -337,6 +358,7 @@ beforeEach(() => {
   mocks.platforms.mockReturnValue([]);
   mocks.tokenEndpoints.mockReturnValue([]);
   mocks.agentList.mockReturnValue([]);
+  mocks.nameCheckFails = false;
   mocks.renameAgent.mockResolvedValue({});
   mocks.createGrant.mockResolvedValue({});
   mocks.deleteGrant.mockResolvedValue({});
@@ -407,6 +429,63 @@ describe("Provisioning a new agent", () => {
     expect(mocks.createAgent).not.toHaveBeenCalled();
   });
 
+  it("holds a name another agent has on the first step, whatever its case", async () => {
+    mocks.agentList.mockReturnValue([
+      { id: "agent_other", name: "Release Bot" },
+    ]);
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "release bot" },
+    });
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "already exists",
+    );
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(screen.getByText("Pick a name no other agent has.")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot 2" },
+    });
+    await nameChecked();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("asks again about a name it already checked before letting it through", async () => {
+    setup();
+    const field = screen.getByLabelText("Name");
+    fireEvent.change(field, { target: { value: "Release Bot" } });
+    await nameChecked();
+    fireEvent.change(field, { target: { value: "Deploy Bot" } });
+    await nameChecked();
+
+    // Taken since it was last asked about.
+    mocks.agentList.mockReturnValue([
+      { id: "agent_other", name: "Release Bot" },
+    ]);
+    fireEvent.change(field, { target: { value: "Release Bot" } });
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "already exists",
+    );
+  });
+
+  it("lets the server decide when the name check fails", async () => {
+    mocks.nameCheckFails = true;
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    await nameChecked();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("will not move on without a name or a server", async () => {
     setup();
     expect(
@@ -418,6 +497,7 @@ describe("Provisioning a new agent", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Release Bot" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     await screen.findByRole("heading", { name: "MCP Selection" });
@@ -445,6 +525,7 @@ describe("Provisioning a new agent", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Release Bot" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     const server = await screen.findByRole("checkbox", { name: "GitHub" });
     expect(screen.queryByText("Call its servers")).toBeNull();
@@ -458,6 +539,7 @@ describe("Provisioning a new agent", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Everything here" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await enabledAllServers());
 
@@ -617,6 +699,7 @@ async function reachPlatformSetup() {
   fireEvent.change(screen.getByLabelText("Name"), {
     target: { value: "Release Bot" },
   });
+  await nameChecked();
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -906,6 +989,7 @@ describe("Connecting a GKE cluster", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Billing Worker" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -988,6 +1072,7 @@ describe("Connecting a GKE cluster", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Review Agent" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     for (const server of servers) {
       fireEvent.click(
@@ -1165,6 +1250,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Project bound" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -1187,6 +1273,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "No project yet" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -1205,6 +1292,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Everything here" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await enabledAllServers());
 
@@ -1222,6 +1310,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Everything here" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     const all = await screen.findByRole("checkbox", { name: "All servers" });
@@ -1312,6 +1401,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Some servers" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(
@@ -1347,6 +1437,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Unchecked" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(
       await screen.findByText("Could not check which servers you can reach."),
@@ -1374,6 +1465,7 @@ describe("Agent project", () => {
       fireEvent.change(screen.getByLabelText("Name"), {
         target: { value: "Rechecked access" },
       });
+      await nameChecked();
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
       await enabledAllServers();
       fireEvent.click(screen.getByRole("checkbox", { name: selection }));
@@ -1429,6 +1521,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Waiting for access" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     const all = await screen.findByRole("checkbox", { name: "All servers" });
@@ -1478,6 +1571,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Several batches" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByText("Could not check which servers you can reach.");
 
@@ -1526,6 +1620,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Everything here" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     const all = await screen.findByRole("checkbox", { name: "All servers" });
@@ -1548,6 +1643,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Everything here" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await enabledAllServers());
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -1699,6 +1795,7 @@ describe("Editing an agent that already exists", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Renamed Bot" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("checkbox", { name: "GitHub" });
     fireEvent.click(await authenticationSave());
@@ -1710,6 +1807,29 @@ describe("Editing an agent that already exists", () => {
     expect(mocks.createGrant).not.toHaveBeenCalled();
     expect(mocks.deleteGrant).not.toHaveBeenCalled();
     await waitFor(() => expect(onDone).toHaveBeenCalledWith(undefined));
+  });
+
+  it("lets an agent keep its own name, and holds a rename to another's", async () => {
+    mocks.agentList.mockReturnValue([
+      { id: "agent_one", name: "Release Bot" },
+      { id: "agent_other", name: "Deploy Bot" },
+    ]);
+    editing();
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Deploy Bot" },
+    });
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "already exists",
+    );
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 
   it("writes nothing when neither the name nor the servers changed", async () => {
@@ -2579,6 +2699,7 @@ describe("Servers that sign in as a person", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Release Bot" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("heading", { name: "MCP Selection" });
     await screen.findByRole("checkbox", { name: "Linear" });
