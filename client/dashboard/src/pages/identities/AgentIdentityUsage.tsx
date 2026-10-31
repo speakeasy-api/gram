@@ -235,7 +235,7 @@ function AgentAuthorizers({ agent }: { agent: ManagedAgent }): JSX.Element {
 
   return (
     <IdentityPanel
-      title="Acting for"
+      title="Authorized by"
       loading={canManage && sessions.isPending}
       error={sessions.isError && all.length === 0}
       refreshFailed={sessions.isError && all.length > 0}
@@ -250,12 +250,13 @@ function AgentAuthorizers({ agent }: { agent: ManagedAgent }): JSX.Element {
     >
       {!canManage ? (
         <IdentityPanelEmpty>
-          You need permission to manage this agent to see who it acts for.
+          You need permission to manage this agent to see who authorized it.
         </IdentityPanelEmpty>
       ) : ranked.length === 0 ? (
         <IdentityPanelEmpty>
-          No one has authorized a session as this agent. A key or a federated
-          platform signs in as the agent alone.
+          No one has authorized a session as this agent. Its keys and platform
+          sign-ins need no person: each server signs them in with its shared
+          credential or the connection assigned to the agent.
         </IdentityPanelEmpty>
       ) : (
         ranked
