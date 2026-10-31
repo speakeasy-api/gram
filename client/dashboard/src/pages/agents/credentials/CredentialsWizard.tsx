@@ -1266,8 +1266,9 @@ export function CredentialsWizard({
           value: scopeName,
         },
         // What creating grants, in words. Editing leaves the hooks grant as it
-        // is and does not read it, so the row would only guess.
-        ...(existing
+        // is and does not read it, so the row would only guess. Before any
+        // server is chosen there is nothing to call yet.
+        ...(existing || (!allServers && selected.length === 0)
           ? []
           : [
               {
