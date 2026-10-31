@@ -123,7 +123,7 @@ func (m *MemoryDigests) Build(ctx context.Context, args BuildMemoryDigestsArgs) 
 
 	level, err := memorydigest.ParseLevel(args.Level)
 	if err != nil {
-		return result, err
+		return result, fmt.Errorf("parse digest level: %w", err)
 	}
 
 	stopHeartbeat := startActivityHeartbeat(ctx)

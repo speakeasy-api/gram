@@ -812,7 +812,11 @@ func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyApps
 }
 
 func (a *Activities) BuildMemoryDigests(ctx context.Context, args activities.BuildMemoryDigestsArgs) (activities.BuildMemoryDigestsResult, error) {
-	return a.memoryDigests.Build(ctx, args)
+	result, err := a.memoryDigests.Build(ctx, args)
+	if err != nil {
+		return result, fmt.Errorf("build memory digests: %w", err)
+	}
+	return result, nil
 }
 
 func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.GenerateChatTitleArgs) error {

@@ -3,7 +3,6 @@ package activities_test
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -18,9 +17,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	memorydigesttest "github.com/speakeasy-api/gram/server/internal/memorydigest/memorydigesttest/repo"
 	"github.com/speakeasy-api/gram/server/internal/memorydigest/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -85,20 +87,64 @@ func newDigestProject(t *testing.T, conn *pgxpool.Pool) digestProject {
 	return digestProject{orgID: orgID, projectID: project.ID}
 }
 
-// addChat seeds a chat whose summary was written at summarizedAt.
+// chatFixture describes a chat whose summary was written at summarizedAt.
+type chatFixture struct {
+	summary      string
+	summarizedAt time.Time
+	redacted     bool
+	excluded     bool
+	accountType  string
+}
+
 func (p digestProject) addChat(t *testing.T, conn *pgxpool.Pool, summary string, summarizedAt time.Time, redacted bool) uuid.UUID {
 	t.Helper()
+	return p.addChatFixture(t, conn, chatFixture{summary: summary, summarizedAt: summarizedAt, redacted: redacted, excluded: false, accountType: ""})
+}
 
-	chatID, err := chatrepo.New(conn).UpsertChat(t.Context(), chatrepo.UpsertChatParams{
-		ID: uuid.New(), ProjectID: p.projectID, OrganizationID: p.orgID,
-		Title: pgtype.Text{String: "title " + summary, Valid: true},
+func (p digestProject) addChatFixture(t *testing.T, conn *pgxpool.Pool, c chatFixture) uuid.UUID {
+	t.Helper()
+
+	ctx := t.Context()
+	title := pgtype.Text{String: "title " + c.summary, Valid: true}
+	var chatID uuid.UUID
+	var err error
+	if c.accountType == "" {
+		chatID, err = chatrepo.New(conn).UpsertChat(ctx, chatrepo.UpsertChatParams{
+			ID: uuid.New(), ProjectID: p.projectID, OrganizationID: p.orgID, Title: title,
+		})
+		require.NoError(t, err)
+	} else {
+		fixtures := testrepo.New(conn)
+		accountID, err := fixtures.SeedUserAccountFixture(ctx, testrepo.SeedUserAccountFixtureParams{
+			OrganizationID: p.orgID, ExternalAccountUuid: uuid.NewString(), AccountType: pgtype.Text{String: c.accountType, Valid: true},
+		})
+		require.NoError(t, err)
+		chatID, err = fixtures.SeedCapturedAgentChatFixture(ctx, testrepo.SeedCapturedAgentChatFixtureParams{
+			ID: uuid.New(), ProjectID: p.projectID, OrganizationID: p.orgID, UserID: pgtype.Text{},
+			ExternalChatID: pgtype.Text{}, Title: title, Cwd: pgtype.Text{}, UserAccountID: uuid.NullUUID{UUID: accountID, Valid: true},
+		})
+		require.NoError(t, err)
+	}
+
+	err = memorydigesttest.New(conn).SetChatMemorySummaryFixture(ctx, memorydigesttest.SetChatMemorySummaryFixtureParams{
+		Summary:            pgtype.Text{String: c.summary, Valid: true},
+		SummaryGeneratedAt: pgtype.Timestamptz{Time: c.summarizedAt, Valid: true, InfinityModifier: pgtype.Finite},
+		SummaryRedacted:    c.redacted,
+		MemoryExcludedAt:   pgtype.Timestamptz{Time: c.summarizedAt, Valid: c.excluded, InfinityModifier: pgtype.Finite},
+		ID:                 chatID,
 	})
 	require.NoError(t, err)
-	_, err = conn.Exec(t.Context(),
-		`UPDATE chats SET summary = $1, summary_generated_at = $2, summary_redacted = $3 WHERE id = $4`,
-		summary, summarizedAt, redacted, chatID)
-	require.NoError(t, err)
 	return chatID
+}
+
+func (p digestProject) digestSources(t *testing.T, conn *pgxpool.Pool, level string, start time.Time) memorydigesttest.GetDigestSourcesFixtureRow {
+	t.Helper()
+
+	row, err := memorydigesttest.New(conn).GetDigestSourcesFixture(t.Context(), memorydigesttest.GetDigestSourcesFixtureParams{
+		ProjectID: p.projectID, Level: level, PeriodStart: pgtype.Date{Time: start, Valid: true, InfinityModifier: pgtype.Finite},
+	})
+	require.NoError(t, err)
+	return row
 }
 
 func (p digestProject) digests(t *testing.T, conn *pgxpool.Pool, level string) []repo.ListChildDigestsRow {
@@ -134,31 +180,21 @@ func TestMemoryDigests_DayDigestFoldsOnlyEligibleSources(t *testing.T) {
 	kept1 := enabled.addChat(t, conn, "picked queue X", at, true)
 	kept2 := enabled.addChat(t, conn, "shipped retries", at.Add(time.Hour), true)
 	enabled.addChat(t, conn, "unmasked summary", at, false)
-	excluded := enabled.addChat(t, conn, "excluded summary", at, true)
-	_, err = conn.Exec(ctx, `UPDATE chats SET memory_excluded_at = now() WHERE id = $1`, excluded)
-	require.NoError(t, err)
-	personal := enabled.addChat(t, conn, "personal summary", at, true)
-	_, err = conn.Exec(ctx, `
-		WITH ua AS (
-			INSERT INTO user_accounts (organization_id, external_account_uuid, account_type)
-			VALUES ($1, $2, 'personal') RETURNING id
-		)
-		UPDATE chats SET user_account_id = (SELECT id FROM ua) WHERE id = $3`,
-		enabled.orgID, uuid.NewString(), personal)
-	require.NoError(t, err)
+	enabled.addChatFixture(t, conn, chatFixture{summary: "excluded summary", summarizedAt: at, redacted: true, excluded: true, accountType: ""})
+	enabled.addChatFixture(t, conn, chatFixture{summary: "personal summary", summarizedAt: at, redacted: true, excluded: false, accountType: "personal"})
+	enabled.addChatFixture(t, conn, chatFixture{summary: "team account summary", summarizedAt: at, redacted: true, excluded: false, accountType: "team"})
 	// Written after the run's anchor day closed: belongs to an open day.
 	enabled.addChat(t, conn, "today summary", day.AddDate(0, 0, 2).Add(30*time.Minute), true)
 	disabled.addChat(t, conn, "other org summary", at, true)
 
-	var memoID uuid.UUID
-	err = conn.QueryRow(ctx, `
-		INSERT INTO memory_memos (organization_id, project_id, content, created_at)
-		VALUES ($1, $2, 'queue X because of ordering', $3) RETURNING id`,
-		enabled.orgID, enabled.projectID, at).Scan(&memoID)
+	memoID, err := memorydigesttest.New(conn).InsertMemoFixture(ctx, memorydigesttest.InsertMemoFixtureParams{
+		OrganizationID: enabled.orgID, ProjectID: enabled.projectID, Content: "queue X because of ordering",
+		CreatedAt: pgtype.Timestamptz{Time: at, Valid: true, InfinityModifier: pgtype.Finite},
+	})
 	require.NoError(t, err)
 
 	stub := &digestCompletionStub{}
-	job := activities.NewMemoryDigests(slog.New(slog.DiscardHandler), conn, stub, flags)
+	job := activities.NewMemoryDigests(testenv.NewLogger(t), conn, stub, flags)
 	now := day.AddDate(0, 0, 2).Add(time.Hour)
 
 	result, err := job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "day", Now: now})
@@ -171,20 +207,17 @@ func TestMemoryDigests_DayDigestFoldsOnlyEligibleSources(t *testing.T) {
 	require.Contains(t, prompts, "picked queue X")
 	require.Contains(t, prompts, "shipped retries")
 	require.Contains(t, prompts, "queue X because of ordering")
+	require.Contains(t, prompts, "team account summary")
 	// Titles are not masked at rest, so they never reach the model.
 	require.NotContains(t, prompts, "title ")
 	for _, leaked := range []string{"unmasked summary", "excluded summary", "personal summary", "today summary", "other org summary"} {
 		require.NotContains(t, prompts, leaked)
 	}
 
-	var chatIDs, memoIDs []uuid.UUID
-	err = conn.QueryRow(ctx, `
-		SELECT chat_ids, memo_ids FROM memory_digests
-		WHERE project_id = $1 AND level = 'day' AND period_start = $2`,
-		enabled.projectID, day).Scan(&chatIDs, &memoIDs)
-	require.NoError(t, err)
-	require.ElementsMatch(t, []uuid.UUID{kept1, kept2}, chatIDs)
-	require.Equal(t, []uuid.UUID{memoID}, memoIDs)
+	sources := enabled.digestSources(t, conn, "day", day)
+	require.Len(t, sources.ChatIds, 3)
+	require.Subset(t, sources.ChatIds, []uuid.UUID{kept1, kept2})
+	require.Equal(t, []uuid.UUID{memoID}, sources.MemoIds)
 	require.Empty(t, disabled.digests(t, conn, "day"))
 
 	// Digests are written once: a second run finds nothing to do.
@@ -220,7 +253,7 @@ func TestMemoryDigests_RollupsWaitForClosedPeriods(t *testing.T) {
 	}
 
 	stub := &digestCompletionStub{}
-	job := activities.NewMemoryDigests(slog.New(slog.DiscardHandler), conn, stub, flags)
+	job := activities.NewMemoryDigests(testenv.NewLogger(t), conn, stub, flags)
 
 	// Sunday 1 November: the week of 26 October is still open.
 	result, err := job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "week", Now: time.Date(2026, 11, 1, 23, 0, 0, 0, time.UTC)})
@@ -233,10 +266,7 @@ func TestMemoryDigests_RollupsWaitForClosedPeriods(t *testing.T) {
 	require.Contains(t, stub.allPrompts(), "day 2026-10-26")
 	require.Contains(t, stub.allPrompts(), "day 2026-10-28")
 
-	var children []uuid.UUID
-	err = conn.QueryRow(ctx, `SELECT child_digest_ids FROM memory_digests WHERE project_id = $1 AND level = 'week'`, p.projectID).Scan(&children)
-	require.NoError(t, err)
-	require.Equal(t, dayIDs, children)
+	require.Equal(t, dayIDs, p.digestSources(t, conn, "week", digestDay(2026, 10, 26)).ChildDigestIds)
 
 	// October's last week closed on 2 November, so October is ready then.
 	result, err = job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "month", Now: time.Date(2026, 11, 2, 1, 0, 0, 0, time.UTC)})
