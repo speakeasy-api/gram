@@ -1806,7 +1806,7 @@ describe("Editing an agent that already exists", () => {
     ).toEqual({ id: "agent_one", name: "Renamed Bot" });
     expect(mocks.createGrant).not.toHaveBeenCalled();
     expect(mocks.deleteGrant).not.toHaveBeenCalled();
-    await waitFor(() => expect(onDone).toHaveBeenCalledWith(undefined));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
   });
 
   it("lets an agent keep its own name, and holds a rename to another's", async () => {
@@ -1838,7 +1838,7 @@ describe("Editing an agent that already exists", () => {
     await screen.findByRole("checkbox", { name: "GitHub" });
     fireEvent.click(await authenticationSave());
 
-    await waitFor(() => expect(onDone).toHaveBeenCalledWith(undefined));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
     expect(mocks.renameAgent).not.toHaveBeenCalled();
     expect(mocks.createGrant).not.toHaveBeenCalled();
     expect(mocks.deleteGrant).not.toHaveBeenCalled();

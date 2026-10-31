@@ -1018,8 +1018,9 @@ export function CredentialsWizard({
         });
       }
       // Saving is the end of editing: what follows are the platform's own
-      // settings, which this flow only describes.
-      onDone();
+      // settings, which this flow only describes. It returns to the agent's
+      // own page, where the change shows.
+      onDone(agent.id);
     } catch (failure) {
       setError(
         failure instanceof Error
