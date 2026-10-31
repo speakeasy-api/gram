@@ -9313,7 +9313,7 @@ paths:
         name: AgentConnectionBlocks
   /rpc/agents.listDelegableGrants:
     get:
-      description: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.
+      description: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted unless carry_exclusions is set. Issuance revalidates every grant.
       operationId: listAgentDelegableGrants
       parameters:
         - allowEmptyValue: true
@@ -9344,6 +9344,14 @@ paths:
               type: string
             maxItems: 100
             type: array
+        - allowEmptyValue: true
+          description: Keep a wildcard candidate that a narrower exclusion overlaps, and return that exclusion beside it as a blocklist-scope grant, instead of omitting the candidate. Requesting both on a key needs delegated grants version 4 or later.
+          in: query
+          name: carry_exclusions
+          schema:
+            default: false
+            description: Keep a wildcard candidate that a narrower exclusion overlaps, and return that exclusion beside it as a blocklist-scope grant, instead of omitting the candidate. Requesting both on a key needs delegated grants version 4 or later.
+            type: boolean
         - allowEmptyValue: true
           description: Session header
           in: header
