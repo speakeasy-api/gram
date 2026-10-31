@@ -196,6 +196,9 @@ umask 077
 const scriptBody = `
 configured=0
 found=0
+# Configured clients that read the key from SPEAKEASY_AGENT_KEY when they
+# start. OpenClaw keeps the key in its own config, so it does not count.
+env_key_clients=""
 configure_claude_code() {
   # Keep the bearer out of argv and let Claude expand it when launched.
   if ! claude mcp add --transport http gram "$GRAM_AGENT_URL" \
@@ -205,6 +208,7 @@ configure_claude_code() {
   fi
   echo "Configured Claude Code. Launch it with SPEAKEASY_AGENT_KEY set."
   configured=$((configured + 1))
+  env_key_clients="Claude Code"
 }
 
 configure_codex() {
@@ -215,6 +219,7 @@ configure_codex() {
   fi
   echo "Configured Codex."
   configured=$((configured + 1))
+  env_key_clients="${env_key_clients:+$env_key_clients and }Codex"
 }
 
 configure_openclaw() {
@@ -456,7 +461,10 @@ main() {
   fi
 
   echo
-  echo "Done. SPEAKEASY_AGENT_KEY was exported for this run only. Store it if a"
-  echo "client you use reads it from the environment."
+  echo "Done."
+  if [ -n "$env_key_clients" ]; then
+    echo "SPEAKEASY_AGENT_KEY was exported for this run only. Store it where"
+    echo "$env_key_clients can read it when started."
+  fi
 }
 `
