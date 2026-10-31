@@ -7,6 +7,7 @@ import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
+import { formatAuditActionLabel } from "@/lib/audit-log-format";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useOrgRoutes } from "@/routes";
 import { useIdentityWindow } from "./useIdentityQueries";
@@ -72,7 +73,7 @@ export function AgentIdentityAudit({
         rows.map((log) => (
           <IdentityPanelRow
             key={log.id}
-            title={log.action}
+            title={formatAuditActionLabel(log.action)}
             detail={
               subject ? (
                 <AuditPrincipalLink

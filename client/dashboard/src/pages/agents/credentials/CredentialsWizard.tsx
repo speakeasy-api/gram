@@ -539,6 +539,23 @@ export function CredentialsWizard({
     throwOnError: false,
   });
   const refetchPolicyCheck = policyCheck.refetch;
+  // AUTH_GRANT covers every auth client, so a role that denies any one of
+  // them would refuse the whole save. It is written only when the server says
+  // this person, and the agent's owner, may give it. When the check itself
+  // fails the grant is still sent, and the save reports the refusal.
+  const mayGrantAuth = async (forAgent: string | undefined) => {
+    try {
+      const { results } = await sdk.agents.checkPolicyGrants({
+        checkAgentPolicyGrantsForm: {
+          ...(forAgent ? { agentId: forAgent } : {}),
+          policyGrants: [AUTH_GRANT],
+        },
+      });
+      return results[0]?.allowed !== false;
+    } catch {
+      return true;
+    }
+  };
   const recheck = useCallback(() => {
     if (checkedSelectors.length > 0) void refetchPolicyCheck();
   }, [checkedSelectors, refetchPolicyCheck]);
@@ -732,6 +749,7 @@ export function CredentialsWizard({
             projectId: entry.server.projectId,
           })),
     };
+    const authGrants = (await mayGrantAuth(undefined)) ? [AUTH_GRANT] : [];
     const created = await sdk.agents.create({
       createAgentForm: {
         name: name.trim(),
@@ -740,7 +758,7 @@ export function CredentialsWizard({
         // hook events may name.
         policyGrants: [
           ...agentPolicyGrantsFromDraft(draft),
-          AUTH_GRANT,
+          ...authGrants,
           ...(hookEvents
             ? [hooksIngestPolicyGrant(organization.id, projectID)]
             : []),
@@ -863,7 +881,8 @@ export function CredentialsWizard({
       if (
         ![...appliedPolicies.current.values()].some(
           (grant) => grant.scope === AUTH_GRANT.scope,
-        )
+        ) &&
+        (await mayGrantAuth(agent.id))
       ) {
         const created = await createGrant.mutateAsync({
           request: {
@@ -939,8 +958,9 @@ export function CredentialsWizard({
         queryKey: ["owner-connections"],
       });
       // Saving is the end of editing: what follows are the platform's own
-      // settings, which this flow only describes.
-      onDone();
+      // settings, which this flow only describes. It returns to the agent's
+      // own page, where the change shows.
+      onDone(agent.id);
     } catch (failure) {
       setError(
         failure instanceof Error
@@ -1250,16 +1270,18 @@ export function CredentialsWizard({
           label: "Project",
           value: scopeName,
         },
-        {
-          label: "Grants",
-          value: (
-            <code className="text-xs">
-              {hookEvents
-                ? `${CONNECT_SCOPE}, ${HOOKS_INGEST_SCOPE}`
-                : CONNECT_SCOPE}
-            </code>
-          ),
-        },
+        // What creating grants, in words. Editing leaves the hooks grant as it
+        // is and does not read it, so the row would only guess.
+        ...(existing
+          ? []
+          : [
+              {
+                label: "Can",
+                value: hookEvents
+                  ? "Call its servers, record its sessions"
+                  : "Call its servers",
+              },
+            ]),
         {
           label: "Credential",
           value: credential === "api-key" ? "API key" : "Workload identity",

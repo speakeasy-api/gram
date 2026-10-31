@@ -181,6 +181,7 @@ export function AgentSessionsSection({
     {
       key: "clientName",
       header: "Client",
+      width: "1.5fr",
       render: (session) => {
         if (session.subjectKind === "api-key") {
           return (
@@ -220,7 +221,7 @@ export function AgentSessionsSection({
       // and the table dropped it, so a reader could revoke someone's
       // delegation without being told whose it was.
       header: "Acting for",
-      width: "200px",
+      width: "1fr",
       render: (session) =>
         session.authorizerUserId ? (
           <IdentityLink identifier={{ userId: session.authorizerUserId }}>
@@ -233,9 +234,9 @@ export function AgentSessionsSection({
     {
       key: "issuerSlug",
       header: "Signed in with",
-      // Issuer slugs are long and hyphenated; an auto column wrapped them
-      // down three lines and left the row taller than every other one.
-      width: "200px",
+      // Issuer slugs are long and hyphenated, so they truncate in a share of
+      // the row rather than wrapping it taller than every other one.
+      width: "1fr",
       render: (session) =>
         session.subjectKind === "api-key" ? (
           "API key"
@@ -250,13 +251,13 @@ export function AgentSessionsSection({
     {
       key: "createdAt",
       header: "Created",
-      width: "160px",
+      width: "auto",
       render: (session) => <SessionDate date={session.createdAt} />,
     },
     {
       key: "lastUsedAt",
       header: "Last used",
-      width: "140px",
+      width: "auto",
       // The one column where elapsed time is the answer: "2 days ago" says
       // whether this session is still in use, which a date does not.
       //
@@ -273,7 +274,7 @@ export function AgentSessionsSection({
     {
       key: "refreshExpiresAt",
       header: "Expires",
-      width: "160px",
+      width: "auto",
       render: (session) =>
         session.refreshExpiresAt ? (
           <SessionDate date={session.refreshExpiresAt} />
@@ -286,7 +287,7 @@ export function AgentSessionsSection({
     {
       key: "status",
       header: "Status",
-      width: "110px",
+      width: "auto",
       render: (session) => (
         <Badge
           size="sm"
@@ -309,6 +310,9 @@ export function AgentSessionsSection({
     {
       key: "actions",
       header: "",
+      // Content-sized, so the button is never pushed past the panel edge
+      // when fixed columns outgrow a narrow detail page.
+      width: "auto",
       render: (session) => {
         if (!isRevocableSession(session)) {
           return credentialsHref ? (

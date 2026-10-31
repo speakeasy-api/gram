@@ -47,6 +47,26 @@ it("queries changes to the agent as the audit subject, including human permissio
     { throwOnError: false },
   );
 });
+it("names each change in words rather than its audit action", () => {
+  mocks.audit.mockReturnValue({
+    data: {
+      result: {
+        logs: [
+          {
+            id: "log_one",
+            action: "agent:policy_grant_create",
+            actorId: "owner_example",
+            actorDisplayName: "Example Owner",
+            createdAt: from,
+          },
+        ],
+      },
+    },
+  });
+  render(<AgentIdentityAudit agent={agent} subject />);
+  expect(screen.getByText("Added direct policy grant to agent")).toBeTruthy();
+  expect(screen.queryByText("agent:policy_grant_create")).toBeNull();
+});
 it("queries agent actions without using its owner's identity", () => {
   render(<AgentIdentityAudit agent={agent} />);
   expect(mocks.audit).toHaveBeenCalledWith(

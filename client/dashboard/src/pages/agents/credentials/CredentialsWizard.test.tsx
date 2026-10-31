@@ -295,7 +295,7 @@ async function reachCredentialStep() {
 
 type CheckRequest = {
   checkAgentPolicyGrantsForm: {
-    policyGrants: { selector: { resourceId: string } }[];
+    policyGrants: { scope: string; selector: { resourceId: string } }[];
   };
 };
 
@@ -307,7 +307,12 @@ function answerChecks(refuse: Record<string, "caller" | "owner"> = {}) {
   return (request: CheckRequest) =>
     Promise.resolve({
       results: request.checkAgentPolicyGrantsForm.policyGrants.map((grant) => {
-        const limitedBy = refuse[grant.selector.resourceId];
+        // Server checks are keyed by server id; the auth clients grant, whose
+        // id is also "*", by its scope.
+        const limitedBy =
+          grant.scope === "mcp:auth"
+            ? refuse["mcp:auth"]
+            : refuse[grant.selector.resourceId];
         return limitedBy === undefined
           ? { allowed: true }
           : { allowed: false, limitedBy };
@@ -428,6 +433,20 @@ describe("Provisioning a new agent", () => {
         .disabled,
     ).toBe(true);
     expect(screen.getByText("Select at least one MCP server.")).toBeTruthy();
+  });
+
+  it("creates the agent without the auth clients grant its creator may not give", async () => {
+    mocks.checkPolicyGrants.mockImplementation(
+      answerChecks({ "mcp:auth": "caller" }),
+    );
+    fireEvent.click(await reachCredentialStep());
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants?.map(
+        (grant: { scope: string }) => grant.scope,
+      ),
+    ).toEqual(["mcp:connect"]);
   });
 
   it("creates the agent, issues its first key and mints one setup command", async () => {
@@ -1661,7 +1680,7 @@ describe("Editing an agent that already exists", () => {
     ).toEqual({ id: "agent_one", name: "Renamed Bot" });
     expect(mocks.createGrant).not.toHaveBeenCalled();
     expect(mocks.deleteGrant).not.toHaveBeenCalled();
-    await waitFor(() => expect(onDone).toHaveBeenCalledWith(undefined));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
   });
 
   it("writes nothing when neither the name nor the servers changed", async () => {
@@ -1670,7 +1689,7 @@ describe("Editing an agent that already exists", () => {
     await screen.findByRole("checkbox", { name: "GitHub" });
     fireEvent.click(await authenticationSave());
 
-    await waitFor(() => expect(onDone).toHaveBeenCalledWith(undefined));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
     expect(mocks.renameAgent).not.toHaveBeenCalled();
     expect(mocks.createGrant).not.toHaveBeenCalled();
     expect(mocks.deleteGrant).not.toHaveBeenCalled();
