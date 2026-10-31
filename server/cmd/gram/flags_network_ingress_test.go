@@ -51,6 +51,8 @@ func TestNetworkIngressProviderFlagsRejectInvalidValues(t *testing.T) {
 		{"network-ingress-class", "tailscale", "nginx"},
 		{"network-ingress-token-audience", "gram-netingress", "other"},
 		{"network-ingress-kubernetes-api-cidr", "10.0.0.1/32", "10.0.0.1"},
+		{"network-ingress-proxy-class", "gram-private-network", "Invalid_Class"},
+		{"network-ingress-workload-pool", "workload-type=private-network", "workload-type"},
 	} {
 		flag, ok := requireFlag(t, flags, test.name).(*cli.StringFlag)
 		require.True(t, ok, test.name)
@@ -68,6 +70,18 @@ func TestNetworkIngressProviderFlagsRejectInvalidValues(t *testing.T) {
 		require.Error(t, flag.Action(nil, -1))
 		require.Error(t, flag.Action(nil, 65536))
 	}
+	for _, name := range []string{"network-ingress-proxy-replicas", "network-ingress-attestor-replicas"} {
+		flag, ok := requireFlag(t, flags, name).(*cli.IntFlag)
+		require.True(t, ok, name)
+		require.Zero(t, flag.Value, name)
+		require.NoError(t, flag.Action(nil, 0), name)
+		require.NoError(t, flag.Action(nil, 2), name)
+		require.Error(t, flag.Action(nil, -1), name)
+		require.Error(t, flag.Action(nil, 6), name)
+	}
+	budgets, ok := requireFlag(t, flags, "network-ingress-disruption-budgets-enabled").(*cli.BoolFlag)
+	require.True(t, ok)
+	require.False(t, budgets.Value)
 	cidrs, ok := requireFlag(t, flags, "network-ingress-cluster-cidrs").(*cli.StringSliceFlag)
 	require.True(t, ok)
 	require.NoError(t, cidrs.Action(nil, nil))
@@ -121,6 +135,41 @@ func TestNetworkIngressConfigFromCLIReadsProviderSettings(t *testing.T) {
 	require.Equal(t, map[string]string{"app.kubernetes.io/name": "gram-server"}, config.Tailscale.BackendPodLabels)
 	require.Equal(t, int32(443), config.Tailscale.KubernetesAPIPort)
 	require.Equal(t, []string{"10.0.0.0/8", "fd00::/8"}, config.Tailscale.ClusterCIDRs)
+	require.Zero(t, config.Tailscale.ProxyReplicas)
+	require.Zero(t, config.Tailscale.AttestorReplicas)
+	require.Empty(t, config.Tailscale.ProxyClass)
+	require.Empty(t, config.Tailscale.WorkloadPoolKey)
+	require.False(t, config.Tailscale.DisruptionBudgets)
+}
+
+func TestNetworkIngressConfigFromCLIReadsTopologySettings(t *testing.T) {
+	t.Parallel()
+	c := networkIngressTestCLI(t)
+	for name, value := range map[string]string{
+		"network-ingress-proxy-class":                "gram-private-network",
+		"network-ingress-proxy-replicas":             "2",
+		"network-ingress-attestor-replicas":          "3",
+		"network-ingress-workload-pool":              "workload-type=private-network",
+		"network-ingress-disruption-budgets-enabled": "true",
+	} {
+		require.NoError(t, c.Set(name, value), name)
+	}
+	config, err := networkIngressConfigFromCLI(c)
+	require.NoError(t, err)
+	require.Equal(t, "gram-private-network", config.Tailscale.ProxyClass)
+	require.Equal(t, int32(2), config.Tailscale.ProxyReplicas)
+	require.Equal(t, int32(3), config.Tailscale.AttestorReplicas)
+	require.Equal(t, "workload-type", config.Tailscale.WorkloadPoolKey)
+	require.Equal(t, "private-network", config.Tailscale.WorkloadPoolValue)
+	require.True(t, config.Tailscale.DisruptionBudgets)
+}
+
+func TestNetworkIngressConfigFromCLIRequiresBudgetsForReplicas(t *testing.T) {
+	t.Parallel()
+	c := networkIngressTestCLI(t)
+	require.NoError(t, c.Set("network-ingress-proxy-replicas", "2"))
+	_, err := networkIngressConfigFromCLI(c)
+	require.ErrorContains(t, err, "disruption budgets")
 }
 
 func TestNetworkIngressConfigFromCLIValidatesWithoutFlagActions(t *testing.T) {
@@ -131,6 +180,9 @@ func TestNetworkIngressConfigFromCLIValidatesWithoutFlagActions(t *testing.T) {
 		{"network-ingress-backend-pod-labels", "app in (server)"},
 		{"network-ingress-backend-port", "4294967297"},
 		{"network-ingress-kubernetes-api-port", "65536"},
+		{"network-ingress-proxy-replicas", "4294967298"},
+		{"network-ingress-attestor-replicas", "-1"},
+		{"network-ingress-workload-pool", "=private-network"},
 	} {
 		c := networkIngressTestCLI(t)
 		require.NoError(t, c.Set(test.name, test.value))
