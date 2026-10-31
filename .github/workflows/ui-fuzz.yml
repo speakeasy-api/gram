@@ -1,0 +1,112 @@
+# Adversarial UI states, judged by Jev (e2e/ui-fuzz/README.md).
+#
+# Nightly and on demand, never per PR: it boots the whole local stack like
+# wake-stack-e2e does, and every case pays for a judgement through
+# OpenRouter. Results are uploaded as an artifact on every run, green or red,
+# so runs can be compared.
+name: UI fuzz
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weeknights, after the day's merges. UTC.
+    - cron: "17 3 * * 2-6"
+
+permissions:
+  contents: read
+
+# A second run would boot a second stack on the same ports.
+concurrency:
+  group: ui-fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui-fuzz:
+    name: ui-fuzz
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    # A cold boot is up to half an hour; the matrix (every static route, each
+    # of its rpc dependencies, each mutator) is about as long again on four
+    # workers.
+    timeout-minutes: 90
+    env:
+      GOMAXPROCS: 8
+      # `mise db:migrate` shells out to `atlas migrate apply`, and the
+      # migration directory uses checks that are gated behind an account.
+      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
+      # A key of its own, with a spend cap set on the OpenRouter side, so a
+      # runaway matrix cannot drain the development key.
+      OPENROUTER_DEV_KEY: ${{ secrets.OPENROUTER_CI_KEY }}
+    steps:
+      - name: Check the judge key is configured
+        run: |
+          if [ -z "${OPENROUTER_DEV_KEY}" ]; then
+            echo "::error::OPENROUTER_CI_KEY is not set in repository secrets; nothing to judge with."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Restore Go module cache
+        uses: $/.github/workflows/composite/go-mod-cache
+
+      # `./zero --agent` would otherwise pick the ClickHouse migration engine
+      # by prompting for an Atlas Pro login, on a runner with nobody to ask.
+      - name: Answer zero's questions before it asks them
+        run: |
+          cat > mise.local.toml <<'TOML'
+          [env]
+          CLICKHOUSE_MIGRATION_ENGINE = "golang-migrate"
+          TOML
+
+      # `mise run seed` builds its local fixtures around whoever
+      # `git config user.email` says you are, and a runner is nobody.
+      - name: Give the seed someone to be
+        run: |
+          git config user.email "ui-fuzz@example.com"
+          git config user.name "UI Fuzz"
+
+      - name: Boot the stack
+        run: ./zero --agent
+
+      - name: Fuzz
+        run: mise run test:ui-fuzz
+
+      # Every case, pass or fail, plus the aria snapshots Jev judged. This is
+      # the record a later run is compared against.
+      - name: Upload case records
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ui-fuzz-${{ github.run_id }}
+          path: e2e/.ui-fuzz
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ui-fuzz-playwright
+          path: e2e/.playwright
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload stack logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ui-fuzz-stack-logs
+          path: |
+            .git/gram-stack-*.log
+          retention-days: 7
+          if-no-files-found: ignore
