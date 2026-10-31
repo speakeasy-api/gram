@@ -435,6 +435,18 @@ describe("Provisioning a new agent", () => {
     expect(screen.getByText("Select at least one MCP server.")).toBeTruthy();
   });
 
+  it("says what the agent can do, with its scopes one focus away", async () => {
+    await reachCredentialStep();
+
+    fireEvent.focus(screen.getByText("Call its servers"));
+    expect(
+      (await screen.findAllByText("mcp:auth on all auth clients")).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("mcp:connect on the selected servers").length,
+    ).toBeGreaterThan(0);
+  });
+
   it("creates the agent without the auth clients grant its creator may not give", async () => {
     mocks.checkPolicyGrants.mockImplementation(
       answerChecks({ "mcp:auth": "caller" }),
