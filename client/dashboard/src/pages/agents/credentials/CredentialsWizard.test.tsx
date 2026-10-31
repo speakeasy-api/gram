@@ -1659,7 +1659,7 @@ describe("Editing an agent that already exists", () => {
     ).toEqual({ id: "agent_one", name: "Renamed Bot" });
     expect(mocks.createGrant).not.toHaveBeenCalled();
     expect(mocks.deleteGrant).not.toHaveBeenCalled();
-    await waitFor(() => expect(onDone).toHaveBeenCalledWith(undefined));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
   });
 
   it("writes nothing when neither the name nor the servers changed", async () => {
@@ -1668,7 +1668,7 @@ describe("Editing an agent that already exists", () => {
     await screen.findByRole("checkbox", { name: "GitHub" });
     fireEvent.click(await authenticationSave());
 
-    await waitFor(() => expect(onDone).toHaveBeenCalledWith(undefined));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
     expect(mocks.renameAgent).not.toHaveBeenCalled();
     expect(mocks.createGrant).not.toHaveBeenCalled();
     expect(mocks.deleteGrant).not.toHaveBeenCalled();
