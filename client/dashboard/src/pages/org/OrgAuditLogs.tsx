@@ -448,11 +448,22 @@ function OrgAuditLogsInner() {
   const organization = useOrganization();
   const { orgSlug } = useSlugs();
   const {
-    values: filterValues,
+    values: rawFilterValues,
     setValue: setFilterValue,
     clearValue: clearFilterValue,
     clearAll: clearAllFilters,
   } = useFilterState(AUDIT_LOG_FILTERS);
+  const filterValues = useMemo(
+    () => ({
+      project:
+        rawFilterValues.project === "all" ? null : rawFilterValues.project,
+      action: rawFilterValues.action === "all" ? null : rawFilterValues.action,
+      actor: rawFilterValues.actor === "all" ? null : rawFilterValues.actor,
+      surface:
+        rawFilterValues.surface === "all" ? null : rawFilterValues.surface,
+    }),
+    [rawFilterValues],
+  );
   const selectedProjectSlug = filterValues.project ?? "all";
   const selectedAction = filterValues.action ?? "all";
   const selectedActor = filterValues.actor ?? "all";
