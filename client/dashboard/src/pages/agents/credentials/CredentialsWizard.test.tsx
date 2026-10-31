@@ -526,6 +526,20 @@ describe("Provisioning a new agent", () => {
     expect(screen.queryByText("mcp:auth on all auth clients")).toBeNull();
   });
 
+  it("says nothing about what it can do until a server is chosen", async () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const server = await screen.findByRole("checkbox", { name: "GitHub" });
+    expect(screen.queryByText("Call its servers")).toBeNull();
+
+    fireEvent.click(server);
+    expect(screen.getByText("Call its servers")).toBeTruthy();
+  });
+
   it("names all servers in its scopes under All servers", async () => {
     setup();
     fireEvent.change(screen.getByLabelText("Name"), {
@@ -1789,6 +1803,16 @@ describe("Editing an agent that already exists", () => {
     await waitFor(() =>
       expect(server.getAttribute("data-state")).toBe("checked"),
     );
+  });
+
+  it("does not guess what the agent can do", async () => {
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const server = await screen.findByRole("checkbox", { name: "GitHub" });
+    await waitFor(() =>
+      expect(server.getAttribute("data-state")).toBe("checked"),
+    );
+    expect(screen.queryByText("Call its servers")).toBeNull();
   });
 
   it("saves a rename and leaves without touching the grants", async () => {
