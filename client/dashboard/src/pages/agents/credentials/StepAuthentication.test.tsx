@@ -1,6 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import { StepAuthentication } from "./StepAuthentication";
 import type { InventoryServer } from "./useServerInventory";
@@ -14,7 +13,6 @@ vi.mock("@/routes", () => ({
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ user: { id: "editor", displayName: "Example Editor" } }),
 }));
-vi.mock("../AgentKeyServers", () => ({ ServerAccounts: () => null }));
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -44,10 +42,9 @@ const expired = {
 } as RemoteSession;
 
 describe("authentication assignment warnings", () => {
-  it("warns about an expired delegated assignment even when the editor has a live account", () => {
+  it("shows the editor's live account when the agent's assignment has ended, since saving assigns it", () => {
     render(
       <StepAuthentication
-        agent={{ id: "agent_one" } as ManagedAgent}
         servers={[server]}
         allServers
         onRemove={vi.fn<(id: string) => void>()}
@@ -62,13 +59,32 @@ describe("authentication assignment warnings", () => {
         }}
       />,
     );
-    expect(screen.getByRole("alert").textContent).toContain("Example server");
-    expect(screen.getByText("Expired")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getAllByText("Your connection").length).toBeGreaterThan(0);
+  });
+  it("waits for the editor's own connection before judging an ended assignment", () => {
+    render(
+      <StepAuthentication
+        servers={[server]}
+        allServers
+        onRemove={vi.fn<(id: string) => void>()}
+        connections={{
+          byServer: new Map([[server.id, { status: "checking" }]]),
+          assignedByServer: new Map([
+            [server.id, { status: "ended", sessions: [expired] }],
+          ]),
+          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        }}
+      />,
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getAllByText("Checking connection…").length).toBeGreaterThan(
+      0,
+    );
   });
   it("keeps a valid delegated assignment clear of candidate warnings", () => {
     render(
       <StepAuthentication
-        agent={{ id: "agent_one" } as ManagedAgent}
         servers={[server]}
         allServers
         onRemove={vi.fn<(id: string) => void>()}

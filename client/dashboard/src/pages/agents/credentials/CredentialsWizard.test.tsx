@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => ({
   sessionClients: vi.fn(),
   bindings: vi.fn(),
   attach: vi.fn(),
+  detach: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/mcpServerAuthClientChoices.js", () => ({
@@ -109,6 +110,7 @@ vi.mock("@/contexts/Sdk", () => ({
       ],
       listBindings: async () => ({ items: await mocks.bindings() }),
       attachBinding: mocks.attach,
+      detachBinding: mocks.detach,
     },
     remoteSessionClients: {
       list: async (request: object) => [
@@ -1722,7 +1724,7 @@ describe("Editing an agent that already exists", () => {
     expect(mocks.deleteGrant).not.toHaveBeenCalled();
   });
 
-  it("keeps an unavailable assignment removable when its issuer has no clients", async () => {
+  it("leaves an unavailable assignment for an explicit detach when saving", async () => {
     mocks.mcpServers.mockResolvedValue({
       mcpServers: [
         {
@@ -1749,24 +1751,17 @@ describe("Editing an agent that already exists", () => {
       },
     ]);
     mocks.sessionClients.mockResolvedValue([]);
-    editing();
+    mocks.detach.mockResolvedValue({});
+    const { onDone } = editing();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("checkbox", { name: "GitHub" });
-    await authenticationSave();
-    // The first row starts expanded.
-    await screen.findByRole("button", {
-      name: /GitHub.*Requires connection/,
-    });
-    expect(
-      await screen.findByRole("button", {
-        name: "Disconnect unavailable account",
-      }),
-    ).toBeTruthy();
-    expect(
-      screen.queryByText(
-        "This server uses a shared credential. No personal connection is needed.",
-      ),
-    ).toBeNull();
+    const save = await authenticationSave();
+    // The row says what is wrong; removing it is an explicit choice on the
+    // agent's Credentials page, never a side effect of saving.
+    await screen.findByRole("button", { name: /GitHub.*Requires connection/ });
+    fireEvent.click(save);
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(mocks.detach).not.toHaveBeenCalled();
   });
 
   it("creates no agent: this one already exists", async () => {
