@@ -387,7 +387,7 @@ export function AgentKeyServers({
   );
 }
 
-export function ServerAccounts({
+function ServerAccounts({
   agent,
   servers,
   onReady,
