@@ -179,8 +179,8 @@ export function StepInstall({
             >
               <div className="space-y-4 p-4">
                 <Text muted small>
-                  For runtimes with a shell — Claude Code, Codex, Cursor, CI
-                  runners. Run once on the machine the agent lives on.
+                  For runtimes with a shell: OpenClaw, Claude Code and Codex.
+                  Run once on the machine the agent lives on.
                 </Text>
                 {command ? (
                   <CodeBlock
