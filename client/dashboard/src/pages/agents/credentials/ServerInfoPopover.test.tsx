@@ -139,6 +139,18 @@ it("says when a server needs no sign-in, and when it has none set up", () => {
   expect(screen.getByText("Not set up")).toBeTruthy();
 });
 
+it("says a hosted server that needs sign-in and offers none is not set up", () => {
+  auth.result = {
+    isLoading: false,
+    isError: false,
+    data: { status: "setup_incomplete", clients: [] },
+  };
+  render(<ServerInfoPopover server={{ ...server, kind: "Hosted" }} />);
+  fireEvent.click(screen.getByRole("button", { name: "About Example" }));
+  expect(screen.getByText("Not set up")).toBeTruthy();
+  expect(screen.queryByText("Hosted by Speakeasy")).toBeNull();
+});
+
 it("calls a toolset hosted by Speakeasy", () => {
   render(
     <ServerInfoPopover

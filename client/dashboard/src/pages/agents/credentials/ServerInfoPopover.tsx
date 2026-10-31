@@ -45,6 +45,11 @@ function ServerSignIn({ server }: { server: InventoryServer }): JSX.Element {
     if (auth.isLoading) return "Checking…";
     if (auth.isError || !auth.data) return "Unavailable";
     if (auth.data.status === "no_auth_required") return "No sign-in needed";
+    // Needs sign-in and offers no usable way to: something to fix, whoever
+    // hosts it.
+    if (auth.data.status === "setup_incomplete" && clients.length === 0) {
+      return "Not set up";
+    }
     if (clients.length === 0) {
       return server.kind === "Hosted" ? "Hosted by Speakeasy" : "Not set up";
     }
