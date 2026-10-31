@@ -249,6 +249,13 @@ describe("Agent sessions", () => {
     });
     expect(screen.getByText("Expired")).toBeTruthy();
   });
+  it("says who authorized a session, not who the agent is upstream", () => {
+    setup();
+    expect(screen.getByText("Authorized by")).toBeTruthy();
+    expect(screen.queryByText("The agent itself")).toBeNull();
+    const nobody = screen.getByText("No one");
+    expect(nobody.getAttribute("title")).toContain("On each server");
+  });
   it("offers pagination without replacing the current sessions", () => {
     const onLoadMore = vi.fn<() => void>();
     setup({ hasMore: true, onLoadMore, loadMoreError: true });

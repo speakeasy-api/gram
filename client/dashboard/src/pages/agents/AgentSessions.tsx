@@ -217,10 +217,10 @@ export function AgentSessionsSection({
     },
     {
       key: "authorizerUserId",
-      // Who the agent is acting for. The endpoint has always returned this
-      // and the table dropped it, so a reader could revoke someone's
-      // delegation without being told whose it was.
-      header: "Acting for",
+      // The person who approved the session, so a reader never revokes
+      // someone's delegation without being told whose it was. Not who the
+      // agent is upstream: each server decides that with its own sign-in.
+      header: "Authorized by",
       width: "1fr",
       render: (session) =>
         session.authorizerUserId ? (
@@ -228,7 +228,12 @@ export function AgentSessionsSection({
             {nameFor(session.authorizerUserId)}
           </IdentityLink>
         ) : (
-          <span className="text-muted-foreground">The agent itself</span>
+          <span
+            className="text-muted-foreground cursor-default underline decoration-dotted underline-offset-4"
+            title="No person approved this session. On each server it signs in with that server's shared credential or the connection assigned to the agent."
+          >
+            No one
+          </span>
         ),
     },
     {
@@ -436,7 +441,7 @@ export function AgentSessionsSection({
               {/* Whose delegation is ending. Revoking one without saying so
                   is the one place this omission actually costs something. */}
               {selected.authorizerUserId
-                ? ` Acting for ${nameFor(selected.authorizerUserId)}.`
+                ? ` Authorized by ${nameFor(selected.authorizerUserId)}.`
                 : ""}
             </Text>
           )}
