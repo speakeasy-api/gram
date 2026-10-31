@@ -625,6 +625,25 @@ func TestScriptPreservesCodexConfigurationWhenAddingFails(t *testing.T) {
 	require.Contains(t, out, "Could not configure Codex. Its existing entry was kept")
 	require.Contains(t, out, "Configured OpenClaw")
 	require.NotContains(t, h.stubFile(t, "codex.log"), "mcp remove")
+	// Only OpenClaw was configured, and it keeps the key in its own config.
+	require.NotContains(t, out, "store it where they can read it")
+}
+
+// Codex reads the key from the environment when it starts, so the script says
+// to store it. An OpenClaw-only run says nothing: an agent relays that advice.
+func TestScriptAsksToStoreTheKeyOnlyForClientsThatReadIt(t *testing.T) {
+	t.Parallel()
+	h := newOpenClawHarness(t, helpWithAcceptCapabilities, `{"seq":1}`)
+	stub := "#!/bin/sh\nexit 0\n"
+	require.NoError(t, os.WriteFile(filepath.Join(h.stubDir, "codex"), []byte(stub), 0o700))
+	out := h.run(t, renderScript(t, testParams()))
+	require.Contains(t, out, "Configured Codex.")
+	require.Contains(t, out, "store it where they can read it")
+
+	openClawOnly := newOpenClawHarness(t, helpWithAcceptCapabilities, `{"seq":1}`)
+	out = openClawOnly.run(t, renderScript(t, testParams()))
+	require.Contains(t, out, "Done.")
+	require.NotContains(t, out, "SPEAKEASY_AGENT_KEY")
 }
 
 func TestScriptUsesBSDTarWhenOtherExtractorsAreMissing(t *testing.T) {
