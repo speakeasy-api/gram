@@ -944,7 +944,17 @@ function OrgAuditLogsInner() {
                   </>
                 )}
               </div>
-              <div className="ml-auto flex items-center gap-2">
+              <div
+                className="ml-auto flex items-center gap-2"
+                onKeyUp={(event) => {
+                  if (
+                    event.key === "Escape" &&
+                    event.target instanceof HTMLInputElement
+                  ) {
+                    event.target.blur();
+                  }
+                }}
+              >
                 <SearchBar
                   value={searchQuery}
                   onChange={handleSearchChange}
@@ -953,7 +963,7 @@ function OrgAuditLogsInner() {
                 />
                 {searchQuery ? (
                   <div className="text-muted-foreground flex items-center gap-1 text-[11px]">
-                    <span className="min-w-8 text-center">
+                    <span aria-live="polite" className="min-w-8 text-center">
                       {searchMatchIndices.length > 0
                         ? `${effectiveSearchIndex + 1}/${searchMatchIndices.length}`
                         : "0/0"}
