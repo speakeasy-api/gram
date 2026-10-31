@@ -13,7 +13,7 @@ describe("verify step", () => {
   });
 
   it("drops the troubleshooting once the agent has called", () => {
-    render(
+    const { container } = render(
       <StepVerify
         state="connected"
         firstCallAt={new Date("2026-01-01T00:00:00Z")}
@@ -22,5 +22,11 @@ describe("verify step", () => {
     );
     expect(screen.getByText("Connected")).toBeTruthy();
     expect(screen.queryByText("If nothing arrives")).toBeNull();
+    // The heading dot and both check dots settle green.
+    const dot = screen.getByRole("heading", {
+      name: "Connected",
+    }).firstElementChild;
+    expect(dot?.classList.contains("bg-success-default")).toBe(true);
+    expect(container.querySelectorAll(".bg-success-default")).toHaveLength(3);
   });
 });
