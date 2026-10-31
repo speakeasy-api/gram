@@ -29,7 +29,7 @@ const (
 
 	// myServersUnknownNote replaces the gateway's unchecked-status note, which
 	// names connection_status, a tool this connection does not offer.
-	myServersUnknownNote = `Status "unknown" means not checked: this list does not contact remote servers. A call to one that needs sign-in returns a link to connect it; relay that link as written.`
+	myServersUnknownNote = `Status "unknown" means not checked: this list does not contact remote servers. A call to one that needs sign-in may return a link to connect it; relay that link as written when it does.`
 
 	// gatewaySearchTool is the bridge's cross-server search, which the
 	// gateway itself does not serve.
