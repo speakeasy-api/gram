@@ -110,9 +110,15 @@ it("names each way a server signs in when it offers several", () => {
     },
   };
   render(<ServerInfoPopover server={server} />);
+  // Asked only once someone opens the popover.
+  expect(auth.requests).toHaveLength(0);
   fireEvent.click(screen.getByRole("button", { name: "About Example" }));
   expect(auth.requests[0]).toEqual({ mcpServerId: "server" });
-  expect(screen.getByText("Sign-in · 2 options")).toBeTruthy();
+  const signIn = screen.getByText("Sign-in · 2 options");
+  expect(
+    signIn.compareDocumentPosition(screen.getByText("Slug")) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
   expect(screen.getByText("Shared credential")).toBeTruthy();
   expect(screen.getByText("Each person's own sign-in")).toBeTruthy();
   expect(screen.queryByText("Caller's own credential")).toBeNull();
