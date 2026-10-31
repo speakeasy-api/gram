@@ -573,6 +573,32 @@ export function CredentialsWizard({
     throwOnError: false,
   });
   const refetchPolicyCheck = policyCheck.refetch;
+  // AUTH_GRANT covers every auth client, so a role that denies any one of
+  // them would refuse the whole save. It is written only when the server says
+  // this person, and the agent's owner, may give it. When the check itself
+  // fails the grant is still sent, and the save reports the refusal.
+  const mayGrantAuth = async (forAgent: string | undefined) => {
+    try {
+      const { results } = await sdk.agents.checkPolicyGrants({
+        checkAgentPolicyGrantsForm: {
+          ...(forAgent ? { agentId: forAgent } : {}),
+          policyGrants: [AUTH_GRANT],
+        },
+      });
+      return results[0]?.allowed !== false;
+    } catch {
+      return true;
+    }
+  };
+  // The same answer ahead of time, so the summary names only the grants a
+  // new agent will get. Creating asks again rather than trusting this one.
+  // It waits until the servers are chosen, so it never sits in front of the
+  // server checks that step depends on.
+  const authCheck = useQuery({
+    queryKey: ["agent-auth-grant-check", organization.id, user.id],
+    queryFn: () => mayGrantAuth(undefined),
+    enabled: !existing && step >= 2,
+  });
   const recheck = useCallback(() => {
     if (checkedSelectors.length > 0) void refetchPolicyCheck();
   }, [checkedSelectors, refetchPolicyCheck]);
@@ -766,6 +792,7 @@ export function CredentialsWizard({
             projectId: entry.server.projectId,
           })),
     };
+    const authGrants = (await mayGrantAuth(undefined)) ? [AUTH_GRANT] : [];
     const created = await sdk.agents.create({
       createAgentForm: {
         name: name.trim(),
@@ -774,7 +801,7 @@ export function CredentialsWizard({
         // hook events may name.
         policyGrants: [
           ...agentPolicyGrantsFromDraft(draft),
-          AUTH_GRANT,
+          ...authGrants,
           ...(hookEvents
             ? [hooksIngestPolicyGrant(organization.id, projectID)]
             : []),
@@ -894,10 +921,14 @@ export function CredentialsWizard({
           projectId: server.projectId,
         });
       }
+      // Only an agent that reaches a server needs to sign in to one; an edit
+      // that adds a server later adds the grant then.
       if (
+        (allServers || selected.length > 0) &&
         ![...appliedPolicies.current.values()].some(
           (grant) => grant.scope === AUTH_GRANT.scope,
-        )
+        ) &&
+        (await mayGrantAuth(agent.id))
       ) {
         const created = await createGrant.mutateAsync({
           request: {
@@ -1278,7 +1309,13 @@ export function CredentialsWizard({
                       allServers
                         ? `${CONNECT_SCOPE} on all servers in the project`
                         : `${CONNECT_SCOPE} on the selected servers`,
-                      `${AUTH_GRANT.scope} on all auth clients`,
+                      ...(authCheck.data === false
+                        ? []
+                        : [
+                            authCheck.data === true
+                              ? `${AUTH_GRANT.scope} on all auth clients`
+                              : `${AUTH_GRANT.scope} on all auth clients, if your role allows it`,
+                          ]),
                       ...(hookEvents ? [HOOKS_INGEST_SCOPE] : []),
                     ]}
                   >
