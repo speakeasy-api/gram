@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
@@ -17,6 +24,9 @@ const state = vi.hoisted(() => ({
   publish: vi.fn(),
   settings: vi.fn(),
   settingsRead: vi.fn(),
+  fetch: vi.fn(),
+  download: vi.fn(),
+  error: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/organizationGateway.js", () => ({
   useOrganizationGateway: () => ({
@@ -43,8 +53,13 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
 vi.mock("@/contexts/Fetcher", () => ({
-  useFetcher: () => ({ fetch: vi.fn() }),
+  useFetcher: () => ({ fetch: state.fetch }),
 }));
+vi.mock("./downloadPluginPackage", async (original) => ({
+  ...(await original<typeof import("./downloadPluginPackage")>()),
+  downloadResponse: state.download,
+}));
+vi.mock("sonner", () => ({ toast: { error: state.error, success: vi.fn() } }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
     plugins: { detail: { href: (id: string) => `/plugins/${id}` } },
@@ -242,6 +257,99 @@ describe("Plugins index authorization", () => {
     state.loading = true;
     render(page());
     expect(state.list).not.toHaveBeenCalled();
+  });
+});
+
+describe("OpenClaw observability download", () => {
+  function downloadOpenClaw() {
+    state.admin = true;
+    state.settingsRead.mockReturnValue({
+      data: { defaultName: "Example", observabilityEnabled: true },
+    });
+    render(page());
+    const controls = screen.getByRole("button", {
+      name: "Observability plugin actions",
+    }).parentElement!;
+    fireEvent.pointerDown(
+      within(controls).getByRole("button", { name: "Install" }),
+      {
+        button: 0,
+        ctrlKey: false,
+      },
+    );
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Download as zip — OpenClaw" }),
+    );
+  }
+
+  it("opens instructions with the response filename only after the download succeeds", async () => {
+    const response = new Response("zip", {
+      headers: {
+        "Content-Disposition": 'attachment; filename="example plugin.zip"',
+      },
+    });
+    state.fetch.mockResolvedValueOnce(response);
+    let finishDownload!: () => void;
+    state.download.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishDownload = resolve;
+      }),
+    );
+
+    downloadOpenClaw();
+    await waitFor(() =>
+      expect(state.download).toHaveBeenCalledWith(
+        response,
+        "observability-openclaw.zip",
+      ),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    finishDownload();
+
+    const sheet = await screen.findByRole("dialog", {
+      name: "Install OpenClaw observability",
+    });
+    expect(sheet.textContent).toContain(
+      "openclaw plugins install --force --accept-capabilities './example plugin.zip'",
+    );
+    expect(sheet.textContent).toContain(
+      "openclaw plugins install --force './example plugin.zip'",
+    );
+    expect(sheet.textContent).toContain(
+      "openclaw plugins install './example plugin.zip'",
+    );
+    expect(state.error).not.toHaveBeenCalled();
+  });
+
+  it("shows an error without opening instructions when the server rejects the download", async () => {
+    state.fetch.mockResolvedValueOnce(new Response(null, { status: 500 }));
+    downloadOpenClaw();
+    await waitFor(() =>
+      expect(state.error).toHaveBeenCalledWith(
+        "Failed to download observability plugin",
+      ),
+    );
+    expect(state.download).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("shows an error without opening instructions when saving the response fails", async () => {
+    const errorLog = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    state.fetch.mockResolvedValueOnce(new Response("zip"));
+    state.download.mockRejectedValueOnce(new Error("Download interrupted"));
+    try {
+      downloadOpenClaw();
+      await waitFor(() =>
+        expect(state.error).toHaveBeenCalledWith(
+          "Failed to download observability plugin",
+        ),
+      );
+      expect(screen.queryByRole("dialog")).toBeNull();
+    } finally {
+      errorLog.mockRestore();
+    }
   });
 });
 

@@ -59,6 +59,8 @@ import type { ObservabilityDownloadPlatform } from "./observability-platforms";
 import { OBSERVABILITY_DOWNLOAD_PLATFORMS } from "./observability-platforms";
 import { RotateObservabilityCredentialDialog } from "./RotateObservabilityCredentialDialog";
 import { downloadResponse } from "./downloadPluginPackage";
+import { filenameFromContentDisposition } from "@/lib/download";
+import { OpenClawInstallSheet } from "./OpenClawInstallSheet";
 import {
   matchesPluginFilters,
   PLUGINS_FILTERS,
@@ -125,6 +127,7 @@ function PluginsContent({
     useState(false);
   const [isDownloadingObservability, setIsDownloadingObservability] =
     useState<ObservabilityDownloadPlatform | null>(null);
+  const [openClawArchive, setOpenClawArchive] = useState<string | null>(null);
 
   const handleObservabilityDownload = async (
     platform: ObservabilityDownloadPlatform,
@@ -141,6 +144,14 @@ function PluginsContent({
         return;
       }
       await downloadResponse(resp, `observability-${platform}.zip`);
+      if (platform === "openclaw") {
+        setOpenClawArchive(
+          filenameFromContentDisposition(
+            resp.headers.get("Content-Disposition"),
+            "observability-openclaw.zip",
+          ),
+        );
+      }
     } catch (err) {
       toast.error("Failed to download observability plugin");
       console.error("observability plugin download failed", err);
@@ -373,6 +384,12 @@ function PluginsContent({
 
   return (
     <>
+      {openClawArchive && (
+        <OpenClawInstallSheet
+          archiveName={openClawArchive}
+          onClose={() => setOpenClawArchive(null)}
+        />
+      )}
       <ResourceListPage
         title="Plugins"
         bodyClassName="-mt-6"
