@@ -67,6 +67,8 @@ export function ManagedAgentSessions({
           id: key.id,
           subjectKind: "api-key",
           clientName: key.name,
+          // Issuing the key is what let the agent connect with it.
+          authorizerUserId: key.createdByUserId || undefined,
           keyPrefix: key.keyPrefix,
           createdAt: key.createdAt,
           expiresAt: key.expiresAt ?? key.createdAt,
