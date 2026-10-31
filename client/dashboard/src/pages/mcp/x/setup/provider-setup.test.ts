@@ -8,7 +8,7 @@ import {
   providerProgressKey,
 } from "./provider-setup";
 
-describe("Slack-only setup routing", () => {
+describe("Provider setup routing", () => {
   it("recognizes only the official Slack endpoint", () => {
     expect(setupProviderForUrl("https://mcp.slack.com/mcp/")).toBe("slack");
     for (const url of [
@@ -22,7 +22,6 @@ describe("Slack-only setup routing", () => {
       expect(setupProviderForUrl(url)).toBeNull();
   });
   it.each([
-    "https://api.githubcopilot.com/mcp",
     "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
     "https://example.snowflakecomputing.com/api/v2/databases/A/schemas/B/mcp-servers/C",
     "https://example.okta.com/mcp",
@@ -209,5 +208,73 @@ describe("Slack progress", () => {
       get.mockRestore();
       set.mockRestore();
     }
+  });
+});
+
+describe("GitHub setup routing and browser progress", () => {
+  it("recognizes only the official GitHub MCP endpoint", () => {
+    expect(setupProviderForUrl("https://api.githubcopilot.com/mcp/")).toBe(
+      "github",
+    );
+    for (const url of [
+      "http://api.githubcopilot.com/mcp",
+      "https://api.githubcopilot.com.evil.test/mcp",
+      "https://api.githubcopilot.com/other",
+      "https://api.githubcopilot.com/mcp?x=1",
+      "https://user@api.githubcopilot.com/mcp",
+      "https://api.githubcopilot.com:444/mcp",
+    ])
+      expect(setupProviderForUrl(url)).toBeNull();
+  });
+  it.each(["user", "agent", "none"] as const)(
+    "hands off only User Identity (%s)",
+    (identityMode) => {
+      expect(
+        providerSetupInstallTarget(
+          [{}],
+          [
+            {
+              status: "completed",
+              key: "github",
+              name: "GitHub",
+              remoteUrl: "https://api.githubcopilot.com/mcp",
+              mcpServerId: "id",
+              mcpServerParam: "installed",
+              identityMode,
+            },
+          ],
+        ),
+      ).toBe(identityMode === "user" ? "installed" : null);
+    },
+  );
+  it("restores organization and app choice without credentials or verified results", () => {
+    const state = initialState("github");
+    saveProviderProgress("github-test", {
+      ...state,
+      step: "app",
+      saved: true,
+      authorized: true,
+      tested: true,
+      values: {
+        ...state.values,
+        org: "example-org",
+        appChoice: "existing",
+        clientId: "private-id",
+        clientSecret: "private-secret",
+      },
+    });
+    const restored = loadProviderProgress("github", "github-test");
+    expect(restored.step).toBe("app");
+    expect(restored.values.org).toBe("example-org");
+    expect(restored.values.appChoice).toBe("existing");
+    expect(restored.values.clientId).toBe("");
+    expect(restored.values.clientSecret).toBe("");
+    expect(sessionStorage.getItem("github-test")).not.toContain("private-");
+    expect([
+      restored.saved,
+      restored.authorized,
+      restored.tested,
+      restored.complete,
+    ]).toEqual([false, false, false, false]);
   });
 });

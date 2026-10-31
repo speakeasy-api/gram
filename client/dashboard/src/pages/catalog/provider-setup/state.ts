@@ -1,7 +1,8 @@
-/** Slack setup state only. Network actions live in the page integration. */
-export type Provider = "slack";
-export const names = { slack: "Slack" };
+/** Provider setup state only. Network actions live in the page integration. */
+export type Provider = "slack" | "github";
+export const names = { slack: "Slack", github: "GitHub" };
 const defaultValues = {
+  org: "",
   appChoice: "new",
   clientId: "",
   clientSecret: "",
@@ -44,6 +45,14 @@ export function initialState(provider: Provider): State {
   };
 }
 export function steps(s: State): { id: string; title: string }[] {
+  if (s.provider === "github")
+    return [
+      { id: "begin", title: "Setup plan" },
+      { id: "organization", title: "GitHub organization" },
+      { id: "app", title: "Set up OAuth app" },
+      { id: "credentials", title: "Enter app credentials" },
+      { id: "test", title: "Connect and test" },
+    ];
   return [
     { id: "begin", title: "Setup plan" },
     {
@@ -57,11 +66,20 @@ export function steps(s: State): { id: string; title: string }[] {
     { id: "test", title: "Connect and test" },
   ];
 }
+export function orgValid(s: State): boolean {
+  const org = s.values.org.trim();
+  return (
+    /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(org) &&
+    !org.includes("--")
+  );
+}
 export function ready(s: State): boolean {
-  return s.saved;
+  return s.saved && (s.provider !== "github" || orgValid(s));
 }
 export function validate(s: State): State["errors"] {
   const errors: State["errors"] = {};
+  if (s.step === "organization" && !orgValid(s))
+    errors.org = "Enter the GitHub organization name, without a URL.";
   if (s.step === "credentials") {
     if (!s.values.clientId.trim()) errors.clientId = "Enter Client ID.";
     if (!s.values.clientSecret.trim())

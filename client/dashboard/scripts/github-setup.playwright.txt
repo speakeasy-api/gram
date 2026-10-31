@@ -1,0 +1,78 @@
+async page => {
+  // Run on a fresh GitHub installation without saved credentials. Exercises navigation, validation,
+  // progress and layouts without saving credentials or simulating readiness.
+  const setupUrl = page.url();
+  if (!setupUrl.endsWith('/setup')) throw new Error('Open an installed GitHub server setup page first');
+  const errors = [], writes = [];
+  const onError = e => errors.push(e.message);
+  const onRequest = r => { if (/\/rpc\/.*(?:update|create|delete|authorize|save|connect|commit|revoke)/i.test(r.url()) && r.method() !== 'GET') writes.push(r.url()); };
+  page.on('pageerror', onError); page.on('request', onRequest);
+  const button = name => page.getByRole('button', {name, exact:true});
+  const click = name => button(name).click();
+  const assert = (value, message) => { if (!value) throw new Error(message); };
+  const rail = () => page.getByRole('navigation', {name:'GitHub setup steps'});
+  try {
+    await rail().getByRole('button').nth(3).click();
+    await page.getByRole('heading', {name:'Enter app credentials',exact:true}).waitFor();
+    assert(await page.getByLabel('Client ID', {exact:true}).isEnabled(), 'Use a fresh GitHub installation without saved credentials');
+    await rail().getByRole('button').nth(0).click();
+    await click('Get started');
+    await page.getByLabel('GitHub organization', {exact:true}).fill('');
+    await click('Continue');
+    await page.getByText('Enter the GitHub organization name, without a URL.').waitFor();
+    await page.getByLabel('GitHub organization', {exact:true}).fill('example-org');
+    await click('Continue');
+    const callback = await page.getByLabel('Authorization callback URL', {exact:true}).inputValue();
+    assert(callback.startsWith('https://') && !callback.includes('example.'), 'real callback missing');
+    assert(await page.getByRole('link', {name:'Open GitHub settings', exact:true}).getAttribute('href') === 'https://github.com/organizations/example-org/settings/applications', 'organization app settings missing');
+    await page.getByRole('radio', {name:'Use an existing app', exact:true}).locator('..').click();
+    await page.getByRole('heading', {name:'Check the callback URL', exact:true}).waitFor();
+    await page.reload();
+    await page.getByRole('heading', {name:'Check the callback URL', exact:true}).waitFor();
+    assert(await page.getByLabel('Authorization callback URL', {exact:true}).inputValue() === callback, 'callback changed on refresh');
+    await click('Continue');
+    await click('Continue');
+    await page.getByText('Enter Client ID.', {exact:true}).waitFor();
+    await page.getByText('Enter Client Secret.', {exact:true}).waitFor();
+    await page.getByLabel('Client ID', {exact:true}).fill('EXAMPLE-unsaved-client-id');
+    await page.getByLabel('Client Secret', {exact:true}).fill('EXAMPLE-unsaved-secret');
+    await click('Show');
+    assert(await page.getByLabel('Client Secret', {exact:true}).getAttribute('type') === 'text', 'secret toggle');
+    await click('Hide');
+    await rail().getByRole('button').nth(2).click();
+    await page.getByRole('radio', {name:'Create a new app', exact:true}).locator('..').click();
+    await page.getByRole('heading', {name:'Configure the app', exact:true}).waitFor();
+    assert(await page.getByRole('link', {name:'Open GitHub settings', exact:true}).getAttribute('href') === 'https://github.com/organizations/example-org/settings/applications', 'new app organization settings missing');
+    assert(await page.getByLabel('Authorization callback URL', {exact:true}).inputValue() === callback, 'new app callback changed');
+    await click('Continue');
+    await page.getByRole('heading', {name:'Enter app credentials', exact:true}).waitFor();
+    assert(await page.getByLabel('Client ID', {exact:true}).inputValue() === '', 'client id survived app change');
+    assert(await page.getByLabel('Client Secret', {exact:true}).inputValue() === '', 'secret survived app change');
+    await page.getByLabel('Client Secret', {exact:true}).fill('EXAMPLE-never-persist-this');
+    await page.reload();
+    await page.getByRole('heading', {name:'Enter app credentials', exact:true}).waitFor();
+    assert(await page.getByLabel('Client Secret', {exact:true}).inputValue() === '', 'secret persisted on refresh');
+    await rail().getByRole('button').nth(4).click();
+    assert(await button('Complete setup').isDisabled(), 'completed before sign-in and testing');
+    assert(await button('Sign in ↗').isDisabled(), 'sign-in enabled without saved credentials');
+    const dismiss = page.getByRole('button', {name:'Dismiss the assistant dock', exact:true});
+    if (await dismiss.count()) await dismiss.click();
+    let layoutChecks = 0;
+    for (const width of [400,768,1200,1440]) {
+      await page.setViewportSize({width,height:1000});
+      for (let step=0; step<5; step++) {
+        await rail().getByRole('button').nth(step).click();
+        const size = await page.evaluate(() => ({scroll:document.documentElement.scrollWidth,width:innerWidth,task:document.querySelector('[aria-label="Current GitHub setup task"]').getBoundingClientRect().width}));
+        assert(size.scroll <= size.width && size.task <= 768.1, JSON.stringify({width,step,size}));
+        layoutChecks++;
+        if (step === 2 && [400,1440].includes(width)) await page.screenshot({path:`.playwright-cli/github-setup-app-${width}.png`,fullPage:true});
+      }
+    }
+    await rail().getByRole('button').nth(2).click();
+    assert(errors.length === 0, 'Page errors: '+errors.join(';'));
+    assert(writes.length === 0, 'Unexpected mutations: '+writes.join(';'));
+    return {setupUrl, layoutChecks, pageErrors:errors, unexpectedMutations:writes, progress:'organization, app choice and step restored; credentials excluded', liveAuthorization:'not attempted; requires valid GitHub OAuth app credentials'};
+  } finally {
+    page.off('pageerror', onError); page.off('request', onRequest);
+  }
+}
