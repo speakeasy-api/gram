@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
+import { SimpleTooltip, TooltipProvider } from "@/components/ui/Tooltip";
 import { HumanizeDateTime, dateTimeFormatters } from "@/lib/dates";
 import { IdentityLink } from "@/components/identity-link";
 
@@ -30,9 +31,9 @@ export type AgentSessionRow = {
   keyPrefix?: string;
   clientName?: string;
   /**
-   * The person whose authority this session acts under, when a person
-   * approved it. A session a key or a federated platform opened has none:
-   * the agent signed in as itself.
+   * The person who approved this session, or who issued the key behind a key
+   * row. A session a federated platform opened has none. Not who the agent is
+   * upstream: each server decides that with its own sign-in.
    */
   authorizerUserId?: string;
   issuerSlug?: string;
@@ -228,12 +229,16 @@ export function AgentSessionsSection({
             {nameFor(session.authorizerUserId)}
           </IdentityLink>
         ) : (
-          <span
-            className="text-muted-foreground cursor-default underline decoration-dotted underline-offset-4"
-            title="No person approved this session. On each server it signs in with that server's shared credential or the connection assigned to the agent."
-          >
-            No one
-          </span>
+          <TooltipProvider>
+            <SimpleTooltip tooltip="No person approved this session. On each server it signs in with that server's shared credential or the connection assigned to the agent.">
+              <span
+                tabIndex={0}
+                className="text-muted-foreground cursor-default underline decoration-dotted underline-offset-4"
+              >
+                No one
+              </span>
+            </SimpleTooltip>
+          </TooltipProvider>
         ),
     },
     {
