@@ -3,10 +3,12 @@ package plugins
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -2527,6 +2529,71 @@ setTimeout(() => process.exit(0), 5500)
 	// A run ID that only ctx carries still pairs the two hooks.
 	require.Len(t, ends[""], 1, "agent_end with a ctx-only run ID is sent once")
 	require.Equal(t, "from ctx", ends[""][0]["finalMessage"])
+}
+
+// Some OpenClaw releases load plugins inside short-lived CLI commands such as
+// plugins install. The shim must not start its daemon until a hook fires, and
+// must not keep the process alive once every hook has its reply, or those
+// commands never exit.
+func TestGenerateOpenClawShimLetsShortLivedHostsExit(t *testing.T) {
+	t.Parallel()
+	nodePath, err := exec.LookPath("node")
+	require.NoError(t, err, "node is required to run the generated shim")
+	files, err := GenerateObservabilityPluginPackage(GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}, "openclaw")
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "index.js"), files["index.js"], 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"type":"module"}`), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "hooks"), 0o700))
+	// The fake daemon records that it started, answers every frame, and
+	// stays up until its stdin closes, like the real one.
+	daemon := "echo started >>\"$STARTS\"\n" +
+		"while IFS= read -r line; do\n" +
+		"  seq=$(printf '%s' \"$line\" | sed -n 's/^{\"seq\":\\([0-9]*\\).*/\\1/p')\n" +
+		"  printf '{\"seq\":%s}\\n' \"$seq\"\n" +
+		"done\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hooks", "bootstrap.sh"), []byte(daemon), 0o600))
+	// Loading the plugin and then stopping, as a Gateway that loaded it while
+	// running does when it shuts down before any other hook.
+	registerOnly := `import plugin from "./index.js"
+const handlers = {}
+plugin.register({ on(name, fn) { (handlers[name] ??= []).push(fn) } })
+for (const stop of handlers.gateway_stop ?? []) await stop({}, {})
+`
+	oneHook := `import plugin from "./index.js"
+const handlers = {}
+plugin.register({ on(name, fn) { handlers[name] = fn } })
+const reply = await handlers.before_tool_call({ toolName: "exec", toolCallId: "t1", params: {} }, { sessionId: "s1" })
+if (reply?.block) throw new Error("the daemon's allow was reported as a block")
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "register.mjs"), []byte(registerOnly), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hook.mjs"), []byte(oneHook), 0o600))
+
+	run := func(script string) string {
+		starts := filepath.Join(dir, script+".starts")
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, nodePath, script)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "STARTS="+starts)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, ctx.Err(), "%s did not exit on its own: %s", script, out)
+		require.NoError(t, err, "%s failed: %s", script, out)
+		raw, err := os.ReadFile(starts)
+		if errors.Is(err, os.ErrNotExist) {
+			return ""
+		}
+		require.NoError(t, err)
+		return strings.TrimSpace(string(raw))
+	}
+
+	require.Empty(t, run("register.mjs"), "loading the plugin must not start the daemon")
+	require.Equal(t, "started", run("hook.mjs"), "the first hook starts the daemon once")
 }
 
 // OpenClaw's Codex app-server harness fires llm_input but no before_agent_run,
