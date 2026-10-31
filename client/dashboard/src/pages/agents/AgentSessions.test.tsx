@@ -263,7 +263,7 @@ describe("Agent sessions", () => {
     expect(screen.queryByText("The agent itself")).toBeNull();
     fireEvent.focus(screen.getByText("No one"));
     expect(
-      (await screen.findAllByText(/On each server it signs in/)).length,
+      (await screen.findAllByText(/On each server it then signs in/)).length,
     ).toBeGreaterThan(0);
   });
   it("names whoever issued a key as the one who authorized it", () => {
@@ -280,7 +280,7 @@ describe("Agent sessions", () => {
           isLoading={false}
           isError={false}
           canRevoke
-          onRetry={vi.fn()}
+          onRetry={vi.fn<() => void>()}
           onRevoke={vi.fn().mockResolvedValue(undefined)}
           authorizerName={(id) =>
             id === "user_one" ? "Example Person" : undefined

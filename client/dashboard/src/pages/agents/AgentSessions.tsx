@@ -230,7 +230,7 @@ export function AgentSessionsSection({
           </IdentityLink>
         ) : (
           <TooltipProvider>
-            <SimpleTooltip tooltip="No person approved this session. On each server it signs in with that server's shared credential or the connection assigned to the agent.">
+            <SimpleTooltip tooltip="No person is on record for this connection: the agent connected with its own key or its platform's identity. On each server it then signs in however that server is set up, with a shared credential or a connection assigned to the agent.">
               <span
                 tabIndex={0}
                 className="text-muted-foreground cursor-default underline decoration-dotted underline-offset-4"
