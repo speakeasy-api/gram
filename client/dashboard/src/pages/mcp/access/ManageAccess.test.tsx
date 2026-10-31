@@ -215,7 +215,7 @@ describe("the access list", () => {
       expect(screen.getByText(label)).toBeTruthy();
     }
     // Connect reaches individual tools; the other two are the server itself.
-    expect(screen.getAllByText("No access")).toHaveLength(2);
+    expect(screen.getAllByText("Not set")).toHaveLength(2);
   });
 
   it("reads a weaker scope as granted by the stronger one that satisfies it", () => {
@@ -298,7 +298,7 @@ describe("the access list", () => {
     expect(screen.queryByText("on every server")).toBeNull();
     // The row summary says it too, so the line is not the only match.
     expect(screen.getAllByText("All tools").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("No access")).toHaveLength(2);
+    expect(screen.getAllByText("Not set")).toHaveLength(2);
   });
 
   it("lets a personal grant outrank a role's block", () => {
@@ -496,7 +496,7 @@ describe("a blocking role", () => {
     expect(screen.queryByRole("menuitem", { name: "No access" })).toBeNull();
   });
 
-  it("keeps no access for a choice that only removes the role's own rule", () => {
+  it("offers clear instead of no access when only the role's own rule grants", () => {
     renderList([entry({ ...engineering })]);
     expandFirstRow();
 
@@ -506,7 +506,56 @@ describe("a blocking role", () => {
       pointerType: "mouse",
     });
 
-    expect(screen.getByRole("menuitem", { name: "No access" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Clear" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "No access" })).toBeNull();
+  });
+
+  it("clears a block without writing a grant in its place", () => {
+    renderList([
+      entry({ ...engineering, level: "blocked" }),
+      entry({ ...engineering, level: "blocked_view" }),
+      entry({ ...engineering, level: "blocked_manage" }),
+    ]);
+    expandFirstRow();
+
+    fireEvent.pointerDown(
+      screen.getAllByRole("button", { name: /^Blocked/ })[1]!,
+      {
+        button: 0,
+        ctrlKey: false,
+        pointerType: "mouse",
+      },
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Clear" }));
+
+    expect(
+      savedEntries()
+        .entries.map((e: { principalUrn: string; level: string }) => [
+          e.principalUrn,
+          e.level,
+        ])
+        .sort(),
+    ).toEqual([
+      ["role:global:1", "blocked"],
+      ["role:global:1", "blocked_manage"],
+    ]);
+  });
+
+  it("shows a line no rule decides as not set, with nothing to clear", () => {
+    renderList([entry({ ...engineering, level: "blocked" })]);
+    expandFirstRow();
+
+    fireEvent.pointerDown(
+      screen.getAllByRole("button", { name: /^Not set/ })[0]!,
+      {
+        button: 0,
+        ctrlKey: false,
+        pointerType: "mouse",
+      },
+    );
+
+    expect(screen.getByRole("menuitem", { name: "Allowed" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "Clear" })).toBeNull();
   });
 });
 
