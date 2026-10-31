@@ -878,7 +878,10 @@ export function CredentialsWizard({
           projectId: server.projectId,
         });
       }
+      // Only an agent that reaches a server needs to sign in to one; an edit
+      // that adds a server later adds the grant then.
       if (
+        (allServers || selected.length > 0) &&
         ![...appliedPolicies.current.values()].some(
           (grant) => grant.scope === AUTH_GRANT.scope,
         ) &&

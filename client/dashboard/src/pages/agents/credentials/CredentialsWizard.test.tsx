@@ -1594,7 +1594,7 @@ describe("Editing an agent that already exists", () => {
     updatedAt: new Date(),
   };
 
-  function editing(over: { grants?: unknown } = {}) {
+  function editing(over: { grants?: unknown; auth?: boolean } = {}) {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -1605,7 +1605,12 @@ describe("Editing an agent that already exists", () => {
           <CredentialsWizard
             agent={agent}
             editing
-            grants={[...((over.grants ?? grants) as never[]), AUTH] as never}
+            grants={
+              [
+                ...((over.grants ?? grants) as never[]),
+                ...(over.auth === false ? [] : [AUTH]),
+              ] as never
+            }
             onDone={(id) => {
               onDone(id);
             }}
@@ -2158,6 +2163,35 @@ describe("Editing an agent that already exists", () => {
       "user_owner",
       "agent_one",
     );
+  });
+
+  it("gives an agent saved before the auth grant existed that grant", async () => {
+    editing({ auth: false });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("checkbox", { name: "GitHub" });
+    fireEvent.click(await authenticationSave());
+
+    await waitFor(() =>
+      expect(
+        mocks.createGrant.mock.calls.map(
+          ([request]) => request.request.createAgentPolicyGrantForm.scope,
+        ),
+      ).toContain("mcp:auth"),
+    );
+  });
+
+  it("does not give the auth grant to an agent left with no servers", async () => {
+    const { onDone } = editing({ auth: false });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(await authenticationSave());
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(
+      mocks.createGrant.mock.calls.map(
+        ([request]) => request.request.createAgentPolicyGrantForm.scope,
+      ),
+    ).not.toContain("mcp:auth");
   });
 
   it("says why a save failed and stays on the step", async () => {
