@@ -5,17 +5,8 @@ import type { EMAServiceServer } from "@gram/client/models/components/emaservice
 import { EmaServiceServers } from "./EmaServiceServers";
 import type { ServiceRow } from "./useEmaServices";
 
-vi.mock("@/routes", () => ({
-  useRoutes: ({ projectSlug }: { projectSlug: string }) => ({
-    mcp: {
-      details: {
-        settings: {
-          href: (server: string) =>
-            `/example/projects/${projectSlug}/mcp/${server}/settings`,
-        },
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "example", projectSlug: undefined }),
 }));
 vi.mock(
   "@/pages/mcp/x/tabs/settings/sections/authentication/IdentityChainingSection",

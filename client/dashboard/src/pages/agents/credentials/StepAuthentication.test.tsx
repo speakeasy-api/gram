@@ -1,14 +1,13 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import { StepAuthentication } from "./StepAuthentication";
 import type { InventoryServer } from "./useServerInventory";
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: { details: { overview: { href: (id: string) => `/mcp/${id}` } } },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -61,6 +60,7 @@ describe("authentication assignment warnings", () => {
           refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
         }}
       />,
+      { wrapper: MemoryRouter },
     );
     expect(screen.getByRole("alert").textContent).toContain("Example server");
     expect(screen.getByText("Expired")).toBeTruthy();
@@ -80,6 +80,7 @@ describe("authentication assignment warnings", () => {
           refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
         }}
       />,
+      { wrapper: MemoryRouter },
     );
     expect(screen.queryByRole("alert")).toBeNull();
   });
@@ -127,6 +128,7 @@ describe("create connection reauthentication", () => {
             refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
           }}
         />,
+        { wrapper: MemoryRouter },
       );
       // The only row, so it starts expanded.
       fireEvent.click(

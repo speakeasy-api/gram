@@ -50,29 +50,9 @@ vi.mock("@/components/page-layout", () => {
     null;
   return { Page };
 });
-vi.mock("@/routes", () => {
-  const tab = (name: string) => ({
-    href: (slug: string) => `/acme/projects/default/mcp/${slug}/${name}`,
-  });
-  return {
-    useRoutes: () => ({
-      mcp: {
-        href: () => "/acme/projects/default/mcp",
-        details: {
-          overview: tab("overview"),
-          tools: tab("tools"),
-          resources: tab("resources"),
-          prompts: tab("prompts"),
-          inspect: tab("inspect"),
-          teamAccess: tab("team-access"),
-          guardrails: tab("guardrails"),
-          sessions: tab("sessions"),
-          settings: tab("settings"),
-        },
-      },
-    }),
-  };
-});
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
+}));
 
 import MCPServerDetails from "./MCPServerDetails";
 

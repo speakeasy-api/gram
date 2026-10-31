@@ -1,28 +1,10 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RegressionWarning } from "./SkillInsightsSection";
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    skills: {
-      detail: {
-        href: (id: string) => `/skills/${id}`,
-        versions: {
-          href: (id: string) => `/skills/${id}/versions`,
-          version: {
-            href: (id: string, versionId: string) =>
-              `/skills/${id}/versions/${versionId}`,
-          },
-        },
-      },
-    },
-  }),
-}));
-vi.mock("react-router", () => ({
-  Link: ({ to, children }: { to: string; children: ReactNode }) => (
-    <a href={to}>{children}</a>
-  ),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 afterEach(cleanup);
@@ -45,6 +27,7 @@ describe("RegressionWarning", () => {
           windowEnd: new Date("2026-07-20T00:00:00Z"),
         }}
       />,
+      { wrapper: MemoryRouter },
     );
 
     expect(
@@ -54,6 +37,6 @@ describe("RegressionWarning", () => {
       screen
         .getByRole("link", { name: "Review version to restore" })
         .getAttribute("href"),
-    ).toBe("/skills/skill_a/versions/version_previous");
+    ).toBe("/org/projects/project/skills/skill_a/versions/version_previous");
   });
 });

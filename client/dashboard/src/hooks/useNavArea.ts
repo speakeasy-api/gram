@@ -7,10 +7,7 @@ export type NavArea =
   | "Security and Policy"
   | "Organization";
 
-// First path segment after /projects/:slug/ → sidebar area. Kept as a plain
-// slug map (rather than deriving from useRoutes) so consumers stay light —
-// routes.tsx imports every page component, which drags the whole app graph
-// into any test that renders a component using this hook.
+// First path segment after /projects/:slug/ → sidebar area.
 const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   // Observability
   costs: "Observability",

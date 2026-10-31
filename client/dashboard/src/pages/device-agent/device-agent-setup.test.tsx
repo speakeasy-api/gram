@@ -16,8 +16,8 @@ const agentToken = vi.hoisted(() => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ slug: "example-corp", name: "Example Corp" }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ apiKeys: { href: () => "/example-corp/api-keys" } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "example-corp", projectSlug: "default" }),
 }));
 // Install commands use the server's stable links only over HTTPS. Tests set
 // serverURL.current to cover the other forms.

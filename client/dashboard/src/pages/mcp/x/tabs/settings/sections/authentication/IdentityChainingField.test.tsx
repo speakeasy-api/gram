@@ -8,6 +8,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityChainingField } from "./IdentityChainingField";
 import type { ChainingProviders } from "./identityChainingGate";
@@ -73,6 +74,7 @@ vi.mock("@gram/client/react-query/remoteSessionClients.js", () => ({
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), warning: vi.fn() } }));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "project",
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org" }),
@@ -97,24 +99,6 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 }));
 vi.mock("@/lib/featureFlags", () => ({
   FEATURE_FLAGS: { oktaConnections: "okta-connections" },
-}));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
-  useRoutes: () => ({
-    remoteIdentityProviders: {
-      clientDetail: {
-        overview: {
-          href: (issuerId: string, clientId: string) =>
-            `/rip/${issuerId}/clients/${clientId}/overview`,
-        },
-      },
-    },
-  }),
-}));
-vi.mock("react-router", () => ({
-  Link: ({ children, to }: { children: ReactNode; to: string }) => (
-    <a href={to}>{children}</a>
-  ),
 }));
 vi.mock("@/lib/remote-identity", () => ({
   useRemoteSessionIssuersByIds: () => issuerNames,
@@ -239,7 +223,7 @@ describe("identity chaining client selection", () => {
   it.each(["prepare", "unlink"] as const)(
     "keeps the target fixed while %s is pending",
     (operation) => {
-      const { rerender } = render(field());
+      const { rerender } = render(field(), { wrapper: MemoryRouter });
       expect((screen.getByRole("combobox") as HTMLButtonElement).disabled).toBe(
         false,
       );
@@ -290,11 +274,13 @@ describe("identity chaining client for this service", () => {
       { id: "tracker", name: "Tracker", issuer: "https://tracker.example.com" },
       { id: "wiki", name: "Wiki", issuer: "https://wiki.example.com" },
     ];
-    render(trackerAndWiki());
+    render(trackerAndWiki(), { wrapper: MemoryRouter });
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(
       screen.getByRole("link", { name: "tracker-client" }).getAttribute("href"),
-    ).toBe("/rip/tracker/clients/tracker-client/overview");
+    ).toBe(
+      "/org/projects/project/remote-identity-providers/tracker/clients/tracker-client/overview",
+    );
     expect(screen.queryByText("wiki-client")).toBeNull();
   });
 
@@ -305,7 +291,7 @@ describe("identity chaining client for this service", () => {
     issuerNames.items = [
       { id: "tracker", name: "Tracker", issuer: "https://tracker.example.com" },
     ];
-    render(trackerAndWiki());
+    render(trackerAndWiki(), { wrapper: MemoryRouter });
     expect(screen.queryByText("tracker-client")).toBeNull();
     expect(
       screen.getByText(
@@ -332,7 +318,7 @@ describe("identity chaining client for this service", () => {
       metadata: { authorizationServers: ["https://tracker.example.com"] },
     };
     arrange();
-    render(trackerAndWiki());
+    render(trackerAndWiki(), { wrapper: MemoryRouter });
     expect(screen.queryByText("tracker-client")).toBeNull();
     expect(screen.queryByText("wiki-client")).toBeNull();
     expect(screen.queryByText(/Link a client/)).toBeNull();
@@ -346,7 +332,7 @@ describe("identity chaining client for this service", () => {
     issuerNames.items = [
       { id: "tracker", name: "Tracker", issuer: "https://tracker.example.com" },
     ];
-    render(trackerAndWiki());
+    render(trackerAndWiki(), { wrapper: MemoryRouter });
     expect(screen.getByText("tracker-client")).toBeTruthy();
     expect(screen.queryByText("wiki-client")).toBeNull();
   });
@@ -374,6 +360,7 @@ describe("identity chaining client for this service", () => {
         }
         resource="https://example.com/mcp"
       />,
+      { wrapper: MemoryRouter },
     );
     expect(screen.getByText(/still on for client wiki-client/)).toBeTruthy();
     expect(
@@ -420,6 +407,7 @@ describe("identity chaining client for this service", () => {
         }
         resource="https://example.com/mcp"
       />,
+      { wrapper: MemoryRouter },
     );
     expect(screen.queryByText(/still on for client/)).toBeNull();
   });
@@ -445,6 +433,7 @@ describe("identity chaining client for this service", () => {
         }
         resource="https://example.com/mcp"
       />,
+      { wrapper: MemoryRouter },
     );
     expect(screen.getByText(/still on for client wiki-client/)).toBeTruthy();
     expect(
@@ -460,7 +449,7 @@ describe("identity chaining client for this service", () => {
   it("skips the lookup notice when the metadata names no authorization server", () => {
     prmMock.value = { metadata: { authorizationServers: [] } };
     issuerNames.isError = true;
-    render(field());
+    render(field(), { wrapper: MemoryRouter });
     expect(
       screen.queryByText(/couldn’t check their authorization server/),
     ).toBeNull();
@@ -470,14 +459,14 @@ describe("identity chaining client for this service", () => {
 describe("identity chaining bound client", () => {
   it("selects the client the binding uses", () => {
     read.data = bound("second");
-    render(field());
+    render(field(), { wrapper: MemoryRouter });
     expect(screen.getByRole("combobox").textContent).toBe("second");
     expect(screen.queryByText("Use this client instead")).toBeNull();
   });
 
   it("says whether chaining is on, next to the action that changes it", () => {
     read.data = bound("second");
-    const { rerender } = render(field());
+    const { rerender } = render(field(), { wrapper: MemoryRouter });
     expect(screen.getByText("On, waiting for a first connection")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
     read.data = unlinked;
@@ -488,13 +477,13 @@ describe("identity chaining bound client", () => {
 
   it("keeps the badge for states the buttons don't explain", () => {
     read.data = { ...bound("second"), state: "transient_failure" };
-    render(field());
+    render(field(), { wrapper: MemoryRouter });
     expect(screen.getByText("Temporary failure")).toBeTruthy();
   });
 
   it("makes replacing the bound client explicit", () => {
     read.data = bound("elsewhere");
-    render(field());
+    render(field(), { wrapper: MemoryRouter });
     expect(screen.getByText("Off")).toBeTruthy();
     expect(
       (
@@ -506,7 +495,7 @@ describe("identity chaining bound client", () => {
   });
 
   it("requires the scope the API enforces", () => {
-    render(field());
+    render(field(), { wrapper: MemoryRouter });
     expect(scopeChecks).toContainEqual(
       expect.objectContaining({
         scope: "project:write",
@@ -561,7 +550,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
       scopes: [],
       emaProviders: providersOf({ kind: "future_provider" }),
     };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     expect(enableButton().disabled).toBe(true);
     fireEvent.click(enableButton());
     expect(screen.getByText("Unknown identity provider")).toBeTruthy();
@@ -581,7 +570,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
         state: "future_state",
         emaProviders: providersOf(speakeasy),
       };
-      render(speakeasyField());
+      render(speakeasyField(), { wrapper: MemoryRouter });
       expect(screen.getByText("Unknown")).toBeTruthy();
       expect(screen.queryByText("Off")).toBeNull();
       expect(
@@ -609,7 +598,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
       state: "future_state",
       emaProviders: providersOf(speakeasy),
     };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     expect(enableButton().disabled).toBe(true);
     fireEvent.click(enableButton());
     expect(state.prepare).not.toHaveBeenCalled();
@@ -623,7 +612,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
         unavailableReason: "not_trusted_by_endpoint",
       }),
     };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     expect(screen.getByText("Unknown identity provider")).toBeTruthy();
     expect(screen.getByText(/Unknown availability/)).toBeTruthy();
     expect(vouchers()).toContain(
@@ -633,7 +622,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
 
   it("blocks a pending turn-off confirmation when a refetch reports an unknown state", () => {
     read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
-    const rendered = render(speakeasyField());
+    const rendered = render(speakeasyField(), { wrapper: MemoryRouter });
     fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
     read.data = { ...read.data, state: "future_state" };
     rendered.rerender(speakeasyField());
@@ -668,27 +657,29 @@ describe("identity chaining vouched for by Speakeasy", () => {
   });
 
   it("offers every linked client when no sign-in client is trusted", () => {
-    render(field(speakeasyOnly, plainIssuer));
+    render(field(speakeasyOnly, plainIssuer), { wrapper: MemoryRouter });
     expect(screen.getByRole("combobox")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "Manage client" }).getAttribute("href"),
-    ).toBe("/rip/issuer/clients/first/overview");
+    ).toBe(
+      "/org/projects/project/remote-identity-providers/issuer/clients/first/overview",
+    );
   });
 
   it("keeps the identity provider's sign-in client out of the picker", () => {
     read.data = { ...unlinked, emaProviders: providersOf(okta) };
-    render(field({ external: true }, trusting));
+    render(field({ external: true }, trusting), { wrapper: MemoryRouter });
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(within(chain()).getByRole("link", { name: "first" })).toBeTruthy();
   });
 
   it("keeps the trusted sign-in client out even when only Speakeasy applies", () => {
-    render(field(speakeasyOnly, trusting));
+    render(field(speakeasyOnly, trusting), { wrapper: MemoryRouter });
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
   it("asks for an authorization server client, not an identity provider one", () => {
-    render(speakeasyField({ linkedClients: [] }));
+    render(speakeasyField({ linkedClients: [] }), { wrapper: MemoryRouter });
     expect(
       screen.getByText(/registered with this server’s authorization server/),
     ).toBeTruthy();
@@ -700,7 +691,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
       generation: 0,
       emaProviders: providersOf(speakeasy),
     };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     fireEvent.click(enableButton());
     expect(state.calls).toEqual(["prepare"]);
     expect(state.prepare).toHaveBeenCalledWith({
@@ -734,7 +725,9 @@ describe("identity chaining vouched for by Speakeasy", () => {
       ...bound("first"),
       emaProviders: { ...providersOf(okta, speakeasyUnused), isDefault: false },
     };
-    render(speakeasyField({ userSessionIssuer: trusting }));
+    render(speakeasyField({ userSessionIssuer: trusting }), {
+      wrapper: MemoryRouter,
+    });
     expect(
       screen.getByText(
         /Set in the identity providers enabled for example\.com\./,
@@ -753,7 +746,9 @@ describe("identity chaining vouched for by Speakeasy", () => {
       ...bound("first"),
       emaProviders: { ...providersOf(okta, speakeasyUnused), isDefault: false },
     };
-    render(speakeasyField({ userSessionIssuer: trusting }));
+    render(speakeasyField({ userSessionIssuer: trusting }), {
+      wrapper: MemoryRouter,
+    });
     expect(
       screen.getByText(
         (_, el) =>
@@ -782,7 +777,9 @@ describe("identity chaining vouched for by Speakeasy", () => {
     ]);
     expect(
       within(chain()).getByRole("link", { name: "first" }).getAttribute("href"),
-    ).toBe("/rip/issuer/clients/first/overview");
+    ).toBe(
+      "/org/projects/project/remote-identity-providers/issuer/clients/first/overview",
+    );
     expect(
       within(chain()).getByText("Okta", { selector: "[title='okta-sign-in']" }),
     ).toBeTruthy();
@@ -791,7 +788,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
       screen
         .getByRole("link", { name: "Change in Sessions" })
         .getAttribute("href"),
-    ).toBe("#sessions");
+    ).toBe("/#sessions");
     expect(vouchers()).toEqual(["Oktafor people who log in with Okta"]);
     expect(trusts()).toEqual([
       {
@@ -823,7 +820,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
 
   it("folds the issuer URL once the vendor trusts a provider, but says Working only for this server", () => {
     read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
-    const { rerender } = render(speakeasyField());
+    const { rerender } = render(speakeasyField(), { wrapper: MemoryRouter });
     expect(screen.getByText("On, waiting for a first connection")).toBeTruthy();
     expect(trusts()).toEqual([
       {
@@ -874,7 +871,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
       generation: 1,
       scopes: [],
     };
-    const { rerender } = render(speakeasyField());
+    const { rerender } = render(speakeasyField(), { wrapper: MemoryRouter });
     fireEvent.click(enableButton());
     rerender(speakeasyField());
     expect(screen.getByText("On, waiting for a first connection")).toBeTruthy();
@@ -891,7 +888,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
       remediation: "record grant_types on remote_session_client",
       emaProviders: providersOf(speakeasy),
     };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     expect(screen.getByText("Couldn’t check the client")).toBeTruthy();
     expect(screen.queryByText("Grants unknown")).toBeNull();
     expect(screen.queryByText(/remote_session_client/)).toBeNull();
@@ -902,7 +899,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
   it("only shows organization admins the link to every server", () => {
     state.orgAdmin = false;
     read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     expect(
       screen.queryByRole("link", {
         name: "Every server that connects to example.com",
@@ -925,7 +922,9 @@ describe("identity chaining vouched for by Speakeasy", () => {
         ...bound("first"),
         emaProviders: providersOf({ ...okta, unavailableReason: "deleted" }),
       };
-      render(speakeasyField({ userSessionIssuer: trusting }));
+      render(speakeasyField({ userSessionIssuer: trusting }), {
+        wrapper: MemoryRouter,
+      });
       expect(
         screen.getByRole("link", { name: label }).getAttribute("href"),
       ).toBe(href);
@@ -934,7 +933,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
 
   it("names Speakeasy's own sign-in when no identity provider is trusted", () => {
     read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     expect(
       screen.getByText(
         "People log in to this server with Speakeasy, so Speakeasy vouches for them.",
@@ -972,7 +971,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
         speakeasy,
       ),
     };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     expect(vouchers()).toEqual([
       "Speakeasyfor everyone who logs in to this server",
     ]);
@@ -995,7 +994,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
       generation: 0,
       emaProviders: providersOf({ ...speakeasy, unavailableReason: reason }),
     };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     expect(screen.getByText(text)).toBeTruthy();
     expect(
       screen
@@ -1014,7 +1013,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
       generation: 0,
       emaProviders: providersOf({ ...speakeasy, unavailableReason: "keyless" }),
     };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     expect(enableButton().disabled).toBe(true);
     expect(
       screen.getByText(
@@ -1034,7 +1033,9 @@ describe("identity chaining vouched for by Speakeasy", () => {
       ],
     };
     read.data = { ...unlinked, generation: 0, emaProviders: savedSpeakeasy };
-    render(speakeasyField({ userSessionIssuer: trusting }));
+    render(speakeasyField({ userSessionIssuer: trusting }), {
+      wrapper: MemoryRouter,
+    });
     expect(vouchers()).toEqual([
       "SpeakeasyCan’t vouch for people who log in with Okta",
     ]);
@@ -1058,7 +1059,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
       screen
         .getByRole("link", { name: "change the sign-in in Sessions" })
         .getAttribute("href"),
-    ).toBe("#sessions");
+    ).toBe("/#sessions");
     fireEvent.click(enableButton());
     expect(state.calls).toEqual([]);
   });
@@ -1076,7 +1077,9 @@ describe("identity chaining vouched for by Speakeasy", () => {
         ],
       },
     };
-    render(speakeasyField({ userSessionIssuer: trusting }));
+    render(speakeasyField({ userSessionIssuer: trusting }), {
+      wrapper: MemoryRouter,
+    });
     expect(
       screen.getByText(
         /ask an organization admin to change the identity providers enabled for example\.com/,
@@ -1100,7 +1103,9 @@ describe("identity chaining vouched for by Speakeasy", () => {
         ],
       },
     };
-    render(speakeasyField({ userSessionIssuer: trusting }));
+    render(speakeasyField({ userSessionIssuer: trusting }), {
+      wrapper: MemoryRouter,
+    });
     expect(screen.getByText("On, but not running")).toBeTruthy();
     expect(
       screen.getByText(
@@ -1126,7 +1131,9 @@ describe("identity chaining vouched for by Speakeasy", () => {
         ],
       },
     };
-    render(speakeasyField({ userSessionIssuer: trusting }));
+    render(speakeasyField({ userSessionIssuer: trusting }), {
+      wrapper: MemoryRouter,
+    });
     expect(vouchers()).toEqual(["Oktafor people who log in with Okta"]);
     expect(
       screen.queryByRole("link", {
@@ -1143,13 +1150,13 @@ describe("identity chaining vouched for by Speakeasy", () => {
         unavailableReason: "signing_paused",
       }),
     };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     expect(screen.getByText("On, but not running")).toBeTruthy();
   });
 
   it("points at the organization's identity settings when nobody is listed", () => {
     read.data = { ...unlinked, generation: 0, emaProviders: providersOf() };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     expect(
       screen
         .getByRole("link", {
@@ -1165,7 +1172,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
       generation: 0,
       emaProviders: providersOf(speakeasy),
     };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     expect(screen.getByText("Off")).toBeTruthy();
     expect(vouchers()).toEqual([
       "Speakeasyfor everyone who logs in to this server",
@@ -1177,7 +1184,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
 
   it("disables without touching who vouches", () => {
     read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
     fireEvent.click(
       screen.getAllByRole("button", { name: "Turn off" }).at(-1)!,
@@ -1198,7 +1205,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
 
   it("has no chaining scope list of its own", () => {
     read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     expect(screen.queryByText("Requested scopes")).toBeNull();
     expect(screen.queryByText("Save scopes")).toBeNull();
   });
@@ -1209,7 +1216,9 @@ describe("identity chaining vouched for by Speakeasy", () => {
       ...bound("first"),
       emaProviders: { ...providersOf(okta, speakeasyUnused), isDefault: false },
     };
-    render(speakeasyField({ userSessionIssuer: trusting }));
+    render(speakeasyField({ userSessionIssuer: trusting }), {
+      wrapper: MemoryRouter,
+    });
     expect(
       screen.queryByRole("link", {
         name: "Set up example.com in Okta’s Cross App Access",
@@ -1227,7 +1236,9 @@ describe("identity chaining vouched for by Speakeasy", () => {
       ...bound("first"),
       emaProviders: { ...providersOf(okta, speakeasyUnused), isDefault: false },
     };
-    render(speakeasyField({ userSessionIssuer: trusting }));
+    render(speakeasyField({ userSessionIssuer: trusting }), {
+      wrapper: MemoryRouter,
+    });
     expect(screen.queryByRole("link", { name: /Cross App Access/ })).toBeNull();
   });
 
@@ -1235,7 +1246,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     state.orgAdmin = false;
     state.orgRead = false;
     read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     expect(trusts()).toEqual([
       {
         name: "Speakeasy",
@@ -1252,7 +1263,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
       generation: 0,
       emaProviders: providersOf({ ...speakeasy, unavailableReason: "keyless" }),
     };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     expect(screen.queryByRole("link", { name: "Fix in Speakeasy" })).toBeNull();
     expect(
       screen.getByText("An organization admin can fix this."),
@@ -1262,7 +1273,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
   it("names an admin instead of linking setup when nobody is listed", () => {
     state.orgAdmin = false;
     read.data = { ...unlinked, generation: 0, emaProviders: providersOf() };
-    render(speakeasyField());
+    render(speakeasyField(), { wrapper: MemoryRouter });
     expect(
       screen.queryByRole("link", {
         name: "Set up Speakeasy as an identity provider",
@@ -1282,6 +1293,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
         onlyWhenOn: true,
         frame: (content) => <section>{content}</section>,
       }),
+      { wrapper: MemoryRouter },
     );
     expect(container.querySelector("section")).toBeNull();
     expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
@@ -1317,6 +1329,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
         resource="https://example.com/mcp"
         onlyWhenOn
       />,
+      { wrapper: MemoryRouter },
     );
     expect(screen.getByText(/still on for client wiki-client/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
@@ -1366,7 +1379,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
           onlyWhenOn
         />
       );
-      const rendered = render(element());
+      const rendered = render(element(), { wrapper: MemoryRouter });
       if (confirmFirst) {
         fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
         staleRead.byIssuer.wiki = {
@@ -1396,6 +1409,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
         onlyWhenOn: true,
         frame: (content) => <section>{content}</section>,
       }),
+      { wrapper: MemoryRouter },
     );
     expect(container.querySelector("section")).toBeTruthy();
     expect(screen.getByText(/binding lookup failed/)).toBeTruthy();
@@ -1409,6 +1423,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
         onlyWhenOn: true,
         frame: (content) => <section>{content}</section>,
       }),
+      { wrapper: MemoryRouter },
     );
     expect(container.querySelector("section")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
@@ -1422,6 +1437,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
         onlyWhenOn: true,
         speakeasyIssuerUrl: undefined,
       }),
+      { wrapper: MemoryRouter },
     );
     const trusts = screen.getByRole("list", { name: /trusts$/ });
     expect(within(trusts).getByText("Speakeasy")).toBeTruthy();
@@ -1449,14 +1465,14 @@ describe("identity chaining connection scopes", () => {
 
   it("says nothing while the recorded scopes match the connection", () => {
     read.data = { ...outOfDate, scopesOutOfDate: false };
-    render(field());
+    render(field(), { wrapper: MemoryRouter });
     expect(screen.queryByText(/connection now asks for/)).toBeNull();
     expect(applyButton()).toBeNull();
   });
 
   it("names what changed and offers one action to apply it", () => {
     read.data = outOfDate;
-    render(field());
+    render(field(), { wrapper: MemoryRouter });
     expect(
       screen.getByText(
         "This server’s connection now asks for read, write. Enterprise Managed Authorization still asks for read.",
@@ -1473,7 +1489,7 @@ describe("identity chaining connection scopes", () => {
       scopes: ["read", "write"],
       scopesOutOfDate: false,
     };
-    render(field());
+    render(field(), { wrapper: MemoryRouter });
     fireEvent.click(applyButton()!);
     expect(state.prepare).toHaveBeenCalledWith({
       request: {
@@ -1495,7 +1511,7 @@ describe("identity chaining connection scopes", () => {
   it("asks for a review when someone else changed the binding first", () => {
     read.data = outOfDate;
     state.prepareResult = { ...outOfDate, state: "configuration_required" };
-    render(field());
+    render(field(), { wrapper: MemoryRouter });
     fireEvent.click(applyButton()!);
     expect(
       screen.getByText("Someone else changed this. Review it and try again."),
@@ -1505,7 +1521,7 @@ describe("identity chaining connection scopes", () => {
   it("tells someone who can't edit the project who can apply it", () => {
     state.projectWrite = false;
     read.data = outOfDate;
-    render(field());
+    render(field(), { wrapper: MemoryRouter });
     expect(screen.getByText(/connection now asks for/)).toBeTruthy();
     expect(
       screen.getByText("Someone who can edit this project can apply them."),
@@ -1531,6 +1547,7 @@ describe("identity chaining connection scopes", () => {
         linkedClients={scoped}
         resource="https://example.com/mcp"
       />,
+      { wrapper: MemoryRouter },
     );
     expect(
       (screen.getByRole("button", { name: "Turn on" }) as HTMLButtonElement)
@@ -1558,6 +1575,7 @@ describe("identity chaining connection scopes", () => {
         linkedClients={scoped}
         resource="https://example.com/mcp"
       />,
+      { wrapper: MemoryRouter },
     );
     expect(
       (screen.getByRole("button", { name: "Turn on" }) as HTMLButtonElement)
@@ -1567,7 +1585,7 @@ describe("identity chaining connection scopes", () => {
 
   it("holds Turn off while the connection's scopes are applying", () => {
     read.data = outOfDate;
-    render(field());
+    render(field(), { wrapper: MemoryRouter });
     const turnOff = () =>
       screen.getByRole("button", { name: "Turn off" }) as HTMLButtonElement;
     expect(turnOff().disabled).toBe(false);

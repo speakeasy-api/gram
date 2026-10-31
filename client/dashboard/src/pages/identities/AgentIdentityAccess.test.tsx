@@ -25,7 +25,7 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ agents: { listPolicyGrants: mocks.list } }),
-  useSlugs: () => ({ orgSlug: "org" }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "example" }),
 }));
 vi.mock("@/pages/access/useResourceLinkMaps", () => ({
   useResourceLinkMaps: () => ({
@@ -43,11 +43,6 @@ vi.mock("@/pages/access/useResourceLinkMaps", () => ({
       ],
     ]),
     mcpServerMap: new Map(),
-  }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    agents: { href: () => "/org/projects/example/agent-management" },
   }),
 }));
 const agent: ManagedAgent = {

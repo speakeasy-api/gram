@@ -5,10 +5,8 @@ import type { ReactNode } from "react";
 import type { ExplainedAccessRule } from "@gram/client/models/components/explainedaccessrule.js";
 import { ServerAssignment } from "./PersonServerAssignment";
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: { details: { overview: { href: () => "/server" } } },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ projects: [] }),

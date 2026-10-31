@@ -21,10 +21,8 @@ vi.mock("@/hooks/useRBAC", async (importOriginal) => ({
     grants: state.grants,
   }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    skills: { detail: { href: (id: string) => `/skills/${id}` } },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project-a" }),
 }));
 vi.mock("@/components/ui/ViewToggle/use-view-mode", () => ({
   useViewMode: () => ["grid", vi.fn()],

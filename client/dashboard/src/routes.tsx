@@ -1,178 +1,10 @@
 import { Icon, IconProps } from "@/components/ui/Icon";
 import { IconName } from "@/components/ui/Icon/names";
 import React, { useMemo } from "react";
-import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { ReleaseStage } from "./components/release-stage-badge";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
-import AssistantPage from "./pages/assistants/Assistant";
-import AssistantsIndex, { AssistantsRoot } from "./pages/assistants/Assistants";
-import NewAssistantPage from "./pages/assistants/NewAssistant";
-import Billing from "./pages/billing/Billing";
-import {
-  BillingSetup,
-  BillingPaymentMethod,
-} from "./pages/billing/BillingSetup";
-import Catalog, { CatalogRoot } from "./pages/catalog/Catalog";
-import CatalogDetail, {
-  CatalogDetailRoot,
-} from "./pages/catalog/CatalogDetail";
-import ChatSessions from "./pages/chatLogs/ChatLogs";
-import OrgMemory from "./components/observe/OrgMemory";
-import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
-import Skills from "./pages/Skills";
-import SkillsList from "./pages/skills/SkillsList";
-import SkillContent from "./pages/skills/SkillContent";
-import SkillDetailRoot from "./pages/skills/SkillDetailRoot";
-import SkillFeedback from "./pages/skills/SkillFeedback";
-import SkillOverview from "./pages/skills/SkillOverview";
-import SkillScoredSessions from "./pages/skills/SkillScoredSessions";
-import SkillSettings from "./pages/skills/SkillSettings";
-import SkillUsage from "./pages/skills/SkillUsage";
-import SkillVersionHistory from "./pages/skills/SkillVersionHistory";
-import Deployment from "./pages/deployments/deployment/Deployment";
-import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
-import ProjectIdentityRedirect from "./pages/org/ProjectIdentityRedirect";
-import UserSessions from "./pages/org/UserSessions";
-import EventFeed from "./pages/data/EventFeed";
-import DataExports from "./pages/data-exports/DataExports";
-import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
-import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
-import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
-import EnvironmentPage from "./pages/environments/Environment";
-import Environments, {
-  EnvironmentsRoot,
-} from "./pages/environments/Environments";
-import Home from "./pages/home/Home";
-import { ProjectGuidePage } from "./components/project-guide/ProjectGuidePage";
-import Integrations from "./pages/integrations/Integrations";
-import Login from "./pages/login/Login";
-import ExploreDemo from "./pages/demo/ExploreDemo";
-import SignUp from "./pages/login/SignUp";
-import { LogsRoot } from "./pages/logs/Logs";
-import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
-import AddMcpServer, { AddMcpServerRoot } from "./pages/mcp/add/AddMcpServer";
-import CreateFromSource from "./pages/mcp/add/CreateFromSource";
-import { RedirectToDeployments } from "./pages/mcp/add/LegacyRedirects";
-import Sources, { SourcesRoot } from "./pages/mcp/sources/Sources";
-import SourceDetailRoute from "./pages/mcp/sources/SourceDetail";
-import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
-import OrganizationGatewayPage from "./pages/mcp/OrganizationGateway";
-import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
-import { ToolsetSlugRedirectPage } from "./pages/mcp/ToolsetRedirect";
-import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
-import Costs from "./pages/costs/Costs";
-import {
-  BuiltInDashboardRoute,
-  DashboardRoute,
-  DashboardsIndex,
-  DashboardsRoot,
-} from "./pages/explore/Dashboards";
-import Explore from "./pages/explore/Explore";
-import SignalsIntelligenceRoute from "./components/signals-intelligence-route";
-import {
-  AgentsIndex,
-  PeopleIndex,
-  PeopleIndexRedirect,
-  IdentityDetailIndexRedirect,
-  IdentitiesRoot,
-} from "./pages/identities/IdentitiesIndex";
-import IdentityDetailRoot from "./pages/identities/IdentityDetailRoot";
-import IdentityOverview from "./pages/identities/IdentityOverview";
-import IdentityAccess from "./pages/identities/IdentityAccess";
-import IdentityUsage from "./pages/identities/IdentityUsage";
-import IdentitySecurity from "./pages/identities/IdentitySecurity";
-import IdentityFindingsPage from "./pages/identities/IdentityFindings";
-import IdentityCost from "./pages/identities/IdentityCost";
-import IdentityDevices from "./pages/identities/IdentityDevices";
-import IdentityConnections from "./pages/identities/IdentityConnections";
-import IdentityActivity from "./pages/identities/IdentityActivity";
-import IdentityAgentSection from "./pages/identities/IdentityAgentSection";
-import NewAgentIdentity from "./pages/agents/NewAgentIdentity";
-import EditAgentIdentity from "./pages/agents/EditAgentIdentity";
-import AgentManagementRedirect from "./pages/agents/AgentManagementRedirect";
-import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
-import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
-import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
-import CreateTunneledMcp from "./pages/sources/tunneled-mcp/CreateTunneledMcp";
-import OrgApiKeys from "./pages/org/OrgApiKeys";
-import Plugins, { PluginsRoot } from "./pages/plugins/Plugins";
-import PluginDetail from "./pages/plugins/PluginDetail";
-import OrgAuditLogs from "./pages/org/OrgAuditLogs";
-import OrgDomains from "./pages/org/OrgDomains";
-import OrgHome from "./pages/org/OrgHome";
-import OrgIdentity from "./pages/org/OrgIdentity";
-import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
-import OrgLogs from "./pages/org/OrgLogs";
-import OrgGateway from "./pages/org/OrgGateway";
-import HeadlessMode from "./pages/org/HeadlessMode";
-import PlatformMCPRedirect from "./pages/org/PlatformMCPRedirect";
-import OrgSkills from "./pages/org/OrgSkills";
-import ExternalCredentialDetail from "./pages/org/external-services/ExternalCredentialDetail";
-import {
-  ExternalServicesPage,
-  ExternalServicesRoot,
-} from "./pages/org/external-services/ExternalServices";
-import ExternalKeyDetail from "./pages/org/encryption-keys/ExternalKeyDetail";
-import JsonWebKeySetDetail, {
-  SigningKeySetsIndex,
-  SigningKeySetsRoot,
-} from "./pages/org/encryption-keys/jwks/JsonWebKeySetDetail";
-import {
-  EncryptionKeysPage,
-  EncryptionKeysRoot,
-} from "./pages/org/encryption-keys/EncryptionKeys";
-import OrgWebhooks from "./pages/org/OrgWebhooks";
-import UserSessionIssuerDetail from "./pages/user-session-issuers/UserSessionIssuerDetail";
-import {
-  UserSessionIssuersPage,
-  UserSessionIssuersRoot,
-} from "./pages/user-session-issuers/UserSessionIssuers";
-import {
-  RemoteIdentityProvidersPage,
-  RemoteIdentityProvidersRoot,
-} from "./pages/remote-identity-providers/RemoteIdentityProviders";
-import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
-import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
-import PlatformAdminOverview from "./pages/platform-admin/Overview";
-import PlatformAdminRbacOverride from "./pages/platform-admin/RbacOverride";
-import PlatformAdminOnboarding from "./pages/platform-admin/Onboarding";
-import PlatformAdminOpenRouterKeys from "./pages/platform-admin/OpenRouterKeys";
-import Playground from "./pages/playground/Playground";
-import NewPromptPage from "./pages/prompts/NewPrompt";
-import PromptPage from "./pages/prompts/Prompt";
-import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
-import SDK from "./pages/sdk/SDK";
-import Access from "./pages/access/Access";
-import { RoleEditorPage } from "./pages/access/RoleEditorPage";
-import RequestAccess from "./pages/access/RequestAccess";
-import Settings from "./pages/settings/Settings";
-import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
-import RiskOverviewRedirect from "./pages/security/RiskOverviewRedirect";
-import Watchdog from "./pages/security/watchdog/Watchdog";
-import RiskEventsPage from "./pages/security/RiskEventsPage";
-import {
-  ShadowAIRoot,
-  ShadowAISectionRedirect,
-  ShadowMCPIndexRedirect,
-  ShadowMCPServerLegacyRedirect,
-} from "./pages/shadow-ai/ShadowAI";
-import ShadowAIToolDetail from "./pages/shadow-ai/ShadowAIToolDetail";
-import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
-import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
-import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
-import DetectionRules from "./pages/security/DetectionRules";
-import Team from "./pages/team/Team";
-import {
-  KillswitchesRoot,
-  KillswitchIndexRedirect,
-  KillswitchRecordRedirect,
-} from "./pages/killswitch/KillswitchesRoot";
-
-const SetupWizard = React.lazy(() => import("./pages/setup/SetupWizard"));
-const SetupTaskRedirect = React.lazy(
-  () => import("./pages/setup/SetupTaskRedirect"),
-);
 
 type AppRouteBasic = {
   title: string;
@@ -180,8 +12,6 @@ type AppRouteBasic = {
   external?: boolean;
   icon?: IconName;
   customIcon?: React.ComponentType<{ className?: string }>;
-  component?: React.ComponentType;
-  indexComponent?: React.ComponentType;
   subPages?: AppRoutesBasic;
   unauthenticated?: boolean;
   outsideMainLayout?: boolean;
@@ -227,16 +57,12 @@ type RouteEntry = {
   | {
       external: true;
 
-      component?: never;
-      indexComponent?: never;
       unauthenticated?: never;
       subPages?: never;
     }
   | {
       external?: false;
 
-      component?: React.ComponentType;
-      indexComponent?: React.ComponentType;
       unauthenticated?: boolean;
       subPages?: Record<string, RouteEntry>;
       outsideMainLayout?: boolean;
@@ -248,25 +74,21 @@ const ROUTE_STRUCTURE = {
   login: {
     title: "Login",
     url: "/login",
-    component: Login,
     unauthenticated: true,
   },
   register: {
     title: "Register",
     url: "/register",
-    component: () => <Navigate to="/sign-up" replace />,
     unauthenticated: true,
   },
   exploreDemo: {
     title: "Explore demo",
     url: "/explore-demo",
-    component: ExploreDemo,
     unauthenticated: true,
   },
   signUp: {
     title: "Sign up",
     url: "/sign-up",
-    component: SignUp,
     unauthenticated: true,
   },
   home: {
@@ -275,12 +97,10 @@ const ROUTE_STRUCTURE = {
     title: "Project Overview",
     url: "",
     icon: "house",
-    component: Home,
   },
   guide: {
     title: "Project Guide",
     url: "guide",
-    component: ProjectGuidePage,
   },
   chat: {
     title: "Project Assistant",
@@ -288,13 +108,10 @@ const ROUTE_STRUCTURE = {
     icon: "message-circle",
     stage: "beta",
     // Layout route: renders the index (ChatHome) or a conversation subpage.
-    component: ChatRoot,
-    indexComponent: ChatHome,
     subPages: {
       conversation: {
         title: "Chat",
         url: ":chatId",
-        component: ChatConversation,
       },
     },
   },
@@ -302,30 +119,24 @@ const ROUTE_STRUCTURE = {
     title: "Playground",
     url: "playground",
     icon: "message-circle",
-    component: Playground,
   },
   integrations: {
     title: "Integrations",
     url: "integrations",
     icon: "package",
-    component: Integrations,
   },
   prompts: {
     title: "Prompts",
     url: "prompts",
     icon: "newspaper",
-    component: PromptsRoot,
-    indexComponent: Prompts,
     subPages: {
       newPrompt: {
         title: "New Prompt",
         url: "new",
-        component: NewPromptPage,
       },
       prompt: {
         title: "Edit Prompt",
         url: ":promptName",
-        component: PromptPage,
       },
     },
   },
@@ -334,18 +145,14 @@ const ROUTE_STRUCTURE = {
     url: "assistants",
     icon: "bot",
     stage: "beta",
-    component: AssistantsRoot,
-    indexComponent: AssistantsIndex,
     subPages: {
       newAssistant: {
         title: "New Assistant",
         url: "new",
-        component: NewAssistantPage,
       },
       detail: {
         title: "Assistant",
         url: ":assistantId",
-        component: AssistantPage,
       },
     },
   },
@@ -354,61 +161,49 @@ const ROUTE_STRUCTURE = {
     url: "signals-intelligence",
     icon: "radio",
     stage: "preview",
-    component: SignalsIntelligenceRoute,
   },
   skills: {
     title: "Skills",
     url: "skills",
     icon: "terminal",
-    component: Skills,
-    indexComponent: SkillsList,
     subPages: {
       detail: {
         title: "Skill",
         url: ":skillId",
-        component: SkillDetailRoot,
         subPages: {
           overview: {
             title: "Skill Overview",
             url: "overview",
-            component: SkillOverview,
           },
           content: {
             title: "Skill Content",
             url: "content",
-            component: SkillContent,
           },
           usage: {
             title: "Skill Usage",
             url: "usage",
-            component: SkillUsage,
           },
           scoredSessions: {
             title: "Scored Sessions",
             url: "scored-sessions",
-            component: SkillScoredSessions,
           },
           feedback: {
             title: "Agent Feedback",
             url: "feedback",
-            component: SkillFeedback,
           },
           versions: {
             title: "Skill Version History",
             url: "versions",
-            component: SkillVersionHistory,
             subPages: {
               version: {
                 title: "Skill Version",
                 url: ":versionId",
-                component: SkillVersionHistory,
               },
             },
           },
           settings: {
             title: "Settings",
             url: "settings",
-            component: SkillSettings,
           },
         },
       },
@@ -418,8 +213,6 @@ const ROUTE_STRUCTURE = {
     title: "MCP",
     url: "mcp",
     icon: "network",
-    component: MCPRoot,
-    indexComponent: MCPPage,
     subPages: {
       // S-853: MCP is the inventory, so every way of adding a server starts
       // here. Options are named for how the server is reached rather than for
@@ -432,33 +225,26 @@ const ROUTE_STRUCTURE = {
       add: {
         title: "Add MCP Server",
         url: "add",
-        component: AddMcpServerRoot,
-        indexComponent: AddMcpServer,
         subPages: {
           remote: {
             title: "Add Remote MCP Server",
             url: "remote",
-            component: CreateRemoteMcp,
           },
           tunneled: {
             title: "Add Tunneled MCP Server",
             url: "tunneled",
-            component: CreateTunneledMcp,
           },
           fromSource: {
             title: "From Existing Source",
             url: "from-existing-source",
-            component: CreateFromSource,
           },
           openapi: {
             title: "Add OpenAPI",
             url: "openapi",
-            component: UploadOpenAPI,
           },
           function: {
             title: "Add Function",
             url: "function",
-            component: FunctionsOnboarding,
           },
         },
       },
@@ -469,14 +255,10 @@ const ROUTE_STRUCTURE = {
       catalog: {
         title: "Catalog",
         url: "catalog",
-        component: CatalogRoot,
-        indexComponent: Catalog,
         subPages: {
           detail: {
             title: "Server Details",
             url: ":serverSpecifier",
-            component: CatalogDetailRoot,
-            indexComponent: CatalogDetail,
           },
         },
       },
@@ -485,18 +267,14 @@ const ROUTE_STRUCTURE = {
       deployments: {
         title: "Deployments",
         url: "deployments",
-        component: Deployments,
       },
       sources: {
         title: "Sources",
         url: "sources",
-        component: SourcesRoot,
-        indexComponent: Sources,
         subPages: {
           detail: {
             title: "Source",
             url: ":sourceId",
-            component: SourceDetailRoute,
           },
         },
       },
@@ -507,14 +285,12 @@ const ROUTE_STRUCTURE = {
       organizationGateway: {
         title: "Organization Gateway",
         url: "organization-gateway",
-        component: OrganizationGatewayPage,
       },
       // Gateway Endpoints (meta MCP servers). Addressed by id: a gateway has
       // no slug of its own — routing identity lives on its mcp_endpoints.
       gateway: {
         title: "Gateway Details",
         url: "gateway/:gatewayId",
-        component: GatewayDetailPage,
         subPages: {
           overview: {
             title: "Gateway Overview",
@@ -553,7 +329,6 @@ const ROUTE_STRUCTURE = {
       details: {
         title: "MCP Server Details",
         url: ":mcpServerSlug",
-        component: MCPServerDetails,
         subPages: {
           overview: {
             title: "MCP Server Overview",
@@ -615,7 +390,6 @@ const ROUTE_STRUCTURE = {
   toolset: {
     title: "Toolset",
     url: "toolsets/:toolsetSlug",
-    component: ToolsetSlugRedirectPage,
     legacyRedirect: true,
     subPages: {
       overview: { title: "Toolset Overview", url: "overview" },
@@ -638,13 +412,10 @@ const ROUTE_STRUCTURE = {
     title: "Environments",
     url: "environments",
     icon: "blocks",
-    component: EnvironmentsRoot,
-    indexComponent: Environments,
     subPages: {
       environment: {
         title: "Environment Details",
         url: ":environmentSlug",
-        component: EnvironmentPage,
       },
     },
   },
@@ -652,34 +423,26 @@ const ROUTE_STRUCTURE = {
     title: "Triggers",
     url: "triggers",
     icon: "zap",
-    component: TriggersRoot,
-    indexComponent: TriggersIndex,
   },
   insights: {
     title: "MCP & Tools",
     url: "insights",
     icon: "layout-dashboard",
-    component: InsightsRoot,
-    indexComponent: InsightsHooksPage,
   },
   mcpSessions: {
     title: "MCP Sessions",
     url: "mcp-sessions",
     icon: "users",
-    component: UserSessions,
   },
 
   remoteIdentityProviders: {
     title: "Authorization Servers",
     url: "remote-identity-providers",
     icon: "key-round",
-    component: RemoteIdentityProvidersRoot,
-    indexComponent: RemoteIdentityProvidersPage,
     subPages: {
       issuerDetail: {
         title: "Authorization Server",
         url: ":issuerId",
-        component: RemoteIdentityProviderDetail,
         subPages: {
           overview: { title: "Overview", url: "overview" },
           clients: { title: "Clients", url: "clients" },
@@ -689,7 +452,6 @@ const ROUTE_STRUCTURE = {
       clientDetail: {
         title: "Remote Session Client",
         url: ":issuerId/clients/:clientId",
-        component: RemoteSessionClientDetail,
         subPages: {
           overview: { title: "Overview", url: "overview" },
           mcpServers: { title: "MCP Servers", url: "mcp-servers" },
@@ -712,7 +474,6 @@ const ROUTE_STRUCTURE = {
     url: "agent-management",
     icon: "bot",
     legacyRedirect: true,
-    component: AgentManagementRedirect,
   },
   // One page per person, reached from every surface that renders a human. The
   // URL segment is an identity URN (`user:...`, `email:...`, `external:...`),
@@ -728,89 +489,69 @@ const ROUTE_STRUCTURE = {
     title: "Identities",
     url: "identities",
     icon: "users",
-    component: IdentitiesRoot,
     // The bare URL holds no roster of its own: people and agents are two
     // rosters, and this sends you to the people.
-    indexComponent: PeopleIndexRedirect,
     subPages: {
       people: {
         title: "People",
         url: "people",
         icon: "users",
-        component: PeopleIndex,
       },
       agents: {
         title: "Agents",
         url: "agents",
         icon: "bot",
         stage: "preview",
-        // indexComponent, not component: a route with children renders its
-        // component as their layout, and the roster has no outlet, so it
-        // would render in place of every child.
-        indexComponent: AgentsIndex,
         subPages: {
           new: {
             title: "New Agent Identity",
             url: "new",
-            component: NewAgentIdentity,
           },
           edit: {
             title: "Edit Agent Identity",
             url: ":agentId/edit",
-            component: EditAgentIdentity,
           },
         },
       },
       detail: {
         title: "Identity",
         url: ":identityUrn",
-        component: IdentityDetailRoot,
-        indexComponent: IdentityDetailIndexRedirect,
         subPages: {
           overview: {
             title: "Identity Overview",
             url: "overview",
-            component: IdentityOverview,
           },
           access: {
             title: "Identity Access",
             url: "access",
-            component: IdentityAccess,
           },
           usage: {
             title: "Identity Usage",
             url: "usage",
-            component: IdentityUsage,
           },
           security: {
             title: "Identity Security",
             url: "security",
-            component: IdentitySecurity,
           },
           findings: {
             title: "Identity Findings",
             url: "findings",
-            component: IdentityFindingsPage,
           },
           cost: {
             title: "Identity Cost",
             url: "cost",
-            component: IdentityCost,
           },
           connections: {
             title: "Identity Connections",
             url: "connections",
-            component: IdentityConnections,
           },
           devices: {
             title: "Identity Devices",
             url: "devices",
-            component: IdentityDevices,
           },
           activity: {
             title: "Identity Activity",
             url: "activity",
-            component: IdentityActivity,
           },
           // An agent is a different subject from a person, and its sections
           // are named for what an agent holds. They are their own segments so
@@ -820,12 +561,10 @@ const ROUTE_STRUCTURE = {
           permissions: {
             title: "Agent Permissions",
             url: "permissions",
-            component: IdentityAgentSection,
           },
           credentials: {
             title: "Agent Credentials",
             url: "credentials",
-            component: IdentityAgentSection,
           },
           // The section this one was renamed from. Kept so the links and
           // bookmarks that name it still resolve: the page itself sends the
@@ -833,17 +572,14 @@ const ROUTE_STRUCTURE = {
           provisioning: {
             title: "Agent Credentials",
             url: "provisioning",
-            component: IdentityAgentSection,
           },
           sessions: {
             title: "Agent Sessions",
             url: "sessions",
-            component: IdentityAgentSection,
           },
           controls: {
             title: "Agent Controls",
             url: "controls",
-            component: IdentityAgentSection,
           },
         },
       },
@@ -853,7 +589,6 @@ const ROUTE_STRUCTURE = {
     title: "Costs",
     url: "costs",
     icon: "credit-card",
-    component: Costs,
     subPages: {
       // Catch-all so the drill path (`/costs/Division~R&D/Department~Eng/…`)
       // renders the same explorer at any depth. CostsExplorer reads the drill
@@ -861,7 +596,6 @@ const ROUTE_STRUCTURE = {
       drill: {
         title: "Costs",
         url: "*",
-        component: Costs,
       },
     },
   },
@@ -869,26 +603,21 @@ const ROUTE_STRUCTURE = {
     title: "Explore",
     url: "explore",
     icon: "telescope",
-    component: Explore,
     stage: "preview",
   },
   dashboards: {
     title: "Dashboards",
     url: "dashboards",
     icon: "layout-grid",
-    component: DashboardsRoot,
-    indexComponent: DashboardsIndex,
     stage: "preview",
     subPages: {
       builtIn: {
         title: "Dashboard",
         url: "builtin/:slug",
-        component: BuiltInDashboardRoute,
       },
       detail: {
         title: "Dashboard",
         url: ":dashboardId",
-        component: DashboardRoute,
       },
     },
   },
@@ -896,26 +625,22 @@ const ROUTE_STRUCTURE = {
     title: "Tool Logs",
     url: "logs",
     icon: "logs",
-    component: LogsRoot,
   },
   agentSessions: {
     title: "Agent Sessions",
     url: "agent-sessions",
     icon: "message-square",
-    component: ChatSessions,
   },
   orgMemory: {
     title: "Org Memory",
     url: "org-memory",
     icon: "brain",
     stage: "preview",
-    component: OrgMemory,
   },
   watchdog: {
     title: "Watchdog",
     url: "watchdog",
     icon: "radar",
-    component: Watchdog,
   },
   // Retired page: old links and bookmarks, including its drill-downs, land on
   // Watchdog.
@@ -923,7 +648,6 @@ const ROUTE_STRUCTURE = {
     title: "Risk Overview",
     url: "risk-overview/*",
     legacyRedirect: true,
-    component: RiskOverviewRedirect,
   },
   // Legacy URL: Detection Rules lives as a Guardrails tab now; the
   // component redirects there (carrying ?rule= deep links along). Kept out of
@@ -932,25 +656,20 @@ const ROUTE_STRUCTURE = {
     title: "Detection Rules",
     url: "detection-rules",
     icon: "scan-search",
-    component: DetectionRules,
   },
   policyCenter: {
     title: "Guardrails",
     url: "risk-policies",
     icon: "shield-check",
     // Layout route: renders the policy list (index) or a policy detail subpage.
-    component: PolicyCenterRoot,
-    indexComponent: PolicyCenter,
     subPages: {
       new: {
         title: "New policy",
         url: "new",
-        component: PolicyNew,
       },
       detail: {
         title: "Policy",
         url: ":policyId",
-        component: PolicyDetail,
       },
     },
   },
@@ -958,7 +677,6 @@ const ROUTE_STRUCTURE = {
     title: "Risk Events",
     url: "risk-events",
     icon: "flag",
-    component: RiskEventsPage,
   },
   // Shadow AI lives in Guardrails (the Shadow AI policy and its targets tab)
   // and is not in the nav. Its section URLs stay because tickets, bookmarks
@@ -971,62 +689,48 @@ const ROUTE_STRUCTURE = {
     title: "Shadow AI",
     url: "shadow-ai",
     icon: "shield",
-    component: ShadowAIRoot,
-    indexComponent: ShadowAISectionRedirect,
     subPages: {
       // A tool's detail is nested under its category, as the server detail
       // is under MCPs, so the breadcrumb says which kind a pasted link is.
       harnesses: {
         title: "Harnesses",
         url: "harnesses",
-        component: ShadowAIRoot,
-        indexComponent: ShadowAISectionRedirect,
         subPages: {
           detail: {
             title: "Shadow AI Tool",
             url: ":targetId",
-            component: ShadowAIToolDetail,
           },
         },
       },
       assistants: {
         title: "Assistants",
         url: "assistants",
-        component: ShadowAIRoot,
-        indexComponent: ShadowAISectionRedirect,
         subPages: {
           detail: {
             title: "Shadow AI Tool",
             url: ":targetId",
-            component: ShadowAIToolDetail,
           },
         },
       },
       models: {
         title: "Models",
         url: "models",
-        component: ShadowAIRoot,
-        indexComponent: ShadowAISectionRedirect,
         subPages: {
           detail: {
             title: "Shadow AI Tool",
             url: ":targetId",
-            component: ShadowAIToolDetail,
           },
         },
       },
       mcps: {
         title: "MCPs",
         url: "mcps",
-        component: ShadowAIRoot,
         // The MCPs index was the approvals queue; it lands on the MCP
         // approvals tab of Guardrails rather than the policies list.
-        indexComponent: ShadowMCPIndexRedirect,
         subPages: {
           detail: {
             title: "Shadow MCP Server",
             url: ":serverSlug",
-            component: ShadowMCPServerDetail,
           },
         },
       },
@@ -1040,13 +744,10 @@ const ROUTE_STRUCTURE = {
   shadowMCP: {
     title: "Shadow MCP",
     url: "shadow-mcp",
-    component: ShadowAIRoot,
-    indexComponent: ShadowMCPIndexRedirect,
     subPages: {
       detail: {
         title: "Shadow MCP Server",
         url: ":serverSlug",
-        component: ShadowMCPServerLegacyRedirect,
       },
     },
   },
@@ -1054,22 +755,18 @@ const ROUTE_STRUCTURE = {
     title: "SDKs",
     url: "sdks",
     icon: "code",
-    component: SDK,
   },
   deployments: {
     title: "Deployments",
     url: "deployments",
     icon: "history",
-    component: DeploymentsRoot,
     // The listing lives on the MCP page as a tab now; this index only
     // forwards. The detail route below stays put — it is the URL the CLI
     // prints after a push.
-    indexComponent: RedirectToDeployments,
     subPages: {
       deployment: {
         title: "Overview",
         url: ":deploymentId",
-        component: Deployment,
       },
     },
   },
@@ -1077,8 +774,6 @@ const ROUTE_STRUCTURE = {
     title: "Plugins",
     url: "plugins",
     icon: "puzzle",
-    component: PluginsRoot,
-    indexComponent: Plugins,
     subPages: {
       detail: {
         title: "Plugin",
@@ -1086,7 +781,6 @@ const ROUTE_STRUCTURE = {
         // PluginDetail renders every section itself, picking the active one
         // from the path — the subpages exist to own the URLs (same shape as
         // mcp.details).
-        component: PluginDetail,
         subPages: {
           overview: {
             title: "Plugin Overview",
@@ -1117,7 +811,6 @@ const ROUTE_STRUCTURE = {
     title: "Project settings",
     url: "settings",
     icon: "settings",
-    component: Settings,
   },
   docs: {
     title: "Docs",
@@ -1127,7 +820,7 @@ const ROUTE_STRUCTURE = {
   },
 } satisfies Record<string, RouteEntry>;
 
-type RouteStructure = typeof ROUTE_STRUCTURE;
+export type RouteStructure = typeof ROUTE_STRUCTURE;
 
 /**
  * The point of all this type magic is to make it so you only have to define the routes once
@@ -1338,77 +1031,61 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Home",
     url: "",
     icon: "house",
-    component: OrgHome,
   },
   billing: {
     title: "Billing",
     url: "billing",
     icon: "credit-card",
-    component: Outlet,
-    indexComponent: Billing,
     subPages: {
-      setup: { title: "Billing setup", url: "setup", component: BillingSetup },
-      paymentMethod: {
-        title: "Payment method",
-        url: "payment-method",
-        component: BillingPaymentMethod,
-      },
+      setup: { title: "Billing setup", url: "setup" },
+      paymentMethod: { title: "Payment method", url: "payment-method" },
     },
   },
   team: {
     title: "Team",
     url: "team",
     icon: "users-round",
-    component: Team,
   },
   apiKeys: {
     title: "API Keys",
     url: "api-keys",
     icon: "key-round",
-    component: OrgApiKeys,
   },
   domains: {
     title: "Custom Domain",
     url: "domains",
     icon: "globe",
-    component: OrgDomains,
   },
   logs: {
     title: "Logging & Telemetry",
     url: "logs",
     icon: "file-text",
-    component: OrgLogs,
   },
   gateway: {
     title: "Org Gateway",
     url: "gateway",
     icon: "network",
-    component: OrgGateway,
   },
   legacyData: {
     title: "Event Feed",
     url: "data",
     icon: "activity",
-    component: LegacyDataRedirect,
   },
   data: {
     title: "Event Feed",
     url: "data/event-feed",
     icon: "activity",
     stage: "preview",
-    component: EventFeed,
   },
   dataExports: {
     title: "Exports",
     url: "data/exports",
     icon: "send",
-    component: DataExports,
   },
   skills: {
     title: "Skills",
     url: "skills",
     icon: "terminal",
-    component: OrgSkills,
   },
   // Legacy URL: Platform MCP setup is what headless mode does now, so the old
   // standalone page redirects there. Kept out of the sidebar, and flagged so
@@ -1417,20 +1094,17 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Platform MCP",
     url: "platform-mcp",
     legacyRedirect: true,
-    component: PlatformMCPRedirect,
   },
   aiIntegrations: {
     title: "AI Integrations",
     url: "ai-integrations",
     icon: "bot",
-    component: OrgAIIntegrations,
   },
   webhooks: {
     title: "Webhooks",
     url: "webhooks",
     icon: "webhook",
     stage: "beta",
-    component: OrgWebhooks,
   },
   // Rolled out behind gram-user-session-issuer-dashboard, which the root
   // checks; the sidebar hides the entry while it is off.
@@ -1438,13 +1112,10 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Speakeasy Authorization Servers",
     url: "user-session-issuers",
     icon: "key-round",
-    component: UserSessionIssuersRoot,
-    indexComponent: UserSessionIssuersPage,
     subPages: {
       issuerDetail: {
         title: "Speakeasy Authorization Server",
         url: ":issuerId",
-        component: UserSessionIssuerDetail,
       },
     },
   },
@@ -1452,8 +1123,6 @@ const ORG_ROUTE_STRUCTURE = {
     title: "External Services",
     url: "external-services",
     icon: "cloud",
-    component: ExternalServicesRoot,
-    indexComponent: ExternalServicesPage,
     subPages: {
       // Credentials are namespaced under their own collection segment so that a
       // second kind of external-service resource (encryption keys) can sit
@@ -1466,7 +1135,6 @@ const ORG_ROUTE_STRUCTURE = {
       credentialDetail: {
         title: "External Credential",
         url: "credentials/:provider/:credentialId",
-        component: ExternalCredentialDetail,
         subPages: {
           overview: { title: "Overview", url: "overview" },
           kmsKeys: { title: "KMS Keys", url: "kms-keys" },
@@ -1479,8 +1147,6 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Encryption Keys",
     url: "encryption-keys",
     icon: "key-square",
-    component: EncryptionKeysRoot,
-    indexComponent: EncryptionKeysPage,
     subPages: {
       // Keyed on the provider for the same reason credentials are: the detail
       // page is per-provider, with its own get/update endpoints and its own
@@ -1489,7 +1155,6 @@ const ORG_ROUTE_STRUCTURE = {
       keyDetail: {
         title: "Encryption Key",
         url: ":provider/:keyId",
-        component: ExternalKeyDetail,
         subPages: {
           overview: { title: "Overview", url: "overview" },
           signingKeys: { title: "Signing Keys", url: "signing-keys" },
@@ -1508,13 +1173,10 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Signing Key Sets",
     url: "signing-keys",
     icon: "key-round",
-    component: SigningKeySetsRoot,
-    indexComponent: SigningKeySetsIndex,
     subPages: {
       setDetail: {
         title: "Signing Key Set",
         url: ":setId",
-        component: JsonWebKeySetDetail,
         subPages: {
           overview: { title: "Overview", url: "overview" },
           keys: { title: "Keys", url: "keys" },
@@ -1527,7 +1189,6 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Audit Logs",
     url: "audit-logs",
     icon: "history",
-    component: OrgAuditLogs,
   },
   // Killswitches are managed on the identity of the person they restrict, so
   // this route no longer carries a roster: its index forwards to the people it
@@ -1537,13 +1198,10 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Killswitch",
     url: "killswitch",
     icon: "shield-off",
-    component: KillswitchesRoot,
-    indexComponent: KillswitchIndexRedirect,
     subPages: {
       detail: {
         title: "Killswitch detail",
         url: ":killswitchId",
-        component: KillswitchRecordRedirect,
       },
     },
   },
@@ -1551,25 +1209,21 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Agent Identity",
     url: "agent-management",
     legacyRedirect: true,
-    component: ProjectIdentityRedirect,
   },
   legacyMcpSessions: {
     title: "MCP Sessions",
     url: "mcp-sessions",
     legacyRedirect: true,
-    component: ProjectIdentityRedirect,
   },
   legacyRemoteIdentityProviders: {
     title: "Authorization Servers",
     url: "remote-identity-providers/*",
     legacyRedirect: true,
-    component: ProjectIdentityRedirect,
   },
   identity: {
     title: "IDP and SSO",
     url: "identity",
     icon: "fingerprint",
-    component: OrgIdentity,
   },
   // Platform Admin pages — the former floating Developer Toolkit, one page per
   // old tab. Speakeasy staff only (plus local dev); see PlatformAdminGate.
@@ -1577,52 +1231,42 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Platform Admin Overview",
     url: "platform-admin",
     icon: "crown",
-    component: PlatformAdminOverview,
   },
   platformAdminRbac: {
     title: "RBAC Override",
     url: "platform-admin/rbac",
     icon: "shield",
-    component: PlatformAdminRbacOverride,
   },
   platformAdminOnboarding: {
     title: "Enterprise Onboarding",
     url: "platform-admin/onboarding",
     icon: "mail",
-    component: PlatformAdminOnboarding,
   },
   platformAdminOpenRouterKeys: {
     title: "OpenRouter Keys",
     url: "platform-admin/openrouter-keys",
     icon: "key-round",
-    component: PlatformAdminOpenRouterKeys,
   },
   deviceAgent: {
     title: "Device Agent",
     url: "device-agent",
     icon: "laptop",
-    component: DeviceAgentRoot,
-    indexComponent: DeviceAgent,
     subPages: {
       configuration: {
         title: "Configuration",
         url: "configuration",
-        component: DeviceAgent,
       },
       scanTargets: {
         title: "Scan Targets",
         url: "scan-targets",
-        component: DeviceAgent,
       },
       mdmIntegrations: {
         title: "MDM Integrations",
         url: "mdm-integrations",
-        component: DeviceAgent,
       },
       mdmDetail: {
         title: "MDM Integration",
         url: "mdm-integrations/:provider",
-        component: MdmIntegrationDetail,
       },
     },
   },
@@ -1630,27 +1274,22 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Roles & Permissions",
     url: "access",
     icon: "shield",
-    component: Access,
     subPages: {
       roles: {
         title: "Roles & Permissions",
         url: "roles",
-        component: Access,
       },
       members: {
         title: "Roles & Permissions",
         url: "members",
-        component: Access,
       },
       assignments: {
         title: "MCP Assignments",
         url: "assignments",
-        component: Access,
       },
       challenges: {
         title: "Roles & Permissions",
         url: "challenges",
-        component: Access,
       },
     },
   },
@@ -1662,24 +1301,20 @@ const ORG_ROUTE_STRUCTURE = {
   createRole: {
     title: "Create Role",
     url: "access/roles/create",
-    component: RoleEditorPage,
   },
   editRole: {
     title: "Edit Role",
     url: "access/roles/:roleId/edit",
-    component: RoleEditorPage,
   },
   requestAccess: {
     title: "Request Access",
     url: "request-access",
-    component: RequestAccess,
     outsideMainLayout: true,
   },
   setup: {
     title: "Setup",
     url: "setup",
     icon: "settings",
-    component: SetupWizard,
     outsideMainLayout: true,
   },
   // Legacy per-card pages (setup/idp, setup/wizard, ...) open the wizard on
@@ -1688,7 +1323,6 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Setup task",
     url: "setup/:taskSlug",
     icon: "list-checks",
-    component: SetupTaskRedirect,
     outsideMainLayout: true,
   },
   // Headless mode renders its own chrome (mode tabs only, no sidebar or
@@ -1696,12 +1330,11 @@ const ORG_ROUTE_STRUCTURE = {
   headless: {
     title: "Headless",
     url: "headless",
-    component: HeadlessMode,
     outsideMainLayout: true,
   },
 } satisfies Record<string, RouteEntry>;
 
-type OrgRouteStructure = typeof ORG_ROUTE_STRUCTURE;
+export type OrgRouteStructure = typeof ORG_ROUTE_STRUCTURE;
 type OrgRoutesWithGoTo = TransformRouteToGoTo<OrgRouteStructure>;
 
 function routePaths(

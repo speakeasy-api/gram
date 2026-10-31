@@ -5,17 +5,8 @@ import { McpTabs } from "./McpTabs";
 
 const projectPath = "/org/projects/proj";
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: Object.assign(
-      { href: () => `${projectPath}/mcp` },
-      {
-        catalog: { href: () => `${projectPath}/mcp/catalog` },
-        sources: { href: () => `${projectPath}/mcp/sources` },
-        deployments: { href: () => `${projectPath}/mcp/deployments` },
-      },
-    ),
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "proj" }),
 }));
 
 afterEach(cleanup);

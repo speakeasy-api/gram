@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -54,9 +55,6 @@ vi.mock("@/hooks/useRootMcpEndpoint", () => ({
     isPending: false,
     setRootMcpEndpoint: vi.fn(),
   }),
-}));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ domains: { goTo: vi.fn() } }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
@@ -133,6 +131,7 @@ function renderSection(mcpServer: McpServer, endpoints: McpEndpoint[]) {
         mcpServer={mcpServer}
       />
     </TooltipProvider>,
+    { wrapper: MemoryRouter },
   );
 }
 

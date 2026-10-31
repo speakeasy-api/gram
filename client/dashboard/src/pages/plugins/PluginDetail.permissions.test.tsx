@@ -61,20 +61,9 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-a" }),
   useProject: () => ({ id: "project-a", slug: "project-a" }),
 }));
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    plugins: {
-      href: () => "/plugins",
-      detail: {
-        overview: { href: (id: string) => `/plugins/${id}/overview` },
-        servers: { href: (id: string) => `/plugins/${id}/servers` },
-        skills: { href: (id: string) => `/plugins/${id}/skills` },
-        assignments: { href: (id: string) => `/plugins/${id}/assignments` },
-        settings: { href: (id: string) => `/plugins/${id}/settings` },
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({}),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project-a" }),
 }));
 vi.mock("@/components/command-palette/recentlyVisited", () => ({
   useRecentLabelOverride: () => {},
@@ -164,11 +153,18 @@ function renderAdmin(section = "overview", servers: object[] = [hostedServer]) {
   return render(
     <TooltipProvider>
       <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter initialEntries={[`/plugins/plugin-a/${section}`]}>
+        <MemoryRouter
+          initialEntries={[
+            `/org/projects/project-a/plugins/plugin-a/${section}`,
+          ]}
+        >
           <Routes>
-            <Route path="/plugins" element={<h1>Plugins</h1>} />
             <Route
-              path="/plugins/:pluginId/:section"
+              path="/org/projects/project-a/plugins"
+              element={<h1>Plugins</h1>}
+            />
+            <Route
+              path="/org/projects/project-a/plugins/:pluginId/:section"
               element={<PluginDetail />}
             />
           </Routes>

@@ -33,13 +33,14 @@ vi.mock("./pages/mcp/x/MCPServerDetails", () => ({
 
 import { mcpServerRouteParam, RESERVED_MCP_SEGMENTS } from "./lib/sources";
 import { legacyMcpRedirects, routesWithSubroutes } from "./route-elements";
+import { type PagedRoute, withProjectPages } from "./route-pages";
 import { useRoutes, type AppRoute } from "./routes";
 
 const BASE = "/acme/projects/default";
 
 // The routes App.tsx mounts inside the project layout.
-function layoutRoutes(routes: ReturnType<typeof useRoutes>): AppRoute[] {
-  return Object.values(routes).filter(
+function layoutRoutes(routes: ReturnType<typeof useRoutes>): PagedRoute[] {
+  return Object.values(withProjectPages(routes)).filter(
     (route) => !route.unauthenticated && !route.outsideMainLayout,
   );
 }

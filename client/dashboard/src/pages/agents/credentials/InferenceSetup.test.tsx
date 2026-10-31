@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InferenceSetup } from "./InferenceSetup";
 import { inferencePolicyGrants } from "./inferenceSetupInstructions";
@@ -40,6 +41,7 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ agents: { create: mocks.create } }),
+  useSlugs: () => ({ orgSlug: "example", projectSlug: "project_one" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
@@ -53,11 +55,6 @@ vi.mock("@/hooks/useRBAC", () => ({
         return mocks.projectWrite && resourceId === mocks.projectId;
       return false;
     },
-  }),
-}));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    access: { roles: { href: () => "/example/access/roles" } },
   }),
 }));
 vi.mock("../agent-policy-grants", () => ({ invalidateAgentPolicy: vi.fn() }));
@@ -171,9 +168,11 @@ function setup() {
   });
   const onDone = vi.fn<() => void>();
   const ui = () => (
-    <QueryClientProvider client={client}>
-      <InferenceSetup onDone={onDone} />
-    </QueryClientProvider>
+    <MemoryRouter>
+      <QueryClientProvider client={client}>
+        <InferenceSetup onDone={onDone} />
+      </QueryClientProvider>
+    </MemoryRouter>
   );
   const view = render(ui());
   return { ...view, refreshProject: () => view.rerender(ui()) };

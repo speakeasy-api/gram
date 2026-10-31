@@ -1,10 +1,12 @@
 import {
   cleanup,
   fireEvent,
-  render,
+  render as renderView,
   screen,
   waitFor,
 } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { MemoryRouter } from "react-router";
 import type { EnvironmentVariable } from "../mcp/environmentVariableUtils";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -38,24 +40,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/hooks/useToolsetUrl", () => ({
   useToolsetMcpTarget: () => mocks.target,
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    toolset: {
-      Link: ({
-        children,
-        params,
-        hash,
-      }: {
-        children: React.ReactNode;
-        params: [string];
-        hash?: string;
-      }) => (
-        <a href={`/toolsets/${params[0]}${hash ? `#${hash}` : ""}`}>
-          {children}
-        </a>
-      ),
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
   useGetMcpMetadata: () => ({}),
@@ -104,6 +90,8 @@ beforeEach(() => {
   mocks.connection.errorMessage = undefined;
 });
 
+const render = (ui: ReactElement) => renderView(ui, { wrapper: MemoryRouter });
+
 afterEach(cleanup);
 
 describe("authoritative MCP auth and session presentation", () => {
@@ -116,7 +104,11 @@ describe("authoritative MCP auth and session presentation", () => {
     "does not make auth decisions while target is %s",
     (status, message) => {
       mocks.target.status = status;
-      const auth = renderToStaticMarkup(<PlaygroundAuth toolset={toolset} />);
+      const auth = renderToStaticMarkup(
+        <MemoryRouter>
+          <PlaygroundAuth toolset={toolset} />
+        </MemoryRouter>,
+      );
       for (const html of [auth]) {
         expect(html).toContain(message);
         expect(html).not.toContain("No authentication required");
@@ -130,7 +122,11 @@ describe("authoritative MCP auth and session presentation", () => {
 
   it("renders selected server auth, not the toolset issuer", () => {
     mocks.target.userSessionIssuerId = "issuer-s";
-    const auth = renderToStaticMarkup(<PlaygroundAuth toolset={toolset} />);
+    const auth = renderToStaticMarkup(
+      <MemoryRouter>
+        <PlaygroundAuth toolset={toolset} />
+      </MemoryRouter>,
+    );
     expect(auth).toContain("Not Connected");
     expect(auth).not.toContain("No authentication required");
     expect(mocks.issuerConnection).toHaveBeenCalledOnce();
@@ -138,7 +134,11 @@ describe("authoritative MCP auth and session presentation", () => {
 
   it("shows ungated state only after authoritative resolution", () => {
     expect(
-      renderToStaticMarkup(<PlaygroundAuth toolset={toolset} />),
+      renderToStaticMarkup(
+        <MemoryRouter>
+          <PlaygroundAuth toolset={toolset} />
+        </MemoryRouter>,
+      ),
     ).toContain("No authentication required");
     expect(mocks.issuerConnection).not.toHaveBeenCalled();
   });
@@ -146,7 +146,11 @@ describe("authoritative MCP auth and session presentation", () => {
   it("keeps a pending connection distinct from not connected", () => {
     mocks.target.userSessionIssuerId = "issuer-s";
     mocks.connection.isLoading = true;
-    const html = renderToStaticMarkup(<PlaygroundAuth toolset={toolset} />);
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <PlaygroundAuth toolset={toolset} />
+      </MemoryRouter>,
+    );
     expect(html).not.toContain("Not Connected");
     expect(html).not.toContain("Connection unavailable");
     render(<PlaygroundAuth toolset={toolset} />);
@@ -160,7 +164,11 @@ describe("authoritative MCP auth and session presentation", () => {
     mocks.connection.isError = true;
     mocks.connection.errorMessage =
       "Unable to check the selected server connection.";
-    const html = renderToStaticMarkup(<PlaygroundAuth toolset={toolset} />);
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <PlaygroundAuth toolset={toolset} />
+      </MemoryRouter>,
+    );
     expect(html).toContain("Connection unavailable");
     expect(html).toContain(mocks.connection.errorMessage);
     expect(html).not.toContain("Not Connected");
@@ -189,7 +197,7 @@ describe("independent environment configuration", () => {
         screen
           .getByRole("link", { name: "Configure auth" })
           .getAttribute("href"),
-      ).toBe("/toolsets/legacy-t#authentication");
+      ).toBe("/org/projects/project/toolsets/legacy-t#authentication");
       const save = screen.getByRole("button", {
         name: "Save",
       }) as HTMLButtonElement;
@@ -227,13 +235,13 @@ describe("independent environment configuration", () => {
     const { rerender } = render(<PlaygroundAuth toolset={toolset} />);
     expect(
       screen.getByRole("link", { name: "Configure auth" }).getAttribute("href"),
-    ).toBe("/toolsets/legacy-t#authentication");
+    ).toBe("/org/projects/project/toolsets/legacy-t#authentication");
     rerender(
       <PlaygroundAuth toolset={{ ...toolset, slug: "another-toolset" }} />,
     );
     expect(
       screen.getByRole("link", { name: "Configure auth" }).getAttribute("href"),
-    ).toBe("/toolsets/another-toolset#authentication");
+    ).toBe("/org/projects/project/toolsets/another-toolset#authentication");
   });
 
   it("keeps Save disabled while saving", () => {

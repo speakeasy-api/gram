@@ -57,6 +57,7 @@ vi.mock("@gram/client/react-query/_context.js", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "project",
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
   useSdkClient: () => ({
     mcpServers: { create: api.create, list: api.readServers },
     metaMcp: { addMember: api.attach, listMembers: api.readMembers },
@@ -89,20 +90,6 @@ vi.mock("@/components/sources/SourceCard", () => ({
   SourceMcpIcon: () => <span />,
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: {
-      catalog: { href: () => "/catalog" },
-      details: { overview: { href: () => "/server" } },
-      add: Object.fromEntries(
-        ["remote", "tunneled", "openapi", "fromSource", "function"].map(
-          (key) => [key, { href: () => "/" + key }],
-        ),
-      ),
-    },
-  }),
-}));
-
 const ok = <T,>(value: T) => ({ ok: true as const, value });
 
 beforeEach(() => {

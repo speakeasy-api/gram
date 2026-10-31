@@ -17,20 +17,15 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => state.sdk,
   useProjectSlugForRequests: () => "project-one",
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "route-project" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
-vi.mock("react-router", () => ({ useNavigate: () => state.navigate }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: {
-      organizationGateway: { href: () => "/org/gateway" },
-      gateway: {
-        sessions: { href: (id: string) => `/gateway/${id}/sessions` },
-      },
-    },
-  }),
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useLocation: () => ({ pathname: "/", search: "" }),
+  useNavigate: () => state.navigate,
 }));
 vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
   buildMetaMcpServersQuery: () => ({
@@ -122,7 +117,7 @@ it("requests the SDK next cursor before exposing a later-page registration", asy
     )!;
     await registration.run("open");
     expect(state.navigate).toHaveBeenCalledWith(
-      "/gateway/gateway-one/sessions?registration=later-page",
+      "/acme/projects/project-one/mcp/gateway/gateway-one/sessions?registration=later-page",
     );
     expect(requests).toHaveLength(2);
   } finally {
