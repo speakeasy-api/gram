@@ -9,5 +9,7 @@ Agent setup fixes:
 - The verify step shows its green checks and hides troubleshooting once the agent connects.
 - The agent's recent changes read in words rather than audit codes.
 - The MCP connections table fits its panel.
-- The wizard summary says what the agent can do in words.
+- The wizard summary says what the agent can do in words, with the scopes on hover.
+- A taken agent name is caught on the name step, before Create agent.
+- The server info popover shows how each server signs in, listing every option it offers.
 - The setup text names OpenClaw.
