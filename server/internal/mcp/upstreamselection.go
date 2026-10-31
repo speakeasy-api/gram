@@ -700,7 +700,7 @@ func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember,
 		return
 	}
 	if err != nil {
-		member.upstreamUnavailable = &metaMemberError{message: "This server's connection could not be checked; try again later."}
+		member.upstreamUnavailable = memberDiscoveryError{metaMemberError: &metaMemberError{message: "This server's connection could not be checked; try again later."}, status: 0, retryable: false, retryAfter: 0}
 		return
 	}
 	switch res.outcome {
@@ -752,7 +752,7 @@ func (c *memberChoices) tokens(ctx context.Context, member metaMember) (map[uuid
 		case <-entry.done:
 			return entry.tokens, entry.err
 		case <-ctx.Done():
-			return nil, &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}
+			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}, status: 0, retryable: false, retryAfter: 0}
 		}
 	}
 
@@ -763,7 +763,7 @@ func (c *memberChoices) tokens(ctx context.Context, member metaMember) (map[uuid
 	case errors.Is(err, remotesessions.ErrNoValidToken):
 		err = &metaMemberError{message: fmt.Sprintf("server %q's attached connection is no longer available; it must be attached again", member.slug)}
 	case err != nil:
-		err = &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}
+		err = memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}, status: 0, retryable: false, retryAfter: 0}
 	}
 	if err != nil {
 		c.mu.Lock()

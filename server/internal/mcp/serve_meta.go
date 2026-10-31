@@ -595,6 +595,12 @@ func (s *Service) callMetaServerTool(
 // logMetaDiscovery writes one meta_discovery telemetry row for a gateway
 // discovery call. Failures record their oops status code.
 func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, toolName string, start time.Time, handlerErr error) {
+	s.telemLogger.Log(ctx, metaDiscoveryLogParams(ctx, gate, toolName, start, handlerErr))
+}
+
+// metaDiscoveryLogParams builds a meta_discovery telemetry row for a gateway
+// discovery call that took since start and failed with handlerErr, if any.
+func metaDiscoveryLogParams(ctx context.Context, gate *metaGateContext, toolName string, start time.Time, handlerErr error) tm.LogParams {
 	logAttrs := tm.HTTPLogAttributes{
 		attr.EventSourceKey:     string(tm.EventSourceMetaDiscovery),
 		attr.MetaMcpServerIDKey: gate.metaServerID.String(),
@@ -619,7 +625,7 @@ func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, t
 	if gate.apiKeyID != "" {
 		logAttrs[attr.APIKeyIDKey] = gate.apiKeyID
 	}
-	s.telemLogger.Log(ctx, tm.LogParams{
+	return tm.LogParams{
 		Timestamp: time.Now(),
 		ToolInfo: tm.ToolInfo{
 			ID: gate.metaServerID.String(),
@@ -633,7 +639,7 @@ func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, t
 		},
 		UserInfo:   tm.UserInfoByID(gate.userID),
 		Attributes: logAttrs,
-	})
+	}
 }
 
 // catalogSelectedMembers keeps the members with at least one tool a Specific
