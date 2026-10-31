@@ -2571,7 +2571,17 @@ plugin.register({ on(name, fn) { handlers[name] = fn } })
 const reply = await handlers.before_tool_call({ toolName: "exec", toolCallId: "t1", params: {} }, { sessionId: "s1" })
 if (reply?.block) throw new Error("the daemon's allow was reported as a block")
 `
+	// An agent_end with no llm_output yet waits for one; a shutdown during
+	// that wait must not let it start the daemon afterwards.
+	endThenStop := `import plugin from "./index.js"
+const handlers = {}
+plugin.register({ on(name, fn) { (handlers[name] ??= []).push(fn) } })
+for (const end of handlers.agent_end) await end({ runId: "r1" }, { sessionId: "s1" })
+for (const stop of handlers.gateway_stop) await stop({}, {})
+await new Promise((resolve) => setTimeout(resolve, 2500))
+`
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "register.mjs"), []byte(registerOnly), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "end-then-stop.mjs"), []byte(endThenStop), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "hook.mjs"), []byte(oneHook), 0o600))
 
 	run := func(script string) string {
@@ -2593,6 +2603,7 @@ if (reply?.block) throw new Error("the daemon's allow was reported as a block")
 	}
 
 	require.Empty(t, run("register.mjs"), "loading the plugin must not start the daemon")
+	require.Empty(t, run("end-then-stop.mjs"), "a deferred agent_end must not start the daemon after gateway_stop")
 	require.Equal(t, "started", run("hook.mjs"), "the first hook starts the daemon once")
 }
 

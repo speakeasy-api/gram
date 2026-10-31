@@ -2118,6 +2118,8 @@ export default {
     // load plugins inside short-lived CLI commands such as plugins install,
     // and a daemon started at register kept those commands from exiting.
     let child = null
+    // Set at gateway_stop: no hook may start a daemon after shutdown.
+    let stopped = false
     let seq = 0
     const pending = new Map()
     // agent_end carries no final message or usage; cache the turn's
@@ -2167,7 +2169,10 @@ export default {
     }
 
     const call = (hook, event, ctx, timeoutMs) => {
-      if (child === null) child = startDaemon()
+      if (child === null) {
+        if (stopped) return Promise.resolve({ timedOut: true })
+        child = startDaemon()
+      }
       if (child.exitCode !== null || !child.stdin?.writable) {
         return Promise.resolve({ timedOut: true })
       }
@@ -2286,6 +2291,10 @@ export default {
     }
 
     api.on("gateway_stop", () => {
+      stopped = true
+      // A deferred agent_end would otherwise fire after shutdown.
+      for (const { timer } of pendingEnds.values()) clearTimeout(timer)
+      pendingEnds.clear()
       if (child === null) return
       try {
         child.stdin.end()
