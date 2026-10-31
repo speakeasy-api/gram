@@ -7,6 +7,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
@@ -31,9 +33,7 @@ const (
 	// project day that exceeds it keeps its newest items.
 	maxPromptRunes = 120_000
 
-	// maxTitleRunes caps a chat title or memo author name in the prompt;
-	// titles are generated at 3 to 6 words and manual renames are limited
-	// to 200 runes.
+	// maxTitleRunes caps an input title in the prompt.
 	maxTitleRunes = 200
 
 	// inputSeparator sits between input blocks in the user message.
@@ -47,15 +47,18 @@ type Input struct {
 	// Kind says whether this is a chat summary, a memo or a child digest.
 	Kind SourceKind
 
+	// ID is the source row's id. The digest records the ids of the inputs
+	// its prompt actually held.
+	ID uuid.UUID
+
 	// At orders inputs: the summary time for chats, the creation time for
 	// memos and the period start for digests.
 	At time.Time
 
-	// Title is the chat title or digest period label. It may be empty.
+	// Title is the digest period label. It is empty for chats and memos:
+	// chat titles are not masked at rest, and memo authors stay out of
+	// team-wide digests.
 	Title string
-
-	// Author is the memo author's display name. It is empty for chats and digests.
-	Author string
 
 	// Text is the masked summary, memo or digest content.
 	Text string
@@ -83,11 +86,13 @@ var wordBudget = map[Level]int{
 }
 
 // Prompt builds the system and user messages for the digest of the period
-// at this level starting at start. It returns ok false when there is nothing
-// to fold, so the caller records an empty period without an LLM call.
-func (l Level) Prompt(start time.Time, inputs []Input) (system, user string, ok bool) {
+// at this level starting at start. used lists the inputs the prompt holds,
+// oldest first: when the period exceeds the prompt cap the oldest inputs are
+// left out, and the caller must record only used ones as covered so the rest
+// stay visible to recall. used is empty when there is nothing to fold.
+func (l Level) Prompt(start time.Time, inputs []Input) (system, user string, used []Input) {
 	if len(inputs) == 0 {
-		return "", "", false
+		return "", "", nil
 	}
 
 	what := "chat summaries and team memos"
@@ -100,6 +105,7 @@ func (l Level) Prompt(start time.Time, inputs []Input) (system, user string, ok 
 	slices.SortStableFunc(ordered, func(a, b Input) int { return a.At.Compare(b.At) })
 
 	blocks := make([]string, 0, len(ordered))
+	first := len(ordered)
 	total := 0
 	// Walk newest first so an over-long period keeps its latest material,
 	// then restore chronological order for the model.
@@ -114,11 +120,12 @@ func (l Level) Prompt(start time.Time, inputs []Input) (system, user string, ok 
 		}
 		total += n
 		blocks = append(blocks, block)
+		first = i
 	}
 	for i, j := 0, len(blocks)-1; i < j; i, j = i+1, j-1 {
 		blocks[i], blocks[j] = blocks[j], blocks[i]
 	}
-	return system, strings.Join(blocks, inputSeparator), true
+	return system, strings.Join(blocks, inputSeparator), ordered[first:]
 }
 
 func formatInput(in Input) string {
@@ -128,11 +135,6 @@ func formatInput(in Input) string {
 	if in.Title != "" {
 		head.WriteString(": ")
 		head.WriteString(conv.TruncateString(in.Title, maxTitleRunes))
-	}
-	if in.Author != "" {
-		head.WriteString(" (saved by ")
-		head.WriteString(conv.TruncateString(in.Author, maxTitleRunes))
-		head.WriteString(")")
 	}
 	head.WriteString(" · ")
 	head.WriteString(in.At.UTC().Format(time.DateOnly))

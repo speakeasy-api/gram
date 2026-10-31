@@ -235,14 +235,12 @@ func (m *MemoryDigests) enabledOrganizations(ctx context.Context, now time.Time)
 
 	enabled := make([]string, 0, len(orgIDs))
 	for _, orgID := range orgIDs {
-		var groups map[string]string
 		org, err := orgrepo.New(m.db).GetOrganizationMetadata(ctx, orgID)
 		if err != nil {
 			m.logger.WarnContext(ctx, "resolve organization slug for team memory flag", attr.SlogError(err), attr.SlogOrganizationID(orgID))
-		} else {
-			groups = feature.OrgProjectGroups(org.Slug, "")
+			continue
 		}
-		on, err := m.flags.IsFlagEnabled(ctx, feature.FlagTeamMemory, orgID, groups)
+		on, err := m.flags.IsFlagEnabled(ctx, feature.FlagTeamMemory, orgID, feature.OrgProjectGroups(org.Slug, ""))
 		if err != nil {
 			m.logger.WarnContext(ctx, "evaluate team memory flag", attr.SlogError(err), attr.SlogOrganizationID(orgID))
 			continue
@@ -289,26 +287,37 @@ func (m *MemoryDigests) buildOne(ctx context.Context, level memorydigest.Level, 
 			return false, fmt.Errorf("list child digests: %w", err)
 		}
 		for _, d := range children {
-			params.ChildDigestIds = append(params.ChildDigestIds, d.ID)
 			inputs = append(inputs, memorydigest.Input{
-				Kind:   memorydigest.SourceDigest,
-				At:     d.PeriodStart.Time,
-				Title:  child.Label(d.PeriodStart.Time),
-				Author: "",
-				Text:   d.Content,
+				Kind:  memorydigest.SourceDigest,
+				ID:    d.ID,
+				At:    d.PeriodStart.Time,
+				Title: child.Label(d.PeriodStart.Time),
+				Text:  d.Content,
 			})
 		}
 	} else {
 		var err error
-		inputs, err = m.dayInputs(ctx, c, start, end, &params)
+		inputs, err = m.dayInputs(ctx, c, start, end)
 		if err != nil {
 			return false, err
 		}
 	}
 
-	system, user, ok := level.Prompt(start, inputs)
-	if !ok {
+	system, user, used := level.Prompt(start, inputs)
+	if len(used) == 0 {
 		return false, nil
+	}
+	// Record only what the prompt held. Sources left out by the caps stay
+	// uncovered, so recall still shows them on their own.
+	for _, in := range used {
+		switch in.Kind {
+		case memorydigest.SourceChat:
+			params.ChatIds = append(params.ChatIds, in.ID)
+		case memorydigest.SourceMemo:
+			params.MemoIds = append(params.MemoIds, in.ID)
+		case memorydigest.SourceDigest:
+			params.ChildDigestIds = append(params.ChildDigestIds, in.ID)
+		}
 	}
 
 	content, usage, err := m.complete(ctx, c, system, user)
@@ -329,8 +338,8 @@ func (m *MemoryDigests) buildOne(ctx context.Context, level memorydigest.Level, 
 }
 
 // dayInputs loads a day's eligible chat summaries and memos in
-// chronological order and records their ids on params.
-func (m *MemoryDigests) dayInputs(ctx context.Context, c memoryDigestCandidate, start, end time.Time, params *repo.InsertDigestParams) ([]memorydigest.Input, error) {
+// chronological order.
+func (m *MemoryDigests) dayInputs(ctx context.Context, c memoryDigestCandidate, start, end time.Time) ([]memorydigest.Input, error) {
 	chats, err := m.repo.ListDayDigestChats(ctx, repo.ListDayDigestChatsParams{
 		ProjectID:      c.projectID,
 		OrganizationID: c.organizationID,
@@ -354,25 +363,23 @@ func (m *MemoryDigests) dayInputs(ctx context.Context, c memoryDigestCandidate, 
 
 	inputs := make([]memorydigest.Input, 0, len(chats)+len(memos))
 	for _, ch := range chats {
-		params.ChatIds = append(params.ChatIds, ch.ID)
 		inputs = append(inputs, memorydigest.Input{
 			Kind: memorydigest.SourceChat,
+			ID:   ch.ID,
 			At:   ch.SummaryGeneratedAt.Time,
 			// Titles are generated from the raw transcript and are not
 			// masked at rest, so only the masked summary reaches the model.
-			Title:  "",
-			Author: "",
-			Text:   ch.Summary,
+			Title: "",
+			Text:  ch.Summary,
 		})
 	}
 	for _, memo := range memos {
-		params.MemoIds = append(params.MemoIds, memo.ID)
 		inputs = append(inputs, memorydigest.Input{
-			Kind:   memorydigest.SourceMemo,
-			At:     memo.CreatedAt.Time,
-			Title:  "",
-			Author: memo.AuthorName,
-			Text:   memo.Content,
+			Kind:  memorydigest.SourceMemo,
+			ID:    memo.ID,
+			At:    memo.CreatedAt.Time,
+			Title: "",
+			Text:  memo.Content,
 		})
 	}
 	slices.SortStableFunc(inputs, func(a, b memorydigest.Input) int { return a.At.Compare(b.At) })

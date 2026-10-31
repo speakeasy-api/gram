@@ -38,8 +38,9 @@ WITH sources AS (
   SELECT m.organization_id, m.project_id, (m.created_at AT TIME ZONE 'UTC')::date AS day
   FROM memory_memos m
   LEFT JOIN chats c ON c.id = m.chat_id
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
   WHERE m.deleted IS FALSE
-    AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE))
+    AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
     AND m.organization_id = ANY(@organization_ids::text[])
     AND m.created_at >= @since::timestamptz
     AND m.created_at < @until::timestamptz
@@ -94,14 +95,16 @@ ORDER BY c.summary_generated_at DESC
 LIMIT @row_limit;
 
 -- name: ListDayDigestMemos :many
-SELECT m.id, m.content, m.created_at, COALESCE(u.display_name, '')::text AS author_name
+-- Memo authors stay out of digest prompts: digests are team-wide and only
+-- need what was decided, not who saved it.
+SELECT m.id, m.content, m.created_at
 FROM memory_memos m
 LEFT JOIN chats c ON c.id = m.chat_id
-LEFT JOIN users u ON u.id = m.author_user_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE m.project_id = @project_id
   AND m.organization_id = @organization_id
   AND m.deleted IS FALSE
-  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE))
+  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
   AND m.created_at >= @period_start::timestamptz
   AND m.created_at < @period_end::timestamptz
 ORDER BY m.created_at DESC
@@ -198,10 +201,11 @@ ORDER BY c.summary_generated_at;
 SELECT m.id, m.chat_id, m.content, m.created_at, COALESCE(u.display_name, '')::text AS author_name
 FROM memory_memos m
 LEFT JOIN chats c ON c.id = m.chat_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 LEFT JOIN users u ON u.id = m.author_user_id
 WHERE m.id = ANY(@ids::uuid[])
   AND m.project_id = @project_id
   AND m.organization_id = @organization_id
   AND m.deleted IS FALSE
-  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE))
+  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
 ORDER BY m.created_at;

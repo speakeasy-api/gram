@@ -69,3 +69,15 @@ func TestMemoryDigestsWorkflowStopsWhenABatchMakesNoProgress(t *testing.T) {
 	})
 	require.Equal(t, []string{"day", "week", "month"}, calls)
 }
+
+func TestMemoryDigestsWorkflowStopsAboveALevelLeftPending(t *testing.T) {
+	t.Parallel()
+
+	full := make([]activities.BuildMemoryDigestsResult, maxMemoryDigestBatchesPerLevel+1)
+	for i := range full {
+		full[i] = activities.BuildMemoryDigestsResult{Built: 40, More: true}
+	}
+	calls := runMemoryDigestsWorkflow(t, map[string][]activities.BuildMemoryDigestsResult{"day": full})
+	require.Len(t, calls, maxMemoryDigestBatchesPerLevel)
+	require.NotContains(t, calls, "week")
+}

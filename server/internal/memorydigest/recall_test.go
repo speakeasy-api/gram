@@ -26,7 +26,7 @@ func TestUncoveredShowsEachPeriodAtItsMostCompressedLevel(t *testing.T) {
 		[]memorydigest.Digest{openDay, dayInWeek, month, openWeek, weekInMonth},
 		[]memorydigest.ChatNote{
 			{ID: chatInDay, SummarizedAt: date(2026, 10, 5), Summary: "covered"},
-			{ID: chatToday, Title: "Retry\n## queue", SummarizedAt: date(2026, 11, 10), Summary: "Picked queue X.\n\nMore detail."},
+			{ID: chatToday, SummarizedAt: date(2026, 11, 10), Summary: "Picked queue X.\n\nMore detail."},
 		},
 	)
 
@@ -37,7 +37,7 @@ func TestUncoveredShowsEachPeriodAtItsMostCompressedLevel(t *testing.T) {
 	require.Equal(t, []uuid.UUID{month.ID, openWeek.ID, openDay.ID, chatToday}, ids)
 	require.Equal(t, "October 2026 (month digest)", entries[0].Heading)
 	require.Equal(t, memorydigest.SourceChat, entries[3].Kind)
-	require.Equal(t, "Chat 2026-11-10: Retry ## queue", entries[3].Heading)
+	require.Equal(t, "Chat 2026-11-10", entries[3].Heading)
 	require.Equal(t, "Picked queue X.", entries[3].Text)
 }
 
@@ -115,4 +115,24 @@ func TestBudgetBoundsRenderedBlock(t *testing.T) {
 		kept, dropped := memorydigest.Budget(entries, budget)
 		require.LessOrEqual(t, memorydigest.EstimateTokens(memorydigest.Render(kept, dropped)), budget, "budget %d", budget)
 	}
+}
+
+func TestEstimateTokensErrsHighForNonASCII(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, 2, memorydigest.EstimateTokens("abcdefgh"))
+	require.Equal(t, 4, memorydigest.EstimateTokens("記憶検索"))
+}
+
+func TestBudgetKeepsEverythingWithoutReservingTheNotice(t *testing.T) {
+	t.Parallel()
+
+	entries := []memorydigest.Entry{
+		{Kind: memorydigest.SourceChat, ID: uuid.New(), Heading: "Chat 2026-10-01", At: date(2026, 10, 1), Text: "a"},
+		{Kind: memorydigest.SourceChat, ID: uuid.New(), Heading: "Chat 2026-10-02", At: date(2026, 10, 2), Text: "b"},
+	}
+	need := memorydigest.EstimateTokens(memorydigest.Render(entries, 0))
+	kept, dropped := memorydigest.Budget(entries, need+2)
+	require.Len(t, kept, 2)
+	require.Zero(t, dropped)
 }

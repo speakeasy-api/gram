@@ -181,14 +181,20 @@ func TestMemoryDigests_DayDigestFoldsOnlyEligibleSources(t *testing.T) {
 	kept2 := enabled.addChat(t, conn, "shipped retries", at.Add(time.Hour), true)
 	enabled.addChat(t, conn, "unmasked summary", at, false)
 	enabled.addChatFixture(t, conn, chatFixture{summary: "excluded summary", summarizedAt: at, redacted: true, excluded: true, accountType: ""})
-	enabled.addChatFixture(t, conn, chatFixture{summary: "personal summary", summarizedAt: at, redacted: true, excluded: false, accountType: "personal"})
+	personal := enabled.addChatFixture(t, conn, chatFixture{summary: "personal summary", summarizedAt: at, redacted: true, excluded: false, accountType: "personal"})
 	enabled.addChatFixture(t, conn, chatFixture{summary: "team account summary", summarizedAt: at, redacted: true, excluded: false, accountType: "team"})
 	// Written after the run's anchor day closed: belongs to an open day.
 	enabled.addChat(t, conn, "today summary", day.AddDate(0, 0, 2).Add(30*time.Minute), true)
 	disabled.addChat(t, conn, "other org summary", at, true)
 
 	memoID, err := memorydigesttest.New(conn).InsertMemoFixture(ctx, memorydigesttest.InsertMemoFixtureParams{
-		OrganizationID: enabled.orgID, ProjectID: enabled.projectID, Content: "queue X because of ordering",
+		OrganizationID: enabled.orgID, ProjectID: enabled.projectID, ChatID: uuid.NullUUID{}, Content: "queue X because of ordering",
+		CreatedAt: pgtype.Timestamptz{Time: at, Valid: true, InfinityModifier: pgtype.Finite},
+	})
+	require.NoError(t, err)
+	// A memo saved from a personal-account chat stays out like the chat.
+	_, err = memorydigesttest.New(conn).InsertMemoFixture(ctx, memorydigesttest.InsertMemoFixtureParams{
+		OrganizationID: enabled.orgID, ProjectID: enabled.projectID, ChatID: uuid.NullUUID{UUID: personal, Valid: true}, Content: "personal memo",
 		CreatedAt: pgtype.Timestamptz{Time: at, Valid: true, InfinityModifier: pgtype.Finite},
 	})
 	require.NoError(t, err)
@@ -210,7 +216,7 @@ func TestMemoryDigests_DayDigestFoldsOnlyEligibleSources(t *testing.T) {
 	require.Contains(t, prompts, "team account summary")
 	// Titles are not masked at rest, so they never reach the model.
 	require.NotContains(t, prompts, "title ")
-	for _, leaked := range []string{"unmasked summary", "excluded summary", "personal summary", "today summary", "other org summary"} {
+	for _, leaked := range []string{"unmasked summary", "excluded summary", "personal summary", "personal memo", "today summary", "other org summary"} {
 		require.NotContains(t, prompts, leaked)
 	}
 

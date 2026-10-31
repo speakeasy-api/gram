@@ -40,14 +40,15 @@ func (q *Queries) GetDigestSourcesFixture(ctx context.Context, arg GetDigestSour
 }
 
 const insertMemoFixture = `-- name: InsertMemoFixture :one
-INSERT INTO memory_memos (organization_id, project_id, content, created_at)
-VALUES ($1, $2, $3, $4)
+INSERT INTO memory_memos (organization_id, project_id, chat_id, content, created_at)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id
 `
 
 type InsertMemoFixtureParams struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
+	ChatID         uuid.NullUUID
 	Content        string
 	CreatedAt      pgtype.Timestamptz
 }
@@ -56,6 +57,7 @@ func (q *Queries) InsertMemoFixture(ctx context.Context, arg InsertMemoFixturePa
 	row := q.db.QueryRow(ctx, insertMemoFixture,
 		arg.OrganizationID,
 		arg.ProjectID,
+		arg.ChatID,
 		arg.Content,
 		arg.CreatedAt,
 	)

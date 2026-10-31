@@ -9,8 +9,8 @@ SET summary = @summary,
 WHERE id = @id;
 
 -- name: InsertMemoFixture :one
-INSERT INTO memory_memos (organization_id, project_id, content, created_at)
-VALUES (@organization_id, @project_id, @content, @created_at)
+INSERT INTO memory_memos (organization_id, project_id, chat_id, content, created_at)
+VALUES (@organization_id, @project_id, sqlc.narg(chat_id), @content, @created_at)
 RETURNING id;
 
 -- name: GetDigestSourcesFixture :one

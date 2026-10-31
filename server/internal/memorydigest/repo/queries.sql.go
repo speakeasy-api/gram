@@ -170,8 +170,9 @@ WITH sources AS (
   SELECT m.organization_id, m.project_id, (m.created_at AT TIME ZONE 'UTC')::date AS day
   FROM memory_memos m
   LEFT JOIN chats c ON c.id = m.chat_id
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
   WHERE m.deleted IS FALSE
-    AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE))
+    AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
     AND m.organization_id = ANY($2::text[])
     AND m.created_at >= $3::timestamptz
     AND m.created_at < $4::timestamptz
@@ -289,14 +290,14 @@ func (q *Queries) ListDayDigestChats(ctx context.Context, arg ListDayDigestChats
 }
 
 const listDayDigestMemos = `-- name: ListDayDigestMemos :many
-SELECT m.id, m.content, m.created_at, COALESCE(u.display_name, '')::text AS author_name
+SELECT m.id, m.content, m.created_at
 FROM memory_memos m
 LEFT JOIN chats c ON c.id = m.chat_id
-LEFT JOIN users u ON u.id = m.author_user_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE m.project_id = $1
   AND m.organization_id = $2
   AND m.deleted IS FALSE
-  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE))
+  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
   AND m.created_at >= $3::timestamptz
   AND m.created_at < $4::timestamptz
 ORDER BY m.created_at DESC
@@ -312,12 +313,13 @@ type ListDayDigestMemosParams struct {
 }
 
 type ListDayDigestMemosRow struct {
-	ID         uuid.UUID
-	Content    string
-	CreatedAt  pgtype.Timestamptz
-	AuthorName string
+	ID        uuid.UUID
+	Content   string
+	CreatedAt pgtype.Timestamptz
 }
 
+// Memo authors stay out of digest prompts: digests are team-wide and only
+// need what was decided, not who saved it.
 func (q *Queries) ListDayDigestMemos(ctx context.Context, arg ListDayDigestMemosParams) ([]ListDayDigestMemosRow, error) {
 	rows, err := q.db.Query(ctx, listDayDigestMemos,
 		arg.ProjectID,
@@ -333,12 +335,7 @@ func (q *Queries) ListDayDigestMemos(ctx context.Context, arg ListDayDigestMemos
 	var items []ListDayDigestMemosRow
 	for rows.Next() {
 		var i ListDayDigestMemosRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Content,
-			&i.CreatedAt,
-			&i.AuthorName,
-		); err != nil {
+		if err := rows.Scan(&i.ID, &i.Content, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -668,12 +665,13 @@ const listZoomMemos = `-- name: ListZoomMemos :many
 SELECT m.id, m.chat_id, m.content, m.created_at, COALESCE(u.display_name, '')::text AS author_name
 FROM memory_memos m
 LEFT JOIN chats c ON c.id = m.chat_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 LEFT JOIN users u ON u.id = m.author_user_id
 WHERE m.id = ANY($1::uuid[])
   AND m.project_id = $2
   AND m.organization_id = $3
   AND m.deleted IS FALSE
-  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE))
+  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
 ORDER BY m.created_at
 `
 

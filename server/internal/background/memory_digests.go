@@ -40,8 +40,9 @@ const (
 // MemoryDigestsWorkflow writes the day, week and month team memory digests
 // for every period that has closed and has no digest yet. Levels run in
 // order so each folds children written earlier in the same run. A level
-// that had failures stops the run: folding a week or month over a missing
-// child would write an incomplete digest that is never rewritten.
+// that had failures, or still had candidates when it hit the batch cap,
+// stops the run: folding a week or month over a missing child would write an
+// incomplete digest that is never rewritten. The next run picks it up.
 func MemoryDigestsWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 20 * time.Minute,
@@ -59,6 +60,7 @@ func MemoryDigestsWorkflow(ctx workflow.Context) error {
 	var a *Activities
 	for _, level := range []memorydigest.Level{memorydigest.LevelDay, memorydigest.LevelWeek, memorydigest.LevelMonth} {
 		failed := 0
+		pending := true
 		for range maxMemoryDigestBatchesPerLevel {
 			var result activities.BuildMemoryDigestsResult
 			if err := workflow.ExecuteActivity(ctx, a.BuildMemoryDigests, activities.BuildMemoryDigestsArgs{
@@ -72,11 +74,12 @@ func MemoryDigestsWorkflow(ctx workflow.Context) error {
 			// A batch that wrote nothing would list the same candidates
 			// again, so stop rather than spin on them.
 			if !result.More || result.Built == 0 {
+				pending = false
 				break
 			}
 		}
-		if failed > 0 {
-			logger.Warn("memory digests stopped before higher levels", "level", string(level), "failed", failed)
+		if failed > 0 || pending {
+			logger.Warn("memory digests stopped before higher levels", "level", string(level), "failed", failed, "pending", pending)
 			return nil
 		}
 	}
