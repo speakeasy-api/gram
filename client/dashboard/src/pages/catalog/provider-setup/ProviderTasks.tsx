@@ -209,7 +209,7 @@ function GitHubTask() {
         />
       </div>
       <Section
-        title={existing ? "Check the Redirect URI" : "Configure the app"}
+        title={existing ? "Check the callback URL" : "Configure the app"}
       >
         {!existing && (
           <>
@@ -221,10 +221,10 @@ function GitHubTask() {
           </>
         )}
         {redirectUrl ? (
-          <CopyValue label="Redirect URI" value={redirectUrl} />
+          <CopyValue label="Authorization callback URL" value={redirectUrl} />
         ) : callbackQuery.isError ? (
           <Alert variant="error">
-            Couldn’t load the Redirect URI.{" "}
+            Couldn’t load the authorization callback URL.{" "}
             <Button
               variant="secondary"
               size="sm"
@@ -235,20 +235,21 @@ function GitHubTask() {
           </Alert>
         ) : (
           <p className="mt-4 text-sm text-muted-foreground">
-            Loading Redirect URI…
+            Loading authorization callback URL…
           </p>
         )}
         <InProvider
           actions={[
             existing ? (
               <>
-                Set <strong>Redirect URI</strong> to the value above.
+                Set <strong>Authorization callback URL</strong> to the value
+                above.
               </>
             ) : (
               <>
                 Enter the values above in <strong>Application name</strong>,{" "}
-                <strong>Homepage URL</strong>, and <strong>Redirect URI</strong>
-                .
+                <strong>Homepage URL</strong>, and{" "}
+                <strong>Authorization callback URL</strong>.
               </>
             ),
             <>

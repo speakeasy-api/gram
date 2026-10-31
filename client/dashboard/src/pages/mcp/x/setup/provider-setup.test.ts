@@ -267,6 +267,8 @@ describe("GitHub setup routing and browser progress", () => {
     expect(restored.step).toBe("app");
     expect(restored.values.org).toBe("example-org");
     expect(restored.values.appChoice).toBe("existing");
+    expect(restored.values.clientId).toBe("");
+    expect(restored.values.clientSecret).toBe("");
     expect(sessionStorage.getItem("github-test")).not.toContain("private-");
     expect([
       restored.saved,

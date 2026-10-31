@@ -90,6 +90,20 @@ it("validates GitHub organizations and requires one for completion", () => {
       validate({ ...s, step: "organization", values: { ...s.values, org } })
         .org,
     ).toBeTruthy();
+  for (const org of ["", "bad--org"]) {
+    expect(
+      reduce(
+        {
+          ...s,
+          saved: true,
+          authorized: true,
+          tested: true,
+          values: { ...s.values, org },
+        },
+        { type: "complete" },
+      ).screen,
+    ).toBe("setup");
+  }
   const valid = { ...s, values: { ...s.values, org: "example-org" } };
   expect(validate({ ...valid, step: "organization" })).toEqual({});
   expect(

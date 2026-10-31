@@ -125,9 +125,9 @@ it.each(["new", "existing"])(
         <ProviderTask serverName="GitHub" />
       </SetupContext>,
     );
-    expect(screen.getByLabelText("Redirect URI").getAttribute("value")).toBe(
-      "https://current.example/callback",
-    );
+    expect(
+      screen.getByLabelText("Authorization callback URL").getAttribute("value"),
+    ).toBe("https://current.example/callback");
     expect(
       screen
         .getByRole("link", { name: "Open GitHub settings" })
