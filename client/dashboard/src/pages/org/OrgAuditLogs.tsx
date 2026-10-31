@@ -31,7 +31,7 @@ import { useAuditLogFacets } from "@gram/client/react-query/auditLogFacets.js";
 import { useAuditLogsInfinite } from "@gram/client/react-query/auditLogs.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { Icon } from "@/components/ui/Icon";
-import { Input } from "@/components/ui/Input";
+import { SearchBar } from "@/components/ui/SearchBar";
 import React, {
   useCallback,
   useDeferredValue,
@@ -572,7 +572,6 @@ function OrgAuditLogsInner() {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentLogIndex, setCurrentLogIndex] = useState<number | null>(null);
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
-  const [searchInputFocused, setSearchInputFocused] = useState(false);
 
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const logRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -713,12 +712,9 @@ function OrgAuditLogsInner() {
       const isWithinLogsSection = logsContainer?.contains(
         activeElement as Node,
       );
-      const isSearchInputFocusedNow = activeElement?.hasAttribute(
-        "data-audit-search-input",
-      );
 
       if (e.key === "Escape") {
-        if (isWithinLogsSection || isSearchInputFocusedNow) {
+        if (isWithinLogsSection) {
           e.preventDefault();
           setSearchQuery("");
           setCurrentLogIndex(null);
@@ -731,17 +727,6 @@ function OrgAuditLogsInner() {
         return;
       }
 
-      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
-        if (isWithinLogsSection || isSearchInputFocusedNow) {
-          e.preventDefault();
-          const searchInput = document.querySelector<HTMLInputElement>(
-            "[data-audit-search-input]",
-          );
-          searchInput?.focus();
-        }
-        return;
-      }
-
       const isInInput =
         activeElement?.tagName === "INPUT" ||
         activeElement?.tagName === "TEXTAREA" ||
@@ -749,14 +734,6 @@ function OrgAuditLogsInner() {
         activeElement?.closest("[contenteditable]") !== null;
       if (!isInInput) {
         switch (e.key) {
-          case "/": {
-            e.preventDefault();
-            const searchInput = document.querySelector<HTMLInputElement>(
-              "[data-audit-search-input]",
-            );
-            searchInput?.focus();
-            break;
-          }
           case "n":
             if (searchMatchIndices.length > 0) {
               e.preventDefault();
@@ -967,64 +944,40 @@ function OrgAuditLogsInner() {
                   </>
                 )}
               </div>
-              <div className="relative ml-auto">
-                <Icon
-                  name="search"
-                  className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2"
-                />
-                <Input
-                  data-audit-search-input
-                  type="text"
-                  placeholder="Search audit logs"
+              <div className="ml-auto flex items-center gap-2">
+                <SearchBar
                   value={searchQuery}
                   onChange={handleSearchChange}
-                  onFocus={() => setSearchInputFocused(true)}
-                  onBlur={() => setSearchInputFocused(false)}
-                  className="w-56 py-1 pr-16 pl-7 text-xs"
+                  placeholder="Search audit logs"
+                  className="w-72"
                 />
-                {searchQuery || searchInputFocused ? (
-                  searchMatchIndices.length > 0 ? (
-                    <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5">
-                      <span className="text-muted-foreground bg-muted px-1 py-0.5 text-[10px]">
-                        ESC
-                      </span>
-                      <span className="text-muted-foreground mx-0.5 text-[10px]">
-                        {effectiveSearchIndex + 1}/{searchMatchIndices.length}
-                      </span>
-                      <div className="flex items-center">
-                        <button
-                          onClick={() => navigateToResult("prev")}
-                          className="hover:bg-muted p-0.5 opacity-60 transition-opacity hover:opacity-100"
-                          title="Previous (Shift+N)"
-                        >
-                          <Icon name="chevron-up" className="size-2.5" />
-                        </button>
-                        <button
-                          onClick={() => navigateToResult("next")}
-                          className="hover:bg-muted p-0.5 opacity-60 transition-opacity hover:opacity-100"
-                          title="Next (N)"
-                        >
-                          <Icon name="chevron-down" className="size-2.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5">
-                      <span className="text-muted-foreground bg-muted px-1 py-0.5 text-[10px]">
-                        ESC
-                      </span>
-                      <span className="text-muted-foreground ml-0.5 text-[10px]">
-                        0/0
-                      </span>
-                    </div>
-                  )
-                ) : (
-                  <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center">
-                    <span className="text-muted-foreground bg-muted px-1 py-0.5 font-mono text-[10px]">
-                      /
+                {searchQuery ? (
+                  <div className="text-muted-foreground flex items-center gap-1 text-[11px]">
+                    <span className="min-w-8 text-center">
+                      {searchMatchIndices.length > 0
+                        ? `${effectiveSearchIndex + 1}/${searchMatchIndices.length}`
+                        : "0/0"}
                     </span>
+                    <button
+                      onClick={() => navigateToResult("prev")}
+                      disabled={searchMatchIndices.length === 0}
+                      className="hover:bg-muted p-1 opacity-60 transition-opacity hover:opacity-100 disabled:pointer-events-none disabled:opacity-30"
+                      title="Previous (Shift+N)"
+                      aria-label="Previous search result"
+                    >
+                      <Icon name="chevron-up" className="size-3" />
+                    </button>
+                    <button
+                      onClick={() => navigateToResult("next")}
+                      disabled={searchMatchIndices.length === 0}
+                      className="hover:bg-muted p-1 opacity-60 transition-opacity hover:opacity-100 disabled:pointer-events-none disabled:opacity-30"
+                      title="Next (N)"
+                      aria-label="Next search result"
+                    >
+                      <Icon name="chevron-down" className="size-3" />
+                    </button>
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
           )}
