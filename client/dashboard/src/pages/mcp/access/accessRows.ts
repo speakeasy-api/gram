@@ -318,6 +318,13 @@ export interface ScopeState {
   subtracts: boolean;
   /** True when the line can be turned off here at all. */
   canRevoke: boolean;
+  /** True when no rule grants or blocks this line, so it has no effect. */
+  unset: boolean;
+  /**
+   * True when this row holds its own grant or block for this line on this
+   * server, which clearing deletes.
+   */
+  canClear: boolean;
   /** Another principal this line comes from, when one decides it. */
   via?: string;
   /** That principal's URN, so the name can link to it. */
@@ -450,10 +457,13 @@ export function scopeState(
       blocked: false,
       subtracts: false,
       canRevoke: false,
+      unset: false,
+      canClear: false,
       capped: false,
     };
   }
   const cell = row.cells[scope];
+  const canClear = cell.own !== undefined || cell.ownBlock !== undefined;
   const reachable = reachableTools(cell, catalog);
   const closed = isClosed(cell, reachable);
 
@@ -466,12 +476,15 @@ export function scopeState(
     // The row's own block decides the line, so naming another principal's
     // block beside it would only repeat the answer.
     const blocked = closedByOwnBlocks(cell, catalog);
+    const unset = cell.grants.length === 0 && cell.blocks.length === 0;
     return {
-      value: blocked ? "Blocked" : "No access",
+      value: blocked ? "Blocked" : unset ? "Not set" : "No access",
       granted: false,
       blocked,
       subtracts: false,
       canRevoke: false,
+      unset,
+      canClear,
       via: cancellingSelf || blocked ? undefined : cancelling?.displayName,
       viaPrincipalUrn:
         cancellingSelf || blocked ? undefined : cancelling?.principalUrn,
@@ -498,6 +511,8 @@ export function scopeState(
     blocked: false,
     subtracts: effectiveForeignGrants(row, scope).length > 0,
     canRevoke: true,
+    unset: false,
+    canClear,
     via: cell.own || grantingSelf ? undefined : granting?.displayName,
     viaPrincipalUrn:
       cell.own || grantingSelf ? undefined : granting?.principalUrn,
