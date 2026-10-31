@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
@@ -47,7 +47,7 @@ it("queries changes to the agent as the audit subject, including human permissio
     { throwOnError: false },
   );
 });
-it("names each change in words rather than its audit action", () => {
+it("names each change in words rather than its audit action", async () => {
   mocks.audit.mockReturnValue({
     data: {
       result: {
@@ -64,8 +64,33 @@ it("names each change in words rather than its audit action", () => {
     },
   });
   render(<AgentIdentityAudit agent={agent} subject />);
-  expect(screen.getByText("Added direct policy grant to agent")).toBeTruthy();
+  const label = screen.getByText("Added direct policy grant to agent");
   expect(screen.queryByText("agent:policy_grant_create")).toBeNull();
+
+  // The code is still there for whoever needs to match it to a log.
+  fireEvent.focus(label);
+  expect(
+    (await screen.findAllByText("agent:policy_grant_create")).length,
+  ).toBeGreaterThan(0);
+});
+it("shows a change with no words of its own as its audit code", () => {
+  mocks.audit.mockReturnValue({
+    data: {
+      result: {
+        logs: [
+          {
+            id: "log_two",
+            action: "agent:something_new",
+            actorId: "owner_example",
+            actorDisplayName: "Example Owner",
+            createdAt: from,
+          },
+        ],
+      },
+    },
+  });
+  render(<AgentIdentityAudit agent={agent} subject />);
+  expect(screen.getByText("agent:something_new")).toBeTruthy();
 });
 it("queries agent actions without using its owner's identity", () => {
   render(<AgentIdentityAudit agent={agent} />);

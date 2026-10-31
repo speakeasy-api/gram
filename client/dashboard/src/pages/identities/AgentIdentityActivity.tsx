@@ -7,6 +7,9 @@ import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
+import type { JSX } from "react";
+import { SimpleTooltip, TooltipProvider } from "@/components/ui/Tooltip";
+import { isAuditAction } from "@/lib/audit-actions";
 import { formatAuditActionLabel } from "@/lib/audit-log-format";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useOrgRoutes } from "@/routes";
@@ -16,6 +19,29 @@ import {
   IdentityPanelEmpty,
   IdentityPanelRow,
 } from "./IdentityPanel";
+
+/**
+ * A change in words, with its audit code a hover or focus away. A code with no
+ * words of its own is shown as the code rather than a guess at its meaning.
+ */
+function ChangeLabel({ action }: { action: string }): JSX.Element {
+  if (!isAuditAction(action)) {
+    return <code className="text-xs">{action}</code>;
+  }
+  // Its own provider, so the row also renders where none is mounted.
+  return (
+    <TooltipProvider>
+      <SimpleTooltip tooltip={<code className="text-xs">{action}</code>}>
+        <span
+          tabIndex={0}
+          className="cursor-default underline decoration-dotted underline-offset-4"
+        >
+          {formatAuditActionLabel(action)}
+        </span>
+      </SimpleTooltip>
+    </TooltipProvider>
+  );
+}
 
 /** Shared so the "no principals to resolve" case is a stable reference. */
 const NO_LOGS: AuditLog[] = [];
@@ -73,7 +99,7 @@ export function AgentIdentityAudit({
         rows.map((log) => (
           <IdentityPanelRow
             key={log.id}
-            title={formatAuditActionLabel(log.action)}
+            title={<ChangeLabel action={log.action} />}
             detail={
               subject ? (
                 <AuditPrincipalLink
