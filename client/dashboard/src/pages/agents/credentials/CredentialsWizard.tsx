@@ -70,6 +70,7 @@ import {
   valuesFromSubject,
 } from "./workloadCatalog";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useServerInventory, type InventoryServer } from "./useServerInventory";
 import { useOwnerConnections } from "./useOwnerConnections";
 import { StepAuthentication } from "./StepAuthentication";
@@ -270,6 +271,51 @@ export function CredentialsWizard({
     [setParams],
   );
   const [name, setName] = useState(agent?.name ?? "");
+  // Names are unique in the organization, case aside. Asking once typing
+  // pauses catches a taken name here instead of on Create agent, which still
+  // refuses one another agent takes in between. A name the agent already has
+  // is its own, and a failed check lets the server decide.
+  const typedName = name.trim();
+  const checksName =
+    (!existing || editing) &&
+    typedName !== "" &&
+    typedName.toLowerCase() !== (agent?.name ?? "").trim().toLowerCase();
+  const nameToCheck = useDebouncedValue(typedName, 400);
+  const nameCheck = useQuery({
+    queryKey: [
+      "agent-name-available",
+      organization.id,
+      nameToCheck.toLowerCase(),
+    ],
+    // One page of the agents whose names contain it. A name in more than 200
+    // of them that this page misses is left to the server to refuse.
+    queryFn: async ({ signal }) => {
+      const page = await sdk.agents.list(
+        { search: nameToCheck, limit: 200 },
+        undefined,
+        { signal },
+      );
+      return !page.result.items.some(
+        (match) =>
+          match.id !== agent?.id &&
+          match.name.trim().toLowerCase() === nameToCheck.toLowerCase(),
+      );
+    },
+    enabled: checksName && nameToCheck === typedName,
+    retry: false,
+  });
+  const nameState: "free" | "checking" | "taken" = !checksName
+    ? "free"
+    : // A cached answer is shown while it is asked again, and it may be out
+      // of date by then.
+      // A failed check answers only for the name it asked about.
+      nameToCheck !== typedName || nameCheck.isPending || nameCheck.isFetching
+      ? "checking"
+      : nameCheck.isError
+        ? "free"
+        : nameCheck.data === false
+          ? "taken"
+          : "free";
   // null until the person picks, so the default can follow the project as it
 
   const [selected, setSelected] = useState<ServerSelection[]>([]);
@@ -1375,13 +1421,20 @@ export function CredentialsWizard({
                 disabled={existing && !editing}
                 autoFocus={!existing}
               />
-              <Text muted small>
-                {existing
-                  ? editing
-                    ? "Shown in audit logs and session lists."
-                    : "Rename this agent from its own page."
-                  : "Shown in audit logs and session lists. You can rename it later."}
-              </Text>
+              {nameState === "taken" ? (
+                <Text role="alert" warning small>
+                  An agent named “{typedName}” already exists. Pick another
+                  name.
+                </Text>
+              ) : (
+                <Text muted small>
+                  {existing
+                    ? editing
+                      ? "Shown in audit logs and session lists."
+                      : "Rename this agent from its own page."
+                    : "Shown in audit logs and session lists. You can rename it later."}
+                </Text>
+              )}
             </div>
           </div>
         );
@@ -1508,7 +1561,11 @@ export function CredentialsWizard({
     step === 0
       ? !name.trim()
         ? "Name this agent."
-        : null
+        : nameState === "taken"
+          ? "Pick a name no other agent has."
+          : nameState === "checking"
+            ? "Checking the name is free…"
+            : null
       : step === 1
         ? !editing && !allServers && selected.length === 0
           ? "Select at least one MCP server."
@@ -1538,7 +1595,8 @@ export function CredentialsWizard({
         <WizardFooter
           note={
             step === 0
-              ? "Renaming an agent is recorded in the organization audit log."
+              ? (blocked ??
+                "Renaming an agent is recorded in the organization audit log.")
               : refusedChoice
                 ? refusedChoice
                 : reconciled
