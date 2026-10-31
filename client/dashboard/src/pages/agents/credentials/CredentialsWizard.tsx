@@ -593,6 +593,15 @@ export function CredentialsWizard({
       return true;
     }
   };
+  // The same answer ahead of time, so the summary names only the grants a
+  // new agent will get. Creating asks again rather than trusting this one.
+  // It waits until the servers are chosen, so it never sits in front of the
+  // server checks that step depends on.
+  const authCheck = useQuery({
+    queryKey: ["agent-auth-grant-check", organization.id, user.id],
+    queryFn: () => mayGrantAuth(undefined),
+    enabled: !existing && step >= 2,
+  });
   const recheck = useCallback(() => {
     if (checkedSelectors.length > 0) void refetchPolicyCheck();
   }, [checkedSelectors, refetchPolicyCheck]);
@@ -1320,8 +1329,16 @@ export function CredentialsWizard({
                 value: (
                   <GrantedScopes
                     scopes={[
-                      `${CONNECT_SCOPE} on the selected servers`,
-                      `${AUTH_GRANT.scope} on all auth clients`,
+                      allServers
+                        ? `${CONNECT_SCOPE} on all servers in the project`
+                        : `${CONNECT_SCOPE} on the selected servers`,
+                      ...(authCheck.data === false
+                        ? []
+                        : [
+                            authCheck.data === true
+                              ? `${AUTH_GRANT.scope} on all auth clients`
+                              : `${AUTH_GRANT.scope} on all auth clients, if your role allows it`,
+                          ]),
                       ...(hookEvents ? [HOOKS_INGEST_SCOPE] : []),
                     ]}
                   >

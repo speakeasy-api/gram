@@ -447,6 +447,35 @@ describe("Provisioning a new agent", () => {
     ).toBeGreaterThan(0);
   });
 
+  it("leaves out of its scopes the auth clients grant its creator may not give", async () => {
+    mocks.checkPolicyGrants.mockImplementation(
+      answerChecks({ "mcp:auth": "caller" }),
+    );
+    await reachCredentialStep();
+
+    fireEvent.focus(screen.getByText("Call its servers"));
+    expect(
+      (await screen.findAllByText("mcp:connect on the selected servers"))
+        .length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText("mcp:auth on all auth clients")).toBeNull();
+  });
+
+  it("names all servers in its scopes under All servers", async () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Everything here" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await enabledAllServers());
+
+    fireEvent.focus(screen.getByText("Call its servers"));
+    expect(
+      (await screen.findAllByText("mcp:connect on all servers in the project"))
+        .length,
+    ).toBeGreaterThan(0);
+  });
+
   it("creates the agent without the auth clients grant its creator may not give", async () => {
     mocks.checkPolicyGrants.mockImplementation(
       answerChecks({ "mcp:auth": "caller" }),
