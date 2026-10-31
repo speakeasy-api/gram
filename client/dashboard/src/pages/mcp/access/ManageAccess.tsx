@@ -75,6 +75,7 @@ import {
   reachableTools,
   inheritedGrants,
   scopeState,
+  type ScopeState,
   SCOPE_ROWS,
   type AccessRow,
   type ScopeKey,
@@ -83,6 +84,7 @@ import {
   addPrincipalsWrite,
   allowDestructiveWrite,
   allowWrite,
+  clearScopeWrite,
   blockDestructiveWrite,
   narrowingSeed,
   narrowWrite,
@@ -444,6 +446,11 @@ export function ManageAccess({
                     revokeScopeWrite(direct, row, scope, resourceName),
                   )
                 }
+                onClearScope={(scope) =>
+                  applyWrite(() =>
+                    clearScopeWrite(direct, row, scope, resourceName),
+                  )
+                }
                 onNarrow={() => openNarrowing(row)}
                 onBlockDestructive={() =>
                   applyWrite(() =>
@@ -584,6 +591,7 @@ function PrincipalRow({
   catalog,
   onAllow,
   onRevokeScope,
+  onClearScope,
   onNarrow,
   onBlockDestructive,
   onAllowDestructive,
@@ -605,6 +613,7 @@ function PrincipalRow({
   catalog: ToolSelectionTool[];
   onAllow: (scope: ScopeKey) => void;
   onRevokeScope: (scope: ScopeKey) => void;
+  onClearScope: (scope: ScopeKey) => void;
   onNarrow: () => void;
   onBlockDestructive: () => void;
   onAllowDestructive: () => void;
@@ -741,6 +750,7 @@ function PrincipalRow({
                   catalog={catalog}
                   onAllow={() => onAllow(key)}
                   onRevoke={() => onRevokeScope(key)}
+                  onClear={() => onClearScope(key)}
                   onNarrow={onNarrow}
                   onBlockDestructive={onBlockDestructive}
                   onAllowDestructive={onAllowDestructive}
@@ -778,6 +788,7 @@ function ScopeLine({
   catalog,
   onAllow,
   onRevoke,
+  onClear,
   onNarrow,
   onBlockDestructive,
   onAllowDestructive,
@@ -793,6 +804,7 @@ function ScopeLine({
   catalog: ToolSelectionTool[];
   onAllow: () => void;
   onRevoke: () => void;
+  onClear: () => void;
   onNarrow: () => void;
   onBlockDestructive: () => void;
   onAllowDestructive: () => void;
@@ -806,6 +818,7 @@ function ScopeLine({
     catalog,
     onAllow,
     onRevoke,
+    onClear,
     onNarrow,
     onBlockDestructive,
     onAllowDestructive,
@@ -820,7 +833,12 @@ function ScopeLine({
         </Text>
       </div>
       {options.length === 0 ? (
-        <Text small destructive={state.blocked} className="px-1">
+        <Text
+          small
+          destructive={state.blocked}
+          muted={state.unset}
+          className="px-1"
+        >
           {state.value}
         </Text>
       ) : (
@@ -836,7 +854,9 @@ function ScopeLine({
             className={
               state.blocked
                 ? "text-default-destructive hover:text-default-destructive"
-                : undefined
+                : state.unset
+                  ? "text-muted-foreground"
+                  : undefined
             }
           />
         </RequireScope>
@@ -873,6 +893,7 @@ function scopeOptions({
   catalog,
   onAllow,
   onRevoke,
+  onClear,
   onNarrow,
   onBlockDestructive,
   onAllowDestructive,
@@ -882,23 +903,65 @@ function scopeOptions({
   catalog: ToolSelectionTool[];
   onAllow: () => void;
   onRevoke: () => void;
+  onClear: () => void;
   onNarrow: () => void;
   onBlockDestructive: () => void;
   onAllowDestructive: () => void;
 }): InlineChoiceOption[] {
   const state = scopeState(row, scope, catalog);
+  const options = choiceOptions({
+    row,
+    scope,
+    state,
+    onAllow,
+    onRevoke,
+    onNarrow,
+    onBlockDestructive,
+    onAllowDestructive,
+  });
+  // Clearing deletes this row's own grant and block for the line and writes
+  // nothing in their place, so the line is left unset rather than flipped.
+  if (state.canClear) {
+    options.push({ label: "Clear", onSelect: onClear, separatorBefore: true });
+  }
+  return options;
+}
+
+/** The grant and block choices for one scope line, before clearing. */
+function choiceOptions({
+  row,
+  scope,
+  state,
+  onAllow,
+  onRevoke,
+  onNarrow,
+  onBlockDestructive,
+  onAllowDestructive,
+}: {
+  row: AccessRow;
+  scope: ScopeKey;
+  state: ScopeState;
+  onAllow: () => void;
+  onRevoke: () => void;
+  onNarrow: () => void;
+  onBlockDestructive: () => void;
+  onAllowDestructive: () => void;
+}): InlineChoiceOption[] {
   // A block this row cannot lift closes the line, and nothing granted here
   // would survive it: the change has to be made where the block is.
   if (!state.granted && state.capped) return [];
   // Closing a line something else grants writes a block, which then
   // outranks those grants, so the choice is named for what it leaves.
   const revokeLabel = state.subtracts ? "Blocked" : "No access";
+  // Without anything else granting the line, closing it only deletes this
+  // row's own rule, which is what Clear does, so it is not offered twice.
+  const offersRevoke = state.subtracts || !state.canClear;
 
   if (scope !== "use") {
     // View and manage cover the server itself; there is nothing inside one
     // to narrow, so the line is on or off.
     if (state.granted) {
-      return [{ label: revokeLabel, onSelect: onRevoke }];
+      return offersRevoke ? [{ label: revokeLabel, onSelect: onRevoke }] : [];
     }
     return [{ label: "Allowed", onSelect: onAllow }];
   }
@@ -929,7 +992,7 @@ function scopeOptions({
       });
     }
   }
-  if (state.canRevoke) {
+  if (state.canRevoke && offersRevoke) {
     options.push({ label: revokeLabel, onSelect: onRevoke });
   }
   return options;
