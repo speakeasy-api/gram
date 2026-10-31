@@ -5,6 +5,7 @@ import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentp
 import {
   DISCOVERY_BATCH_SIZE,
   discoverKeyServerGrants,
+  discoverWildcardKeyGrants,
 } from "./agent-key-discovery";
 
 const first = {
@@ -188,5 +189,72 @@ describe("scoped credential discovery", () => {
       undefined,
       expect.anything(),
     );
+  });
+});
+
+describe("wildcard credential discovery", () => {
+  const wildcard = (projectId?: string): AgentPolicyGrantForm => ({
+    effect: "allow",
+    scope: "mcp:connect",
+    selector: {
+      resourceKind: "mcp",
+      resourceId: "*",
+      ...(projectId ? { projectId } : {}),
+    },
+  });
+  const exclusion: AgentPolicyGrantForm = {
+    effect: "allow",
+    scope: "mcp:blocked_connect",
+    selector: {
+      resourceKind: "mcp",
+      resourceId: "blocked",
+      projectId: "project_one",
+    },
+  };
+
+  it("asks once, unscoped, for candidates with their exclusions", async () => {
+    const listDelegableGrants = vi.fn().mockResolvedValue([]);
+    await discoverWildcardKeyGrants(
+      { listDelegableGrants },
+      "agent_example",
+      ["project_one"],
+      signal(),
+    );
+    expect(listDelegableGrants).toHaveBeenCalledTimes(1);
+    expect(listDelegableGrants.mock.calls[0]?.[0]).toEqual({
+      agentId: "agent_example",
+      carryExclusions: true,
+    });
+  });
+
+  it("keeps the wildcards in reach and every exclusion beside them", async () => {
+    const listDelegableGrants = vi
+      .fn()
+      .mockResolvedValue([
+        wildcard("project_one"),
+        wildcard("project_two"),
+        pinned("toolset_one", "project_one"),
+        exclusion,
+      ]);
+    const grants = await discoverWildcardKeyGrants(
+      { listDelegableGrants },
+      "agent_example",
+      ["project_one"],
+      signal(),
+    );
+    expect(grants).toEqual([wildcard("project_one"), exclusion]);
+  });
+
+  it("is empty when no wildcard can be delegated, so the caller names servers", async () => {
+    const listDelegableGrants = vi
+      .fn()
+      .mockResolvedValue([pinned("toolset_one", "project_one"), exclusion]);
+    const grants = await discoverWildcardKeyGrants(
+      { listDelegableGrants },
+      "agent_example",
+      [],
+      signal(),
+    );
+    expect(grants).toEqual([]);
   });
 });

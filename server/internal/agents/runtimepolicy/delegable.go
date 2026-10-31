@@ -39,6 +39,13 @@ func DelegableGrantsWithExclusions(agent, owner, caller []authz.Grant) ([]authz.
 	return delegableGrants(agent, owner, caller, "", true, nil)
 }
 
+// DelegableGrantsWithExclusionsFor is DelegableGrantsWithExclusions for a
+// credential that will act for representedUserID, narrowed by constraints as
+// DelegableGrantsFor is.
+func DelegableGrantsWithExclusionsFor(representedUserID string, agent, owner, caller []authz.Grant, constraints ...authz.Selector) ([]authz.Grant, error) {
+	return delegableGrants(agent, owner, caller, representedUserID, true, constraints)
+}
+
 // DelegatedRuntimeGrants derives the policy that bounds a credential storing
 // none of its own from live parent policies: the delegable subset of agent
 // within owner and delegator, exclusions carried, in the canonical form a

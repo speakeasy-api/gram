@@ -1467,6 +1467,7 @@ func EncodeListDelegableGrantsRequest(encoder func(*http.Request) goahttp.Encode
 		for _, value := range p.ToolsetIds {
 			values.Add("toolset_ids", value)
 		}
+		values.Add("carry_exclusions", fmt.Sprintf("%v", p.CarryExclusions))
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
