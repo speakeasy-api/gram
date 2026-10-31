@@ -428,6 +428,33 @@ describe("Provisioning a new agent", () => {
     expect(screen.getByText("Select at least one MCP server.")).toBeTruthy();
   });
 
+  it("says what the agent can do, with its scopes one focus away", async () => {
+    await reachCredentialStep();
+
+    fireEvent.focus(screen.getByText("Call its servers"));
+    expect(
+      (await screen.findAllByText("mcp:auth on all auth clients")).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("mcp:connect on the selected servers").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("names all servers in its scopes under All servers", async () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Everything here" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await enabledAllServers());
+
+    fireEvent.focus(screen.getByText("Call its servers"));
+    expect(
+      (await screen.findAllByText("mcp:connect on all servers in the project"))
+        .length,
+    ).toBeGreaterThan(0);
+  });
+
   it("creates the agent, issues its first key and mints one setup command", async () => {
     fireEvent.click(await reachCredentialStep());
 

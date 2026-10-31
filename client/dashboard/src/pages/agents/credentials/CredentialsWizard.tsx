@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
+import { SimpleTooltip, TooltipProvider } from "@/components/ui/Tooltip";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
@@ -15,6 +16,7 @@ import {
   useRef,
   useState,
   type JSX,
+  type ReactNode,
 } from "react";
 import { useSearchParams } from "react-router";
 import {
@@ -148,6 +150,41 @@ function freeName(base: string, taken: Set<string>): string {
   let suffix = 2;
   while (taken.has(numbered(suffix))) suffix++;
   return numbered(suffix);
+}
+
+/**
+ * What the agent can do, in words, with the scopes it will be granted one
+ * hover or focus away for the reader who needs to match them to a policy.
+ */
+function GrantedScopes({
+  scopes,
+  children,
+}: {
+  scopes: string[];
+  children: ReactNode;
+}): JSX.Element {
+  // Its own provider: the summary is rendered on its own in tests, and a
+  // tooltip without one throws rather than degrades.
+  return (
+    <TooltipProvider>
+      <SimpleTooltip
+        tooltip={
+          <ul className="space-y-0.5 text-left font-mono text-xs">
+            {scopes.map((scope) => (
+              <li key={scope}>{scope}</li>
+            ))}
+          </ul>
+        }
+      >
+        <span
+          tabIndex={0}
+          className="cursor-default underline decoration-dotted underline-offset-4"
+        >
+          {children}
+        </span>
+      </SimpleTooltip>
+    </TooltipProvider>
+  );
 }
 
 export function CredentialsWizard({
@@ -1228,16 +1265,30 @@ export function CredentialsWizard({
           label: "Project",
           value: scopeName,
         },
-        {
-          label: "Grants",
-          value: (
-            <code className="text-xs">
-              {hookEvents
-                ? `${CONNECT_SCOPE}, ${HOOKS_INGEST_SCOPE}`
-                : CONNECT_SCOPE}
-            </code>
-          ),
-        },
+        // What creating grants, in words. Editing leaves the hooks grant as it
+        // is and does not read it, so the row would only guess.
+        ...(existing
+          ? []
+          : [
+              {
+                label: "Can",
+                value: (
+                  <GrantedScopes
+                    scopes={[
+                      allServers
+                        ? `${CONNECT_SCOPE} on all servers in the project`
+                        : `${CONNECT_SCOPE} on the selected servers`,
+                      `${AUTH_GRANT.scope} on all auth clients`,
+                      ...(hookEvents ? [HOOKS_INGEST_SCOPE] : []),
+                    ]}
+                  >
+                    {hookEvents
+                      ? "Call its servers, record its sessions"
+                      : "Call its servers"}
+                  </GrantedScopes>
+                ),
+              },
+            ]),
         {
           label: "Credential",
           value: credential === "api-key" ? "API key" : "Workload identity",
