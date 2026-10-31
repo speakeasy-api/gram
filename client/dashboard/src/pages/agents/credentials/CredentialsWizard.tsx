@@ -308,13 +308,14 @@ export function CredentialsWizard({
     ? "free"
     : // A cached answer is shown while it is asked again, and it may be out
       // of date by then.
+      // A failed check answers only for the name it asked about.
       nameToCheck !== typedName || nameCheck.isPending || nameCheck.isFetching
-      ? nameCheck.isError
+      ? "checking"
+      : nameCheck.isError
         ? "free"
-        : "checking"
-      : nameCheck.data === false
-        ? "taken"
-        : "free";
+        : nameCheck.data === false
+          ? "taken"
+          : "free";
   // null until the person picks, so the default can follow the project as it
 
   const [selected, setSelected] = useState<ServerSelection[]>([]);

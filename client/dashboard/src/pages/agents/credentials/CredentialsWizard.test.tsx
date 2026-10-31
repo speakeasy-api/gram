@@ -40,6 +40,7 @@ const mocks = vi.hoisted(() => ({
   createGrant: vi.fn(),
   deleteGrant: vi.fn(),
   agentList: vi.fn(),
+  nameCheckFails: false,
   sessions: vi.fn(),
   sessionClients: vi.fn(),
   bindings: vi.fn(),
@@ -100,7 +101,10 @@ vi.mock("@/hooks/useDebouncedValue", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     agents: {
-      list: async () => ({ result: { items: mocks.agentList() } }),
+      list: async () => {
+        if (mocks.nameCheckFails) throw new Error("network down");
+        return { result: { items: mocks.agentList() } };
+      },
       create: mocks.createAgent,
       listDelegableGrants: mocks.listDelegableGrants,
       checkPolicyGrants: mocks.checkPolicyGrants,
@@ -354,6 +358,7 @@ beforeEach(() => {
   mocks.platforms.mockReturnValue([]);
   mocks.tokenEndpoints.mockReturnValue([]);
   mocks.agentList.mockReturnValue([]);
+  mocks.nameCheckFails = false;
   mocks.renameAgent.mockResolvedValue({});
   mocks.createGrant.mockResolvedValue({});
   mocks.deleteGrant.mockResolvedValue({});
@@ -469,6 +474,16 @@ describe("Provisioning a new agent", () => {
     expect((await screen.findByRole("alert")).textContent).toContain(
       "already exists",
     );
+  });
+
+  it("lets the server decide when the name check fails", async () => {
+    mocks.nameCheckFails = true;
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    await nameChecked();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("will not move on without a name or a server", async () => {
