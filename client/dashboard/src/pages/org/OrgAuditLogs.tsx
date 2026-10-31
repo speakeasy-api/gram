@@ -11,7 +11,12 @@ import { recommended } from "@/elements/plugins";
 import { InsightsConfig, InsightsProvider } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { ResourceListPage } from "@/components/page-templates";
-import { Button } from "@/components/ui/Button";
+import { Page } from "@/components/page-layout";
+import {
+  defineFilters,
+  useFilterState,
+  type FilterValue,
+} from "@/components/filters";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { Switch } from "@/components/ui/Switch";
@@ -31,7 +36,6 @@ import { useAuditLogFacets } from "@gram/client/react-query/auditLogFacets.js";
 import { useAuditLogsInfinite } from "@gram/client/react-query/auditLogs.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { Icon } from "@/components/ui/Icon";
-import { SearchBar } from "@/components/ui/SearchBar";
 import React, {
   useCallback,
   useDeferredValue,
@@ -55,13 +59,11 @@ import {
   ActionIconTile,
   AuditFeedFooter,
   DateGroupHeader,
-  FacetSelect,
 } from "@/components/auditlogs/feed";
 import {
   formatDateHeader,
   formatTimeOnly,
   groupLogsByDate,
-  type FacetOption,
 } from "@/lib/audit-log-feed";
 import { cn, getServerURL } from "@/lib/utils";
 
@@ -90,6 +92,18 @@ function truncateMiddle(value: string, start = 18, end = 16) {
 const SUBJECT_MONO_CLASS = "font-mono text-xs text-muted-foreground";
 // Same mono treatment minus the colour, so the design-system link palette wins.
 const SUBJECT_LINK_CLASS = "font-mono text-xs";
+
+const AUDIT_LOG_FILTERS = defineFilters([
+  { id: "project", label: "Project", kind: "select" },
+  { id: "action", label: "Action", kind: "select" },
+  { id: "actor", label: "Actor", kind: "select" },
+  { id: "surface", label: "Surface", kind: "select" },
+]);
+
+function auditLogCountDescription(count?: number) {
+  if (count == null) return undefined;
+  return `${count.toLocaleString()} audit log${count === 1 ? "" : "s"}`;
+}
 
 // A subject rendered as a link to its detail page. Centralizes the mono styling
 // and hover affordance so every linked subject looks identical.
@@ -433,19 +447,16 @@ export default function OrgAuditLogs(): React.JSX.Element {
 function OrgAuditLogsInner() {
   const organization = useOrganization();
   const { orgSlug } = useSlugs();
-  const [selectedProjectSlug, setSelectedProjectSlug] = useQueryState(
-    "project",
-    { defaultValue: "all" },
-  );
-  const [selectedAction, setSelectedAction] = useQueryState("action", {
-    defaultValue: "all",
-  });
-  const [selectedActor, setSelectedActor] = useQueryState("actor", {
-    defaultValue: "all",
-  });
-  const [selectedSurface, setSelectedSurface] = useQueryState("surface", {
-    defaultValue: "all",
-  });
+  const {
+    values: filterValues,
+    setValue: setFilterValue,
+    clearValue: clearFilterValue,
+    clearAll: clearAllFilters,
+  } = useFilterState(AUDIT_LOG_FILTERS);
+  const selectedProjectSlug = filterValues.project ?? "all";
+  const selectedAction = filterValues.action ?? "all";
+  const selectedActor = filterValues.actor ?? "all";
+  const selectedSurface = filterValues.surface ?? "all";
   const [timestampMode, setTimestampMode] = useQueryState("time", {
     defaultValue: "utc",
   });
@@ -465,7 +476,7 @@ function OrgAuditLogsInner() {
       selectedProjectSlug === "all" ? undefined : selectedProjectSlug,
   });
 
-  const actionOptions: Array<FacetOption> = useMemo(
+  const actionOptions = useMemo(
     () =>
       (facetsData?.actions ?? []).map((option) => ({
         ...option,
@@ -473,8 +484,8 @@ function OrgAuditLogsInner() {
       })),
     [facetsData?.actions],
   );
-  const actorOptions: Array<FacetOption> = facetsData?.actors ?? [];
-  const surfaceOptions: Array<FacetOption> = useMemo(
+  const actorOptions = facetsData?.actors ?? [];
+  const surfaceOptions = useMemo(
     () =>
       (facetsData?.surfaces ?? []).map((option) => ({
         ...option,
@@ -561,12 +572,6 @@ function OrgAuditLogsInner() {
     }
     return map;
   }, [dateGroups]);
-
-  const hasActiveFilters =
-    selectedProjectSlug !== "all" ||
-    selectedAction !== "all" ||
-    selectedActor !== "all" ||
-    selectedSurface !== "all";
 
   // --- Search & keyboard navigation state ---
   const [searchQuery, setSearchQuery] = useState("");
@@ -795,172 +800,54 @@ function OrgAuditLogsInner() {
       <div className="flex w-full flex-col gap-4">
         <InsightsConfig contextInfo={insightsContext} />
 
-        <div className="flex flex-wrap items-end gap-3">
-          <FacetSelect
-            label="Project"
-            value={selectedProjectSlug}
-            onValueChange={(value) => {
-              void setSelectedProjectSlug(value);
-            }}
-            placeholder="All projects"
-            allLabel="All projects"
-            options={projects.map((project) => ({
-              value: project.slug,
-              displayName: project.slug,
-            }))}
-          />
-          <FacetSelect
-            label="Action"
-            value={selectedAction}
-            onValueChange={(value) => {
-              void setSelectedAction(value);
-            }}
-            placeholder="All actions"
-            allLabel="All actions"
-            options={actionOptions}
-          />
-          <FacetSelect
-            label="Actor"
-            value={selectedActor}
-            onValueChange={(value) => {
-              void setSelectedActor(value);
-            }}
-            placeholder="All actors"
-            allLabel="All actors"
-            options={actorOptions}
-          />
-          <FacetSelect
-            label="Surface"
-            value={selectedSurface}
-            onValueChange={(value) => {
-              void setSelectedSurface(value);
-            }}
-            placeholder="All surfaces"
-            allLabel="All surfaces"
-            options={surfaceOptions}
-          />
-          <div className="flex flex-col gap-1.5">
-            <Text small muted>
-              Filters
-            </Text>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={!hasActiveFilters}
-              onClick={() => {
-                void Promise.allSettled([
-                  setSelectedProjectSlug("all"),
-                  setSelectedAction("all"),
-                  setSelectedActor("all"),
-                  setSelectedSurface("all"),
-                ]);
+        <div
+          onKeyUp={(event) => {
+            if (
+              event.key === "Escape" &&
+              event.target instanceof HTMLInputElement
+            ) {
+              event.target.blur();
+            }
+          }}
+        >
+          <Page.Toolbar>
+            <Page.Toolbar.Search
+              value={searchQuery}
+              onChange={handleSearchChange}
+              placeholder="Search audit logs"
+            />
+            <Page.Toolbar.Filters
+              schema={AUDIT_LOG_FILTERS}
+              values={filterValues}
+              optionsById={{
+                project: projects.map((project) => ({
+                  value: project.slug,
+                  label: project.slug,
+                })),
+                action: actionOptions.map((option) => ({
+                  value: option.value,
+                  label: option.displayName,
+                  description: auditLogCountDescription(option.count),
+                })),
+                actor: actorOptions.map((option) => ({
+                  value: option.value,
+                  label: option.displayName,
+                  description: auditLogCountDescription(option.count),
+                })),
+                surface: surfaceOptions.map((option) => ({
+                  value: option.value,
+                  label: option.displayName,
+                  description: auditLogCountDescription(option.count),
+                })),
               }}
-            >
-              Clear filters
-            </Button>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Text small muted>
-              Timestamp
-            </Text>
-            <div className="bg-background flex h-8 items-center gap-2 border px-3">
-              <Text
-                small
-                className={
-                  tsMode === "utc" ? "text-foreground" : "text-muted-foreground"
-                }
-              >
-                UTC
-              </Text>
-              <Switch
-                checked={tsMode === "local"}
-                onCheckedChange={(checked) => {
-                  void setTimestampMode(checked ? "local" : "utc");
-                }}
-                aria-label="Toggle timestamp timezone"
-              />
-              <Text
-                small
-                className={
-                  tsMode === "local"
-                    ? "text-foreground"
-                    : "text-muted-foreground"
-                }
-              >
-                Local
-              </Text>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-card overflow-hidden border">
-          {/* Search toolbar */}
-          {!isLoading && !error && logs.length > 0 && (
-            <div className="bg-card flex items-center gap-2 border-b p-2">
-              <div className="text-muted-foreground flex items-center gap-3 text-[11px]">
-                {searchQuery ? (
-                  <>
-                    <span className="flex items-center gap-1">
-                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
-                        N
-                      </kbd>
-                      <span>/</span>
-                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
-                        ⇧N
-                      </kbd>
-                      <span className="ml-0.5">results</span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
-                        ESC
-                      </kbd>
-                      <span>clear</span>
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="flex items-center gap-1">
-                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
-                        J
-                      </kbd>
-                      <span>/</span>
-                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
-                        K
-                      </kbd>
-                      <span className="ml-0.5">navigate</span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
-                        G
-                      </kbd>
-                      <span>first</span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
-                        ⇧G
-                      </kbd>
-                      <span>last</span>
-                    </span>
-                  </>
-                )}
-              </div>
-              <div
-                className="ml-auto flex items-center gap-2"
-                onKeyUp={(event) => {
-                  if (
-                    event.key === "Escape" &&
-                    event.target instanceof HTMLInputElement
-                  ) {
-                    event.target.blur();
-                  }
-                }}
-              >
-                <SearchBar
-                  value={searchQuery}
-                  onChange={handleSearchChange}
-                  placeholder="Search audit logs"
-                  className="w-72"
-                />
+              onChange={
+                setFilterValue as (id: string, value: FilterValue) => void
+              }
+              onClear={clearFilterValue as (id: string) => void}
+              onClearAll={clearAllFilters}
+            />
+            <Page.Toolbar.Actions>
+              <div className="flex items-center gap-3">
                 {searchQuery ? (
                   <div className="text-muted-foreground flex items-center gap-1 text-[11px]">
                     <span aria-live="polite" className="min-w-8 text-center">
@@ -988,10 +875,44 @@ function OrgAuditLogsInner() {
                     </button>
                   </div>
                 ) : null}
+                <Text small muted>
+                  Timestamp
+                </Text>
+                <div className="bg-background flex h-8 items-center gap-2 border px-3">
+                  <Text
+                    small
+                    className={
+                      tsMode === "utc"
+                        ? "text-foreground"
+                        : "text-muted-foreground"
+                    }
+                  >
+                    UTC
+                  </Text>
+                  <Switch
+                    checked={tsMode === "local"}
+                    onCheckedChange={(checked) => {
+                      void setTimestampMode(checked ? "local" : "utc");
+                    }}
+                    aria-label="Toggle timestamp timezone"
+                  />
+                  <Text
+                    small
+                    className={
+                      tsMode === "local"
+                        ? "text-foreground"
+                        : "text-muted-foreground"
+                    }
+                  >
+                    Local
+                  </Text>
+                </div>
               </div>
-            </div>
-          )}
+            </Page.Toolbar.Actions>
+          </Page.Toolbar>
+        </div>
 
+        <div className="bg-card overflow-hidden border">
           <div
             ref={logsContainerRef}
             tabIndex={0}
