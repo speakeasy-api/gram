@@ -66,8 +66,9 @@ export async function discoverKeyServerGrants(
  * agent or the caller holds against it. The key then reaches servers added
  * after it is issued, where a list of today's servers never would.
  *
- * Empty when no such wildcard can be delegated, for example when the owner is
- * granted servers one by one. The caller then falls back to naming servers.
+ * Empty when a project in reach has no such wildcard to delegate, for example
+ * when the owner is granted servers one by one. The caller then falls back to
+ * naming servers.
  */
 export async function discoverWildcardKeyGrants(
   agents: Pick<Agents, "listDelegableGrants">,
@@ -88,11 +89,21 @@ export async function discoverWildcardKeyGrants(
       grant.scope === "mcp:connect" &&
       grant.selector.resourceKind === "mcp" &&
       grant.selector.resourceId === ANY_RESOURCE &&
-      (projectIds.length === 0 ||
-        (grant.selector.projectId !== undefined &&
-          projectIds.includes(grant.selector.projectId))),
+      (projectIds.length === 0
+        ? grant.selector.projectId === undefined
+        : grant.selector.projectId !== undefined &&
+          projectIds.includes(grant.selector.projectId)),
   );
-  if (wildcards.length === 0) return [];
+  // Every project in reach needs its wildcard, and an empty reach (every
+  // project) needs the organization-wide one. A partial set would issue a key
+  // that silently misses the other projects, so name servers instead.
+  const complete =
+    projectIds.length === 0
+      ? wildcards.length > 0
+      : projectIds.every((projectId) =>
+          wildcards.some((grant) => grant.selector.projectId === projectId),
+        );
+  if (!complete) return [];
   // Exclusions only narrow, so carrying one the kept wildcards do not overlap
   // costs nothing, and leaving one out would fail issuance.
   const exclusions = grants.filter(

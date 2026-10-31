@@ -252,7 +252,46 @@ describe("wildcard credential discovery", () => {
     const grants = await discoverWildcardKeyGrants(
       { listDelegableGrants },
       "agent_example",
+      ["project_one"],
+      signal(),
+    );
+    expect(grants).toEqual([]);
+  });
+
+  it("needs the organization-wide wildcard when the reach is every project", async () => {
+    const listDelegableGrants = vi
+      .fn()
+      .mockResolvedValue([
+        wildcard("project_one"),
+        pinned("toolset_one", "project_one"),
+        exclusion,
+      ]);
+    const projectOnly = await discoverWildcardKeyGrants(
+      { listDelegableGrants },
+      "agent_example",
       [],
+      signal(),
+    );
+    expect(projectOnly).toEqual([]);
+
+    listDelegableGrants.mockResolvedValue([wildcard(), exclusion]);
+    const organizationWide = await discoverWildcardKeyGrants(
+      { listDelegableGrants },
+      "agent_example",
+      [],
+      signal(),
+    );
+    expect(organizationWide).toEqual([wildcard(), exclusion]);
+  });
+
+  it("is empty when only some projects in reach have a wildcard", async () => {
+    const listDelegableGrants = vi
+      .fn()
+      .mockResolvedValue([wildcard("project_one"), exclusion]);
+    const grants = await discoverWildcardKeyGrants(
+      { listDelegableGrants },
+      "agent_example",
+      ["project_one", "project_two"],
       signal(),
     );
     expect(grants).toEqual([]);

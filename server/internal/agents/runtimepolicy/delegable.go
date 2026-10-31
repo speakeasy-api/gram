@@ -41,9 +41,35 @@ func DelegableGrantsWithExclusions(agent, owner, caller []authz.Grant) ([]authz.
 
 // DelegableGrantsWithExclusionsFor is DelegableGrantsWithExclusions for a
 // credential that will act for representedUserID, narrowed by constraints as
-// DelegableGrantsFor is.
+// DelegableGrantsFor is. A candidate that a carried exclusion withdraws
+// entirely is dropped: a key storing it would reach nothing through it, so
+// discovery must not offer it as reach.
 func DelegableGrantsWithExclusionsFor(representedUserID string, agent, owner, caller []authz.Grant, constraints ...authz.Selector) ([]authz.Grant, error) {
-	return delegableGrants(agent, owner, caller, representedUserID, true, constraints)
+	grants, err := delegableGrants(agent, owner, caller, representedUserID, true, constraints)
+	if err != nil {
+		return nil, err
+	}
+	kept := make([]authz.Grant, 0, len(grants))
+	for _, grant := range grants {
+		if !withdrawn(grant, grants, representedUserID) {
+			kept = append(kept, grant)
+		}
+	}
+	return kept, nil
+}
+
+// withdrawn reports whether an exclusion in grants covers the whole of allow.
+func withdrawn(allow authz.Grant, grants []authz.Grant, representedUserID string) bool {
+	if authz.IsBlocklistScope(allow.Scope) {
+		return false
+	}
+	exclusion, ok := authz.ExclusionScopeFor(allow.Scope)
+	if !ok {
+		return false
+	}
+	return slices.ContainsFunc(grants, func(carried authz.Grant) bool {
+		return carried.Scope == exclusion && carried.Selector.StrictMatchesFor(allow.Selector, representedUserID)
+	})
 }
 
 // DelegatedRuntimeGrants derives the policy that bounds a credential storing
