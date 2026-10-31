@@ -577,26 +577,25 @@ export function CredentialsWizard({
   // them would refuse the whole save. It is written only when the server says
   // this person, and the agent's owner, may give it. When the check itself
   // fails the grant is still sent, and the save reports the refusal.
-  const mayGrantAuth = async (forAgent: string | undefined) => {
-    try {
-      const { results } = await sdk.agents.checkPolicyGrants({
-        checkAgentPolicyGrantsForm: {
-          ...(forAgent ? { agentId: forAgent } : {}),
-          policyGrants: [AUTH_GRANT],
-        },
-      });
-      return results[0]?.allowed !== false;
-    } catch {
-      return true;
-    }
+  const checkAuthGrant = async (forAgent: string | undefined) => {
+    const { results } = await sdk.agents.checkPolicyGrants({
+      checkAgentPolicyGrantsForm: {
+        ...(forAgent ? { agentId: forAgent } : {}),
+        policyGrants: [AUTH_GRANT],
+      },
+    });
+    return results[0]?.allowed !== false;
   };
+  const mayGrantAuth = (forAgent: string | undefined) =>
+    checkAuthGrant(forAgent).catch(() => true);
   // The same answer ahead of time, so the summary names only the grants a
   // new agent will get. Creating asks again rather than trusting this one.
   // It waits until the servers are chosen, so it never sits in front of the
-  // server checks that step depends on.
+  // server checks that step depends on. A failed check leaves the summary's
+  // caveat in place rather than claiming the grant.
   const authCheck = useQuery({
     queryKey: ["agent-auth-grant-check", organization.id, user.id],
-    queryFn: () => mayGrantAuth(undefined),
+    queryFn: () => checkAuthGrant(undefined),
     enabled: !existing && step >= 2,
   });
   const recheck = useCallback(() => {
@@ -1297,8 +1296,9 @@ export function CredentialsWizard({
           value: scopeName,
         },
         // What creating grants, in words. Editing leaves the hooks grant as it
-        // is and does not read it, so the row would only guess.
-        ...(existing
+        // is and does not read it, so the row would only guess. Before any
+        // server is chosen there is nothing to call yet.
+        ...(existing || (!allServers && selected.length === 0)
           ? []
           : [
               {

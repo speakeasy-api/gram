@@ -456,7 +456,61 @@ describe("Provisioning a new agent", () => {
       (await screen.findAllByText("mcp:connect on the selected servers"))
         .length,
     ).toBeGreaterThan(0);
-    expect(screen.queryByText("mcp:auth on all auth clients")).toBeNull();
+    // Matched loosely: until the check answers, the line carries a caveat.
+    await waitFor(() =>
+      expect(
+        screen.queryAllByText(/mcp:auth on all auth clients/),
+      ).toHaveLength(0),
+    );
+  });
+
+  it("keeps the auth clients grant's caveat when its check fails", async () => {
+    const answer = answerChecks();
+    mocks.checkPolicyGrants.mockImplementation((request: CheckRequest) =>
+      request.checkAgentPolicyGrantsForm.policyGrants.some(
+        (grant) => grant.scope === "mcp:auth",
+      )
+        ? Promise.reject(new Error("network down"))
+        : answer(request),
+    );
+    await reachCredentialStep();
+    // Let the failed check settle: the caveat also shows while it is asked.
+    await waitFor(() =>
+      expect(
+        mocks.checkPolicyGrants.mock.calls.some(([request]) =>
+          (
+            request as CheckRequest
+          ).checkAgentPolicyGrantsForm.policyGrants.some(
+            (grant) => grant.scope === "mcp:auth",
+          ),
+        ),
+      ).toBe(true),
+    );
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50);
+    });
+
+    fireEvent.focus(screen.getByText("Call its servers"));
+    expect(
+      (
+        await screen.findAllByText(
+          "mcp:auth on all auth clients, if your role allows it",
+        )
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("says nothing about what it can do until a server is chosen", async () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const server = await screen.findByRole("checkbox", { name: "GitHub" });
+    expect(screen.queryByText("Call its servers")).toBeNull();
+
+    fireEvent.click(server);
+    expect(screen.getByText("Call its servers")).toBeTruthy();
   });
 
   it("names all servers in its scopes under All servers", async () => {
@@ -1707,6 +1761,16 @@ describe("Editing an agent that already exists", () => {
     await waitFor(() =>
       expect(server.getAttribute("data-state")).toBe("checked"),
     );
+  });
+
+  it("does not guess what the agent can do", async () => {
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const server = await screen.findByRole("checkbox", { name: "GitHub" });
+    await waitFor(() =>
+      expect(server.getAttribute("data-state")).toBe("checked"),
+    );
+    expect(screen.queryByText("Call its servers")).toBeNull();
   });
 
   it("saves a rename and leaves without touching the grants", async () => {
