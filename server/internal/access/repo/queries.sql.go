@@ -3542,6 +3542,24 @@ func (q *Queries) LockResourceAudience(ctx context.Context, arg LockResourceAudi
 	return err
 }
 
+const lockRolePrincipalGrants = `-- name: LockRolePrincipalGrants :exec
+SELECT pg_advisory_xact_lock(hashtextextended('role-grants:' || $1::text || ':' || $2::text, 0))
+`
+
+type LockRolePrincipalGrantsParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+}
+
+// Serializes grant writes for one role principal in an organization until the
+// transaction ends. Role edits and the assistant-role-grants backfill both take
+// it, so a backfill cannot recheck a role, lose a race with a revocation, and
+// then write grants back.
+func (q *Queries) LockRolePrincipalGrants(ctx context.Context, arg LockRolePrincipalGrantsParams) error {
+	_, err := q.db.Exec(ctx, lockRolePrincipalGrants, arg.OrganizationID, arg.PrincipalUrn)
+	return err
+}
+
 const markAuthPermissionTakenOver = `-- name: MarkAuthPermissionTakenOver :exec
 UPDATE auth_permission_provisions
 SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()

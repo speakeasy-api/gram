@@ -10,6 +10,13 @@ WHERE organization_id = @organization_id
   AND (@principal_urn::text = '' OR principal_urn = @principal_urn)
 ORDER BY principal_urn, scope;
 
+-- name: LockRolePrincipalGrants :exec
+-- Serializes grant writes for one role principal in an organization until the
+-- transaction ends. Role edits and the assistant-role-grants backfill both take
+-- it, so a backfill cannot recheck a role, lose a race with a revocation, and
+-- then write grants back.
+SELECT pg_advisory_xact_lock(hashtextextended('role-grants:' || @organization_id::text || ':' || @principal_urn::text, 0));
+
 -- name: GetPrincipalGrants :many
 -- Returns all grant rows matching a set of principal URNs within an org.
 -- Used by the access resolver to load grants for a user+role in a single query.

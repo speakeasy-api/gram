@@ -10,6 +10,8 @@
 //     PRO_ENTITLEMENTS_BACKFILL.md. It defaults to a non-writing dry run.
 //   - auth-permission-defaults: PostgreSQL application-data backfill; see
 //     AUTH_PERMISSION_DEFAULTS_BACKFILL.md. It defaults to a dry run.
+//   - assistant-role-grants: PostgreSQL application-data backfill; see
+//     ASSISTANT_ROLE_GRANTS_BACKFILL.md. It defaults to a dry run.
 //
 // Each guide documents its own connectivity, secret environment variables,
 // invocation modes, output, and recovery procedure. Flags are subcommand-local;
@@ -97,9 +99,11 @@ func run() int {
 		return runProEntitlements(args, os.Stdout, os.Getenv)
 	case authPermissionDefaultsName:
 		return runAuthPermissionDefaults(args, os.Stdout, os.Getenv)
+	case assistantRoleGrantsCommand:
+		return runAssistantRoleGrants(args, os.Stdout, os.Getenv)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, auth-permission-defaults)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, auth-permission-defaults, assistant-role-grants)")
 		return 2
 	}
 }
