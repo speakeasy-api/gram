@@ -279,7 +279,7 @@ export class Agents extends ClientSDK {
    * listDelegableGrants agents
    *
    * @remarks
-   * List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.
+   * List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted unless carry_exclusions is set. Issuance revalidates every grant.
    */
   async listDelegableGrants(
     request: ListAgentDelegableGrantsRequest,
