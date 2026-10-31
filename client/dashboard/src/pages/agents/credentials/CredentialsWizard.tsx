@@ -76,7 +76,6 @@ import {
 } from "./workloadCatalog";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { collectPageItems } from "@/components/sessions/collectPageItems";
 import { useServerInventory, type InventoryServer } from "./useServerInventory";
 import { useOwnerConnections } from "./useOwnerConnections";
 import { StepAuthentication } from "./StepAuthentication";
@@ -328,13 +327,15 @@ export function CredentialsWizard({
       organization.id,
       nameToCheck.toLowerCase(),
     ],
+    // One page of the agents whose names contain it. A name in more than 200
+    // of them that this page misses is left to the server to refuse.
     queryFn: async ({ signal }) => {
-      const matches = await collectPageItems(
-        sdk.agents.list({ search: nameToCheck, limit: 200 }, undefined, {
-          signal,
-        }),
+      const page = await sdk.agents.list(
+        { search: nameToCheck, limit: 200 },
+        undefined,
+        { signal },
       );
-      return !matches.some(
+      return !page.result.items.some(
         (match) =>
           match.id !== agent?.id &&
           match.name.trim().toLowerCase() === nameToCheck.toLowerCase(),
@@ -345,7 +346,9 @@ export function CredentialsWizard({
   });
   const nameState: "free" | "checking" | "taken" = !checksName
     ? "free"
-    : nameToCheck !== typedName || nameCheck.isPending
+    : // A cached answer is shown while it is asked again, and it may be out
+      // of date by then.
+      nameToCheck !== typedName || nameCheck.isPending || nameCheck.isFetching
       ? nameCheck.isError
         ? "free"
         : "checking"

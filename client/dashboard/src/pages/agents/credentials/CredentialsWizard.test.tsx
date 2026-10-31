@@ -101,7 +101,7 @@ vi.mock("@/hooks/useDebouncedValue", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     agents: {
-      list: async () => [{ result: { items: mocks.agentList() } }],
+      list: async () => ({ result: { items: mocks.agentList() } }),
       create: mocks.createAgent,
       listDelegableGrants: mocks.listDelegableGrants,
       checkPolicyGrants: mocks.checkPolicyGrants,
@@ -454,6 +454,28 @@ describe("Provisioning a new agent", () => {
     });
     await nameChecked();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("asks again about a name it already checked before letting it through", async () => {
+    setup();
+    const field = screen.getByLabelText("Name");
+    fireEvent.change(field, { target: { value: "Release Bot" } });
+    await nameChecked();
+    fireEvent.change(field, { target: { value: "Deploy Bot" } });
+    await nameChecked();
+
+    // Taken since it was last asked about.
+    mocks.agentList.mockReturnValue([
+      { id: "agent_other", name: "Release Bot" },
+    ]);
+    fireEvent.change(field, { target: { value: "Release Bot" } });
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "already exists",
+    );
   });
 
   it("will not move on without a name or a server", async () => {
