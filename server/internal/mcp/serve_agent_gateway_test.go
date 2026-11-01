@@ -43,15 +43,72 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// agentGatewayFixture is one agent, one key, and two private member servers in
-// the caller's project: the agent is granted one of them and not the other.
+// agentGatewayFixture is one agent, one key, and four member servers in the
+// caller's project: a private and a public one the agent is granted, and a
+// private and a public one it is not.
 type agentGatewayFixture struct {
 	agent          agentsrepo.Agent
 	token          string
 	granted        string
+	grantedPublic  string
 	grantedProject string
 	denied         string
 	open           string
+}
+
+// agentServerGrant is one server an agent key may connect to.
+type agentServerGrant struct {
+	serverID  uuid.UUID
+	projectID uuid.UUID
+}
+
+// mintAgentGatewayKey grants the agent and its owner mcp:connect on each
+// server and mints a key whose delegated policy names exactly those servers.
+// Runtime admission intersects the key's policy with the agent's own grants
+// and with its owner's, so a grant the owner lacks admits nothing. Seed all
+// three, as the consent fixtures do.
+func mintAgentGatewayKey(t *testing.T, ctx context.Context, ti *testInstance, agent agentsrepo.Agent, servers ...agentServerGrant) string {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
+
+	grants := make([]authz.Grant, 0, len(servers))
+	for _, server := range servers {
+		seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, server.serverID.String())
+		seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, agentPrincipal, server.serverID)
+		grants = append(grants, authz.Grant{
+			Scope: authz.ScopeMCPConnect,
+			Selector: authz.Selector{
+				authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+				authz.SelectorKeyResourceID:   server.serverID.String(),
+				authz.SelectorKeyProjectID:    server.projectID.String(),
+			},
+		})
+	}
+
+	// Credential policy: the immutable ceiling on this one key.
+	policy, err := runtimepolicy.NewDelegatedPolicyV1(grants)
+	require.NoError(t, err)
+	delegated, err := runtimepolicy.EncodeDelegatedPolicy(runtimepolicy.CurrentDelegatedPolicyVersion, policy)
+	require.NoError(t, err)
+
+	token, hash, prefix, err := auth.GenerateAPIKeyMaterial(auth.APIKeyPrefix("test"))
+	require.NoError(t, err)
+	_, err = keysrepo.New(ti.conn).CreateAgentAPIKey(ctx, keysrepo.CreateAgentAPIKeyParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		CreatedByUserID:        authCtx.UserID,
+		Name:                   "gateway key " + uuid.NewString()[:8],
+		KeyPrefix:              prefix,
+		KeyHash:                hash,
+		SubjectUrn:             pgtype.Text{String: urn.NewAgentSubject(agent.ID).String(), Valid: true},
+		DelegatedGrants:        delegated,
+		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(runtimepolicy.CurrentDelegatedPolicyVersion), Valid: true},
+		ExpiresAt:              pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	require.NoError(t, err)
+	return token
 }
 
 // mcpServerBySlug resolves the id a proxy-backed member's mcp:connect grant is
@@ -82,8 +139,9 @@ func seedAgentGateway(t *testing.T, ctx context.Context, ti *testInstance) agent
 	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "denied member", deniedSlug, 1, mcpservers.VisibilityPrivate)
 	publicSlug := "openmember-" + uuid.NewString()[:8]
 	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "public member", publicSlug, 2, mcpservers.VisibilityPublic)
+	grantedPublicSlug := "grantedopen-" + uuid.NewString()[:8]
+	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "granted public member", grantedPublicSlug, 3, mcpservers.VisibilityPublic)
 
-	grantedServer := mcpServerBySlug(t, ctx, ti, *authCtx.ProjectID, grantedSlug)
 	project, perr := projectsrepo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
 	require.NoError(t, perr)
 
@@ -94,44 +152,14 @@ func seedAgentGateway(t *testing.T, ctx context.Context, ti *testInstance) agent
 	})
 	require.NoError(t, err)
 
-	// Runtime admission intersects the credential's policy with the agent's own
-	// and with its owner's, so a grant the owner lacks admits nothing. Seed
-	// both, as the consent fixtures do.
-	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, grantedServer.String())
-	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
-	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, agentPrincipal, grantedServer)
-
-	// Credential policy: the immutable ceiling on this one key.
-	policy, err := runtimepolicy.NewDelegatedPolicyV1([]authz.Grant{{
-		Scope: authz.ScopeMCPConnect,
-		Selector: authz.Selector{
-			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
-			authz.SelectorKeyResourceID:   grantedServer.String(),
-			authz.SelectorKeyProjectID:    authCtx.ProjectID.String(),
-		},
-	}})
-	require.NoError(t, err)
-	delegated, err := runtimepolicy.EncodeDelegatedPolicy(runtimepolicy.CurrentDelegatedPolicyVersion, policy)
-	require.NoError(t, err)
-
-	token, hash, prefix, err := auth.GenerateAPIKeyMaterial(auth.APIKeyPrefix("test"))
-	require.NoError(t, err)
-	_, err = keysrepo.New(ti.conn).CreateAgentAPIKey(ctx, keysrepo.CreateAgentAPIKeyParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		CreatedByUserID:        authCtx.UserID,
-		Name:                   "gateway key " + uuid.NewString()[:8],
-		KeyPrefix:              prefix,
-		KeyHash:                hash,
-		SubjectUrn:             pgtype.Text{String: urn.NewAgentSubject(agent.ID).String(), Valid: true},
-		DelegatedGrants:        delegated,
-		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(runtimepolicy.CurrentDelegatedPolicyVersion), Valid: true},
-		ExpiresAt:              pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
-	})
-	require.NoError(t, err)
+	token := mintAgentGatewayKey(t, ctx, ti, agent,
+		agentServerGrant{serverID: mcpServerBySlug(t, ctx, ti, *authCtx.ProjectID, grantedSlug), projectID: *authCtx.ProjectID},
+		agentServerGrant{serverID: mcpServerBySlug(t, ctx, ti, *authCtx.ProjectID, grantedPublicSlug), projectID: *authCtx.ProjectID},
+	)
 
 	return agentGatewayFixture{
 		agent: agent, token: token,
-		granted: grantedSlug, grantedProject: project.Slug,
+		granted: grantedSlug, grantedPublic: grantedPublicSlug, grantedProject: project.Slug,
 		denied: deniedSlug, open: publicSlug,
 	}
 }
@@ -177,8 +205,9 @@ func requireAgentGatewayCode(t *testing.T, err error, code oops.Code) {
 }
 
 // The whole point of the surface: membership follows the agent's grants, so a
-// server it cannot connect to never appears, even though both are stored
-// members of a gateway in the same project.
+// server it cannot connect to never appears, even though all of them are
+// stored members of a gateway in the same project. Visibility does not change
+// that: a public server the agent was not granted is not listed either.
 func TestServeAgentGateway_ListsOnlyGrantedServers(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
@@ -192,11 +221,18 @@ func TestServeAgentGateway_ListsOnlyGrantedServers(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Contains(t, w.Body.String(), fx.granted)
+	require.Contains(t, w.Body.String(), fx.grantedPublic)
 	require.NotContains(t, w.Body.String(), fx.denied)
-	// A public server is anonymously reachable by anyone, so withholding it
-	// here would hide something the agent can already reach without Speakeasy.
-	// Listing it is deliberate, not an admission leak.
-	require.Contains(t, w.Body.String(), fx.open)
+	require.NotContains(t, w.Body.String(), fx.open)
+
+	// Not merely hidden: drill-down must miss identically, or the listing
+	// would be the only thing keeping the agent inside its policy.
+	w, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      "describe_server",
+		"arguments": map[string]any{"server": fx.open},
+	}))
+	require.NoError(t, err)
+	require.Contains(t, w.Body.String(), "unknown server")
 }
 
 // An agent gateway answers initialize without an OAuth issuer gate: the agent
@@ -309,12 +345,16 @@ func TestServeAgentGateway_QualifiesMemberSlugsByProject(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Deliberately the same slug as the first project's granted member, and
-	// public so it is admitted without a second set of grants.
+	// Deliberately the same slug as the first project's granted member. A
+	// second key names both, since the fixture key predates the twin.
 	metaTwo := createMetaMcpEndpoint(t, ctx, ti.conn, second.ID, authCtx.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
 	seedMetaMember(t, ctx, ti.conn, second.ID, metaTwo.ID, "twin member", fx.granted, 0, mcpservers.VisibilityPublic)
+	token := mintAgentGatewayKey(t, ctx, ti, fx.agent,
+		agentServerGrant{serverID: mcpServerBySlug(t, ctx, ti, *authCtx.ProjectID, fx.granted), projectID: *authCtx.ProjectID},
+		agentServerGrant{serverID: mcpServerBySlug(t, ctx, ti, second.ID, fx.granted), projectID: second.ID},
+	)
 
-	w, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, makeMetaRPCBody(t, "tools/call", map[string]any{
+	w, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), token, makeMetaRPCBody(t, "tools/call", map[string]any{
 		"name":      "list_servers",
 		"arguments": map[string]any{},
 	}))
@@ -473,8 +513,8 @@ func TestServeAgentGateway_ListsPrivateOnlyMembersOnPrivateIngress(t *testing.T)
 	}))
 	require.NoError(t, err)
 	require.Contains(t, w.Body.String(), fx.granted)
-	// public_only members are the ones excluded here.
-	require.NotContains(t, w.Body.String(), fx.open)
+	// public_only members are the ones excluded here, granted or not.
+	require.NotContains(t, w.Body.String(), fx.grantedPublic)
 }
 
 // "All servers" is a project wildcard on the key as well as on the agent, so

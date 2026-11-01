@@ -265,7 +265,7 @@ func TestAdmitMetaMembersShadowLeavesAdmissionUnchanged(t *testing.T) {
 	ctx := sessionContext(t, shadowOrg, authz.NewGrant(authz.ScopeMCPConnect, granted.serverID.String()))
 
 	admitted := func(h shadowHarness) []uuid.UUID {
-		_, members, err := h.service.admitMetaMembers(ctx, testenv.NewLogger(t), mandatorySurfaceConsent, shadowOrg, []metaMemberCandidate{public, granted, denied})
+		_, members, err := h.service.admitMetaMembers(ctx, testenv.NewLogger(t), mandatorySurfaceConsent, shadowOrg, []metaMemberCandidate{public, granted, denied}, false)
 		require.NoError(t, err)
 		ids := make([]uuid.UUID, 0, len(members))
 		for _, member := range members {
