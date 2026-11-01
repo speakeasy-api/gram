@@ -242,7 +242,7 @@ func symlinkOrCopy(dir string, target string, name string) error {
 func (r Runner) printNextSteps(opts InitOptions) error {
 	steps, err := templatesFS.ReadFile(path.Join("templates", opts.Template, "NEXT_STEPS.txt"))
 	if err != nil {
-		steps = []byte("All done! Jump in with `cd $DIR` and run `speakeasy functions build`.\n")
+		steps = []byte("All done! Jump in with `cd $DIR` and run `speakeasy-ai functions build`.\n")
 	}
 	text := strings.NewReplacer("$PACKAGE_MANAGER", opts.PackageManager, "$DIR", opts.Dir).Replace(string(steps))
 	if _, err := fmt.Fprintln(r.out(), "\n"+strings.TrimRight(text, "\n")); err != nil {

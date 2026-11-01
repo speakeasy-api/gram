@@ -54,7 +54,7 @@ func TestLegacyEnv_ReachesParsedFlags(t *testing.T) { //nolint:paralleltest // s
 	}
 
 	got := map[string]string{}
-	app := newApp()
+	app := newApp(commandName)
 	app.Commands = append(app.Commands, &cli.Command{
 		Name:   "legacy-env-probe",
 		Hidden: true,

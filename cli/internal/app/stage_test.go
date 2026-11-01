@@ -18,7 +18,7 @@ func runAppIn(t *testing.T, dir string, args ...string) (string, error) {
 	t.Chdir(dir)
 
 	var stderr bytes.Buffer
-	app := newApp()
+	app := newApp(commandName)
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &stderr
 	app.ExitErrHandler = func(*cli.Context, error) {}

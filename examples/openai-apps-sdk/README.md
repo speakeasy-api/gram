@@ -28,7 +28,7 @@ from `pizzaz_node_server/pizza-app-gram`:
 
 ```bash
 pnpm build
-speakeasy auth
+speakeasy-ai auth
 pnpm push
 ```
 

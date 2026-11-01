@@ -36,7 +36,7 @@ pnpm build
 Ensure you are authenticated with your Speakeasy account by running:
 
 ```bash
-speakeasy auth
+speakeasy-ai auth
 ```
 
 After building, push your function to Speakeasy with:

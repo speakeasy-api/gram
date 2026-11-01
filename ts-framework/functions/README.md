@@ -26,23 +26,24 @@ export default functions;
 ## Quickstart
 
 Install the Speakeasy AI Control Plane CLI with
-`brew install speakeasy-api/tap/cli` or `npm i -g @speakeasy-api/cli`, then
-scaffold, build and deploy a project:
+`brew install speakeasy-api/tap/cli` or `npm i -g @speakeasy-api/cli`. Check
+it with `speakeasy-ai --control-plane-cli`, which prints
+`speakeasy-ai-control-plane-cli`. Then scaffold, build and deploy a project:
 
 ```
-speakeasy functions init my-tools
+speakeasy-ai functions init my-tools
 cd my-tools
-speakeasy functions build
-speakeasy functions push
+speakeasy-ai functions build
+speakeasy-ai functions push
 ```
 
-`speakeasy functions dev` runs the project's `dev` script, which starts a local
-MCP server with the MCP Inspector. `speakeasy functions build` runs this
+`speakeasy-ai functions dev` runs the project's `dev` script, which starts a local
+MCP server with the MCP Inspector. `speakeasy-ai functions build` runs this
 package from the project's `node_modules`, so the build always matches the SDK
 version the project depends on.
 
 `npm create @gram-ai/function` and the `gf build` and `gf push` commands still
-work but are deprecated in favour of the `speakeasy functions` commands.
+work but are deprecated in favour of the `speakeasy-ai functions` commands.
 
 ## Installation
 
@@ -539,11 +540,11 @@ const manifest = functions.manifest();
 
 ## Deploying
 
-Deploy with `speakeasy functions push`. It builds the project, adds the zip
+Deploy with `speakeasy-ai functions push`. It builds the project, adds the zip
 file to the deployment file (`speakeasy.deploy.json` by default, or
 `gram.deploy.json` when only that file exists) and pushes a deployment. The
 target project is `--project` (or `SPEAKEASY_AI_PROJECT`), then `deployProject`
-in `speakeasy.config.ts`, then the project you chose with `speakeasy auth`.
+in `speakeasy.config.ts`, then the project you chose with `speakeasy-ai auth`.
 The slug comes from `--slug`, then `slug` in `speakeasy.config.ts`, then the
 package.json `name` without its scope. Pass `--no-build` to deploy the
 existing build output.
@@ -568,7 +569,7 @@ when only that file exists. The build writes `dist/functions.zip`.
 ### Building programmatically
 
 `@speakeasy-api/functions/build` exports the build that
-`speakeasy functions build` runs:
+`speakeasy-ai functions build` runs:
 
 ```typescript
 import { build, resolveProject } from "@speakeasy-api/functions/build";
@@ -593,10 +594,12 @@ picks the CLI in this order:
    environment variable.
 2. `cli/bin/gram` from this repository, when `SPEAKEASY_AI_DEV` (or deprecated
    `GRAM_DEV`) is `1` or `true`.
-3. `speakeasy` on your `PATH`, if `speakeasy --control-plane-cli` confirms it
-   is the AI Control Plane CLI. The Speakeasy SDK generator CLI also installs
-   a `speakeasy` binary, and the SDK skips it.
-4. The legacy `gram` command.
+3. `speakeasy-ai` on your `PATH`.
+4. `speakeasy` on your `PATH`, the name older releases installed under, if
+   `speakeasy --control-plane-cli` confirms it is the AI Control Plane CLI. The
+   Speakeasy SDK generator CLI also installs a `speakeasy` binary, and the SDK
+   skips it.
+5. The legacy `gram` command.
 
 ## Handling Tool Calls
 
