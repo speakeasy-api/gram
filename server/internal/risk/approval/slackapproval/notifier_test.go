@@ -7,11 +7,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/slackapproval"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -120,6 +123,47 @@ func TestNotifyDMsEachApprover(t *testing.T) {
 		require.Equal(t, "D"+message.SlackUserID.String, message.SlackChannelID.String)
 		require.NotEmpty(t, message.SlackMessageTs.String)
 	}
+}
+
+func TestNotifyWithoutButtonsSendsApproversToTheDashboard(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.slack.mapUser(f.email(t, f.approverID), "UAPPROVER")
+	policy := f.addPolicy(t, userURN(f.approverID))
+	approvalID := f.pendingRequest(t, policy, "")
+	// Without the signing secret, the server cannot verify a click.
+	notifier := slackapproval.NewNotifier(testenv.NewLogger(t), f.cards, f.workspaces, slackapi.NewClient(f.slack.server.URL, f.slack.server.Client()), false)
+
+	result, err := notifier.Notify(t.Context(), f.target(approvalID))
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Sent)
+	posts := f.slack.callsTo("chat.postMessage")
+	require.Len(t, posts, 1)
+	require.Empty(t, buttonActions(cardBlocks(t, posts[0])))
+	text := cardText(t, posts[0])
+	require.Contains(t, text, "|Decide in Speakeasy>, on the Tool approvals tab.")
+	require.Contains(t, text, "<https://app.speakeasy.test/")
+	require.Contains(t, text, "request="+approvalID.String())
+	require.NotContains(t, text, "Approve once")
+}
+
+func TestSentReportsRecordedDMsWithoutSending(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.slack.mapUser(f.email(t, f.approverID), "UAPPROVER")
+	policy := f.addPolicy(t, userURN(f.approverID))
+	approvalID := f.pendingRequest(t, policy, "")
+	sent, err := f.notifier.Notify(t.Context(), f.target(approvalID))
+	require.NoError(t, err)
+
+	recorded, err := f.notifier.Sent(t.Context(), f.target(approvalID))
+	require.NoError(t, err)
+	require.Equal(t, sent, recorded)
+	require.Len(t, f.slack.callsTo("chat.postMessage"), 1)
+
+	gone, err := f.notifier.Sent(t.Context(), f.target(uuid.New()))
+	require.NoError(t, err)
+	require.Equal(t, 0, gone.Sent)
 }
 
 func TestNotifyPrefersAConfirmedSlackMapping(t *testing.T) {
