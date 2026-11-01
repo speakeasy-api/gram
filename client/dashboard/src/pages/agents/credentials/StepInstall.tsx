@@ -154,6 +154,7 @@ export function StepInstall({
           reader copying a template with a placeholder where the key goes. */}
       <div className="relative">
         <PanelTabs
+          aria-label="Setup method"
           value={tab}
           onValueChange={setTab}
           tabs={INSTALL_TABS}
