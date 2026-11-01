@@ -79,6 +79,10 @@ const (
 	// both surfaces; targeted by organization group (org slug), like
 	// FlagBudgets. A rollout gate, not authorization. Removed once Explore is GA.
 	FlagExplore Flag = "gram-explore"
+	// FlagTeamMemory gates the Platform MCP team memory tools and the jobs that
+	// build team memory. Targeted by organization group (org slug). A rollout
+	// gate, not authorization: memory:read and memory:write still apply.
+	FlagTeamMemory Flag = "team-memory"
 	// FlagRiskLLMAnalyzer selects the engine behind an organization's secret,
 	// PII, prompt injection and destructive tool call detection on both the
 	// realtime enforcement lane and the batch flag lane. It is multivariate:

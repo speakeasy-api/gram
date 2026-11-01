@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 )
 
 // chatRedactMaxDepth bounds JSON nesting, including JSON encoded inside JSON
@@ -214,4 +216,19 @@ func chatAttachmentPart(value map[string]any) bool {
 		}
 	}
 	return false
+}
+
+// chatSearchRedactor masks text exactly as search_chats masks transcripts, so
+// team memory never stores or shows a value chat search would hide.
+type chatSearchRedactor struct {
+	service *ChatSearchService
+}
+
+// NewChatSearchRedactor returns the search_chats redaction as a TextRedactor.
+func NewChatSearchRedactor() TextRedactor {
+	return chatSearchRedactor{service: &ChatSearchService{db: nil, engine: nil, audit: nil, budget: OperationBudget{Connection: nil, Organization: nil}, references: nil, scanner: gitleaks.NewScanner()}}
+}
+
+func (r chatSearchRedactor) Text(ctx context.Context, text string) (string, bool, error) {
+	return r.service.redactText(ctx, text)
 }
