@@ -1,0 +1,106 @@
+# Magellan: a nightly agent that explores the production dashboard as a bot
+# user in a dedicated integration org, and files the bugs it can prove as
+# Linear Triage issues. See e2e/magellan/README.md.
+#
+# The repo is public, so this workflow uploads no artifacts and logs no
+# findings: screenshots and detail go to Linear only.
+#
+# Setup, in the `magellan` environment:
+# - vars:    MAGELLAN_SITE_URL (e.g. https://app.speakeasy.com), MAGELLAN_ORG
+# - secrets: MAGELLAN_SESSION (the bot's `gram_session`), ANTHROPIC_API_KEY,
+#            MAGELLAN_LINEAR_API_KEY
+name: Magellan
+
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: Focus on dashboard changes merged since (git date)
+        default: 24 hours ago
+      file:
+        description: File Linear issues (otherwise dry run)
+        type: boolean
+        default: true
+  schedule:
+    # Explore on weeknights, after the day's merges.
+    - cron: "0 3 * * 2-6"
+    # Keep the bot's session alive. It expires after 72h without use, and
+    # the weekend gap alone is about that long.
+    - cron: "0 15 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: magellan-${{ github.event.schedule || 'dispatch' }}
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    name: keepalive
+    if: github.event.schedule == '0 15 * * *'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    environment: magellan
+    timeout-minutes: 5
+    steps:
+      # Any authenticated call slides the session's 72h expiry. A failure
+      # here means the session is gone and someone has to capture a new one.
+      - name: Refresh the bot session
+        env:
+          SITE_URL: ${{ vars.MAGELLAN_SITE_URL }}
+          SESSION: ${{ secrets.MAGELLAN_SESSION }}
+        run: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Gram-Session: $SESSION" "${SITE_URL%/}/rpc/auth.info")
+          if [ "$status" != 200 ]; then
+            echo "::error::The Magellan bot session is no longer valid (auth.info returned $status). Capture a new one; see e2e/magellan/README.md."
+            exit 1
+          fi
+
+  explore:
+    name: explore
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 3 * * 2-6'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    environment: magellan
+    timeout-minutes: 75
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Install the browser
+        run: mise run playwright:install-browser
+
+      - name: Install Claude Code
+        run: curl -fsSL https://claude.ai/install.sh | bash
+
+      - name: Explore
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MAGELLAN_SITE_URL: ${{ vars.MAGELLAN_SITE_URL }}
+          MAGELLAN_ORG: ${{ vars.MAGELLAN_ORG }}
+          MAGELLAN_SESSION: ${{ secrets.MAGELLAN_SESSION }}
+          SINCE: ${{ inputs.since || '24 hours ago' }}
+        run: PATH="$HOME/.local/bin:$PATH" mise run magellan:explore --since "$SINCE"
+
+      - name: File findings
+        env:
+          LINEAR_API_KEY: ${{ secrets.MAGELLAN_LINEAR_API_KEY }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          FILE: ${{ github.event_name == 'schedule' || inputs.file }}
+        run: |
+          if [ "$FILE" = true ]; then
+            mise run magellan:file --file --run-url "$RUN_URL"
+          else
+            mise run magellan:file --run-url "$RUN_URL"
+          fi
