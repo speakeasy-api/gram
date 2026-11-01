@@ -514,20 +514,16 @@ const (
 	// McpKillswitchResourceClassKey is the bounded kill-switch resource
 	// coverage class of a covered MCP tools/call. Never a server identifier.
 	McpKillswitchResourceClassKey = attribute.Key("gram.mcp.killswitch.resource_class")
-	// McpEntryPointKey is the bounded entry-point dimension on the
-	// mcp.toolset_slug_fallback counter: which public surface resolved a
-	// request through the legacy toolsets.mcp_slug lookup.
-	McpEntryPointKey       = attribute.Key("gram.mcp.entry_point")
-	McpRequestedTagsKey    = attribute.Key("gram.mcp.requested_tags")
-	McpToolsReturnedKey    = attribute.Key("gram.mcp.tools_returned")
-	McpToolsFilteredKey    = attribute.Key("gram.mcp.tools_filtered")
-	McpServerIDKey         = attribute.Key("gram.mcp_server.id")
-	McpServerIDsKey        = attribute.Key("gram.mcp_server.ids")
-	McpEndpointIDKey       = attribute.Key("gram.mcp_endpoint.id")
-	MetaMcpServerIDKey     = attribute.Key("gram.meta_mcp_server.id")
-	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
-	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
-	McpURLKey              = attribute.Key("gram.mcp.url")
+	McpRequestedTagsKey           = attribute.Key("gram.mcp.requested_tags")
+	McpToolsReturnedKey           = attribute.Key("gram.mcp.tools_returned")
+	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
+	McpServerIDKey                = attribute.Key("gram.mcp_server.id")
+	McpServerIDsKey               = attribute.Key("gram.mcp_server.ids")
+	McpEndpointIDKey              = attribute.Key("gram.mcp_endpoint.id")
+	MetaMcpServerIDKey            = attribute.Key("gram.meta_mcp_server.id")
+	MetaMemberBackendKey          = attribute.Key("gram.meta.member.backend")
+	MetaDispatchOutcomeKey        = attribute.Key("gram.meta.dispatch.outcome")
+	McpURLKey                     = attribute.Key("gram.mcp.url")
 
 	// Gateway consent diagnostics contain IDs and comparison results only,
 	// never credentials, configuration hashes, or captured tool definitions.
@@ -538,11 +534,6 @@ const (
 	McpConsentExecuteKey         = attribute.Key("gram.mcp.consent.execute")
 	McpConsentComparisonsKey     = attribute.Key("gram.mcp.consent.comparisons")
 	McpConsentExpiresAtKey       = attribute.Key("gram.mcp.consent.expires_at")
-
-	// Legacy toolsets.mcp_slug fallback attribution; logs only, never metric dimensions.
-	McpFallbackRequestHostKey         = attribute.Key("gram.mcp.fallback.request_host")
-	McpFallbackCanonicalWrapperKey    = attribute.Key("gram.mcp.fallback.canonical_wrapper")
-	McpFallbackToolsetCustomDomainKey = attribute.Key("gram.mcp.fallback.toolset_custom_domain")
 
 	// McpClientNameKey / McpClientVersionKey carry the MCP caller's
 	// self-reported identity from the initialize handshake (or the
@@ -3482,23 +3473,6 @@ func SlogMcpSkillTargetKind[V ~string](v V) slog.Attr {
 func McpSkillTargetID(v string) attribute.KeyValue { return McpSkillTargetIDKey.String(v) }
 func SlogMcpSkillTargetID(v string) slog.Attr {
 	return slog.String(string(McpSkillTargetIDKey), v)
-}
-
-func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }
-func SlogMcpEntryPoint[V ~string](v V) slog.Attr {
-	return slog.String(string(McpEntryPointKey), string(v))
-}
-
-func SlogMcpFallbackRequestHost[V ~string](v V) slog.Attr {
-	return slog.String(string(McpFallbackRequestHostKey), string(v))
-}
-
-func SlogMcpFallbackCanonicalWrapper(v bool) slog.Attr {
-	return slog.Bool(string(McpFallbackCanonicalWrapperKey), v)
-}
-
-func SlogMcpFallbackToolsetCustomDomain[V ~string](v V) slog.Attr {
-	return slog.String(string(McpFallbackToolsetCustomDomainKey), string(v))
 }
 
 func McpKillswitchSurface[V ~string](v V) attribute.KeyValue {

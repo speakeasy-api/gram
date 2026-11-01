@@ -16,7 +16,6 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -37,7 +36,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/identity"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcpRepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -4144,10 +4142,6 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	if err != nil {
 		return nil, nil, fmt.Errorf("load hosted MCP state: %w", err)
 	}
-	aliases, err := legacyalias.List(ctx, db, projectID, toolsetIDs)
-	if err != nil {
-		return nil, nil, fmt.Errorf("list toolset aliases: %w", err)
-	}
 
 	// Include soft-deleted servers: tool_source on telemetry rows is the
 	// backend remote/tunneled server id, which outlives the mcp_servers row.
@@ -4166,11 +4160,8 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	}
 	hostedMatchers := make([]repo.HostedMCPMatcher, 0, len(toolsets))
 	for _, toolset := range toolsets {
-		// Traffic can arrive through the frozen alias or any of the canonical server's endpoints.
+		// Traffic can arrive through any of the canonical server's endpoints.
 		var slugs []string
-		if alias := aliases[toolset.ID].Slug; alias.Valid && alias.String != "" {
-			slugs = append(slugs, alias.String)
-		}
 		if row := hostingstate.For(hosting, toolset.ID); row != nil && row.Canonical {
 			for _, slug := range row.EndpointSlugs {
 				if !slices.Contains(slugs, slug) {
@@ -4276,23 +4267,9 @@ func LoadMetaMCPMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid.U
 	if err != nil {
 		return nil, fmt.Errorf("list project gateway endpoints: %w", err)
 	}
-	// A deleted endpoint stops matching once a legacy toolset alias holds its address.
-	var deleted []legacyalias.Alias
-	for _, endpoint := range endpoints {
-		if endpoint.Deleted {
-			deleted = append(deleted, legacyalias.Alias{Slug: pgtype.Text{String: endpoint.Slug, Valid: true}, CustomDomainID: endpoint.CustomDomainID})
-		}
-	}
-	taken, err := legacyalias.TakenAddresses(ctx, db, deleted)
-	if err != nil {
-		return nil, fmt.Errorf("check gateway endpoint addresses: %w", err)
-	}
 	anchoredMatchers := make([]repo.MetaMCPMatcher, 0, len(endpoints))
 	platformMatchers := make([]repo.MetaMCPMatcher, 0, len(endpoints))
 	for _, endpoint := range endpoints {
-		if endpoint.Deleted && taken[legacyalias.Alias{Slug: pgtype.Text{String: endpoint.Slug, Valid: true}, CustomDomainID: endpoint.CustomDomainID}] {
-			continue
-		}
 		matcher := repo.MetaMCPMatcher{
 			URLSuffix:    "/mcp/" + endpoint.Slug,
 			TargetID:     endpoint.MetaMcpServerID.String(),

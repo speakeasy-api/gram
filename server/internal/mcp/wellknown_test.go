@@ -1,10 +1,8 @@
 // wellknown_test.go covers the /.well-known/.../mcp/{slug} OAuth metadata
 // handlers (HandleGetAuthorizationServer, HandleGetProtectedResource)
-// end-to-end. Resolution tries mcp_endpoints → mcp_servers first and falls
-// back to the legacy toolsets.mcp_slug lookup, so these tests exercise the
-// full per-backend dispatch matrix on the resolved path (remote / toolset /
-// issuer-gated) plus the legacy slug fallback, with metadata URLs rooted at
-// /mcp/{slug}.
+// end-to-end. Resolution goes through mcp_endpoints → mcp_servers, so these
+// tests exercise the full per-backend dispatch matrix (remote / toolset /
+// issuer-gated), with metadata URLs rooted at /mcp/{slug}.
 //
 // The low-level response writers these handlers share
 // (writeOAuth{Server,ProtectedResource}MetadataResponse) are unit-tested
@@ -29,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -70,19 +67,15 @@ func TestHandleGetAuthorizationServer_MissingSlug(t *testing.T) {
 	require.Empty(t, w.Body.String())
 }
 
-func TestWellKnownPrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
+func TestWellKnownPrivateOnlyEndpointNotFoundPublicly(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	sharedSlug := "wellknown-private-only-" + uuid.NewString()[:8]
+	slug := "wellknown-private-only-" + uuid.NewString()[:8]
 	endpointToolset := createPublicMCPToolset(t, ctx, ti, authCtx, "endpoint-"+uuid.NewString()[:8])
-	legacy := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
-		Slug: sharedSlug, IsPublic: true,
-	})
-	testenv.SetLegacyAlias(t, ctx, ti.conn, legacy.Toolset.ProjectID, legacy.Toolset.ID, sharedSlug, uuid.NullUUID{})
-	server := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, endpointToolset.ID, sharedSlug, "public", uuid.NullUUID{}, uuid.Nil)
+	server := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, endpointToolset.ID, slug, "public", uuid.NullUUID{}, uuid.Nil)
 	rows, err := testrepo.New(ti.conn).SetMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMCPServerNetworkAccessModeFixtureParams{
 		NetworkAccessMode: pgtype.Text{String: string(networkaccess.ModePrivateOnly), Valid: true},
 		ID:                server.ID, ProjectID: *authCtx.ProjectID,
@@ -94,7 +87,7 @@ func TestWellKnownPrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
 		ti.service.HandleGetAuthorizationServer,
 		ti.service.HandleGetProtectedResource,
 	} {
-		w, err := runMCPWellKnown(t, ctx, handler, sharedSlug)
+		w, err := runMCPWellKnown(t, ctx, handler, slug)
 		require.Error(t, err)
 		require.Empty(t, w.Body.String())
 	}
@@ -123,8 +116,7 @@ func TestHandleGetAuthorizationServer_DisabledServer(t *testing.T) {
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "disabled", issuerID)
 
-	// Disabled mcp_server resolves as not-found; with no legacy toolset for
-	// the slug the fallback also misses → 404.
+	// Disabled mcp_server resolves as not-found → 404.
 	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, slug)
 	require.Error(t, err)
 	require.Empty(t, w.Body.String())
@@ -280,9 +272,6 @@ func TestHandleGetAuthorizationServer_IssuerGatedRemoteBackend_DanglingIssuerFK(
 	require.Empty(t, w.Body.String())
 }
 
-// TestHandleGetAuthorizationServer_LegacySlugFallbackProxy confirms a
-// toolset with no mcp_endpoint row (pre the toolsets→mcp_servers
-// migration) still resolves via the legacy toolsets.mcp_slug fallback.
 // ---------------------------------------------------------------------------
 // HandleGetProtectedResource
 // ---------------------------------------------------------------------------
@@ -465,9 +454,6 @@ func TestHandleGetProtectedResource_IssuerGatedToolsetBackend_OnCustomDomain(t *
 	require.True(t, ok)
 	require.Equal(t, []any{expectedResource}, authServers)
 }
-
-// TestHandleGetProtectedResource_LegacySlugFallbackProxy is the
-// protected-resource companion of the legacy fallback test.
 
 // TestWellKnown_IssuerGatedToolsetBackend_TwoEndpoints pins the AIS-634
 // contract: a hosted (toolset-backed) server carrying two endpoints serves

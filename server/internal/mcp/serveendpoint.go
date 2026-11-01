@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
@@ -316,8 +315,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 // that resolved through an mcp_endpoints → mcp_servers pair: the wrapper row
 // governs visibility, issuer gating, RBAC, and the variation group (AIS-633).
 // callerGated reports whether the caller already ran the issuer gate keyed on
-// mcp_servers.user_session_issuer_id; the in-toolset gate never runs on this
-// path regardless.
+// mcp_servers.user_session_issuer_id.
 func hostedServingFromWrapper(endpointID uuid.UUID, mcpServer *mcpserversrepo.McpServer, callerGated bool) *hostedServing {
 	var groupID *uuid.UUID
 	if mcpServer.ToolVariationsGroupID.Valid {
@@ -327,14 +325,11 @@ func hostedServingFromWrapper(endpointID uuid.UUID, mcpServer *mcpserversrepo.Mc
 	serverID := mcpServer.ID
 	return &hostedServing{
 		isPublic:              mcpServer.Visibility == mcpservers.VisibilityPublic,
-		runInToolsetGate:      false,
 		callerGated:           callerGated,
 		rbacResourceID:        mcpServer.ID,
 		toolVariationsGroupID: groupID,
 		mcpServerID:           &serverID,
 		mcpEndpointID:         &endpointID,
-		toolsetHosting:        nil,
-		toolsetAlias:          legacyalias.None(),
 	}
 }
 
@@ -520,8 +515,8 @@ func routeFailClosed(ctx context.Context, logger *slog.Logger, reason string, to
 // requests re-load their live ingress authority and supply its pinned namespace,
 // organization, and surface explicitly to the centralized resolver.
 //
-// A private namespace miss or policy mismatch is always authoritative and never
-// permits legacy toolset fallback. Transient ingress lookup failures return 503;
+// A private namespace miss or policy mismatch is always authoritative.
+// Transient ingress lookup failures return 503;
 // stale, deleted, disabled, or mismatched authority remains externally 404 while
 // being warning-logged. logger should already carry the slug attribute.
 func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.Logger, slug string) (*mcpendpointsrepo.McpEndpoint, *mcpserversrepo.McpServer, *metamcprepo.MetaMcpServer, error) {
@@ -593,24 +588,13 @@ func privateEndpointNamespace(kind string) (mcpendpoints.NamespaceKind, error) {
 //     authoritative for the slug and is not an OAuth endpoint, so we do
 //     NOT fall back — this keeps non-issuer-gated remote-backed servers
 //     returning not-found, matching the well-known surface.
-//   - Addressing miss (CodeNotFound, not ErrEndpointUnavailable): fall back
-//     to the legacy toolsets.mcp_slug lookup so issuer-gated toolset-backed
-//     servers without an mcp_endpoint row (predating the toolsets →
-//     mcp_servers migration) still resolve. A resolvable-but-unavailable
-//     address (disabled wrapper, dangling backend) is terminal.
+//   - Addressing miss: CodeNotFound.
 //
-// mcpRouteBase propagates into the resolved endpoint's
-// URL building on both the primary and fallback paths.
+// mcpRouteBase propagates into the resolved endpoint's URL building.
 //
 // mcpRouteBase mcproute.OrganizationGateway resolves slug as an organization slug to that
 // organization's gateway instead.
 func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug string, mcpRouteBase mcproute.Base) (*ResolvedMcpEndpoint, error) {
-	return s.loadResolvedMcpEndpointBySlug(ctx, logger, slug, mcpRouteBase, mcpmetrics.LegacyFallbackOAuth)
-}
-
-// loadResolvedMcpEndpointBySlug is LoadResolvedMcpEndpointBySlug with the
-// entry point its legacy fallback is attributed to.
-func (s *Service) loadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug string, mcpRouteBase mcproute.Base, fallbackEntryPoint mcpmetrics.LegacyFallbackEntryPoint) (*ResolvedMcpEndpoint, error) {
 	if mcpRouteBase == mcproute.OrganizationGateway {
 		gateway, err := s.loadOrganizationGateway(ctx, slug)
 		if err != nil {
@@ -638,7 +622,7 @@ func (s *Service) loadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 		}
 		return s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
 	case mcpendpoints.IsAddressMiss(err):
-		return s.loadResolvedMcpEndpointByToolsetSlug(ctx, slug, mcpRouteBase, fallbackEntryPoint)
+		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 	default:
 		return nil, err
 	}

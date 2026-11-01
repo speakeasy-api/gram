@@ -23,7 +23,7 @@ import (
 // ExternalOAuthToolsetResult holds the objects created by CreateExternalOAuthToolset.
 type ExternalOAuthToolsetResult struct {
 	Toolset toolsets_repo.Toolset
-	// McpSlug is the toolset's legacy /mcp/<slug> alias, which serves it.
+	// McpSlug is the slug of the platform endpoint that serves the toolset.
 	McpSlug        string
 	ServerMetadata oauth_repo.ExternalOauthServerMetadatum
 }
@@ -89,7 +89,7 @@ func CreateExternalOAuthToolset(
 	})
 	require.NoError(t, err)
 
-	toolset := createLegacyHostedToolset(t, ctx, conn, authCtx, legacyHostedToolset{
+	toolset := createHostedToolset(t, ctx, conn, authCtx, hostedToolset{
 		name: "External OAuth MCP " + suffix, slug: slug, description: "Test toolset with external OAuth",
 		public: opts.IsPublic, issuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
@@ -108,9 +108,8 @@ func CreateExternalOAuthToolset(
 	}
 }
 
-// legacyHostedToolset is a toolset served through its legacy /mcp/<slug> alias, as toolsets created before hosted
-// servers owned their endpoints are.
-type legacyHostedToolset struct {
+// hostedToolset is a toolset served by its canonical MCP server at a platform endpoint.
+type hostedToolset struct {
 	name        string
 	slug        string
 	description string
@@ -118,9 +117,8 @@ type legacyHostedToolset struct {
 	issuerID    uuid.NullUUID
 }
 
-// createLegacyHostedToolset creates the toolset, its alias, and an enabled canonical MCP server without endpoints, so
-// requests reach it through the legacy slug fallback.
-func createLegacyHostedToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, authCtx *contextvalues.AuthContext, input legacyHostedToolset) toolsets_repo.Toolset {
+// createHostedToolset creates the toolset and an enabled canonical MCP server with a platform endpoint at its slug.
+func createHostedToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, authCtx *contextvalues.AuthContext, input hostedToolset) toolsets_repo.Toolset {
 	t.Helper()
 
 	toolset, err := toolsets_repo.New(conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
@@ -132,7 +130,6 @@ func createLegacyHostedToolset(t *testing.T, ctx context.Context, conn *pgxpool.
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	testenv.SetLegacyAlias(t, ctx, conn, toolset.ProjectID, toolset.ID, input.slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 
 	vis := visibility.Private
 	if input.public {
@@ -154,6 +151,9 @@ func createLegacyHostedToolset(t *testing.T, ctx context.Context, conn *pgxpool.
 		NetworkAccessMode:     pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{
+		Visibility: "", UserSessionIssuerID: nil, Slug: input.slug, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
 
 	toolset, err = toolsets_repo.New(conn).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	require.NoError(t, err)

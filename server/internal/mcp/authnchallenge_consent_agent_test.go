@@ -65,8 +65,9 @@ func newAgentConsentFixture(t *testing.T, ctx context.Context, ti *testInstance)
 		AuthorizerImpersonated:   new(bool),
 		AgentAuthorizationTarget: &target,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:   toolset.McpSlug.String,
-			RouteBase: mcproute.MCP,
+			McpSlug:     toolset.McpSlug.String,
+			McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
+			RouteBase:   mcproute.MCP,
 		},
 		ClientID:            client.ClientID,
 		RedirectURI:         client.RedirectUris[0],

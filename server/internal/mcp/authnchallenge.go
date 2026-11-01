@@ -41,7 +41,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -90,7 +89,7 @@ type EndpointRef struct {
 
 	// McpServerID, when valid, identifies the mcp_servers row that owns
 	// this challenge. Populated when the endpoint resolves through
-	// mcp_endpoints → mcp_servers; zero for legacy toolset-keyed callers.
+	// mcp_endpoints → mcp_servers.
 	McpServerID uuid.NullUUID `json:"mcp_server_id"`
 
 	// MetaMcpServerID, when valid, identifies the meta_mcp_servers row that
@@ -551,12 +550,10 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	if err != nil {
 		return ctx, nil, nil, false, fmt.Errorf("build user-session resource audience: %w", err)
 	}
-	legacyAudience, _ := endpoint.legacyToolsetAudienceURN()
 	session, acceptedAudience, err := validateUserSessionBearerAudiences(ctx, s.userSessionSigner, s.chatSessionsManager, token, userSessionBearerAudiences{
 		Resource:         resource,
 		Current:          endpoint.AudienceURN,
 		IssuerMCPServers: urn.NewUserSessionIssuerMCPServers(endpoint.UserSessionIssuerID).String(),
-		Legacy:           legacyAudience,
 	})
 	if err != nil {
 		// A revocation store that could not answer judged nothing; everything
@@ -574,7 +571,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	// server instead.
 	sharedResourceSession := false
 	switch acceptedAudience {
-	case userSessionAudienceCurrent, userSessionAudienceLegacy:
+	case userSessionAudienceCurrent:
 		if err := s.checkPerEndpointTokenHost(ctx, session, endpoint, baseURL); err != nil {
 			return ctx, nil, nil, false, fmt.Errorf("%w: %w", errCredentialRejected, err)
 		}
@@ -587,16 +584,6 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 		if err := s.checkIssuerMCPServersSession(ctx, session, endpoint); err != nil {
 			return ctx, nil, nil, false, err
 		}
-	}
-	if acceptedAudience == userSessionAudienceLegacy {
-		s.metrics.RecordLegacyAudienceAccepted(ctx, s.logger, mcpmetrics.LegacyAudienceAccepted{
-			IssuerID:         endpoint.UserSessionIssuerID,
-			Slug:             endpoint.Slug,
-			ToolsetID:        endpoint.ToolsetID,
-			McpServerID:      endpoint.McpServerID,
-			ProjectID:        endpoint.ProjectID,
-			CustomDomainHost: customdomains.FromContext(ctx) != nil,
-		})
 	}
 	// An organization gateway serves the organization's users, each with the
 	// servers their own access reaches; an agent, workload, or anonymous
@@ -710,7 +697,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	// and have none.
 	refreshable := false
 	switch acceptedAudience {
-	case userSessionAudienceCurrent, userSessionAudienceLegacy:
+	case userSessionAudienceCurrent:
 		refreshable = true
 	case userSessionAudienceResource:
 		refreshable = sharedResourceSession && sessionRefreshable
@@ -731,10 +718,6 @@ type userSessionBearerAudiences struct {
 	// audience its shared authorization server mints for a grant naming no
 	// resource.
 	IssuerMCPServers string
-
-	// Legacy is the pre-migration toolset audience, or empty when the endpoint
-	// has none.
-	Legacy string
 }
 
 type userSessionAcceptedAudience uint8
@@ -743,14 +726,12 @@ const (
 	userSessionAudienceResource userSessionAcceptedAudience = iota
 	userSessionAudienceCurrent
 	userSessionAudienceIssuerMCPServers
-	userSessionAudienceLegacy
 )
 
-// validateUserSessionBearerAudiences applies the rollout-safe audience order:
-// exact endpoint resource first, current issuer-scoped audience second, the
-// audience naming all of the issuer's MCP servers third, then the
-// pre-migration toolset audience. It falls through only on an audience
-// mismatch; every other validation failure is final.
+// validateUserSessionBearerAudiences applies the audience order: exact
+// endpoint resource first, current issuer-scoped audience second, then the
+// audience naming all of the issuer's MCP servers. It falls through only on an
+// audience mismatch; every other validation failure is final.
 func validateUserSessionBearerAudiences(
 	ctx context.Context,
 	signer *sessiontokens.Signer,
@@ -781,18 +762,9 @@ func validateUserSessionBearerAudiences(
 	if !errors.Is(issuerErr, jwt.ErrTokenInvalidAudience) {
 		return sessiontokens.ValidatedSession{}, userSessionAudienceIssuerMCPServers, fmt.Errorf("validate issuer MCP servers audience: %w", issuerErr)
 	}
-	if audiences.Legacy == "" {
-		// The token names none of this endpoint's audiences. Reported as the
-		// issuer-scoped mismatch, which is what most such tokens were meant
-		// for.
-		return sessiontokens.ValidatedSession{}, userSessionAudienceCurrent, fmt.Errorf("validate current audience: %w", currentErr)
-	}
-
-	session, legacyErr := signer.ValidateBearer(ctx, token, audiences.Legacy, revocation)
-	if legacyErr != nil {
-		return sessiontokens.ValidatedSession{}, userSessionAudienceLegacy, fmt.Errorf("validate legacy audience: %w", legacyErr)
-	}
-	return session, userSessionAudienceLegacy, nil
+	// The token names none of this endpoint's audiences. Reported as the
+	// issuer-scoped mismatch, which is what most such tokens were meant for.
+	return sessiontokens.ValidatedSession{}, userSessionAudienceCurrent, fmt.Errorf("validate current audience: %w", currentErr)
 }
 
 // sessionAuthContext is the AuthContext a session acts under in an

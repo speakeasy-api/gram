@@ -25,7 +25,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -109,7 +108,7 @@ func (s *Service) shadowedEndpointHandler(name string, endpointRoute, gatewayRou
 			rctx = chi.NewRouteContext()
 			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 		}
-		if _, err := s.loadResolvedMcpEndpointBySlug(r.Context(), s.logger, shadowedEndpointSlug, mcproute.MCP, mcpmetrics.LegacyFallbackOrgGatewayProbe); err == nil {
+		if _, err := s.LoadResolvedMcpEndpointBySlug(r.Context(), s.logger, shadowedEndpointSlug, mcproute.MCP); err == nil {
 			rctx.URLParams.Add("mcpSlug", shadowedEndpointSlug)
 			endpointRoute.ServeHTTP(w, r)
 			return

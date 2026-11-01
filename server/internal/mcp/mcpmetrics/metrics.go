@@ -106,8 +106,7 @@ const (
 )
 
 // Metrics is the mcp service's full instrument set. A nil *Metrics is valid —
-// metric recording becomes a no-op, but RecordToolsetSlugFallback still emits
-// attribution logs when a logger is supplied. Each method is also
+// metric recording becomes a no-op. Each method is also
 // nil-instrument-safe, so a partially constructed value still records what it can.
 type Metrics struct {
 	// mcpInitializeCounter is the unsampled census of observed handshakes by
@@ -161,7 +160,6 @@ type Metrics struct {
 	mcpToolCallCounter metric.Int64Counter
 	mcpRequestDuration metric.Float64Histogram
 	identityCoverage   *IdentityCoverageCounter
-	legacyFallback     *LegacyFallbackCounter
 
 	// oauthFlow{Started,Completed,Failed,Declined}Counter instrument the
 	// user-facing OAuth flow as a unit. They decompose a flow's terminal
@@ -385,7 +383,6 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		mcpSkillReadCounter:                  mcpSkillReadCounter,
 		requestCensus:                        NewRequestCounter(meter, logger),
 		identityCoverage:                     NewIdentityCoverageCounter(meter, logger),
-		legacyFallback:                       NewLegacyFallbackCounter(meter, logger),
 		oauthFlowStartedCounter:              oauthFlowStartedCounter,
 		oauthFlowCompletedCounter:            oauthFlowCompletedCounter,
 		oauthFlowFailedCounter:               oauthFlowFailedCounter,
@@ -471,27 +468,6 @@ func (m *Metrics) RecordKillswitchIdentityCoverage(ctx context.Context, surface 
 		return
 	}
 	m.identityCoverage.Record(ctx, surface, identity, resource)
-}
-
-// RecordToolsetSlugFallback logs and counts one request served through the
-// legacy toolsets.mcp_slug lookup after an mcp_endpoints address miss. Semantics on
-// [LegacyFallbackCounter.RecordToolsetSlugFallback].
-func (m *Metrics) RecordToolsetSlugFallback(ctx context.Context, logger *slog.Logger, hit ToolsetSlugFallback) {
-	var counter *LegacyFallbackCounter
-	if m != nil {
-		counter = m.legacyFallback
-	}
-	counter.RecordToolsetSlugFallback(ctx, logger, hit)
-}
-
-// RecordLegacyAudienceAccepted logs and counts one bearer accepted via the
-// legacy toolset-URN audience. Semantics on
-// [LegacyFallbackCounter.RecordLegacyAudienceAccepted].
-func (m *Metrics) RecordLegacyAudienceAccepted(ctx context.Context, logger *slog.Logger, hit LegacyAudienceAccepted) {
-	if m == nil {
-		return
-	}
-	m.legacyFallback.RecordLegacyAudienceAccepted(ctx, logger, hit)
 }
 
 // RecordMCPInitialize counts one observed MCP handshake, dimensioned by the

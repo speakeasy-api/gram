@@ -5,9 +5,7 @@
 -- columns are dropped. Remove each statement in the migration that drops its
 -- column.
 
--- The toolset MCP hosting columns (AIM-671). The canonical hosted MCP server owns hosting state; only the legacy
--- alias package (internal/hostedmcp/legacyalias) still reads mcp_slug and custom_domain_id, and it leaves this
--- file out of its schema.
+-- The toolset MCP hosting columns (AIM-671). The canonical hosted MCP server owns hosting state.
 ALTER TABLE toolsets DROP COLUMN mcp_slug;
 ALTER TABLE toolsets DROP COLUMN mcp_is_public;
 ALTER TABLE toolsets DROP COLUMN mcp_enabled;

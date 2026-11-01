@@ -63,7 +63,7 @@ func TestServePublic_PrivateWithoutOAuth_ValidAPIKey_Succeeds(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "private-no-oauth-mcp-"+uuid.New().String()[:8], "private", noIssuer())
+	toolset := hostToolset(t, ctx, ti, toolsetRow, "private-no-oauth-mcp-"+uuid.New().String()[:8], "private", noIssuer())
 
 	// Create API key
 	apiKey := ti.createTestAPIKey(ctx, t)

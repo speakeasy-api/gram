@@ -1067,21 +1067,10 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 	if len(toolsetSlugs) == 0 {
 		return nil, nil
 	}
-	var aliasCandidates []uuid.UUID
-	for _, row := range toolsetRows {
-		if row.DisabledWrapper && !row.EnablesMcp {
-			aliasCandidates = append(aliasCandidates, row.ID)
-		}
-	}
-	// A disabled hosted server with only its legacy alias still serves once enabled.
-	aliased, err := hasLegacyAlias(ctx, tx, projectID, aliasCandidates)
-	if err != nil {
-		return nil, err
-	}
 	enablesMCP := map[uuid.UUID]bool{}
 	for _, row := range toolsetRows {
 		toolsetIDs[row.Slug] = row.ID
-		enablesMCP[row.ID] = row.EnablesMcp || aliased[row.ID]
+		enablesMCP[row.ID] = row.EnablesMcp
 	}
 	for _, slug := range toolsetSlugs {
 		if _, ok := toolsetIDs[slug]; !ok {
@@ -1293,7 +1282,7 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 	if len(assistantIDs) == 0 {
 		return out, nil
 	}
-	rows, err := loadAssistantMcpServers(ctx, s.db, assistantrepo.LoadAssistantMcpServersParams{
+	rows, err := assistantrepo.New(s.db).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{
 		AssistantIds: assistantIDs,
 		ProjectID:    projectID,
 	})
