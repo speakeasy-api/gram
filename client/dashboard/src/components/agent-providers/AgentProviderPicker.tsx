@@ -74,7 +74,11 @@ export function AgentProviderPicker<T extends string>({
         if (available) return item;
         return (
           <Tooltip key={p.id}>
-            <TooltipTrigger asChild>{item}</TooltipTrigger>
+            {/* A disabled button fires no pointer events, so the span is the
+                trigger: hovering a coming-soon tool still says why. */}
+            <TooltipTrigger asChild>
+              <span className="inline-flex">{item}</span>
+            </TooltipTrigger>
             <TooltipContent>
               <p>Coming soon</p>
             </TooltipContent>

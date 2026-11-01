@@ -28,10 +28,21 @@ function renderPicker(onValueChange = vi.fn<(id: string) => void>()) {
 it("offers each tool as a radio with its logo, the chosen one checked", () => {
   renderPicker();
   const group = screen.getByRole("radiogroup", { name: "AI tool" });
-  const claude = screen.getByRole("radio", { name: "Claude Code" });
-  expect(group.contains(claude)).toBe(true);
-  expect(claude.getAttribute("aria-checked")).toBe("true");
-  expect(claude.querySelector("svg")).toBeTruthy();
+  const radios = screen.getAllByRole("radio");
+  expect(radios).toHaveLength(providers.length);
+  // Every tool shows its logo, including one that is coming soon.
+  for (const radio of radios) {
+    expect(group.contains(radio)).toBe(true);
+    expect(
+      radio.querySelector("svg, img"),
+      radio.textContent ?? "",
+    ).toBeTruthy();
+  }
+  expect(
+    screen
+      .getByRole("radio", { name: "Claude Code" })
+      .getAttribute("aria-checked"),
+  ).toBe("true");
   expect(
     screen
       .getByRole("radio", { name: "OpenAI Codex" })
@@ -52,4 +63,14 @@ it("lists a tool that is coming soon without letting it be chosen", () => {
   expect(gemini.textContent).toContain("Coming soon");
   fireEvent.click(gemini);
   expect(onValueChange).not.toHaveBeenCalled();
+});
+
+it("says a coming-soon tool is coming soon when it is hovered", async () => {
+  renderPicker();
+  const gemini = screen.getByRole("radio", { name: /Gemini/ });
+  // The disabled button fires no pointer events; its wrapper is the trigger.
+  fireEvent.pointerMove(gemini.parentElement!, { pointerType: "mouse" });
+  expect((await screen.findByRole("tooltip")).textContent).toContain(
+    "Coming soon",
+  );
 });
