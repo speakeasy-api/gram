@@ -316,7 +316,7 @@ async function reachCredentialStep() {
 
 type CheckRequest = {
   checkAgentPolicyGrantsForm: {
-    policyGrants: { selector: { resourceId: string } }[];
+    policyGrants: { scope: string; selector: { resourceId: string } }[];
   };
 };
 
@@ -328,7 +328,12 @@ function answerChecks(refuse: Record<string, "caller" | "owner"> = {}) {
   return (request: CheckRequest) =>
     Promise.resolve({
       results: request.checkAgentPolicyGrantsForm.policyGrants.map((grant) => {
-        const limitedBy = refuse[grant.selector.resourceId];
+        // Server checks are keyed by server id; the auth clients grant, whose
+        // id is also "*", by its scope.
+        const limitedBy =
+          grant.scope === "mcp:auth"
+            ? refuse["mcp:auth"]
+            : refuse[grant.selector.resourceId];
         return limitedBy === undefined
           ? { allowed: true }
           : { allowed: false, limitedBy };
@@ -522,6 +527,61 @@ describe("Provisioning a new agent", () => {
     ).toBeGreaterThan(0);
   });
 
+  it("leaves out of its scopes the auth clients grant its creator may not give", async () => {
+    mocks.checkPolicyGrants.mockImplementation(
+      answerChecks({ "mcp:auth": "caller" }),
+    );
+    await reachCredentialStep();
+
+    fireEvent.focus(screen.getByText("Call its servers"));
+    expect(
+      (await screen.findAllByText("mcp:connect on the selected servers"))
+        .length,
+    ).toBeGreaterThan(0);
+    // Matched loosely: until the check answers, the line carries a caveat.
+    await waitFor(() =>
+      expect(
+        screen.queryAllByText(/mcp:auth on all auth clients/),
+      ).toHaveLength(0),
+    );
+  });
+
+  it("keeps the auth clients grant's caveat when its check fails", async () => {
+    const answer = answerChecks();
+    mocks.checkPolicyGrants.mockImplementation((request: CheckRequest) =>
+      request.checkAgentPolicyGrantsForm.policyGrants.some(
+        (grant) => grant.scope === "mcp:auth",
+      )
+        ? Promise.reject(new Error("network down"))
+        : answer(request),
+    );
+    await reachCredentialStep();
+    // Let the failed check settle: the caveat also shows while it is asked.
+    await waitFor(() =>
+      expect(
+        mocks.checkPolicyGrants.mock.calls.some(([request]) =>
+          (
+            request as CheckRequest
+          ).checkAgentPolicyGrantsForm.policyGrants.some(
+            (grant) => grant.scope === "mcp:auth",
+          ),
+        ),
+      ).toBe(true),
+    );
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50);
+    });
+
+    fireEvent.focus(screen.getByText("Call its servers"));
+    expect(
+      (
+        await screen.findAllByText(
+          "mcp:auth on all auth clients, if your role allows it",
+        )
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
   it("says nothing about what it can do until a server is chosen", async () => {
     setup();
     fireEvent.change(screen.getByLabelText("Name"), {
@@ -550,6 +610,20 @@ describe("Provisioning a new agent", () => {
       (await screen.findAllByText("mcp:connect on all servers in the project"))
         .length,
     ).toBeGreaterThan(0);
+  });
+
+  it("creates the agent without the auth clients grant its creator may not give", async () => {
+    mocks.checkPolicyGrants.mockImplementation(
+      answerChecks({ "mcp:auth": "caller" }),
+    );
+    fireEvent.click(await reachCredentialStep());
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants?.map(
+        (grant: { scope: string }) => grant.scope,
+      ),
+    ).toEqual(["mcp:connect"]);
   });
 
   it("creates the agent, issues its first key and mints one setup command", async () => {
@@ -1711,7 +1785,7 @@ describe("Editing an agent that already exists", () => {
     updatedAt: new Date(),
   };
 
-  function editing(over: { grants?: unknown } = {}) {
+  function editing(over: { grants?: unknown; auth?: boolean } = {}) {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -1722,7 +1796,12 @@ describe("Editing an agent that already exists", () => {
           <CredentialsWizard
             agent={agent}
             editing
-            grants={[...((over.grants ?? grants) as never[]), AUTH] as never}
+            grants={
+              [
+                ...((over.grants ?? grants) as never[]),
+                ...(over.auth === false ? [] : [AUTH]),
+              ] as never
+            }
             onDone={(id) => {
               onDone(id);
             }}
@@ -2309,6 +2388,35 @@ describe("Editing an agent that already exists", () => {
       "user_owner",
       "agent_one",
     );
+  });
+
+  it("gives an agent saved before the auth grant existed that grant", async () => {
+    editing({ auth: false });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("checkbox", { name: "GitHub" });
+    fireEvent.click(await authenticationSave());
+
+    await waitFor(() =>
+      expect(
+        mocks.createGrant.mock.calls.map(
+          ([request]) => request.request.createAgentPolicyGrantForm.scope,
+        ),
+      ).toContain("mcp:auth"),
+    );
+  });
+
+  it("does not give the auth grant to an agent left with no servers", async () => {
+    const { onDone } = editing({ auth: false });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(await authenticationSave());
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(
+      mocks.createGrant.mock.calls.map(
+        ([request]) => request.request.createAgentPolicyGrantForm.scope,
+      ),
+    ).not.toContain("mcp:auth");
   });
 
   it("says why a save failed and stays on the step", async () => {
