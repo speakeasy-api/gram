@@ -52,7 +52,16 @@ func kitWorkloadSubject(r assistantRuntimeRecord, c KitLocalCompositionConfig, g
 	}
 	digest := sha256.Sum256([]byte(gateway))
 	sa := fmt.Sprintf("kit-%s-%x", strings.ReplaceAll(r.ID.String(), "-", ""), digest[:8])
-	return "system:serviceaccount:" + c.WorkloadNamespace + ":" + sa, sa, nil
+	if c.nativeIdentity == nil {
+		return "", "", errors.New("kit GKE requires native Agent Identity configuration")
+	}
+	if err := c.nativeIdentity.Validate(); err != nil {
+		return "", "", err
+	}
+	if c.WorkloadIssuerURL != c.nativeIdentity.issuer() || c.WorkloadJWKSURL != c.nativeIdentity.issuer()+"/openid/jwks" {
+		return "", "", ErrKitRuntimeBinding
+	}
+	return c.nativeIdentity.subject(c.WorkloadNamespace, sa), sa, nil
 }
 
 func kitWorkloadIssuerName(issuer string) string {
@@ -155,7 +164,7 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 	admissionName := "kit-runtime-" + r.ID.String() + "-" + generation
 	project := uuid.NullUUID{UUID: r.ProjectID, Valid: true}
 	q := workloadrepo.New(db)
-	if c.Environment == "local" {
+	if c.Environment == "local" || c.nativeIdentity != nil {
 		// Serialize the external subject across projects before taking a project
 		// lock. A project-only lock cannot protect the organization-wide history.
 		key, err := json.Marshal([]string{"kit-local-subject", identity.OrganizationID, c.WorkloadIssuerURL, subject})
@@ -198,18 +207,16 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 	if _, err := q.LockWorkloadIssuerForWrite(ctx, workloadrepo.LockWorkloadIssuerForWriteParams{OrganizationID: identity.OrganizationID, ID: issuer.ID}); err != nil {
 		return nil, fmt.Errorf("provision kit workload: %w", err)
 	}
-	if c.Environment == "local" {
-		// Never rebind an externally verified subject, even after withdrawal or
-		// issuer recreation. Old assertions and sessions can still be valid;
-		// changing only metadata.Generation cannot distinguish them. Query all
-		// historical issuer rows for this external issuer URL, not just its ID.
-		var used bool
-		if err := db.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM workload_identity_admissions a JOIN workload_issuers i ON i.id = a.workload_issuer_id WHERE a.organization_id = $1 AND i.organization_id = $1 AND i.issuer = ANY($2::text[]) AND a.subject = $3 AND a.match_kind = 'exact')", identity.OrganizationID, canonicalIssuer.MatchCandidates(), subject).Scan(&used); err != nil {
-			return nil, fmt.Errorf("provision kit workload: %w", err)
-		}
-		if used {
-			return nil, errors.New("local Kit workload subjects cannot be reused; configure a fresh generation subject")
-		}
+	// Never rebind an externally verified subject, even after withdrawal or
+	// issuer recreation. Old assertions and sessions can still be valid;
+	// changing only metadata.Generation cannot distinguish them. Query all
+	// historical issuer rows for this external issuer URL, not just its ID.
+	var used bool
+	if err := db.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM workload_identity_admissions a JOIN workload_issuers i ON i.id = a.workload_issuer_id WHERE a.organization_id = $1 AND i.organization_id = $1 AND i.issuer = ANY($2::text[]) AND a.subject = $3 AND a.match_kind = 'exact')", identity.OrganizationID, canonicalIssuer.MatchCandidates(), subject).Scan(&used); err != nil {
+		return nil, fmt.Errorf("provision kit workload: %w", err)
+	}
+	if used {
+		return nil, errors.New("kit workload subjects cannot be reused; subject was already admitted")
 	}
 	assignments, err := q.GetWorkloadAgentAssignmentForSubject(ctx, workloadrepo.GetWorkloadAgentAssignmentForSubjectParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: issuer.ID, Subject: subject, MatchKind: "exact"})
 	if err != nil {
@@ -220,28 +227,12 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 			return nil, errors.New("kit workload subject is assigned to another agent")
 		}
 	}
-	admissions, err := q.ListWorkloadAdmissions(ctx, workloadrepo.ListWorkloadAdmissionsParams{OrganizationID: identity.OrganizationID, ProjectID: project})
+	admission, err := q.CreateWorkloadAdmission(ctx, workloadrepo.CreateWorkloadAdmissionParams{OrganizationID: identity.OrganizationID, ProjectID: project, WorkloadIssuerID: issuer.ID, Subject: subject, MatchKind: "exact", Name: pgtype.Text{String: admissionName, Valid: true}, Tags: []string{"kit-runtime"}})
 	if err != nil {
 		return nil, fmt.Errorf("provision kit workload: %w", err)
 	}
-	found := false
-	for _, admission := range admissions {
-		if admission.WorkloadIssuerID != issuer.ID || admission.Subject != subject || admission.MatchKind != "exact" {
-			continue
-		}
-		if admission.ProjectID != project || admission.Name.String != admissionName {
-			return nil, errors.New("kit workload subject belongs to another runtime")
-		}
-		found = true
-	}
-	if !found {
-		admission, err := q.CreateWorkloadAdmission(ctx, workloadrepo.CreateWorkloadAdmissionParams{OrganizationID: identity.OrganizationID, ProjectID: project, WorkloadIssuerID: issuer.ID, Subject: subject, MatchKind: "exact", Name: pgtype.Text{String: admissionName, Valid: true}, Tags: []string{"kit-runtime"}})
-		if err != nil {
-			return nil, fmt.Errorf("provision kit workload: %w", err)
-		}
-		if err := s.audit.LogWorkloadAdmissionAdmit(ctx, db, audit.LogWorkloadAdmissionAdmitEvent{ActorDisplayName: nil, ActorSlug: nil, OrganizationID: identity.OrganizationID, ProjectID: project, Actor: urn.NewSystemPrincipal("kit-runtime"), AdmissionURN: urn.NewWorkloadAdmission(admission.ID), AdmissionDisplayName: subject, AdmissionSnapshotAfter: kitWorkloadAdmissionSnapshot(admission, issuer, identity.AgentID.String())}); err != nil {
-			return nil, fmt.Errorf("provision kit workload: %w", err)
-		}
+	if err := s.audit.LogWorkloadAdmissionAdmit(ctx, db, audit.LogWorkloadAdmissionAdmitEvent{ActorDisplayName: nil, ActorSlug: nil, OrganizationID: identity.OrganizationID, ProjectID: project, Actor: urn.NewSystemPrincipal("kit-runtime"), AdmissionURN: urn.NewWorkloadAdmission(admission.ID), AdmissionDisplayName: subject, AdmissionSnapshotAfter: kitWorkloadAdmissionSnapshot(admission, issuer, identity.AgentID.String())}); err != nil {
+		return nil, fmt.Errorf("provision kit workload: %w", err)
 	}
 
 	_, err = q.UpsertWorkloadAgentAssignment(ctx, workloadrepo.UpsertWorkloadAgentAssignmentParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: issuer.ID, Subject: subject, MatchKind: "exact", AgentID: identity.AgentID})
