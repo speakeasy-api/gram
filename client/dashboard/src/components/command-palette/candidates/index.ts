@@ -78,7 +78,7 @@ export function useLauncherCandidates({
   // Listing gateways requires mcp:read on the project itself
   // (server/internal/metamcp/impl.go), so a grant in another project must not
   // fire the forbidden list call here or keep its cached names visible.
-  const canListGateways = hasAnyScope(["mcp:read", "mcp:write"], project.id);
+  const canListGateways = hasScope("mcp:read", project.id);
   // Plugins list for whoever can edit them (org admins and plugin:write on
   // this project, per usePluginWriteAccess) or read the organization; the
   // same gate the Plugins page renders behind.

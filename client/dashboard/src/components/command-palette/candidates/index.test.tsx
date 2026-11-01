@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   toolsets: [] as unknown[],
   mcpServers: [] as unknown[],
   gateways: [] as unknown[],
+  gatewaysError: false,
   catalogServers: [] as unknown[],
   publishStatus: undefined as unknown,
   deployment: undefined as unknown,
@@ -86,7 +87,10 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
 vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
   useMetaMcpServers: (...args: unknown[]) => {
     record("useMetaMcpServers", args);
-    return { data: { metaMcpServers: mocks.gateways } };
+    return {
+      data: { metaMcpServers: mocks.gateways },
+      isError: mocks.gatewaysError,
+    };
   },
 }));
 vi.mock("@gram/client/react-query/listMCPCatalog.js", () => ({
@@ -445,6 +449,7 @@ beforeEach(() => {
   mocks.toolsets = [];
   mocks.mcpServers = [];
   mocks.gateways = [];
+  mocks.gatewaysError = false;
   mocks.catalogServers = [];
   mocks.publishStatus = undefined;
   mocks.deployment = undefined;
@@ -511,8 +516,8 @@ describe("useGatewayCandidates", () => {
     renderCandidates();
 
     expect(mocks.rbacCalls).toContainEqual({
-      fn: "hasAnyScope",
-      scopes: ["mcp:read", "mcp:write"],
+      fn: "hasScope",
+      scopes: ["mcp:read"],
       resourceId: "project-default",
     });
   });
@@ -1638,7 +1643,13 @@ describe("useLauncherCandidates", () => {
     });
   });
   it("orders sources: actions, recents, marketplace, mcp servers, gateways, catalog, …, people", () => {
-    mocks.scopes = ["org:read", "org:admin", "mcp:write", "project:read"];
+    mocks.scopes = [
+      "org:read",
+      "org:admin",
+      "mcp:read",
+      "mcp:write",
+      "project:read",
+    ];
     mocks.actions = [
       { id: "a", label: "A", group: "Pages", onSelect: vi.fn() },
     ];
@@ -1896,5 +1907,70 @@ describe("new resource source wiring", () => {
     expect(useManagedDeviceCandidates).toHaveBeenLastCalledWith({
       enabled: false,
     });
+  });
+});
+
+describe("gateway candidates", () => {
+  beforeEach(() => {
+    mocks.scopes = ["mcp:read"];
+    mocks.gateways = [{ id: "gateway-example", name: "Operations gateway" }];
+  });
+
+  it("registers named gateways and opens their canonical overview", async () => {
+    const { result } = renderCandidates();
+    const gateway = result.current.find(
+      (c) => c.id === "gateway:gateway-example",
+    );
+    expect(gateway).toMatchObject({
+      title: "Operations gateway",
+      detail: "MCP gateway",
+      group: "Gateways",
+      keywords: ["gateway", "mcp", "gateway-example"],
+      verbs: ["open"],
+    });
+    await gateway?.run("open");
+    expect(mocks.goToGatewayOverview).toHaveBeenCalledWith("gateway-example");
+    expect(mocks.rbacCalls).toContainEqual({
+      fn: "hasScope",
+      scopes: ["mcp:read"],
+      resourceId: "project-default",
+    });
+  });
+
+  it.each(["closed", "organization shell", "unauthorized", "write-only"])(
+    "does not fetch or expose cached gateways when %s",
+    (state) => {
+      if (state === "unauthorized") mocks.scopes = [];
+      if (state === "write-only") mocks.scopes = ["mcp:write"];
+      if (state === "organization shell") mocks.inProject = false;
+      const { result } = renderCandidates({ enabled: state !== "closed" });
+      expect(result.current.some((c) => c.id.startsWith("gateway:"))).toBe(
+        false,
+      );
+      expect(optionsOf(mocks.calls.useMetaMcpServers?.at(-1)).enabled).toBe(
+        false,
+      );
+    },
+  );
+
+  it("drops cached gateway candidates after read access is revoked", () => {
+    const { result, rerender } = renderCandidates();
+    expect(result.current.some((c) => c.id.startsWith("gateway:"))).toBe(true);
+    mocks.scopes = [];
+    rerender();
+    expect(result.current.some((c) => c.id.startsWith("gateway:"))).toBe(false);
+  });
+
+  it("isolates a failed gateway list without hiding other candidates", () => {
+    mocks.gatewaysError = true;
+    mocks.actions = [
+      { id: "page:/mcp", label: "MCP servers", onSelect: vi.fn() },
+    ];
+    const { result } = renderCandidates();
+    expect(result.current.some((c) => c.id.startsWith("gateway:"))).toBe(false);
+    expect(result.current.some((c) => c.title === "MCP servers")).toBe(true);
+    expect(optionsOf(mocks.calls.useMetaMcpServers?.at(-1)).throwOnError).toBe(
+      false,
+    );
   });
 });
