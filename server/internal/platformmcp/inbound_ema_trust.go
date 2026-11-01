@@ -779,20 +779,20 @@ func inboundEMAReadNextStep(output GetInboundEMATrustOutput) string {
 	if len(output.Issuers) == 0 {
 		return "This organization has no organization-level user session issuer. Create one with a shared authorization server in the dashboard first."
 	}
-	unread := ""
+	var unread strings.Builder
 	for _, issuer := range output.Issuers {
 		if note := inboundEMAUnreadNote(issuer.unavailableParts()); note != "" {
-			unread += "Issuer " + issuer.Slug + ": " + note + " "
+			unread.WriteString("Issuer " + issuer.Slug + ": " + note + " ")
 		}
 		if issuer.TrustedIdentityProviderUnavailable {
 			if issuer.FederatedBrowserSignIn {
-				unread += "Interactive sign-in on this issuer uses that provider, so it cannot be removed here. To change it, change the sign-in provider in the dashboard (IDP and SSO). "
+				unread.WriteString("Interactive sign-in on this issuer uses that provider, so it cannot be removed here. To change it, change the sign-in provider in the dashboard (IDP and SSO). ")
 			} else {
-				unread += "To remove that trust anyway, call " + untrustInboundEMAProviderToolName + ". "
+				unread.WriteString("To remove that trust anyway, call " + untrustInboundEMAProviderToolName + ". ")
 			}
 		}
 	}
-	return unread + inboundEMAReadStep(output)
+	return unread.String() + inboundEMAReadStep(output)
 }
 
 func inboundEMAReadStep(output GetInboundEMATrustOutput) string {

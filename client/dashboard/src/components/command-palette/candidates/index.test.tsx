@@ -283,6 +283,26 @@ vi.mock("./useAgentIdentityCandidates", () => ({
       : [],
   ),
 }));
+// Covered by its own test; here it only has to be wired in.
+vi.mock("./usePlatformSetupCandidates", () => ({
+  usePlatformSetupCandidates: vi.fn(
+    ({ enabled, inProject }: { enabled: boolean; inProject?: boolean }) =>
+      enabled && inProject !== false && mocks.includeNewResourceFixtures
+        ? [
+            {
+              id: "platform-setup:github-actions",
+              kind: "page",
+              title: "Set up GitHub Actions",
+              detail: "",
+              keywords: [],
+              verbs: ["open"],
+              group: "Identities",
+              run: () => {},
+            },
+          ]
+        : [],
+  ),
+}));
 vi.mock("./useManagedDeviceCandidates", () => ({
   useManagedDeviceCandidates: vi.fn(({ enabled }: { enabled: boolean }) =>
     enabled && mocks.includeNewResourceFixtures
@@ -354,6 +374,7 @@ import { useLauncherCandidates } from "./index";
 import { useSkillCandidates } from "./useSkillCandidates";
 import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
 import { useManagedDeviceCandidates } from "./useManagedDeviceCandidates";
+import { usePlatformSetupCandidates } from "./usePlatformSetupCandidates";
 import type { LauncherCandidate } from "./types";
 
 const REMOTE = { remoteMcpServerId: "remote-1" };
@@ -1822,6 +1843,27 @@ describe("useLauncherCandidates", () => {
 describe("new resource source wiring", () => {
   beforeEach(() => {
     mocks.includeNewResourceFixtures = true;
+  });
+  it("offers the platform setups, gated on the project", () => {
+    const { result } = renderCandidates();
+    expect(
+      result.current.some((c) => c.id === "platform-setup:github-actions"),
+    ).toBe(true);
+    expect(usePlatformSetupCandidates).toHaveBeenLastCalledWith({
+      enabled: true,
+      inProject: true,
+    });
+  });
+
+  it("offers no platform setup from the organization shell", () => {
+    const { result } = renderCandidates({ inProject: false });
+    expect(
+      result.current.some((c) => c.id === "platform-setup:github-actions"),
+    ).toBe(false);
+    expect(usePlatformSetupCandidates).toHaveBeenLastCalledWith({
+      enabled: true,
+      inProject: false,
+    });
   });
   it("includes skills only with project skill:read access", () => {
     mocks.scopes = ["skill:read"];

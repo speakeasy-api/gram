@@ -41,19 +41,26 @@ func TestEmbeddedPlatformsAreValid(t *testing.T) {
 	require.NotEmpty(t, platforms)
 }
 
-func TestEmbeddedClaudeTagPinsOneOrganization(t *testing.T) {
-	t.Parallel()
+// embeddedPlatform is the embedded catalog's entry for key; the test fails
+// when there is none.
+func embeddedPlatform(t *testing.T, key string) *catalog.Platform {
+	t.Helper()
 
 	platforms, err := catalog.Embedded().Platforms(t.Context())
 	require.NoError(t, err)
-
-	var claudeTag *catalog.Platform
 	for i := range platforms {
-		if platforms[i].Key == "claude-tag" {
-			claudeTag = &platforms[i]
+		if platforms[i].Key == key {
+			return &platforms[i]
 		}
 	}
-	require.NotNil(t, claudeTag)
+	require.FailNow(t, "no embedded platform", key)
+	return nil
+}
+
+func TestEmbeddedClaudeTagPinsOneOrganization(t *testing.T) {
+	t.Parallel()
+
+	claudeTag := embeddedPlatform(t, "claude-tag")
 	require.Equal(t, "https://identity.anthropic.com/agents", claudeTag.Issuer.Value)
 	require.Equal(t, catalog.VisibilityHidden, claudeTag.Issuer.Visibility)
 	require.Equal(t, "wimse://identity.anthropic.com/org/{org_id}/agent/", claudeTag.Subject.Template)
@@ -63,16 +70,7 @@ func TestEmbeddedClaudeTagPinsOneOrganization(t *testing.T) {
 func TestEmbeddedGKEPinsOneClusterAndServiceAccount(t *testing.T) {
 	t.Parallel()
 
-	platforms, err := catalog.Embedded().Platforms(t.Context())
-	require.NoError(t, err)
-
-	var gke *catalog.Platform
-	for i := range platforms {
-		if platforms[i].Key == "gke" {
-			gke = &platforms[i]
-		}
-	}
-	require.NotNil(t, gke)
+	gke := embeddedPlatform(t, "gke")
 	cluster := "https://container.googleapis.com/v1/projects/{project}/locations/{location}/clusters/{cluster}"
 	require.Equal(t, cluster, gke.Issuer.Value)
 	require.Equal(t, cluster+"/jwks", gke.JWKSURI.Value)
@@ -86,6 +84,51 @@ func TestEmbeddedGKEPinsOneClusterAndServiceAccount(t *testing.T) {
 		for _, delimiter := range []string{":", "/", "*"} {
 			require.False(t, pattern.MatchString("ab"+delimiter+"cd"), "%s admits %q", variable.Key, delimiter)
 		}
+	}
+}
+
+func TestEmbeddedGitHubActionsPinsOneRepository(t *testing.T) {
+	t.Parallel()
+
+	github := embeddedPlatform(t, "github-actions")
+	require.True(t, github.Enabled)
+	require.Equal(t, "https://token.actions.githubusercontent.com", github.Issuer.Value)
+	require.Equal(t, "https://token.actions.githubusercontent.com/.well-known/jwks", github.JWKSURI.Value)
+	require.Equal(t, "repo:{owner}/{repo}:", github.Subject.Template)
+	require.True(t, github.Subject.Wildcard)
+
+	patterns := make(map[string]*regexp.Regexp, len(github.Variables))
+	for _, variable := range github.Variables {
+		require.Equal(t, catalog.TierRule, variable.Tier, "%s varies per repository, not per platform", variable.Key)
+		patterns[variable.Key] = regexp.MustCompile("^(?:" + variable.Pattern + ")$")
+	}
+	require.Len(t, patterns, 2)
+
+	// A value holding a delimiter could reach past its segment: an owner of
+	// "acme/app" or a repository of "app:ref" would move the stem, and a "*"
+	// would read as a second wildcard.
+	for key, pattern := range patterns {
+		for _, delimiter := range []string{":", "/", "*", " "} {
+			require.False(t, pattern.MatchString("ab"+delimiter+"cd"), "%s admits %q", key, delimiter)
+		}
+		// GitHub names never contain "@", so it may only introduce an ID.
+		require.False(t, pattern.MatchString("ab@cd"), "%s admits a non-numeric ID", key)
+		require.False(t, pattern.MatchString("ab@"), "%s admits an empty ID", key)
+		require.False(t, pattern.MatchString("ab@1@2"), "%s admits two IDs", key)
+	}
+
+	owner, repo := patterns["owner"], patterns["repo"]
+	for _, valid := range []string{"octo-org", "Octo-Org", "a", "octo-org@123456", strings.Repeat("a", 39)} {
+		require.True(t, owner.MatchString(valid), "owner refuses %q", valid)
+	}
+	for _, invalid := range []string{"", "-octo", "octo_org", "octo.org", strings.Repeat("a", 40)} {
+		require.False(t, owner.MatchString(invalid), "owner admits %q", invalid)
+	}
+	for _, valid := range []string{"octo-repo", "Octo.Repo_2", ".github", "octo-repo@456789", strings.Repeat("a", 100)} {
+		require.True(t, repo.MatchString(valid), "repository refuses %q", valid)
+	}
+	for _, invalid := range []string{"", strings.Repeat("a", 101)} {
+		require.False(t, repo.MatchString(invalid), "repository admits %q", invalid)
 	}
 }
 

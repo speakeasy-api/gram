@@ -87,6 +87,9 @@ export function isSupportedCatalogEntry(entry: CatalogEntry): boolean {
  */
 export type ComputedValueKey = "token_endpoint" | "issuer_url" | "mcp_host";
 
+/** How long a fetched catalog is reused before it is read again. */
+const CATALOG_STALE_TIME_MS = 10 * 60_000;
+
 /**
  * The catalog the server ships. The server validates it; this reshapes.
  *
@@ -103,6 +106,9 @@ export function useCatalogEntries(enabled = true): {
   const query = useWorkloadPlatforms({}, undefined, {
     enabled,
     throwOnError: false,
+    // Embedded in the server binary, so it changes only with a deploy:
+    // reopening Command K or the wizard should not fetch it again.
+    staleTime: CATALOG_STALE_TIME_MS,
   });
   // Disabled means the caller may not read the catalog, so nothing cached from
   // before, entries or an error, is reported. A disabled query also stays

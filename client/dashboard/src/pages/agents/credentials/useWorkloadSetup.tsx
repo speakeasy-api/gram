@@ -1,3 +1,4 @@
+import { Alert } from "@/components/ui/Alert";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { WorkloadIssuerSelector } from "./WorkloadIssuerSelector";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
@@ -210,10 +211,6 @@ export function useWorkloadSetup({
   };
   const platformName = entry?.displayName ?? "this platform";
 
-  const isTrusted =
-    connection !== null &&
-    (connection.issuer === trustedIssuer ||
-      connectedIssuer(connection.issuer, issuers) !== undefined);
   // The rule the agent holds as far as this flow knows: the one it saved,
   // or else the one being edited. The prop is read rather than seeded into
   // state because the admission arrives a render or two after the first.
@@ -240,6 +237,30 @@ export function useWorkloadSetup({
       : keptProjectSlug !== undefined
         ? { gramProject: keptProjectSlug, projectScoped: true }
         : { projectScoped: false };
+  // A catalog platform's new rule is written at the organization tier, so
+  // only an organization-tier issuer counts as already trusting it there. A
+  // project's own row for the same URL would skip the registration that
+  // admission needs, and the admission would then find no issuer at its tier.
+  // A replacement that keeps a project's tier may use that project's issuer.
+  const organizationTier = !customFlow && !tier?.projectScoped;
+  const tierIssuers = organizationTier
+    ? issuers.filter((issuer) => issuer.projectId === "")
+    : issuers;
+  const isTrusted =
+    connection !== null &&
+    (connection.issuer === trustedIssuer ||
+      connectedIssuer(connection.issuer, tierIssuers) !== undefined);
+  // A project that trusts the same issuer on its own takes precedence in that
+  // project: its MCP servers match a token against the project's rules, not
+  // the organization-tier one this flow saves, so a job reaches them as a
+  // different identity or not at all.
+  const shadowingIssuer =
+    !organizationTier || connection === null
+      ? undefined
+      : issuers.find(
+          (issuer) =>
+            issuer.projectId !== "" && issuer.issuer === connection.issuer,
+        );
   const conflicting =
     connection === null || ours
       ? undefined
@@ -430,6 +451,36 @@ export function useWorkloadSetup({
         ) : (
           <div className="space-y-4">
             {step.body(context)}
+            {step.phase === "create" && shadowingIssuer !== undefined && (
+              <Alert variant="warning">
+                <div className="space-y-2 text-sm">
+                  <p>
+                    This project also trusts{" "}
+                    <strong>{shadowingIssuer.name}</strong> on its own, at the
+                    same issuer URL. Its MCP servers check a job against that
+                    issuer&apos;s rules instead of the one saved here, so the
+                    job reaches them as another identity, or not at all.
+                  </p>
+                  <p>
+                    Removing an agent&apos;s access does not fix this: the
+                    project&apos;s own issuer has to be withdrawn, which also
+                    withdraws every rule admitted under it. The dashboard has no
+                    control for that yet, so ask someone who can manage workload
+                    identities to withdraw it.
+                  </p>
+                  <details>
+                    <summary className="cursor-pointer">
+                      Technical details
+                    </summary>
+                    <p className="mt-2">
+                      Withdraw it through the API:{" "}
+                      <code>{`DELETE /rpc/workloadIdentities.withdrawIssuer?id=${shadowingIssuer.id}`}</code>{" "}
+                      with the header <code>Gram-Project: {project.slug}</code>.
+                    </p>
+                  </details>
+                </div>
+              </Alert>
+            )}
             {step.phase === "create" && !isTrusted && (
               <AssertionReuseField
                 checked={

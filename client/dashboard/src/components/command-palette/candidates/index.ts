@@ -17,6 +17,7 @@ import { useMarketplaceCandidate } from "./useMarketplaceCandidate";
 import { useManagedDeviceCandidates } from "./useManagedDeviceCandidates";
 import { useMcpServerCandidates } from "./useMcpServerCandidates";
 import { usePersonCandidates } from "./usePersonCandidates";
+import { usePlatformSetupCandidates } from "./usePlatformSetupCandidates";
 import { usePluginCandidates } from "./usePluginCandidates";
 import { usePolicyCandidates } from "./usePolicyCandidates";
 import { useProjectCandidates } from "./useProjectCandidates";
@@ -127,6 +128,7 @@ export function useLauncherCandidates({
     enabled: projectEnabled && canReadSkills,
   });
   const inferenceSetup = useInferenceSetupCandidate({ enabled, inProject });
+  const platformSetups = usePlatformSetupCandidates({ enabled, inProject });
   const agentIdentities = useAgentIdentityCandidates({ enabled });
   const environments = useEnvironmentCandidates({ enabled: projectEnabled });
   const sources = useSourceCandidates({
@@ -167,6 +169,7 @@ export function useLauncherCandidates({
       ...(inProject && canReadSkills ? skills : []),
       ...agentIdentities,
       ...inferenceSetup,
+      ...platformSetups,
       ...projectOnly(environments),
       ...(inProject && canListMcp ? sources : []),
       ...projectOnly(deployments),
@@ -192,6 +195,7 @@ export function useLauncherCandidates({
     skills,
     agentIdentities,
     inferenceSetup,
+    platformSetups,
     actions,
     gatewayConnections,
     recents,

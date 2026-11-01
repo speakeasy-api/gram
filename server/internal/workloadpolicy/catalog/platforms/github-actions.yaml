@@ -1,0 +1,68 @@
+# GitHub Actions on github.com.
+#
+# Every github.com job's token comes from the same issuer, so the issuer and its
+# keys are constants and the repository in the subject is what pins an access
+# rule to one customer. GitHub Enterprise Server issues its own tokens, and an
+# enterprise that has switched to its own issuer URL
+# (token.actions.githubusercontent.com/<enterprise>) presents that one; neither
+# is covered here.
+#
+# The subject is repo:<owner>/<repo>:<context>, where the context names the
+# event: ref:refs/heads/<branch>, ref:refs/tags/<tag>, pull_request or
+# environment:<name>. The rule is a wildcard over the whole repository, so one
+# rule admits every branch, tag, environment and pull request job of it.
+#
+# That is the trade-off this entry makes on purpose. The context is chosen by
+# whoever starts the job, not by GitHub: anyone who can push a branch to the
+# repository, or open a pull request from a branch of it, can run a job that
+# receives a token and acts as the agent. On the pull_request event, pull
+# requests from forks get no OIDC token, so outside contributors cannot. That
+# does not hold for pull_request_target: such a workflow runs in the base
+# repository with its permissions, so one that grants id-token: write is
+# admitted by this rule, and if it checks out the pull request's head, code
+# from a fork runs as the agent. An operator who wants only one branch or
+# environment admits that exact subject through the custom flow instead.
+#
+# Repositories created, renamed or transferred on github.com since 2026-07-15
+# put immutable IDs in the subject (repo:<owner>@<owner_id>/<repo>@<repo_id>:),
+# which also stops a deleted owner or repository name being re-registered by
+# someone else from matching. Both variables therefore accept an optional
+# @<digits> suffix; GitHub names never contain "@", so the suffix can only be an
+# ID. Owner and repository names are matched exactly, capital letters included,
+# as GitHub writes them into the subject.
+#
+# Each pattern refuses ":", "/" and "*", which would otherwise let a value
+# extend the stem into the context or a neighboring repository. The stem ends
+# on ":", so "repo:acme/app:" cannot admit "repo:acme/app-evil:".
+key: github-actions
+display_name: GitHub Actions
+description: Let jobs in one GitHub repository fetch an agent's plugins, call its MCP servers and send hook events, with no Speakeasy secret stored in GitHub.
+icon: /access-hub/github-actions.svg
+enabled: true
+
+issuer:
+  value: https://token.actions.githubusercontent.com
+  visibility: read-only
+jwks_uri:
+  value: https://token.actions.githubusercontent.com/.well-known/jwks
+  visibility: hidden
+
+variables:
+  - key: owner
+    tier: rule
+    label: Owner
+    help: The user or organization that owns the repository, with the same capital letters GitHub shows. Add @ and the owner ID if the repository uses immutable subjects.
+    placeholder: my-org
+    pattern: "[A-Za-z0-9][A-Za-z0-9-]{0,38}(?:@[0-9]+)?"
+    pattern_message: An owner is up to 39 letters, numbers and hyphens, starting with a letter or number, optionally followed by @ and its numeric ID.
+  - key: repo
+    tier: rule
+    label: Repository
+    help: The repository's name, with the same capital letters GitHub shows. Add @ and the repository ID if it uses immutable subjects.
+    placeholder: my-repo
+    pattern: "[A-Za-z0-9._-]{1,100}(?:@[0-9]+)?"
+    pattern_message: A repository name is up to 100 letters, numbers, dots, hyphens and underscores, optionally followed by @ and its numeric ID.
+
+subject:
+  template: "repo:{owner}/{repo}:"
+  wildcard: true
