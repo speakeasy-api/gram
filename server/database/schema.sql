@@ -6174,6 +6174,13 @@ CREATE TABLE IF NOT EXISTS chats (
   -- Written by chat.summarize; regenerated in place when requested.
   summary text,
   summary_generated_at timestamptz,
+  -- True when summary was generated from the risk-redacted transcript by the
+  -- background summary job. Team memory only reads summaries where this is
+  -- true; older on-demand summaries were built from the unmasked transcript.
+  summary_redacted boolean NOT NULL DEFAULT false,
+  -- When a user excluded this chat from team memory (NULL = included).
+  -- Excluded chats are skipped by the summary, memo and digest readers.
+  memory_excluded_at timestamptz,
 
   -- Versioned hashes of the last successfully evaluated inference frame.
   -- Archival alone must never advance this checkpoint.
@@ -6242,6 +6249,8 @@ COMMENT ON COLUMN chats.title_manually_set IS '@access: confidential';
 COMMENT ON COLUMN chats.pinned_at IS '@access: confidential';
 COMMENT ON COLUMN chats.summary IS '@access: opaque-restricted';
 COMMENT ON COLUMN chats.summary_generated_at IS '@access: confidential';
+COMMENT ON COLUMN chats.summary_redacted IS '@access: confidential';
+COMMENT ON COLUMN chats.memory_excluded_at IS '@access: confidential';
 COMMENT ON COLUMN chats.inference_accepted_checkpoint IS '@access: confidential';
 COMMENT ON COLUMN chats.inference_actor_key IS '@access: confidential-pii';
 COMMENT ON COLUMN chats.user_account_id IS '@access: confidential';
@@ -16577,3 +16586,132 @@ COMMENT ON COLUMN registry_promotion_candidates.curation_updated_by IS '@access:
 COMMENT ON COLUMN registry_promotion_candidates.curation_retry_key IS '@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.curation_retry_revision IS '@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.curation_retry_action IS '@access: confidential';
+
+-- Team memory: facts an agent saved on purpose through the platform MCP
+-- remember tool. Content is risk-redacted before it is written. Memos are
+-- shared with everyone who holds memory:read on the project.
+CREATE TABLE IF NOT EXISTS memory_memos (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  -- Chat the memo was saved from, when the caller named one.
+  chat_id uuid,
+  -- Who saved the memo. At most one is set: a person or a Speakeasy agent.
+  -- Both stay NULL only for system-written memos.
+  author_user_id TEXT,
+  author_agent_id uuid,
+  content TEXT NOT NULL,
+  search_vector tsvector NOT NULL GENERATED ALWAYS AS (to_tsvector('english'::regconfig, content)) STORED,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT memory_memos_pkey PRIMARY KEY (id),
+  -- The composite key pins the project to the memo's organization. The chat
+  -- and agent references are single-column so a hard delete can clear them:
+  -- on a composite key ON DELETE SET NULL would also null project_id or
+  -- organization_id (NOT NULL), and Atlas does not model Postgres 15's
+  -- `SET NULL (column list)` form. Writers resolve chat_id and
+  -- author_agent_id within the memo's project and organization.
+  CONSTRAINT memory_memos_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT memory_memos_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE SET NULL,
+  CONSTRAINT memory_memos_author_agent_id_fkey FOREIGN KEY (author_agent_id) REFERENCES agents (id) ON DELETE SET NULL,
+  CONSTRAINT memory_memos_author_check CHECK (num_nonnulls(author_user_id, author_agent_id) <= 1),
+  CONSTRAINT memory_memos_content_check CHECK (content <> '' AND char_length(content) <= 4000)
+);
+
+COMMENT ON COLUMN memory_memos.id IS '@access: confidential';
+COMMENT ON COLUMN memory_memos.organization_id IS '@access: confidential';
+COMMENT ON COLUMN memory_memos.project_id IS '@access: confidential';
+COMMENT ON COLUMN memory_memos.chat_id IS '@access: confidential';
+COMMENT ON COLUMN memory_memos.author_user_id IS '@access: confidential';
+COMMENT ON COLUMN memory_memos.author_agent_id IS '@access: confidential';
+COMMENT ON COLUMN memory_memos.content IS 'Risk-redacted fact text supplied by an agent.
+@access: opaque-restricted';
+COMMENT ON COLUMN memory_memos.search_vector IS 'Full-text index of content.
+@access: opaque-restricted';
+COMMENT ON COLUMN memory_memos.created_at IS '@access: confidential';
+COMMENT ON COLUMN memory_memos.updated_at IS '@access: confidential';
+COMMENT ON COLUMN memory_memos.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN memory_memos.deleted IS '@access: confidential';
+
+CREATE INDEX IF NOT EXISTS memory_memos_project_id_created_at_idx
+ON memory_memos (project_id, created_at DESC) WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS memory_memos_search_vector_idx
+ON memory_memos USING gin (search_vector) WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS memory_memos_chat_id_idx
+ON memory_memos (chat_id) WHERE chat_id IS NOT NULL;
+
+-- Team memory: period digests that fold a project's chat summaries and memos
+-- into day digests, days into weeks, and weeks into months. A digest is
+-- written once when its period closes; it is rebuilt in place only when a
+-- source it cites changes masking or is excluded from memory.
+CREATE TABLE IF NOT EXISTS memory_digests (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  level TEXT NOT NULL,
+  -- Half-open period [period_start, period_end) in UTC.
+  period_start date NOT NULL,
+  period_end date NOT NULL,
+  content TEXT NOT NULL,
+  -- Sources folded into this digest. Day digests cite chats and memos; week
+  -- and month digests cite the digests one level down.
+  chat_ids uuid[] NOT NULL DEFAULT '{}',
+  memo_ids uuid[] NOT NULL DEFAULT '{}',
+  child_digest_ids uuid[] NOT NULL DEFAULT '{}',
+  model TEXT,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  search_vector tsvector NOT NULL GENERATED ALWAYS AS (to_tsvector('english'::regconfig, content)) STORED,
+  generated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT memory_digests_pkey PRIMARY KEY (id),
+  CONSTRAINT memory_digests_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT memory_digests_level_check CHECK (level IN ('day', 'week', 'month')),
+  -- Each level covers exactly one canonical UTC period: a day, an ISO week
+  -- starting Monday, or a calendar month.
+  CONSTRAINT memory_digests_period_check CHECK (
+    (level = 'day' AND period_end = period_start + 1)
+    OR (level = 'week' AND extract(isodow FROM period_start) = 1 AND period_end = period_start + 7)
+    OR (level = 'month' AND extract(day FROM period_start) = 1 AND period_end = (period_start + interval '1 month')::date)
+  ),
+  CONSTRAINT memory_digests_tokens_check CHECK (
+    (input_tokens IS NULL OR input_tokens >= 0) AND (output_tokens IS NULL OR output_tokens >= 0)
+  )
+);
+
+COMMENT ON COLUMN memory_digests.id IS '@access: confidential';
+COMMENT ON COLUMN memory_digests.organization_id IS '@access: confidential';
+COMMENT ON COLUMN memory_digests.project_id IS '@access: confidential';
+COMMENT ON COLUMN memory_digests.level IS '@access: confidential';
+COMMENT ON COLUMN memory_digests.period_start IS '@access: confidential';
+COMMENT ON COLUMN memory_digests.period_end IS '@access: confidential';
+COMMENT ON COLUMN memory_digests.content IS 'Model-written digest built only from redacted summaries, memos and child digests.
+@access: opaque-restricted';
+COMMENT ON COLUMN memory_digests.chat_ids IS '@access: confidential';
+COMMENT ON COLUMN memory_digests.memo_ids IS '@access: confidential';
+COMMENT ON COLUMN memory_digests.child_digest_ids IS '@access: confidential';
+COMMENT ON COLUMN memory_digests.model IS '@access: confidential';
+COMMENT ON COLUMN memory_digests.input_tokens IS '@access: confidential';
+COMMENT ON COLUMN memory_digests.output_tokens IS '@access: confidential';
+COMMENT ON COLUMN memory_digests.search_vector IS 'Full-text index of content.
+@access: opaque-restricted';
+COMMENT ON COLUMN memory_digests.generated_at IS '@access: confidential';
+COMMENT ON COLUMN memory_digests.created_at IS '@access: confidential';
+COMMENT ON COLUMN memory_digests.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS memory_digests_project_id_level_period_start_key
+ON memory_digests (project_id, level, period_start);
+
+CREATE INDEX IF NOT EXISTS memory_digests_search_vector_idx
+ON memory_digests USING gin (search_vector);
+
+-- Finds the digests that cite a chat so they can be rebuilt when it changes.
+CREATE INDEX IF NOT EXISTS memory_digests_chat_ids_idx
+ON memory_digests USING gin (chat_ids);
