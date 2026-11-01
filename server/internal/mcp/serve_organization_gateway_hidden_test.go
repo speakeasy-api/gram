@@ -82,14 +82,15 @@ func TestServeOrganizationGateway_HiddenMemberLeavesListServers(t *testing.T) {
 	require.Equal(t, []string{fx.granted}, listedServerSlugs(result))
 	require.Equal(t, []metamcp.HiddenServer{{Slug: fx.open, Name: "public member"}}, result.Hidden)
 	require.True(t, strings.HasSuffix(result.ConnectURL, "/mcp/gateway/"+fx.organizationSlug+"/connect/first-party"), "connectUrl %q", result.ConnectURL)
-	require.Equal(t, metamcp.HiddenNote, result.Note)
+	// Its members are remote, so the unchecked-status note rides along.
+	require.Equal(t, metamcp.HiddenNote+" "+metamcp.UnknownNote, result.Note)
 
 	require.NoError(t, hiddenmcpservers.Unhide(ctx, ti.conn, fx.organizationID, fx.subject.ID, fx.openServerID))
 	result = organizationGatewayListServers(t, ti, fx.organizationGatewayFixture)
 	require.ElementsMatch(t, []string{fx.granted, fx.open}, listedServerSlugs(result))
 	require.Empty(t, result.Hidden)
 	require.Empty(t, result.ConnectURL)
-	require.Empty(t, result.Note)
+	require.Equal(t, metamcp.UnknownNote, result.Note)
 }
 
 func TestServeOrganizationGateway_HiddenMemberReadsAsHidden(t *testing.T) {

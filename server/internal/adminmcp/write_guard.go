@@ -35,6 +35,7 @@ const (
 	OperationUpdateGlobalIssuer                   WriteOperation = "update_global_issuer"
 	OperationUpdateSupportMatrix                  WriteOperation = "update_support_matrix"
 	OperationCreateRegistryEntry                  WriteOperation = "create_registry_entry"
+	OperationSetRegistryIcons                     WriteOperation = "set_registry_icons"
 	OperationUploadPlatformImage                  WriteOperation = "upload_platform_image"
 )
 
@@ -54,6 +55,7 @@ var AllWriteOperations = []WriteOperation{
 	OperationUpdateGlobalIssuer,
 	OperationUpdateSupportMatrix,
 	OperationCreateRegistryEntry,
+	OperationSetRegistryIcons,
 	OperationUploadPlatformImage,
 }
 
@@ -62,7 +64,7 @@ var AllWriteOperations = []WriteOperation{
 // only durable record.
 func (op WriteOperation) PlatformGlobal() bool {
 	switch op {
-	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationUploadPlatformImage:
+	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationSetRegistryIcons, OperationUploadPlatformImage:
 		return true
 	default:
 		return false
@@ -105,7 +107,7 @@ func (op WriteOperation) implemented() bool {
 	switch op {
 	case OperationCurateRegistryPromotionCandidate, OperationRetryRegistryPromotionDocs, OperationPromoteRegistryCandidate, OperationSetOrganizationFeature, OperationSetOrganizationWhitelist, OperationAssignOrganizationOnboardingPlaybook,
 		OperationSetChatAnalysisSettings, OperationExtendOrganizationTrial,
-		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationUploadPlatformImage:
+		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationSetRegistryIcons, OperationUploadPlatformImage:
 		return true
 	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer:
 		return false

@@ -72,7 +72,8 @@ func createMetaMcpEndpoint(
 }
 
 // seedMetaMember creates a member mcp_server (remote-backed, named and
-// slugged) and attaches it to the meta server at the given sort order.
+// slugged), attaches it to the meta server at the given sort order, and
+// returns the member server's id.
 func seedMetaMember(
 	t *testing.T,
 	ctx context.Context,
@@ -82,7 +83,7 @@ func seedMetaMember(
 	name, slug string,
 	sortOrder int32,
 	visibility string,
-) {
+) uuid.UUID {
 	t.Helper()
 
 	remote := remotemcptest.SeedServer(t, ctx, conn, remotemcprepo.CreateServerParams{
@@ -116,6 +117,8 @@ func seedMetaMember(
 		SortOrder:       sortOrder,
 	})
 	require.NoError(t, err)
+
+	return server.ID
 }
 
 func makeMetaRPCBody(t *testing.T, method string, params map[string]any) []byte {

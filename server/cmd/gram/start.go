@@ -1515,6 +1515,7 @@ func newStartCommand() *cli.Command {
 				WithWorkloadTokenTargets(mcpService)
 			agentService.SetAgentVersions(deviceagentversions.NewStore(redisClient))
 			agentService.WithStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-state", agent.StateReportRate, ratelimit.WithMetrics(meterProvider)))
+			agentService.WithNewStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-state-new", agent.NewStateReportRate, ratelimit.WithMetrics(meterProvider)))
 			agent.Attach(mux, agentService)
 			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, clientAssertionSigner)
 			agentmanagement.Attach(mux, agentmanagement.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, chatSessionsManager, upstreamRevoker))
@@ -1757,11 +1758,11 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("catalog validator: %w", err)
 			}
-			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator)), featureFlags)
+			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator).WithAssetBaseURL(siteURL)), featureFlags)
 			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger, mcpCatalog)
 			deployments.Attach(mux, deploymentsService)
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
-			authclients.Attach(mux, authclients.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
+			authclients.Attach(mux, authclients.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient))
 			// Hoisted so the services that authenticate as a customer's GCP identity
 			// share one identity: they then agree on which impersonation targets are
 			// refused, and probe for Speakeasy's own service account once between them
@@ -1885,7 +1886,7 @@ func newStartCommand() *cli.Command {
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine, mcpPolicyEvaluator))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			if c.Bool("registry-discovery-enabled") {
-				registry := mcpregistry.New(db, registryValidator)
+				registry := mcpregistry.New(db, registryValidator).WithAssetBaseURL(siteURL)
 				if err := registry.AttachDiscovery(ctx, logger, mux, true, auth.New(logger, db, sessionManager, authzEngine), authzEngine); err != nil {
 					return fmt.Errorf("registry discovery readiness: %w", err)
 				}
@@ -1917,6 +1918,8 @@ func newStartCommand() *cli.Command {
 				DeploymentRedeploy:        deploymentsService,
 				AssistantIdentity:         assistantsSvc,
 				WorkloadAssertionReuse:    workloadPolicySvc,
+				InboundEMAUserIssuers:     userSessionsService,
+				InboundEMARemoteIssuers:   remoteSessionsService,
 				Workspaces:                platformMCPWorkspaces{auth: authService, organizations: organizationsService},
 				SignalAuthoring:           sigintSvc,
 				Logger:                    logger,
@@ -1957,6 +1960,7 @@ func newStartCommand() *cli.Command {
 				ProjectCore:               projects.NewCore(logger.With(attr.SlogComponent("projects")), auditLogger, temporalEnv, pluginsGitHub != nil),
 				Skills:                    skillsService,
 				GatewaySessions:           userSessionsService,
+				GatewayProxy:              mcpService,
 				SkillInsights:             telemetryrepo.New(chDB),
 				RiskPolicyApprovals:       mcpApprovalService,
 				RiskPolicySignaler:        riskSignaler,
@@ -1972,6 +1976,7 @@ func newStartCommand() *cli.Command {
 				ToolUsage:                 telemetryrepo.New(chDB),
 				ToolCallSearch:            telemetryrepo.New(chDB),
 				TelemetryDrilldown:        telemetryrepo.New(chDB),
+				GatewayActivity:           telemetryrepo.New(chDB),
 				Analytics:                 analyticsSvc.Engine(),
 				ConversationAccess:        chatService,
 				Widgets:                   widgetsSvc,
@@ -2199,7 +2204,7 @@ func newStartCommand() *cli.Command {
 					}
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-						CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, registryValidator), productFeatures, tm.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
+						CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, registryValidator).WithAssetBaseURL(siteURL), productFeatures, tm.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
 						CatalogPromotionDeliveryPaused: c.Bool("catalog-promotion-delivery-paused"),
 						GuardianPolicy:                 guardianPolicy,
 						TunnelHTTPClient:               tunnelHTTPClient,
@@ -2239,7 +2244,7 @@ func newStartCommand() *cli.Command {
 						IssuerMetadataRefresher:        issuerMetadataRefresher,
 						RemoteSessionAssertionSigner:   clientAssertionSigner,
 						IssuerKeySweeper:               issuerKeySweeper(identityProviderProvisioner),
-						StartupSeeds:                   startupSeeds(logger, db),
+						StartupSeeds:                   startupSeeds(logger, db, siteURL),
 						EmailService:                   emailService,
 						AssistantsCore:                 assistantsCore,
 						TemporalEnv:                    temporalEnv,

@@ -301,7 +301,7 @@ func newAuthenticationHostIDJAGFixture(t *testing.T) authenticationHostIDJAGFixt
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, authenticationHostIDJAGUpstreamIssuer, jwksURL)
 	toolset = setToolsetIssuer(t, ctx, ti.conn, *authCtx.ProjectID, toolset, issuer.ID)
-	client := createIDJAGClient(t, ctx, ti, issuer.ID)
+	client := seedCIMDClient(t, ctx, ti, issuer.ID, codexCIMDClientID)
 	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
 	useAuthenticationHost(t, ctx, ti, authCtx.ActiveOrganizationID, issuer.ID)

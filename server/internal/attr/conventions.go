@@ -529,6 +529,16 @@ const (
 	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
 	McpURLKey              = attribute.Key("gram.mcp.url")
 
+	// Gateway consent diagnostics contain IDs and comparison results only,
+	// never credentials, configuration hashes, or captured tool definitions.
+	McpConsentMemberProjectIDKey = attribute.Key("gram.mcp.consent.member_project_id")
+	McpConsentCatalogIDKey       = attribute.Key("gram.mcp.consent.catalog_id")
+	McpConsentDiscoveryModeKey   = attribute.Key("gram.mcp.consent.discovery_mode")
+	McpConsentCatalogModeKey     = attribute.Key("gram.mcp.consent.catalog_mode")
+	McpConsentExecuteKey         = attribute.Key("gram.mcp.consent.execute")
+	McpConsentComparisonsKey     = attribute.Key("gram.mcp.consent.comparisons")
+	McpConsentExpiresAtKey       = attribute.Key("gram.mcp.consent.expires_at")
+
 	// Legacy toolsets.mcp_slug fallback attribution; logs only, never metric dimensions.
 	McpFallbackRequestHostKey         = attribute.Key("gram.mcp.fallback.request_host")
 	McpFallbackCanonicalWrapperKey    = attribute.Key("gram.mcp.fallback.canonical_wrapper")
@@ -567,6 +577,15 @@ const (
 	OAuthFlowStageKey = attribute.Key("gram.oauth.flow_stage")
 	OAuthGrantKey     = attribute.Key("gram.oauth.grant")
 	OAuthIssuerKey    = attribute.Key("gram.oauth.issuer")
+
+	// OAuthIDJAGOutcomeKey is an ID-JAG token exchange's outcome: accepted, rejected, or error for an unexpected server failure.
+	OAuthIDJAGOutcomeKey = attribute.Key("gram.oauth.id_jag.outcome")
+
+	// OAuthIDJAGRejectionReasonKey is the bounded reason an ID-JAG token exchange was rejected.
+	OAuthIDJAGRejectionReasonKey = attribute.Key("gram.oauth.id_jag.rejection_reason")
+
+	// OAuthIDJAGResourceSourceKey is where a shared token endpoint took an ID-JAG exchange's target MCP server from when neither the request nor the assertion named it.
+	OAuthIDJAGResourceSourceKey = attribute.Key("gram.oauth.id_jag.resource_source")
 
 	// OAuthAssertionAudienceKey records which accepted audience form a verified client assertion carried.
 	OAuthAssertionAudienceKey = attribute.Key("gram.oauth.assertion_audience")
@@ -2398,6 +2417,26 @@ func SlogOAuthFailureReason(v string) slog.Attr {
 	return slog.String(string(OAuthFailureReasonKey), v)
 }
 
+func OAuthIDJAGOutcome(v string) attribute.KeyValue { return OAuthIDJAGOutcomeKey.String(v) }
+func SlogOAuthIDJAGOutcome(v string) slog.Attr {
+	return slog.String(string(OAuthIDJAGOutcomeKey), v)
+}
+
+func OAuthIDJAGRejectionReason[V ~string](v V) attribute.KeyValue {
+	return OAuthIDJAGRejectionReasonKey.String(string(v))
+}
+
+func SlogOAuthIDJAGRejectionReason[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthIDJAGRejectionReasonKey), string(v))
+}
+
+func OAuthIDJAGResourceSource(v string) attribute.KeyValue {
+	return OAuthIDJAGResourceSourceKey.String(v)
+}
+func SlogOAuthIDJAGResourceSource(v string) slog.Attr {
+	return slog.String(string(OAuthIDJAGResourceSourceKey), v)
+}
+
 func OAuthGrant(v string) attribute.KeyValue { return OAuthGrantKey.String(v) }
 func SlogOAuthGrant(v string) slog.Attr      { return slog.String(string(OAuthGrantKey), v) }
 
@@ -3351,6 +3390,26 @@ func SlogMetaMcpServerID(v string) slog.Attr        { return slog.String(string(
 func MetaMemberBackend(v string) attribute.KeyValue { return MetaMemberBackendKey.String(v) }
 func MetaDispatchOutcome[V ~string](v V) attribute.KeyValue {
 	return MetaDispatchOutcomeKey.String(string(v))
+}
+
+func SlogMcpConsentMemberProjectID(v string) slog.Attr {
+	return slog.String(string(McpConsentMemberProjectIDKey), v)
+}
+func SlogMcpConsentCatalogID(v string) slog.Attr {
+	return slog.String(string(McpConsentCatalogIDKey), v)
+}
+func SlogMcpConsentDiscoveryMode(v string) slog.Attr {
+	return slog.String(string(McpConsentDiscoveryModeKey), v)
+}
+func SlogMcpConsentCatalogMode(v string) slog.Attr {
+	return slog.String(string(McpConsentCatalogModeKey), v)
+}
+func SlogMcpConsentExecute(v bool) slog.Attr { return slog.Bool(string(McpConsentExecuteKey), v) }
+func SlogMcpConsentComparisons(v map[string]bool) slog.Attr {
+	return slog.Any(string(McpConsentComparisonsKey), v)
+}
+func SlogMcpConsentExpiresAt(v time.Time) slog.Attr {
+	return slog.Time(string(McpConsentExpiresAtKey), v)
 }
 
 func ToolsetID(v string) attribute.KeyValue { return ToolsetIDKey.String(v) }

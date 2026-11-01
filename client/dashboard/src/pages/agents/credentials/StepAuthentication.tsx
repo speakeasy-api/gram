@@ -1,6 +1,5 @@
 import { ServerInfoPopover } from "./ServerInfoPopover";
 import { useState, type JSX } from "react";
-import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import {
   Accordion,
   AccordionContent,
@@ -18,7 +17,6 @@ import {
 } from "@/components/sessions/connection-lifetime";
 import { useOAuthPopup } from "@/components/sessions/useOAuthPopup";
 import { AlertTriangle, Check, LockKeyhole, RefreshCw, X } from "lucide-react";
-import { ServerAccounts } from "../AgentKeyServers";
 import { WizardStepHeader } from "./WizardChrome";
 import type { OwnerConnections } from "./useOwnerConnections";
 import type { InventoryServer } from "./useServerInventory";
@@ -26,13 +24,11 @@ import type { InventoryServer } from "./useServerInventory";
 export function StepAuthentication({
   servers,
   connections,
-  agent,
   allServers,
   onRemove,
 }: {
   servers: InventoryServer[];
   connections: OwnerConnections;
-  agent?: ManagedAgent;
   allServers: boolean;
   onRemove: (id: string) => void;
 }): JSX.Element {
@@ -41,9 +37,19 @@ export function StepAuthentication({
   // Controlled so the first row opens even when the server list arrives after
   // mount; until someone toggles a row, the default tracks the list.
   const [openRows, setOpenRows] = useState<string[] | null>(null);
-  const displayedConnections = agent
-    ? (connections.assignedByServer ?? connections.byServer)
-    : connections.byServer;
+  // Editing shows the agent's assigned connection, unless it no longer works
+  // and the editor has a usable one: saving assigns that in its place,
+  // exactly as creating does. Until the editor's own connection is known,
+  // its checking or error state stands rather than a premature verdict.
+  const displayedConnections = new Map(connections.byServer);
+  for (const [serverId, assigned] of connections.assignedByServer ?? []) {
+    const own = connections.byServer.get(serverId)?.status;
+    const keepOwn =
+      assigned.status !== "ready" &&
+      assigned.status !== "not-required" &&
+      (own === "ready" || own === "checking" || own === "error");
+    if (!keepOwn) displayedConnections.set(serverId, assigned);
+  }
   const missing = servers.filter(
     (server) =>
       server.issuerId &&
@@ -176,13 +182,6 @@ export function StepAuthentication({
                     This server uses a shared credential. No personal connection
                     is needed.
                   </Text>
-                ) : agent ? (
-                  <ServerAccounts
-                    compact
-                    agent={agent}
-                    servers={[server]}
-                    onReady={() => {}}
-                  />
                 ) : (
                   <div className="flex flex-wrap items-center gap-3 py-1">
                     <div className="min-w-0 flex-1">

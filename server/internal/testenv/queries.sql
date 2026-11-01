@@ -452,6 +452,39 @@ FROM device_agent_syncs
 WHERE organization_id = @organization_id
   AND email = @email;
 
+-- name: InsertDeviceAgentStateReportFixture :exec
+-- Seeds one stored state report for coverage tests; the write path is
+-- agent.reportState.
+INSERT INTO device_agent_state_reports (
+    organization_id, email, serial_number, schema_version, generated_at, reported_at,
+    applied_etag, enforcement_halted, current_blocked, speakeasyd_version, tools
+)
+VALUES (
+    @organization_id, @email, NULLIF(@serial_number::text, ''), 1, @reported_at, @reported_at,
+    NULLIF(@applied_etag::text, ''), @enforcement_halted, @current_blocked, NULLIF(@speakeasyd_version::text, ''), @tools
+);
+
+-- name: SetDeviceAgentStateReportUpdateFixture :exec
+-- Sets one seeded state report's update posture and last rollback. Matches
+-- the report key: an empty serial selects the serial-less report.
+UPDATE device_agent_state_reports
+SET auto_update = @auto_update
+  , update_channel = @update_channel
+  , pinned_target = @pinned_target
+  , last_rollback_at = @last_rollback_at
+  , last_rollback_from = @last_rollback_from
+  , last_rollback_to = @last_rollback_to
+WHERE organization_id = @organization_id
+  AND LOWER(email) = LOWER(@email)
+  AND LOWER(serial_number) IS NOT DISTINCT FROM LOWER(NULLIF(@serial_number::text, ''));
+
+-- name: SetDeviceAgentServedEtagFixture :exec
+-- Records the etag GetPlugins last served a user, as a poll would.
+UPDATE device_agent_syncs
+SET served_etag = @served_etag, served_etag_changed_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND email = @email;
+
 -- name: InsertMdmDeviceFixture :exec
 INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
 VALUES (@device_integration_config_id, @organization_id, @external_id, NULLIF(@user_email::text, ''), sqlc.narg('user_id')::text, NULLIF(@serial_number::text, ''), sqlc.narg('missing_since')::timestamptz);
@@ -1110,8 +1143,36 @@ WHERE organization_id = @organization_id
   AND id = (@grant_json::jsonb->>'id')::uuid;
 
 -- name: CountDemoSeedAgentGrantsFixture :one
-SELECT count(*) FROM principal_grants
+SELECT count(*) FILTER (WHERE scope = 'mcp:auth') AS auth_grants,
+       count(*) FILTER (WHERE scope <> 'mcp:auth') AS policy_grants
+FROM principal_grants
 WHERE organization_id = @organization_id AND principal_urn LIKE 'agent:%';
+
+-- name: ListDemoSeedAuthGrantsFixture :many
+-- Every mcp:auth and mcp:blocked_auth grant in the organization, with the
+-- names that identify its principal and auth client across seed runs, and
+-- the default auth permission ledger kind that provisioned it, if any.
+SELECT g.principal_urn,
+       coalesce(a.name, '')::text AS agent_name,
+       coalesce(r.workos_slug, '')::text AS role_slug,
+       g.scope,
+       coalesce(ac.name, g.selectors->>'resource_id', '')::text AS auth_client,
+       coalesce(g.selectors->>'client_type', '')::text AS client_type,
+       coalesce(g.selectors->>'connection_owner', '')::text AS connection_owner,
+       coalesce(g.selectors->>'upstream_client', '')::text AS upstream_client,
+       coalesce(p.kind, '')::text AS provision_kind
+FROM principal_grants g
+LEFT JOIN agents a
+  ON a.organization_id = g.organization_id AND g.principal_urn = 'agent:' || a.id::text
+LEFT JOIN organization_roles r
+  ON r.organization_id = g.organization_id AND g.principal_urn = 'role:organization:' || r.id
+LEFT JOIN mcp_auth_clients ac
+  ON ac.organization_id = g.organization_id AND ac.id::text = g.selectors->>'resource_id'
+LEFT JOIN auth_permission_provisions p
+  ON p.organization_id = g.organization_id AND p.principal_urn = g.principal_urn
+ AND p.scope = g.scope AND p.selectors = g.selectors
+WHERE g.organization_id = @organization_id
+  AND g.scope IN ('mcp:auth', 'mcp:blocked_auth');
 
 -- name: CountDemoSeedAPIKeysFixture :one
 SELECT count(*) FROM api_keys WHERE organization_id = @organization_id;
@@ -2286,6 +2347,13 @@ SELECT EXISTS (
       AND query LIKE '%LockWorkloadIssuerForWrite%'
 )::boolean;
 
+-- name: LockMCPServerForUpdateFixture :one
+-- Test-only synchronization: holds an MCP server's row lock.
+SELECT id
+FROM mcp_servers
+WHERE id = @id
+FOR UPDATE;
+
 -- name: SetHostedToolsetVisibilityFixture :execrows
 -- Sets a toolset's hosting visibility on its canonical MCP server, which owns it.
 UPDATE mcp_servers
@@ -2325,3 +2393,8 @@ SET resource = sqlc.narg('resource'), created_at = @created_at,
     last_used_at = sqlc.narg('last_used_at'), refresh_expires_at = @refresh_expires_at,
     deleted_at = sqlc.narg('deleted_at')
 WHERE id = @id AND organization_id = @organization_id;
+
+-- name: ClearOrganizationFeatureSettingFixture :execrows
+-- Returns a feature setting to never configured, removing even the
+-- soft-deleted row that records an explicit opt-in.
+DELETE FROM organization_features WHERE organization_id = @organization_id AND feature_name = @feature_name;

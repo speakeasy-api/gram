@@ -14,6 +14,7 @@ import { AgentFederatedAccess } from "@/pages/agents/AgentFederatedAccess";
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
 import { ManagedAgentSessions } from "@/pages/agents/ManagedAgentSessions";
 import { AgentIdentityPermissions } from "./AgentIdentityAccess";
+import { AgentCredentialRestrictions } from "./AgentCredentialRestrictions";
 import {
   AgentIdentityAudit,
   AgentIdentityChallenges,
@@ -93,6 +94,11 @@ export function AgentIdentityProfile({
         admission.matchKind !== "wildcard" || admission.wildcardActive,
     );
   const issuing = params.get("credential") === "new";
+  // Keys and federated access are revoked where they are issued, so their
+  // connection rows link there.
+  const credentialsHref = routes.identities.detail.credentials.href(
+    encodeIdentityUrn(`agent:${agent.id}`),
+  );
   const setIssuing = (open: boolean) => {
     const next = new URLSearchParams(params);
     if (open) next.set("credential", "new");
@@ -108,6 +114,7 @@ export function AgentIdentityProfile({
           meta="What this agent's keys may be narrowed to"
         >
           <AgentIdentityPermissions agent={agent} />
+          <AgentCredentialRestrictions agent={agent} />
           <AgentIdentityChallenges agent={agent} />
         </IdentitySection>
       );
@@ -143,7 +150,11 @@ export function AgentIdentityProfile({
           {/* Padded rather than full-bleed: the full list carries a pager and
               permission notes beneath its table, which need an inset. */}
           <IdentityPanel title="MCP connections" contentClassName="p-4">
-            <ManagedAgentSessions agent={agent} variant="bare" />
+            <ManagedAgentSessions
+              agent={agent}
+              variant="bare"
+              credentialsHref={credentialsHref}
+            />
           </IdentityPanel>
         </IdentitySection>
       );
@@ -263,7 +274,12 @@ export function AgentIdentityProfile({
               encodeIdentityUrn(`agent:${agent.id}`),
             )}${params.toString() ? `?${params}` : ""}`}
           >
-            <ManagedAgentSessions agent={agent} variant="panel" limit={3} />
+            <ManagedAgentSessions
+              agent={agent}
+              variant="panel"
+              limit={3}
+              credentialsHref={credentialsHref}
+            />
           </IdentityPanel>
           <AgentIdentityAudit agent={agent} subject />
           {/* Every call it made, under the usage summary's numbers. */}

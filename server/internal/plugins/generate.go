@@ -394,7 +394,7 @@ const platformMCPGeneratorVersion = "4"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "53"
+const hooksGeneratorVersion = "57"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -2187,12 +2187,21 @@ const COMMAND =
   process.platform === "win32"
     ? ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(ROOT, "hooks", "bootstrap.ps1"), ...SERVE_ARGS]
     : ["bash", join(ROOT, "hooks", "bootstrap.sh"), ...SERVE_ARGS]
-const HOOKS = ["before_tool_call", "after_tool_call", "before_agent_run", "session_start", "session_end", "agent_end", "llm_output", "gateway_start", "gateway_stop"]
+// llm_input is observe-only. OpenClaw's Codex app-server harness fires no
+// before_agent_run, so the daemon reports those runs' user prompt from
+// llm_input. No gate fires there, so prompt policies cannot block those runs.
+const HOOKS = ["before_tool_call", "after_tool_call", "before_agent_run", "session_start", "session_end", "agent_end", "llm_input", "llm_output", "gateway_start", "gateway_stop"]
 // 10s gate wall: the daemon's deadline is 90% of this and the relay's
 // network budget is 5s, so a fail-closed verdict always lands first and
 // no hook stalls the agent longer than ~10s.
 const GATE_TIMEOUT_MS = { before_tool_call: 10000, before_agent_run: 10000 }
 const DEFAULT_TIMEOUT_MS = 30000
+// How long an agent_end that arrived before its run's llm_output waits for it
+// before it is sent without the final message.
+const AGENT_END_WAIT_MS = 2000
+// How long a run whose agent_end was sent without its final message ignores a
+// late llm_output, so that output is not cached where nothing will consume it.
+const ENDED_RUN_TTL_MS = 60000
 // The relay resolves the org's fail-open posture in-process; shim-level
 // fail-closed covers the binary being unavailable (mirrors cursor failClosed).
 const FAIL_CLOSED = true
@@ -2202,36 +2211,65 @@ export default {
   name: "Speakeasy Observability",
   description: "Speakeasy observability hooks for OpenClaw.",
   register(api) {
-    const child = spawn(COMMAND[0], [...COMMAND.slice(1)], {
-      stdio: ["pipe", "pipe", "inherit"],
-    })
+    // The daemon starts on the first hook, not here. Some OpenClaw releases
+    // load plugins inside short-lived CLI commands such as plugins install,
+    // and a daemon started at register kept those commands from exiting.
+    let child = null
+    // Set at gateway_stop: no hook may start a daemon after shutdown.
+    let stopped = false
     let seq = 0
     const pending = new Map()
     // agent_end carries no final message or usage; cache the turn's
     // llm_output and splice it into the agent_end frame.
     const llmByRun = new Map()
+    // The built-in runtime can fire agent_end just before the run's last
+    // llm_output, so an agent_end with nothing to splice waits briefly for it.
+    const pendingEnds = new Map()
+    const endedRuns = new Set()
 
-    createInterface({ input: child.stdout }).on("line", (line) => {
-      if (!line.trim()) return
-      let reply
-      try {
-        reply = JSON.parse(line)
-      } catch {
-        return
+    // The daemon keeps the host process alive only while a reply is pending,
+    // so a CLI command that fired a hook can still exit once it is answered.
+    const holdHost = (hold) => {
+      for (const handle of [child, child?.stdin, child?.stdout]) {
+        if (hold) handle?.ref?.()
+        else handle?.unref?.()
       }
-      const resolve = pending.get(reply.seq)
+    }
+    const settle = (id, reply) => {
+      const resolve = pending.get(id)
       if (!resolve) return
-      pending.delete(reply.seq)
+      pending.delete(id)
+      if (pending.size === 0) holdHost(false)
       resolve(reply)
-    })
-    child.on("exit", () => {
-      // An exited consumer cannot evaluate gates: resolve as timed out so
-      // FAIL_CLOSED applies instead of silently allowing.
-      for (const [, resolve] of pending) resolve({ timedOut: true })
-      pending.clear()
-    })
+    }
+
+    const startDaemon = () => {
+      const daemon = spawn(COMMAND[0], [...COMMAND.slice(1)], {
+        stdio: ["pipe", "pipe", "inherit"],
+      })
+      createInterface({ input: daemon.stdout }).on("line", (line) => {
+        if (!line.trim()) return
+        let reply
+        try {
+          reply = JSON.parse(line)
+        } catch {
+          return
+        }
+        settle(reply.seq, reply)
+      })
+      daemon.on("exit", () => {
+        // An exited consumer cannot evaluate gates: resolve as timed out so
+        // FAIL_CLOSED applies instead of silently allowing.
+        for (const id of [...pending.keys()]) settle(id, { timedOut: true })
+      })
+      return daemon
+    }
 
     const call = (hook, event, ctx, timeoutMs) => {
+      if (child === null) {
+        if (stopped) return Promise.resolve({ timedOut: true })
+        child = startDaemon()
+      }
       if (child.exitCode !== null || !child.stdin?.writable) {
         return Promise.resolve({ timedOut: true })
       }
@@ -2243,22 +2281,24 @@ export default {
       child.stdin.write(JSON.stringify(frame) + "\n")
       return new Promise((resolve) => {
         pending.set(id, resolve)
-        const timer = setTimeout(() => {
-          if (pending.delete(id)) resolve({ timedOut: true })
-        }, timeoutMs ?? DEFAULT_TIMEOUT_MS)
+        holdHost(true)
+        const timer = setTimeout(() => settle(id, { timedOut: true }), timeoutMs ?? DEFAULT_TIMEOUT_MS)
         if (typeof timer.unref === "function") timer.unref()
       })
     }
 
     // The daemon never reads these history-sized fields (finalMessage/usage
     // ride the llm_output splice), and an oversized frame is dropped at the
-    // serve loop's size cap — strip them before they reach the pipe. The
-    // canonical shim also strips llm_input.historyMessages; this shim never
-    // subscribes llm_input, so that branch is omitted here.
+    // serve loop's size cap, so strip them before they reach the pipe. From
+    // llm_input the daemon reads only the prompt and the run identity.
     const slimEvent = (hook, event) => {
       if (event == null || typeof event !== "object") return event
       if (hook === "agent_end" || hook === "before_agent_run") {
         const { messages, ...rest } = event
+        return rest
+      }
+      if (hook === "llm_input") {
+        const { historyMessages, systemPrompt, tools, ...rest } = event
         return rest
       }
       return event
@@ -2287,18 +2327,30 @@ export default {
     for (const hook of HOOKS) {
       const gateTimeoutMs = GATE_TIMEOUT_MS[hook]
       api.on(hook, (rawEvent, ctx) => {
+        // A Gateway that loaded the plugin while running fires no gateway_start,
+        // so its shutdown may be the first hook: never start the daemon for it.
+        if (hook === "gateway_stop" && child === null) return
         const event = slimEvent(hook, rawEvent)
         if (hook === "llm_output") {
           const texts = Array.isArray(event?.assistantTexts) ? event.assistantTexts : []
-          const key = event?.runId ?? event?.sessionId ?? ""
-          llmByRun.set(key, { finalMessage: texts.join("\n") || undefined, usage: event?.usage })
+          const key = event?.runId ?? ctx?.runId ?? event?.sessionId ?? ""
           void call(hook, event, sanitizeCtx(hook, ctx))
+          if (endedRuns.delete(key)) return
+          llmByRun.set(key, { finalMessage: texts.join("\n") || undefined, usage: event?.usage })
+          const waiting = pendingEnds.get(key)
+          if (waiting !== undefined) {
+            clearTimeout(waiting.timer)
+            pendingEnds.delete(key)
+            const cached = llmByRun.get(key)
+            llmByRun.delete(key)
+            void call("agent_end", { ...waiting.event, finalMessage: cached.finalMessage, usage: cached.usage }, waiting.ctx)
+          }
           return
         }
         if (hook === "agent_end") {
           // Consume exactly the entry that served the splice: deleting the
           // other candidate key could destroy a concurrent turn's pending entry.
-          const runKey = event?.runId ?? ""
+          const runKey = event?.runId ?? ctx?.runId ?? ""
           let cached = llmByRun.get(runKey)
           if (cached !== undefined) {
             llmByRun.delete(runKey)
@@ -2306,6 +2358,17 @@ export default {
             const sessionKey = ctx?.sessionId ?? ""
             cached = llmByRun.get(sessionKey)
             if (cached !== undefined) llmByRun.delete(sessionKey)
+          }
+          if (cached === undefined && runKey !== "") {
+            const waitingCtx = sanitizeCtx(hook, ctx)
+            const timer = setTimeout(() => {
+              pendingEnds.delete(runKey)
+              endedRuns.add(runKey)
+              setTimeout(() => endedRuns.delete(runKey), ENDED_RUN_TTL_MS).unref?.()
+              void call(hook, event, waitingCtx)
+            }, AGENT_END_WAIT_MS)
+            pendingEnds.set(runKey, { event, ctx: waitingCtx, timer })
+            return
           }
           const spliced = cached ? { ...event, finalMessage: cached.finalMessage, usage: cached.usage } : event
           void call(hook, spliced, sanitizeCtx(hook, ctx))
@@ -2325,6 +2388,11 @@ export default {
     }
 
     api.on("gateway_stop", () => {
+      stopped = true
+      // A deferred agent_end would otherwise fire after shutdown.
+      for (const { timer } of pendingEnds.values()) clearTimeout(timer)
+      pendingEnds.clear()
+      if (child === null) return
       try {
         child.stdin.end()
         child.kill()

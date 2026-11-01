@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -37,6 +38,10 @@ var ErrWorkspaceCreationInProgress = errors.New("workspace creation already in p
 // held if its holder dies before releasing it. It is well above the time a
 // provisioning takes, WorkOS call included.
 const platformMCPWorkspaceLeaseTTL = 2 * time.Minute
+
+// platformMCPClientProperty names the MCP client behind a Platform MCP signup
+// on its analytics events.
+const platformMCPClientProperty = "client"
 
 // freeMailDomains are personal mailbox providers. Their domain names a mail
 // service, not the user's company, so a workspace name suggested from one
@@ -112,8 +117,11 @@ func capitalizeFirst(value string) string {
 // creates the Default project, so the agent has a project to work in straight
 // away.
 //
+// clientName is the registered name of the OAuth client the user is
+// connecting. It attributes the signup to that MCP client in analytics.
+//
 // It returns the organization ID and its stored name.
-func (s *Service) ProvisionPlatformMCPWorkspace(ctx context.Context, userID, name string) (string, string, error) {
+func (s *Service) ProvisionPlatformMCPWorkspace(ctx context.Context, userID, name, clientName string) (string, string, error) {
 	orgName, err := orgprovision.ValidateName(name)
 	if err != nil {
 		return "", "", err
@@ -136,6 +144,11 @@ func (s *Service) ProvisionPlatformMCPWorkspace(ctx context.Context, userID, nam
 	if err := s.trialNotifier.TrialStarted(ctx, org.ID); err != nil {
 		s.logger.ErrorContext(ctx, "failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(org.ID), attr.SlogUserID(userID))
 	}
+
+	s.captureSignupTelemetry(ctx, user.Email, org.Name, org, createdViaPlatformMCP, map[string]string{
+		growthsignals.PropertySignupSource: createdViaPlatformMCP,
+		platformMCPClientProperty:          clientName,
+	})
 
 	return org.ID, org.Name, nil
 }

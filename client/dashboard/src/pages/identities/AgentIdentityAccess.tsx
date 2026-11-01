@@ -6,6 +6,7 @@ import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { ResourceLink } from "@/pages/access/ResourceLink";
 import { useResourceLinkMaps } from "@/pages/access/useResourceLinkMaps";
 import {
+  AGENT_CREDENTIAL_BLOCK_SCOPE,
   AGENT_POLICY_SCOPES,
   agentPolicyUnrestrictedLabel,
   isAgentPolicyConstraint,
@@ -72,7 +73,12 @@ export function AgentIdentityPermissions({
     throwOnError: false,
   });
   const { orgSlug } = useSlugs();
-  const rows = canRead ? (grants.data ?? []) : [];
+  // Credential restrictions are listed and edited in their own panel.
+  const rows = canRead
+    ? (grants.data ?? []).filter(
+        (grant) => grant.scope !== AGENT_CREDENTIAL_BLOCK_SCOPE,
+      )
+    : [];
   // Only a grant naming a specific MCP server needs the org inventories;
   // project names come from the session.
   const maps = useResourceLinkMaps(
@@ -190,7 +196,7 @@ export function AgentIdentityPermissions({
       {editing && canRead && grants.data && (
         <AgentPermissionEditor
           agent={agent}
-          grants={rows}
+          grants={grants.data}
           onClose={() => setEditing(false)}
         />
       )}

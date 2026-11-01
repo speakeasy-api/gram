@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { SettingsSection } from "@/components/page-templates";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Badge } from "@/components/ui/Badge";
@@ -7,17 +8,32 @@ import { Dialog } from "@/components/ui/Dialog";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
+import { SimpleTooltip, TooltipProvider } from "@/components/ui/Tooltip";
 import { HumanizeDateTime, dateTimeFormatters } from "@/lib/dates";
 import { IdentityLink } from "@/components/identity-link";
 
-/** Presentation model, populated only by the agent-scoped sessions endpoint. */
+/**
+ * Presentation model for one way in: a session from the agent-scoped sessions
+ * endpoint, or one of the agent's API keys that has been used.
+ */
 export type AgentSessionRow = {
   id: string;
+  /**
+   * How it signed in. "agent" is an MCP sign-in that chose this agent;
+   * "workload" a platform that federates as it; "api-key" one of its keys,
+   * which opens no session. Absent reads as "agent". A string, not a union:
+   * the SDK passes through kinds a newer server adds.
+   */
+  subjectKind?: string;
+  /** The workload's subject as its platform issued it. */
+  workloadSubject?: string;
+  /** For a key, the visible start of it, so two keys can be told apart. */
+  keyPrefix?: string;
   clientName?: string;
   /**
-   * The person whose authority this session acts under, when a person
-   * approved it. A session a key or a federated platform opened has none:
-   * the agent signed in as itself.
+   * The person who approved this session, or who issued the key behind a key
+   * row. A session a federated platform opened has none. Not who the agent is
+   * upstream: each server decides that with its own sign-in.
    */
   authorizerUserId?: string;
   issuerSlug?: string;
@@ -52,7 +68,18 @@ export type AgentSessionsSectionProps = {
   isLoadingMore?: boolean;
   loadMoreError?: boolean;
   onLoadMore?: () => void;
+  /**
+   * Where a key or workload row is managed. Neither is revoked here: a key is
+   * revoked with the agent's credentials, and a workload session is
+   * short-lived and ends when its platform stops signing in.
+   */
+  credentialsHref?: string;
 };
+
+/** Whether a row is a session this table can revoke. */
+function isRevocableSession(session: AgentSessionRow): boolean {
+  return (session.subjectKind ?? "agent") === "agent";
+}
 
 /** The day, with the exact moment on hover — the shape credential tables on
  * the agent page share. */
@@ -82,6 +109,7 @@ export function AgentSessionsSection({
   loadMoreError = false,
   onLoadMore,
   authorizerName,
+  credentialsHref,
 }: AgentSessionsSectionProps): JSX.Element {
   const [selected, setSelected] = useState<AgentSessionRow | null>(null);
   const [pending, setPending] = useState(false);
@@ -153,47 +181,93 @@ export function AgentSessionsSection({
   const columns: Column<AgentSessionRow>[] = [
     {
       key: "clientName",
-      header: "Client name (unverified)",
-      render: (session) => session.clientName || "Unknown client",
+      header: "Client",
+      width: "1.5fr",
+      render: (session) => {
+        if (session.subjectKind === "api-key") {
+          return (
+            <span className="min-w-0 truncate" title={session.clientName}>
+              {session.clientName || "Unnamed key"}
+              {session.keyPrefix && (
+                <span className="text-muted-foreground font-mono text-xs">
+                  {" "}
+                  {session.keyPrefix}
+                </span>
+              )}
+            </span>
+          );
+        }
+        if (session.subjectKind === "workload") {
+          return (
+            <span
+              className="min-w-0 truncate font-mono text-xs"
+              title={session.workloadSubject}
+            >
+              {session.workloadSubject || "Unknown workload"}
+            </span>
+          );
+        }
+        // An MCP client names itself when it registers, so the name is a
+        // claim, not a fact.
+        return (
+          <span title="The name the client gave itself. Not verified.">
+            {session.clientName || "Unknown client"}
+          </span>
+        );
+      },
     },
     {
       key: "authorizerUserId",
-      // Who the agent is acting for. The endpoint has always returned this
-      // and the table dropped it, so a reader could revoke someone's
-      // delegation without being told whose it was.
-      header: "Acting for",
-      width: "200px",
+      // The person who approved the session, so a reader never revokes
+      // someone's delegation without being told whose it was. Not who the
+      // agent is upstream: each server decides that with its own sign-in.
+      header: "Authorized by",
+      width: "1fr",
       render: (session) =>
         session.authorizerUserId ? (
           <IdentityLink identifier={{ userId: session.authorizerUserId }}>
             {nameFor(session.authorizerUserId)}
           </IdentityLink>
         ) : (
-          <span className="text-muted-foreground">The agent itself</span>
+          <TooltipProvider>
+            <SimpleTooltip tooltip="No person is on record for this connection: the agent connected with its own key or its platform's identity. On each server it then signs in however that server is set up, with a shared credential or a connection assigned to the agent.">
+              <span
+                tabIndex={0}
+                className="text-muted-foreground cursor-default underline decoration-dotted underline-offset-4"
+              >
+                No one
+              </span>
+            </SimpleTooltip>
+          </TooltipProvider>
         ),
     },
     {
       key: "issuerSlug",
-      header: "Issuer",
-      // Issuer slugs are long and hyphenated; an auto column wrapped them
-      // down three lines and left the row taller than every other one.
-      width: "200px",
-      render: (session) => (
-        <span className="min-w-0 truncate" title={session.issuerSlug}>
-          {session.issuerSlug || "Unknown issuer"}
-        </span>
-      ),
+      header: "Signed in with",
+      // Issuer slugs are long and hyphenated, so they truncate in a share of
+      // the row rather than wrapping it taller than every other one.
+      width: "1fr",
+      render: (session) =>
+        session.subjectKind === "api-key" ? (
+          "API key"
+        ) : session.subjectKind === "workload" ? (
+          "Workload identity"
+        ) : (
+          <span className="min-w-0 truncate" title={session.issuerSlug}>
+            {session.issuerSlug || "Unknown issuer"}
+          </span>
+        ),
     },
     {
       key: "createdAt",
       header: "Created",
-      width: "160px",
+      width: "auto",
       render: (session) => <SessionDate date={session.createdAt} />,
     },
     {
       key: "lastUsedAt",
       header: "Last used",
-      width: "140px",
+      width: "auto",
       // The one column where elapsed time is the answer: "2 days ago" says
       // whether this session is still in use, which a date does not.
       //
@@ -210,10 +284,12 @@ export function AgentSessionsSection({
     {
       key: "refreshExpiresAt",
       header: "Expires",
-      width: "160px",
+      width: "auto",
       render: (session) =>
         session.refreshExpiresAt ? (
           <SessionDate date={session.refreshExpiresAt} />
+        ) : session.subjectKind === "api-key" ? (
+          "Never"
         ) : (
           "Unknown"
         ),
@@ -221,7 +297,7 @@ export function AgentSessionsSection({
     {
       key: "status",
       header: "Status",
-      width: "110px",
+      width: "auto",
       render: (session) => (
         <Badge
           size="sm"
@@ -244,8 +320,22 @@ export function AgentSessionsSection({
     {
       key: "actions",
       header: "",
-      render: (session) =>
-        !session.revokedAt && canRevoke ? (
+      // Content-sized, so the button is never pushed past the panel edge
+      // when fixed columns outgrow a narrow detail page.
+      width: "auto",
+      render: (session) => {
+        if (!isRevocableSession(session)) {
+          return credentialsHref ? (
+            <Button asChild size="sm" variant="secondary">
+              <Link to={credentialsHref}>
+                {session.subjectKind === "api-key"
+                  ? "Manage key"
+                  : "Manage access"}
+              </Link>
+            </Button>
+          ) : null;
+        }
+        return !session.revokedAt && canRevoke ? (
           <Button
             size="sm"
             variant="destructive-secondary"
@@ -256,7 +346,8 @@ export function AgentSessionsSection({
           >
             Revoke session
           </Button>
-        ) : null,
+        ) : null;
+      },
     },
   ];
 
@@ -272,7 +363,7 @@ export function AgentSessionsSection({
         </div>
       ) : isError ? (
         <div role="alert" className="space-y-3">
-          <Text>Unable to load agent sessions.</Text>
+          <Text>Unable to load this agent's connections.</Text>
           <Button variant="secondary" onClick={onRetry}>
             Try again
           </Button>
@@ -281,7 +372,7 @@ export function AgentSessionsSection({
         <InlineEmptyState
           icon="key-round"
           heading="No sessions yet"
-          description="Choose this agent when authorizing an MCP connection to create a session."
+          description="Connections appear here once this agent's API key is used, a platform signs in as it, or someone picks it when authorizing an MCP connection."
           className={frameless}
         />
       ) : (
@@ -355,7 +446,7 @@ export function AgentSessionsSection({
               {/* Whose delegation is ending. Revoking one without saying so
                   is the one place this omission actually costs something. */}
               {selected.authorizerUserId
-                ? ` Acting for ${nameFor(selected.authorizerUserId)}.`
+                ? ` Authorized by ${nameFor(selected.authorizerUserId)}.`
                 : ""}
             </Text>
           )}

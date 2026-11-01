@@ -3008,6 +3008,7 @@ function SessionTranscript({
     () => ({
       dimNonRisk: false,
       userLabel: headerChat ? sessionUserLabel(headerChat) : undefined,
+      openClawSession: headerChat?.source?.trim().toLowerCase() === "openclaw",
       rowDecoration: (messageIds) => {
         const matched = messageIds
           .map((id) => verdictByMessage.get(id))

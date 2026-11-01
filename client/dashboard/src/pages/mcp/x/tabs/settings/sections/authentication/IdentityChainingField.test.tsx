@@ -945,6 +945,25 @@ describe("identity chaining vouched for by Speakeasy", () => {
     ).toBe("speakeasy-sign-in");
   });
 
+  it("names Speakeasy's own sign-in when a provider is trusted for inbound ID-JAGs only", () => {
+    read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
+    render(
+      speakeasyField({
+        userSessionIssuer: {
+          ...trusting,
+          slug: "speakeasy-sign-in",
+          trustedRemoteSessionClientId: undefined,
+        } as UserSessionIssuer,
+      }),
+    );
+    expect(
+      screen.getByText(
+        "People log in to this server with Speakeasy, so Speakeasy vouches for them.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Speakeasy’s own sign-in")).toBeTruthy();
+  });
+
   it("leaves out an identity provider this server's sign-in doesn't use", () => {
     read.data = {
       ...bound("first"),

@@ -3,9 +3,59 @@
   "title": "Speakeasy AI Control Plane metadata extensions",
   "type": "object",
   "properties": {
+    "com.speakeasy.ai/icons": false,
+    "server": {
+      "properties": {
+        "_meta": {
+          "properties": { "com.speakeasy.ai/icons": false }
+        }
+      }
+    },
     "_meta": {
       "type": "object",
       "properties": {
+        "com.speakeasy.ai/icons": {
+          "type": "object",
+          "properties": {
+            "default": {
+              "type": "object",
+              "properties": {
+                "src": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 2048
+                },
+                "mimeType": {
+                  "const": "image/svg+xml"
+                },
+                "sizes": {
+                  "const": ["any"]
+                }
+              },
+              "required": ["src", "mimeType", "sizes"],
+              "additionalProperties": false
+            },
+            "dark": {
+              "type": "object",
+              "properties": {
+                "src": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 2048
+                },
+                "mimeType": {
+                  "const": "image/svg+xml"
+                },
+                "sizes": {
+                  "const": ["any"]
+                }
+              },
+              "required": ["src", "mimeType", "sizes"],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
         "com.speakeasy.ai/registry": {
           "type": "object",
           "description": "Backend-owned first recorded publication. Historical publication dates may be unknown.",

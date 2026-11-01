@@ -6,12 +6,20 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AgentSessionsSection,
   type AgentSessionsSectionProps,
   type AgentSessionRow,
 } from "./AgentSessions";
+
+// A person's name links to their identity page, which reads the SDK.
+vi.mock("@/components/identity-link", () => ({
+  IdentityLink: ({ children }: { children: React.ReactNode }) => (
+    <span>{children}</span>
+  ),
+}));
 
 // Keep expiry scheduling assertions independent of the relative-date clock.
 vi.mock("@/lib/dates", () => ({
@@ -249,6 +257,40 @@ describe("Agent sessions", () => {
     });
     expect(screen.getByText("Expired")).toBeTruthy();
   });
+  it("says who authorized a session, not who the agent is upstream", async () => {
+    setup();
+    expect(screen.getByText("Authorized by")).toBeTruthy();
+    expect(screen.queryByText("The agent itself")).toBeNull();
+    fireEvent.focus(screen.getByText("No one"));
+    expect(
+      (await screen.findAllByText(/On each server it then signs in/)).length,
+    ).toBeGreaterThan(0);
+  });
+  it("names whoever issued a key as the one who authorized it", () => {
+    render(
+      <MemoryRouter>
+        <AgentSessionsSection
+          sessions={[
+            {
+              ...session,
+              subjectKind: "api-key",
+              authorizerUserId: "user_one",
+            },
+          ]}
+          isLoading={false}
+          isError={false}
+          canRevoke
+          onRetry={vi.fn<() => void>()}
+          onRevoke={vi.fn().mockResolvedValue(undefined)}
+          authorizerName={(id) =>
+            id === "user_one" ? "Example Person" : undefined
+          }
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("Example Person")).toBeTruthy();
+    expect(screen.queryByText("No one")).toBeNull();
+  });
   it("offers pagination without replacing the current sessions", () => {
     const onLoadMore = vi.fn<() => void>();
     setup({ hasMore: true, onLoadMore, loadMoreError: true });
@@ -292,12 +334,16 @@ describe("Agent sessions", () => {
   it("explains how to establish an agent session in the empty state", () => {
     setup({ sessions: [] });
     expect(screen.getByText("No sessions yet")).toBeTruthy();
-    expect(screen.getByText(/Choose this agent when authorizing/)).toBeTruthy();
+    expect(
+      screen.getByText(/API key is used, a platform signs in/),
+    ).toBeTruthy();
   });
   it("lists the client as unverified without exposing raw session IDs", () => {
     setup();
-    expect(screen.getByText("Client name (unverified)")).toBeTruthy();
-    expect(screen.getByText("Example client")).toBeTruthy();
+    expect(screen.getByText("Client")).toBeTruthy();
+    expect(screen.getByText("Example client").getAttribute("title")).toContain(
+      "Not verified",
+    );
     expect(screen.getByText("Active")).toBeTruthy();
     expect(screen.queryByText("session_example")).toBeNull();
   });
