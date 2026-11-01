@@ -62,6 +62,7 @@ import {
   unblockPlatformScope,
   clearMcp,
   clearPlatform,
+  EXTRA_INCLUDED_BY,
   extraCopy,
 } from "./roleMatrixModel";
 import { ToolAccessSheet, type ToolAccessTarget } from "./ToolAccessSheet";
@@ -1195,6 +1196,13 @@ function PlatformMatrix({
           const checked = platformAllows(grants, scope.slug);
           const blockedEverywhere = platformBlock(grants, scope.slug) === "all";
           const copy = extraCopy(scope);
+          const includedBy = extras.find(
+            (extra) => extra.scope.slug === EXTRA_INCLUDED_BY[scope.slug],
+          );
+          const included =
+            !checked &&
+            !!includedBy &&
+            platformAllows(grants, includedBy.scope.slug);
           return (
             <tr key={scope.slug}>
               <th scope="row" className="py-2 pr-2 pl-4 text-left font-normal">
@@ -1212,7 +1220,20 @@ function PlatformMatrix({
               </th>
               <td className={TD}>
                 <Cell
-                  state={blockedEverywhere ? "blocked" : checked ? "on" : "off"}
+                  state={
+                    blockedEverywhere
+                      ? "blocked"
+                      : checked
+                        ? "on"
+                        : included
+                          ? "inherited"
+                          : "off"
+                  }
+                  reason={
+                    included && includedBy
+                      ? `${extraCopy(includedBy.scope).label} includes ${copy.label}`
+                      : undefined
+                  }
                   label={copy.label}
                   onToggle={() =>
                     onChange((prev) =>
