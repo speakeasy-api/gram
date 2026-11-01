@@ -152,10 +152,34 @@ func TestPublicationRequestsCommitAndRollbackWithMutation(t *testing.T) {
 	require.Equal(t, ac.ActiveOrganizationID, published.GetOrganizationId())
 	require.Equal(t, ac.ProjectID.String(), published.GetProjectId())
 	require.Equal(t, ac.UserID, published.GetCreatedByUserId())
+	require.False(t, published.GetIncludePausedPlugins(), "an ordinary request is automatic")
 
 	tx, err = ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary for SQLc outbox checks
 	require.NoError(t, err)
 	require.NoError(t, requester.Project(ctx, tx, "another-organization", *ac.ProjectID, ac.UserID))
 	require.NoError(t, tx.Commit(ctx))
 	assertCount(1)
+
+	// A manual sync asks the publish to send paused plugins' pending changes.
+	tx, err = ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary for SQLc outbox checks
+	require.NoError(t, err)
+	outcome, err = requester.SyncProjectWithOutcome(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID)
+	require.NoError(t, err)
+	require.Equal(t, plugins.ProjectPublicationEnqueued, outcome)
+	require.NoError(t, tx.Commit(ctx))
+	assertCount(2)
+	rows, err = testrepo.New(ti.conn).ListPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	syncs := 0
+	for _, row := range rows {
+		if row.Topic != "gram.plugins.v1.PublicationRequested" {
+			continue
+		}
+		var request publicationv1.PublicationRequested
+		require.NoError(t, proto.Unmarshal(row.Message, &request))
+		if request.GetIncludePausedPlugins() {
+			syncs++
+		}
+	}
+	require.Equal(t, 1, syncs)
 }

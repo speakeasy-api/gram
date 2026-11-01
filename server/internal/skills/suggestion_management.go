@@ -352,6 +352,9 @@ func (s *Service) approveSuggestion(
 			approval.outcome = "partially_applied"
 		}
 	}
+	if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return approval, oops.E(oops.CodeUnexpected, err, "lock approved skill package content").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return approval, oops.E(oops.CodeUnexpected, err, "commit skill suggestion approval").LogError(ctx, logger)
 	}

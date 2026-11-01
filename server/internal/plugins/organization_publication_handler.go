@@ -105,6 +105,8 @@ func (h *OrganizationPublicationHandler) publishPage(ctx context.Context, organi
 			OrganizationId:  new(organizationID),
 			ProjectId:       new(projectID.String()),
 			CreatedByUserId: new(actorID),
+			// An organization-wide refresh is automatic, never a manual sync.
+			IncludePausedPlugins: nil,
 		}.Build()}); err != nil {
 			return fmt.Errorf("enqueue project publication for %s: %w", projectID, err)
 		}

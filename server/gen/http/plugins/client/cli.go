@@ -150,7 +150,7 @@ func BuildCreatePluginPayload(pluginsCreatePluginBody string, pluginsCreatePlugi
 	{
 		err = json.Unmarshal([]byte(pluginsCreatePluginBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"auto_sync_enabled\": false,\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -166,9 +166,10 @@ func BuildCreatePluginPayload(pluginsCreatePluginBody string, pluginsCreatePlugi
 		}
 	}
 	v := &plugins.CreatePluginPayload{
-		Name:        body.Name,
-		Slug:        body.Slug,
-		Description: body.Description,
+		Name:            body.Name,
+		Slug:            body.Slug,
+		Description:     body.Description,
+		AutoSyncEnabled: body.AutoSyncEnabled,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -184,7 +185,7 @@ func BuildUpdatePluginPayload(pluginsUpdatePluginBody string, pluginsUpdatePlugi
 	{
 		err = json.Unmarshal([]byte(pluginsUpdatePluginBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"auto_sync_enabled\": false,\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {
@@ -204,10 +205,11 @@ func BuildUpdatePluginPayload(pluginsUpdatePluginBody string, pluginsUpdatePlugi
 		}
 	}
 	v := &plugins.UpdatePluginPayload{
-		ID:          body.ID,
-		Name:        body.Name,
-		Slug:        body.Slug,
-		Description: body.Description,
+		ID:              body.ID,
+		Name:            body.Name,
+		Slug:            body.Slug,
+		Description:     body.Description,
+		AutoSyncEnabled: body.AutoSyncEnabled,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

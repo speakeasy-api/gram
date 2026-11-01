@@ -920,6 +920,7 @@ pubsub:
           string organization_id = 1;
           string project_id = 2;
           string created_by_user_id = 3;
+          bool include_paused_plugins = 4;
         }
       type: PROTOCOL_BUFFER
   - labels:

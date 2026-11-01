@@ -31,6 +31,10 @@ type PluginSnapshot struct {
 	Name        string  `json:"name"`
 	Slug        string  `json:"slug"`
 	Description *string `json:"description,omitempty"`
+
+	// AutoSyncEnabled reports whether the plugin's changes publish
+	// automatically. Nil when the entry predates the setting.
+	AutoSyncEnabled *bool `json:"auto_sync_enabled,omitempty"`
 }
 
 type LogPluginCreateEvent struct {
@@ -44,10 +48,20 @@ type LogPluginCreateEvent struct {
 	PluginID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
 	PluginName string
 	PluginSlug string
+
+	// PluginSnapshotAfter is the created plugin, recording settings chosen at
+	// creation such as auto sync being off. Nil records no snapshot.
+	PluginSnapshotAfter *PluginSnapshot
 }
 
 func (l *Logger) LogPluginCreate(ctx context.Context, dbtx repo.DBTX, event LogPluginCreateEvent) error {
 	action := ActionPluginCreate
+
+	afterSnapshot, err := marshalAuditPayload(event.PluginSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
@@ -65,7 +79,7 @@ func (l *Logger) LogPluginCreate(ctx context.Context, dbtx repo.DBTX, event LogP
 		SubjectSlug:        conv.ToPGTextEmpty(event.PluginSlug),
 
 		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
+		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
 	}
 

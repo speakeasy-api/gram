@@ -1323,6 +1323,7 @@ func EncodeUpdatePluginRequest(encoder func(*http.Request) goahttp.Encoder) func
 // plugins updatePlugin endpoint. restoreBody controls whether the response
 // body should be restored after having been read.
 // DecodeUpdatePluginResponse may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -1365,6 +1366,20 @@ func DecodeUpdatePluginResponse(decoder func(*http.Response) goahttp.Decoder, re
 			}
 			res := NewUpdatePluginPluginOK(&body)
 			return res, nil
+		case http.StatusPreconditionFailed:
+			var (
+				body UpdatePluginFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "updatePlugin", err)
+			}
+			err = ValidateUpdatePluginFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "updatePlugin", err)
+			}
+			return nil, NewUpdatePluginFailedPrecondition(&body)
 		case http.StatusUnauthorized:
 			var (
 				body UpdatePluginUnauthorizedResponseBody
@@ -5092,6 +5107,7 @@ func unmarshalPluginResponseBodyToPluginsPlugin(v *PluginResponseBody) *plugins.
 		Description:              v.Description,
 		IsDefault:                v.IsDefault,
 		AutoCreated:              *v.AutoCreated,
+		AutoSyncEnabled:          *v.AutoSyncEnabled,
 		ServerCount:              v.ServerCount,
 		SkillCount:               v.SkillCount,
 		AssignmentCount:          v.AssignmentCount,
@@ -5183,6 +5199,22 @@ func unmarshalRotatedObservabilityKeyResponseBodyToPluginsRotatedObservabilityKe
 		Name:      *v.Name,
 		KeyPrefix: *v.KeyPrefix,
 		ExpiresAt: v.ExpiresAt,
+	}
+
+	return res
+}
+
+// unmarshalPluginPublishStatusResponseBodyToPluginsPluginPublishStatus builds
+// a value of type *plugins.PluginPublishStatus from a value of type
+// *PluginPublishStatusResponseBody.
+func unmarshalPluginPublishStatusResponseBodyToPluginsPluginPublishStatus(v *PluginPublishStatusResponseBody) *plugins.PluginPublishStatus {
+	if v == nil {
+		return nil
+	}
+	res := &plugins.PluginPublishStatus{
+		Slug:               *v.Slug,
+		UpToDate:           *v.UpToDate,
+		AwaitingManualSync: *v.AwaitingManualSync,
 	}
 
 	return res

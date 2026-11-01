@@ -211,8 +211,10 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 	}
 	published := map[string]string{}
 	pluginsBySlug := map[string]pluginsrepo.Plugin{}
+	// Every assigned plugin has auto sync off, so the member projection's
+	// omission of it is observable.
 	for _, assignment := range assignments {
-		plugin := seedPlugin(t, prepared, conn, principal.OrganizationID, project.ID, assignment.slug, assignment.slug)
+		plugin := seedPluginWithAutoSync(t, prepared, conn, principal.OrganizationID, project.ID, assignment.slug, assignment.slug, pgtype.Bool{Bool: false, Valid: true})
 		pluginsBySlug[assignment.slug] = plugin
 		require.NoError(t, pluginsrepo.New(conn).SetPluginAutoCreatedFixture(prepared, pluginsrepo.SetPluginAutoCreatedFixtureParams{ProjectID: project.ID, ID: plugin.ID, AutoCreated: assignment.slug == "member-role"}))
 		_, err = pluginsrepo.New(conn).AddPluginAssignment(prepared, pluginsrepo.AddPluginAssignmentParams{
@@ -259,11 +261,13 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 		encoded, err := json.Marshal(plugin)
 		require.NoError(t, err)
 		require.Contains(t, string(encoded), marker)
+		require.NotContains(t, string(encoded), "auto_sync_enabled", "auto sync is an administrator setting")
 		detail, err := service.GetAssignedPlugin(prepared, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID})
 		require.NoError(t, err)
 		encoded, err = json.Marshal(detail.Plugin)
 		require.NoError(t, err)
 		require.Contains(t, string(encoded), marker)
+		require.NotContains(t, string(encoded), "auto_sync_enabled", "auto sync is an administrator setting")
 
 		require.Nil(t, plugin.Assignments)
 		require.Equal(t, PluginPublicationPublished, plugin.Publication)
@@ -973,13 +977,21 @@ func TestSetPluginAssignmentsRejectsExpiredAndCrossProjectReferences(t *testing.
 
 func seedPlugin(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, name, slug string) pluginsrepo.Plugin {
 	t.Helper()
+	return seedPluginWithAutoSync(t, ctx, conn, organizationID, projectID, name, slug, pgtype.Bool{})
+}
+
+// seedPluginWithAutoSync seeds a plugin with a stored auto sync setting; an
+// invalid one is the default, on.
+func seedPluginWithAutoSync(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, name, slug string, autoSync pgtype.Bool) pluginsrepo.Plugin {
+	t.Helper()
 
 	plugin, err := pluginsrepo.New(conn).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-		Name:           name,
-		Slug:           slug,
-		Description:    pgtype.Text{},
+		OrganizationID:  organizationID,
+		ProjectID:       projectID,
+		Name:            name,
+		Slug:            slug,
+		Description:     pgtype.Text{},
+		AutoSyncEnabled: autoSync,
 	})
 	require.NoError(t, err)
 	return plugin

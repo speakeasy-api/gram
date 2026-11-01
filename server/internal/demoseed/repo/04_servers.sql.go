@@ -686,8 +686,8 @@ func (q *Queries) ServersInsertEngineeringEssentialsAssignment(ctx context.Conte
 }
 
 const serversInsertEngineeringEssentialsPlugin = `-- name: ServersInsertEngineeringEssentialsPlugin :one
-INSERT INTO plugins (organization_id, project_id, name, slug)
-VALUES ($1::text, $2::uuid, 'Engineering Essentials', 'engineering-essentials')
+INSERT INTO plugins (organization_id, project_id, name, slug, auto_sync_enabled)
+VALUES ($1::text, $2::uuid, 'Engineering Essentials', 'engineering-essentials', false)
 RETURNING id
 `
 
