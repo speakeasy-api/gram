@@ -2,6 +2,11 @@ import {
   CLAUDE_CODE_EXACT_NAME_NOTE,
   CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL,
 } from "@/lib/claude-code-marketplace";
+import {
+  CLAUDE_UNIFIED_EXPERIENCE_DOCS_URL,
+  CLAUDE_UNIFIED_EXPERIENCE_NOTE,
+  CLAUDE_UNIFIED_EXPERIENCE_STEP_TITLE,
+} from "@/lib/claude-unified-experience";
 import { getCursorInstallCommand } from "@/lib/cursor-install-command";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import {
@@ -249,6 +254,15 @@ const setupAgentPlatforms = (
           alt: "Claude.ai plugin access dropdown showing four options (Available to install, Installed by default, Not available, Required) with Required selected",
           caption:
             'Open the Default access dropdown on the observability plugin row and select "Required".',
+        },
+      },
+      {
+        title: CLAUDE_UNIFIED_EXPERIENCE_STEP_TITLE,
+        description: CLAUDE_UNIFIED_EXPERIENCE_NOTE,
+        helpLink: {
+          url: CLAUDE_UNIFIED_EXPERIENCE_DOCS_URL,
+          linkLabel: "Claude's unified experience guide",
+          sentence: "See {LINK} for how to turn it off",
         },
       },
       {

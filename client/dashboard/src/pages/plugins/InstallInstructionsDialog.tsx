@@ -15,6 +15,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
 import { useFetcher } from "@/contexts/Fetcher";
+import {
+  CLAUDE_UNIFIED_EXPERIENCE_DOCS_URL,
+  CLAUDE_UNIFIED_EXPERIENCE_NOTE,
+  CLAUDE_UNIFIED_EXPERIENCE_STEP_TITLE,
+} from "@/lib/claude-unified-experience";
 import { getCursorInstallCommand } from "@/lib/cursor-install-command";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import { cn } from "@/lib/utils";
@@ -221,11 +226,21 @@ function ClaudeCoworkInstallContent({
               description:
                 "Choose Required to pre-install the plugin without allowing members to remove it, or Installed by default to allow opting out. Start a new Cowork session and verify expected components. Required installation does not guarantee hook execution or telemetry delivery. Native Cowork monitoring is a separate Team/Enterprise feature.",
             },
+            {
+              title: CLAUDE_UNIFIED_EXPERIENCE_STEP_TITLE,
+              description: CLAUDE_UNIFIED_EXPERIENCE_NOTE,
+            },
           ]}
         />
 
         <RelatedLinks
-          links={[{ href: COWORK_DOCS_URL, label: "Cowork setup guide" }]}
+          links={[
+            { href: COWORK_DOCS_URL, label: "Cowork setup guide" },
+            {
+              href: CLAUDE_UNIFIED_EXPERIENCE_DOCS_URL,
+              label: "Turn off the unified Claude experience",
+            },
+          ]}
         />
       </div>
 
