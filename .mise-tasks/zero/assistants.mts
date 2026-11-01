@@ -66,24 +66,25 @@ async function ensureLocalConfig(
     console.log(`✅ ${key} is already set.`);
     return existing;
   }
-  if (existing && !supported(existing)) {
+
+  // Persist a value already in the process environment (intentional override
+  // or a leftover from the old mise.toml defaults) so a later clean shell
+  // still has it. Fall back to the local default when nothing is set or the
+  // value is no longer supported.
+  const current = existing || process.env[key];
+  if (restart || !isSet(current)) {
+    await saveConfig(key, fallback);
+    return fallback;
+  }
+  if (!supported(current!)) {
     console.log(
-      `⚠️ ${key}=${existing} is no longer supported; using ${fallback}.`,
+      `⚠️ ${key}=${current} is no longer supported; using ${fallback}.`,
     );
     await saveConfig(key, fallback);
     return fallback;
   }
-
-  // Persist a value already in the process environment (intentional override
-  // or a leftover from the old mise.toml defaults) so a later clean shell
-  // still has it. Fall back to the local default when nothing is set.
-  const value = restart
-    ? fallback
-    : isSet(process.env[key]) && supported(process.env[key]!)
-      ? process.env[key]!
-      : fallback;
-  await saveConfig(key, value);
-  return value;
+  await saveConfig(key, current!);
+  return current!;
 }
 
 async function run() {
