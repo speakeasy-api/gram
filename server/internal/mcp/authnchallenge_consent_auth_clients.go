@@ -220,23 +220,19 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 		auth := &consentServerAuth{ServerID: server.id, Status: consentAuthChoose, Options: nil}
 		choices[server.id] = auth
 
-		var requires *bool
-		if len(serverRows) > 0 && serverRows[0].RequiresUpstreamAuth.Valid {
-			requires = &serverRows[0].RequiresUpstreamAuth.Bool
-		}
 		offered := slices.DeleteFunc(slices.Clone(serverRows), func(row upstreamclientsrepo.ListServerConsentAuthClientsRow) bool {
 			return !row.AuthClientID.Valid
 		})
 		switch {
-		case requires != nil && !*requires:
-			auth.Status = consentAuthNoAuth
-			continue
-		case len(offered) == 0 && requires != nil:
+		case len(offered) > 0:
+		case len(serverRows) > 0 && serverRows[0].UpstreamAuthPending:
+			// Upstream credentials no auth client records yet are incomplete
+			// setup, never a server needing none.
 			auth.Status = consentAuthSetupIncomplete
 			continue
-		case len(offered) == 0:
-			// Undecided with nothing offered serves without upstream
-			// authentication, as the resolver does.
+		default:
+			// A server offering no enabled client needs no upstream
+			// authentication.
 			auth.Status = consentAuthNoAuth
 			continue
 		}

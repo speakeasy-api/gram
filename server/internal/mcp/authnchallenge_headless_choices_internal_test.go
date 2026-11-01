@@ -10,7 +10,6 @@ import (
 
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -153,9 +152,10 @@ func TestHeadlessAuthClientPicks(t *testing.T) {
 	t.Run("incomplete setup is told apart from a missing choice", func(t *testing.T) {
 		t.Parallel()
 		f, endpoint, caller := setup(t)
-		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(t.Context(), authclientbackfill.SetRequiresUpstreamAuthFixtureParams{ID: f.serverID, RequiresUpstreamAuth: pgtype.Bool{Bool: true, Valid: true}}))
+		// An upstream OAuth client no auth client records yet.
+		f.attach()
 		_, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, nil)
-		requireOAuthCode(t, err, tokenErrorSetupRequired, "required with nothing offered")
+		requireOAuthCode(t, err, tokenErrorSetupRequired, "upstream credentials with nothing offered")
 	})
 
 	t.Run("organizations that do not enforce refuse named choices and decide nothing", func(t *testing.T) {

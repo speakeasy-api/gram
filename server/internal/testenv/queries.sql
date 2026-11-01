@@ -2311,6 +2311,16 @@ VALUES (@id, @project_id, 'streamable-http', @url);
 INSERT INTO mcp_servers (id, project_id, slug, name, remote_mcp_server_id, visibility)
 VALUES (@id, @project_id, @slug, @slug, @remote_mcp_server_id, @visibility);
 
+-- name: CreateRemoteMCPCredentialHeaderFixture :exec
+INSERT INTO remote_mcp_server_headers (remote_mcp_server_id, name, is_secret, value)
+VALUES (@remote_mcp_server_id, 'Authorization', TRUE, @value);
+
+-- name: SetMCPServerRequiresUpstreamAuthFixture :exec
+UPDATE mcp_servers SET requires_upstream_auth = @requires_upstream_auth WHERE id = @id;
+
+-- name: GetMCPServerRequiresUpstreamAuthFixture :one
+SELECT requires_upstream_auth FROM mcp_servers WHERE id = @id;
+
 -- name: CreateAuthClientFixture :one
 INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name)
 VALUES (@organization_id, @project_id, @client_type, 'backfill', @name)

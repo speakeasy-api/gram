@@ -93,7 +93,6 @@ func TestRun_EMAGatewayIssuerReachesItsProjectsServers(t *testing.T) {
 	ema := f.live(TypeEMA)
 	require.Len(t, ema, 1)
 	require.Equal(t, []uuid.UUID{ema[0].ID}, f.links(server), "the server offers the client its gateway members chain")
-	require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, f.requiresUpstreamAuth(server))
 	require.Zero(t, f.selections(server), "no credential's choice is made for it")
 
 	rerun := f.run(true)

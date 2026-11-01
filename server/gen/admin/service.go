@@ -947,11 +947,13 @@ type AdminMcpServerHealthTrustedRemoteSession struct {
 // Whether the server's upstream needs authentication and the auth clients it
 // offers.
 type AdminMcpServerHealthUpstreamAuth struct {
-	// configured, setup_incomplete (required with no enabled client),
-	// no_auth_required or undecided.
+	// configured (at least one enabled auth client), setup_incomplete (no auth
+	// client was ever linked to it, live or detached, but it has upstream
+	// credentials that no auth client records yet) or no_auth_required.
 	Status string
-	// Whether the upstream needs authentication. Omitted while undecided.
-	RequiresUpstreamAuth *bool
+	// Whether the upstream needs authentication: true when the server offers at
+	// least one enabled auth client.
+	RequiresUpstreamAuth bool
 	AuthClients          []*AdminMcpServerHealthAuthClient
 }
 
@@ -1632,14 +1634,14 @@ type AdminUpstreamOAuthMigrationAuthClientKind struct {
 // records yet.
 type AdminUpstreamOAuthMigrationAuthClients struct {
 	// Whether every configured identity has its auth client, server links and
-	// header copies recorded, no backfilled record is left to retire, no server
-	// offering one is left undecided, and no phase failed.
+	// header copies recorded, no backfilled record is left to retire, and no phase
+	// failed.
 	Complete bool
 	// Whether a run is recording typed auth clients for the organization right
 	// now. The other counts are then empty; check again when it finishes.
 	InProgress bool
-	// Servers offering a backfilled auth client whose need for upstream
-	// authentication is still undecided, not yet marked as needing it.
+	// Deprecated: always 0. Whether a server needs upstream authentication follows
+	// from the auth clients it offers, so no server is marked.
 	PendingMarkedServers int64
 	// Configured identities and server links decided.
 	Associations int64
@@ -1696,9 +1698,8 @@ type AdminUpstreamOAuthMigrationExecutionProfileGap struct {
 	// Why there is no choice: selection_required (several clients could serve it),
 	// personal_requires_user (only a personal client serves it, and the turn has
 	// no user), no_client (no live, enabled auth client carries its upstream OAuth
-	// client), setup_incomplete (it needs upstream authentication and offers no
-	// auth client) or upstream_auth_undecided (it offers no auth client and an
-	// administrator has not decided whether it needs upstream authentication).
+	// client) or setup_incomplete (no auth client was ever linked to it, live or
+	// detached, but it has upstream credentials that no auth client records yet).
 	Reason string
 	// Profile and server pairs with no choice for this reason.
 	Servers int64
@@ -1753,8 +1754,8 @@ type AdminUpstreamOAuthMigrationRun struct {
 	AuthClientsWritten *int64
 	// Server to auth client links recorded.
 	AuthClientLinksWritten *int64
-	// Servers marked as needing upstream authentication because they offer a
-	// backfilled auth client.
+	// Deprecated: always omitted. Whether a server needs upstream authentication
+	// follows from the auth clients it offers, so no server is marked.
 	ServersMarkedRequiringUpstreamAuth *int64
 	// Credential choices this run named a typed auth client on.
 	SelectionsMapped *int64

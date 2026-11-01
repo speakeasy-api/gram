@@ -16869,7 +16869,9 @@ func authClientsUsage() {
 	fmt.Fprintln(os.Stderr, `    set-issuance-profile: Create or replace the issuance profile of one headless caller signing in through a sign-in: an OAuth client, or a workload issuer and subject. Each choice names a credential the server offers, or none for a server that needs no upstream authentication. A workload subject represents no person, so its profile names shared credentials only. Choices take effect on sessions issued afterwards; existing sessions keep theirs. Choosing a credential grants nothing: each issuance checks the caller may use it. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    delete-issuance-profile: Delete an issuance profile. Sessions already issued keep their choices; later sessions decide theirs without it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-authentication: Get how an MCP server authenticates to its upstream: whether authentication is required and which auth clients it offers. Requires org:read.`)
-	fmt.Fprintln(os.Stderr, `    set-mcp-server-upstream-auth-requirement: Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    set-mcp-server-upstream-auth-requirement: Return how an MCP server authenticates to its upstream. The requested requirement is ignored: whether the upstream needs authentication follows from the enabled auth clients the server offers. Not available for hosted toolsets. Requires org:admin.
+	
+	Deprecated: read getMcpServerAuthentication, and attach, detach, enable or disable auth clients instead.`)
 	fmt.Fprintln(os.Stderr, `    get-auth-client-audience: List who may use an auth client: the rules naming it and the broader rules that reach it. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    set-auth-client-audience: Replace the rules naming an auth client. Use grants mcp:auth on the client and Blocked writes mcp:blocked_auth; both apply on every server that offers the client. Server access is unchanged and still needs mcp:connect. Administering a client gives nobody permission to use it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
@@ -17156,7 +17158,9 @@ func authClientsSetMcpServerUpstreamAuthRequirementUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Return how an MCP server authenticates to its upstream. The requested requirement is ignored: whether the upstream needs authentication follows from the enabled auth clients the server offers. Not available for hosted toolsets. Requires org:admin.
+	
+	Deprecated: read getMcpServerAuthentication, and attach, detach, enable or disable auth clients instead.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

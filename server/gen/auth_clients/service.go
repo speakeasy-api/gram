@@ -84,12 +84,13 @@ type Service interface {
 	// Get how an MCP server authenticates to its upstream: whether authentication
 	// is required and which auth clients it offers. Requires org:read.
 	GetMcpServerAuthentication(context.Context, *GetMcpServerAuthenticationPayload) (res *types.McpServerAuthentication, err error)
-	// Declare whether an MCP server's upstream needs authentication. Where typed
-	// auth client resolution is enforced, a server that needs none is served
-	// without upstream credentials and a server that needs it and offers no
-	// enabled client is unavailable until setup is complete; elsewhere, including
-	// in shadow mode, the server's existing upstream configuration keeps serving.
-	// Not available for hosted toolsets. Requires org:admin.
+	// Return how an MCP server authenticates to its upstream. The requested
+	// requirement is ignored: whether the upstream needs authentication follows
+	// from the enabled auth clients the server offers. Not available for hosted
+	// toolsets. Requires org:admin.
+
+	// Deprecated: read getMcpServerAuthentication, and attach, detach, enable or
+	// disable auth clients instead.
 	SetMcpServerUpstreamAuthRequirement(context.Context, *SetMcpServerUpstreamAuthRequirementPayload) (res *types.McpServerAuthentication, err error)
 	// List who may use an auth client: the rules naming it and the broader rules
 	// that reach it. Requires org:read.
@@ -280,8 +281,14 @@ type ListMcpServerAuthClientChoicesPayload struct {
 // ListMcpServerAuthClientChoicesResult is the result type of the authClients
 // service listMcpServerAuthClientChoices method.
 type ListMcpServerAuthClientChoicesResult struct {
-	// Whether the upstream needs authentication. Omitted while undecided.
-	RequiresUpstreamAuth *bool
+	// Whether the upstream needs authentication: true when the server offers at
+	// least one enabled auth client.
+	RequiresUpstreamAuth bool
+	// configured when the server offers at least one enabled auth client;
+	// setup_incomplete when no auth client was ever linked to it, live or
+	// detached, but it has a live upstream OAuth client or a credential header on
+	// its source that no auth client records yet; no_auth_required otherwise.
+	Status string
 	// The enabled shared credentials the server offers.
 	Choices []*types.AuthClientChoice
 }
@@ -338,7 +345,7 @@ type SetIssuanceProfilePayload struct {
 type SetMcpServerUpstreamAuthRequirementPayload struct {
 	// The MCP server id.
 	McpServerID string
-	// Whether the upstream needs authentication.
+	// Ignored.
 	RequiresUpstreamAuth bool
 	SessionToken         *string
 	ApikeyToken          *string
