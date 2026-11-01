@@ -138,6 +138,22 @@ func TestGatewayProxyListsServersAsTheCaller(t *testing.T) {
 	require.Equal(t, principal.UserID, proxy.calls[0].userID)
 }
 
+// The gateway's note names connection_status, which this connection does not
+// offer, so list_my_servers says how sign-in surfaces here instead.
+func TestGatewayProxyRewritesTheUncheckedStatusNote(t *testing.T) {
+	t.Parallel()
+	ctx, service, proxy, principal := newGatewayProxyFixture(t, true, true)
+	note, err := json.Marshal(metamcp.HiddenNote + " " + metamcp.UnknownNote)
+	require.NoError(t, err)
+	proxy.results[metamcp.ToolListServers] = `{"content":[],"structuredContent":{"servers":[{"slug":"crm","name":"CRM","sortOrder":0,"status":"unknown"}],"note":` + string(note) + `}}`
+
+	output, err := service.ListMyServers(ctx, principal)
+
+	require.NoError(t, err)
+	require.Equal(t, metamcp.HiddenNote+" "+myServersUnknownNote, output.Note)
+	require.NotContains(t, output.Note, "connection_status")
+}
+
 func TestGatewayProxyDescribesToolsByPlainName(t *testing.T) {
 	t.Parallel()
 	ctx, service, proxy, principal := newGatewayProxyFixture(t, true, true)

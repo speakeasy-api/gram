@@ -2,6 +2,8 @@ package runtimepolicy
 
 import (
 	"fmt"
+	"slices"
+
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -297,6 +299,18 @@ func TestDelegableGrantsWithExclusions(t *testing.T) {
 		ok, err := authz.GrantsAuthorize(policy.RuntimeGrants(), check)
 		require.NoError(t, err)
 		require.True(t, ok)
+	})
+
+	t.Run("discovery drops a candidate its carried exclusion withdraws entirely", func(t *testing.T) {
+		t.Parallel()
+		grants, err := DelegableGrantsWithExclusionsFor("", []authz.Grant{wildcard}, []authz.Grant{roleAllow}, []authz.Grant{roleAllow, roleBlockAll})
+		require.NoError(t, err)
+		require.False(t, slices.ContainsFunc(grants, func(grant authz.Grant) bool { return grant.Scope == authz.ScopeMCPConnect }))
+
+		narrowed, err := DelegableGrantsWithExclusionsFor("", []authz.Grant{wildcard}, []authz.Grant{roleAllow}, []authz.Grant{roleAllow, roleBlock})
+		require.NoError(t, err)
+		require.True(t, connects(t, narrowed, other), "a narrower exclusion keeps the wildcard")
+		require.False(t, connects(t, narrowed, blocked))
 	})
 
 	t.Run("allow-only discovery still drops the overlapping wildcard", func(t *testing.T) {

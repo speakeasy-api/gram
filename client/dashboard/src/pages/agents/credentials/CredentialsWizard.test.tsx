@@ -40,10 +40,12 @@ const mocks = vi.hoisted(() => ({
   createGrant: vi.fn(),
   deleteGrant: vi.fn(),
   agentList: vi.fn(),
+  nameCheckFails: false,
   sessions: vi.fn(),
   sessionClients: vi.fn(),
   bindings: vi.fn(),
   attach: vi.fn(),
+  detach: vi.fn(),
   plugins: vi.fn(),
   getPlugin: vi.fn(),
   listPolicyGrants: vi.fn(),
@@ -95,9 +97,18 @@ vi.mock("@/contexts/Auth", () => ({
     user: { id: "user_owner", displayName: "Example Owner", email: "o@e.test" },
   }),
 }));
+// The name check answers as soon as a name is typed rather than after the
+// pause the page waits for.
+vi.mock("@/hooks/useDebouncedValue", () => ({
+  useDebouncedValue: <T,>(value: T) => value,
+}));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     agents: {
+      list: async () => {
+        if (mocks.nameCheckFails) throw new Error("network down");
+        return { result: { items: mocks.agentList() } };
+      },
       create: mocks.createAgent,
       listDelegableGrants: mocks.listDelegableGrants,
       listPolicyGrants: mocks.listPolicyGrants,
@@ -114,6 +125,7 @@ vi.mock("@/contexts/Sdk", () => ({
       ],
       listBindings: async () => ({ items: await mocks.bindings() }),
       attachBinding: mocks.attach,
+      detachBinding: mocks.detach,
     },
     remoteSessionClients: {
       list: async (request: object) => [
@@ -292,11 +304,22 @@ async function continueFromAuthentication() {
   fireEvent.click(next);
 }
 
+/** Continue, once the typed name has been checked and found free. */
+async function nameChecked() {
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false),
+  );
+}
+
 async function reachCredentialStep() {
   setup();
   fireEvent.change(screen.getByLabelText("Name"), {
     target: { value: "Release Bot" },
   });
+  await nameChecked();
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -350,6 +373,7 @@ beforeEach(() => {
   mocks.platforms.mockReturnValue([]);
   mocks.tokenEndpoints.mockReturnValue([]);
   mocks.agentList.mockReturnValue([]);
+  mocks.nameCheckFails = false;
   mocks.renameAgent.mockResolvedValue({});
   mocks.createGrant.mockResolvedValue({});
   mocks.deleteGrant.mockResolvedValue({});
@@ -423,6 +447,63 @@ describe("Provisioning a new agent", () => {
     expect(mocks.createAgent).not.toHaveBeenCalled();
   });
 
+  it("holds a name another agent has on the first step, whatever its case", async () => {
+    mocks.agentList.mockReturnValue([
+      { id: "agent_other", name: "Release Bot" },
+    ]);
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "release bot" },
+    });
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "already exists",
+    );
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(screen.getByText("Pick a name no other agent has.")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot 2" },
+    });
+    await nameChecked();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("asks again about a name it already checked before letting it through", async () => {
+    setup();
+    const field = screen.getByLabelText("Name");
+    fireEvent.change(field, { target: { value: "Release Bot" } });
+    await nameChecked();
+    fireEvent.change(field, { target: { value: "Deploy Bot" } });
+    await nameChecked();
+
+    // Taken since it was last asked about.
+    mocks.agentList.mockReturnValue([
+      { id: "agent_other", name: "Release Bot" },
+    ]);
+    fireEvent.change(field, { target: { value: "Release Bot" } });
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "already exists",
+    );
+  });
+
+  it("lets the server decide when the name check fails", async () => {
+    mocks.nameCheckFails = true;
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    await nameChecked();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("will not move on without a name or a server", async () => {
     setup();
     expect(
@@ -434,6 +515,7 @@ describe("Provisioning a new agent", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Release Bot" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     await screen.findByRole("heading", { name: "MCP Selection" });
@@ -442,6 +524,48 @@ describe("Provisioning a new agent", () => {
         .disabled,
     ).toBe(true);
     expect(screen.getByText("Select at least one MCP server.")).toBeTruthy();
+  });
+
+  it("says what the agent can do, with its scopes one focus away", async () => {
+    await reachCredentialStep();
+
+    fireEvent.focus(screen.getByText("Call its servers"));
+    expect(
+      (await screen.findAllByText("mcp:auth on all auth clients")).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("mcp:connect on the selected servers").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("says nothing about what it can do until a server is chosen", async () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const server = await screen.findByRole("checkbox", { name: "GitHub" });
+    expect(screen.queryByText("Call its servers")).toBeNull();
+
+    fireEvent.click(server);
+    expect(screen.getByText("Call its servers")).toBeTruthy();
+  });
+
+  it("names all servers in its scopes under All servers", async () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Everything here" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await enabledAllServers());
+
+    fireEvent.focus(screen.getByText("Call its servers"));
+    expect(
+      (await screen.findAllByText("mcp:connect on all servers in the project"))
+        .length,
+    ).toBeGreaterThan(0);
   });
 
   it("creates the agent, issues its first key and mints one setup command", async () => {
@@ -461,6 +585,11 @@ describe("Provisioning a new agent", () => {
           resourceId: "toolset_one",
           projectId: "project_one",
         },
+      },
+      {
+        effect: "allow",
+        scope: "mcp:auth",
+        selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
       },
     ]);
     expect(
@@ -588,6 +717,7 @@ async function reachPlatformSetup() {
   fireEvent.change(screen.getByLabelText("Name"), {
     target: { value: "Release Bot" },
   });
+  await nameChecked();
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -877,6 +1007,7 @@ describe("Connecting a GKE cluster", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Billing Worker" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -959,6 +1090,7 @@ describe("Connecting a GKE cluster", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Review Agent" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     for (const server of servers) {
       fireEvent.click(
@@ -1136,6 +1268,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Project bound" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -1158,6 +1291,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "No project yet" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -1176,6 +1310,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Everything here" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await enabledAllServers());
 
@@ -1193,6 +1328,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Everything here" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     const all = await screen.findByRole("checkbox", { name: "All servers" });
@@ -1283,6 +1419,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Some servers" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(
@@ -1307,7 +1444,7 @@ describe("Agent project", () => {
         (form: { selector: { resourceId: string } }) =>
           form.selector.resourceId,
       ),
-    ).toEqual(["toolset_one"]);
+    ).toEqual(["toolset_one", "*"]);
   });
 
   it("saves no server the check has not answered for", async () => {
@@ -1318,6 +1455,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Unchecked" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(
       await screen.findByText("Could not check which servers you can reach."),
@@ -1345,6 +1483,7 @@ describe("Agent project", () => {
       fireEvent.change(screen.getByLabelText("Name"), {
         target: { value: "Rechecked access" },
       });
+      await nameChecked();
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
       await enabledAllServers();
       fireEvent.click(screen.getByRole("checkbox", { name: selection }));
@@ -1400,6 +1539,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Waiting for access" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     const all = await screen.findByRole("checkbox", { name: "All servers" });
@@ -1449,6 +1589,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Several batches" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByText("Could not check which servers you can reach.");
 
@@ -1488,7 +1629,7 @@ describe("Agent project", () => {
         (form: { selector: { resourceId: string } }) =>
           form.selector.resourceId,
       ),
-    ).toEqual(["toolset_0"]);
+    ).toEqual(["toolset_0", "*"]);
   });
 
   it("holds All servers until the check answers, and retries one that failed", async () => {
@@ -1497,6 +1638,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Everything here" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     const all = await screen.findByRole("checkbox", { name: "All servers" });
@@ -1519,6 +1661,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Everything here" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await enabledAllServers());
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -1538,6 +1681,11 @@ describe("Agent project", () => {
           resourceId: "*",
           projectId: "project_one",
         },
+      },
+      {
+        effect: "allow",
+        scope: "mcp:auth",
+        selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
       },
     ]);
   });
@@ -1569,6 +1717,16 @@ describe("Editing an agent that already exists", () => {
     },
   ] as never;
 
+  // Agents the wizard saved hold mcp:auth beside their server grants.
+  const AUTH = {
+    id: "grant_auth",
+    effect: "allow",
+    scope: "mcp:auth",
+    selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
   function editing(over: { grants?: unknown } = {}) {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -1580,7 +1738,7 @@ describe("Editing an agent that already exists", () => {
           <CredentialsWizard
             agent={agent}
             editing
-            grants={(over.grants ?? grants) as never}
+            grants={[...((over.grants ?? grants) as never[]), AUTH] as never}
             onDone={(id) => {
               onDone(id);
             }}
@@ -1640,11 +1798,22 @@ describe("Editing an agent that already exists", () => {
     );
   });
 
+  it("does not guess what the agent can do", async () => {
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const server = await screen.findByRole("checkbox", { name: "GitHub" });
+    await waitFor(() =>
+      expect(server.getAttribute("data-state")).toBe("checked"),
+    );
+    expect(screen.queryByText("Call its servers")).toBeNull();
+  });
+
   it("saves a rename and leaves without touching the grants", async () => {
     const { onDone } = editing();
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Renamed Bot" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("checkbox", { name: "GitHub" });
     fireEvent.click(await authenticationSave());
@@ -1655,7 +1824,30 @@ describe("Editing an agent that already exists", () => {
     ).toEqual({ id: "agent_one", name: "Renamed Bot" });
     expect(mocks.createGrant).not.toHaveBeenCalled();
     expect(mocks.deleteGrant).not.toHaveBeenCalled();
-    await waitFor(() => expect(onDone).toHaveBeenCalledWith(undefined));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+  });
+
+  it("lets an agent keep its own name, and holds a rename to another's", async () => {
+    mocks.agentList.mockReturnValue([
+      { id: "agent_one", name: "Release Bot" },
+      { id: "agent_other", name: "Deploy Bot" },
+    ]);
+    editing();
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Deploy Bot" },
+    });
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "already exists",
+    );
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 
   it("writes nothing when neither the name nor the servers changed", async () => {
@@ -1664,7 +1856,7 @@ describe("Editing an agent that already exists", () => {
     await screen.findByRole("checkbox", { name: "GitHub" });
     fireEvent.click(await authenticationSave());
 
-    await waitFor(() => expect(onDone).toHaveBeenCalledWith(undefined));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
     expect(mocks.renameAgent).not.toHaveBeenCalled();
     expect(mocks.createGrant).not.toHaveBeenCalled();
     expect(mocks.deleteGrant).not.toHaveBeenCalled();
@@ -1718,7 +1910,7 @@ describe("Editing an agent that already exists", () => {
     expect(mocks.deleteGrant).not.toHaveBeenCalled();
   });
 
-  it("keeps an unavailable assignment removable when its issuer has no clients", async () => {
+  it("leaves an unavailable assignment for an explicit detach when saving", async () => {
     mocks.mcpServers.mockResolvedValue({
       mcpServers: [
         {
@@ -1745,24 +1937,17 @@ describe("Editing an agent that already exists", () => {
       },
     ]);
     mocks.sessionClients.mockResolvedValue([]);
-    editing();
+    mocks.detach.mockResolvedValue({});
+    const { onDone } = editing();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("checkbox", { name: "GitHub" });
-    await authenticationSave();
-    // The first row starts expanded.
-    await screen.findByRole("button", {
-      name: /GitHub.*Requires connection/,
-    });
-    expect(
-      await screen.findByRole("button", {
-        name: "Disconnect unavailable account",
-      }),
-    ).toBeTruthy();
-    expect(
-      screen.queryByText(
-        "This server uses a shared credential. No personal connection is needed.",
-      ),
-    ).toBeNull();
+    const save = await authenticationSave();
+    // The row says what is wrong; removing it is an explicit choice on the
+    // agent's Credentials page, never a side effect of saving.
+    await screen.findByRole("button", { name: /GitHub.*Requires connection/ });
+    fireEvent.click(save);
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(mocks.detach).not.toHaveBeenCalled();
   });
 
   it("creates no agent: this one already exists", async () => {
@@ -1955,10 +2140,15 @@ describe("Editing an agent that already exists", () => {
     fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Issue key" }));
 
+    // Discovery offers no wildcard here, only the servers one by one, so the
+    // key falls back to naming every server in reach.
     await waitFor(() =>
-      expect(mocks.listDelegableGrants).toHaveBeenCalledTimes(1),
+      expect(mocks.listDelegableGrants).toHaveBeenCalledTimes(2),
     );
-    expect(mocks.listDelegableGrants.mock.calls[0]?.[0]?.toolsetIds).toEqual([
+    expect(mocks.listDelegableGrants.mock.calls[0]?.[0]?.carryExclusions).toBe(
+      true,
+    );
+    expect(mocks.listDelegableGrants.mock.calls[1]?.[0]?.toolsetIds).toEqual([
       "toolset_one",
       "toolset_two",
     ]);
@@ -1970,6 +2160,41 @@ describe("Editing an agent that already exists", () => {
           form.selector.resourceId,
       ),
     ).toEqual(["toolset_one", "toolset_two"]);
+  });
+
+  it("issues an All servers key with the wildcard, so it reaches servers added later", async () => {
+    // A key reaches only what it stores. Today's servers listed out would
+    // leave every server added after this key unreachable.
+    const exclusion = {
+      effect: "allow",
+      scope: "mcp:blocked_connect",
+      selector: {
+        resourceKind: "mcp",
+        resourceId: "toolset_blocked",
+        projectId: "project_one",
+      },
+    };
+    const wildcard = {
+      effect: "allow",
+      scope: "mcp:connect",
+      selector: { resourceKind: "mcp", resourceId: "*" },
+    };
+    mocks.listDelegableGrants.mockResolvedValue([wildcard, exclusion]);
+    editing({ grants: [WILDCARD] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const all = await screen.findByRole("checkbox", { name: "All servers" });
+    await waitFor(() => expect(all.getAttribute("data-state")).toBe("checked"));
+
+    fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Issue key" }));
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(mocks.listDelegableGrants).toHaveBeenCalledTimes(1);
+    const form = mocks.createKey.mock.calls[0]?.[0]?.createKeyForm;
+    // The owner's blocked server travels with the wildcard, which needs a
+    // version that can store an exclusion.
+    expect(form?.requestedGrants).toEqual([wildcard, exclusion]);
+    expect(form?.delegatedGrantsVersion).toBe(4);
   });
 
   it("creates the wildcard once when a later removal fails", async () => {
@@ -2525,6 +2750,7 @@ describe("Servers that sign in as a person", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Release Bot" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("heading", { name: "MCP Selection" });
     await screen.findByRole("checkbox", { name: "Linear" });
@@ -2584,6 +2810,11 @@ describe("Servers that sign in as a person", () => {
           resourceId: "server_linear",
           projectId: "project_one",
         },
+      },
+      {
+        effect: "allow",
+        scope: "mcp:auth",
+        selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
       },
     ]);
     // The issuer's sign-ins are read in the server's own project, before the
@@ -2845,6 +3076,7 @@ describe("Connecting a GitHub repository", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Release Bot" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -2988,6 +3220,15 @@ describe("Connecting a GitHub repository", () => {
   it("trusts GitHub for the organization and gives the agent what the device agent needs", async () => {
     await reachRepositoryStep();
     expect(screen.getByText("repo:acme/payments-api:*")).toBeTruthy();
+    // The summary says what the device agent's grants add, with their scopes
+    // one focus away like the agent's own.
+    const can = screen.getByText(
+      "Call its servers, fetch its plugins, record its sessions",
+    );
+    fireEvent.focus(can);
+    expect(
+      (await screen.findAllByText("org:device_agent_sync")).length,
+    ).toBeGreaterThan(0);
     fireEvent.click(
       screen.getByRole("button", { name: "Connect GitHub Actions" }),
     );

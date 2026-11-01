@@ -33,3 +33,21 @@ func TestOverlayPreservesRootAllOf(t *testing.T) {
 		require.Error(t, err, raw)
 	}
 }
+
+func TestSpeakeasyCatalogIconsPlacement(t *testing.T) {
+	t.Parallel()
+
+	s, err := Compile(Schema)
+	require.NoError(t, err)
+	for _, raw := range []string{
+		`{"server":{"name":"example.test/demo","description":"Demo","version":"1","_meta":{"com.speakeasy.ai/icons":{}}}}`,
+		`{"server":{"name":"example.test/demo","description":"Demo","version":"1"},"com.speakeasy.ai/icons":{}}`,
+	} {
+		value, err := decode([]byte(raw))
+		require.NoError(t, err)
+		require.Error(t, s.Validate(value))
+	}
+	value, err := decode([]byte(`{"server":{"name":"example.test/demo","description":"Demo","version":"1"},"_meta":{"com.speakeasy.ai/icons":{}}}`))
+	require.NoError(t, err)
+	require.NoError(t, s.Validate(value))
+}

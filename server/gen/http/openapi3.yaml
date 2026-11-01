@@ -35,6 +35,9 @@ paths:
                             schema:
                                 format: int64
                                 type: integer
+                        Content-Security-Policy:
+                            schema:
+                                type: string
                         Content-Type:
                             schema:
                                 type: string
@@ -42,6 +45,9 @@ paths:
                             schema:
                                 type: string
                         Last-Modified:
+                            schema:
+                                type: string
+                        X-Content-Type-Options:
                             schema:
                                 type: string
                 "400":
@@ -110,7 +116,7 @@ paths:
             x-speakeasy-name-override: serveImage
     /admin/assets.uploadImage:
         post:
-            description: Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.
+            description: 'Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG with local clip paths. This is a direct upload, not a staged proposal: successful uploads are publicly served immediately and remain stored.'
             operationId: adminUploadPlatformImage
             parameters:
                 - allowEmptyValue: true
@@ -124,7 +130,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/UploadImageResult'
+                                $ref: '#/components/schemas/AdminUploadImageResult'
                     description: OK response.
                 "400":
                     content:
@@ -17958,7 +17964,7 @@ paths:
                 name: AgentConnectionBlocks
     /rpc/agents.listDelegableGrants:
         get:
-            description: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.
+            description: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted unless carry_exclusions is set. Issuance revalidates every grant.
             operationId: listAgentDelegableGrants
             parameters:
                 - allowEmptyValue: true
@@ -17989,6 +17995,14 @@ paths:
                         type: string
                     maxItems: 100
                     type: array
+                - allowEmptyValue: true
+                  description: Keep a wildcard candidate that a narrower exclusion overlaps, and return that exclusion beside it as a blocklist-scope grant, instead of omitting the candidate. Requesting both on a key needs delegated grants version 4 or later.
+                  in: query
+                  name: carry_exclusions
+                  schema:
+                    default: false
+                    description: Keep a wildcard candidate that a narrower exclusion overlaps, and return that exclusion beside it as a blocklist-scope grant, instead of omitting the candidate. Requesting both on a key needs delegated grants version 4 or later.
+                    type: boolean
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -21132,6 +21146,9 @@ paths:
                             schema:
                                 format: int64
                                 type: integer
+                        Content-Security-Policy:
+                            schema:
+                                type: string
                         Content-Type:
                             schema:
                                 type: string
@@ -21139,6 +21156,9 @@ paths:
                             schema:
                                 type: string
                         Last-Modified:
+                            schema:
+                                type: string
+                        X-Content-Type-Options:
                             schema:
                                 type: string
                 "400":
@@ -97168,6 +97188,17 @@ components:
                 - id
                 - customer_id
                 - status
+        AdminUploadImageResult:
+            type: object
+            properties:
+                asset:
+                    $ref: '#/components/schemas/Asset'
+                url:
+                    type: string
+                    description: Canonical public URL for the uploaded image
+            required:
+                - asset
+                - url
         AdminUpstreamAuthEnforcement:
             type: object
             properties:
@@ -124452,11 +124483,15 @@ components:
                 content_length:
                     type: integer
                     format: int64
+                content_security_policy:
+                    type: string
                 content_type:
                     type: string
                 cross_origin_resource_policy:
                     type: string
                 last_modified:
+                    type: string
+                x_content_type_options:
                     type: string
             required:
                 - content_type

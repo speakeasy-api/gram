@@ -48,7 +48,7 @@ export function StepVerify({
               className={cn(
                 "size-2 rounded-full",
                 state === "connected"
-                  ? "bg-default-success"
+                  ? "bg-success-default"
                   : "bg-muted-foreground",
               )}
             />
@@ -88,7 +88,7 @@ export function StepVerify({
                 className={cn(
                   "size-2 rounded-full",
                   check.done
-                    ? "bg-default-success"
+                    ? "bg-success-default"
                     : "bg-warning-default animate-pulse",
                 )}
               />
@@ -105,25 +105,29 @@ export function StepVerify({
         ))}
       </ol>
 
-      <div className="space-y-2">
-        <span className="text-muted-foreground font-mono text-[10px] tracking-[0.08em] uppercase">
-          If nothing arrives
-        </span>
-        <ul className="space-y-1 text-sm">
-          <li>
-            <code className="text-xs">401</code> — the credential was rejected.
-            Check that the API key is still active, or issue a new key and run
-            its setup command.
-          </li>
-          <li>
-            <code className="text-xs">403</code> — the tool is not granted.
-            Check the server selection and the agent's permissions.
-          </li>
-          <li>
-            No requests at all — the runtime is not pointed at the gateway URL.
-          </li>
-        </ul>
-      </div>
+      {/* Troubleshooting only while the agent has not called yet. */}
+      {state !== "connected" && (
+        <div className="space-y-2">
+          <span className="text-muted-foreground font-mono text-[10px] tracking-[0.08em] uppercase">
+            If nothing arrives
+          </span>
+          <ul className="space-y-1 text-sm">
+            <li>
+              <code className="text-xs">401</code> — the credential was
+              rejected. Check that the API key is still active, or issue a new
+              key and run its setup command.
+            </li>
+            <li>
+              <code className="text-xs">403</code> — the tool is not granted.
+              Check the server selection and the agent's permissions.
+            </li>
+            <li>
+              No requests at all — the runtime is not pointed at the gateway
+              URL.
+            </li>
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

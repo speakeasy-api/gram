@@ -8301,6 +8301,22 @@ func (q *Queries) RecordPlatformMCPSetupMilestone(ctx context.Context, arg Recor
 	return err
 }
 
+const releaseInboundEMAProviderLock = `-- name: ReleaseInboundEMAProviderLock :one
+SELECT pg_advisory_unlock(hashtextextended('inbound-ema-provider:' || $1::text || ':' || $2::text, 0)) AS unlocked
+`
+
+type ReleaseInboundEMAProviderLockParams struct {
+	OrganizationID string
+	Issuer         string
+}
+
+func (q *Queries) ReleaseInboundEMAProviderLock(ctx context.Context, arg ReleaseInboundEMAProviderLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseInboundEMAProviderLock, arg.OrganizationID, arg.Issuer)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
+}
+
 const resolvePlatformMCPAssignedPluginTarget = `-- name: ResolvePlatformMCPAssignedPluginTarget :many
 SELECT
     p.id,
@@ -8946,6 +8962,25 @@ func (q *Queries) SearchPlatformChatMessages(ctx context.Context, arg SearchPlat
 		return nil, err
 	}
 	return items, nil
+}
+
+const tryAcquireInboundEMAProviderLock = `-- name: TryAcquireInboundEMAProviderLock :one
+SELECT pg_try_advisory_lock(hashtextextended('inbound-ema-provider:' || $1::text || ':' || $2::text, 0))
+`
+
+type TryAcquireInboundEMAProviderLockParams struct {
+	OrganizationID string
+	Issuer         string
+}
+
+// Serialize finding or creating an organization's identity provider record
+// for one issuer URL, so concurrent trusts never create two. Non-blocking: a
+// waiter would hold a pooled connection the holder's nested calls need.
+func (q *Queries) TryAcquireInboundEMAProviderLock(ctx context.Context, arg TryAcquireInboundEMAProviderLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, tryAcquireInboundEMAProviderLock, arg.OrganizationID, arg.Issuer)
+	var pg_try_advisory_lock bool
+	err := row.Scan(&pg_try_advisory_lock)
+	return pg_try_advisory_lock, err
 }
 
 const updatePlatformMCPCatalogRegistrationComponents = `-- name: UpdatePlatformMCPCatalogRegistrationComponents :one

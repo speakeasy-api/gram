@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
+import { SimpleTooltip, TooltipProvider } from "@/components/ui/Tooltip";
 import { HumanizeDateTime, dateTimeFormatters } from "@/lib/dates";
 import { IdentityLink } from "@/components/identity-link";
 
@@ -30,9 +31,9 @@ export type AgentSessionRow = {
   keyPrefix?: string;
   clientName?: string;
   /**
-   * The person whose authority this session acts under, when a person
-   * approved it. A session a key or a federated platform opened has none:
-   * the agent signed in as itself.
+   * The person who approved this session, or who issued the key behind a key
+   * row. A session a federated platform opened has none. Not who the agent is
+   * upstream: each server decides that with its own sign-in.
    */
   authorizerUserId?: string;
   issuerSlug?: string;
@@ -181,6 +182,7 @@ export function AgentSessionsSection({
     {
       key: "clientName",
       header: "Client",
+      width: "1.5fr",
       render: (session) => {
         if (session.subjectKind === "api-key") {
           return (
@@ -216,26 +218,35 @@ export function AgentSessionsSection({
     },
     {
       key: "authorizerUserId",
-      // Who the agent is acting for. The endpoint has always returned this
-      // and the table dropped it, so a reader could revoke someone's
-      // delegation without being told whose it was.
-      header: "Acting for",
-      width: "200px",
+      // The person who approved the session, so a reader never revokes
+      // someone's delegation without being told whose it was. Not who the
+      // agent is upstream: each server decides that with its own sign-in.
+      header: "Authorized by",
+      width: "1fr",
       render: (session) =>
         session.authorizerUserId ? (
           <IdentityLink identifier={{ userId: session.authorizerUserId }}>
             {nameFor(session.authorizerUserId)}
           </IdentityLink>
         ) : (
-          <span className="text-muted-foreground">The agent itself</span>
+          <TooltipProvider>
+            <SimpleTooltip tooltip="No person is on record for this connection: the agent connected with its own key or its platform's identity. On each server it then signs in however that server is set up, with a shared credential or a connection assigned to the agent.">
+              <span
+                tabIndex={0}
+                className="text-muted-foreground cursor-default underline decoration-dotted underline-offset-4"
+              >
+                No one
+              </span>
+            </SimpleTooltip>
+          </TooltipProvider>
         ),
     },
     {
       key: "issuerSlug",
       header: "Signed in with",
-      // Issuer slugs are long and hyphenated; an auto column wrapped them
-      // down three lines and left the row taller than every other one.
-      width: "200px",
+      // Issuer slugs are long and hyphenated, so they truncate in a share of
+      // the row rather than wrapping it taller than every other one.
+      width: "1fr",
       render: (session) =>
         session.subjectKind === "api-key" ? (
           "API key"
@@ -250,13 +261,13 @@ export function AgentSessionsSection({
     {
       key: "createdAt",
       header: "Created",
-      width: "160px",
+      width: "auto",
       render: (session) => <SessionDate date={session.createdAt} />,
     },
     {
       key: "lastUsedAt",
       header: "Last used",
-      width: "140px",
+      width: "auto",
       // The one column where elapsed time is the answer: "2 days ago" says
       // whether this session is still in use, which a date does not.
       //
@@ -273,7 +284,7 @@ export function AgentSessionsSection({
     {
       key: "refreshExpiresAt",
       header: "Expires",
-      width: "160px",
+      width: "auto",
       render: (session) =>
         session.refreshExpiresAt ? (
           <SessionDate date={session.refreshExpiresAt} />
@@ -286,7 +297,7 @@ export function AgentSessionsSection({
     {
       key: "status",
       header: "Status",
-      width: "110px",
+      width: "auto",
       render: (session) => (
         <Badge
           size="sm"
@@ -309,6 +320,9 @@ export function AgentSessionsSection({
     {
       key: "actions",
       header: "",
+      // Content-sized, so the button is never pushed past the panel edge
+      // when fixed columns outgrow a narrow detail page.
+      width: "auto",
       render: (session) => {
         if (!isRevocableSession(session)) {
           return credentialsHref ? (
@@ -432,7 +446,7 @@ export function AgentSessionsSection({
               {/* Whose delegation is ending. Revoking one without saying so
                   is the one place this omission actually costs something. */}
               {selected.authorizerUserId
-                ? ` Acting for ${nameFor(selected.authorizerUserId)}.`
+                ? ` Authorized by ${nameFor(selected.authorizerUserId)}.`
                 : ""}
             </Text>
           )}

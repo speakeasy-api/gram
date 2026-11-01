@@ -56,6 +56,10 @@ import { buildAdminGetRegistryEntryQuery } from "@gram/admin-client/react-query/
 import { buildAdminGetRegistryOktaCandidatesQuery } from "@gram/admin-client/react-query/adminGetRegistryOktaCandidates.core";
 import { buildAdminListRegistryOktaUnmappedQuery } from "@gram/admin-client/react-query/adminListRegistryOktaUnmapped.core";
 import { buildAdminCreateRegistryEntryMutation } from "@gram/admin-client/react-query/adminCreateRegistryEntry";
+import {
+  registryEntryName,
+  registryEntryNameKey,
+} from "@/lib/registryEntryName";
 import { buildAdminSaveRegistryEntryMutation } from "@gram/admin-client/react-query/adminSaveRegistryEntry";
 import { buildAdminSetRegistryEntryPublishedMutation } from "@gram/admin-client/react-query/adminSetRegistryEntryPublished";
 import type { UseQueryOptions } from "@tanstack/react-query";
@@ -998,7 +1002,12 @@ function createRegistryEntryQuery(id: string) {
   const generated = buildAdminGetRegistryEntryQuery(redirectingClient, { id });
   return queryOptions({
     ...generated,
-    queryFn: (context) => redirecting(generated.queryFn(context)),
+    queryFn: async (context) => {
+      const entry = await redirecting(generated.queryFn(context));
+      const name = registryEntryName(entry.dataJson);
+      context.client.setQueryData(registryEntryNameKey(id), { name });
+      return entry;
+    },
     enabled: id !== "",
   });
 }

@@ -214,6 +214,9 @@ type Service struct {
 	// idJAGValidator authenticates enterprise identity grants, enforces replay
 	// protection, and resolves their subjects to provisioned Speakeasy users.
 	idJAGValidator *idjag.Validator
+
+	// idJAGTrust is the validator's trust lookup, reused by metadata.
+	idJAGTrust idjag.Store
 	// aiToolBlockReads are the database reads behind the Shadow AI gateway
 	// block check, held as values so a test can make one of them fail.
 	aiToolBlockReads  aiToolBlockReads
@@ -557,7 +560,11 @@ func NewService(
 	if err != nil {
 		return nil, fmt.Errorf("initialize hosted MCP kill-switch checkpoint: %w", err)
 	}
-	idJAGValidator, err := newIDJAGValidator(db, redisClient, guardianPolicy, meterProvider, logger)
+	idJAGTrust, err := idjag.NewPostgresStore(db)
+	if err != nil {
+		return nil, fmt.Errorf("initialize ID-JAG store: %w", err)
+	}
+	idJAGValidator, err := newIDJAGValidator(db, redisClient, guardianPolicy, meterProvider, logger, idJAGTrust)
 	if err != nil {
 		return nil, fmt.Errorf("initialize ID-JAG validator: %w", err)
 	}
@@ -625,6 +632,7 @@ func NewService(
 		clientAssertionVerifier:   newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),
 		workloadGrant:             newWorkloadGrant(db, redisClient, guardianPolicy, meterProvider, logger),
 		idJAGValidator:            idJAGValidator,
+		idJAGTrust:                idJAGTrust,
 		aiToolBlockReads:          defaultAIToolBlockReads(),
 		toolProxy: gateway.NewToolProxy(
 			logger,
@@ -2239,10 +2247,25 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 	// Strategy 4: Try Chat Sessions Token authentication
 	ctx, err = s.chatSessionsManager.Authorize(ctx, token)
 	if err == nil {
-		return s.identityValidator.StampChatSession(ctx), nil
+		return s.identityValidator.StampChatSession(ctx, chatSessionMinterUserID(ctx)), nil
 	}
 
 	return ctx, oops.E(oops.CodeUnauthorized, errors.New("failed to authorize token using any strategy"), "failed to authorize").LogWarn(ctx, s.logger, attr.SlogToolsetID(oauthResourceID.String()))
+}
+
+// chatSessionMinterUserID returns the dashboard user a chat-session token
+// was minted from, read from the auth context the chat-session validator
+// has just built from the token's verified claims. chatSessions.create copies
+// the user and dashboard session ids from a signed-in dashboard session; a
+// key-minted token carries the key id instead and, for a legacy key, its
+// creator's user id, which names the key's owner rather than who minted the
+// session. The embedder-supplied external user id is never consulted.
+func chatSessionMinterUserID(ctx context.Context) string {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.APIKeyID != "" || authCtx.SessionID == nil || *authCtx.SessionID == "" {
+		return ""
+	}
+	return authCtx.UserID
 }
 
 // HandleToolsList executes tools/list RPC for internal clients (e.g., agent workflows).

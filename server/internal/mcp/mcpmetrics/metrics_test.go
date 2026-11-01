@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 )
 
 func TestNewMetrics(t *testing.T) {
@@ -465,6 +466,62 @@ func collectMetric(t *testing.T, reader *sdkmetric.ManualReader, name string) me
 	}
 	t.Fatalf("metric %q not found", name)
 	return metricdata.Metrics{}
+}
+
+func TestRecordIDJAGExchange_PinsInstrumentAndDimensions(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	issuerID := uuid.NewString()
+
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordIDJAGExchange(t.Context(), issuerID, IDJAGExchangeRejected, IDJAGRejectionFromValidator(idjag.ReasonNotProvisioned))
+	m.RecordIDJAGExchange(t.Context(), issuerID, IDJAGExchangeAccepted, IDJAGRejectionNone)
+
+	got := collectMetric(t, reader, InstrumentOAuthIDJAGExchange)
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok, "exchange instrument must be an int64 counter")
+	require.Len(t, sum.DataPoints, 2)
+	for _, point := range sum.DataPoints {
+		require.Equal(t, int64(1), point.Value)
+		issuer, _ := point.Attributes.Value(attr.UserSessionIssuerIDKey)
+		require.Equal(t, issuerID, issuer.AsString())
+		_, hasClient := point.Attributes.Value(attr.OAuthClientIDKey)
+		require.False(t, hasClient, "client ids are unbounded and never a dimension")
+		outcome, _ := point.Attributes.Value(attr.OAuthIDJAGOutcomeKey)
+		reason, hasReason := point.Attributes.Value(attr.OAuthIDJAGRejectionReasonKey)
+		switch IDJAGExchangeOutcome(outcome.AsString()) {
+		case IDJAGExchangeRejected:
+			require.True(t, hasReason)
+			require.Equal(t, "subject_not_provisioned", reason.AsString())
+		case IDJAGExchangeAccepted:
+			require.False(t, hasReason, "accepted exchanges carry no rejection reason")
+		case IDJAGExchangeError:
+			t.Fatal("no exchange failed")
+		default:
+			t.Fatalf("unexpected outcome %q", outcome.AsString())
+		}
+	}
+}
+
+func TestRecordIDJAGExchange_NilSafe(t *testing.T) {
+	t.Parallel()
+
+	var nilMetrics *Metrics
+	nilMetrics.RecordIDJAGExchange(t.Context(), uuid.NewString(), IDJAGExchangeRejected, IDJAGRejectionInvalidRequest)
+
+	empty := &Metrics{}
+	empty.RecordIDJAGExchange(t.Context(), uuid.NewString(), IDJAGExchangeError, IDJAGRejectionNone)
+}
+
+func TestIDJAGRejectionFromValidator_MapsUnknownReasonsGenerically(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, IDJAGRejectionReason(idjag.ReasonAudienceMismatch), IDJAGRejectionFromValidator(idjag.ReasonAudienceMismatch))
+	require.Equal(t, IDJAGRejectionReason(idjag.ReasonResourceNotIndicated), IDJAGRejectionFromValidator(idjag.ReasonResourceNotIndicated))
+	require.Equal(t, IDJAGRejectionAssertionOther, IDJAGRejectionFromValidator(idjag.Reason("a_reason_added_later")))
+	require.Equal(t, IDJAGRejectionAssertionOther, IDJAGRejectionFromValidator(""))
 }
 
 // TestRecordSkillRead_PinsInstrumentAndDimensions pins the wiring a noop

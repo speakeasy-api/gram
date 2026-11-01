@@ -21,8 +21,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
+
+// SetCIMDResolver replaces the client metadata document resolver.
+func (s *Service) SetCIMDResolver(resolver *cimd.Resolver) {
+	s.cimdResolver = resolver
+}
 
 // ErrWorkloadIssuerUntrusted and ErrWorkloadNotAdmitted expose the workload
 // admission sentinels, so a test can tell which stage refused an assertion.
@@ -248,4 +255,9 @@ func (f testAuthClientPermission) Permitted(context.Context, authClientPermitReq
 // RecordConnectionPopupGrant exercises the callback's parent-state correlation.
 func (s *Service) RecordConnectionPopupGrant(ctx context.Context, grant remotesessions.RemoteGrant) error {
 	return s.recordConnectionPopupGrant(ctx, grant)
+}
+
+// SetIDJAGTrust replaces the trust lookup metadata uses to advertise the ID-JAG grant.
+func (s *Service) SetIDJAGTrust(store idjag.Store) {
+	s.idJAGTrust = store
 }

@@ -166,9 +166,10 @@ func marshalSkillRead(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID
 // counts. The RBAC engine refuses the same identification (an API key is not
 // a user principal), so the skill scope follows it. The same holds for every
 // other credential whose user claim is attribution rather than proof: an
-// assistant, agent, workload or chat-session token, or a consent-discovery
-// sign-in. Only a validated user session, or a request no MCP credential
-// stamped (a dashboard session), names the caller.
+// assistant, agent or workload token, a chat-session token minted from an API
+// key, or a consent-discovery sign-in. Only a validated user session, a
+// chat-session token minted from a dashboard session (the playground), or a
+// request no MCP credential stamped (a dashboard session), names the caller.
 func hostedSkillScope(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs) (scope mcpskills.Scope, ok bool) {
 	// The dispatcher leaves attribution to the handlers, and it must not turn
 	// an otherwise valid skills request into an error.
@@ -184,8 +185,8 @@ func hostedSkillScope(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	}
 
 	userID := ""
-	if payload.authenticated && payload.apiKeyID == "" && actsAsUser(ctx) {
-		userID = payload.userID
+	if payload.authenticated && payload.apiKeyID == "" {
+		userID = skillRecipientUserID(ctx, payload.userID)
 	}
 	return mcpskills.Scope{
 		OrganizationID:     payload.organizationID,
@@ -195,12 +196,25 @@ func hostedSkillScope(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	}, true
 }
 
-// actsAsUser reports whether the request's MCP credential, if any, proves an
-// acting user. Unstamped requests did not come through an MCP credential, so
-// the auth context's user is the caller.
-func actsAsUser(ctx context.Context) bool {
+// skillRecipientUserID returns the user the request's MCP credential, if
+// any, proves is calling, or empty when it proves none. Unstamped requests
+// did not come through an MCP credential, so the auth context's user is the
+// caller. A chat session counts only when it was minted from a signed-in
+// dashboard session (the playground), and then names the minting user as
+// recorded by its validator.
+func skillRecipientUserID(ctx context.Context, authUserID string) string {
 	identity, ok := mcpidentity.FromContext(ctx)
-	return !ok || identity.Kind() == mcpidentity.KindUserSession
+	if !ok {
+		return authUserID
+	}
+	switch identity.Kind() {
+	case mcpidentity.KindUserSession:
+		return authUserID
+	case mcpidentity.KindChatSession:
+		return identity.ChatSessionMinterUserID()
+	default:
+		return ""
+	}
 }
 
 // skillResourceURI reports the skill URI a resources/read request names, when

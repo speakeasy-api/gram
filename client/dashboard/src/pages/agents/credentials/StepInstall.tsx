@@ -179,8 +179,8 @@ export function StepInstall({
             >
               <div className="space-y-4 p-4">
                 <Text muted small>
-                  For runtimes with a shell — Claude Code, Codex, Cursor, CI
-                  runners. Run once on the machine the agent lives on.
+                  For runtimes with a shell: OpenClaw, Claude Code and Codex.
+                  Run once on the machine the agent lives on.
                 </Text>
                 {command ? (
                   <CodeBlock
@@ -291,33 +291,18 @@ export function StepInstall({
                 />
                 <CodeBlock
                   value={[
-                    // OpenClaw sends MCP headers as written, so its config must
-                    // hold the key. A private batch file keeps the key out of
-                    // argv, as the one-line setup does; the entry is named
-                    // `speakeasy` like that setup's, so either replaces the other.
-                    "# Saves the key in ~/.openclaw/openclaw.json. Restart the Gateway after.",
-                    "(",
-                    "  umask 077",
-                    "  batch=$(mktemp) || exit 1",
-                    '  cat >"$batch" <<EOF',
-                    JSON.stringify([
-                      {
-                        path: "mcp.servers.speakeasy",
-                        value: {
-                          url: gatewayURL,
-                          transport: "streamable-http",
-                          headers: { Authorization: `Bearer $${KEY_ENV}` },
-                        },
-                      },
-                    ]),
-                    "EOF",
-                    '  openclaw config set --batch-file "$batch"',
-                    "  rc=$?",
-                    '  rm -f "$batch"',
-                    '  exit "$rc"',
-                    ") && chmod 600 ~/.openclaw/openclaw.json",
+                    // Single quotes keep the key out of argv and out of the
+                    // config: OpenClaw saves the `${VAR}` reference and fills it
+                    // in from its own environment when it connects. `add`'s
+                    // pre-save check does not, hence --no-probe. The entry is
+                    // named `speakeasy` like the one-line setup's.
+                    `openclaw mcp add speakeasy --url ${gatewayURL} \\`,
+                    "  --transport streamable-http --no-probe \\",
+                    `  --header 'Authorization=Bearer \${${KEY_ENV}}'`,
                   ].join("\n")}
-                  label="OpenClaw"
+                  // The oldest release verified to take --no-probe and
+                  // resolve the ${VAR} reference at connect time.
+                  label="OpenClaw 2026.10.6 or later"
                   language="shell"
                 />
                 <CodeBlock

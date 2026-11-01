@@ -394,7 +394,7 @@ const platformMCPGeneratorVersion = "4"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "56"
+const hooksGeneratorVersion = "57"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -2114,9 +2114,12 @@ export default {
   name: "Speakeasy Observability",
   description: "Speakeasy observability hooks for OpenClaw.",
   register(api) {
-    const child = spawn(COMMAND[0], [...COMMAND.slice(1)], {
-      stdio: ["pipe", "pipe", "inherit"],
-    })
+    // The daemon starts on the first hook, not here. Some OpenClaw releases
+    // load plugins inside short-lived CLI commands such as plugins install,
+    // and a daemon started at register kept those commands from exiting.
+    let child = null
+    // Set at gateway_stop: no hook may start a daemon after shutdown.
+    let stopped = false
     let seq = 0
     const pending = new Map()
     // agent_end carries no final message or usage; cache the turn's
@@ -2127,27 +2130,49 @@ export default {
     const pendingEnds = new Map()
     const endedRuns = new Set()
 
-    createInterface({ input: child.stdout }).on("line", (line) => {
-      if (!line.trim()) return
-      let reply
-      try {
-        reply = JSON.parse(line)
-      } catch {
-        return
+    // The daemon keeps the host process alive only while a reply is pending,
+    // so a CLI command that fired a hook can still exit once it is answered.
+    const holdHost = (hold) => {
+      for (const handle of [child, child?.stdin, child?.stdout]) {
+        if (hold) handle?.ref?.()
+        else handle?.unref?.()
       }
-      const resolve = pending.get(reply.seq)
+    }
+    const settle = (id, reply) => {
+      const resolve = pending.get(id)
       if (!resolve) return
-      pending.delete(reply.seq)
+      pending.delete(id)
+      if (pending.size === 0) holdHost(false)
       resolve(reply)
-    })
-    child.on("exit", () => {
-      // An exited consumer cannot evaluate gates: resolve as timed out so
-      // FAIL_CLOSED applies instead of silently allowing.
-      for (const [, resolve] of pending) resolve({ timedOut: true })
-      pending.clear()
-    })
+    }
+
+    const startDaemon = () => {
+      const daemon = spawn(COMMAND[0], [...COMMAND.slice(1)], {
+        stdio: ["pipe", "pipe", "inherit"],
+      })
+      createInterface({ input: daemon.stdout }).on("line", (line) => {
+        if (!line.trim()) return
+        let reply
+        try {
+          reply = JSON.parse(line)
+        } catch {
+          return
+        }
+        settle(reply.seq, reply)
+      })
+      daemon.on("exit", () => {
+        // An exited consumer cannot evaluate gates: resolve as timed out so
+        // FAIL_CLOSED applies instead of silently allowing.
+        for (const id of [...pending.keys()]) settle(id, { timedOut: true })
+      })
+      return daemon
+    }
 
     const call = (hook, event, ctx, timeoutMs) => {
+      if (child === null) {
+        if (stopped) return Promise.resolve({ timedOut: true })
+        child = startDaemon()
+      }
       if (child.exitCode !== null || !child.stdin?.writable) {
         return Promise.resolve({ timedOut: true })
       }
@@ -2159,9 +2184,8 @@ export default {
       child.stdin.write(JSON.stringify(frame) + "\n")
       return new Promise((resolve) => {
         pending.set(id, resolve)
-        const timer = setTimeout(() => {
-          if (pending.delete(id)) resolve({ timedOut: true })
-        }, timeoutMs ?? DEFAULT_TIMEOUT_MS)
+        holdHost(true)
+        const timer = setTimeout(() => settle(id, { timedOut: true }), timeoutMs ?? DEFAULT_TIMEOUT_MS)
         if (typeof timer.unref === "function") timer.unref()
       })
     }
@@ -2206,6 +2230,9 @@ export default {
     for (const hook of HOOKS) {
       const gateTimeoutMs = GATE_TIMEOUT_MS[hook]
       api.on(hook, (rawEvent, ctx) => {
+        // A Gateway that loaded the plugin while running fires no gateway_start,
+        // so its shutdown may be the first hook: never start the daemon for it.
+        if (hook === "gateway_stop" && child === null) return
         const event = slimEvent(hook, rawEvent)
         if (hook === "llm_output") {
           const texts = Array.isArray(event?.assistantTexts) ? event.assistantTexts : []
@@ -2264,6 +2291,11 @@ export default {
     }
 
     api.on("gateway_stop", () => {
+      stopped = true
+      // A deferred agent_end would otherwise fire after shutdown.
+      for (const { timer } of pendingEnds.values()) clearTimeout(timer)
+      pendingEnds.clear()
+      if (child === null) return
       try {
         child.stdin.end()
         child.kill()
