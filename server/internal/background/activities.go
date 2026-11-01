@@ -136,6 +136,7 @@ type Activities struct {
 	listStagedTelemetryProjects      *activities.ListStagedTelemetryProjects
 	generateChatTitle                *activities.GenerateChatTitle
 	memoryDigests                    *activities.MemoryDigests
+	summarizeIdleChats               *activities.SummarizeIdleChats
 	processDeployment                *activities.ProcessDeployment
 	provisionFunctionsAccess         *activities.ProvisionFunctionsAccess
 	deployFunctionRunners            *activities.DeployFunctionRunners
@@ -418,6 +419,7 @@ func NewActivities(
 		listStagedTelemetryProjects:      activities.NewListStagedTelemetryProjects(logger, chConn),
 		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient),
 		memoryDigests:                    activities.NewMemoryDigests(logger, db, chatClient, features),
+		summarizeIdleChats:               activities.NewSummarizeIdleChats(logger, db, features, chatClient),
 		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpCatalog),
 		provisionFunctionsAccess:         activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
@@ -821,6 +823,10 @@ func (a *Activities) BuildMemoryDigests(ctx context.Context, args activities.Bui
 
 func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.GenerateChatTitleArgs) error {
 	return a.generateChatTitle.Do(ctx, input)
+}
+
+func (a *Activities) SummarizeIdleChats(ctx context.Context, input activities.SummarizeIdleChatsArgs) (*activities.SummarizeIdleChatsResult, error) {
+	return a.summarizeIdleChats.Do(ctx, input)
 }
 
 func (a *Activities) SyncIdentityMap(ctx context.Context) (*activities.SyncIdentityMapResult, error) {

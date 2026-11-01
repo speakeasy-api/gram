@@ -1608,11 +1608,14 @@ SET pinned_at = CASE WHEN @pinned::boolean THEN COALESCE(pinned_at, NOW()) ELSE 
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: UpdateChatSummary :one
--- Persist an on-demand LLM session summary. Project-scoped so a summarize write
--- can never touch another project's chat. Returns the updated row timestamps.
+-- Persist an LLM session summary. Project-scoped so a summarize write can
+-- never touch another project's chat. summary_redacted records whether the
+-- summary was built from the risk-redacted transcript; team memory reads only
+-- redacted summaries. Returns the updated row timestamps.
 UPDATE chats
 SET summary = @summary,
     summary_generated_at = NOW(),
+    summary_redacted = @summary_redacted,
     updated_at = NOW()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING summary, summary_generated_at;
@@ -2226,3 +2229,77 @@ UPDATE api_keys SET scopes = ARRAY[]::text[], subject_urn = @subject_urn,
   delegated_grants = @delegated_grants::jsonb, delegated_grants_version = @delegated_grants_version,
   expires_at = clock_timestamp() + interval '1 hour'
 WHERE id = @api_key_id AND project_id = @project_id;
+
+-- name: ListOrganizationsWithChatsForMemorySweep :many
+-- Team memory summary sweep: every organization that has at least one
+-- eligible chat, read as a loose index scan over chats_memory_summary_sweep_idx
+-- so the cost is one index probe per organization, not per chat.
+WITH RECURSIVE orgs AS (
+  (
+    SELECT c.organization_id
+    FROM chats c
+    WHERE c.deleted IS FALSE AND c.memory_excluded_at IS NULL
+    ORDER BY c.organization_id
+    LIMIT 1
+  )
+  UNION ALL
+  SELECT (
+    SELECT c.organization_id
+    FROM chats c
+    WHERE c.deleted IS FALSE
+      AND c.memory_excluded_at IS NULL
+      AND c.organization_id > orgs.organization_id
+    ORDER BY c.organization_id
+    LIMIT 1
+  )
+  FROM orgs
+  WHERE orgs.organization_id IS NOT NULL
+)
+SELECT orgs.organization_id::text AS organization_id
+FROM orgs
+WHERE orgs.organization_id IS NOT NULL;
+
+-- name: ListChatsDueForMemorySummary :many
+-- Team memory summary sweep: an organization's chats that have been idle since
+-- idle_before and changed since their last masked summary, newest first.
+-- Personal-account sessions and chats excluded from memory are never returned.
+SELECT c.id, c.project_id
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.organization_id = @organization_id
+  AND c.deleted IS FALSE
+  AND c.memory_excluded_at IS NULL
+  AND c.updated_at < @idle_before
+  AND c.updated_at > @since
+  AND (
+    c.summary_generated_at IS NULL
+    OR c.summary_redacted IS FALSE
+    OR c.summary_generated_at < c.updated_at
+  )
+  AND (ua.account_type IS NULL OR ua.account_type <> 'personal')
+ORDER BY c.updated_at DESC
+LIMIT @max_chats;
+
+-- name: CountMemorySummariesSince :one
+-- Masked summaries written for an organization since a point in time; the
+-- sweep uses it to enforce the per-organization daily cap. A summary write
+-- bumps updated_at to the same instant, so the updated_at bound lets the
+-- sweep index serve this.
+SELECT COUNT(*)::bigint
+FROM chats c
+WHERE c.organization_id = @organization_id
+  AND c.deleted IS FALSE
+  AND c.memory_excluded_at IS NULL
+  AND c.updated_at >= @since
+  AND c.summary_redacted IS TRUE
+  AND c.summary_generated_at >= @since;
+
+-- name: MarkChatSummaryEmpty :exec
+-- Records that a chat had nothing to summarize so the sweep does not retry it
+-- until new messages arrive. Project-scoped like UpdateChatSummary.
+UPDATE chats
+SET summary = NULL,
+    summary_generated_at = NOW(),
+    summary_redacted = TRUE,
+    updated_at = NOW()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
