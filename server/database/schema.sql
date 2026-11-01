@@ -6281,6 +6281,14 @@ ON chats (project_id);
 CREATE UNIQUE INDEX IF NOT EXISTS chats_id_project_id_key
 ON chats (id, project_id);
 
+-- Team memory reads (recall, zoom, the nightly digest rollup) walk one
+-- project's eligible chat summaries by when they were written. Partial on the
+-- eligibility predicate those queries share, so it stays small while most
+-- chats have no redacted summary.
+CREATE INDEX IF NOT EXISTS chats_memory_summary_idx
+ON chats (project_id, summary_generated_at)
+WHERE summary_redacted IS TRUE AND memory_excluded_at IS NULL AND deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS skill_distributions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
