@@ -1,5 +1,5 @@
 import { Alert } from "@/components/ui/Alert";
-import { AgentProviderPicker } from "@/components/agent-providers/AgentProviderPicker";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -11,6 +11,7 @@ import { useQueries } from "@tanstack/react-query";
 import { useState, type JSX } from "react";
 import { Link } from "react-router";
 import { CodeBlock } from "./CodeBlock";
+import { PanelTab, PanelTabs } from "./PanelTabs";
 import {
   ACTION_DOCS,
   WORKFLOW_AGENTS,
@@ -204,64 +205,82 @@ export function WorkflowStep(): JSX.Element {
         already have. The job proves who it is with its own GitHub token, so no
         Speakeasy secret is stored in GitHub.
       </p>
-      <AgentProviderPicker
+      <PanelTabs
         aria-label="Workflow agent"
-        providers={WORKFLOW_AGENT_OPTIONS}
         value={agent}
         onValueChange={setAgent}
-      />
-      <p>
-        Add <code>{selected.secret}</code> to your repository&apos;s Actions
-        secrets for {selected.name}, then replace the example prompt with your
-        task. Speakeasy access uses the job&apos;s GitHub token separately.
-      </p>
-      {workflow.yaml === null ? (
-        <SetupError>{workflow.problem}</SetupError>
-      ) : (
-        <CodeBlock
-          value={workflow.yaml}
-          label=".github/workflows/speakeasy.yml"
-          language="yaml"
-        />
-      )}
-      <Alert variant="info">
-        <div className="space-y-2 text-sm">
+        tabs={WORKFLOW_AGENT_OPTIONS.map((option) => ({
+          value: option.id,
+          label: (
+            <span className="inline-flex items-center gap-2">
+              <AgentProviderIcon
+                source={option.iconSource}
+                className="size-3.5"
+              />
+              {option.name}
+            </span>
+          ),
+        }))}
+      >
+        {/* One panel, for the chosen agent: the other tab's workflow would
+            be a second copy of the same file under the same name. */}
+        <PanelTab value={agent}>
           <p>
-            <strong>Preview.</strong> The action needs a speakeasyd with GitHub
-            Actions support, which no release includes yet, so this workflow
-            builds speakeasyd from source. Remove those three steps and the{" "}
-            <code>speakeasyd-binary</code> input once a release supports it.
+            Add <code>{selected.secret}</code> to your repository&apos;s Actions
+            secrets for {selected.name}, then replace the example prompt with
+            your task. Speakeasy access uses the job&apos;s GitHub token
+            separately.
           </p>
-        </div>
-      </Alert>
-      <ul className="list-disc space-y-1 pl-5">
-        <li>
-          <code>id-token: write</code> is required. Without it the job has no
-          GitHub token.
-        </li>
-        <li>
-          <code>project</code> is where hook events go. The agent may send them
-          to <strong>{project.name || project.slug}</strong> only; leave it out
-          to send none.
-        </li>
-        <li>
-          On <code>pull_request</code>, forks get no GitHub token, and the
-          job&apos;s <code>if:</code> skips them. Don&apos;t run it on{" "}
-          <code>pull_request_target</code>: that event gives a fork&apos;s pull
-          request a token the rule admits.
-        </li>
-        <li>
-          Keep <strong>Connect to Speakeasy</strong> before{" "}
-          <strong>Run {selected.name}</strong> in the same job so it can use the
-          configured MCP servers.
-        </li>
-      </ul>
-      <Links
-        links={[
-          { href: ACTION_DOCS, label: "Device agent action" },
-          { href: selected.docs, label: `${selected.name} action` },
-        ]}
-      />
+          {workflow.yaml === null ? (
+            <SetupError>{workflow.problem}</SetupError>
+          ) : (
+            <CodeBlock
+              value={workflow.yaml}
+              label=".github/workflows/speakeasy.yml"
+              language="yaml"
+            />
+          )}
+          <Alert variant="info">
+            <div className="space-y-2 text-sm">
+              <p>
+                <strong>Preview.</strong> The action needs a speakeasyd with
+                GitHub Actions support, which no release includes yet, so this
+                workflow builds speakeasyd from source. Remove those three steps
+                and the <code>speakeasyd-binary</code> input once a release
+                supports it.
+              </p>
+            </div>
+          </Alert>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>
+              <code>id-token: write</code> is required. Without it the job has
+              no GitHub token.
+            </li>
+            <li>
+              <code>project</code> is where hook events go. The agent may send
+              them to <strong>{project.name || project.slug}</strong> only;
+              leave it out to send none.
+            </li>
+            <li>
+              On <code>pull_request</code>, forks get no GitHub token, and the
+              job&apos;s <code>if:</code> skips them. Don&apos;t run it on{" "}
+              <code>pull_request_target</code>: that event gives a fork&apos;s
+              pull request a token the rule admits.
+            </li>
+            <li>
+              Keep <strong>Connect to Speakeasy</strong> before{" "}
+              <strong>Run {selected.name}</strong> in the same job so it can use
+              the configured MCP servers.
+            </li>
+          </ul>
+          <Links
+            links={[
+              { href: ACTION_DOCS, label: "Device agent action" },
+              { href: selected.docs, label: `${selected.name} action` },
+            ]}
+          />
+        </PanelTab>
+      </PanelTabs>
     </div>
   );
 }

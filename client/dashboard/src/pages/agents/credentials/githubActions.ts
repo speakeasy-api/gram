@@ -1,6 +1,5 @@
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import { AGENT_PROVIDERS } from "@/components/agent-providers/agent-providers";
-import type { AgentProviderOption } from "@/components/agent-providers/AgentProviderPicker";
 import { hooksIngestPolicyGrant } from "../agent-hook-events";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { SetupServer } from "./setupInstructions";
@@ -118,12 +117,15 @@ const WORKFLOW_AGENT_KEYS = Object.keys(WORKFLOW_AGENTS) as WorkflowAgent[];
  * The workflow agents as the dashboard shows AI tools elsewhere: the product's
  * own name and logo, from the agent provider registry.
  */
-export const WORKFLOW_AGENT_OPTIONS: AgentProviderOption<WorkflowAgent>[] =
-  WORKFLOW_AGENT_KEYS.map((id) => ({
-    id,
-    name: AGENT_PROVIDERS[id].name,
-    iconSource: AGENT_PROVIDERS[id].iconSource,
-  }));
+export const WORKFLOW_AGENT_OPTIONS: {
+  id: WorkflowAgent;
+  name: string;
+  iconSource: string;
+}[] = WORKFLOW_AGENT_KEYS.map((id) => ({
+  id,
+  name: AGENT_PROVIDERS[id].name,
+  iconSource: AGENT_PROVIDERS[id].iconSource,
+}));
 
 /**
  * The control plane the action talks to when its input is left out. The token

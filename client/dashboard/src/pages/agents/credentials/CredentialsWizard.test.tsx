@@ -3418,18 +3418,20 @@ describe("Connecting a GitHub repository", () => {
     expect(workflow.textContent).toMatch(
       /anthropics\/claude-code-action@[0-9a-f]{40}/,
     );
-    // The agents are chosen the way the dashboard's other setup instructions
-    // choose an AI tool: by the product's name and logo.
-    const picker = screen.getByRole("radiogroup", { name: "Workflow agent" });
-    const claude = screen.getByRole("radio", { name: "Claude Code" });
-    expect(claude.getAttribute("aria-checked")).toBe("true");
+    // The agents are tabs, like the ways to connect an agent with a key, each
+    // labelled with the product's logo and name; the workflow is the panel.
+    const tabs = screen.getByRole("tablist", { name: "Workflow agent" });
+    const claude = screen.getByRole("tab", { name: "Claude Code" });
+    expect(claude.getAttribute("aria-selected")).toBe("true");
     expect(claude.querySelector("svg")).toBeTruthy();
-    expect(picker.contains(claude)).toBe(true);
+    expect(tabs.contains(claude)).toBe(true);
+    expect(screen.getByRole("tabpanel").contains(workflow)).toBe(true);
 
-    const codex = screen.getByRole("radio", { name: "OpenAI Codex" });
+    const codex = screen.getByRole("tab", { name: "OpenAI Codex" });
     expect(codex.querySelector("svg")).toBeTruthy();
-    fireEvent.click(codex);
-    expect(codex.getAttribute("aria-checked")).toBe("true");
+    // Radix tabs select on mouse down, as a pointer press does.
+    fireEvent.mouseDown(codex);
+    expect(codex.getAttribute("aria-selected")).toBe("true");
     expect(workflow.textContent).toMatch(/openai\/codex-action@[0-9a-f]{40}/);
     expect(workflow.textContent).toContain(
       "openai-api-key: ${{ secrets.OPENAI_API_KEY }}",
@@ -3440,7 +3442,13 @@ describe("Connecting a GitHub repository", () => {
       screen.getByRole("link", { name: "Codex action" }).getAttribute("href"),
     ).toBe("https://learn.chatgpt.com/docs/github-action");
 
-    fireEvent.click(screen.getByRole("radio", { name: "Claude Code" }));
+    // Arrow keys move between the agents, as in any tab list.
+    codex.focus();
+    fireEvent.keyDown(codex, { key: "ArrowLeft" });
+    await waitFor(() => expect(document.activeElement).toBe(claude));
+    await waitFor(() =>
+      expect(claude.getAttribute("aria-selected")).toBe("true"),
+    );
     expect(workflow.textContent).toMatch(
       /anthropics\/claude-code-action@[0-9a-f]{40}/,
     );
