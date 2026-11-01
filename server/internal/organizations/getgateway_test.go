@@ -18,9 +18,9 @@ import (
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-func createGatewayIssuer(t *testing.T, ctx context.Context, ti *testInstance, organizationID string) {
+func createGatewayIssuer(t *testing.T, ctx context.Context, ti *testInstance, organizationID string) uuid.UUID {
 	t.Helper()
-	_, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+	issuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
 		OrganizationID:     conv.ToPGText(organizationID),
 		Slug:               "org-gateway-" + uuid.NewString()[:8],
 		AuthnChallengeMode: "interactive",
@@ -33,6 +33,7 @@ func createGatewayIssuer(t *testing.T, ctx context.Context, ti *testInstance, or
 	require.NoError(t, err)
 	_, err = settings.DeleteFeature(ctx, featuresrepo.DeleteFeatureParams(flag))
 	require.NoError(t, err)
+	return issuer.ID
 }
 
 func TestService_GetGateway_Available(t *testing.T) {
@@ -41,7 +42,7 @@ func TestService_GetGateway_Available(t *testing.T) {
 	ctx, ti := newTestOrganizationsService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	createGatewayIssuer(t, ctx, ti, authCtx.ActiveOrganizationID)
+	issuerID := createGatewayIssuer(t, ctx, ti, authCtx.ActiveOrganizationID)
 
 	res, err := ti.service.GetGateway(ctx, &gen.GetGatewayPayload{})
 
@@ -49,6 +50,8 @@ func TestService_GetGateway_Available(t *testing.T) {
 	require.True(t, res.Available)
 	require.NotNil(t, res.URL)
 	require.Equal(t, "http://localhost:35291/mcp/gateway/"+authCtx.OrganizationSlug, *res.URL)
+	require.NotNil(t, res.UserSessionIssuerID)
+	require.Equal(t, issuerID.String(), *res.UserSessionIssuerID)
 	require.Nil(t, res.UnavailableReason)
 }
 
