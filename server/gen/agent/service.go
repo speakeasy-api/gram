@@ -816,11 +816,11 @@ type UpdateConfigurationPayload struct {
 	SessionToken *string
 	// Shareable device-agent settings. Supported keys include platforms,
 	// update_channel, auto_update, pinned_target, blocked_versions,
-	// sync_interval_seconds, ai_scan_interval_seconds, and disable_ai_scan.
-	// update_channel and blocked_versions can only be set by Speakeasy platform
-	// administrators; per-device identity and secret keys are forbidden, as is
-	// ai_scan, which Speakeasy injects from the organization's scan target list
-	// when serving agents.
+	// sync_interval_seconds, ai_scan_interval_seconds, disable_ai_scan, and
+	// disable_crash_reports. update_channel and blocked_versions can only be set
+	// by Speakeasy platform administrators; per-device identity and secret keys
+	// are forbidden, as is ai_scan, which Speakeasy injects from the
+	// organization's scan target list when serving agents.
 	Config map[string]any
 }
 
