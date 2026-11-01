@@ -650,9 +650,11 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 // requireAutoSyncCanTurnOff refuses an update that turns a plugin's auto sync
 // off while the plugin has changes that haven't been synced, or while the same
 // update edits the plugin: from then on automatic publishes keep the plugin as
-// it was last published, so anything unsynced would be stranded. Turning it off
-// when it already is off needs no check. A nil payload is an update that
-// changes nothing but auto sync.
+// it was last published, so anything unsynced would be stranded. It also
+// refuses while one of the plugin's package directories is also another
+// package's, which no automatic publish could keep apart. Turning it off when
+// it already is off needs no check. A nil payload is an update that changes
+// nothing but auto sync.
 //
 // It runs in tx, the transaction that writes the setting, and its locks hold
 // until that transaction ends. A change to the plugin's content that commits
@@ -696,8 +698,9 @@ func (s *Service) requireAutoSyncCanTurnOff(ctx context.Context, tx pgx.Tx, orga
 // writes the setting, before the write: the locks it takes there are what keep
 // a change to the plugin from committing unseen in between. A refusal because
 // the plugin has changes that haven't been synced matches
-// ErrPluginHasUnsyncedChanges. The caller must already have authorized plugin
-// write for the project.
+// ErrPluginHasUnsyncedChanges, and one because a package directory is shared
+// carries a PluginPackagesSharedError naming it. The caller must already have
+// authorized plugin write for the project.
 func (s *Service) RequireAutoSyncCanTurnOffInTransaction(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID uuid.UUID) error {
 	return s.requireAutoSyncCanTurnOff(ctx, tx, organizationID, projectID, pluginID, nil)
 }

@@ -23,6 +23,16 @@ func requireSlugUnavailable(t *testing.T, err error, message string) {
 	require.Equal(t, message, oopsErr.Error())
 }
 
+// requirePackagesSharedRefusal checks the refusal to turn auto sync off while
+// the plugin's packages share a directory, given as "<dir> with <holder>".
+func requirePackagesSharedRefusal(t *testing.T, err error, shared string) {
+	t.Helper()
+	requireSlugUnavailable(t, err, "This plugin's packages share "+shared+", and only a plugin whose packages have their own directories can wait for a manual sync. Change this plugin's slug, then turn off auto sync.")
+	var cause *plugins.PluginPackagesSharedError
+	require.ErrorAs(t, err, &cause)
+	require.NotErrorIs(t, err, plugins.ErrPluginSlugUnavailable, "the refusal is not the create and rename one")
+}
+
 // Plugin foo publishes its Codex package to foo-codex/, the directory plugin
 // foo-codex would publish its Claude package to, so the second of the two is
 // refused whichever comes first, on create and on a slug change alike.
@@ -114,9 +124,9 @@ func TestPluginsService_ExistingSharedDirectoryCannotPublishPausedChanges(t *tes
 	_, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	for _, plugin := range seeded {
-		_, err = f.setAutoSync(ctx, plugin, false)
-		requireFailedPrecondition(t, err, "Cannot turn off auto sync")
+	for slug, shared := range map[string]string{"foo": "foo-codex/ with plugin foo-codex", "foo-codex": "foo-codex/ with plugin foo"} {
+		_, err = f.setAutoSync(ctx, seeded[slug], false)
+		requirePackagesSharedRefusal(t, err, shared)
 	}
 
 	// Arrange a paused row saved before the collision guard existed. Even

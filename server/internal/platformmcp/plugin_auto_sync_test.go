@@ -277,17 +277,13 @@ func TestSetPluginAutoSyncRefusesTurningOffWithUnsyncedChanges(t *testing.T) {
 	require.Empty(t, fixture.budget.keys, "a refused change is checked before the allowance is charged")
 }
 
-// racingAutoSyncGuard passes the early check and refuses the one in the
-// write's transaction, as the plugins service does when a change to the plugin
-// commits between the two.
-type racingAutoSyncGuard struct{}
+// transactionOnlyAutoSyncGuard passes the early check and runs only the one in
+// the write's transaction, as the plugins service behaves when a change to the
+// plugin commits between the two.
+type transactionOnlyAutoSyncGuard struct{ pluginAutoSyncGuard }
 
-func (racingAutoSyncGuard) RequireAutoSyncCanTurnOff(context.Context, string, uuid.UUID, uuid.UUID) error {
+func (transactionOnlyAutoSyncGuard) RequireAutoSyncCanTurnOff(context.Context, string, uuid.UUID, uuid.UUID) error {
 	return nil
-}
-
-func (racingAutoSyncGuard) RequireAutoSyncCanTurnOffInTransaction(context.Context, pgx.Tx, string, uuid.UUID, uuid.UUID) error {
-	return unsyncedChangesRefusal()
 }
 
 // The check in the write's transaction is the one that decides: a change that
@@ -297,7 +293,7 @@ func TestSetPluginAutoSyncRefusesAChangeThatLandsAfterTheEarlyCheck(t *testing.T
 	t.Parallel()
 	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_set_plugin_auto_sync_race")
 	plugin := seedPlugin(t, ctx, fixture.conn, fixture.principal.OrganizationID, fixture.project.ID, "Raced", "raced")
-	fixture.service.WithAutoSyncGuard(racingAutoSyncGuard{})
+	fixture.service.WithAutoSyncGuard(transactionOnlyAutoSyncGuard{&stubAutoSyncGuard{unsynced: map[uuid.UUID]bool{plugin.ID: true}}})
 	beforeAudit, err := audittest.AuditLogCountByAction(ctx, fixture.conn, audit.ActionPluginUpdate)
 	require.NoError(t, err)
 
@@ -348,8 +344,12 @@ func TestSetPluginAutoSyncUsesThePluginsServiceCheck(t *testing.T) {
 	require.Equal(t, new(false), got.Plugin.AutoSyncEnabled)
 }
 
-// Package directory conflicts are refused before pausing, through the same
-// plugins service guard used by the dashboard and the documented tool code.
+// Turning auto sync off is refused as invalid_request, with nothing written,
+// while the plugin's packages share a directory with another plugin's: by the
+// plugins service's own check, both early, before anything is charged, and in
+// the write's transaction. The refusal names the directory and sends the agent
+// to the dashboard for the slug change, not to a sync. A plugin whose packages
+// have their own directories still turns off.
 func TestSetPluginAutoSyncRefusesPackageDirectoryCollisions(t *testing.T) {
 	t.Parallel()
 	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_auto_sync_collision")
@@ -358,6 +358,14 @@ func TestSetPluginAutoSyncRefusesPackageDirectoryCollisions(t *testing.T) {
 	fixture.service.WithAutoSyncGuard(management)
 	plugin := seedPlugin(t, ctx, fixture.conn, fixture.principal.OrganizationID, fixture.project.ID, "Tools", "tools")
 	seedPlugin(t, ctx, fixture.conn, fixture.principal.OrganizationID, fixture.project.ID, "Conflicting Tools", "tools-codex")
+	beforeAudit, err := audittest.AuditLogCountByAction(ctx, fixture.conn, audit.ActionPluginUpdate)
+	require.NoError(t, err)
+	requireSharedPackagesRefusal := func(code, message string) {
+		t.Helper()
+		require.Equal(t, "invalid_request", code)
+		require.Contains(t, message, "share tools-codex/ with plugin tools-codex")
+		require.Contains(t, message, "AICP dashboard")
+	}
 
 	payload := invokePluginMetadataRefusal(t, fixture.descriptor(t, operationSetPluginAutoSync), map[string]any{
 		"project_id": fixture.project.ID.String(), "plugin": plugin.ID.String(), "auto_sync_enabled": false,
@@ -365,12 +373,34 @@ func TestSetPluginAutoSyncRefusesPackageDirectoryCollisions(t *testing.T) {
 	}, ContextWithPrincipal(ctx, fixture.principal))
 	var refusal pluginMetadataRefusal
 	require.NoError(t, json.Unmarshal([]byte(payload), &refusal))
-	require.Equal(t, "invalid_request", refusal.Code)
-	require.Contains(t, refusal.Message, "tools-codex")
+	requireSharedPackagesRefusal(refusal.Code, refusal.Message)
+	require.Empty(t, fixture.budget.keys, "the early check refuses before the allowance is charged")
+
+	fixture.service.WithAutoSyncGuard(transactionOnlyAutoSyncGuard{management})
+	_, err = fixture.service.SetPluginAutoSync(ctx, fixture.principal, SetPluginAutoSyncInput{
+		ProjectID: fixture.project.ID.String(), Plugin: plugin.ID.String(), AutoSyncEnabled: false, IdempotencyKey: "off-collision-in-transaction", Confirmed: true,
+	})
+	var inTransaction *PluginMetadataMutationError
+	require.ErrorAs(t, err, &inTransaction)
+	requireSharedPackagesRefusal(inTransaction.Code, inTransaction.Message)
+
 	got, err := fixture.service.GetPlugin(ctx, fixture.principal, GetPluginInput{ProjectID: fixture.project.ID.String(), Plugin: plugin.ID.String()})
 	require.NoError(t, err)
-	require.Equal(t, new(true), got.Plugin.AutoSyncEnabled)
-	requireNoOperationReceipt(t, ctx, fixture.conn, fixture.principal, fixture.project, operationSetPluginAutoSync, "off-collision")
+	require.Equal(t, new(true), got.Plugin.AutoSyncEnabled, "a refused change leaves auto sync on")
+	afterAudit, err := audittest.AuditLogCountByAction(ctx, fixture.conn, audit.ActionPluginUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeAudit, afterAudit)
+	for _, key := range []string{"off-collision", "off-collision-in-transaction"} {
+		requireNoOperationReceipt(t, ctx, fixture.conn, fixture.principal, fixture.project, operationSetPluginAutoSync, key)
+	}
+
+	fixture.service.WithAutoSyncGuard(management)
+	separate := seedPlugin(t, ctx, fixture.conn, fixture.principal.OrganizationID, fixture.project.ID, "Separate", "separate")
+	turnedOff, err := fixture.service.SetPluginAutoSync(ctx, fixture.principal, SetPluginAutoSyncInput{
+		ProjectID: fixture.project.ID.String(), Plugin: separate.ID.String(), AutoSyncEnabled: false, IdempotencyKey: "off-separate", Confirmed: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, new(false), turnedOff.Plugin.AutoSyncEnabled)
 }
 
 // The listed input schemas carry auto sync: optional on create_plugin, where

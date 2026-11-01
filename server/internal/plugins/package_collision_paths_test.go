@@ -5,6 +5,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -36,24 +38,51 @@ func TestProcessRoleDistributionSetup_RefusesPackageDirectoryCollision(t *testin
 	}
 }
 
+// Turning auto sync off is refused, with nothing written, while one of the
+// plugin's package directories is also another plugin's or the observability
+// plugin's: no automatic publish could keep it as it was last published. The
+// refusal is a client error that names the directory, not the unsynced
+// changes refusal. Once the slugs no longer collide, auto sync turns off.
 func TestPluginsService_RefusesCollidingPauseBeforeFirstPublish(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestPluginsService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	f := newAutoSyncFixtureFor(t, ctx, ti, nil)
-	var collidingPlugins []*gen.Plugin
-	for _, slug := range []string{"legacy", "legacy-codex"} {
+	observability, _ := orgObservabilitySlugs(t, ctx, ti)
+	seeded := make(map[string]*gen.Plugin)
+	for _, slug := range []string{"legacy", "legacy-codex", observability} {
 		plugin, err := pluginsrepo.New(ti.conn).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
 			OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
 			Name: slug, Slug: slug, Description: pgtype.Text{}, AutoSyncEnabled: pgtype.Bool{},
 		})
 		require.NoError(t, err)
-		collidingPlugins = append(collidingPlugins, &gen.Plugin{ID: plugin.ID.String()})
+		seeded[slug] = &gen.Plugin{ID: plugin.ID.String()}
 	}
-	for _, plugin := range collidingPlugins {
-		_, err := f.setAutoSync(ctx, plugin, false)
-		requireFailedPrecondition(t, err, "Cannot turn off auto sync")
+	beforeAudit, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginUpdate)
+	require.NoError(t, err)
+
+	for slug, shared := range map[string]string{
+		"legacy":       "legacy-codex/ with plugin legacy-codex",
+		"legacy-codex": "legacy-codex/ with plugin legacy",
+		observability:  observability + "/ with the observability plugin",
+	} {
+		_, err := f.setAutoSync(ctx, seeded[slug], false)
+		requirePackagesSharedRefusal(t, err, shared)
+		got, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: seeded[slug].ID})
+		require.NoError(t, err)
+		require.True(t, got.AutoSyncEnabled, "a refused change leaves auto sync on for %s", slug)
+	}
+	afterAudit, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeAudit, afterAudit, "a refused change writes nothing")
+
+	moved, err := ti.service.UpdatePlugin(ctx, &gen.UpdatePluginPayload{ID: seeded["legacy-codex"].ID, Name: "legacy-codex", Slug: "legacy-tools"})
+	require.NoError(t, err)
+	for _, plugin := range []*gen.Plugin{seeded["legacy"], moved} {
+		paused, err := f.setAutoSync(ctx, plugin, false)
+		require.NoError(t, err)
+		require.False(t, paused.AutoSyncEnabled)
 	}
 }
 

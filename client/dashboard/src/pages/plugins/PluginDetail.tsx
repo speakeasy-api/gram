@@ -500,8 +500,9 @@ function PluginDetailContent({
       );
     },
     onError: (error) => {
-      // A 412 is the server refusing to turn auto sync off, which the admin
-      // fixes next to the switch. Any other failure is a toast.
+      // A 412 is the server refusing while changes wait to sync, which Sync
+      // changes next to the switch fixes. Anything else, including a 400 a
+      // sync can't fix, is a toast.
       if (error instanceof GramError && error.statusCode === 412) {
         setAutoSyncError(error.message);
         return;

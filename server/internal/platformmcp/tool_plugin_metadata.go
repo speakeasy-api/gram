@@ -69,7 +69,7 @@ func registerPluginMetadataTools(reg *Registrar, plugins *PluginsService) {
 			"With auto sync on, the plugin's changes publish to the project's marketplace on their own. With it off, they wait until someone syncs by hand with republish_plugin, or Sync changes in the dashboard, and everyone keeps the version last published; a plugin never published stays out of the marketplace until then. " +
 			"Read the plugin with get_plugin first, tell the user which of these the change means, then call this with a stable idempotency key and confirmed: true once they confirm the exact plugin and the setting. " +
 			"Turning auto sync off is refused as unsynced_changes while the plugin has changes that haven't been synced, and nothing changes: offer to sync them with republish_plugin, then turn auto sync off once get_plugin reports publication_evidence.fresh=true. " +
-			"Turning auto sync off is also refused as invalid_request if its package directories conflict with another plugin or a reserved marketplace package; resolve the slug conflict instead of retrying a sync. " +
+			"Turning auto sync off is also refused as invalid_request, and nothing changes, while the plugin's packages share a directory with another plugin or a reserved marketplace package: syncing won't fix that, and rename_plugin keeps the slug, so ask the user to change the plugin's slug in the AICP dashboard, then turn auto sync off. " +
 			"Turning it back on requests a publish that sends the changes held while it was off; check get_plugin later rather than reporting them published. " +
 			"Retrying with the same idempotency key returns the change already made.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},

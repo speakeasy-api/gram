@@ -198,9 +198,9 @@ func (s *PluginsService) metadataMutationValid() bool {
 	return s.valid() && s.authorization != nil && s.metadataLogger != nil && s.metadataCore != nil && s.metadataBudget.valid()
 }
 
-// pluginAutoSyncGuard refuses turning a plugin's auto sync off while it has
-// changes that haven't been synced. Implemented by the plugins management
-// service, so the rule is the dashboard's own.
+// pluginAutoSyncGuard refuses turning a plugin's auto sync off when the
+// dashboard would. Implemented by the plugins management service, so the rule
+// is the dashboard's own.
 type pluginAutoSyncGuard interface {
 	// RequireAutoSyncCanTurnOff refuses early, before anything is charged or
 	// written.
@@ -394,8 +394,8 @@ func (s *PluginsService) renamePlugin(ctx context.Context, principal Principal, 
 }
 
 // setPluginAutoSync applies the dashboard's auto sync switch: turning auto
-// sync off is refused while the plugin has changes that haven't been synced,
-// and turning it on lets the publish this requests send what was held.
+// sync off is refused whenever the dashboard's check refuses it, and turning
+// it on lets the publish this requests send what was held.
 func (s *PluginsService) setPluginAutoSync(ctx context.Context, principal Principal, input SetPluginAutoSyncInput) (PluginMetadataMutationOutput, error) {
 	if !s.autoSyncMutationValid() {
 		return PluginMetadataMutationOutput{}, &PluginMetadataMutationError{Code: unavailableCode, Message: pluginAutoSyncUnavailableMessage, Slug: "", Cause: ErrPluginMetadataMutationUnavailable}
@@ -430,8 +430,8 @@ func (s *PluginsService) setPluginAutoSync(ctx context.Context, principal Princi
 	// which is what keeps a change to the plugin from committing unseen in
 	// between; a refusal there is charged.
 	var ref PluginRef
-	unsynced := func(err error) error {
-		return pluginMetadataCoreError(fmt.Errorf("check plugin has no unsynced changes: %w", err))
+	turnOffRefusal := func(err error) error {
+		return pluginMetadataCoreError(fmt.Errorf("check plugin auto sync can turn off: %w", err))
 	}
 	precheck := func(ctx context.Context) error {
 		resolved, err := s.resolve(ctx, platformrepo.New(s.db), principal, project.ID, target)
@@ -443,14 +443,14 @@ func (s *PluginsService) setPluginAutoSync(ctx context.Context, principal Princi
 			return nil
 		}
 		if err := s.autoSyncGuard.RequireAutoSyncCanTurnOff(ctx, principal.OrganizationID, project.ID, ref.ID); err != nil {
-			return unsynced(err)
+			return turnOffRefusal(err)
 		}
 		return nil
 	}
 	return s.executePluginMetadataMutation(ctx, principal, project, operationSetPluginAutoSync, key, normalized, precheck, func(ctx context.Context, tx pgx.Tx) (PluginMetadataReceiptResult, error) {
 		if !input.AutoSyncEnabled {
 			if err := s.autoSyncGuard.RequireAutoSyncCanTurnOffInTransaction(ctx, tx, principal.OrganizationID, project.ID, ref.ID); err != nil {
-				return PluginMetadataReceiptResult{}, unsynced(err)
+				return PluginMetadataReceiptResult{}, turnOffRefusal(err)
 			}
 		}
 		updated, err := s.metadataCore.UpdateInTransaction(ctx, tx, plugindelivery.UpdatePluginMutation{
@@ -685,8 +685,12 @@ func validPluginMetadataReceiptResult(result PluginMetadataReceiptResult) bool {
 
 // pluginMetadataCoreError turns the shared core's refusals into the readable
 // refusals this surface returns. The wording matches what the dashboard says
-// for the same input.
+// for the same input, except that the auto sync refusals name this surface's
+// own remedies.
 func pluginMetadataCoreError(err error) error {
+	if shared, ok := errors.AsType[*plugindelivery.PluginPackagesSharedError](err); ok {
+		return pluginMetadataMutationInvalid("invalid_request", fmt.Sprintf("Auto sync is still on: this plugin's packages share %s with %s, and only a plugin whose packages have their own directories can wait for a manual sync. Syncing won't fix this, and rename_plugin keeps the slug, so ask the user to change this plugin's slug in the AICP dashboard, then turn auto sync off.", shared.Dir, shared.Holder))
+	}
 	switch {
 	case errors.Is(err, plugindelivery.ErrPluginSlugInvalid), errors.Is(err, plugindelivery.ErrPluginSlugTooLong), errors.Is(err, plugindelivery.ErrPluginSlugUnavailable), errors.Is(err, plugindelivery.ErrPluginNameWithoutSlug), errors.Is(err, plugindelivery.ErrPluginNameEmpty):
 		return pluginMetadataMutationInvalid("invalid_request", err.Error()+".")

@@ -507,8 +507,8 @@ type PluginsService struct {
 	metadataLogger *slog.Logger
 	metadataCore   *plugindelivery.PluginMetadataCore
 	metadataBudget OperationBudget
-	// autoSyncGuard refuses turning auto sync off while a plugin has changes
-	// that haven't been synced. set_plugin_auto_sync is unavailable without it.
+	// autoSyncGuard is the dashboard's check for turning auto sync off.
+	// set_plugin_auto_sync is unavailable without it.
 	autoSyncGuard pluginAutoSyncGuard
 
 	// orgHosts resolves the platform host stored as an organization's default

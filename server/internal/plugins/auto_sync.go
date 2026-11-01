@@ -36,6 +36,31 @@ var ErrPluginHasUnsyncedChanges = errors.New("plugin has unsynced changes")
 // update that edits the plugin: the edit itself would be an unsynced change.
 const autoSyncOffWithOtherChangesMessage = "Turn off auto sync on its own, without other changes to the plugin."
 
+// pluginPackagesSharedMessage refuses turning auto sync off while one of the
+// plugin's package directories is also another package's. An automatic
+// publish keeps a plugin whose auto sync is off by copying its directories,
+// and can't copy a shared one for one plugin alone, so every automatic publish
+// in the project would fail. Its arguments are the shared directory and what
+// else publishes there.
+const pluginPackagesSharedMessage = "This plugin's packages share %s with %s, and only a plugin whose packages have their own directories can wait for a manual sync. Change this plugin's slug, then turn off auto sync."
+
+// PluginPackagesSharedError is the cause of the refusal carrying
+// pluginPackagesSharedMessage. A caller outside the management API words the
+// refusal for its own surface from it.
+type PluginPackagesSharedError struct {
+	// Dir is the plugin's package directory that Holder also publishes into,
+	// such as "tools-codex/".
+	Dir string
+
+	// Holder is what else publishes into Dir: "plugin <slug>", or a reserved
+	// package such as "the observability plugin".
+	Holder string
+}
+
+func (e *PluginPackagesSharedError) Error() string {
+	return fmt.Sprintf(pluginPackagesSharedMessage, e.Dir, e.Holder)
+}
+
 // pausedPluginPlan is how an automatic publish treats the project's plugins
 // once those whose auto sync is off ("paused") are accounted for.
 type pausedPluginPlan struct {
@@ -411,9 +436,10 @@ func publishMCPFingerprints(active []PluginInfo, held []heldPlugin, cfg Generate
 }
 
 // requirePluginSyncedForPause refuses turning a plugin's auto sync off while
-// its live state differs from what was last published. A plugin that was
-// never published, or a project with no marketplace yet, has nothing to
-// compare against, so turning auto sync off is always allowed there. The live
+// one of its package directories is also another package's, or while its live
+// state differs from what was last published. A plugin that was never
+// published, or a project with no marketplace yet, has nothing to compare
+// against, so only the directory check applies there. The live
 // fingerprint is computed with the same configuration publishProject uses.
 // It reads the plugin's live state in tx. lockContent first takes the package
 // content lock exclusively, which the check that decides must do so no change
@@ -426,7 +452,12 @@ func (s *Service) requirePluginSyncedForPause(ctx context.Context, tx pgx.Tx, pl
 		}
 	}
 	if err := RequirePluginSlugPackagesFree(ctx, s.repo.WithTx(tx), plugin.OrganizationID, plugin.ProjectID, plugin.ID, plugin.Slug); err != nil {
-		return oops.E(oops.CodeFailedPrecondition, err, "Cannot turn off auto sync: %s", err)
+		collision, ok := errors.AsType[*pluginSlugUnavailableError](err)
+		if !ok {
+			return oops.E(oops.CodeUnexpected, err, "check plugin package directories").LogError(ctx, s.logger)
+		}
+		shared := &PluginPackagesSharedError{Dir: collision.dir, Holder: collision.holder}
+		return oops.E(oops.CodeBadRequest, shared, "%s", shared.Error())
 	}
 	conn, err := s.repo.WithTx(tx).GetGitHubConnection(ctx, plugin.ProjectID)
 	if errors.Is(err, pgx.ErrNoRows) {

@@ -316,25 +316,32 @@ describe("plugin detail permission boundary", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sync changes" }));
     expect(publish).toHaveBeenCalled();
   });
-  it("toasts an auto sync failure that isn't a refusal", () => {
-    state.pluginWrite = true;
-    // handleError logs the failure it toasts.
-    const consoleError = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => {});
-    renderAdmin("settings", [hostedServer], { autoSyncEnabled: true });
-    updateOutcome.mockImplementationOnce((options) =>
-      options.onError?.(updateError(503, "service unavailable")),
-    );
-    fireEvent.click(
-      screen.getByRole("switch", { name: "Sync changes automatically" }),
-    );
-    expect(toastError).toHaveBeenCalled();
-    expect(consoleError).toHaveBeenCalled();
-    expect(screen.queryByText("service unavailable")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Sync changes" })).toBeNull();
-    consoleError.mockRestore();
-  });
+  // A failure that isn't the 412 for changes waiting to sync is a toast, with
+  // no Sync changes beside the switch: a server fault, or a 400 a sync can't
+  // fix such as packages that share a directory. handleError logs a 4xx as a
+  // warning and anything else as an error.
+  it.each([
+    [503, "service unavailable", "error"],
+    [400, "This plugin's packages share a directory.", "warn"],
+  ] as const)(
+    "toasts a %i from the auto sync switch without offering a sync",
+    (status, message, logged) => {
+      state.pluginWrite = true;
+      const consoleLog = vi.spyOn(console, logged).mockImplementation(() => {});
+      renderAdmin("settings", [hostedServer], { autoSyncEnabled: true });
+      updateOutcome.mockImplementationOnce((options) =>
+        options.onError?.(updateError(status, message)),
+      );
+      fireEvent.click(
+        screen.getByRole("switch", { name: "Sync changes automatically" }),
+      );
+      expect(toastError).toHaveBeenCalled();
+      expect(consoleLog).toHaveBeenCalled();
+      expect(screen.queryByText(message)).toBeNull();
+      expect(screen.queryByRole("button", { name: "Sync changes" })).toBeNull();
+      consoleLog.mockRestore();
+    },
+  );
   it("drops an auto sync refusal when moving to another plugin", () => {
     state.pluginWrite = true;
     renderAdmin(
