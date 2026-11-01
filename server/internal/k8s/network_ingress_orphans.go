@@ -75,7 +75,16 @@ func (p *TailscaleNetworkIngressProvisioner) FindOrphans(ctx context.Context, kn
 			key.name = name
 			expected[key] = names.OwnerID
 		}
+		// Apply removes a component's budget at one replica, so only budgets
+		// for multi-replica components are expected.
+		if p.config.DisruptionBudgets && p.config.AttestorReplicas > 1 {
+			expected[resourceKey{kind: "poddisruptionbudgets", namespace: names.Namespace, name: names.AttestorDeployment}] = names.OwnerID
+		}
+		if p.config.DisruptionBudgets && p.config.ProxyReplicas > 1 {
+			expected[resourceKey{kind: "poddisruptionbudgets", namespace: p.config.OperatorNamespace, name: names.ProxyNetworkPolicy}] = names.OwnerID
+		}
 	}
+	disruptionBudgetGVR := schema.GroupVersionResource{Group: "policy", Version: "v1", Resource: "poddisruptionbudgets"}
 
 	selector := labels.Set{managedByLabelKey: networkIngressManagedBy}.String()
 	list := func(gvr schema.GroupVersionResource, namespace, ownerSelector, name string, visit func(metav1.Object)) error {
@@ -186,6 +195,12 @@ func (p *TailscaleNetworkIngressProvisioner) FindOrphans(ctx context.Context, kn
 		{schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}, func(names NetworkIngressResourceNames) string { return names.Ingress }},
 		{schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}, func(names NetworkIngressResourceNames) string { return names.AttestorNetworkPolicy }},
 	}
+	if p.config.DisruptionBudgets {
+		namespacedResources = append(namespacedResources, struct {
+			gvr  schema.GroupVersionResource
+			name func(NetworkIngressResourceNames) string
+		}{disruptionBudgetGVR, func(names NetworkIngressResourceNames) string { return names.AttestorDeployment }})
+	}
 	for _, namespace := range orderedNamespaces {
 		names := namespaces[namespace]
 		ownerSelector := labels.Set{
@@ -226,19 +241,26 @@ func (p *TailscaleNetworkIngressProvisioner) FindOrphans(ctx context.Context, kn
 		}
 	}
 
-	networkPolicyGVR := schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}
-	if err := list(networkPolicyGVR, p.config.OperatorNamespace, selector, "", func(object metav1.Object) {
-		if malformedManagedOwner(object) {
-			orphans = append(orphans, NetworkIngressOrphan{OwnerID: uuid.Nil, Kind: "networkpolicies"})
-			return
+	// Proxy NetworkPolicies and disruption budgets in the operator namespace
+	// share the reserved "-proxy" name.
+	operatorResources := []schema.GroupVersionResource{{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}}
+	if p.config.DisruptionBudgets {
+		operatorResources = append(operatorResources, disruptionBudgetGVR)
+	}
+	for _, gvr := range operatorResources {
+		if err := list(gvr, p.config.OperatorNamespace, selector, "", func(object metav1.Object) {
+			if malformedManagedOwner(object) {
+				orphans = append(orphans, NetworkIngressOrphan{OwnerID: uuid.Nil, Kind: gvr.Resource})
+				return
+			}
+			names, ok := identity(object)
+			if !ok || object.GetNamespace() != p.config.OperatorNamespace || object.GetName() != names.ProxyNetworkPolicy {
+				return
+			}
+			report(resourceKey{kind: gvr.Resource, namespace: p.config.OperatorNamespace, name: names.ProxyNetworkPolicy}, names.OwnerID)
+		}); err != nil {
+			return nil, err
 		}
-		names, ok := identity(object)
-		if !ok || object.GetNamespace() != p.config.OperatorNamespace || object.GetName() != names.ProxyNetworkPolicy {
-			return
-		}
-		report(resourceKey{kind: "networkpolicies", namespace: p.config.OperatorNamespace, name: names.ProxyNetworkPolicy}, names.OwnerID)
-	}); err != nil {
-		return nil, err
 	}
 
 	return orphans, nil
