@@ -609,7 +609,7 @@ func (p *GKEProvider) inspect(ctx context.Context, entry *projectRunner, initial
 	if initial && !sandbox.Ready(resource) {
 		return errCodeSandboxPending
 	}
-	pods, err := sandbox.RunningPods(ctx, p.config.Dynamic, p.config.Namespace, string(entry.uid))
+	pods, err := sandbox.RunningPodsForClaim(ctx, p.config.Dynamic, p.config.Namespace, claim)
 	if err != nil {
 		return fmt.Errorf("discover code pod: %w", err)
 	}
