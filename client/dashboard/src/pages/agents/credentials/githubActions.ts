@@ -112,9 +112,7 @@ export const WORKFLOW_AGENTS = {
 export type WorkflowAgent = keyof typeof WORKFLOW_AGENTS;
 
 /** The coding agents a workflow can run, in the order they are offered. */
-export const WORKFLOW_AGENT_KEYS = Object.keys(
-  WORKFLOW_AGENTS,
-) as WorkflowAgent[];
+const WORKFLOW_AGENT_KEYS = Object.keys(WORKFLOW_AGENTS) as WorkflowAgent[];
 
 /**
  * The workflow agents as the dashboard shows AI tools elsewhere: the product's
