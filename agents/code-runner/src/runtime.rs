@@ -22,6 +22,24 @@ pub const MAX_PENDING: usize = 8;
 const MAX_OUTPUT: usize = 16 << 10;
 const MAX_FINAL: usize = 256 << 10;
 const PRELUDE: &str = include_str!("prelude.py");
+// Matches Speakeasy's own budget error, so a run reports the same failure
+// whichever side detects it.
+const CALLBACK_BUDGET_MESSAGE: &str =
+    "callback result budget exceeded; dispatched tool outcomes are recorded separately";
+
+/// A callback result exceeded its 1 MiB limit or the 8 MiB cumulative budget.
+/// It ends the execution with `callback_limit`, the code Speakeasy reports
+/// when it detects the same overrun before sending a result.
+#[derive(Debug)]
+struct CallbackBudgetExceeded;
+
+impl std::fmt::Display for CallbackBudgetExceeded {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(CALLBACK_BUDGET_MESSAGE)
+    }
+}
+
+impl std::error::Error for CallbackBudgetExceeded {}
 
 pub async fn new_pool(binary: &str, capacity: usize) -> Result<Pool> {
     ensure!(
@@ -118,6 +136,8 @@ pub async fn execute(
     let mut issued = HashSet::new();
     let mut callbacks = 0;
     let mut suspensions = 0;
+    // Bytes of callback result frames received: exactly the bytes Speakeasy
+    // counts before sending each result, so its check normally trips first.
     let mut cumulative = 0;
     loop {
         // The final Complete event is not a suspension.
@@ -177,8 +197,6 @@ pub async fn execute(
                         arguments.is_object(),
                         "callback arguments must be an object"
                     );
-                    cumulative += serde_json::to_vec(&arguments)?.len();
-                    ensure!(cumulative <= MAX_CUMULATIVE, "callback budget exceeded");
                     pending.insert(call_id);
                     frames
                         .send(ServerFrame::Callback {
@@ -204,7 +222,7 @@ pub async fn execute(
                 cumulative += size;
                 ensure!(
                     size <= MAX_CALLBACK + 4096 && cumulative <= MAX_CUMULATIVE,
-                    "callback result budget exceeded"
+                    CallbackBudgetExceeded
                 );
                 let ClientFrame::CallbackResult { id, value, error } = reply else {
                     bail!("unexpected frame during execution")
@@ -224,7 +242,7 @@ pub async fn execute(
                     (Some(value), None) => {
                         ensure!(
                             serde_json::to_vec(&value)?.len() <= MAX_CALLBACK,
-                            "callback result exceeds limit"
+                            CallbackBudgetExceeded
                         );
                         ResumeValue::Return(from_json(value)?)
                     }
@@ -246,6 +264,15 @@ pub async fn execute(
 
 /// The public failure for an execution error, with the output printed before it.
 pub fn public_error(error: &anyhow::Error, output: &Output) -> ServerFrame {
+    let (output, output_truncated) = output.take();
+    if error.is::<CallbackBudgetExceeded>() {
+        return ServerFrame::Error {
+            code: "callback_limit".into(),
+            message: CALLBACK_BUDGET_MESSAGE.into(),
+            output,
+            output_truncated,
+        };
+    }
     let message = match error.downcast_ref::<PoolError>() {
         Some(PoolError::Runtime(exception)) => exception.to_string(),
         Some(PoolError::Crashed {
@@ -260,7 +287,6 @@ pub fn public_error(error: &anyhow::Error, output: &Output) -> ServerFrame {
     while !message.is_char_boundary(end) {
         end -= 1;
     }
-    let (output, output_truncated) = output.take();
     ServerFrame::Error {
         code: "execution_failed".into(),
         message: message[..end].to_owned(),
