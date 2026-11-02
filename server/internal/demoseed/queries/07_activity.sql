@@ -114,10 +114,13 @@ VALUES (@id, @organization_id,
 -- workload identity on each start and teardown. They live in the security log
 -- and show under Security activity on the audit log page.
 -- name: ActivityInsertSecurityAuditLog :exec
+-- The actor's name is read from the seeded agent, as the runtime records it.
 INSERT INTO security_audit_logs (id, organization_id, project_id, actor_id, actor_type,
-                                 action, subject_id, subject_type, subject_display_name,
-                                 acting_surface, created_at)
+                                 actor_display_name, action, subject_id, subject_type,
+                                 subject_display_name, acting_surface, created_at)
 VALUES (@id, @organization_id, @project_id::uuid, @actor_id, 'agent',
+        (SELECT agents.name FROM agents
+         WHERE agents.organization_id = @organization_id AND agents.id::text = @actor_id),
         @action, @subject_id, 'workload_admission', @subject_display_name::text,
         'system', now() - @age::interval);
 

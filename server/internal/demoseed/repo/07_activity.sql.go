@@ -412,9 +412,11 @@ func (q *Queries) ActivityInsertQuarantineAuditLog(ctx context.Context, arg Acti
 
 const activityInsertSecurityAuditLog = `-- name: ActivityInsertSecurityAuditLog :exec
 INSERT INTO security_audit_logs (id, organization_id, project_id, actor_id, actor_type,
-                                 action, subject_id, subject_type, subject_display_name,
-                                 acting_surface, created_at)
+                                 actor_display_name, action, subject_id, subject_type,
+                                 subject_display_name, acting_surface, created_at)
 VALUES ($1, $2, $3::uuid, $4, 'agent',
+        (SELECT agents.name FROM agents
+         WHERE agents.organization_id = $2 AND agents.id::text = $4),
         $5, $6, 'workload_admission', $7::text,
         'system', now() - $8::interval)
 `
@@ -433,6 +435,7 @@ type ActivityInsertSecurityAuditLogParams struct {
 // Security entries: an agent's runtime admitting and withdrawing its own
 // workload identity on each start and teardown. They live in the security log
 // and show under Security activity on the audit log page.
+// The actor's name is read from the seeded agent, as the runtime records it.
 func (q *Queries) ActivityInsertSecurityAuditLog(ctx context.Context, arg ActivityInsertSecurityAuditLogParams) error {
 	_, err := q.db.Exec(ctx, activityInsertSecurityAuditLog,
 		arg.ID,
