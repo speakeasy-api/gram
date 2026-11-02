@@ -4,6 +4,7 @@ import (
 	. "goa.design/goa/v3/dsl"
 
 	"github.com/speakeasy-api/gram/server/design/security"
+	"github.com/speakeasy-api/gram/server/design/shared"
 )
 
 var AdminMemoryEvalRunConfig = Type("AdminMemoryEvalRunConfig", func() {
@@ -61,6 +62,7 @@ func memoryEvalMethods() {
 		Meta("openapi:operationId", "adminListMemoryEvalRuns")
 		Meta("openapi:extension:x-speakeasy-name-override", "listMemoryEvalRuns")
 		Description("Team memory eval runs, newest first, without their reports.")
+		shared.CursorPagination()
 		Payload(func() {
 			security.AdminAuthPayload()
 			Attribute("cursor", String, "ID of the last run on the previous page.", func() { Format(FormatUUID) })

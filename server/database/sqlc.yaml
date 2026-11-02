@@ -116,6 +116,7 @@ sql:
       - ../internal/testenv/role_distribution_pipeline_queries.sql
       - ../internal/testenv/role_deletion_queries.sql
       - ../internal/testenv/directory_source_queries.sql
+      - ../internal/testenv/team_memory_queries.sql
     engine: postgresql
     gen:
       go:

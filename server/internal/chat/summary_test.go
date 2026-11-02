@@ -3,7 +3,9 @@ package chat_test
 import (
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -77,6 +79,11 @@ func TestService_Summarize_MaskedPathRedactsInputAndOutput(t *testing.T) {
 	require.True(t, stored.SummaryRedacted)
 	require.Equal(t, result.Summary, stored.Summary.String)
 
+	messages, err := repo.New(ti.conn).ListChatMessages(ctx, repo.ListChatMessagesParams{ChatID: chatID, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	require.NotEmpty(t, messages)
+	require.False(t, stored.SummaryGeneratedAt.Time.Before(messages[len(messages)-1].CreatedAt.Time))
+
 	// Served from the stored masked summary without another model call.
 	again, err := ti.service.Summarize(ctx, &gen.SummarizePayload{ID: chatID.String()})
 	require.NoError(t, err)
@@ -142,4 +149,37 @@ func TestService_Summarize_FlagOffKeepsLegacyPath(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, stored.SummaryRedacted)
 	client.AssertExpectations(t)
+}
+
+func TestUpdateChatSummary_StampsCoveredThroughWhenNewerMessageLanded(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestChatServiceWithCompletion(t, &mockCompletionClient{})
+	ctx := initSessionCtx(t, ti)
+	chatID := seedChat(t, ctx, ti, "", "ext-user", "Race")
+	seedMessageContent(t, ctx, ti, chatID, "A message that landed after the transcript was read")
+
+	// The summary covered the transcript up to an hour ago; the message above
+	// is newer, so the summary must not read as covering it.
+	coveredThrough := time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
+	updated, err := repo.New(ti.conn).UpdateChatSummary(ctx, repo.UpdateChatSummaryParams{
+		Summary:         conv.ToPGText("Summary of the earlier transcript."),
+		SummaryRedacted: true,
+		CoveredThrough:  pgtype.Timestamptz{Time: coveredThrough, InfinityModifier: pgtype.Finite, Valid: true},
+		ID:              chatID,
+		ProjectID:       ti.projectID,
+	})
+	require.NoError(t, err)
+	require.True(t, updated.SummaryGeneratedAt.Time.Equal(coveredThrough))
+
+	// Covering every message stamps the write time instead.
+	updated, err = repo.New(ti.conn).UpdateChatSummary(ctx, repo.UpdateChatSummaryParams{
+		Summary:         conv.ToPGText("Summary of the whole transcript."),
+		SummaryRedacted: true,
+		CoveredThrough:  pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		ID:              chatID,
+		ProjectID:       ti.projectID,
+	})
+	require.NoError(t, err)
+	require.WithinDuration(t, time.Now(), updated.SummaryGeneratedAt.Time, time.Minute)
 }

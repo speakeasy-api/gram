@@ -104,8 +104,15 @@ func Queue(ctx context.Context, db *pgxpool.Pool, cfg Config, requestedBy string
 	return run, nil
 }
 
-// FailToStart fails a queued run whose workflow could not be started.
+// FailToStart fails a run whose workflow could not be started. It only
+// touches a still-queued row: if a workflow did start and claimed the run
+// before the start call reported an error, the run is left to finish.
 func FailToStart(ctx context.Context, db *pgxpool.Pool, run repo.MemoryEvalRun, reason string) error {
-	r := Runner{logger: nil, db: db, repo: repo.New(db), client: nil}
-	return r.fail(ctx, run.ID, reason)
+	if runes := []rune(reason); len(runes) > maxErrorRunes {
+		reason = string(runes[:maxErrorRunes])
+	}
+	if _, err := repo.New(db).FailQueuedRun(ctx, repo.FailQueuedRunParams{Error: pgtype.Text{String: reason, Valid: true}, ID: run.ID}); err != nil {
+		return fmt.Errorf("fail unstarted memory eval run: %w", err)
+	}
+	return nil
 }

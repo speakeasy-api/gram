@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryrepo"
@@ -57,9 +56,6 @@ type SearchTeamMemoryInput struct {
 type TeamMemoryHit struct {
 	Source TeamMemorySource `json:"source"`
 
-	// Title is the chat's redacted title, for chat hits.
-	Title string `json:"title,omitempty"`
-
 	// Text is the redacted summary, memo or digest text, cut around the match.
 	Text string `json:"text"`
 
@@ -89,7 +85,9 @@ type SearchTeamMemoryOutput struct {
 
 // Search ranks one project's masked chat summaries, memos and digests against
 // a full-text query. Every returned text is redacted again on the way out, so
-// a masking rule added after an item was stored still applies.
+// a masking rule added after an item was stored still applies, and the
+// snippet is cut around the matching words. Chat titles are never returned:
+// unlike summaries they are not masked at rest.
 func (s *TeamMemoryService) Search(ctx context.Context, principal Principal, input SearchTeamMemoryInput) (SearchTeamMemoryOutput, error) {
 	var zero SearchTeamMemoryOutput
 	query := strings.TrimSpace(input.Query)
@@ -122,42 +120,48 @@ func (s *TeamMemoryService) Search(ctx context.Context, principal Principal, inp
 	if err != nil {
 		return zero, err
 	}
-	searchCtx, cancel := context.WithTimeout(ctx, teamMemorySearchTimeout)
+	// The timeout covers the whole read: query, redaction and the audit entry.
+	ctx, cancel := context.WithTimeout(ctx, teamMemorySearchTimeout)
 	defer cancel()
-	rows, err := memoryrepo.New(s.db).SearchTeamMemory(searchCtx, memoryrepo.SearchTeamMemoryParams{
+	output, err := s.search(ctx, principal, project, query, from, to, limit, includeChats, includeMemos, includeDigests)
+	if errors.Is(err, context.DeadlineExceeded) {
+		return zero, errTeamMemoryTimeout
+	}
+	return output, err
+}
+
+func (s *TeamMemoryService) search(ctx context.Context, principal Principal, project ResolvedProject, query string, from, to time.Time, limit int, includeChats, includeMemos, includeDigests bool) (SearchTeamMemoryOutput, error) {
+	var zero SearchTeamMemoryOutput
+	rows, err := memoryrepo.New(s.db).SearchTeamMemory(ctx, memoryrepo.SearchTeamMemoryParams{
 		OrganizationID: principal.OrganizationID, ProjectID: project.ID,
 		IncludeChats: includeChats, IncludeMemos: includeMemos, IncludeDigests: includeDigests,
 		FromTime: conv.ToPGTimestamptz(from), ToTime: conv.ToPGTimestamptz(to),
-		Query: query, RowLimit: int32(limit),
+		Query: query, RowLimit: conv.SafeInt32(limit),
 	})
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			return zero, errTeamMemoryTimeout
-		}
 		return zero, fmt.Errorf("search team memory: %w", err)
 	}
 
+	terms := queryTerms(query)
 	output := SearchTeamMemoryOutput{Hits: make([]TeamMemoryHit, 0, len(rows)), From: from, To: to}
 	sources := make([]TeamMemorySource, 0, len(rows))
 	for _, row := range rows {
-		body := row.Body
-		if row.Kind == TeamMemorySourceChat {
-			body = firstParagraph(body)
-		}
-		text, _, err := s.redactor.Text(ctx, body)
+		text, changed, err := s.redactor.Text(ctx, row.Body)
 		if err != nil {
 			return zero, fmt.Errorf("redact team memory hit: %w", err)
 		}
-		title, _, err := s.redactor.Text(ctx, row.Title)
-		if err != nil {
-			return zero, fmt.Errorf("redact team memory title: %w", err)
+		anchor, found := snippetAnchor(text, terms)
+		// When masking changed the text and no query word survives it, the
+		// match came from masked content; returning it would confirm it.
+		if changed && !found {
+			continue
 		}
-		snippet, truncated := chatSnippet(text, firstQueryTerm(query), teamMemorySnippetRunes)
+		snippet, truncated := chatSnippet(text, anchor, teamMemorySnippetRunes)
 		source := TeamMemorySource{Kind: row.Kind, ID: row.ID.String(), ChatID: ""}
 		if row.ChatID.Valid {
 			source.ChatID = row.ChatID.UUID.String()
 		}
-		hit := TeamMemoryHit{Source: source, Title: title, Text: snippet, Truncated: truncated || utf8.RuneCountInString(body) < utf8.RuneCountInString(row.Body), At: row.At.Time.UTC(), AuthorUserID: row.AuthorUserID, Level: row.Level, PeriodStart: ""}
+		hit := TeamMemoryHit{Source: source, Text: snippet, Truncated: truncated, At: row.At.Time.UTC(), AuthorUserID: row.AuthorUserID, Level: row.Level, PeriodStart: ""}
 		if row.PeriodStart.Valid {
 			hit.PeriodStart = row.PeriodStart.Time.Format(time.DateOnly)
 		}
@@ -194,22 +198,31 @@ func teamMemoryWindow(rawFrom, rawTo string, now time.Time) (time.Time, time.Tim
 	return from, to, nil
 }
 
-// firstParagraph returns a summary's first paragraph, which the summary job
-// writes to stand alone as the memory snippet.
-func firstParagraph(text string) string {
-	text = strings.TrimSpace(text)
-	if before, _, ok := strings.Cut(text, "\n\n"); ok {
-		return strings.TrimSpace(before)
-	}
-	return text
+// queryTerms lists the words a web-search query asks for, leaving out
+// excluded words and the OR operator.
+func queryTerms(query string) []string {
+	fields := strings.FieldsFunc(query, func(r rune) bool { return r == ' ' || r == '"' || r == '\t' || r == '\n' })
+	return slices.DeleteFunc(fields, func(field string) bool { return strings.HasPrefix(field, "-") || strings.EqualFold(field, "or") })
 }
 
-// firstQueryTerm picks a word to centre snippets on.
-func firstQueryTerm(query string) string {
-	fields := strings.FieldsFunc(query, func(r rune) bool { return r == ' ' || r == '"' || r == '\t' || r == '\n' })
-	fields = slices.DeleteFunc(fields, func(field string) bool { return strings.HasPrefix(field, "-") || strings.EqualFold(field, "or") })
-	if len(fields) == 0 {
-		return ""
+// snippetAnchor finds the first query word in text to centre the snippet on.
+// Full-text search matches stems, so a word not found whole is tried again by
+// its leading runes ("retries" finds "retry").
+func snippetAnchor(text string, terms []string) (string, bool) {
+	for _, term := range terms {
+		if containsFold(text, term) {
+			return term, true
+		}
 	}
-	return fields[0]
+	for _, term := range terms {
+		runes := []rune(term)
+		if len(runes) < 5 {
+			continue
+		}
+		stem := string(runes[:max(4, len(runes)-3)])
+		if containsFold(text, stem) {
+			return stem, true
+		}
+	}
+	return "", false
 }

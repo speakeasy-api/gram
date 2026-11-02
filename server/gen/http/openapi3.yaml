@@ -1121,6 +1121,14 @@ paths:
             tags:
                 - admin
             x-speakeasy-name-override: listMemoryEvalRuns
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
     /admin/memoryEval.start:
         post:
             description: Queue a team memory eval run against the demo organization's synthetic corpus. Spends model credits; one run at a time and a daily limit.

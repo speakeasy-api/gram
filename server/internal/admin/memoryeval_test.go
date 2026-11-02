@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -38,7 +39,7 @@ func seedMemoryEvalCorpusProject(t *testing.T, db *pgxpool.Pool) {
 	require.NoError(t, err)
 	id, ok := demoseed.MemoryEvalProjectID(spec, memoryeval.ProjectMain)
 	require.True(t, ok)
-	require.NoError(t, demoseedrepo.New(db).MemoryEvalInsertProject(t.Context(), demoseedrepo.MemoryEvalInsertProjectParams{ProjectID: id, Name: "Team memory eval", Slug: "team-memory-eval", OrgID: spec.OrgID}))
+	require.NoError(t, demoseedrepo.New(db).MemoryEvalInsertProject(t.Context(), demoseedrepo.MemoryEvalInsertProjectParams{ProjectID: id, Name: "Team memory eval", Slug: "team-memory-eval", OrgID: spec.OrgID, CreatedAt: pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}}))
 }
 
 func memoryEvalPayloadConfig() *gen.AdminMemoryEvalRunConfig {

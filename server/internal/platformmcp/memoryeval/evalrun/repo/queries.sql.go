@@ -49,11 +49,11 @@ func (q *Queries) CountActiveRuns(ctx context.Context) (int64, error) {
 
 const countRunsSince = `-- name: CountRunsSince :one
 SELECT count(*) FROM memory_eval_runs
-WHERE deleted IS FALSE AND created_at >= $1
+WHERE created_at >= $1
 `
 
-// Runs started since a time, for the daily cap. Failed runs count too: they
-// spent credits before failing.
+// Runs started since a time, for the daily cap. Failed and deleted runs count
+// too: they spent credits, and deleting a run must not refund the cap.
 func (q *Queries) CountRunsSince(ctx context.Context, since pgtype.Timestamptz) (int64, error) {
 	row := q.db.QueryRow(ctx, countRunsSince, since)
 	var count int64
@@ -93,6 +93,42 @@ func (q *Queries) CreateRun(ctx context.Context, arg CreateRunParams) (MemoryEva
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const deleteRun = `-- name: DeleteRun :execrows
+UPDATE memory_eval_runs
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = $1 AND deleted IS FALSE
+`
+
+// Soft-deletes a run. It still counts toward the daily cap.
+func (q *Queries) DeleteRun(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRun, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const failQueuedRun = `-- name: FailQueuedRun :execrows
+UPDATE memory_eval_runs
+SET status = 'failed', error = $1, finished_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = $2 AND status = 'queued'
+`
+
+type FailQueuedRunParams struct {
+	Error pgtype.Text
+	ID    uuid.UUID
+}
+
+// Fails a run whose workflow never started. Only a still-queued row matches,
+// so a run a workflow already claimed is never failed under it.
+func (q *Queries) FailQueuedRun(ctx context.Context, arg FailQueuedRunParams) (int64, error) {
+	result, err := q.db.Exec(ctx, failQueuedRun, arg.Error, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const failRun = `-- name: FailRun :execrows
@@ -141,6 +177,19 @@ func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (MemoryEvalRun, erro
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getRunStatus = `-- name: GetRunStatus :one
+SELECT status FROM memory_eval_runs WHERE id = $1 AND deleted IS FALSE
+`
+
+// A live run's status, so a claim that found nothing can tell an orphaned
+// running row from one that is finished or gone.
+func (q *Queries) GetRunStatus(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getRunStatus, id)
+	var status string
+	err := row.Scan(&status)
+	return status, err
 }
 
 const listRuns = `-- name: ListRuns :many

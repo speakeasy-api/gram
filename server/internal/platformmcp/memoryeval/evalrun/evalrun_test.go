@@ -124,3 +124,43 @@ func TestRunnerMarkInterrupted(t *testing.T) {
 	// Unknown runs are a no-op too.
 	require.NoError(t, runner.MarkInterrupted(t.Context(), uuid.New()))
 }
+
+// A row an earlier execution left running is resolved by the next execution
+// for that run instead of being skipped as already claimed.
+func TestRunnerResolvesOrphanedRunningRow(t *testing.T) {
+	t.Parallel()
+
+	db, err := testInfra(t).CloneTestDatabase(t, "evalrun")
+	require.NoError(t, err)
+	q := repo.New(db)
+	runner := evalrun.NewRunner(testenv.NewLogger(t), db, noCalls{})
+
+	orphan := newRun(t, q, "org-a")
+	_, err = q.MarkRunRunning(t.Context(), orphan.ID)
+	require.NoError(t, err)
+
+	require.NoError(t, runner.Run(t.Context(), orphan.ID))
+	got, err := q.GetRun(t.Context(), orphan.ID)
+	require.NoError(t, err)
+	require.Equal(t, "failed", got.Status)
+	require.Contains(t, got.Error.String, "stopped before it finished")
+}
+
+// Deleting a run does not give its spend back to the daily cap.
+func TestCountRunsSinceIncludesDeletedRuns(t *testing.T) {
+	t.Parallel()
+
+	db, err := testInfra(t).CloneTestDatabase(t, "evalrun")
+	require.NoError(t, err)
+	q := repo.New(db)
+
+	run := newRun(t, q, "org-a")
+	newRun(t, q, "org-a")
+	deleted, err := q.DeleteRun(t.Context(), run.ID)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deleted)
+
+	count, err := q.CountRunsSince(t.Context(), run.CreatedAt)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, count)
+}

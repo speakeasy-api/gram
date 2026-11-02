@@ -37,6 +37,18 @@ type MemoryEvalCopyChatsParams struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
+const memoryEvalCountChatMessages = `-- name: MemoryEvalCountChatMessages :one
+SELECT count(*) FROM chat_messages
+WHERE project_id = $1::uuid
+`
+
+func (q *Queries) MemoryEvalCountChatMessages(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, memoryEvalCountChatMessages, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const memoryEvalCountChats = `-- name: MemoryEvalCountChats :one
 SELECT count(*) FROM chats
 WHERE organization_id = $1::text AND project_id = ANY($2::uuid[])
@@ -89,8 +101,8 @@ func (q *Queries) MemoryEvalInsertPersonalAccount(ctx context.Context, arg Memor
 
 const memoryEvalInsertProject = `-- name: MemoryEvalInsertProject :exec
 
-INSERT INTO projects (id, name, slug, organization_id)
-VALUES ($1::uuid, $2::text, $3::text, $4::text)
+INSERT INTO projects (id, name, slug, organization_id, created_at)
+VALUES ($1::uuid, $2::text, $3::text, $4::text, $5::timestamptz)
 `
 
 type MemoryEvalInsertProjectParams struct {
@@ -98,25 +110,60 @@ type MemoryEvalInsertProjectParams struct {
 	Name      string
 	Slug      string
 	OrgID     string
+	CreatedAt pgtype.Timestamptz
 }
 
 // The team memory eval corpus: two synthetic projects with their chats,
 // messages, and the personal accounts that mark private sessions. Platform
 // admins run the memory eval against these projects.
+// created_at is the seed's transaction time, the instant the corpus anchor
+// comes from, so a runner rebuilding from it gets the same corpus.
 func (q *Queries) MemoryEvalInsertProject(ctx context.Context, arg MemoryEvalInsertProjectParams) error {
 	_, err := q.db.Exec(ctx, memoryEvalInsertProject,
 		arg.ProjectID,
 		arg.Name,
 		arg.Slug,
 		arg.OrgID,
+		arg.CreatedAt,
 	)
 	return err
+}
+
+const memoryEvalListChatIDs = `-- name: MemoryEvalListChatIDs :many
+SELECT id FROM chats
+WHERE organization_id = $1::text AND project_id = $2::uuid
+ORDER BY id
+`
+
+type MemoryEvalListChatIDsParams struct {
+	OrgID     string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) MemoryEvalListChatIDs(ctx context.Context, arg MemoryEvalListChatIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, memoryEvalListChatIDs, arg.OrgID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const memoryEvalListPersonalAccounts = `-- name: MemoryEvalListPersonalAccounts :many
 SELECT id FROM user_accounts
 WHERE organization_id = $1::text AND user_id = $2::text
-  AND account_type = 'personal'
+  AND account_type = 'personal' AND provider = 'anthropic'
 ORDER BY created_at, id
 `
 
@@ -125,8 +172,9 @@ type MemoryEvalListPersonalAccountsParams struct {
 	UserID         string
 }
 
-// The roster's existing personal accounts for one user, so a private corpus
-// session reuses the account the demo already shows for its owner.
+// The roster's existing personal Anthropic accounts for one user, so a
+// private corpus session, a Claude Code session, reuses the account the demo
+// already shows for its owner.
 func (q *Queries) MemoryEvalListPersonalAccounts(ctx context.Context, arg MemoryEvalListPersonalAccountsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, memoryEvalListPersonalAccounts, arg.OrganizationID, arg.UserID)
 	if err != nil {

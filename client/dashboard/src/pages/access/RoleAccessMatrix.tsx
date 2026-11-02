@@ -1246,10 +1246,16 @@ function PlatformMatrix({
               </td>
               <td colSpan={3} aria-hidden="true" />
               <td className="py-2 pr-4 pl-2 text-left">
+                {/* An inherited permission applies wherever the including one
+                    does, so its rules are the ones to show and edit. */}
                 <AppliesTo
                   grants={grants}
-                  defs={[scope]}
-                  permissionLabel={copy.label}
+                  defs={[included && includedBy ? includedBy.scope : scope]}
+                  permissionLabel={
+                    included && includedBy
+                      ? extraCopy(includedBy.scope).label
+                      : copy.label
+                  }
                   resourceType={area.resourceType}
                   projects={projects}
                   onEditRule={onEditRule}

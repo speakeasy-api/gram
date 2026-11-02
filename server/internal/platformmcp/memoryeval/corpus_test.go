@@ -267,10 +267,12 @@ func TestWithChatIDsKeepsCitationsByKey(t *testing.T) {
 		if q.ExpectsNotFound() {
 			continue
 		}
-		source, ok := remapped.Chat(q.Sources[0])
-		require.True(t, ok, q.ID)
-		require.NotEqual(t, memoryeval.ChatID(source.Key), source.ID, q.ID)
-		require.Equal(t, corpus.ChatCitationValid(q, memoryeval.ChatID(source.Key)), remapped.ChatCitationValid(q, source.ID), q.ID)
-		require.False(t, remapped.ChatCitationValid(q, memoryeval.ChatID(source.Key)), "old IDs no longer resolve")
+		for _, key := range q.Sources {
+			source, ok := remapped.Chat(key)
+			require.True(t, ok, "%s %s", q.ID, key)
+			require.NotEqual(t, memoryeval.ChatID(source.Key), source.ID, "%s %s", q.ID, key)
+			require.Equal(t, corpus.ChatCitationValid(q, memoryeval.ChatID(source.Key)), remapped.ChatCitationValid(q, source.ID), "%s %s", q.ID, key)
+			require.False(t, remapped.ChatCitationValid(q, memoryeval.ChatID(source.Key)), "%s %s: old IDs no longer resolve", q.ID, key)
+		}
 	}
 }
