@@ -659,12 +659,59 @@
         {{end}}
 
         {{with .CatalogChanges}}
-        <section class="border-t px-6 py-6 sm:px-8" data-catalog-changes>
-          <h2 class="text-lg font-semibold">Review updated tools</h2>
-          <p class="text-sm text-muted-foreground">Your gateway will use the new catalogue only after you approve. Your current access selection is preselected.</p>
-          <details><summary>{{len .Added}} added</summary><ul>{{range .Added}}<li class="font-mono text-sm">{{.}}</li>{{end}}</ul></details>
-          <details><summary>{{len .Removed}} removed</summary><ul>{{range .Removed}}<li class="font-mono text-sm">{{.}}</li>{{end}}</ul></details>
-          <details><summary>{{len .Changed}} changed</summary><ul>{{range .Changed}}<li class="font-mono text-sm">{{.}}</li>{{end}}</ul></details>
+        <section class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8" data-catalog-changes aria-labelledby="catalog-changes-heading">
+          <h2 class="text-eyebrow" id="catalog-changes-heading">Review updated tools</h2>
+          <p class="text-sm text-muted-foreground">Changes apply only after you approve. Your current tool selection is preselected.</p>
+          <div class="divide-y border">
+            {{if .Added}}
+            <details class="group">
+              <summary class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                <span class="text-sm">Added <span class="text-muted-foreground font-mono">{{len .Added}}</span></span>
+                <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true">View tools</span>
+                <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true">Collapse</span>
+              </summary>
+              <ul class="max-h-64 overflow-y-auto divide-y">
+                {{range .Added}}
+                <li class="px-4 py-3 font-mono text-xs break-all">{{.}}</li>
+                {{end}}
+              </ul>
+            </details>
+            {{else}}
+            <div class="text-sm text-muted-foreground px-4 py-3">Added <span class="font-mono">0</span></div>
+            {{end}}
+            {{if .Removed}}
+            <details class="group">
+              <summary class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                <span class="text-sm">Removed <span class="text-muted-foreground font-mono">{{len .Removed}}</span></span>
+                <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true">View tools</span>
+                <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true">Collapse</span>
+              </summary>
+              <ul class="max-h-64 overflow-y-auto divide-y">
+                {{range .Removed}}
+                <li class="px-4 py-3 font-mono text-xs break-all">{{.}}</li>
+                {{end}}
+              </ul>
+            </details>
+            {{else}}
+            <div class="text-sm text-muted-foreground px-4 py-3">Removed <span class="font-mono">0</span></div>
+            {{end}}
+            {{if .Changed}}
+            <details class="group">
+              <summary class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                <span class="text-sm">Changed <span class="text-muted-foreground font-mono">{{len .Changed}}</span></span>
+                <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true">View tools</span>
+                <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true">Collapse</span>
+              </summary>
+              <ul class="max-h-64 overflow-y-auto divide-y">
+                {{range .Changed}}
+                <li class="px-4 py-3 font-mono text-xs break-all">{{.}}</li>
+                {{end}}
+              </ul>
+            </details>
+            {{else}}
+            <div class="text-sm text-muted-foreground px-4 py-3">Changed <span class="font-mono">0</span></div>
+            {{end}}
+          </div>
         </section>
         {{end}}
         {{with .ApprovalError}}
