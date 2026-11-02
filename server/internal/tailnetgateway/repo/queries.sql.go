@@ -149,6 +149,26 @@ func (q *Queries) EnsureNetworkIngressNodeSlot(ctx context.Context, arg EnsureNe
 	return err
 }
 
+const getNetworkIngressGatewayOwner = `-- name: GetNetworkIngressGatewayOwner :one
+SELECT organization_id, hostname, runtime
+FROM network_ingresses
+WHERE id = $1
+`
+
+type GetNetworkIngressGatewayOwnerRow struct {
+	OrganizationID string
+	Hostname       string
+	Runtime        pgtype.Text
+}
+
+// Tombstones are included: teardown needs the owner and label after soft delete.
+func (q *Queries) GetNetworkIngressGatewayOwner(ctx context.Context, id uuid.UUID) (GetNetworkIngressGatewayOwnerRow, error) {
+	row := q.db.QueryRow(ctx, getNetworkIngressGatewayOwner, id)
+	var i GetNetworkIngressGatewayOwnerRow
+	err := row.Scan(&i.OrganizationID, &i.Hostname, &i.Runtime)
+	return i, err
+}
+
 const getNetworkIngressNodeSlot = `-- name: GetNetworkIngressNodeSlot :one
 SELECT id, network_ingress_id, organization_id, slot, pod_name, auth_key_encrypted, auth_key_expires_at, status, node_id, dns_name, last_error, last_seen_at, connected_since, retired_at, created_at, updated_at
 FROM network_ingress_nodes

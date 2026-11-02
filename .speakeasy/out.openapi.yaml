@@ -92085,7 +92085,7 @@ components:
       properties:
         hostname:
           type: string
-          description: Lowercase DNS label
+          description: Lowercase DNS label; defaults to speakeasy
         identity_required:
           type: boolean
         oauth_client_id:
@@ -92098,7 +92098,6 @@ components:
             - tailscale
       required:
         - provider
-        - hostname
         - oauth_client_id
         - oauth_client_secret
     CreateInstanceRequestBody:
