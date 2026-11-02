@@ -3,25 +3,37 @@
 Mirrors the Go unit tests in
 ``server/internal/risk/presidiofp/classify_test.go``
 (``TestNonPIIIPExactKeysAreCanonical``, ``TestReason``, ``TestReasonByRuleID``),
-``nhs_test.go`` and ``retired_test.go``, and adds broader table coverage of the
-IP and email catalogs.
+``nhs_test.go``, ``creditcard_test.go`` and ``retired_test.go``, and adds broader
+table coverage of the IP and email catalogs.
 
 (``fp_split_test.go`` is build-tagged dev tooling that regenerates testdata
 rather than a unit test, so it has no counterpart here.)
 """
 
 import ipaddress
+import json
 import random
+import re
+from pathlib import Path
 
 import pytest
 
 from pystreams.risk import presidiofp
 from pystreams.risk.presidiofp import ip_asn
 from pystreams.risk.presidiofp.classify import (
+    ENTITY_TYPE_CREDIT_CARD,
     ENTITY_TYPE_EMAIL_ADDRESS,
     ENTITY_TYPE_IP_ADDRESS,
     ENTITY_TYPE_UK_NHS,
     _entity_type_for_rule_id,
+)
+from pystreams.risk.presidiofp.creditcard import (
+    KNOWN_TEST_PANS,
+    MAX_CARD_DIGITS,
+    MIN_CARD_DIGITS,
+    _card_digits,
+    _card_id_listing,
+    non_card_reason,
 )
 from pystreams.risk.presidiofp.ip import _NON_PII_IP_EXACT
 from pystreams.risk.presidiofp.nhs import (
@@ -31,6 +43,10 @@ from pystreams.risk.presidiofp.nhs import (
     non_nhs_reason,
 )
 from pystreams.risk.presidiofp.retired import RETIRED_RECOGNIZERS
+
+# A Luhn-valid Visa number that is not a published test card and has no
+# placeholder shape, so it stands in for a real customer card.
+REAL_LOOKING_CARD = "4539578763621486"
 
 
 def test_non_pii_ip_exact_keys_are_canonical():
@@ -55,12 +71,18 @@ def test_reason():
     assert presidiofp.reason(ENTITY_TYPE_EMAIL_ADDRESS, "noreply@example.com"), (
         "placeholder email"
     )
+    assert presidiofp.reason(ENTITY_TYPE_CREDIT_CARD, "4111 1111 1111 1111"), (
+        "published test card"
+    )
 
     assert not presidiofp.reason(ENTITY_TYPE_IP_ADDRESS, "71.126.87.167"), (
         "residential IP"
     )
     assert not presidiofp.reason(ENTITY_TYPE_EMAIL_ADDRESS, "ada@speakeasy.com"), (
         "real email"
+    )
+    assert not presidiofp.reason(ENTITY_TYPE_CREDIT_CARD, REAL_LOOKING_CARD), (
+        "real-looking card number"
     )
 
     # Uncatalogued entity types never fire, even on a value another lane would flag.
@@ -80,6 +102,12 @@ def test_reason_by_rule_id():
     assert not presidiofp.reason_by_rule_id("pii.ip_address", "71.126.87.167"), (
         "residential IP"
     )
+    assert presidiofp.reason_by_rule_id("pii.credit_card", "4242-4242-4242-4242"), (
+        "published test card"
+    )
+    assert not presidiofp.reason_by_rule_id("pii.credit_card", REAL_LOOKING_CARD), (
+        "real-looking card number"
+    )
 
     # Rule ids without a catalog never fire, even when the match would match
     # another lane's catalog.
@@ -93,6 +121,7 @@ def test_reason_by_rule_id():
         "pii.ip_address",
         "pii.email_address",
         "pii.uk_nhs",
+        "pii.credit_card",
         "pii.us_driver_license",
     ]
     assert presidiofp.context_rule_ids() == ["pii.uk_nhs"]
@@ -310,6 +339,144 @@ def test_nhs_suppresses_opaque_identifiers():
             f"opaque identifier {identifier} must not read as an NHS number"
         )
     assert checked > 0, "corpus produced no checksum-valid ids"
+
+
+def _luhn_valid(digits: str) -> bool:
+    """The mod-10 check Presidio's ``CreditCardRecognizer`` applies before it
+    reports a match.
+    """
+    total = 0
+    for i, ch in enumerate(reversed(digits)):
+        d = int(ch)
+        if i % 2:
+            d *= 2
+            if d > 9:
+                d -= 9
+        total += d
+    return bool(digits) and total % 10 == 0
+
+
+@pytest.mark.parametrize(
+    ("match", "expect_fp"),
+    [
+        (REAL_LOOKING_CARD, False),
+        ("4539 5787 6362 1486", False),
+        ("4539-5787-6362-1486", False),
+        ("5534129876004319", False),
+        ("371882450931763", False),
+        ("4111111111111111", True),
+        ("4111 1111 1111 1111", True),
+        ("4242-4242-4242-4242", True),
+        ("4539 1488 0343 6467", True),
+        ("5555555555554444", True),
+        ("378282246310005", True),
+        ("6011111111111117", True),
+        ("30569309025904", True),
+        ("3530111333300000", True),
+        ("6243030000000001", True),
+        ("4444 5555 5555 5555", True),
+        ("1234567890123452", True),
+        ("6543210987654326", True),
+        ("6651 6652 6653 6654", True),
+        ("6789 6786 6782 6777", True),
+        # Out of scope: the recognizer never emits these shapes.
+        ("453957876362", False),
+        ("45395787636214860000", False),
+        ("4111.1111.1111.1111", False),
+        ("", False),
+    ],
+)
+def test_non_card_reason(match: str, expect_fp: bool):
+    """Mirror of ``TestNonCardReason``."""
+    assert bool(non_card_reason(match)) is expect_fp
+
+
+def test_card_id_listing():
+    """Mirror of ``TestCardIDListing``."""
+    assert _card_id_listing("6651665266536654"), "consecutive ascending"
+    assert _card_id_listing("6789678667826777"), "descending with gaps"
+    assert _card_id_listing("1000100110501100"), "span exactly at the limit"
+
+    assert not _card_id_listing("1000100110501101"), "span one past the limit"
+    assert not _card_id_listing("6784678167776683"), "groups too far apart"
+    assert not _card_id_listing("6651665366526654"), "not monotonic"
+    assert not _card_id_listing("6651665166526653"), "repeated group"
+    assert not _card_id_listing("665166526653665"), "not sixteen digits"
+
+
+def test_credit_card_regressions():
+    """Mirror of ``TestCreditCardRegressions`` (AIS-720)."""
+    # A fixture-bearing file re-shipped by a coding agent's PostToolUse hook. It
+    # talks about cards, so only the value can clear it.
+    fixture = (
+        'f.match = "4539 1488 0343 6467"\n'
+        "if i%4 == 0 {\n"
+        '\tf.match = "4111 1111 1111 1111"\n'
+        "}\n"
+        'f.content = "Customer card " + f.match + ", exp 11/27."'
+    )
+    for pan in ("4539 1488 0343 6467", "4111 1111 1111 1111"):
+        assert presidiofp.reason_in_context(ENTITY_TYPE_CREDIT_CARD, pan, fixture), (
+            f"fixture card {pan!r} must not flag"
+        )
+
+    # A Bash tool request listing four consecutive PR numbers.
+    assert presidiofp.reason_in_context(
+        ENTITY_TYPE_CREDIT_CARD,
+        "6651 6652 6653 6654",
+        "gh pr view 6651 6652 6653 6654 --json title",
+    )
+
+    # A real-looking card with card context still flags, in a user message and in
+    # a tool response.
+    assert not presidiofp.reason_in_context(
+        ENTITY_TYPE_CREDIT_CARD,
+        REAL_LOOKING_CARD,
+        f"Please refund my order, my credit card is {REAL_LOOKING_CARD}",
+    )
+    tool_response = json.dumps(
+        {"customer": {"card": {"number": REAL_LOOKING_CARD, "exp": "11/27"}}}
+    )
+    assert not presidiofp.reason_in_context(
+        ENTITY_TYPE_CREDIT_CARD, REAL_LOOKING_CARD, tool_response
+    )
+
+
+def test_credit_card_keeps_random_cards():
+    """Mirror of ``TestCreditCardKeepsRandomCards``: every Luhn-valid run in a
+    deterministic corpus must survive the value checks.
+    """
+    rng = random.Random(720)
+    checked = 0
+    while checked < 50_000:
+        pan = f"{rng.choice((3, 4, 5, 6))}{rng.randrange(10**15):015d}"
+        if not _luhn_valid(pan):
+            continue
+        checked += 1
+        if pan in KNOWN_TEST_PANS:
+            continue
+        assert non_card_reason(pan) == "", f"plausible card {pan} was suppressed"
+
+
+def test_known_test_pans_are_well_formed():
+    """Mirror of ``TestKnownTestPANsAreWellFormed``."""
+    assert KNOWN_TEST_PANS
+    for pan in KNOWN_TEST_PANS:
+        assert pan == _card_digits(pan), f"{pan} must be stored as bare digits"
+        assert MIN_CARD_DIGITS <= len(pan) <= MAX_CARD_DIGITS, f"{pan} is out of window"
+        assert _luhn_valid(pan), f"{pan} must pass the Luhn checksum"
+
+
+def test_known_test_pans_match_go():
+    """The Go and Python catalogs must list the same test cards."""
+    go_source = (
+        Path(__file__).resolve().parents[2]
+        / "server/internal/risk/presidiofp/creditcard.go"
+    )
+    if not go_source.exists():
+        pytest.skip("Go source not available outside the monorepo")
+    go_pans = set(re.findall(r'"(\d+)":\s*true', go_source.read_text()))
+    assert go_pans == KNOWN_TEST_PANS
 
 
 def test_retired_recognizers():
