@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
@@ -86,19 +87,11 @@ vi.mock("@gram/client/react-query/marketplaceSettings", () => ({
 vi.mock("@/contexts/Fetcher", () => ({
   useFetcher: () => ({ fetch: vi.fn() }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    plugins: {
-      href: () => "/plugins",
-      Link: ({ children }: { children: ReactNode }) => (
-        <a href="/plugins">{children}</a>
-      ),
-    },
-    playground: { Link: () => null },
-    mcp: { href: () => "/mcp" },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project-slug" }),
 }));
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   useParams: () => ({ mcpServerSlug: "server-a" }),
   useLocation: () => ({ pathname: "/mcp/server-a" }),
   Link: ({
@@ -291,7 +284,7 @@ function banner() {
       </TooltipProvider>
     </QueryClientProvider>
   );
-  const view = render(content());
+  const view = render(content(), { wrapper: MemoryRouter });
   return { ...view, refresh: () => view.rerender(content()) };
 }
 describe("MCP plugin permission boundaries", () => {
@@ -333,7 +326,7 @@ describe("MCP plugin permission boundaries", () => {
     "scopes sidebar queries for %s",
     (grant) => {
       state.grants = [{ scope: grant }];
-      render(<McpServerXSidebarNav />);
+      render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
       expect(screen.getByText("Included in Plugin")).toBeTruthy();
       expect(state.plugins).toHaveBeenCalledWith(
         scope,
@@ -356,7 +349,7 @@ describe("MCP plugin permission boundaries", () => {
             { scope: "org:blocked_read", selectors: [{ resourceId: "org-a" }] },
           ]
         : [];
-      render(<McpServerXSidebarNav />);
+      render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
       expect(state.plugins).toHaveBeenCalledWith(
         scope,
         undefined,
@@ -376,7 +369,7 @@ describe("MCP plugin permission boundaries", () => {
       { scope: "mcp:read" },
       { scope: "org:blocked_read", selectors: [{ resourceId: "org-a" }] },
     ];
-    render(<McpServerXSidebarNav />);
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
     expect(screen.queryByText("Team Access")).toBeNull();
   });
   it.each([
@@ -439,7 +432,7 @@ describe("remote MCP server Skills tab", () => {
     state.skillsOverMcp = true;
     state.mcpServer = remote;
     state.grants = [{ scope: "skill:read" }];
-    render(<McpServerXSidebarNav />);
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
     expect(screen.getByText("Skills")).toBeTruthy();
   });
 
@@ -469,7 +462,7 @@ describe("remote MCP server Skills tab", () => {
     state.skillsOverMcp = flag;
     state.mcpServer = server;
     state.grants = grants;
-    render(<McpServerXSidebarNav />);
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
     expect(screen.queryByText("Skills")).toBeNull();
   });
 });
@@ -477,7 +470,7 @@ describe("remote MCP server Skills tab", () => {
 describe("MCP server readiness", () => {
   it("leaves servers without a tunnel unchanged", () => {
     state.grants = [{ scope: "org:read" }];
-    render(<McpServerXSidebarNav />);
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
     for (const label of [
       "Server URL",
       "Authentication",
@@ -502,7 +495,7 @@ describe("MCP server readiness", () => {
       isLoading: false,
       isError: false,
     });
-    render(<McpServerXSidebarNav />);
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
     expect(screen.getByText("Tunnel agent")).toBeTruthy();
     // The Overview polls; the sidebar reads the same cached snapshot.
     expect(state.tunnelConnections).toHaveBeenCalledWith("tunnel-a");
@@ -533,7 +526,7 @@ describe("remote MCP server Identity summary", () => {
       isError: false,
       data: { upstreamAuthEnforced: true },
     });
-    render(<McpServerXSidebarNav />);
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
     expect(
       screen.getByRole("link", { name: /Identity: Credentials set up/ }),
     ).toBeTruthy();
@@ -542,7 +535,7 @@ describe("remote MCP server Identity summary", () => {
 
   it("keeps the legacy identity mode when enforcement is off", () => {
     state.mcpServer = remote;
-    render(<McpServerXSidebarNav />);
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
     expect(screen.getByRole("link", { name: /Identity: Manual/ })).toBeTruthy();
     expect(
       screen.queryByRole("link", { name: /Credentials set up/ }),
@@ -570,7 +563,7 @@ describe("remote MCP server Identity summary", () => {
     (_state, features, text) => {
       state.mcpServer = remote;
       setFeatures(features);
-      render(<McpServerXSidebarNav />);
+      render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
       expect(screen.getByText(text)).toBeTruthy();
       expect(screen.queryByRole("link", { name: /^Identity:/ })).toBeNull();
     },
@@ -619,7 +612,7 @@ describe("remote MCP server readiness under enforcement", () => {
       isError: false,
       data: { status },
     };
-    render(<McpServerXSidebarNav />);
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
     expect(authenticationCheck().getAttribute("data-ready")).toBe(ready);
     expect(authenticationCheck().getAttribute("title")).toBe(description);
   });
@@ -631,7 +624,7 @@ describe("remote MCP server readiness under enforcement", () => {
       isError: false,
       data: undefined,
     };
-    render(<McpServerXSidebarNav />);
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
     expect(authenticationCheck().getAttribute("data-ready")).toBe("false");
     expect(authenticationCheck().getAttribute("title")).toBe(
       "The identity status is not available yet.",

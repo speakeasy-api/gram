@@ -7,6 +7,7 @@ vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
+import { withOrgPages } from "@/route-pages";
 import { useOrgRoutes } from "@/routes";
 import { orgRoutesToNavActions } from "./navigation-actions";
 
@@ -18,7 +19,7 @@ describe("organization navigation registration", () => {
   it("registers both billing destinations without navigating until selected", () => {
     const { result } = renderHook(
       () => {
-        const routes = useOrgRoutes();
+        const routes = withOrgPages(useOrgRoutes());
         const location = useLocation();
         return {
           actions: orgRoutesToNavActions(routes, false, true),
@@ -58,7 +59,9 @@ describe("organization navigation registration", () => {
   });
 
   it("requires ordinary billing route access and does not expand unrelated nested routes", () => {
-    const { result } = renderHook(() => useOrgRoutes(), { wrapper });
+    const { result } = renderHook(() => withOrgPages(useOrgRoutes()), {
+      wrapper,
+    });
     const denied = orgRoutesToNavActions(result.current, false, false);
     const allowed = orgRoutesToNavActions(result.current, false, true);
     expect(denied.some(({ id }) => id === "nav-org-billing-setup")).toBe(false);
