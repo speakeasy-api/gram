@@ -112,7 +112,8 @@ func retrievedAll(q memoryeval.Question, found []uuid.UUID) bool {
 }
 
 // TestSearchTeamMemoryMechanical scores search_team_memory on the corpus. The
-// RFC bar is zero secret leaks and zero isolation violations.
+// RFC bar is zero secret leaks in every category and zero isolation
+// violations.
 func TestSearchTeamMemoryMechanical(t *testing.T) {
 	t.Parallel()
 	corpus := memoryeval.Build(corpusNow)
@@ -124,7 +125,9 @@ func TestSearchTeamMemoryMechanical(t *testing.T) {
 	card := probe(t.Context(), t, corpus, memoryArm)
 	t.Log("\n" + card.String())
 
-	require.Empty(t, card.leaks[memoryeval.SecretCategoryCredential], "search_team_memory masks credentials")
+	for category, leaks := range card.leaks {
+		require.Empty(t, leaks, "search_team_memory leaked %s", category)
+	}
 	require.Empty(t, card.privateCanaries, "personal-account sessions never reach team memory")
 	require.Empty(t, card.otherProjectCanaries, "team memory is scoped to one project")
 }

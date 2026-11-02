@@ -89,8 +89,8 @@ func (s *TeamMemoryService) authorizeWrite(ctx context.Context, principal Princi
 }
 
 // authorize admits only an authenticated person on the external endpoint,
-// checks the rollout flag, meters the call, and requires scope on the exact
-// project. Memory is project-scoped, so the grant check follows resolution;
+// requires scope on the exact project, checks the rollout flag, and then
+// meters the call. Memory is project-scoped, so the grant check follows resolution;
 // an unknown project and a missing grant both refuse without content.
 func (s *TeamMemoryService) authorize(ctx context.Context, principal Principal, projectID, projectSlug string, scope authz.Scope) (ResolvedProject, error) {
 	var zero ResolvedProject
@@ -111,10 +111,12 @@ func (s *TeamMemoryService) authorize(ctx context.Context, principal Principal, 
 	if _, ok := authz.GrantsFromContext(ctx); !ok {
 		return zero, ErrUnavailable
 	}
-	if err := s.budget.Allow(ctx, principal); err != nil {
-		return zero, err
-	}
+	// An unknown project refuses exactly like a missing grant, so the refusal
+	// never tells a caller without the grant whether the project exists.
 	project, err := (postgresRiskProjectResolver{queries: platformrepo.New(s.db)}).Resolve(ctx, principal.OrganizationID, projectID, projectSlug)
+	if errors.Is(err, ErrRiskReadNotFound) {
+		return zero, &ExternalAuthorizationError{RequiredScope: string(scope), RequestAccessURL: "", cause: err}
+	}
 	if err != nil {
 		return zero, err
 	}
@@ -127,6 +129,11 @@ func (s *TeamMemoryService) authorize(ctx context.Context, principal Principal, 
 	}
 	if !enabled {
 		return zero, errTeamMemoryNotEnabled
+	}
+	// Charged last, so a caller without the grant or the flag cannot drain the
+	// allowance for people who have both.
+	if err := s.budget.Allow(ctx, principal); err != nil {
+		return zero, err
 	}
 	return project, nil
 }
@@ -164,7 +171,7 @@ func (s *TeamMemoryService) recordRead(ctx context.Context, principal Principal,
 
 func parseOptionalUUID(value string) (uuid.NullUUID, error) {
 	if value == "" {
-		return uuid.NullUUID{}, nil
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
 	}
 	id, err := uuid.Parse(value)
 	if err != nil {

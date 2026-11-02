@@ -90,8 +90,14 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 	loaded := loadCorpus(t, "memoryeval_judged", corpus)
 	searchArm, err := bench.SearchChatsArm(testenv.NewLogger(t), loaded.target())
 	require.NoError(t, err)
+	// Arm C gets its own copy of the corpus: it writes proxy summaries, which
+	// arm B must not see.
+	memoryLoaded := loadCorpus(t, "memoryeval_judged_memory", corpus)
+	writeProxySummaries(t, memoryLoaded)
+	memoryArm, err := bench.SearchTeamMemoryArm(testenv.NewLogger(t), memoryLoaded.target())
+	require.NoError(t, err)
 
-	report, err := bench.Run(t.Context(), client, corpus, []bench.Arm{bench.NoMemoryArm(), searchArm}, cfg)
+	report, err := bench.Run(t.Context(), client, corpus, []bench.Arm{bench.NoMemoryArm(), searchArm, memoryArm}, cfg)
 	require.NoError(t, err)
 	markdown := report.Markdown()
 	t.Log("\n" + markdown)

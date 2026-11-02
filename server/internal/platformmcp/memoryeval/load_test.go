@@ -60,7 +60,7 @@ func writeProxySummaries(t *testing.T, loaded loadedCorpus) {
 		summary, _, err := redactor.Text(ctx, body.String())
 		require.NoError(t, err, chat.Key)
 		last := chat.Messages[len(chat.Messages)-1].At
-		_, err = loaded.db.Exec(ctx, `UPDATE chats SET summary = $2, summary_generated_at = $3, summary_redacted = true WHERE id = $1`, chat.ID, summary, last)
+		err = testrepo.New(loaded.db).SetChatMemorySummaryFixture(ctx, testrepo.SetChatMemorySummaryFixtureParams{ID: chat.ID, Summary: conv.ToPGText(summary), SummaryGeneratedAt: conv.ToPGTimestamptz(last)})
 		require.NoError(t, err, chat.Key)
 	}
 }
