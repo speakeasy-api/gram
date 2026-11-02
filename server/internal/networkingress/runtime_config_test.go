@@ -135,3 +135,48 @@ func completeRuntimeConfig() RuntimeConfig {
 		TokenAudience:  "gram-netingress",
 	}
 }
+
+func TestRuntimeConfigGatewayMutationReadiness(t *testing.T) {
+	t.Parallel()
+	config := RuntimeConfig{
+		ReconcileTaskQueue: "gram-dev-network-ingress", ProviderMutationsEnabled: true,
+		Gateway: GatewayRuntimeConfig{Enabled: true, Tag: "tag:speakeasy", Slots: 3, APIURL: ""},
+	}
+	require.NoError(t, config.Validate())
+	require.True(t, config.MutationReady(), "the gateway needs no operator settings")
+	require.False(t, config.OperatorApplyReady())
+
+	for _, test := range []struct {
+		name  string
+		clear func(*RuntimeConfig)
+	}{
+		{"tag", func(c *RuntimeConfig) { c.Gateway.Tag = "" }},
+		{"slots", func(c *RuntimeConfig) { c.Gateway.Slots = 0 }},
+		{"queue", func(c *RuntimeConfig) { c.ReconcileTaskQueue = "" }},
+		{"mutations", func(c *RuntimeConfig) { c.ProviderMutationsEnabled = false }},
+	} {
+		incomplete := config
+		test.clear(&incomplete)
+		require.NoError(t, incomplete.Validate(), test.name)
+		require.False(t, incomplete.MutationReady(), test.name)
+	}
+
+	for _, test := range []struct {
+		name string
+		set  func(*RuntimeConfig)
+	}{
+		{"bad tag", func(c *RuntimeConfig) { c.Gateway.Tag = "speakeasy" }},
+		{"too many slots", func(c *RuntimeConfig) { c.Gateway.Slots = 1000 }},
+		{"bad api url", func(c *RuntimeConfig) { c.Gateway.APIURL = "not a url" }},
+	} {
+		invalid := config
+		test.set(&invalid)
+		require.Error(t, invalid.Validate(), test.name)
+	}
+
+	// Enabling the gateway on an operator-complete configuration keeps it ready.
+	both := completeRuntimeConfig()
+	both.Gateway = GatewayRuntimeConfig{Enabled: true, Tag: "tag:speakeasy", Slots: 3, APIURL: "https://api.tailscale.com"}
+	require.True(t, both.MutationReady())
+	require.True(t, both.OperatorApplyReady())
+}

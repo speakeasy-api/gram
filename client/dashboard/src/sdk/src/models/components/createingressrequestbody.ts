@@ -15,9 +15,9 @@ export type CreateIngressRequestBodyProvider = ClosedEnum<
 
 export type CreateIngressRequestBody = {
   /**
-   * Lowercase DNS label
+   * Lowercase DNS label; defaults to speakeasy
    */
-  hostname: string;
+  hostname?: string | undefined;
   identityRequired?: boolean | undefined;
   oauthClientId: string;
   oauthClientSecret: string;
@@ -31,7 +31,7 @@ export const CreateIngressRequestBodyProvider$outboundSchema: z.ZodMiniEnum<
 
 /** @internal */
 export type CreateIngressRequestBody$Outbound = {
-  hostname: string;
+  hostname?: string | undefined;
   identity_required?: boolean | undefined;
   oauth_client_id: string;
   oauth_client_secret: string;
@@ -44,7 +44,7 @@ export const CreateIngressRequestBody$outboundSchema: z.ZodMiniType<
   CreateIngressRequestBody
 > = z.pipe(
   z.object({
-    hostname: z.string(),
+    hostname: z.optional(z.string()),
     identityRequired: z.optional(z.boolean()),
     oauthClientId: z.string(),
     oauthClientSecret: z.string(),

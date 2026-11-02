@@ -149,7 +149,11 @@ func ParseNetworkIngressResourceNames(encoded []byte) (NetworkIngressResourceNam
 // decrypted provider-opaque bytes and must remain in-memory only. Only the
 // selected provider adapter may decode their contents.
 type NetworkIngressDesired struct {
-	ID             uuid.UUID                   `json:"id"`
+	ID uuid.UUID `json:"id"`
+
+	// OrganizationID owns the ingress. Providers that keep per-organization
+	// state (the tailnet gateway) require it; the operator provider ignores it.
+	OrganizationID string                      `json:"organization_id"`
 	Provider       string                      `json:"provider"`
 	Hostname       string                      `json:"hostname"`
 	Credentials    []byte                      `json:"-"`
@@ -188,6 +192,13 @@ type NetworkIngressProvisioner interface {
 	// Delete returns nil only once all persisted resources are confirmed absent.
 	// ErrNetworkIngressDeletionPending is retryable while Kubernetes completes deletion.
 	Delete(context.Context, NetworkIngressResourceNames) error
+}
+
+// NetworkIngressCredentialedDeleter is implemented by providers whose teardown
+// must call the customer's provider API, such as deleting tailnet devices.
+// The executor prefers it over Delete whenever the saved credentials decrypt.
+type NetworkIngressCredentialedDeleter interface {
+	DeleteWithCredentials(context.Context, NetworkIngressResourceNames, []byte) error
 }
 
 type NetworkIngressProvisionerRegistry struct {

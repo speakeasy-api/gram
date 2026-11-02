@@ -129,6 +129,23 @@ func (p *observedNetworkIngressProvisioner) Delete(ctx context.Context, resource
 	return nil
 }
 
+// DeleteWithCredentials forwards to the wrapped provider when it needs
+// credentials for teardown and falls back to Delete otherwise.
+func (p *observedNetworkIngressProvisioner) DeleteWithCredentials(ctx context.Context, resources NetworkIngressResourceNames, credentials []byte) (err error) {
+	deleter, ok := p.provisioner.(NetworkIngressCredentialedDeleter)
+	if !ok {
+		return p.Delete(ctx, resources)
+	}
+	started := time.Now()
+	defer func() {
+		p.record(ctx, networkIngressOperationDelete, NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, err, time.Since(started))
+	}()
+	if err = deleter.DeleteWithCredentials(ctx, resources, credentials); err != nil {
+		return fmt.Errorf("delete network ingress resources: %w", err)
+	}
+	return nil
+}
+
 func (p *observedNetworkIngressProvisioner) record(ctx context.Context, operation string, observation NetworkIngressObservation, err error, duration time.Duration) {
 	result := networkIngressResultSuccess
 	errorCode := networkIngressErrorCodeNone

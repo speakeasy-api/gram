@@ -182,6 +182,37 @@ func (p *TailscaleNetworkIngressProvisioner) Apply(ctx context.Context, desired 
 	return p.observe(ctx, desired.Resources, desired.Hostname)
 }
 
+// HasResources reports whether the operator still owns Kubernetes resources
+// for the ingress, which is how the tailnet gateway cutover decides whether a
+// teardown must finish before the gateway takes over.
+func (p *TailscaleNetworkIngressProvisioner) HasResources(ctx context.Context, resources NetworkIngressResourceNames) (bool, error) {
+	if err := resources.Validate(); err != nil {
+		return false, err
+	}
+	ownerID := resources.OwnerID.String()
+	namespace, err := p.clientset.CoreV1().Namespaces().Get(ctx, resources.Namespace, metav1.GetOptions{})
+	switch {
+	case err == nil:
+		if err := ensureResourceOwned(namespace.GetLabels(), ownerID); err != nil {
+			return false, fmt.Errorf("refuse to adopt namespace: %w", err)
+		}
+		return true, nil
+	case !k8serrors.IsNotFound(err):
+		return false, fmt.Errorf("get namespace: %w", err)
+	}
+	tailnet, err := p.dynamic.Resource(tailnetGVR).Get(ctx, resources.Tailnet, metav1.GetOptions{})
+	switch {
+	case err == nil:
+		if err := ensureResourceOwned(tailnet.GetLabels(), ownerID); err != nil {
+			return false, fmt.Errorf("refuse to adopt Tailnet: %w", err)
+		}
+		return true, nil
+	case !k8serrors.IsNotFound(err):
+		return false, fmt.Errorf("get Tailnet: %w", err)
+	}
+	return false, nil
+}
+
 //nolint:exhaustruct // observations intentionally populate only known current state.
 func (p *TailscaleNetworkIngressProvisioner) observe(ctx context.Context, resources NetworkIngressResourceNames, desiredHostname string) (NetworkIngressObservation, error) {
 	if err := resources.Validate(); err != nil {
