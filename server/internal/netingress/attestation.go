@@ -63,9 +63,9 @@ type hostEntry struct {
 	lastChecked time.Time
 }
 
-// maxGatewayHostsPerToken bounds host resolutions cached under one gateway
-// token. A gateway serves at most the ingresses it hosts, so this is ample,
-// and it stops a flood of unknown hosts from growing the entry.
+// maxGatewayHostsPerToken bounds the successfully resolved hosts cached under
+// one gateway token; unknown hosts are never stored. A gateway serves at most
+// the ingresses it hosts, so this is ample.
 const maxGatewayHostsPerToken = 256
 
 type AttestationVerifier struct {
