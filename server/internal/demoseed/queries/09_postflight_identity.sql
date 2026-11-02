@@ -254,7 +254,13 @@ WHERE (SELECT count(*) FROM live) = 26
      AND mcp_server_id = @github_server_id::uuid
      AND remote_session_client_id IS NULL
      AND auth_client_id = @github_auth_client_id::uuid
-     AND no_auth IS FALSE)
+     AND no_auth IS FALSE
+     AND EXISTS (SELECT 1 FROM mcp_auth_clients ac
+                 JOIN mcp_server_auth_clients l
+                   ON l.auth_client_id = ac.id AND l.mcp_server_id = live.mcp_server_id
+                  AND l.project_id = @project_id::uuid AND l.deleted IS FALSE
+                 WHERE ac.id = live.auth_client_id AND ac.organization_id = live.organization_id
+                   AND ac.deleted IS FALSE AND ac.enabled))
     OR
     (credential_id = ANY(@org_session_ids::uuid[])
      AND no_auth IS FALSE
@@ -287,7 +293,13 @@ WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
           AND u.mcp_server_id = ANY(@org_no_auth_server_ids::uuid[]) AND u.no_auth)
       OR (u.credential_id = ANY(@org_session_ids::uuid[])
           AND u.mcp_server_id = @github_server_id::uuid AND u.remote_session_client_id IS NULL
-          AND u.auth_client_id = @github_auth_client_id::uuid AND NOT u.no_auth)
+          AND u.auth_client_id = @github_auth_client_id::uuid AND NOT u.no_auth
+          AND EXISTS (SELECT 1 FROM mcp_auth_clients ac
+                      JOIN mcp_server_auth_clients l
+                        ON l.auth_client_id = ac.id AND l.mcp_server_id = u.mcp_server_id
+                       AND l.project_id = @project_id::uuid AND l.deleted IS FALSE
+                      WHERE ac.id = u.auth_client_id AND ac.organization_id = u.organization_id
+                        AND ac.deleted IS FALSE AND ac.enabled))
       OR (u.credential_id = ANY(@org_session_ids::uuid[]) AND NOT u.no_auth
           AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
                       WHERE a.mcp_server_id = u.mcp_server_id
