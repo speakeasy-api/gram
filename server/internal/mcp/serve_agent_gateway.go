@@ -265,6 +265,9 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 		return nil, metaMemberClientCredentialError(member, err)
 	}
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("resolve agent member credential: %w", ctx.Err())
+	}
 	if err != nil {
 		return nil, agentMemberCredentialError(member)
 	}

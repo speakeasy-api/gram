@@ -293,6 +293,9 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, sess remo
 		// pgx.ErrNoRows case above), while one that clears on its own or
 		// needs an administrator comes back as its refined ErrNoValidToken.
 		m.logger.WarnContext(ctx, "remote session unusable: upstream token refresh failed", refreshFailureAttrs(sess, err)...)
+		if refreshErr, ok := errors.AsType[*RefreshError](err); ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeCanceled {
+			return zero, fmt.Errorf("refresh canceled: %w", err)
+		}
 		switch {
 		case errors.Is(err, ErrRemoteSessionUnavailable):
 			outage := &SessionOutageError{err: err}
@@ -1058,6 +1061,7 @@ func (s *RefreshService) refreshSessionTokens(
 	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
 	sess remotesessions_repo.RemoteSession,
 	resource string,
+	postDeadline time.Time,
 ) (remotesessions_repo.RemoteSession, tokenResponse, error) {
 	var zero remotesessions_repo.RemoteSession
 	var noToken tokenResponse
@@ -1110,7 +1114,7 @@ func (s *RefreshService) refreshSessionTokens(
 
 	// One deadline bounds both POSTs so an unresponsive upstream cannot
 	// outlive the single-flight lease; the persist below still runs on ctx.
-	postCtx, cancel := context.WithTimeout(ctx, refreshUpstreamTimeout)
+	postCtx, cancel := context.WithDeadline(ctx, postDeadline)
 	defer cancel()
 
 	clientAuth := TokenEndpointClientAuth{

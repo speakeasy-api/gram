@@ -95,9 +95,11 @@ func (e *RefreshError) Is(target error) bool {
 	case remotesessionmetrics.RefreshOutcomeUpstreamError,
 		remotesessionmetrics.RefreshOutcomeRateLimited,
 		remotesessionmetrics.RefreshOutcomeUnreachable,
-		remotesessionmetrics.RefreshOutcomeCanceled,
 		remotesessionmetrics.RefreshOutcomeDeferred:
 		return target == ErrRemoteSessionUnavailable
+	case remotesessionmetrics.RefreshOutcomeCanceled:
+		// The caller went away: the POST may have rotated the token, and nothing here is an outage.
+		return false
 	case remotesessionmetrics.RefreshOutcomeRejected,
 		remotesessionmetrics.RefreshOutcomeRejectedUnparsed:
 		// The upstream refused the client's request rather than the grant, so
@@ -320,12 +322,24 @@ const (
 	refreshWaitPoll       = 200 * time.Millisecond
 	refreshReleaseTimeout = 5 * time.Second
 
+	// refreshLeaseMargin keeps a POST and its write inside the lease, so the next holder never presents a token in flight.
+	refreshLeaseMargin = time.Second
+
 	// refreshOutageCooldown paces retries after an outage: callers are told to retry.
 	refreshOutageCooldown = 30 * time.Second
 
 	// refreshOutageCooldownMax caps a provider's Retry-After against an odd header.
 	refreshOutageCooldownMax = 5 * time.Minute
 )
+
+// refreshPostDeadline bounds the POST by the lease as well as its own timeout: setup time comes out of the lease.
+func refreshPostDeadline(lockAcquiredAt, now time.Time) time.Time {
+	leaseEnd := lockAcquiredAt.Add(refreshLockTTL - refreshLeaseMargin)
+	if timeout := now.Add(refreshUpstreamTimeout); timeout.Before(leaseEnd) {
+		return timeout
+	}
+	return leaseEnd
+}
 
 func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
 	return "remotesession:refresh:" + subject.String() + ":" + clientID.String()
@@ -710,7 +724,12 @@ func (s *RefreshService) refresh(
 		return zero, nil, nil, refreshClientLoadError(err)
 	}
 
-	updated, tok, refreshErr := s.refreshSessionTokens(ctx, q, client, sess, resource)
+	now := time.Now()
+	postDeadline := refreshPostDeadline(lockAcquiredAt, now)
+	if !postDeadline.After(now) {
+		return zero, &client, nil, &refreshDeferredError{wait: refreshOutageCooldown}
+	}
+	updated, tok, refreshErr := s.refreshSessionTokens(ctx, q, client, sess, resource, postDeadline)
 	if refreshErr == nil {
 		accessToken := tok.AccessToken
 		// The issuer authenticated the client, so an earlier rejection was not

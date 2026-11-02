@@ -183,3 +183,16 @@ func mustSuccessBodyError(t *testing.T, statusCode int, status string, body []by
 	require.True(t, ok, "body carries no recognizable OAuth error")
 	return err
 }
+
+func TestRefreshPostDeadlineStaysInsideLease(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	require.Equal(t, now.Add(refreshUpstreamTimeout), refreshPostDeadline(now, now), "a fresh lease leaves the full timeout")
+
+	lateSetup := now.Add(-5 * time.Second)
+	require.Equal(t, lateSetup.Add(refreshLockTTL-refreshLeaseMargin), refreshPostDeadline(lateSetup, now), "slow setup shortens the POST, never the lease")
+
+	spent := now.Add(-refreshLockTTL)
+	require.False(t, refreshPostDeadline(spent, now).After(now), "a spent lease allows no POST")
+}
