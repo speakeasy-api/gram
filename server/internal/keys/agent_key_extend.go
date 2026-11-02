@@ -42,8 +42,17 @@ func (s *Service) ExtendAgentKeys(ctx context.Context, payload *gen.ExtendAgentK
 	if err != nil {
 		return nil, err
 	}
-	if slices.Contains(payload.AuthClientChoices, nil) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "credential choice must not be null")
+	for _, choice := range payload.AuthClientChoices {
+		if choice == nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "credential choice must not be null")
+		}
+		// A choice is for a server this call adds. One naming any other
+		// server would otherwise be dropped and the key left without it.
+		if !slices.ContainsFunc(additions, func(grant authz.Grant) bool {
+			return grant.Selector[authz.SelectorKeyResourceID] == choice.McpServerID
+		}) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "credential choice for server %q names no server in requested_grants", choice.McpServerID)
+		}
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -86,10 +95,17 @@ func (s *Service) ExtendAgentKeys(ctx context.Context, payload *gen.ExtendAgentK
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid delegated grants")
 		}
-		if err := s.requireWithinAgentKeyBounds(ctx, bounds, policy); err != nil {
+		// Only what this call delegates. A grant the key already holds was
+		// checked when it was delegated, and one the agent has since lost is
+		// already refused on every request; it must not block new servers.
+		delegated, err := runtimepolicy.NewDelegatedPolicy(version, added)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid delegated grants")
+		}
+		if err := s.requireWithinAgentKeyBounds(ctx, bounds, delegated); err != nil {
 			return nil, err
 		}
-		for _, grant := range policy.Effective {
+		for _, grant := range delegated.Effective {
 			if err := authz.RequireUpstreamSelectorWrites(ctx, human.Auth.ActiveOrganizationID, grant.Selector); err != nil {
 				return nil, oops.E(oops.CodeForbidden, err, "check upstream_client write gate")
 			}

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -102,6 +103,52 @@ func TestKeysService_ExtendAgentKeysRecordsCredentialForAddedServer(t *testing.T
 	choice, err := clients.GetSelectionFixture(ctx, authclientbackfill.GetSelectionFixtureParams{CredentialID: uuid.MustParse(created.ID), McpServerID: serverID})
 	require.NoError(t, err)
 	require.Equal(t, uuid.NullUUID{UUID: shared, Valid: true}, choice.AuthClientID)
+}
+
+func TestKeysService_ExtendAgentKeysIgnoresServerTheAgentLost(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestKeysService(t)
+	agentID, first := connectAgentFixture(t, ctx, ti)
+	created, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
+		AgentID: new(agentID.String()), Name: "gateway key", DelegatedGrantsVersion: new(2),
+		RequestedGrants: []*gen.AgentPolicyGrantForm{connectForm(first)},
+	})
+	require.NoError(t, err)
+
+	// An earlier edit took the first server away from the agent. The key still
+	// names it, which must not stop it gaining the next server.
+	selectors, err := authz.NewSelector(authz.ScopeMCPConnect, first).MarshalJSON()
+	require.NoError(t, err)
+	removed, err := accessrepo.New(ti.conn).DeletePrincipalGrantByIdentity(ctx, accessrepo.DeletePrincipalGrantByIdentityParams{
+		OrganizationID: testAuthContext(t, ctx).ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()),
+		Scope: string(authz.ScopeMCPConnect), Selectors: selectors,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), removed)
+
+	second := uuid.NewString()
+	grantConnect(t, ctx, ti, agentID, second)
+	extended, err := ti.service.ExtendAgentKeys(ctx, &gen.ExtendAgentKeysPayload{
+		AgentID: agentID.String(), RequestedGrants: []*gen.ExtendAgentKeyGrantForm{extendForm(second)},
+	})
+	require.NoError(t, err)
+	require.Len(t, extended.Keys, 1)
+	require.Equal(t, created.ID, extended.Keys[0].ID)
+	require.ElementsMatch(t, []string{first, second}, requestedServers(extended.Keys[0]))
+}
+
+func TestKeysService_ExtendAgentKeysRejectsChoiceForUnrequestedServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestKeysService(t)
+	agentID, first := connectAgentFixture(t, ctx, ti)
+	_, err := ti.service.ExtendAgentKeys(ctx, &gen.ExtendAgentKeysPayload{
+		AgentID:           agentID.String(),
+		RequestedGrants:   []*gen.ExtendAgentKeyGrantForm{extendForm(first)},
+		AuthClientChoices: []*gen.AgentKeyAuthClientChoice{{McpServerID: uuid.NewString()}},
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestKeysService_ExtendAgentKeysRejectsServerOutsideAgentPolicy(t *testing.T) {
