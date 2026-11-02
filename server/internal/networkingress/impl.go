@@ -186,7 +186,8 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 	if payload.Provider != ProviderTailscale {
 		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported network ingress provider")
 	}
-	if err := validateHostname(payload.Hostname); err != nil {
+	hostname := conv.PtrValOr(payload.Hostname, DefaultHostname)
+	if err := validateHostname(hostname); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
 	}
 	credentials, err := s.encryptCredentials(payload.OauthClientID, payload.OauthClientSecret)
@@ -238,7 +239,7 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 
 	ingress, err := queries.CreateNetworkIngress(ctx, repo.CreateNetworkIngressParams{
 		ID: ingressID, OrganizationID: authCtx.ActiveOrganizationID, Provider: payload.Provider,
-		Hostname: payload.Hostname, EndpointNamespaceKind: namespaceKind, CustomDomainID: customDomainID,
+		Hostname: hostname, EndpointNamespaceKind: namespaceKind, CustomDomainID: customDomainID,
 		Enabled: true, IdentityRequired: conv.PtrValOr(payload.IdentityRequired, false), CredentialsEncrypted: credentials,
 		AttestorNamespace: resources.Namespace, AttestorServiceAccount: resources.AttestorServiceAccount, ProviderResources: providerResources,
 	})

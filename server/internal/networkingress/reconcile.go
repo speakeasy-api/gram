@@ -33,6 +33,10 @@ type ExecutorOptions struct {
 	// BackendPort is the private backend Service port.
 	BackendPort int32
 
+	// AttestorRequired means the registered provider deploys an attestor and
+	// therefore needs Image, BackendService and BackendPort before applying.
+	AttestorRequired bool
+
 	// CanApply is checked on every attempt before credential decryption.
 	CanApply func(context.Context) error
 
@@ -161,7 +165,7 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 			}
 			callCtx, callCancel := context.WithTimeout(ctx, 2*time.Minute)
 			observation, operationErr = provider.Apply(callCtx, k8s.NetworkIngressDesired{
-				ID: row.ID, Provider: row.Provider, Hostname: row.Hostname, Credentials: []byte(credentials), Resources: resources,
+				ID: row.ID, OrganizationID: row.OrganizationID, Provider: row.Provider, Hostname: row.Hostname, Credentials: []byte(credentials), Resources: resources,
 				AttestorImage: e.options.Image, BackendService: e.options.BackendService, BackendPort: e.options.BackendPort,
 			})
 			callCancel()
@@ -193,7 +197,10 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 }
 
 func (e *Executor) applyGate(ctx context.Context) string {
-	if e.enc == nil || e.options.Queue == "" || e.options.Image == "" || e.options.BackendService == "" || e.options.BackendPort <= 0 || e.options.BackendPort > 65535 {
+	if e.enc == nil || e.options.Queue == "" {
+		return "provider_configuration_unavailable"
+	}
+	if e.options.AttestorRequired && (e.options.Image == "" || e.options.BackendService == "" || e.options.BackendPort <= 0 || e.options.BackendPort > 65535) {
 		return "provider_configuration_unavailable"
 	}
 	if e.options.CanApply == nil || e.options.CanApply(ctx) != nil {
@@ -215,7 +222,7 @@ func (e *Executor) cleanup(ctx context.Context, conn *pgxpool.Conn, row repo.Net
 		return ReconcileResult{Requeue: false}, reconcileFailure("provider_configuration_unavailable")
 	}
 	callCtx, callCancel := context.WithTimeout(ctx, 2*time.Minute)
-	err = provider.Delete(callCtx, resources)
+	err = e.deleteProviderResources(callCtx, provider, row, resources)
 	callCancel()
 	if err != nil {
 		failure := providerFailure(err, "")
@@ -256,6 +263,22 @@ func (e *Executor) cleanup(ctx context.Context, conn *pgxpool.Conn, row repo.Net
 		return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
 	}
 	return ReconcileResult{Requeue: false}, nil
+}
+
+// deleteProviderResources hands the saved credentials to providers whose
+// teardown calls the customer's provider API. Credentials that are missing or
+// no longer decrypt fall back to the credential-free path, which surfaces the
+// blocker through the provider's own error.
+func (e *Executor) deleteProviderResources(ctx context.Context, provider k8s.NetworkIngressProvisioner, row repo.NetworkIngress, resources k8s.NetworkIngressResourceNames) error {
+	deleter, ok := provider.(k8s.NetworkIngressCredentialedDeleter)
+	if !ok || e.enc == nil || !row.CredentialsEncrypted.Valid || row.CredentialsEncrypted.String == "" {
+		return provider.Delete(ctx, resources) //nolint:wrapcheck // provider errors are classified by providerFailure
+	}
+	credentials, err := e.enc.Decrypt(row.CredentialsEncrypted.String)
+	if err != nil || credentials == "" {
+		return provider.Delete(ctx, resources) //nolint:wrapcheck // provider errors are classified by providerFailure
+	}
+	return deleter.DeleteWithCredentials(ctx, resources, []byte(credentials)) //nolint:wrapcheck // provider errors are classified by providerFailure
 }
 
 // recordCleanupBlocker exposes why a tombstone cannot finish cleanup, or clears

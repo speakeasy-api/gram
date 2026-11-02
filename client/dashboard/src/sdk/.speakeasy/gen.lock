@@ -5487,7 +5487,7 @@ examples:
   createNetworkIngress:
     speakeasy-default-create-network-ingress:
       requestBody:
-        application/json: {"hostname": "dapper-diagram.name", "oauth_client_id": "<id>", "oauth_client_secret": "<value>", "provider": "tailscale"}
+        application/json: {"oauth_client_id": "<id>", "oauth_client_secret": "<value>", "provider": "tailscale"}
       responses:
         "200":
           application/json: {"created_at": "2026-03-27T06:26:17.101Z", "credentials_configured": true, "enabled": true, "endpoint_namespace_kind": "custom_domain", "hostname": "teeming-switch.biz", "id": "b2c68e9e-832e-41a7-9b11-5ac744b3bb24", "identity_required": false, "organization_id": "<id>", "provider": "tailscale", "status": "<value>", "updated_at": "2024-03-04T06:53:28.935Z"}

@@ -20,6 +20,16 @@ type lifecycleProvider struct {
 	delete  func(context.Context, k8s.NetworkIngressResourceNames) error
 }
 
+// credentialedProvider also receives the saved credentials during teardown.
+type credentialedProvider struct {
+	lifecycleProvider
+	deleteWithCredentials func(context.Context, k8s.NetworkIngressResourceNames, []byte) error
+}
+
+func (p credentialedProvider) DeleteWithCredentials(ctx context.Context, r k8s.NetworkIngressResourceNames, creds []byte) error {
+	return p.deleteWithCredentials(ctx, r, creds)
+}
+
 func (p lifecycleProvider) Apply(ctx context.Context, d k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
 	return p.apply(ctx, d)
 }
@@ -312,4 +322,69 @@ func TestNetworkIngressExecutorDeleteWinsDuringPartialApply(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, row.Deleted)
 	require.False(t, row.CredentialsEncrypted.Valid)
+}
+
+func TestNetworkIngressExecutorHandsCredentialsToProviderTeardown(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	id := uuid.MustParse(ti.create(t, ctx).ID)
+	require.NoError(t, ti.service.DeleteIngress(ctx, &gen.DeleteIngressPayload{}))
+	var received []byte
+	plainDeletes := 0
+	provider := credentialedProvider{
+		lifecycleProvider: lifecycleProvider{apply: nil, observe: nil, delete: func(context.Context, k8s.NetworkIngressResourceNames) error {
+			plainDeletes++
+			return nil
+		}},
+		deleteWithCredentials: func(_ context.Context, _ k8s.NetworkIngressResourceNames, creds []byte) error {
+			received = creds
+			return nil
+		},
+	}
+	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
+	require.NoError(t, err)
+	enc := testenv.NewEncryptionClient(t)
+	executor := networkingress.NewExecutor(ti.conn, enc, registry, networkingress.ExecutorOptions{})
+
+	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	require.NoError(t, err)
+	require.Zero(t, plainDeletes)
+	require.JSONEq(t, `{"client_id":"client-id","client_secret":"client-secret"}`, string(received))
+
+	// Without an encryption client the credential-free path is used.
+	received = nil
+	id = uuid.MustParse(ti.create(t, ctx).ID)
+	require.NoError(t, ti.service.DeleteIngress(ctx, &gen.DeleteIngressPayload{}))
+	executor = networkingress.NewExecutor(ti.conn, nil, registry, networkingress.ExecutorOptions{})
+	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	require.NoError(t, err)
+	require.Nil(t, received)
+	require.Equal(t, 1, plainDeletes)
+}
+
+func TestNetworkIngressExecutorApplyGateSkipsAttestorSettingsForGateway(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	id := uuid.MustParse(ti.create(t, ctx).ID)
+	var applied k8s.NetworkIngressDesired
+	provider := lifecycleProvider{
+		apply: func(_ context.Context, d k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
+			applied = d
+			return k8s.NetworkIngressObservation{Status: "pending", DNSName: "", ErrorCode: "", ConnectedAt: nil}, nil
+		},
+		observe: func(context.Context, k8s.NetworkIngressResourceNames) (k8s.NetworkIngressObservation, error) {
+			return k8s.NetworkIngressObservation{Status: "pending", DNSName: "", ErrorCode: "", ConnectedAt: nil}, nil
+		},
+		delete: nil,
+	}
+	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
+	require.NoError(t, err)
+	executor := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{
+		Queue: "test-network-ingress", AttestorRequired: false, CanApply: func(context.Context) error { return nil },
+	})
+	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	require.NoError(t, err)
+	require.Equal(t, id, applied.ID)
+	require.Equal(t, ti.orgID, applied.OrganizationID, "the gateway provider needs the owning organization")
+	require.NotEmpty(t, applied.Credentials)
 }

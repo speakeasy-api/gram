@@ -122,8 +122,11 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			if err := validateNetworkIngressWorkerTemporalTLS(c.String("environment"), c.String("temporal-client-cert"), c.String("temporal-client-key")); err != nil {
 				return err
 			}
-			if c.String("network-ingress-operator-namespace") == "" {
+			if c.Bool("network-ingress-operator-provider-enabled") && c.String("network-ingress-operator-namespace") == "" {
 				return errors.New("private ingress operator namespace is required for observation and cleanup")
+			}
+			if !c.Bool("network-ingress-operator-provider-enabled") && !c.Bool("network-ingress-gateway-enabled") {
+				return errors.New("private ingress reconciler needs the operator provider or the tailnet gateway enabled")
 			}
 
 			serviceName := "gram-network-ingress-worker"
@@ -193,8 +196,8 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create Kubernetes client: %w", err)
 			}
-			if k8sClient.Clientset == nil || k8sClient.DynamicClient == nil {
-				return errors.New("private ingress reconciler requires in-cluster Kubernetes clients")
+			if config.OperatorProviderEnabled && (k8sClient.Clientset == nil || k8sClient.DynamicClient == nil) {
+				return errors.New("private ingress reconciler requires in-cluster Kubernetes clients while the operator provider is enabled")
 			}
 			publicationRequester := plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)}
 			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, config, publicationRequester)
@@ -217,9 +220,11 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			)
 			healthMux := http.NewServeMux()
 			healthMux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-				if err := checkNetworkIngressWorkerKubernetes(r.Context(), k8sClient.Clientset); err != nil {
-					http.Error(w, "kubernetes dependency unavailable", http.StatusServiceUnavailable)
-					return
+				if config.OperatorProviderEnabled {
+					if err := checkNetworkIngressWorkerKubernetes(r.Context(), k8sClient.Clientset); err != nil {
+						http.Error(w, "kubernetes dependency unavailable", http.StatusServiceUnavailable)
+						return
+					}
 				}
 				healthHandler.ServeHTTP(w, r)
 			})
