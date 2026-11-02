@@ -1783,7 +1783,7 @@ PARTITION BY toDate(attempt_started_at)
 ORDER BY (organization_id, project_id, server_kind, server_id, attempt_started_at, attempt_id, event_time)
 TTL toDateTime(attempt_started_at) + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1
-COMMENT 'One row per step of an MCP connection attempt, successes included. Metadata only and never updated.';
+COMMENT 'One row per step of an MCP connection attempt, successes included. Used for drill-in on one attempt, person or server. Rows are never updated. Kept 30 days.';
 
 CREATE INDEX IF NOT EXISTS idx_mcp_connection_events_attempt_id ON mcp_connection_events (attempt_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_mcp_connection_events_subject_urn ON mcp_connection_events (subject_urn) TYPE bloom_filter(0.01) GRANULARITY 1;
@@ -1816,7 +1816,7 @@ PRIMARY KEY (organization_id, project_id, server_kind, server_id, bucket)
 ORDER BY (organization_id, project_id, server_kind, server_id, bucket, step, step_result, outcome, reason, who_fixes, grant_type, member_id, provider_host, app_key)
 TTL bucket + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1
-COMMENT 'Connection attempt counts per 30-minute bucket of attempt start, from mcp_connection_events';
+COMMENT 'MCP connection attempts per 30-minute bucket of attempt start, for rates and trends. Filled by a view on mcp_connection_events. Abandoned is exact only per org, project, server and bucket. Kept 90 days.';
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mcp_connection_attempt_summaries_mv TO mcp_connection_attempt_summaries AS
 SELECT
@@ -1859,7 +1859,7 @@ PARTITION BY toYYYYMM(day)
 ORDER BY (provider, app, step, day, outcome, reason, fixed_by, computed_at)
 TTL day + INTERVAL 13 MONTH
 SETTINGS index_granularity = 8192
-COMMENT 'Daily connection outcomes across orgs for long-term learning. Filled by a daily job, not a materialized view. Holds no org, project or person. A rerun adds rows, so readers keep only the latest computed_at per day.';
+COMMENT 'Long-term daily counts of connection outcomes per provider and app, for trends beyond raw retention. No org, project or person. Written by a daily job, and readers keep only the latest run per day. Kept 13 months.';
 
 CREATE TABLE IF NOT EXISTS authz_challenge_bucket_summaries (
     challenge_date Date COMMENT 'UTC date of the summarized challenge rows.\n@access: confidential',
