@@ -52,7 +52,7 @@ var connectionEndings = []connectionEnding{
 	{connectionevents.StepProviderSignIn, connectionevents.CodeProviderOAuthInvalidClient},
 	{connectionevents.StepProviderSignIn, connectionevents.CodeProviderRateLimited},
 	{connectionevents.StepProviderSignIn, connectionevents.CodeTunnelUnavailable},
-	{connectionevents.StepProviderSignIn, connectionevents.CodeCanceled},
+	{connectionevents.StepProviderSignIn, connectionevents.CodeProviderDenied},
 	{connectionevents.StepInboundSignIn, connectionevents.CodeNotOrgMember},
 }
 

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,8 +19,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/connectionevents"
 	"github.com/speakeasy-api/gram/server/internal/connectionevents/connectioneventstest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -147,6 +152,68 @@ func TestAuthorize_OrganizationGatewayRecordsNoProject(t *testing.T) {
 	require.Equal(t, uuid.Nil, rows[0].ProjectID)
 	require.Equal(t, "meta", rows[0].ServerKind)
 	require.Equal(t, connectionevents.AppDCR.String(), rows[0].AppKey)
+}
+
+// A sign-in for a member the organization gateway claimed names that member, so
+// the rollup can tie the gateway's sign-in to a server.
+func TestConsentConnect_OrganizationGatewayMemberIsRecorded(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	gateway := seedOrganizationGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
+	memberSlug := "claimed-" + uuid.NewString()[:8]
+	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "claimed member", memberSlug, 0, mcpservers.VisibilityPublic)
+	member, err := mcpserversrepo.New(ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(memberSlug), ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	client := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "orggw-"+uuid.NewString()[:8], "", []uuid.UUID{member.UserSessionIssuerID.UUID, gateway.issuerID})
+	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{member.UserSessionIssuerID.UUID}))
+
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, testenv.NewLogger(t), gateway.organizationSlug, "mcp/gateway")
+	require.NoError(t, err)
+	require.True(t, endpoint.IsOrganizationGateway())
+
+	stateID := uuid.NewString()
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:                  stateID,
+		FlowID:              uuid.NewString(),
+		UserSessionIssuerID: gateway.issuerID,
+		Endpoint: mcp.EndpointRef{
+			McpSlug:         endpoint.Slug,
+			RouteBase:       endpoint.RouteBase,
+			MetaMcpServerID: endpoint.MetaMcpServerID,
+			CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		},
+		ClientID:    "org-gateway-mcp-client",
+		RedirectURI: "http://example.com/cb",
+		CSRFToken:   "csrf-token",
+		Subject:     &gateway.subject,
+		CreatedAt:   time.Now(),
+	}))
+
+	form := url.Values{"state": {stateID}, "csrf_token": {"csrf-token"}, "action": {"connect"}, "client_id": {client.String()}}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/gateway/"+endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeConsentAction(w, req, endpoint))
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+
+	rec := connectioneventstest.New(t)
+	manager := ti.service.RemoteChallengeManager()
+	remotesessions.WithConnectionRecorder(rec.Recorder)(manager)
+	callback := httptest.NewRequestWithContext(ctx, http.MethodGet, "/mcp/remote_login_callback?error=access_denied&state="+url.QueryEscape(loc.Query().Get("state")), nil)
+	_, err = manager.CompleteRemoteLogin(callback)
+	require.NoError(t, err)
+
+	row := rec.RequireStep(connectionevents.StepProviderSignIn, connectionevents.CodeProviderDenied)
+	require.Equal(t, member.ID.String(), row.MemberID)
+	require.Equal(t, endpoint.MetaMcpServerID.UUID.String(), row.ServerID)
+	require.Equal(t, uuid.Nil, row.ProjectID)
 }
 
 // A dashboard connect and its return to consent stay on one attempt, however
