@@ -136,7 +136,7 @@ func (s *TeamMemoryService) search(ctx context.Context, principal Principal, pro
 		OrganizationID: principal.OrganizationID, ProjectID: project.ID,
 		IncludeChats: includeChats, IncludeMemos: includeMemos, IncludeDigests: includeDigests,
 		FromTime: conv.ToPGTimestamptz(from), ToTime: conv.ToPGTimestamptz(to),
-		Query: query, RowLimit: int32(limit),
+		Query: query, RowLimit: conv.SafeInt32(limit),
 	})
 	if err != nil {
 		return zero, fmt.Errorf("search team memory: %w", err)
