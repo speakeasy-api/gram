@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,12 +15,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -29,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -42,6 +48,9 @@ type memberRefreshOutageFixture struct {
 	clientID uuid.UUID
 	down     *atomic.Bool
 	upstream *atomic.Value
+
+	// memberCalls counts MCP calls that reached the member.
+	memberCalls *atomic.Int32
 
 	// refreshes counts POSTs to the provider's token endpoint.
 	refreshes *atomic.Int32
@@ -77,10 +86,15 @@ func newMemberRefreshOutageFixture(t *testing.T, ctx context.Context, ti *testIn
 	}))
 	t.Cleanup(provider.Close)
 
+	memberCalls := &atomic.Int32{}
 	lastAuthorization := &atomic.Value{}
 	lastAuthorization.Store("")
+	// The protected resource prober GETs the member on its own schedule; only MCP calls count here.
 	member := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		lastAuthorization.Store(r.Header.Get("Authorization"))
+		if r.Method == http.MethodPost {
+			memberCalls.Add(1)
+			lastAuthorization.Store(r.Header.Get("Authorization"))
+		}
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	t.Cleanup(member.Close)
@@ -120,7 +134,8 @@ func newMemberRefreshOutageFixture(t *testing.T, ctx context.Context, ti *testIn
 		down:     down,
 		upstream: lastAuthorization,
 
-		refreshes: refreshes,
+		memberCalls: memberCalls,
+		refreshes:   refreshes,
 	}
 }
 
@@ -152,7 +167,7 @@ func TestServePublic_MetaEndpoint_RefreshOutageIsRetryableThenRecovers(t *testin
 	require.Contains(t, text, "If it keeps happening, reconnect at")
 	require.Contains(t, text, "/connect/first-party?server=member", "reconnecting stays offered, since a provider can answer 5xx for one bad token")
 	require.NotContains(t, text, "not connected")
-	require.Empty(t, f.upstream.Load(), "an outage never turns into an anonymous call")
+	require.Zero(t, f.memberCalls.Load(), "an outage never turns into an anonymous call")
 	require.EqualValues(t, 1, f.refreshes.Load())
 
 	status := f.connectionStatus(t, ctx)
@@ -255,6 +270,11 @@ func TestDatabaseOutageAnswersRetryably(t *testing.T) {
 	require.NotEmpty(t, token.Header().Get("Retry-After"))
 	require.Contains(t, token.Body.String(), "temporarily_unavailable")
 
+	discovery := httptest.NewRecorder()
+	oops.AuthErrHandle(testenv.NewLogger(t), ti.service.HandleGetProtectedResource).ServeHTTP(discovery, wellKnownRequest(t, "/.well-known/oauth-protected-resource/mcp/", f.metaSlug))
+	require.Equal(t, http.StatusServiceUnavailable, discovery.Code, discovery.Body.String())
+	require.NotEmpty(t, discovery.Header().Get("Retry-After"))
+
 	shared := httptest.NewRecorder()
 	oops.OAuthErrHandle(testenv.NewLogger(t), ti.service.HandleSharedToken).ServeHTTP(shared, sharedRequest(ctx, http.MethodPost, "/oauth/usi/"+uuid.NewString()+"/token", uuid.NewString(), strings.NewReader(form.Encode())))
 	require.Equal(t, http.StatusServiceUnavailable, shared.Code, shared.Body.String())
@@ -267,4 +287,53 @@ func TestDatabaseOutageAnswersRetryably(t *testing.T) {
 	missing := httptest.NewRecorder()
 	oops.OAuthErrHandle(testenv.NewLogger(t), ti.service.HandleSharedToken).ServeHTTP(missing, sharedRequest(ctx, http.MethodPost, "/oauth/usi/"+uuid.NewString()+"/token", uuid.NewString(), strings.NewReader(form.Encode())))
 	require.NotEqual(t, http.StatusServiceUnavailable, missing.Code, "a missing row stays as it was: %s", missing.Body.String())
+}
+
+// A failed admission read reached no verdict, so an agent keeps its refresh
+// token: an outage is retryable, a broken deploy is our 500, neither says reauthorize.
+func TestHandleToken_AgentRefreshDuringAdmissionFailure(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		code  string
+		want  int
+		retry bool
+	}{
+		{name: "outage", code: "57P01", want: http.StatusServiceUnavailable, retry: true},
+		{name: "broken deploy", code: "42P01", want: http.StatusInternalServerError, retry: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestMCPService(t)
+			fx, _, refreshToken, _ := seedAgentRefreshSession(t, ctx, ti)
+			working := ti.authzEngine
+			fail := fmt.Errorf("load admission: %w", &pgconn.PgError{Code: tc.code})
+			ti.service.SetAuthzEngine(authz.NewEngine(testenv.NewLogger(t), ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{
+				AdmitPrincipalCredential: func(context.Context, *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
+					return authz.PrincipalCredentialAdmission{}, fail
+				},
+				AdmitPrincipalCredentialWithDBTX: func(context.Context, accessrepo.DBTX) (authz.PrincipalCredentialAdmission, error) {
+					return authz.PrincipalCredentialAdmission{}, fail
+				},
+			}))
+
+			form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}, "client_id": {fx.client.ClientID}}
+			req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/"+fx.toolset.McpSlug.String+"/token", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			routeCtx := chi.NewRouteContext()
+			routeCtx.URLParams.Add("mcpSlug", fx.toolset.McpSlug.String)
+			w := httptest.NewRecorder()
+			oops.OAuthErrHandle(testenv.NewLogger(t), ti.service.HandleToken).ServeHTTP(w, req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx)))
+			require.Equal(t, tc.want, w.Code, w.Body.String())
+			require.NotContains(t, w.Body.String(), "invalid_grant")
+			require.Equal(t, tc.retry, w.Header().Get("Retry-After") != "")
+
+			ti.service.SetAuthzEngine(working)
+			retried := performRefreshRequest(ctx, ti, fx.toolset.McpSlug.String, fx.client.ClientID, refreshToken)
+			require.NoError(t, retried.err)
+			require.Equal(t, http.StatusOK, retried.code, retried.body)
+		})
+	}
 }

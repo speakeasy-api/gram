@@ -811,11 +811,11 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 		case netingress.RouteInstallScript:
 			handler = oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript)
 		case netingress.RouteProtectedResource:
-			handler = oops.ErrHandle(service.logger, service.HandleGetProtectedResource)
+			handler = oops.AuthErrHandle(service.logger, service.HandleGetProtectedResource)
 		case netingress.RouteAuthorizationServer:
-			handler = oops.ErrHandle(service.logger, service.HandleGetAuthorizationServer)
+			handler = oops.AuthErrHandle(service.logger, service.HandleGetAuthorizationServer)
 		case netingress.RouteRegister:
-			handler = oops.ErrHandle(service.logger, service.HandleRegister)
+			handler = oops.AuthErrHandle(service.logger, service.HandleRegister)
 		case netingress.RouteAuthorize:
 			handler = oops.BrowserErrHandle(service.logger, service.HandleAuthorize)
 		case netingress.RouteConnect:
@@ -900,9 +900,9 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 
 	// OAuth metadata at the canonical RFC paths; resolution semantics are
 	// documented in authnchallenge_well_known.go.
-	o11y.AttachHandler(mux, "GET", wellknown.OAuthProtectedResourcePath+PublicServerRoute, oops.ErrHandle(service.logger, service.HandleGetProtectedResource).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", wellknown.OAuthAuthorizationServerPath+PublicServerRoute, oops.ErrHandle(service.logger, service.HandleGetAuthorizationServer).ServeHTTP)
-	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/register", oops.ErrHandle(service.logger, service.HandleRegister).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", wellknown.OAuthProtectedResourcePath+PublicServerRoute, oops.AuthErrHandle(service.logger, service.HandleGetProtectedResource).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", wellknown.OAuthAuthorizationServerPath+PublicServerRoute, oops.AuthErrHandle(service.logger, service.HandleGetAuthorizationServer).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/register", oops.AuthErrHandle(service.logger, service.HandleRegister).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/authorize", oops.BrowserErrHandle(service.logger, service.HandleAuthorize).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/idp_callback", oops.BrowserErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/connect", oops.BrowserErrHandle(service.logger, service.HandleConsent).ServeHTTP)

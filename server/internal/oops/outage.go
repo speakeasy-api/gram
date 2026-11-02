@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -20,19 +21,28 @@ const OutageRetryAfter = 30 * time.Second
 // outageMessage answers a request a failed dependency stopped.
 const outageMessage = "Speakeasy is temporarily unavailable. Retry shortly."
 
-// pgClassData and pgClassIntegrity are SQLSTATE classes a bad statement earns, not an outage.
-const (
-	pgClassData      = "22"
-	pgClassIntegrity = "23"
-)
+// transientSQLStates are the SQLSTATEs a retry can clear; anything else is a bug or a broken deploy.
+var transientSQLStates = map[string]struct{}{
+	"57P01": {}, // admin_shutdown
+	"57P02": {}, // crash_shutdown
+	"57P03": {}, // cannot_connect_now
+	"40001": {}, // serialization_failure
+	"40P01": {}, // deadlock_detected
+}
 
-// IsInfrastructureFailure reports a store or network that couldn't answer; a missing row is an answer.
+// transientSQLStateClasses are SQLSTATE classes a retry can clear: connection exceptions and exhausted resources.
+var transientSQLStateClasses = []string{"08", "53"}
+
+// IsInfrastructureFailure reports a store or network that couldn't answer right now.
 func IsInfrastructureFailure(err error) bool {
 	if err == nil || errors.Is(err, pgx.ErrNoRows) {
 		return false
 	}
 	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
-		return !strings.HasPrefix(pgErr.Code, pgClassData) && !strings.HasPrefix(pgErr.Code, pgClassIntegrity)
+		if _, transient := transientSQLStates[pgErr.Code]; transient {
+			return true
+		}
+		return slices.ContainsFunc(transientSQLStateClasses, func(class string) bool { return strings.HasPrefix(pgErr.Code, class) })
 	}
 	if _, ok := errors.AsType[*pgconn.ConnectError](err); ok {
 		return true
@@ -40,7 +50,17 @@ func IsInfrastructureFailure(err error) bool {
 	if _, ok := errors.AsType[net.Error](err); ok {
 		return true
 	}
-	return pgconn.Timeout(err) || pgconn.SafeToRetry(err)
+	// Waiting on an exhausted pool ends in a deadline; the caller's own is ruled out by answerOutage.
+	return errors.Is(err, context.DeadlineExceeded) || pgconn.Timeout(err) || pgconn.SafeToRetry(err)
+}
+
+// IsStoreFailure reports a query the store failed: an outage, or a broken statement or deploy.
+func IsStoreFailure(err error) bool {
+	if err == nil || errors.Is(err, pgx.ErrNoRows) {
+		return false
+	}
+	_, pgFailure := errors.AsType[*pgconn.PgError](err)
+	return pgFailure || IsInfrastructureFailure(err)
 }
 
 // answerOutage turns a server fault caused by a failed dependency into a 503

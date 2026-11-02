@@ -1243,8 +1243,8 @@ func (s *Service) rotateRefreshToken(
 				if errors.As(admissionErr, &rolloutErr) && rolloutErr.Code == oops.CodeNotFound {
 					return true, admissionErr
 				}
-				if oops.IsInfrastructureFailure(admissionErr) {
-					return true, admissionErr
+				if oops.IsStoreFailure(admissionErr) {
+					return true, oops.E(oops.CodeUnexpected, admissionErr, "admit agent session").LogError(ctx, logger)
 				}
 				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
 				return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
@@ -1449,8 +1449,8 @@ func (s *Service) rotateRefreshToken(
 			}
 		}
 		if admissionErr != nil {
-			if oops.IsInfrastructureFailure(admissionErr) {
-				return true, admissionErr
+			if oops.IsStoreFailure(admissionErr) {
+				return true, oops.E(oops.CodeUnexpected, admissionErr, "admit agent session").LogError(ctx, logger)
 			}
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
 			return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
@@ -1755,8 +1755,8 @@ func (s *Service) writeRefreshTokenReplay(
 				if errors.As(cerr, &rolloutErr) && rolloutErr.Code == oops.CodeNotFound {
 					return cerr
 				}
-				if oops.IsInfrastructureFailure(cerr) {
-					return cerr
+				if oops.IsStoreFailure(cerr) {
+					return oops.E(oops.CodeUnexpected, cerr, "admit agent session").LogError(ctx, logger)
 				}
 				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
 				return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")

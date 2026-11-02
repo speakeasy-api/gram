@@ -20,16 +20,22 @@ import (
 // errors and a generic message is returned to the client. All errors are logged
 // with the provided logger.
 func ErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error) http.Handler {
-	return errHandle(logger, handler, false)
+	return errHandle(logger, handler, false, false)
+}
+
+// AuthErrHandle is ErrHandle for machine routes an MCP client signs in through,
+// such as discovery, where a 500 restarts sign-in and an outage must say retry.
+func AuthErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error) http.Handler {
+	return errHandle(logger, handler, false, true)
 }
 
 // BrowserErrHandle opts a navigation route into HTML failures. Machine endpoints
 // keep ErrHandle or OAuthErrHandle; request headers never choose the format.
 func BrowserErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error) http.Handler {
-	return errHandle(logger, handler, true)
+	return errHandle(logger, handler, true, true)
 }
 
-func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error, browser bool) http.Handler {
+func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error, browser, outages bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		recorded := &oauthResponseWriter{ResponseWriter: w, committed: false}
 		writer := w
@@ -40,7 +46,9 @@ func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 		if err == nil {
 			return
 		}
-		err = answerOutage(r.Context(), logger, w, err)
+		if outages {
+			err = answerOutage(r.Context(), logger, w, err)
+		}
 
 		code := http.StatusInternalServerError
 		payload := goa.NewServiceError(

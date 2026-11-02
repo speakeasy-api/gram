@@ -29,7 +29,7 @@ func oauthRouteHandler(logger *slog.Logger, method, pattern string, handler func
 	if (method == http.MethodGet && (strings.HasSuffix(pattern, "/authorize") || strings.HasSuffix(pattern, "/connect/first-party"))) || ((method == http.MethodGet || method == http.MethodPost) && strings.HasSuffix(pattern, "/connect")) {
 		return oops.BrowserErrHandle(logger, handler)
 	}
-	return oops.ErrHandle(logger, handler)
+	return oops.AuthErrHandle(logger, handler)
 }
 
 // consentActionRouteHandler classifies the parsed action before endpoint or
