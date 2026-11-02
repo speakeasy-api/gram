@@ -1,4 +1,4 @@
-h1:Kknb46jjwV7oJ6BBUwfxVGcbkE27mpDEuNZFtI7sS/Y=
+h1:54rXQVMg4gW8NU5ELiryJsTFafOwd2prwmniN1GAv44=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -522,3 +522,4 @@ h1:Kknb46jjwV7oJ6BBUwfxVGcbkE27mpDEuNZFtI7sS/Y=
 20261105175811_remote-session-clients-add-forward-client-name.sql h1:NlgZYpmo1fvV19RdA7Jkcla8uXjZ9ZtCOW5kU3Lr+mw=
 20261105224000_team-memory.sql h1:lo3T4uCDR8hGoF3OQnKeu5DCeve3akbArJkNrzemPr4=
 20261105224100_chats-memory-summary-idx.sql h1:xDihnhHuszDZMF865cCjmyIw0wqaeqb1LXXKIAE21wk=
+20261105224200_memory-eval-runs.sql h1:6xWdwiETSjyXQhHb5PGTL/Yuqbft4cOgCEK2wdwllYM=
