@@ -6,11 +6,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -133,10 +138,37 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 	if !dial.anonymous {
 		return metamcp.SignInConnected, ""
 	}
-	if !member.remoteSessionIssuerID.Valid {
+	if member.remoteSessionIssuerID.Valid {
+		return metamcp.SignInNotConnected, ""
+	}
+	if member.upstreamNoAuth {
 		return metamcp.SignInNotRequired, ""
 	}
-	return metamcp.SignInNotConnected, ""
+	// A member with no derived provider can still require a credential
+	// through an enabled auth client, such as a static credential. A call
+	// that sends none is refused upstream, so it is not ready.
+	required, err := s.memberRequiresUpstreamAuth(ctx, gate.organizationID, member)
+	if err != nil {
+		logger.ErrorContext(ctx, "check member upstream authentication", attr.SlogError(err))
+		return metamcp.SignInError, "could not check this server"
+	}
+	if required {
+		return metamcp.SignInNotConnected, ""
+	}
+	return metamcp.SignInNotRequired, ""
+}
+
+// memberRequiresUpstreamAuth reports whether a proxied member offers an
+// enabled auth client, so a call carrying no credential cannot succeed.
+func (s *Service) memberRequiresUpstreamAuth(ctx context.Context, organizationID string, member metaMember) (bool, error) {
+	if member.backend != metaMemberBackendProxied {
+		return false, nil
+	}
+	rows, err := upstreamclientsrepo.New(s.db).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: []uuid.UUID{member.serverID}})
+	if err != nil {
+		return false, fmt.Errorf("list member auth clients: %w", err)
+	}
+	return len(rows) > 0 && rows[0].RequiresUpstreamAuth, nil
 }
 
 func memberErrorMessage(err error) string {
