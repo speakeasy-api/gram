@@ -5,15 +5,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/stretchr/testify/require"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -27,7 +32,8 @@ var (
 
 // scriptedModel stands in for both the answering model and the judge, so the
 // harness can be checked without LLM calls. With tools it searches once for
-// PgCat and answers with what it found; without tools it answers Not found.
+// PgCat and cites the pooler reversal only if the search returned it; without
+// tools it answers Not found.
 // As judge it accepts Not found for a Not found key, and otherwise an answer
 // that contains the key's first word of four or more letters.
 type scriptedModel struct {
@@ -57,7 +63,7 @@ func (m scriptedModel) GetCompletion(_ context.Context, request openrouter.Compl
 		if key != memoryeval.NotFound {
 			correct = !correct && strings.Contains(candidate, scriptedKeyWord.FindString(key))
 		}
-		return &openrouter.CompletionResponse{Content: `{"correct": ` + strconv.FormatBool(correct) + `, "miss": "", "reason": "scripted"}`}, nil
+		return &openrouter.CompletionResponse{Content: `{"correct": ` + strconv.FormatBool(correct) + `, "miss": "` + scriptedMiss(correct) + `", "reason": "scripted"}`}, nil
 	}
 	if len(request.Tools) == 0 {
 		return &openrouter.CompletionResponse{Content: "Not found"}, nil
@@ -73,7 +79,20 @@ func (m scriptedModel) GetCompletion(_ context.Context, request openrouter.Compl
 		}
 		return &openrouter.CompletionResponse{ToolCalls: []openrouter.ToolCall{{ID: "call-1", Type: "function", Function: openrouter.ToolCallFunction{Name: "search_chats", Arguments: string(args)}}}}, nil
 	}
-	return &openrouter.CompletionResponse{Content: "PgCat replaced PgBouncer [chat:" + memoryeval.ChatID("reversal-pooler").String() + "]"}, nil
+	// Answer only from what the tool returned, so broken tool wiring shows up
+	// as a Not found instead of a scripted success.
+	pooler := memoryeval.ChatID("reversal-pooler").String()
+	if !strings.Contains(transcript, `\"chat_id\":\"`+pooler+`\"`) {
+		return &openrouter.CompletionResponse{Content: "Not found"}, nil
+	}
+	return &openrouter.CompletionResponse{Content: "PgCat replaced PgBouncer [chat:" + pooler + "]"}, nil
+}
+
+func scriptedMiss(correct bool) string {
+	if correct {
+		return ""
+	}
+	return "retrieval"
 }
 
 func (scriptedModel) GetCompletionStream(context.Context, openrouter.CompletionRequest) (openrouter.StreamReader, error) {
@@ -139,4 +158,52 @@ func TestSummarizeLeavesErrorsOutOfAccuracy(t *testing.T) {
 	s := summarize(corpus, 1, []arm{a}, answers, verdicts)[a.name]
 	require.InDelta(t, 1.0, s.accuracyByRun[0], 1e-9)
 	require.Equal(t, 1, s.errors)
+}
+
+func TestParseVerdictRejectsIncompleteOrContradictoryReplies(t *testing.T) {
+	t.Parallel()
+	ok, err := parseVerdict(`{"correct": false, "miss": "reasoning", "reason": "wrong library"}`)
+	require.NoError(t, err)
+	require.Equal(t, verdict{Correct: false, Miss: "reasoning", Reason: "wrong library"}, ok)
+
+	for _, reply := range []string{
+		`{"miss": "", "reason": "no verdict"}`,
+		`{"correct": true, "miss": "retrieval", "reason": "both"}`,
+		`{"correct": false, "miss": "", "reason": "no miss"}`,
+		`not json`,
+	} {
+		_, err := parseVerdict(reply)
+		require.Error(t, err, reply)
+	}
+}
+
+// keyResolverSentinel stops a completion right after request validation.
+type keyResolverSentinel struct{}
+
+var errReachedKeyResolver = errors.New("reached key resolution")
+
+func (keyResolverSentinel) ResolveKey(context.Context, string, string, billing.ModelUsageSource, openrouter.KeyType) (openrouter.ResolvedKey, error) {
+	return openrouter.ResolvedKey{}, errReachedKeyResolver
+}
+
+// TestCompletionRequestPassesClientValidation runs the eval's request through
+// the real completion client. Key resolution happens after validation, so
+// reaching it proves the client would send the request to the model.
+func TestCompletionRequestPassesClientValidation(t *testing.T) {
+	t.Parallel()
+	client := openrouter.NewUnifiedClient(
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		guardian.NewDefaultPolicy(tracenoop.NewTracerProvider()),
+		openrouter.NewDevelopment("unused"),
+		keyResolverSentinel{},
+		nil, nil, nil, nil,
+	)
+	_, err := client.GetCompletion(t.Context(), completionRequest("scripted-answer", []or.ChatMessages{openrouter.CreateMessageUser("hi")}, nil, nil))
+	require.ErrorIs(t, err, errReachedKeyResolver)
+}
+
+func TestRequireSomeSucceededPassesWithOneSuccess(t *testing.T) {
+	t.Parallel()
+	errs := []error{errors.New("rate limited"), nil}
+	requireSomeSucceeded(t, "answer", len(errs), func(i int) error { return errs[i] })
 }

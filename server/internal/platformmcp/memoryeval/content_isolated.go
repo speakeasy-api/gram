@@ -161,7 +161,7 @@ func isolatedChats() []chatSpec {
 		other("other-ab-tool", "priya", 12, "Marketing A/B testing tool",
 			[]string{"Kestrel Experiments"},
 			"Which tool should marketing use for page experiments?",
-			"Kestrel Experiments runs server-side splits on Webflow pages without flicker.",
+			"Kestrel Experiments runs server-side splits on marketing pages without flicker.",
 			"Use Kestrel Experiments for marketing page tests.",
 			"Set up the first experiment on the pricing page.",
 		),

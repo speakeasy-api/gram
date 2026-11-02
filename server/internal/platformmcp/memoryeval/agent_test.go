@@ -3,6 +3,7 @@ package memoryeval_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -34,6 +35,10 @@ const (
 
 	// evalOrgID labels completion requests; the dev key pays for them.
 	evalOrgID = "memoryeval"
+
+	// evalProjectID labels completion requests. The completion client rejects
+	// a request whose project ID is not a UUID before it calls the model.
+	evalProjectID = "6d656d6f-7279-4576-a16c-000000000001"
 )
 
 // citationPattern matches the source citations the agent is told to write.
@@ -95,6 +100,7 @@ func runEval(ctx context.Context, t *testing.T, client openrouter.CompletionClie
 		}
 	}
 	require.NoError(t, group.Wait())
+	requireSomeSucceeded(t, "answer", len(answers), func(i int) error { return answers[i].err })
 
 	verdicts := make([]verdict, len(answers))
 	group, groupCtx = errgroup.WithContext(ctx)
@@ -106,7 +112,32 @@ func runEval(ctx context.Context, t *testing.T, client openrouter.CompletionClie
 		})
 	}
 	require.NoError(t, group.Wait())
+	requireSomeSucceeded(t, "judge", len(verdicts), func(i int) error {
+		if verdicts[i].Miss == "error" && answers[i].err == nil {
+			return errors.New(verdicts[i].Reason)
+		}
+		return nil
+	})
 	return answers, verdicts
+}
+
+// requireSomeSucceeded fails the eval when every call of one kind errored,
+// which means the setup is broken rather than the answers being wrong.
+func requireSomeSucceeded(t *testing.T, kind string, n int, errAt func(int) error) {
+	t.Helper()
+	var first error
+	failed := 0
+	for i := range n {
+		if err := errAt(i); err != nil {
+			failed++
+			if first == nil {
+				first = err
+			}
+		}
+	}
+	if n > 0 && failed == n {
+		require.FailNow(t, "every "+kind+" call failed", "%d of %d failed, first: %v", failed, n, first)
+	}
 }
 
 func systemPrompt(corpus *memoryeval.Corpus, a arm) string {
@@ -178,7 +209,7 @@ func completionRequest(model string, messages []or.ChatMessages, tools []openrou
 	return openrouter.CompletionRequest{
 		OrgID:                     evalOrgID,
 		Messages:                  messages,
-		ProjectID:                 "",
+		ProjectID:                 evalProjectID,
 		Tools:                     tools,
 		Temperature:               temperature,
 		Model:                     model,
@@ -262,11 +293,34 @@ func judge(ctx context.Context, client openrouter.CompletionClient, model string
 	}
 	text := strings.TrimSpace(response.Content)
 	text = strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(text, "```json"), "```"), "```")
-	var v verdict
-	if err := json.Unmarshal([]byte(strings.TrimSpace(text)), &v); err != nil {
-		return verdict{Correct: false, Miss: "error", Reason: "unparseable judge reply: " + response.Content}
+	v, err := parseVerdict(text)
+	if err != nil {
+		return verdict{Correct: false, Miss: "error", Reason: err.Error()}
 	}
 	return v
+}
+
+// parseVerdict decodes a judge reply and rejects one that leaves out correct
+// or pairs it with a miss it cannot have.
+func parseVerdict(text string) (verdict, error) {
+	var raw struct {
+		Correct *bool  `json:"correct"`
+		Miss    string `json:"miss"`
+		Reason  string `json:"reason"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(text)), &raw); err != nil {
+		return verdict{}, fmt.Errorf("unparseable judge reply %q: %w", text, err)
+	}
+	if raw.Correct == nil {
+		return verdict{}, fmt.Errorf("judge reply %q has no correct field", text)
+	}
+	switch {
+	case *raw.Correct && raw.Miss != "":
+		return verdict{}, fmt.Errorf("judge reply %q is correct with miss %q", text, raw.Miss)
+	case !*raw.Correct && raw.Miss != "retrieval" && raw.Miss != "reasoning":
+		return verdict{}, fmt.Errorf("judge reply %q is incorrect with miss %q", text, raw.Miss)
+	}
+	return verdict{Correct: *raw.Correct, Miss: raw.Miss, Reason: raw.Reason}, nil
 }
 
 // armStats aggregates one arm across runs.
