@@ -70,7 +70,7 @@ func TestDelegationRefreshRechecksLiveAuthorityAndScopesRelease(t *testing.T) {
 
 func TestDelegationVerificationFailureQuarantinesRotation(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []FederatedRefreshFailure{FederatedRefreshAmbiguous, FederatedRefreshInvalidIdentity} {
+	for _, kind := range []FederatedRefreshFailure{FederatedRefreshAmbiguous, FederatedRefreshInvalidIdentity, FederatedRefreshConfiguration} {
 		t.Run(string(kind), func(t *testing.T) {
 			t.Parallel()
 			s, store, p, b, allow := newDelegationUnitFixture(t)
@@ -85,7 +85,7 @@ func TestDelegationVerificationFailureQuarantinesRotation(t *testing.T) {
 			row, loadErr := store.load(t.Context(), b)
 			require.NoError(t, loadErr)
 			require.Empty(t, row.IdentityAssertionEncrypted.String)
-			if kind == FederatedRefreshAmbiguous {
+			if kind != FederatedRefreshInvalidIdentity {
 				require.ErrorIs(t, err, ErrDelegationTemporary)
 				require.True(t, row.RefreshClaimID.Valid)
 				require.NotEqual(t, "rotated-refresh", row.RefreshTokenEncrypted.String)

@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 )
@@ -21,7 +23,9 @@ type FederatedRefreshFailure string
 const (
 	FederatedRefreshInvalidGrant    FederatedRefreshFailure = "invalid_grant"
 	FederatedRefreshConfiguration   FederatedRefreshFailure = "configuration"
+	FederatedRefreshClientRejected  FederatedRefreshFailure = "client_rejected"
 	FederatedRefreshAmbiguous       FederatedRefreshFailure = "ambiguous"
+	FederatedRefreshRateLimited     FederatedRefreshFailure = "rate_limited"
 	FederatedRefreshRetryable       FederatedRefreshFailure = "retryable"
 	FederatedRefreshInvalidIdentity FederatedRefreshFailure = "invalid_identity"
 )
@@ -65,6 +69,10 @@ func (m *ChallengeManager) RefreshFederatedIdentity(ctx context.Context, p *Fede
 	if p == nil || refreshToken == "" || expectedSubject == "" {
 		return nil, &FederatedRefreshError{Kind: FederatedRefreshConfiguration}
 	}
+	logger := m.logger.With(attr.SlogOrganizationID(p.organizationID), attr.SlogRemoteSessionIssuerID(p.issuer.ID.String()), attr.SlogRemoteSessionClientID(p.client.ID.String()))
+	if m.federatedClientPaused(ctx, logger, p) {
+		return nil, &FederatedRefreshError{Kind: FederatedRefreshClientRejected}
+	}
 	if err := m.preflightFederatedSigner(p); err != nil {
 		return nil, federatedRefreshSetupError(err)
 	}
@@ -82,9 +90,12 @@ func (m *ChallengeManager) RefreshFederatedIdentity(ctx context.Context, p *Fede
 	if err != nil {
 		return nil, federatedRefreshSetupError(classifyFederatedExchangeError(err))
 	}
-	logger := m.logger.With(attr.SlogOrganizationID(p.organizationID), attr.SlogRemoteSessionIssuerID(p.issuer.ID.String()), attr.SlogRemoteSessionClientID(p.client.ID.String()))
 	tok, receivedAt, err := postFederatedRefresh(logger, doer, req)
 	if err != nil {
+		var failure *FederatedRefreshError
+		if errors.As(err, &failure) && failure.Kind == FederatedRefreshClientRejected {
+			m.pauseFederatedClient(ctx, logger, p)
+		}
 		return nil, err
 	}
 	return m.verifyFederatedRefresh(ctx, p, tok, receivedAt, expectedSubject, expectedNonce, doer)
@@ -148,24 +159,59 @@ func postFederatedRefresh(logger *slog.Logger, doer httpDoer, req *http.Request)
 	return tok, receivedAt, nil
 }
 
-// classifyFederatedRefreshResponse also returns the canonical OAuth error code,
-// which is provider-controlled and may be empty. Only invalid_grant says the
-// refresh token is dead (RFC 6749 section 5.2), so every other rejection falls
-// through to configuration, which keeps the token.
+// federatedClientPause is how long a client rejection stops every person's
+// refresh for that client, so one request per interval tests the fix.
+const federatedClientPause = 5 * time.Minute
+
+func federatedClientPauseKey(p *FederatedProvider) string {
+	return "federatedRefreshClientPause:" + p.client.ID.String() + ":" + p.DelegationConfigurationHash()
+}
+
+// A cache failure must not stop refreshes, so it reads as not paused.
+func (m *ChallengeManager) federatedClientPaused(ctx context.Context, logger *slog.Logger, p *FederatedProvider) bool {
+	if m.locks == nil {
+		return false
+	}
+	var paused bool
+	err := m.locks.Get(ctx, federatedClientPauseKey(p), &paused)
+	if err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
+		logger.WarnContext(ctx, "read federated client pause", attr.SlogError(err))
+	}
+	return err == nil && paused
+}
+
+func (m *ChallengeManager) pauseFederatedClient(ctx context.Context, logger *slog.Logger, p *FederatedProvider) {
+	if m.locks == nil {
+		return
+	}
+	if err := m.locks.Set(ctx, federatedClientPauseKey(p), true, federatedClientPause); err != nil {
+		logger.WarnContext(ctx, "record federated client pause", attr.SlogError(err))
+	}
+}
+
+// Only a dead-grant or sign-in code deletes the token (RFC 6749 section 5.2); the rest keep it.
 func classifyFederatedRefreshResponse(status int, body []byte) (FederatedRefreshFailure, string) {
 	parsed, _ := oautherr.ParseTokenError(body)
 	code := oautherr.CanonicalTokenErrorCode(parsed.Code)
 	switch {
 	// An intermediary can return a timeout, rate limit or 5xx after the issuer rotated.
 	// The HTTP error is not evidence that the submitted refresh token is unspent.
-	case status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError:
+	case status == http.StatusTooManyRequests:
+		return FederatedRefreshRateLimited, code
+	case status == http.StatusRequestTimeout || status >= http.StatusInternalServerError:
 		return FederatedRefreshAmbiguous, code
-	case code == oautherr.CodeInvalidGrant:
+	case code == oautherr.CodeInvalidGrant || federatedRefreshNeedsSignIn(code):
 		return FederatedRefreshInvalidGrant, code
+	case code == oautherr.CodeInvalidClient || code == oautherr.CodeUnauthorizedClient:
+		return FederatedRefreshClientRejected, code
 	case code == oautherr.CodeTemporarilyUnavailable || code == oautherr.CodeServerError:
 		return FederatedRefreshRetryable, code
 	}
 	return FederatedRefreshConfiguration, code
+}
+
+func federatedRefreshNeedsSignIn(code string) bool {
+	return code == oautherr.OIDCCodeLoginRequired || code == oautherr.OIDCCodeInteractionRequired || code == oautherr.OIDCCodeConsentRequired
 }
 
 // oauthErrorCodeUnrecognized replaces a code outside the IETF registry in logs.
@@ -173,7 +219,7 @@ const oauthErrorCodeUnrecognized = "unrecognized"
 
 // The "error" member is provider-controlled text, so only registered codes reach logs.
 func loggableOAuthErrorCode(code string) string {
-	if code == "" || oautherr.IsIETFRegisteredCode(code) {
+	if code == "" || oautherr.IsIETFRegisteredCode(code) || federatedRefreshNeedsSignIn(code) {
 		return code
 	}
 	return oauthErrorCodeUnrecognized

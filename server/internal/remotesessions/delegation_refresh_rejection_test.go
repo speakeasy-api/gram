@@ -2,7 +2,9 @@ package remotesessions
 
 import (
 	"bytes"
+	"context"
 	"crypto/x509"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -45,7 +48,7 @@ func (e *fakeTokenEndpoint) received() []string {
 // rejectionFixture drives the real Postgres store and the real HTTP client
 // against a fake provider. The clock starts refusalRetryWait in the past
 // because the claim query checks retry_after against the database clock.
-func rejectionFixture(t *testing.T) (*delegationAdapterFixture, *delegationAdapterStore, DelegationBinding, DelegationAuthorizer, *fakeTokenEndpoint, *bytes.Buffer) {
+func rejectionFixture(t *testing.T, locks cache.Cache) (*delegationAdapterFixture, *delegationAdapterStore, DelegationBinding, DelegationAuthorizer, *fakeTokenEndpoint, *bytes.Buffer) {
 	t.Helper()
 	s, store, p, b, allow := newDelegationUnitFixture(t)
 	endpoint := &fakeTokenEndpoint{}
@@ -77,7 +80,7 @@ func rejectionFixture(t *testing.T) (*delegationAdapterFixture, *delegationAdapt
 	p.client.ClientSecretEncrypted.String, err = s.enc.Encrypt([]byte("secret-client"))
 	require.NoError(t, err)
 	logs := &bytes.Buffer{}
-	manager := &ChallengeManager{enc: s.enc, policy: policy, logger: slog.New(slog.NewJSONHandler(logs, nil))}
+	manager := &ChallengeManager{enc: s.enc, policy: policy, logger: slog.New(slog.NewJSONHandler(logs, nil)), locks: locks}
 	s.refreshIdentity = manager.RefreshFederatedIdentity
 	start := time.Now().UTC().Truncate(time.Microsecond).Add(-refusalRetryWait)
 	s.now = func() time.Time { return start }
@@ -100,7 +103,7 @@ func TestDelegationUnexpectedRejectionKeepsTokenUntilProviderRecovers(t *testing
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s, store, b, allow, endpoint, logs := rejectionFixture(t)
+			s, store, b, allow, endpoint, logs := rejectionFixture(t, nil)
 			endpoint.answer(tc.status, tc.body)
 
 			_, err := s.Resolve(t.Context(), b, allow)
@@ -132,6 +135,84 @@ func TestDelegationUnexpectedRejectionKeepsTokenUntilProviderRecovers(t *testing
 	}
 }
 
+type unavailableCache struct{ cache.Cache }
+
+func (unavailableCache) Get(context.Context, string, any) error {
+	return errors.New("cache unavailable")
+}
+
+func (unavailableCache) Set(context.Context, string, any, time.Duration) error {
+	return errors.New("cache unavailable")
+}
+
+func moveDelegationClock(s *delegationAdapterFixture) {
+	later := s.now().Add(refusalRetryWait)
+	s.now = func() time.Time { return later }
+}
+
+func TestDelegationClientRejectionPausesEveryRefreshForThatClient(t *testing.T) {
+	t.Parallel()
+	locks := testenv.NewMemoryCache()
+	s, store, b, allow, endpoint, _ := rejectionFixture(t, locks)
+	endpoint.answer(http.StatusUnauthorized, `{"error":"invalid_client"}`)
+
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrDelegationConfiguration)
+	require.Len(t, endpoint.received(), 1)
+
+	moveDelegationClock(s)
+	_, err = s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrDelegationConfiguration)
+	require.Len(t, endpoint.received(), 1, "the client pause must stop the request")
+	row, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, "secret-refresh", delegationPlain(t, s, row.RefreshTokenEncrypted.String))
+}
+
+func TestDelegationOtherRejectionDoesNotPauseTheClient(t *testing.T) {
+	t.Parallel()
+	s, _, b, allow, endpoint, _ := rejectionFixture(t, testenv.NewMemoryCache())
+	endpoint.answer(http.StatusForbidden, `<html>blocked</html>`)
+
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrDelegationConfiguration)
+	moveDelegationClock(s)
+	_, err = s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrDelegationConfiguration)
+	require.Len(t, endpoint.received(), 2)
+}
+
+func TestDelegationClientPauseFailsOpenWhenCacheIsDown(t *testing.T) {
+	t.Parallel()
+	s, _, b, allow, endpoint, _ := rejectionFixture(t, unavailableCache{})
+	endpoint.answer(http.StatusUnauthorized, `{"error":"invalid_client"}`)
+
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrDelegationConfiguration)
+	moveDelegationClock(s)
+	_, err = s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrDelegationConfiguration)
+	require.Len(t, endpoint.received(), 2)
+}
+
+func TestDelegationRetainedTokenSurvivesRateLimitedRetry(t *testing.T) {
+	t.Parallel()
+	s, store, b, allow, endpoint, _ := rejectionFixture(t, nil)
+	endpoint.answer(http.StatusForbidden, `<html>blocked</html>`)
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrDelegationConfiguration)
+
+	endpoint.answer(http.StatusTooManyRequests, `slow down`)
+	moveDelegationClock(s)
+	_, err = s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrDelegationTemporary)
+	row, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.False(t, row.RefreshClaimID.Valid, "a rate limit must not hold the claim")
+	require.Equal(t, "configuration_failure", row.ObservationStatus.String)
+	require.Equal(t, "secret-refresh", delegationPlain(t, s, row.RefreshTokenEncrypted.String))
+}
+
 func TestDelegationInvalidGrantClearsSavedToken(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -140,10 +221,13 @@ func TestDelegationInvalidGrantClearsSavedToken(t *testing.T) {
 	}{
 		{name: "standard", body: `{"error":"invalid_grant","error_description":"secret-upstream"}`},
 		{name: "vendor envelope", body: `{"errors":["invalid_grant - secret-upstream"]}`},
+		{name: "login required", body: `{"error":"login_required","error_description":"secret-upstream"}`},
+		{name: "interaction required", body: `{"error":"interaction_required","error_description":"secret-upstream"}`},
+		{name: "consent required", body: `{"error":"consent_required","error_description":"secret-upstream"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s, store, b, allow, endpoint, logs := rejectionFixture(t)
+			s, store, b, allow, endpoint, logs := rejectionFixture(t, nil)
 			endpoint.answer(http.StatusBadRequest, tc.body)
 
 			_, err := s.Resolve(t.Context(), b, allow)

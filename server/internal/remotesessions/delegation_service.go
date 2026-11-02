@@ -82,8 +82,10 @@ func delegationRefreshError(err error) error {
 		kind = delegation.RefreshAmbiguous
 	case FederatedRefreshInvalidGrant:
 		kind = delegation.RefreshInvalidGrant
-	case FederatedRefreshConfiguration:
+	case FederatedRefreshConfiguration, FederatedRefreshClientRejected:
 		kind = delegation.RefreshConfiguration
+	case FederatedRefreshRateLimited:
+		kind = delegation.RefreshRateLimited
 	case FederatedRefreshInvalidIdentity:
 		kind = delegation.RefreshInvalidIdentity
 	case FederatedRefreshRetryable:

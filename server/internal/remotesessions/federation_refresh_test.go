@@ -98,10 +98,14 @@ func TestFederatedRefreshResponse(t *testing.T) {
 		{name: "rotation without assertion", status: 200, body: `{"access_token":"secret-access","refresh_token":"secret-rotated"}`},
 		{name: "omitted rotation", status: 200, body: `{"access_token":"secret-access"}`},
 		{name: "invalid grant", status: 400, body: `{"error":"invalid_grant","error_description":"secret-upstream"}`, kind: FederatedRefreshInvalidGrant},
-		{name: "invalid client", status: 401, body: `{"error":"invalid_client","error_description":"secret-upstream"}`, kind: FederatedRefreshConfiguration},
+		{name: "invalid client", status: 401, body: `{"error":"invalid_client","error_description":"secret-upstream"}`, kind: FederatedRefreshClientRejected},
 		{name: "vendor shaped invalid grant", status: 400, body: `{"errors":["invalid_grant - secret-upstream"]}`, kind: FederatedRefreshInvalidGrant},
 		{name: "vendor dead grant code", status: 400, body: `{"error":"bad_refresh_token"}`, kind: FederatedRefreshInvalidGrant},
-		{name: "unauthorized client", status: 400, body: `{"error":"unauthorized_client"}`, kind: FederatedRefreshConfiguration},
+		{name: "unauthorized client", status: 400, body: `{"error":"unauthorized_client"}`, kind: FederatedRefreshClientRejected},
+		{name: "login required", status: 400, body: `{"error":"login_required"}`, kind: FederatedRefreshInvalidGrant},
+		{name: "interaction required", status: 400, body: `{"error":"interaction_required"}`, kind: FederatedRefreshInvalidGrant},
+		{name: "consent required", status: 400, body: `{"error":"consent_required"}`, kind: FederatedRefreshInvalidGrant},
+		{name: "server error code on a 4xx", status: 400, body: `{"error":"server_error"}`, kind: FederatedRefreshRetryable},
 		{name: "invalid request", status: 400, body: `{"error":"invalid_request"}`, kind: FederatedRefreshConfiguration},
 		{name: "unsupported grant type", status: 400, body: `{"error":"unsupported_grant_type"}`, kind: FederatedRefreshConfiguration},
 		{name: "invalid scope", status: 400, body: `{"error":"invalid_scope"}`, kind: FederatedRefreshConfiguration},
@@ -109,9 +113,9 @@ func TestFederatedRefreshResponse(t *testing.T) {
 		{name: "html forbidden", status: 403, body: `<html>secret-upstream</html>`, kind: FederatedRefreshConfiguration},
 		{name: "empty not found", status: 404, kind: FederatedRefreshConfiguration},
 		{name: "unavailable code on a 4xx", status: 400, body: `{"error":"temporarily_unavailable"}`, kind: FederatedRefreshRetryable},
-		{name: "rate limited", status: 429, body: `secret-upstream`, kind: FederatedRefreshAmbiguous},
-		{name: "rate limited overrides invalid grant", status: 429, body: `{"error":"invalid_grant"}`, kind: FederatedRefreshAmbiguous},
-		{name: "rate limited overrides invalid client", status: 429, body: `{"error":"invalid_client"}`, kind: FederatedRefreshAmbiguous},
+		{name: "rate limited", status: 429, body: `secret-upstream`, kind: FederatedRefreshRateLimited},
+		{name: "rate limited overrides invalid grant", status: 429, body: `{"error":"invalid_grant"}`, kind: FederatedRefreshRateLimited},
+		{name: "rate limited overrides invalid client", status: 429, body: `{"error":"invalid_client"}`, kind: FederatedRefreshRateLimited},
 		{name: "server failure overrides invalid grant", status: 503, body: `{"error":"invalid_grant"}`, kind: FederatedRefreshAmbiguous},
 		{name: "server failure overrides invalid client", status: 503, body: `{"error":"invalid_client"}`, kind: FederatedRefreshAmbiguous},
 		{name: "unavailable", status: 503, body: `secret-upstream`, kind: FederatedRefreshAmbiguous},
@@ -165,19 +169,23 @@ func TestFederatedRefreshResponse(t *testing.T) {
 	}
 }
 
-func TestFederatedRefreshRejectionLogsOnlyStatusAndCode(t *testing.T) {
+func TestFederatedRefreshRejectionLogsStatusCodeAndOutcome(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name   string
 		status int
 		body   string
 		code   string
+		kind   FederatedRefreshFailure
 	}{
-		{name: "registered code", status: 401, body: `{"error":"invalid_client","error_description":"secret-upstream","error_uri":"https://secret-upstream.example.test"}`, code: "invalid_client"},
-		{name: "code with a token next to it", status: 400, body: `{"error":"invalid_grant","refresh_token":"secret-rotated","access_token":"secret-access"}`, code: "invalid_grant"},
-		{name: "provider text in the code", status: 400, body: `{"error":"secret-upstream"}`, code: "unrecognized"},
-		{name: "not json", status: 403, body: `<html>secret-upstream</html>`, code: ""},
-		{name: "server failure", status: 503, body: `secret-upstream`, code: ""},
+		{name: "registered code", status: 401, body: `{"error":"invalid_client","error_description":"secret-upstream","error_uri":"https://secret-upstream.example.test"}`, code: "invalid_client", kind: FederatedRefreshClientRejected},
+		{name: "code with a token next to it", status: 400, body: `{"error":"invalid_grant","refresh_token":"secret-rotated","access_token":"secret-access"}`, code: "invalid_grant", kind: FederatedRefreshInvalidGrant},
+		{name: "sign-in code", status: 400, body: `{"error":"login_required","error_description":"secret-upstream"}`, code: "login_required", kind: FederatedRefreshInvalidGrant},
+		{name: "provider text in the code", status: 400, body: `{"error":"secret-upstream"}`, code: "unrecognized", kind: FederatedRefreshConfiguration},
+		{name: "not json", status: 403, body: `<html>secret-upstream</html>`, code: "", kind: FederatedRefreshConfiguration},
+		{name: "server failure", status: 503, body: `secret-upstream`, code: "", kind: FederatedRefreshAmbiguous},
+		{name: "server error code on a 4xx", status: 400, body: `{"error":"server_error","error_description":"secret-upstream"}`, code: "server_error", kind: FederatedRefreshRetryable},
+		{name: "rate limit", status: 429, body: `secret-upstream`, code: "", kind: FederatedRefreshRateLimited},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -196,6 +204,7 @@ func TestFederatedRefreshRejectionLogsOnlyStatusAndCode(t *testing.T) {
 			require.Equal(t, "WARN", entry["level"])
 			require.EqualValues(t, tc.status, entry[string(attr.HTTPResponseStatusCodeKey)])
 			require.Equal(t, tc.code, entry[string(attr.OAuthErrorKey)])
+			require.Equal(t, string(tc.kind), entry[string(attr.OutcomeKey)])
 		})
 	}
 }

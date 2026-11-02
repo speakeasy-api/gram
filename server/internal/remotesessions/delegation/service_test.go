@@ -859,28 +859,133 @@ func TestDelegationConfigurationFailureThenInvalidIdentityStaysErased(t *testing
 func TestDelegationConfigurationFailureSignInLiftsThePause(t *testing.T) {
 	t.Parallel()
 	s, store, p, b, allow := failedConfigurationFixture(t)
-	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "fresh-id", "", time.Hour), true))
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "fresh-id", "", time.Hour), false))
 	a, err := s.Resolve(t.Context(), b, allow)
 	require.NoError(t, err)
 	require.Equal(t, "fresh-id", a.Value())
 	c, err := store.load(t.Context(), b)
 	require.NoError(t, err)
-	require.Equal(t, "durable_credential_present", c.status)
-	require.Equal(t, "old-refresh", delegationPlain(t, s, c.refresh))
+	require.Equal(t, "assertion_only", c.status)
+	require.Empty(t, c.refresh, "a kept token that may be dead must not survive a sign-in")
 	require.True(t, c.retryAfter.IsZero())
+	status, err := s.OfflineStatus(t.Context(), p, b.HumanID)
+	require.NoError(t, err)
+	require.False(t, status.UsableRefresh)
 }
 
-func TestDelegationConfigurationFailureKeepsOfflineState(t *testing.T) {
+func TestDelegationConfigurationFailureSignInReplacesDeadToken(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := failedConfigurationFixture(t)
+	status, err := s.OfflineStatus(t.Context(), p, b.HumanID)
+	require.NoError(t, err)
+	require.False(t, status.UsableRefresh, "the next sign-in must ask for a new token")
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "fresh-id", "new-refresh", 30*time.Second), true))
+
+	var submitted []string
+	s.refreshIdentity = func(_ context.Context, _ Provider, token, _, _ string) (*RefreshResult, error) {
+		submitted = append(submitted, token)
+		return delegationRenewal(p, s.now(), "renewed-id", ""), nil
+	}
+	delegationMoveClock(s, time.Hour)
+	a, err := s.Resolve(t.Context(), b, allow)
+	require.NoError(t, err)
+	require.Equal(t, "renewed-id", a.Value())
+	require.Equal(t, []string{"new-refresh"}, submitted)
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, "durable_credential_present", c.status)
+}
+
+func TestDelegationConfigurationFailureNewSubjectResetsTheRow(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := failedConfigurationFixture(t)
+	login := delegationLogin(p, s.now(), "other-id", "other-refresh", time.Hour)
+	login.Subject = "other-subject"
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, login, true))
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, "other-subject", delegationPlain(t, s, c.subject))
+	require.Equal(t, "other-refresh", delegationPlain(t, s, c.refresh))
+	require.Equal(t, "durable_credential_present", c.status)
+	a, err := s.Resolve(t.Context(), b, allow)
+	require.NoError(t, err)
+	require.Equal(t, "other-id", a.Value())
+}
+
+func TestDelegationConfigurationFailureAsksForANewToken(t *testing.T) {
 	t.Parallel()
 	s, store, p, b, _ := failedConfigurationFixture(t)
 	status, err := s.OfflineStatus(t.Context(), p, b.HumanID)
 	require.NoError(t, err)
-	require.True(t, status.UsableRefresh)
+	require.False(t, status.UsableRefresh)
 	require.NoError(t, s.RecordOfflineRefusal(t.Context(), p, b.HumanID))
 	c, err := store.load(t.Context(), b)
 	require.NoError(t, err)
 	require.Equal(t, "configuration_failure", c.status)
 	require.Equal(t, "old-refresh", delegationPlain(t, s, c.refresh))
+}
+
+func TestDelegationConfigurationFailureRetryKeepsStatus(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		kind      RefreshFailure
+		holdClaim bool
+	}{
+		{name: "retryable", kind: RefreshRetryable},
+		{name: "rate limited", kind: RefreshRateLimited},
+		{name: "ambiguous", kind: RefreshAmbiguous, holdClaim: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s, store, _, b, allow := failedConfigurationFixture(t)
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				return nil, &RefreshError{Kind: tc.kind}
+			}
+			delegationMoveClock(s, configurationRetryDelay)
+			_, err := s.Resolve(t.Context(), b, allow)
+			require.ErrorIs(t, err, ErrTemporary)
+			c, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.Equal(t, "configuration_failure", c.status, "stored downstream tokens must stay closed")
+			require.Equal(t, s.now().Add(time.Minute), c.retryAfter)
+			require.Equal(t, tc.holdClaim, c.claim != uuid.Nil)
+		})
+	}
+}
+
+func TestDelegationConfigurationFailureRecoversAfterRateLimitedRetry(t *testing.T) {
+	t.Parallel()
+	s, _, p, b, allow := failedConfigurationFixture(t)
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		return nil, &RefreshError{Kind: RefreshRateLimited}
+	}
+	delegationMoveClock(s, configurationRetryDelay)
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrTemporary)
+
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		return delegationRenewal(p, s.now(), "new-id", "rotated-refresh"), nil
+	}
+	delegationMoveClock(s, time.Minute)
+	a, err := s.Resolve(t.Context(), b, allow)
+	require.NoError(t, err)
+	require.Equal(t, "new-id", a.Value())
+}
+
+func TestDelegationRateLimitWithoutRetainedFailureHoldsClaim(t *testing.T) {
+	t.Parallel()
+	s, store, p, b, allow := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		return nil, &RefreshError{Kind: RefreshRateLimited}
+	}
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrTemporary)
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.NotEqual(t, uuid.Nil, c.claim)
+	require.Equal(t, "temporary_failure", c.status)
 }
 
 func TestDelegationConfigurationFailureAfterTokenExpiryNeedsSignIn(t *testing.T) {
@@ -899,10 +1004,6 @@ func TestDelegationConfigurationFailureAfterTokenExpiryNeedsSignIn(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, "old-refresh", delegationPlain(t, s, c.refresh))
 	delegationMoveClock(s, configurationRetryDelay)
-	c.refresh, c.refreshExpiry = "", time.Time{}
-	store.mu.Lock()
-	store.rows[b] = c
-	store.mu.Unlock()
 	_, err = s.Resolve(t.Context(), b, allow)
 	require.ErrorIs(t, err, ErrReauthentication)
 	require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)

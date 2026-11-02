@@ -167,13 +167,10 @@ func (s *Service) decrypt(value string) (string, error) {
 	return decrypted, nil
 }
 
-// configurationRetryDelay paces renewal after a refusal that did not invalidate
-// the refresh token. Such a refusal needs an administrator, so retrying sooner
-// mostly adds failed client authentications at the provider, and five minutes
-// is a short enough wait after the fix.
+// configurationRetryDelay paces renewal while an administrator fixes a refusal that kept the token.
 const configurationRetryDelay = 5 * time.Minute
 
-// A zero retryAfter marks a configuration failure that erased the credential.
+// A zero retryAfter means an erased credential; an old erased row with a stale one has no token, so it reads as needing sign-in.
 func configurationFailureRetained(c delegationCredential) bool {
 	return c.status == "configuration_failure" && !c.retryAfter.IsZero()
 }
@@ -204,7 +201,8 @@ func (s *Service) OfflineStatus(ctx context.Context, p Provider, humanID string)
 	if err != nil {
 		return OfflineStatus{}, ErrTemporary
 	}
-	return OfflineStatus{UsableRefresh: c.config == p.DelegationConfigurationHash() && usableRefresh(c, s.now()), Refused: c.requestConfig == hash && !c.refusedAt.IsZero()}, nil
+	// A sign-in must be able to replace a kept token that may be dead.
+	return OfflineStatus{UsableRefresh: c.config == p.DelegationConfigurationHash() && usableRefresh(c, s.now()) && !configurationFailureRetained(c), Refused: c.requestConfig == hash && !c.refusedAt.IsZero()}, nil
 }
 
 // RetainVerifiedLogin is only called synchronously from AIM-70's authorized
@@ -262,6 +260,7 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 				return ErrTemporary
 			}
 			next := current
+			retained := configurationFailureRetained(current)
 			// A callback installs a new generation; a late refresh cannot overwrite it.
 			next.claim = uuid.Nil
 			next.retryAfter = time.Time{}
@@ -271,10 +270,11 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 				if e != nil {
 					return e
 				}
-				if plain != identity.SubjectID() {
+				// A failed row may hold the only record of the old subject, so it must not block a new one.
+				if plain != identity.SubjectID() && current.status != "configuration_failure" {
 					return ErrConfiguration
 				}
-				sameIdentity = true
+				sameIdentity = plain == identity.SubjectID()
 			}
 			if !sameIdentity {
 				var empty delegationCredential
@@ -290,7 +290,7 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 			next.config = hash
 			next.observedAt = now
 			// A preserved refresh family remains bound to its original login nonce.
-			if refresh == "" && sameIdentity && current.claim == uuid.Nil {
+			if refresh == "" && sameIdentity && current.claim == uuid.Nil && !retained {
 				next.nonce = current.nonce
 			}
 			// Do not resurrect a possibly spent refresh token from an in-flight claim.
@@ -298,7 +298,7 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 				next.refresh = refresh
 				next.refreshExpiry = expiry
 				next.obtainedAt = now
-			} else if refreshExpired || !sameIdentity || current.claim != uuid.Nil {
+			} else if refreshExpired || !sameIdentity || current.claim != uuid.Nil || retained {
 				next.refresh = ""
 				next.refreshExpiry = time.Time{}
 			}
@@ -398,7 +398,8 @@ func (s *Service) Check(ctx context.Context, b Binding, authority Authorizer) er
 // CheckResolvable is Check plus whether Resolve could return an assertion now
 // without the human signing in again: a retained assertion still outside
 // Resolve's one-minute safety window, or a refresh grant it may renew with. A
-// renewal in flight or backing off is ErrTemporary. Secrets Resolve would
+// renewal in flight or backing off is ErrTemporary; one paused after a
+// configuration failure is ErrConfiguration. Secrets Resolve would
 // need that no longer decrypt are ErrConfiguration, as in Resolve. Like Check
 // it never renews, claims or rewrites the credential and never contacts the
 // provider.
@@ -570,10 +571,13 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	defer cancel()
 	if refreshErr != nil {
 		var failure *RefreshError
-		// A successful exchange followed by unavailable verification may have
-		// spent the old token. Preserve rotation only behind the held claim;
-		// never admit its unverified assertion or automatically replay it.
-		if result != nil && result.Credentials != nil && errors.As(refreshErr, &failure) && failure.Kind == RefreshAmbiguous {
+		// A successful exchange followed by a failure may have spent the old
+		// token. Preserve rotation only behind the held claim; never admit its
+		// unverified assertion or automatically replay it. An invalid identity
+		// erases the credential instead.
+		invalidIdentity := errors.As(refreshErr, &failure) && failure.Kind == RefreshInvalidIdentity
+		if result != nil && result.Credentials != nil && !invalidIdentity {
+			refreshErr = &RefreshError{Kind: RefreshAmbiguous}
 			c.assertion = ""
 			c.assertionExpiry = time.Time{}
 			if rotation := result.Credentials.RefreshToken(); rotation != "" {
@@ -735,7 +739,13 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	next.claim = uuid.Nil
 	next.retryAfter = time.Time{}
 	outcome := ErrTemporary
-	switch failure.Kind {
+	retained := configurationFailureRetained(c)
+	kind := failure.Kind
+	// The token was not consumed, and a kept token must not wedge on a held claim.
+	if kind == RefreshRateLimited && retained {
+		kind = RefreshRetryable
+	}
+	switch kind {
 	case RefreshInvalidGrant:
 		next.refresh = ""
 		next.refreshExpiry = time.Time{}
@@ -748,7 +758,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 		}
 		outcome = ErrReauthentication
 	case RefreshConfiguration:
-		// Nothing here says the refresh token is invalid, so it survives for a later retry.
+		// Nothing here says the refresh token is invalid.
 		next.assertion = ""
 		next.assertionExpiry = time.Time{}
 		next.status = "configuration_failure"
@@ -759,14 +769,18 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 		next.status = "configuration_failure"
 		outcome = ErrConfiguration
 	case RefreshRetryable:
-		next.status = "temporary_failure"
 		next.retryAfter = s.now().Add(time.Minute)
+		if !retained {
+			next.status = "temporary_failure"
+		}
 	default:
 		// The upstream may have rotated its token. Never clear/expire this claim;
 		// reauthentication, not automatic replay, is the safe recovery path.
 		next.claim = claim
-		next.status = "temporary_failure"
 		next.retryAfter = s.now().Add(time.Minute)
+		if !retained {
+			next.status = "temporary_failure"
+		}
 	}
 	next = eraseExpiredDelegationSecrets(next, s.now())
 	ok, err := s.store.finish(ctx, b, c.generation, claim, next)
