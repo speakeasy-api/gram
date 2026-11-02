@@ -119,9 +119,9 @@ func decodeJSON(text string) (any, bool) {
 }
 
 // urlCredentials matches the password of a URL's userinfo, such as the
-// password in postgres://user:password@host/db. The secret scanner does not
-// flag these, so they are masked before the scan.
-var urlCredentials = regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.\-]*://[^\s:/@?#]+:)[^\s@/?#]+@`)
+// password in postgres://user:password@host/db or redis://:password@host. The
+// secret scanner does not flag these, so they are masked before the scan.
+var urlCredentials = regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.\-]*://[^\s:/@?#]*:)[^\s@/?#]+@`)
 
 func (r *Redactor) redactPlainText(ctx context.Context, text string, changed *bool) (string, error) {
 	if masked := urlCredentials.ReplaceAllString(text, "${1}[REDACTED]@"); masked != text {
