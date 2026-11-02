@@ -736,6 +736,12 @@ export function CredentialsWizard({
   // chosen. Elsewhere sign-in does not need it yet, so the grant is left out
   // instead of failing the save. An unknown answer keeps the grant, and the
   // server decides.
+  // An edit writes grants one by one, so saving while the check is still out
+  // could write the servers and then be refused the sign-in grant. Creating
+  // sends every grant in one request, which the server accepts or refuses
+  // whole, so it does not wait.
+  const authPending = editing && writesAuthGrant && authCheck.isLoading;
+  const authPendingNote = `Checking that you can give this agent ${AUTH_GRANT.scope}…`;
   const authStop = !authRefused
     ? null
     : features.isLoading
@@ -909,7 +915,7 @@ export function CredentialsWizard({
     if (agent === undefined || grants === undefined) return;
     // The selection is only the agent's reach once the grants have been
     // reconciled into it; before that every grant would read as withdrawn.
-    if (!reconciled || saving) return;
+    if (!reconciled || saving || authPending) return;
     if (authStop) {
       setError(authStop);
       return;
@@ -1739,6 +1745,7 @@ export function CredentialsWizard({
               ? (blocked ??
                 "Renaming an agent is recorded in the organization audit log.")
               : (authStop ??
+                (authPending ? authPendingNote : null) ??
                 refusedChoice ??
                 (reconciled
                   ? "Changing what an agent reaches is recorded in the organization audit log."
@@ -1760,7 +1767,8 @@ export function CredentialsWizard({
                   saving ||
                   !reconciled ||
                   refusedChoice !== null ||
-                  authStop !== null
+                  authStop !== null ||
+                  authPending
                 }
                 onClick={() => void save()}
               >

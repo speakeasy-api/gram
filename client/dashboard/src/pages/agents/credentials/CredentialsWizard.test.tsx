@@ -1886,6 +1886,30 @@ describe("Editing an agent that already exists", () => {
     expect(mocks.createGrant).not.toHaveBeenCalled();
   });
 
+  it("holds an edit's save until the sign-in check answers", async () => {
+    let answer: (value: unknown) => void = () => {};
+    mocks.checkAuthGrant.mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+    editing({ withoutAuth: true });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("checkbox", { name: "GitHub" });
+    const save = await authenticationSave();
+    expect(
+      await screen.findByText(
+        "Checking that you can give this agent mcp:auth…",
+      ),
+    ).toBeTruthy();
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+
+    answer({ results: [{ allowed: true }] });
+    await waitFor(() =>
+      expect((save as HTMLButtonElement).disabled).toBe(false),
+    );
+  });
+
   it("gives no sign-in grant to an edited agent that reaches no server", async () => {
     mocks.authEnforced = true;
     mocks.checkAuthGrant.mockResolvedValue({
@@ -1897,7 +1921,12 @@ describe("Editing an agent that already exists", () => {
     });
     await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(await authenticationSave());
+    await screen.findByRole("checkbox", { name: "GitHub" });
+    const save = await authenticationSave();
+    await waitFor(() =>
+      expect((save as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(save);
 
     await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
     expect(mocks.checkAuthGrant).not.toHaveBeenCalled();
