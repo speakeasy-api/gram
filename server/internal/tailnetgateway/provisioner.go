@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -80,10 +82,12 @@ var (
 	_ k8s.NetworkIngressCredentialedDeleter = (*Provisioner)(nil)
 )
 
-// NewProvisioner validates the configuration and returns the provider.
+// NewProvisioner validates the configuration and returns the provider. enc
+// may be nil, in which case Apply is unavailable while observation and
+// teardown still work.
 func NewProvisioner(db *pgxpool.Pool, enc *encryption.Client, api tailscaleapi.Client, cfg ProvisionerConfig) (*Provisioner, error) {
-	if db == nil || enc == nil || api == nil {
-		return nil, errors.New("tailnet gateway provisioner requires a database, encryption client and Tailscale API client")
+	if db == nil || api == nil {
+		return nil, errors.New("tailnet gateway provisioner requires a database and Tailscale API client")
 	}
 	if err := ValidateTag(cfg.Tag); err != nil {
 		return nil, err
@@ -133,18 +137,33 @@ func errorObservation(code string) k8s.NetworkIngressObservation {
 	return k8s.NetworkIngressObservation{Status: k8s.NetworkIngressStatusError, ErrorCode: code}
 }
 
-// Apply defines the service, ensures slot rows and mints keys for slots that
-// have neither persisted state nor an unexpired key, then observes.
-func (p *Provisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
+// ValidateDesired checks everything Apply needs before any side effect, so a
+// cutover never tears down an operator backend for a desired state the
+// gateway would reject. The returned error observation carries the code
+// Apply would report.
+func (p *Provisioner) ValidateDesired(desired k8s.NetworkIngressDesired) (tailscaleapi.Credentials, k8s.NetworkIngressObservation, error) {
 	if desired.ID == uuid.Nil || desired.OrganizationID == "" || desired.Provider != k8s.NetworkIngressProviderTailscale || len(desired.Credentials) == 0 {
-		return errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), fmt.Errorf("%w: desired state is incomplete", k8s.ErrNetworkIngressInvalidDesiredState)
+		return tailscaleapi.Credentials{}, errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), fmt.Errorf("%w: desired state is incomplete", k8s.ErrNetworkIngressInvalidDesiredState)
 	}
 	if err := ValidateLabel(desired.Hostname); err != nil {
-		return errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), fmt.Errorf("%w: %w", k8s.ErrNetworkIngressInvalidDesiredState, err)
+		return tailscaleapi.Credentials{}, errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), fmt.Errorf("%w: %w", k8s.ErrNetworkIngressInvalidDesiredState, err)
+	}
+	if p.enc == nil {
+		return tailscaleapi.Credentials{}, errorObservation(""), errors.New("tailnet gateway provisioner has no encryption key to store auth keys")
 	}
 	creds, err := credentialsFrom(desired.Credentials)
 	if err != nil {
-		return errorObservation(k8s.NetworkIngressErrorInvalidCredentials), err
+		return tailscaleapi.Credentials{}, errorObservation(k8s.NetworkIngressErrorInvalidCredentials), err
+	}
+	return creds, k8s.NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, nil
+}
+
+// Apply defines the service, ensures slot rows and mints keys for slots that
+// have not registered and hold no unexpired key, then observes.
+func (p *Provisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
+	creds, observation, err := p.ValidateDesired(desired)
+	if err != nil {
+		return observation, err
 	}
 
 	err = p.api.UpsertService(ctx, creds, tailscaleapi.Service{
@@ -175,18 +194,25 @@ func (p *Provisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesir
 	if err != nil {
 		return errorObservation(""), fmt.Errorf("list gateway slots: %w", err)
 	}
+	// A label change leaves the previous service behind; the hosts' reported
+	// FQDNs remember which one it was.
+	if err := p.deleteRenamedServices(ctx, creds, desired.Hostname, nodes); err != nil {
+		return errorObservation(""), err
+	}
 	now := p.cfg.Now()
 	for _, node := range nodes {
 		if node.RetiredAt.Valid || node.Slot >= p.cfg.Slots {
 			continue
 		}
-		hasState, err := queries.HasNetworkIngressNodeState(ctx, repo.HasNetworkIngressNodeStateParams{
-			NetworkIngressID: desired.ID, OrganizationID: desired.OrganizationID, Slot: node.Slot,
-		})
+		store, err := NewPostgresStateStore(p.db, p.enc, desired.ID, desired.OrganizationID, node.Slot)
 		if err != nil {
-			return errorObservation(""), fmt.Errorf("check gateway slot state: %w", err)
+			return errorObservation(""), fmt.Errorf("build gateway slot state store: %w", err)
 		}
-		if hasState {
+		registered, err := store.Registered(ctx)
+		if err != nil {
+			return errorObservation(""), fmt.Errorf("check gateway slot registration: %w", err)
+		}
+		if registered {
 			continue
 		}
 		if node.AuthKeyEncrypted.Valid && node.AuthKeyExpiresAt.Valid && node.AuthKeyExpiresAt.Time.After(now.Add(authKeyRenewMargin)) {
@@ -223,6 +249,28 @@ func (p *Provisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesir
 		return errorObservation(""), fmt.Errorf("mark ingress runtime: %w", err)
 	}
 	return p.observe(ctx, desired.ID, desired.OrganizationID)
+}
+
+// deleteRenamedServices removes services advertised under a previous label.
+func (p *Provisioner) deleteRenamedServices(ctx context.Context, creds tailscaleapi.Credentials, label string, nodes []repo.NetworkIngressNode) error {
+	seen := map[string]struct{}{}
+	for _, node := range nodes {
+		if !node.DnsName.Valid {
+			continue
+		}
+		previous, _, _ := strings.Cut(node.DnsName.String, ".")
+		if previous == "" || previous == label {
+			continue
+		}
+		if _, done := seen[previous]; done {
+			continue
+		}
+		seen[previous] = struct{}{}
+		if err := p.api.DeleteService(ctx, creds, ServiceName(previous)); err != nil {
+			return mapAPIError(err)
+		}
+	}
+	return nil
 }
 
 // Observe reports the ingress online when any slot has a fresh online
@@ -283,34 +331,35 @@ func anyHeartbeat(nodes []repo.NetworkIngressNode) bool {
 	return false
 }
 
-// Delete without credentials can only succeed when no node identities exist;
-// otherwise devices would be left on the customer's tailnet.
+// Delete without credentials is DeleteWithCredentials with none: it only
+// succeeds when the gateway never touched the tailnet for this ingress.
 func (p *Provisioner) Delete(ctx context.Context, resources k8s.NetworkIngressResourceNames) error {
-	own, err := p.owner(ctx, resources.OwnerID)
-	if err != nil {
-		return err
-	}
-	nodes, err := repo.New(p.db).ListNetworkIngressNodes(ctx, repo.ListNetworkIngressNodesParams{NetworkIngressID: resources.OwnerID, OrganizationID: own.organizationID})
-	if err != nil {
-		return fmt.Errorf("list gateway slots: %w", err)
-	}
-	if len(nodes) == 0 {
-		return nil
-	}
-	return fmt.Errorf("%w: credentials are required to delete tailnet devices", k8s.ErrNetworkIngressProviderCredentialsRejected)
+	return p.DeleteWithCredentials(ctx, resources, nil)
 }
 
 // DeleteWithCredentials retires every slot, waits for gateway pods to stop
 // hosting, then deletes the devices and the service through the API and
-// purges the persisted node identities.
+// purges the persisted node identities. Once Apply has run, the service and
+// any devices exist on the customer's tailnet, so missing or unparseable
+// credentials block cleanup rather than silently leaving them behind.
 func (p *Provisioner) DeleteWithCredentials(ctx context.Context, resources k8s.NetworkIngressResourceNames, credentials []byte) error {
-	creds, err := credentialsFrom(credentials)
-	if err != nil {
-		return fmt.Errorf("%w: %w", k8s.ErrNetworkIngressProviderCredentialsRejected, err)
-	}
 	own, err := p.owner(ctx, resources.OwnerID)
 	if err != nil {
 		return err
+	}
+	if len(credentials) == 0 {
+		nodes, err := repo.New(p.db).ListNetworkIngressNodes(ctx, repo.ListNetworkIngressNodesParams{NetworkIngressID: resources.OwnerID, OrganizationID: own.organizationID})
+		if err != nil {
+			return fmt.Errorf("list gateway slots: %w", err)
+		}
+		if own.runtime != RuntimeGateway && len(nodes) == 0 {
+			return nil
+		}
+		return fmt.Errorf("%w: credentials are required to delete the tailnet service and devices", k8s.ErrNetworkIngressProviderCredentialsRejected)
+	}
+	creds, err := credentialsFrom(credentials)
+	if err != nil {
+		return fmt.Errorf("%w: %w", k8s.ErrNetworkIngressProviderCredentialsRejected, err)
 	}
 	queries := repo.New(p.db)
 	if err := queries.RetireNetworkIngressNodes(ctx, repo.RetireNetworkIngressNodesParams{

@@ -190,25 +190,35 @@ func (p *TailscaleNetworkIngressProvisioner) HasResources(ctx context.Context, r
 		return false, err
 	}
 	ownerID := resources.OwnerID.String()
+	// A namespace owned by someone else is not ours, exactly as teardown
+	// treats it; the cluster-scoped operator resources are checked on their own.
 	namespace, err := p.clientset.CoreV1().Namespaces().Get(ctx, resources.Namespace, metav1.GetOptions{})
 	switch {
 	case err == nil:
-		if err := ensureResourceOwned(namespace.GetLabels(), ownerID); err != nil {
-			return false, fmt.Errorf("refuse to adopt namespace: %w", err)
+		if ensureResourceOwned(namespace.GetLabels(), ownerID) == nil {
+			return true, nil
 		}
-		return true, nil
 	case !k8serrors.IsNotFound(err):
 		return false, fmt.Errorf("get namespace: %w", err)
 	}
-	tailnet, err := p.dynamic.Resource(tailnetGVR).Get(ctx, resources.Tailnet, metav1.GetOptions{})
-	switch {
-	case err == nil:
-		if err := ensureResourceOwned(tailnet.GetLabels(), ownerID); err != nil {
-			return false, fmt.Errorf("refuse to adopt Tailnet: %w", err)
+	for _, candidate := range []struct {
+		kind string
+		gvr  schema.GroupVersionResource
+		name string
+	}{
+		{kind: "Tailnet", gvr: tailnetGVR, name: resources.Tailnet},
+		{kind: "ProxyGroup", gvr: proxyGroupGVR, name: resources.ProxyGroup},
+	} {
+		object, err := p.dynamic.Resource(candidate.gvr).Get(ctx, candidate.name, metav1.GetOptions{})
+		switch {
+		case err == nil:
+			if err := ensureResourceOwned(object.GetLabels(), ownerID); err != nil {
+				return false, fmt.Errorf("refuse to adopt %s: %w", candidate.kind, err)
+			}
+			return true, nil
+		case !k8serrors.IsNotFound(err):
+			return false, fmt.Errorf("get %s: %w", candidate.kind, err)
 		}
-		return true, nil
-	case !k8serrors.IsNotFound(err):
-		return false, fmt.Errorf("get Tailnet: %w", err)
 	}
 	return false, nil
 }
