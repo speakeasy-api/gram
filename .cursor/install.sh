@@ -1,9 +1,11 @@
 set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 export DEBIAN_FRONTEND=noninteractive
-if ! command -v dockerd >/dev/null 2>&1 || ! command -v fuse-overlayfs >/dev/null 2>&1; then
+# docker-buildx provides BuildKit, which the assistant runtime image needs
+# (its Dockerfile uses RUN --mount).
+if ! command -v dockerd >/dev/null 2>&1 || ! command -v fuse-overlayfs >/dev/null 2>&1 || ! docker buildx version >/dev/null 2>&1; then
   sudo apt-get update
-  sudo apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y docker.io docker-compose-v2 fuse-overlayfs iptables
+  sudo apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y docker.io docker-buildx docker-compose-v2 fuse-overlayfs iptables
 fi
 sudo mkdir -p /etc/docker
 printf '%s\n' '{' '  "storage-driver": "fuse-overlayfs",' '  "iptables": true' '}' | sudo tee /etc/docker/daemon.json >/dev/null
