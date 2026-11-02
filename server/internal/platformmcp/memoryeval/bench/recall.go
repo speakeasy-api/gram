@@ -28,8 +28,8 @@ type RecallRow struct {
 	// Questions is how many answerable questions were asked.
 	Questions int `json:"questions"`
 
-	// Keyword counts questions whose sources all came back for a search on an
-	// evidence group: the query an agent writes when it knows the words.
+	// Keyword counts questions whose sources all came back across searches on
+	// its evidence groups: the query an agent writes when it knows the words.
 	Keyword int `json:"keyword_retrieved"`
 
 	// Natural counts questions whose sources all came back when the
@@ -38,8 +38,8 @@ type RecallRow struct {
 	Natural int `json:"natural_retrieved"`
 }
 
-// QuestionRecall searches each arm once per answerable question with its
-// first evidence group and once with the question's text.
+// QuestionRecall searches each arm for every answerable question with each of
+// its evidence groups, pooling the results, and once with the question's text.
 func QuestionRecall(ctx context.Context, corpus *memoryeval.Corpus, arms []Arm) (RecallReport, error) {
 	report := RecallReport{Rows: make([]RecallRow, 0, len(arms))}
 	for _, a := range arms {
@@ -52,11 +52,17 @@ func QuestionRecall(ctx context.Context, corpus *memoryeval.Corpus, arms []Arm) 
 				continue
 			}
 			row.Questions++
-			keyword, err := a.Search(ctx, strings.Join(q.Evidence[0], " "))
-			if err != nil {
-				return RecallReport{}, fmt.Errorf("%s keyword search for %s: %w", a.Name, q.ID, err)
+			// A timeline question's sources can need different words, so every
+			// evidence group is searched and the results pooled.
+			var keywordIDs []uuid.UUID
+			for _, group := range q.Evidence {
+				keyword, err := a.Search(ctx, strings.Join(group, " "))
+				if err != nil {
+					return RecallReport{}, fmt.Errorf("%s keyword search for %s: %w", a.Name, q.ID, err)
+				}
+				keywordIDs = append(keywordIDs, keyword.ChatIDs...)
 			}
-			if retrievedSources(q, keyword.ChatIDs) {
+			if retrievedSources(q, keywordIDs) {
 				row.Keyword++
 			}
 			natural, err := a.Search(ctx, recallQuery(q.Text))

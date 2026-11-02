@@ -1,6 +1,7 @@
 package bench
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -71,4 +72,25 @@ func TestCosine(t *testing.T) {
 	require.InDelta(t, 0, cosine([]float32{1, 0}, []float32{0, 3}), 1e-9)
 	require.Zero(t, cosine([]float32{0, 0}, []float32{1, 0}))
 	require.Zero(t, cosine([]float32{1}, []float32{1, 0}), "mismatched dimensions score zero")
+}
+
+// TestQuerySnippetAnchorsOnQueryWords checks that a long vector-only hit is
+// cut around the first query word it contains, and from the start when the
+// query shares no word with it.
+func TestQuerySnippetAnchorsOnQueryWords(t *testing.T) {
+	t.Parallel()
+	text := strings.Repeat("filler ", 300) + "the Redis cache was removed " + strings.Repeat("tail ", 300)
+
+	snippet, truncated := querySnippet(text, "why did we drop the cache?", 200)
+	require.True(t, truncated)
+	require.Contains(t, snippet, "Redis cache was removed")
+	require.Len(t, []rune(snippet), 200)
+
+	snippet, truncated = querySnippet(text, "unrelated words", 200)
+	require.True(t, truncated)
+	require.True(t, strings.HasPrefix(snippet, "filler "))
+
+	snippet, truncated = querySnippet("short text", "cache", 200)
+	require.False(t, truncated)
+	require.Equal(t, "short text", snippet)
 }

@@ -8,7 +8,9 @@ import (
 	"log/slog"
 	"math"
 	"slices"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/bench/repo"
@@ -77,7 +79,8 @@ func (e OpenRouterEmbedder) Embed(ctx context.Context, inputs []string) ([][]flo
 }
 
 // memoryItem is one summary, memo or digest the hybrid arm can return, with
-// its masked text embedded.
+// its masked text embedded. hit.Text holds the whole masked text; the snippet
+// is cut per query.
 type memoryItem struct {
 	hit       platformmcp.TeamMemoryHit
 	periodEnd time.Time
@@ -119,6 +122,9 @@ func HybridTeamMemoryArm(ctx context.Context, logger *slog.Logger, embedder Embe
 		if limit == 0 {
 			limit = 10
 		}
+		if limit < 1 || limit > hybridCandidates {
+			return platformmcp.SearchTeamMemoryOutput{}, fmt.Errorf("search_team_memory: limit %d is outside 1-%d", input.Limit, hybridCandidates)
+		}
 		// The full-text list goes through the real tool, which validates the
 		// input, authorizes the read and resolves the window.
 		ftsInput := input
@@ -132,6 +138,9 @@ func HybridTeamMemoryArm(ctx context.Context, logger *slog.Logger, embedder Embe
 			return platformmcp.SearchTeamMemoryOutput{}, fmt.Errorf("embed query: %w", err)
 		}
 		vector := vectorCandidates(items, queryVectors[0], input.Kinds, fts.From, fts.To, hybridCandidates)
+		for i := range vector {
+			vector[i].Text, vector[i].Truncated = querySnippet(vector[i].Text, input.Query, hybridSnippetRunes)
+		}
 		return platformmcp.SearchTeamMemoryOutput{Hits: fuseRanked(fts.Hits, vector, limit), From: fts.From, To: fts.To}, nil
 	}
 
@@ -187,16 +196,12 @@ func loadMemoryItems(ctx context.Context, embedder Embedder, target Target, main
 		if err != nil {
 			return nil, fmt.Errorf("redact team memory item: %w", err)
 		}
-		snippet, truncated := text, false
-		if runes := []rune(text); len(runes) > hybridSnippetRunes {
-			snippet, truncated = string(runes[:hybridSnippetRunes]), true
-		}
 		source := platformmcp.TeamMemorySource{Kind: row.Kind, ID: row.ID.String(), ChatID: ""}
 		if row.ChatID.Valid {
 			source.ChatID = row.ChatID.UUID.String()
 		}
 		item := memoryItem{
-			hit:       platformmcp.TeamMemoryHit{Source: source, Text: snippet, Truncated: truncated, At: row.At.Time.UTC(), AuthorUserID: row.AuthorUserID, Level: row.Level, PeriodStart: ""},
+			hit:       platformmcp.TeamMemoryHit{Source: source, Text: text, Truncated: false, At: row.At.Time.UTC(), AuthorUserID: row.AuthorUserID, Level: row.Level, PeriodStart: ""},
 			periodEnd: time.Time{},
 			vector:    nil,
 		}
@@ -254,6 +259,41 @@ func vectorCandidates(items []memoryItem, query []float32, kinds []string, from,
 		hits = append(hits, c.hit)
 	}
 	return hits
+}
+
+// querySnippet cuts text to at most n runes, starting a little before the
+// first query word of four or more letters it contains, so a long digest
+// still shows the part that matched. A query that shares no such word, as a
+// paraphrase may not, gets the start of the text.
+func querySnippet(text, query string, n int) (string, bool) {
+	runes := []rune(text)
+	if len(runes) <= n {
+		return text, false
+	}
+	lower := []rune(strings.ToLower(text))
+	start := 0
+	best := -1
+	for _, word := range strings.FieldsFunc(strings.ToLower(query), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
+		if len([]rune(word)) < 4 {
+			continue
+		}
+		if at := runeIndex(lower, []rune(word)); at >= 0 && (best < 0 || at < best) {
+			best = at
+		}
+	}
+	if best > 0 {
+		start = max(0, min(best-n/8, len(runes)-n))
+	}
+	return string(runes[start : start+n]), true
+}
+
+func runeIndex(haystack, needle []rune) int {
+	for i := 0; i+len(needle) <= len(haystack); i++ {
+		if slices.Equal(haystack[i:i+len(needle)], needle) {
+			return i
+		}
+	}
+	return -1
 }
 
 func cosine(a, b []float32) float64 {
