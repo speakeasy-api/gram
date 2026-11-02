@@ -104,6 +104,21 @@ func IsConfigured(value string) bool {
 	return value != "" && value != "unset"
 }
 
+// GetSubscriptionOption controls validation for a live subscription read.
+type GetSubscriptionOption int
+
+// RequireAdoptionEligibility rejects subscriptions outside the configured billing catalog.
+// Ordinary reads remain tolerant so already-linked subscriptions can still be managed.
+const RequireAdoptionEligibility GetSubscriptionOption = iota
+
+// SubscriptionEligibilityError identifies a subscription that cannot be adopted.
+// Reason contains a safe catalog validation message, never upstream Stripe details.
+type SubscriptionEligibilityError struct {
+	Reason string
+}
+
+func (e *SubscriptionEligibilityError) Error() string { return e.Reason }
+
 // Client is the Stripe surface used by PAYG billing.
 type Client interface {
 	ResolveGatewayPromotionCode(context.Context, string) (string, error)
@@ -115,7 +130,7 @@ type Client interface {
 	// Use IsConfigured to check for empty or "unset" configuration.
 	PublishableKey() string
 	GetCheckoutSession(context.Context, string) (*CheckoutSessionState, error)
-	GetSubscription(context.Context, string) (*SubscriptionState, error)
+	GetSubscription(context.Context, string, ...GetSubscriptionOption) (*SubscriptionState, error)
 	SetSubscriptionCancelAtPeriodEnd(context.Context, SetSubscriptionCancelAtPeriodEndInput) (*SubscriptionState, error)
 	CreatePortalSession(context.Context, CreatePortalSessionInput) (*PortalSession, error)
 	GetInvoice(context.Context, string) (*InvoiceState, error)
@@ -949,7 +964,7 @@ func (c *client) GetCheckoutSession(ctx context.Context, id string) (*CheckoutSe
 	return state, nil
 }
 
-func (c *client) GetSubscription(ctx context.Context, id string) (*SubscriptionState, error) {
+func (c *client) GetSubscription(ctx context.Context, id string, options ...GetSubscriptionOption) (*SubscriptionState, error) {
 	if id == "" {
 		return nil, errors.New("subscription id is required")
 	}
@@ -964,7 +979,46 @@ func (c *client) GetSubscription(ctx context.Context, id string) (*SubscriptionS
 		}
 		return nil, fmt.Errorf("retrieve Stripe subscription: %w", err)
 	}
+	for _, option := range options {
+		if option == RequireAdoptionEligibility {
+			if err := c.validateSubscriptionCatalog(subscription); err != nil {
+				return nil, err
+			}
+		}
+	}
 	return c.subscriptionState(subscription)
+}
+
+// validateSubscriptionCatalog fails closed only when adopting a subscription.
+func (c *client) validateSubscriptionCatalog(subscription *stripesdk.Subscription) error {
+	if subscription == nil || subscription.ID == "" {
+		return errors.New("stripe subscription response is empty")
+	}
+	if !IsConfigured(c.catalog.PriceIDTUM) {
+		return errors.New("missing TUM price id in catalog")
+	}
+	if subscription.Items == nil || subscription.Items.HasMore {
+		return &SubscriptionEligibilityError{Reason: "stripe subscription item coverage is incomplete"}
+	}
+	var hasTUMServicePeriod bool
+	for _, item := range subscription.Items.Data {
+		if item == nil || item.Price == nil || !IsConfigured(item.Price.ID) {
+			return &SubscriptionEligibilityError{Reason: "stripe subscription item is missing a price"}
+		}
+		priceID := item.Price.ID
+		if priceID == c.catalog.PriceIDTUM && item.CurrentPeriodStart > 0 && item.CurrentPeriodEnd > item.CurrentPeriodStart {
+			hasTUMServicePeriod = true
+		}
+		if priceID != c.catalog.PriceIDTUM &&
+			(!IsConfigured(c.catalog.PriceIDMCPEgress) || priceID != c.catalog.PriceIDMCPEgress) &&
+			(!IsConfigured(c.catalog.PriceIDRiskScans) || priceID != c.catalog.PriceIDRiskScans) {
+			return &SubscriptionEligibilityError{Reason: "stripe subscription contains a price outside the configured AICP catalog"}
+		}
+	}
+	if !hasTUMServicePeriod {
+		return &SubscriptionEligibilityError{Reason: "stripe subscription is missing the configured TUM service period"}
+	}
+	return nil
 }
 
 func (c *client) SetSubscriptionCancelAtPeriodEnd(ctx context.Context, input SetSubscriptionCancelAtPeriodEndInput) (*SubscriptionState, error) {
@@ -1359,7 +1413,7 @@ func (s *stubClient) GetCheckoutSession(context.Context, string) (*CheckoutSessi
 	return nil, errors.New("retrieve Stripe Checkout session is unavailable locally")
 }
 
-func (s *stubClient) GetSubscription(context.Context, string) (*SubscriptionState, error) {
+func (s *stubClient) GetSubscription(context.Context, string, ...GetSubscriptionOption) (*SubscriptionState, error) {
 	return nil, errors.New("retrieve Stripe subscription is unavailable locally")
 }
 

@@ -135,7 +135,7 @@ type BillingOperations interface {
 	GetCustomerUsage(context.Context, []usage.CustomerUsageOrganization, usage.CustomerUsageInterval) (*usage.CustomerUsageReport, error)
 	GetStripeCustomer(context.Context, string) (*stripeclient.CustomerDetails, error)
 	// GetStripeSubscriptionByID loads a live Stripe subscription so an assignment can verify its customer.
-	GetStripeSubscriptionByID(context.Context, string) (*stripeclient.SubscriptionState, error)
+	GetStripeSubscriptionByID(context.Context, string, ...stripeclient.GetSubscriptionOption) (*stripeclient.SubscriptionState, error)
 	GetStripeSubscriptionForOrganization(context.Context, string) (*usage.StripeSubscription, error)
 	SetStripeSubscriptionCancelAtPeriodEndForOrganization(context.Context, string, usage.BillingActor, bool) (*usage.StripeSubscription, error)
 }
