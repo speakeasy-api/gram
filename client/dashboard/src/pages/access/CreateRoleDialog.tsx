@@ -34,6 +34,7 @@ import {
   clientTypeGrantChanges,
   clientTypeRulesFromRole,
   clientTypeRulesKey,
+  rebaseClientTypeRules,
   type ClientTypeRules,
 } from "./roleAuthClientTypes";
 import { Dialog } from "@/components/ui/Dialog";
@@ -69,6 +70,7 @@ import {
   applyRemoveRule,
   diffGrants,
   grantsFromRole,
+  rebaseFormGrants,
   roleHoldsGrants,
   sdkGrantsFromForm,
 } from "./roleGrantTransform";
@@ -183,7 +185,9 @@ export function CreateRoleDialog({
   const [showAgents, setShowAgents] = useState(false);
   const [initialName, setInitialName] = useState("");
   const [initialDescription, setInitialDescription] = useState("");
-  const [initialGrantKeys, setInitialGrantKeys] = useState("");
+  const [initialGrants, setInitialGrants] = useState<Record<string, RoleGrant>>(
+    {},
+  );
   const [clientTypeRules, setClientTypeRules] = useState<ClientTypeRules>(() =>
     clientTypeRulesFromRole(undefined),
   );
@@ -252,15 +256,25 @@ export function CreateRoleDialog({
     [organization.projects],
   );
 
+  // The permissions the role stores, in the form's own shape. Read once per
+  // role rather than per render: every read mints fresh rule ids, and the
+  // editor compares these against what is on screen.
+  const storedGrants = useMemo(
+    () =>
+      editingRole && scopesData
+        ? grantsFromRole(editingRole, scopesData.scopes)
+        : null,
+    [editingRole, scopesData],
+  );
+
   // ─── Initialize when editing ──────────────────────────────────
-  if (editingRole && !initialized && scopesData && membersData) {
+  if (editingRole && !initialized && storedGrants && membersData) {
     setName(editingRole.name);
     setDescription(editingRole.description);
-    const roleGrants = grantsFromRole(editingRole, scopesData.scopes);
-    setGrants(roleGrants);
+    setGrants(storedGrants);
     setInitialName(editingRole.name);
     setInitialDescription(editingRole.description);
-    setInitialGrantKeys(grantKeysStringFn(roleGrants));
+    setInitialGrants(storedGrants);
     setClientTypeRules(clientTypeRulesFromRole(editingRole));
     setSavedClientTypeRules(clientTypeRulesFromRole(editingRole));
     const assignedIds = new Set(membersWithRole(members, editingRole.id));
@@ -273,6 +287,42 @@ export function CreateRoleDialog({
   }
   if (!editingRole && initialized) {
     setInitialized(false);
+  }
+
+  // ─── Follow the role as it is read again ──────────────────────
+  //
+  // The roles list keeps being refreshed while the editor is open, and a save
+  // works out what to take off the role from what the form holds. So anything
+  // nobody has touched here follows the role as stored: a permission or
+  // credential rule the role gained since the form was filled in shows up
+  // rather than sitting switched off, and saving an unrelated edit cannot take
+  // it away. Changes made in the editor are left as they are, and still
+  // decide what the save removes.
+  if (editingRole && initialized && storedGrants) {
+    if (grantKeysStringFn(storedGrants) !== grantKeysStringFn(initialGrants)) {
+      setGrants((current) =>
+        rebaseFormGrants({
+          current,
+          baseline: initialGrants,
+          stored: storedGrants,
+        }),
+      );
+      setInitialGrants(storedGrants);
+    }
+    const storedClientTypes = clientTypeRulesFromRole(editingRole);
+    if (
+      clientTypeRulesKey(storedClientTypes) !==
+      clientTypeRulesKey(savedClientTypeRules)
+    ) {
+      setClientTypeRules((current) =>
+        rebaseClientTypeRules({
+          current,
+          baseline: savedClientTypeRules,
+          stored: storedClientTypes,
+        }),
+      );
+      setSavedClientTypeRules(storedClientTypes);
+    }
   }
 
   // ─── Mutations ────────────────────────────────────────────────
@@ -292,7 +342,7 @@ export function CreateRoleDialog({
     clientTypeRules: ClientTypeRules;
     name: string;
     description: string;
-    grantKeys: string;
+    formGrants: Record<string, RoleGrant>;
     grants: SdkRoleGrant[];
     members: Set<string>;
     agents: Set<string>;
@@ -345,7 +395,7 @@ export function CreateRoleDialog({
       if (presentation === "page" && saved) {
         setInitialName(saved.name);
         setInitialDescription(saved.description);
-        if (grantsStored) setInitialGrantKeys(saved.grantKeys);
+        if (grantsStored) setInitialGrants(saved.formGrants);
         setInitialMembers(saved.members);
         setInitialAgents(saved.agents);
         setSavedClientTypeRules(storedClientTypeRules);
@@ -376,7 +426,7 @@ export function CreateRoleDialog({
       initial: {
         name: initialName,
         description: initialDescription,
-        grantKeys: initialGrantKeys,
+        grantKeys: grantKeysStringFn(initialGrants),
         members: initialMembers,
         agents: initialAgents,
       },
@@ -543,11 +593,10 @@ export function CreateRoleDialog({
     const sdkGrants = sdkGrantsFromForm(grants, scopeDefinitions);
 
     if (isEditing) {
-      const initialGrants = sdkGrantsFromForm(
-        grantsFromRole(editingRole, scopeDefinitions),
-        scopeDefinitions,
+      const scopeChanges = diffGrants(
+        sdkGrantsFromForm(storedGrants ?? {}, scopeDefinitions),
+        sdkGrants,
       );
-      const scopeChanges = diffGrants(initialGrants, sdkGrants);
       // Removals use the role's stored selectors, so only the credential
       // types whose rule changed are rewritten.
       const typeChanges = clientTypeGrantChanges(editingRole, clientTypeRules);
@@ -560,7 +609,7 @@ export function CreateRoleDialog({
         clientTypeRules,
         name,
         description,
-        grantKeys: grantKeysStringFn(grants),
+        formGrants: grants,
         grants: sdkGrants,
         members: new Set(selectedMembers),
         agents: new Set(selectedAgents),
@@ -623,7 +672,7 @@ export function CreateRoleDialog({
     setShowAgents(false);
     setInitialName("");
     setInitialDescription("");
-    setInitialGrantKeys("");
+    setInitialGrants({});
     setShowMembers(false);
     setAssignmentConfirmed(false);
     setInitialized(false);

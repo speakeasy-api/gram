@@ -10,6 +10,7 @@ import {
   type Selector,
 } from "@gram/client/models/components/selector.js";
 
+import { grantSummaryKey } from "./roleDialogState";
 import type {
   AnnotationHint,
   PolicyEffect,
@@ -296,6 +297,36 @@ export function roleHoldsGrants(
   const saved = sdkGrantsFromForm(grantsFromRole(role, scopes), scopes);
   const { addGrants, removeGrants } = diffGrants(saved, wanted);
   return addGrants.length === 0 && removeGrants.length === 0;
+}
+
+/**
+ * The form's permissions after the role was read again. A permission the
+ * person changed keeps their edit; every other one follows the role as stored.
+ *
+ * The editor fills its form in from one read of the role and a save works out
+ * its removals from that form, so a later read is not a cosmetic refresh: a
+ * permission the role gained since the form was filled in would otherwise sit
+ * in the form as switched off, and the next save would take it away.
+ */
+export function rebaseFormGrants(args: {
+  current: Record<string, RoleGrant>;
+  baseline: Record<string, RoleGrant>;
+  stored: Record<string, RoleGrant>;
+}): Record<string, RoleGrant> {
+  const { current, baseline, stored } = args;
+  const next: Record<string, RoleGrant> = Object.create(null);
+  const scopes = new Set([
+    ...Object.keys(current),
+    ...Object.keys(baseline),
+    ...Object.keys(stored),
+  ]);
+  for (const scope of scopes) {
+    const edited =
+      grantSummaryKey(current[scope]) !== grantSummaryKey(baseline[scope]);
+    const keep = edited ? current[scope] : stored[scope];
+    if (keep) next[scope] = keep;
+  }
+  return next;
 }
 
 /**
