@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type telemetryNetworkIngressProvisioner struct {
@@ -186,7 +187,7 @@ func TestObservedProvisionerExposesCredentialedTeardownOnlyWhenWrapped(t *testin
 	reader := sdkmetric.NewManualReader()
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
-	logger := slog.New(slog.DiscardHandler)
+	logger := testenv.NewLogger(t)
 	metrics := NewNetworkIngressMetrics(logger, provider)
 
 	plain := ObserveNetworkIngressProvisioner(NetworkIngressProviderTailscale, telemetryNetworkIngressProvisioner{err: nil}, logger, metrics)
