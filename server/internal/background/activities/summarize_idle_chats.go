@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -38,6 +39,9 @@ const (
 	memorySummaryTickBatch = 1000
 	// memorySummaryConcurrency bounds parallel model calls in one run.
 	memorySummaryConcurrency = 8
+	// memorySummaryHeartbeat is how often a run reports liveness, well under
+	// the workflow's heartbeat timeout.
+	memorySummaryHeartbeat = 30 * time.Second
 )
 
 // SummarizeIdleChatsArgs bounds one sweep run.
@@ -90,27 +94,56 @@ func (s *SummarizeIdleChats) Do(ctx context.Context, args SummarizeIdleChatsArgs
 		return result, nil
 	}
 
-	due, err := s.collect(ctx, result)
+	// Heartbeat on a timer for the whole run: collect and waits for a free
+	// slot can each outlast the heartbeat timeout on a large fleet.
+	if activity.IsActivity(ctx) {
+		stop := make(chan struct{})
+		defer close(stop)
+		go func() {
+			ticker := time.NewTicker(memorySummaryHeartbeat)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					activity.RecordHeartbeat(ctx)
+				case <-stop:
+					return
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+
+	due, err := s.collect(ctx, args, result)
 	if err != nil {
 		return result, err
 	}
 
-	heartbeat := func() {}
-	if activity.IsActivity(ctx) {
-		heartbeat = func() { activity.RecordHeartbeat(ctx) }
+	// deadlineC fires when the run must stop starting new summaries, so a
+	// wait for a free slot never runs into the drain window.
+	var deadlineC <-chan time.Time
+	if !args.Deadline.IsZero() {
+		timer := time.NewTimer(args.Deadline.Sub(s.now()))
+		defer timer.Stop()
+		deadlineC = timer.C
 	}
 
 	var mu sync.Mutex
 	slots := make(chan struct{}, memorySummaryConcurrency)
 	var wg sync.WaitGroup
+dispatch:
 	for _, c := range due {
-		if !args.Deadline.IsZero() && s.now().After(args.Deadline) {
+		if s.pastDeadline(args) || ctx.Err() != nil {
 			break
 		}
-		if ctx.Err() != nil {
-			break
+		select {
+		case slots <- struct{}{}:
+		case <-deadlineC:
+			break dispatch
+		case <-ctx.Done():
+			break dispatch
 		}
-		slots <- struct{}{}
 		wg.Add(1)
 		go func(c dueChat) {
 			defer wg.Done()
@@ -125,9 +158,9 @@ func (s *SummarizeIdleChats) Do(ctx context.Context, args SummarizeIdleChatsArgs
 				result.Empty++
 			case summaryFailed:
 				result.Failed++
+			case summarySkipped:
 			}
 		}(c)
-		heartbeat()
 	}
 	wg.Wait()
 
@@ -143,17 +176,17 @@ func (s *SummarizeIdleChats) Do(ctx context.Context, args SummarizeIdleChatsArgs
 
 // collect lists due chats across flagged organizations, honoring the
 // per-organization daily cap and the per-run limits.
-func (s *SummarizeIdleChats) collect(ctx context.Context, result *SummarizeIdleChatsResult) ([]dueChat, error) {
+func (s *SummarizeIdleChats) collect(ctx context.Context, args SummarizeIdleChatsArgs, result *SummarizeIdleChatsResult) ([]dueChat, error) {
 	orgs, err := s.repo.ListOrganizationsWithChatsForMemorySweep(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list organizations for memory sweep: %w", err)
 	}
 
 	now := s.now().UTC()
 	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	var due []dueChat
 	for _, orgID := range orgs {
-		if len(due) >= memorySummaryTickBatch {
+		if len(due) >= memorySummaryTickBatch || s.pastDeadline(args) || ctx.Err() != nil {
 			break
 		}
 		if !chat.TeamMemoryEnabled(ctx, s.logger, s.db, s.features, orgID) {
@@ -166,7 +199,7 @@ func (s *SummarizeIdleChats) collect(ctx context.Context, result *SummarizeIdleC
 			Since:          pgtype.Timestamptz{Time: dayStart, InfinityModifier: pgtype.Finite, Valid: true},
 		})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("count memory summaries for organization: %w", err)
 		}
 		budget := min(int64(MemorySummaryDailyCap)-written, memorySummaryOrgBatch, int64(memorySummaryTickBatch-len(due)))
 		if budget <= 0 {
@@ -178,10 +211,10 @@ func (s *SummarizeIdleChats) collect(ctx context.Context, result *SummarizeIdleC
 			OrganizationID: orgID,
 			IdleBefore:     pgtype.Timestamptz{Time: now.Add(-MemorySummaryIdle), InfinityModifier: pgtype.Finite, Valid: true},
 			Since:          pgtype.Timestamptz{Time: now.Add(-MemorySummaryLookback), InfinityModifier: pgtype.Finite, Valid: true},
-			MaxChats:       int32(budget), //nolint:gosec // bounded by memorySummaryOrgBatch
+			MaxChats:       int32(budget),
 		})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("list chats due for memory summary: %w", err)
 		}
 		for _, row := range rows {
 			due = append(due, dueChat{orgID: orgID, projectID: row.ProjectID, chatID: row.ID})
@@ -190,15 +223,25 @@ func (s *SummarizeIdleChats) collect(ctx context.Context, result *SummarizeIdleC
 	return due, nil
 }
 
+func (s *SummarizeIdleChats) pastDeadline(args SummarizeIdleChatsArgs) bool {
+	return !args.Deadline.IsZero() && s.now().After(args.Deadline)
+}
+
 type summaryOutcome int
 
 const (
 	summaryWritten summaryOutcome = iota
 	summaryEmpty
 	summaryFailed
+	summarySkipped
 )
 
 func (s *SummarizeIdleChats) summarize(ctx context.Context, c dueChat) summaryOutcome {
+	// A run lasts minutes, so re-check the flag before each model call: an
+	// organization switched off mid-run gets no further summaries.
+	if !chat.TeamMemoryEnabled(ctx, s.logger, s.db, s.features, c.orgID) {
+		return summarySkipped
+	}
 	_, err := s.summaries.Generate(ctx, c.orgID, c.projectID, c.chatID)
 	switch {
 	case err == nil:

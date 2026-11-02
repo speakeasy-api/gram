@@ -42,7 +42,9 @@ const (
 )
 
 // MemoryDigestsWorkflow writes the day, week and month team memory digests
-// for every period that has closed and has no digest yet. Levels run in
+// for every period that has closed and has no digest yet. It first deletes
+// digests whose sources left memory, so the levels below rebuild them. Levels
+// run in
 // order so each folds children written earlier in the same run. A level
 // that had failures, or still had candidates when it hit the batch cap,
 // stops the run: folding a week or month over a missing child would write an
@@ -62,6 +64,9 @@ func MemoryDigestsWorkflow(ctx workflow.Context) error {
 	now := workflow.Now(ctx).UTC()
 
 	var a *Activities
+	if err := workflow.ExecuteActivity(ctx, a.InvalidateMemoryDigests).Get(ctx, nil); err != nil {
+		return fmt.Errorf("invalidate memory digests: %w", err)
+	}
 	for _, level := range []memorydigest.Level{memorydigest.LevelDay, memorydigest.LevelWeek, memorydigest.LevelMonth} {
 		failed := 0
 		pending := true

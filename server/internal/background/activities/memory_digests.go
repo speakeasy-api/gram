@@ -129,13 +129,6 @@ func (m *MemoryDigests) Build(ctx context.Context, args BuildMemoryDigestsArgs) 
 	stopHeartbeat := startActivityHeartbeat(ctx)
 	defer stopHeartbeat()
 
-	// Invalidation runs before anything else and for every organization, so
-	// a source removed from memory leaves every digest that folded it even
-	// when the flag is off or the run stops before higher levels.
-	if err := m.invalidate(ctx); err != nil {
-		return result, err
-	}
-
 	now := args.Now.UTC()
 	orgIDs, err := m.enabledOrganizations(ctx, now)
 	if err != nil {
@@ -189,13 +182,18 @@ func (m *MemoryDigests) Build(ctx context.Context, args BuildMemoryDigestsArgs) 
 	return result, nil
 }
 
-// invalidate deletes digests whose sources changed after they were written,
+// Invalidate deletes digests whose sources changed after they were written,
 // so the job rebuilds them: day digests that folded a chat or memo no longer
 // eligible, then week digests that folded a deleted day, then month digests
-// that folded a deleted week. One pass removes the whole chain. A period
-// older than the lookback is deleted but not rebuilt; its sources then fall
-// back to search.
-func (m *MemoryDigests) invalidate(ctx context.Context) error {
+// that folded a deleted week. One pass removes the whole chain. It covers
+// every organization, flag or not, so removal from memory never depends on
+// rollout. The workflow runs it once per run, before any level is built. A
+// period older than the lookback is deleted but not rebuilt; its sources then
+// fall back to search.
+func (m *MemoryDigests) Invalidate(ctx context.Context) error {
+	stopHeartbeat := startActivityHeartbeat(ctx)
+	defer stopHeartbeat()
+
 	ids, err := m.repo.DeleteStaleDayDigests(ctx)
 	if err != nil {
 		return fmt.Errorf("invalidate day digests: %w", err)

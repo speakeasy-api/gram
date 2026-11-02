@@ -3,6 +3,7 @@
 package memoryeval_test
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"testing"
@@ -83,9 +84,13 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 	corpus := memoryeval.Build(corpusNow)
 	loaded := loadCorpus(t, "memoryeval_judged", corpus)
 	ctx, searchArm := searchChatsArm(t, loaded)
+	// Arm C gets its own copy of the corpus: it writes proxy summaries, which
+	// arm B must not see.
+	memoryCtx, memoryArm := searchTeamMemoryArm(t, loadCorpus(t, "memoryeval_judged_memory", corpus))
 	arms := []arm{
 		{name: "A: no memory", search: nil, sweep: nil, tools: nil, call: nil, instructions: ""},
 		searchArm,
+		boundArm(memoryCtx, memoryArm),
 	}
 
 	answers, verdicts := runEval(ctx, t, client, answerModel, judgeModel, corpus, arms, runs, concurrency)
@@ -95,3 +100,24 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 		require.NoError(t, os.WriteFile(out, []byte(report), 0o600))
 	}
 }
+
+// boundArm makes an arm's tool calls see its own context values (that arm's
+// grants and principal) while keeping the eval's deadline and cancellation.
+func boundArm(bound context.Context, a arm) arm {
+	if a.call != nil {
+		call := a.call
+		a.call = func(ctx context.Context, tool, arguments string) (string, error) {
+			return call(valuesFrom{Context: ctx, values: bound}, tool, arguments)
+		}
+	}
+	return a
+}
+
+// valuesFrom takes deadline and cancellation from the embedded context and
+// values from another one.
+type valuesFrom struct {
+	context.Context //nolint:containedctx // merges two contexts for one call
+	values          context.Context
+}
+
+func (c valuesFrom) Value(key any) any { return c.values.Value(key) }
