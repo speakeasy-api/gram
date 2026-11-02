@@ -3,6 +3,8 @@
 package memoryeval_test
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -85,9 +87,13 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 	corpus := memoryeval.Build(corpusNow)
 	loaded := loadCorpus(t, "memoryeval_judged", corpus)
 	ctx, searchArm := searchChatsArm(t, loaded)
+	// Arm C gets its own copy of the corpus: it writes proxy summaries, which
+	// arm B must not see.
+	memoryCtx, memoryArm := searchTeamMemoryArm(t, loadCorpus(t, "memoryeval_judged_memory", corpus))
 	arms := []arm{
 		{name: "A: no memory", search: nil, sweep: nil, tools: nil, call: nil, instructions: ""},
 		searchArm,
+		boundArm(memoryCtx, memoryArm),
 	}
 
 	answers, verdicts := runEval(ctx, t, client, answerModel, judgeModel, corpus, arms, runs, concurrency)
@@ -96,4 +102,20 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 	if out := os.Getenv("MEMORYEVAL_OUT"); out != "" {
 		require.NoError(t, os.WriteFile(out, []byte(report), 0o600))
 	}
+}
+
+// boundArm makes an arm's tool calls run with its own context, which carries
+// that arm's grants and principal, while still stopping when the eval's
+// context is cancelled.
+func boundArm(bound context.Context, a arm) arm {
+	if a.call != nil {
+		call := a.call
+		a.call = func(ctx context.Context, tool, arguments string) (string, error) {
+			if err := ctx.Err(); err != nil {
+				return "", fmt.Errorf("eval cancelled: %w", err)
+			}
+			return call(bound, tool, arguments)
+		}
+	}
+	return a
 }
