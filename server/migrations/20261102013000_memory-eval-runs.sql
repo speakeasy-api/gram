@@ -14,11 +14,10 @@ CREATE TABLE "memory_eval_runs" (
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "deleted_at" timestamptz NULL,
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
-  PRIMARY KEY ("id"),
-  CONSTRAINT "memory_eval_runs_status_check" CHECK (status = ANY (ARRAY['queued'::text, 'running'::text, 'succeeded'::text, 'failed'::text]))
+  PRIMARY KEY ("id")
 );
 -- Create index "memory_eval_runs_created_at_idx" to table: "memory_eval_runs"
-CREATE INDEX "memory_eval_runs_created_at_idx" ON "memory_eval_runs" ("created_at" DESC) WHERE (deleted IS FALSE);
+CREATE INDEX "memory_eval_runs_created_at_idx" ON "memory_eval_runs" ("created_at" DESC, "id" DESC) WHERE (deleted IS FALSE);
 -- Set comment to column: "id" on table: "memory_eval_runs"
 COMMENT ON COLUMN "memory_eval_runs"."id" IS '@access: confidential';
 -- Set comment to column: "organization_id" on table: "memory_eval_runs"

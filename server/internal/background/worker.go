@@ -591,6 +591,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
 	temporalWorker.RegisterActivity(activities.BuildMemoryDigests)
 	temporalWorker.RegisterActivity(activities.SummarizeIdleChats)
+	temporalWorker.RegisterActivity(activities.InvalidateMemoryDigests)
 	temporalWorker.RegisterActivity(activities.SyncIdentityMap)
 	temporalWorker.RegisterActivity(activities.SyncTenantDimensions)
 	temporalWorker.RegisterActivity(activities.PromoteStagedTelemetry)

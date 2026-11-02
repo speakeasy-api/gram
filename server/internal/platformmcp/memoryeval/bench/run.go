@@ -184,7 +184,9 @@ func runEval(ctx context.Context, client openrouter.CompletionClient, corpus *me
 			}
 		}
 	}
-	if err := group.Wait(); err != nil {
+	// Every goroutine returns nil, so a cancelled run shows up only as ctx.Err.
+	_ = group.Wait()
+	if err := ctx.Err(); err != nil {
 		return nil, nil, fmt.Errorf("answer questions: %w", err)
 	}
 	if err := someSucceeded("answer", len(answers), func(i int) error { return answers[i].err }); err != nil {
@@ -200,12 +202,21 @@ func runEval(ctx context.Context, client openrouter.CompletionClient, corpus *me
 			return nil
 		})
 	}
-	if err := group.Wait(); err != nil {
+	_ = group.Wait()
+	if err := ctx.Err(); err != nil {
 		return nil, nil, fmt.Errorf("grade answers: %w", err)
 	}
-	err := someSucceeded("judge", len(verdicts), func(i int) error {
-		if verdicts[i].Miss == missError && answers[i].err == nil {
-			return errors.New(verdicts[i].Reason)
+	// Only answers that reached the judge count: errored answers are never
+	// graded, and counting them would hide a judge that always fails.
+	judged := make([]int, 0, len(answers))
+	for i := range answers {
+		if answers[i].err == nil {
+			judged = append(judged, i)
+		}
+	}
+	err := someSucceeded("judge", len(judged), func(j int) error {
+		if v := verdicts[judged[j]]; v.Miss == missError {
+			return errors.New(v.Reason)
 		}
 		return nil
 	})
@@ -320,7 +331,7 @@ func completionRequest(model string, messages []or.ChatMessages, tools []openrou
 		UserEmail:                 "",
 		HTTPMetadata:              nil,
 		APIKeyID:                  "",
-		KeyType:                   openrouter.KeyTypeChat,
+		KeyType:                   openrouter.KeyTypeInternal,
 		KeySlot:                   "",
 		JSONSchema:                nil,
 		Reasoning:                 nil,

@@ -102,6 +102,11 @@ type BuildMemoryDigestsArgs struct {
 	// Now is the run's anchor time, so every batch of a run agrees on which
 	// periods are closed.
 	Now time.Time
+
+	// ProjectIDs limits the run to these projects; empty means every project.
+	// The scheduled workflow leaves it empty; the memory eval passes its own
+	// projects so it never writes digests for the rest of the organization.
+	ProjectIDs []uuid.UUID
 }
 
 // BuildMemoryDigestsResult counts what one batch did.
@@ -145,13 +150,6 @@ func (m *MemoryDigests) Build(ctx context.Context, args BuildMemoryDigestsArgs) 
 		defer stopHeartbeat()
 	}
 
-	// Invalidation runs before anything else and for every organization, so
-	// a source removed from memory leaves every digest that folded it even
-	// when the flag is off or the run stops before higher levels.
-	if err := m.invalidate(ctx); err != nil {
-		return result, err
-	}
-
 	now := args.Now.UTC()
 	orgIDs, err := m.enabledOrganizations(ctx, now)
 	if err != nil {
@@ -161,7 +159,7 @@ func (m *MemoryDigests) Build(ctx context.Context, args BuildMemoryDigestsArgs) 
 		return result, nil
 	}
 
-	candidates, err := m.listCandidates(ctx, level, now, orgIDs)
+	candidates, err := m.listCandidates(ctx, level, now, orgIDs, args.ProjectIDs)
 	if err != nil {
 		return result, err
 	}
@@ -205,13 +203,18 @@ func (m *MemoryDigests) Build(ctx context.Context, args BuildMemoryDigestsArgs) 
 	return result, nil
 }
 
-// invalidate deletes digests whose sources changed after they were written,
+// Invalidate deletes digests whose sources changed after they were written,
 // so the job rebuilds them: day digests that folded a chat or memo no longer
 // eligible, then week digests that folded a deleted day, then month digests
-// that folded a deleted week. One pass removes the whole chain. A period
-// older than the lookback is deleted but not rebuilt; its sources then fall
-// back to search.
-func (m *MemoryDigests) invalidate(ctx context.Context) error {
+// that folded a deleted week. One pass removes the whole chain. It covers
+// every organization, flag or not, so removal from memory never depends on
+// rollout. The workflow runs it once per run, before any level is built. A
+// period older than the lookback is deleted but not rebuilt; its sources then
+// fall back to search.
+func (m *MemoryDigests) Invalidate(ctx context.Context) error {
+	stopHeartbeat := startActivityHeartbeat(ctx)
+	defer stopHeartbeat()
+
 	ids, err := m.repo.DeleteStaleDayDigests(ctx)
 	if err != nil {
 		return fmt.Errorf("invalidate day digests: %w", err)
@@ -230,7 +233,10 @@ func (m *MemoryDigests) invalidate(ctx context.Context) error {
 	return nil
 }
 
-func (m *MemoryDigests) listCandidates(ctx context.Context, level memorydigest.Level, now time.Time, orgIDs []string) ([]memoryDigestCandidate, error) {
+func (m *MemoryDigests) listCandidates(ctx context.Context, level memorydigest.Level, now time.Time, orgIDs []string, projectIDs []uuid.UUID) ([]memoryDigestCandidate, error) {
+	if projectIDs == nil {
+		projectIDs = []uuid.UUID{}
+	}
 	since := level.PeriodStart(now.Add(-MemoryDigestLookback))
 	// One extra row tells the caller another batch is waiting.
 	limit := int32(memoryDigestBatchSize + 1)
@@ -239,6 +245,7 @@ func (m *MemoryDigests) listCandidates(ctx context.Context, level memorydigest.L
 	if level == memorydigest.LevelDay {
 		rows, err := m.repo.ListDayDigestCandidates(ctx, repo.ListDayDigestCandidatesParams{
 			OrganizationIds: orgIDs,
+			ProjectIds:      projectIDs,
 			Since:           pgtype.Timestamptz{Time: since, Valid: true, InfinityModifier: pgtype.Finite},
 			Until:           pgtype.Timestamptz{Time: level.PeriodStart(now), Valid: true, InfinityModifier: pgtype.Finite},
 			RowLimit:        limit,
@@ -257,6 +264,7 @@ func (m *MemoryDigests) listCandidates(ctx context.Context, level memorydigest.L
 		ParentLevel:     string(level),
 		ChildLevel:      string(child),
 		OrganizationIds: orgIDs,
+		ProjectIds:      projectIDs,
 		Since:           pgDate(since),
 		// Children of the current, open period are excluded here; a month
 		// can still be open after its own start has passed, which the

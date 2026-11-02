@@ -16623,13 +16623,15 @@ CREATE TABLE IF NOT EXISTS memory_memos (
 
   CONSTRAINT memory_memos_pkey PRIMARY KEY (id),
   -- The composite key pins the project to the memo's organization. The chat
-  -- and agent references are single-column so a hard delete can clear them:
-  -- on a composite key ON DELETE SET NULL would also null project_id or
-  -- organization_id (NOT NULL), and Atlas does not model Postgres 15's
-  -- `SET NULL (column list)` form. Writers resolve chat_id and
-  -- author_agent_id within the memo's project and organization.
+  -- and agent references are single-column: on a composite key ON DELETE SET
+  -- NULL would also null project_id or organization_id (NOT NULL), and Atlas
+  -- does not model Postgres 15's `SET NULL (column list)` form. Writers
+  -- resolve chat_id and author_agent_id within the memo's project and
+  -- organization. A memo recorded from a chat is derived from that chat's
+  -- content, so hard-deleting the chat deletes the memo with it; deleting an
+  -- agent only clears the authorship.
   CONSTRAINT memory_memos_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT memory_memos_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE SET NULL,
+  CONSTRAINT memory_memos_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE,
   CONSTRAINT memory_memos_author_agent_id_fkey FOREIGN KEY (author_agent_id) REFERENCES agents (id) ON DELETE SET NULL,
   CONSTRAINT memory_memos_author_check CHECK (num_nonnulls(author_user_id, author_agent_id) <= 1),
   CONSTRAINT memory_memos_content_check CHECK (content <> '' AND char_length(content) <= 4000)
@@ -16658,6 +16660,10 @@ ON memory_memos USING gin (search_vector) WHERE deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS memory_memos_chat_id_idx
 ON memory_memos (chat_id) WHERE chat_id IS NOT NULL;
+
+-- Serves the author_agent_id foreign key when an agent is deleted.
+CREATE INDEX IF NOT EXISTS memory_memos_author_agent_id_idx
+ON memory_memos (author_agent_id) WHERE author_agent_id IS NOT NULL;
 
 -- Team memory: period digests that fold a project's chat summaries and memos
 -- into day digests, days into weeks, and weeks into months. A digest is
@@ -16750,8 +16756,7 @@ CREATE TABLE IF NOT EXISTS memory_eval_runs (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
-  CONSTRAINT memory_eval_runs_pkey PRIMARY KEY (id),
-  CONSTRAINT memory_eval_runs_status_check CHECK (status IN ('queued', 'running', 'succeeded', 'failed'))
+  CONSTRAINT memory_eval_runs_pkey PRIMARY KEY (id)
 );
 
 COMMENT ON COLUMN memory_eval_runs.id IS '@access: confidential';
@@ -16778,5 +16783,5 @@ COMMENT ON COLUMN memory_eval_runs.deleted IS '@access: confidential';
 
 -- Lists runs newest first on the admin page.
 CREATE INDEX IF NOT EXISTS memory_eval_runs_created_at_idx
-ON memory_eval_runs (created_at DESC)
+ON memory_eval_runs (created_at DESC, id DESC)
 WHERE deleted IS FALSE;

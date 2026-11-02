@@ -60,7 +60,7 @@ type Preparation struct {
 // models do not mix.
 func Prepare(ctx context.Context, logger *slog.Logger, client openrouter.CompletionClient, target Target, models MemoryModels, concurrency int) (Preparation, error) {
 	started := time.Now()
-	prep := Preparation{Models: models, Summaries: 0, Failed: 0, Digests: 0, SummarySpend: ModelSpend{Model: models.Summary, Calls: 0, PromptTokens: 0, CompletionTokens: 0, CostUSD: 0}, DigestSpend: ModelSpend{Model: models.Digest, Calls: 0, PromptTokens: 0, CompletionTokens: 0, CostUSD: 0}, Duration: 0}
+	prep := Preparation{Models: models, Summaries: 0, Failed: 0, Digests: 0, SummarySpend: ModelSpend{Model: models.Summary, Calls: 0, PromptTokens: 0, CompletionTokens: 0, CostUSD: 0, Unpriced: 0}, DigestSpend: ModelSpend{Model: models.Digest, Calls: 0, PromptTokens: 0, CompletionTokens: 0, CostUSD: 0, Unpriced: 0}, Duration: 0}
 	if !openrouter.IsModelAllowed(models.Summary) || !openrouter.IsModelAllowed(models.Digest) {
 		return prep, fmt.Errorf("summary model %q and digest model %q must both be allowed", models.Summary, models.Digest)
 	}
@@ -102,8 +102,11 @@ func Prepare(ctx context.Context, logger *slog.Logger, client openrouter.Complet
 		return prep, fmt.Errorf("write summaries: %w", err)
 	}
 	prep.Summaries, prep.Failed = int(written.Load()), int(failed.Load())
-	if prep.Summaries == 0 {
-		return prep, errors.New("every summary failed")
+	// A chat without a fresh summary would keep an earlier run's summary (or
+	// none) and skew the comparison, so any failure fails the preparation,
+	// as a failed digest does.
+	if prep.Failed > 0 {
+		return prep, fmt.Errorf("%d of %d summaries failed", prep.Failed, prep.Failed+prep.Summaries)
 	}
 	prep.SummarySpend = metered.take(models.Summary)
 
@@ -111,7 +114,7 @@ func Prepare(ctx context.Context, logger *slog.Logger, client openrouter.Complet
 	flags.SetFlag(feature.FlagTeamMemory, target.OrganizationID, true)
 	digests := activities.NewMemoryDigests(logger, target.DB, metered, flags).WithModel(models.Digest)
 	for _, level := range []memorydigest.Level{memorydigest.LevelDay, memorydigest.LevelWeek, memorydigest.LevelMonth} {
-		built, err := buildLevel(ctx, digests, level, target.Corpus.Now)
+		built, err := buildLevel(ctx, digests, level, target.Corpus.Now, target.projectIDs())
 		prep.Digests += built
 		if err != nil {
 			return prep, err
@@ -125,10 +128,10 @@ func Prepare(ctx context.Context, logger *slog.Logger, client openrouter.Complet
 // buildLevel runs the digest job for one level until it reports no more
 // work, and fails when any period failed, since a missing digest would skew
 // the arms that read them.
-func buildLevel(ctx context.Context, digests *activities.MemoryDigests, level memorydigest.Level, now time.Time) (int, error) {
+func buildLevel(ctx context.Context, digests *activities.MemoryDigests, level memorydigest.Level, now time.Time, projectIDs []uuid.UUID) (int, error) {
 	built := 0
 	for range maxDigestBatches {
-		result, err := digests.Build(ctx, activities.BuildMemoryDigestsArgs{Level: string(level), Now: now})
+		result, err := digests.Build(ctx, activities.BuildMemoryDigestsArgs{Level: string(level), Now: now, ProjectIDs: projectIDs})
 		if err != nil {
 			return built, fmt.Errorf("build %s digests: %w", level, err)
 		}
@@ -143,15 +146,20 @@ func buildLevel(ctx context.Context, digests *activities.MemoryDigests, level me
 	return built, fmt.Errorf("%s digests still had work after %d batches", level, maxDigestBatches)
 }
 
+// projectIDs lists the target's projects.
+func (t Target) projectIDs() []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(t.Projects))
+	for _, p := range t.Projects {
+		ids = append(ids, p.ID)
+	}
+	return ids
+}
+
 // clearMemory deletes the target's digests so the next build starts empty.
 // Summaries need no clearing: Generate overwrites every team chat's summary
 // and private sessions never get one.
 func clearMemory(ctx context.Context, target Target) error {
-	projectIDs := make([]uuid.UUID, 0, len(target.Projects))
-	for _, p := range target.Projects {
-		projectIDs = append(projectIDs, p.ID)
-	}
-	if _, err := digestrepo.New(target.DB).DeleteProjectDigests(ctx, digestrepo.DeleteProjectDigestsParams{OrganizationID: target.OrganizationID, ProjectIds: projectIDs}); err != nil {
+	if _, err := digestrepo.New(target.DB).DeleteProjectDigests(ctx, digestrepo.DeleteProjectDigestsParams{OrganizationID: target.OrganizationID, ProjectIds: target.projectIDs()}); err != nil {
 		return fmt.Errorf("clear digests: %w", err)
 	}
 	return nil

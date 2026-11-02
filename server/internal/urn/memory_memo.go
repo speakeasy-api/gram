@@ -13,21 +13,10 @@ import (
 // used by the audit log to identify memos saved through remember.
 type MemoryMemo struct {
 	ID uuid.UUID
-
-	checked bool
-	err     error
 }
 
 func NewMemoryMemo(id uuid.UUID) MemoryMemo {
-	c := MemoryMemo{
-		ID:      id,
-		checked: false,
-		err:     nil,
-	}
-
-	_ = c.validate()
-
-	return c
+	return MemoryMemo{ID: id}
 }
 
 func ParseMemoryMemo(value string) (MemoryMemo, error) {
@@ -48,6 +37,9 @@ func ParseMemoryMemo(value string) (MemoryMemo, error) {
 	id, err := uuid.Parse(parts[1])
 	if err != nil {
 		return MemoryMemo{}, fmt.Errorf("%w: invalid memory memo uuid", ErrInvalid)
+	}
+	if id == uuid.Nil {
+		return MemoryMemo{}, fmt.Errorf("%w: empty id", ErrInvalid)
 	}
 
 	return NewMemoryMemo(id), nil
@@ -142,16 +134,10 @@ func (u *MemoryMemo) UnmarshalText(text []byte) error {
 	return nil
 }
 
-func (u *MemoryMemo) validate() error {
-	if u.checked {
-		return u.err
-	}
-
-	u.checked = true
-
+// validate is not cached: ID is exported, so a verdict could go stale.
+func (u MemoryMemo) validate() error {
 	if u.ID == uuid.Nil {
-		u.err = fmt.Errorf("%w: empty id", ErrInvalid)
-		return u.err
+		return fmt.Errorf("%w: empty id", ErrInvalid)
 	}
 
 	return nil

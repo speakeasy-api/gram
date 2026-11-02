@@ -14,7 +14,8 @@ import (
 
 // runMemoryDigestsWorkflow runs the workflow against a fake activity that
 // answers each call from results[level] in order, and returns the levels it
-// was called with.
+// was called with. Invalidation must run once, before any level, so it is
+// checked here and left out of the returned calls.
 func runMemoryDigestsWorkflow(t *testing.T, results map[string][]activities.BuildMemoryDigestsResult) []string {
 	t.Helper()
 
@@ -36,11 +37,23 @@ func runMemoryDigestsWorkflow(t *testing.T, results map[string][]activities.Buil
 		},
 		activity.RegisterOptions{Name: "BuildMemoryDigests"},
 	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context) error {
+			mu.Lock()
+			defer mu.Unlock()
+			calls = append(calls, "invalidate")
+			return nil
+		},
+		activity.RegisterOptions{Name: "InvalidateMemoryDigests"},
+	)
 
 	env.ExecuteWorkflow(MemoryDigestsWorkflow)
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
-	return calls
+	require.NotEmpty(t, calls)
+	require.Equal(t, "invalidate", calls[0])
+	require.NotContains(t, calls[1:], "invalidate")
+	return calls[1:]
 }
 
 func TestMemoryDigestsWorkflowRunsLevelsInOrderAndDrainsBatches(t *testing.T) {

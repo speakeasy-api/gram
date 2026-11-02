@@ -242,12 +242,47 @@ func TestMemoryDigests_DayDigestFoldsOnlyEligibleSources(t *testing.T) {
 		ID:                 kept1,
 	})
 	require.NoError(t, err)
+	require.NoError(t, job.Invalidate(ctx))
 	result, err = job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "day", Now: now})
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Built)
 	rebuilt := enabled.digestSources(t, conn, "day", day)
 	require.Len(t, rebuilt.ChatIds, 2)
 	require.NotContains(t, rebuilt.ChatIds, kept1)
+}
+
+// TestMemoryDigests_ProjectIDsScopeTheRun checks that a run limited to some
+// projects leaves the organization's other projects alone, which the memory
+// eval relies on when it builds digests inside a shared organization.
+func TestMemoryDigests_ProjectIDsScopeTheRun(t *testing.T) {
+	t.Parallel()
+
+	conn, err := infra.CloneTestDatabase(t, "memory_digests_scope")
+	require.NoError(t, err)
+	ctx := t.Context()
+
+	scoped := newDigestProject(t, conn)
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Other Project", Slug: "proj-" + uuid.NewString()[:8], OrganizationID: scoped.orgID,
+	})
+	require.NoError(t, err)
+	other := digestProject{orgID: scoped.orgID, projectID: project.ID}
+	flags := new(feature.InMemory)
+	flags.SetFlag(feature.FlagTeamMemory, scoped.orgID, true)
+
+	day := digestDay(2026, 10, 27)
+	at := day.Add(10 * time.Hour)
+	scoped.addChat(t, conn, "scoped summary", at, true)
+	other.addChat(t, conn, "other project summary", at, true)
+
+	stub := &digestCompletionStub{}
+	job := activities.NewMemoryDigests(testenv.NewLogger(t), conn, stub, flags)
+	result, err := job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "day", Now: day.AddDate(0, 0, 2), ProjectIDs: []uuid.UUID{scoped.projectID}})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Built)
+	require.Len(t, scoped.digests(t, conn, "day"), 1)
+	require.Empty(t, other.digests(t, conn, "day"))
+	require.NotContains(t, stub.allPrompts(), "other project summary")
 }
 
 func TestMemoryDigests_RollupsWaitForClosedPeriods(t *testing.T) {
@@ -303,6 +338,7 @@ func TestMemoryDigests_RollupsWaitForClosedPeriods(t *testing.T) {
 	// remaining children.
 	require.NoError(t, memorydigesttest.New(conn).DeleteDigestFixture(ctx, dayIDs[0]))
 	later := time.Date(2026, 11, 3, 1, 0, 0, 0, time.UTC)
+	require.NoError(t, job.Invalidate(ctx))
 	result, err = job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "week", Now: later})
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Built)
