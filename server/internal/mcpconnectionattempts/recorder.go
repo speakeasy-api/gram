@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -48,6 +50,9 @@ const (
 
 	// defaultInsertTimeout bounds one insert, so a stalled ClickHouse only costs queued rows.
 	defaultInsertTimeout = 3 * time.Second
+
+	// drainLogWait bounds the wait for Shutdown's one log line.
+	drainLogWait = time.Second
 
 	// dropLogInterval limits logging per reason during an outage.
 	dropLogInterval = time.Minute
@@ -337,9 +342,12 @@ type Recorder struct {
 	stopped bool
 
 	lastDrop map[dropReason]*atomic.Int64
+
+	// dropTotals counts rows per reason, so Shutdown can report what its drain lost.
+	dropTotals map[dropReason]*atomic.Int64
 }
 
-func lastDropTimes() map[dropReason]*atomic.Int64 {
+func newDropCounters() map[dropReason]*atomic.Int64 {
 	return map[dropReason]*atomic.Int64{
 		dropQueueFull:    {},
 		dropTableMissing: {},
@@ -396,7 +404,8 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		stopOnce:    sync.Once{},
 		stopMu:      sync.RWMutex{},
 		stopped:     false,
-		lastDrop:    lastDropTimes(),
+		lastDrop:    newDropCounters(),
+		dropTotals:  newDropCounters(),
 	}
 	go r.run()
 	return r
@@ -419,7 +428,8 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 		stopOnce:    sync.Once{},
 		stopMu:      sync.RWMutex{},
 		stopped:     false,
-		lastDrop:    lastDropTimes(),
+		lastDrop:    newDropCounters(),
+		dropTotals:  newDropCounters(),
 	}
 }
 
@@ -459,37 +469,89 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		return
 	}
 
+	if reason := r.enqueue(row); reason != "" {
+		r.drop(ctx, reason, 1, nil)
+	}
+}
+
+// enqueue holds the lock only for a non-blocking send, and reports any drop after releasing it.
+func (r *Recorder) enqueue(row Row) dropReason {
 	r.stopMu.RLock()
 	defer r.stopMu.RUnlock()
 
 	if r.stopped {
-		r.drop(ctx, dropShutdown, 1, nil)
-		return
+		return dropShutdown
 	}
 	select {
 	case r.queue <- row:
+		return ""
 	default:
-		r.drop(ctx, dropQueueFull, 1, nil)
+		return dropQueueFull
 	}
 }
 
-// Shutdown writes what is queued, each batch once, and stops the goroutine.
+// Shutdown writes what is queued, each batch once, and stops the goroutine. It logs
+// what the drain lost, because metrics may not be exported by then.
 func (r *Recorder) Shutdown(ctx context.Context) error {
 	if r == nil || r.stop == nil {
 		return nil
 	}
+	first := false
+	var before map[dropReason]int64
 	r.stopOnce.Do(func() {
+		first = true
 		r.stopMu.Lock()
 		r.stopped = true
 		r.stopMu.Unlock()
+		before = r.dropSnapshot()
 		close(r.stop)
 	})
+
+	var err error
 	select {
 	case <-r.done:
-		return nil
 	case <-ctx.Done():
-		return fmt.Errorf("drain connection events: %w", ctx.Err())
+		err = fmt.Errorf("drain connection events: %w", ctx.Err())
 	}
+	if first {
+		// A stuck log handler must not hold Shutdown past its deadline.
+		logged := make(chan struct{})
+		go func() {
+			defer close(logged)
+			r.logDrainLosses(context.WithoutCancel(ctx), before)
+		}()
+		select {
+		case <-logged:
+		case <-time.After(drainLogWait):
+		}
+	}
+	return err
+}
+
+func (r *Recorder) dropSnapshot() map[dropReason]int64 {
+	snapshot := make(map[dropReason]int64, len(r.dropTotals))
+	for reason, total := range r.dropTotals {
+		snapshot[reason] = total.Load()
+	}
+	return snapshot
+}
+
+// logDrainLosses logs one line of rows lost since the drain began. Logs-off rows are not a loss.
+func (r *Recorder) logDrainLosses(ctx context.Context, before map[dropReason]int64) {
+	var parts []string
+	for reason, count := range r.dropSnapshot() {
+		if lost := count - before[reason]; lost > 0 && reason != dropLogsOff {
+			parts = append(parts, fmt.Sprintf("%s=%d", reason, lost))
+		}
+	}
+	if unwritten := len(r.queue); unwritten > 0 {
+		parts = append(parts, fmt.Sprintf("still_queued=%d", unwritten))
+	}
+	if len(parts) == 0 {
+		return
+	}
+	slices.Sort(parts)
+	r.logger.WarnContext(ctx, "connection events lost during shutdown", attr.SlogConnectionDropCounts(strings.Join(parts, " ")))
 }
 
 func (r *Recorder) run() {
@@ -613,6 +675,7 @@ func (r *Recorder) countStep(ctx context.Context, row Row) {
 }
 
 func (r *Recorder) drop(ctx context.Context, reason dropReason, rows int, cause error) {
+	r.dropTotals[reason].Add(int64(rows))
 	if r.dropped != nil {
 		r.dropped.Add(ctx, int64(rows), metric.WithAttributes(attr.ConnectionDropReason(string(reason))))
 	}

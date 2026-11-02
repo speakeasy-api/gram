@@ -860,3 +860,141 @@ func TestRecord_RowsRacingShutdownAreWrittenOrCounted(t *testing.T) {
 	}
 	require.Equal(t, int64(writers*perWriter), int64(written)+recorder.dropped(t, dropShutdown)+recorder.dropped(t, dropQueueFull))
 }
+
+// blockingLogHandler holds every log call until released.
+type blockingLogHandler struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (h *blockingLogHandler) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *blockingLogHandler) Handle(context.Context, slog.Record) error {
+	select {
+	case h.entered <- struct{}{}:
+	default:
+	}
+	<-h.release
+	return nil
+}
+
+func (h *blockingLogHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+
+func (h *blockingLogHandler) WithGroup(string) slog.Handler { return h }
+
+// A drop stuck in a log handler holds no lock, so it can't stall Shutdown or other requests.
+func TestRecord_BlockedDropLogHoldsNoLock(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	defer close(release)
+	handler := &blockingLogHandler{entered: make(chan struct{}, 1), release: release}
+	conn := &scriptedConn{Conn: nil, block: release, err: errors.New("stalled"), prepares: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.queueSize = 4
+	cfg.maxBatch = 1
+	cfg.insertTimeout = time.Minute
+	recorder := newRecorder(slog.New(handler), sdkmetric.NewMeterProvider(), conn, logsOn, cfg)
+	attempt := Begin(testScope())
+
+	recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	require.Eventually(t, func() bool { return conn.prepares.Load() == 1 }, 10*time.Second, time.Millisecond)
+	for range cfg.queueSize {
+		recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	}
+
+	go recorder.Step(context.Background(), attempt, StepInboundAuthorize, ResultAccepted)
+	select {
+	case <-handler.entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the queue-full drop never logged")
+	}
+
+	finished := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer cancel()
+		finished <- recorder.Shutdown(ctx)
+	}()
+	select {
+	case err := <-finished:
+		require.ErrorIs(t, err, context.DeadlineExceeded, "the writer is still stalled, so Shutdown stops at its context")
+	case <-time.After(10 * time.Second):
+		t.Fatal("Shutdown waited on a blocked log call")
+	}
+}
+
+const drainLossLine = "connection events lost during shutdown"
+
+func newLoggedRecorder(t *testing.T, conn driver.Conn, logsEnabled func(context.Context, string) (bool, error), cfg config) (*Recorder, *bytes.Buffer) {
+	t.Helper()
+
+	var logged bytes.Buffer
+	return newRecorder(slog.New(slog.NewTextHandler(&logged, nil)), sdkmetric.NewMeterProvider(), conn, logsEnabled, cfg), &logged
+}
+
+// Metrics may stop exporting during shutdown, so the logs say what the drain lost.
+func TestShutdown_LogsWhatTheDrainLostByReason(t *testing.T) {
+	t.Parallel()
+
+	conn := &scriptedConn{Conn: nil, block: nil, err: errors.New("refused"), prepares: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.flushInterval = time.Hour
+	cfg.maxBatch = 2
+	recorder, logged := newLoggedRecorder(t, conn, logsOn, cfg)
+	attempt := Begin(testScope())
+
+	recorder.Step(t.Context(), attempt, StepInboundToken, nil)
+	require.Eventually(t, func() bool { return recorder.dropTotals[dropInvalidEvent].Load() == 1 }, 10*time.Second, time.Millisecond)
+	for range 5 {
+		recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	}
+	require.NoError(t, recorder.Shutdown(t.Context()))
+	recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.Equal(t, 1, strings.Count(logged.String(), drainLossLine), "one line, however many times Shutdown is called")
+	require.Contains(t, logged.String(), `gram.connection.drop_counts="insert_failed=5"`)
+	require.NotContains(t, logged.String(), "invalid_event=", "drops before the drain are not drain losses")
+}
+
+// A clean drain, and rows skipped because logs are off, are not losses.
+func TestShutdown_LogsNothingWhenNothingWasLost(t *testing.T) {
+	t.Parallel()
+
+	logsOff := func(context.Context, string) (bool, error) { return false, nil }
+	cfg := testConfig()
+	cfg.flushInterval = time.Hour
+	recorder, logged := newLoggedRecorder(t, &scriptedConn{Conn: nil, block: nil, err: nil, prepares: atomic.Int64{}}, logsOff, cfg)
+
+	recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.NotContains(t, logged.String(), drainLossLine)
+}
+
+// A drain cut off by its deadline says how many rows it never reached.
+func TestShutdown_LogsRowsStillQueuedAtItsDeadline(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	defer close(release)
+	conn := &scriptedConn{Conn: nil, block: release, err: errors.New("stalled"), prepares: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.maxBatch = 1
+	cfg.insertTimeout = time.Minute
+	recorder, logged := newLoggedRecorder(t, conn, logsOn, cfg)
+	attempt := Begin(testScope())
+
+	recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	require.Eventually(t, func() bool { return conn.prepares.Load() == 1 }, 10*time.Second, time.Millisecond)
+	for range 3 {
+		recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+	require.ErrorIs(t, recorder.Shutdown(ctx), context.DeadlineExceeded)
+
+	require.Contains(t, logged.String(), `gram.connection.drop_counts="still_queued=3"`)
+}
