@@ -16,6 +16,8 @@ import (
 	"golang.org/x/time/rate"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
 const (
@@ -47,7 +49,24 @@ type cacheEntry struct {
 	expiresAt   time.Time
 	rejected    bool
 	lastChecked time.Time
+
+	// gateway marks a token belonging to the shared tailnet gateway. Its
+	// ingress depends on the request host, so hosts holds one resolution per
+	// canonical host instead of the single ingress above.
+	gateway bool
+	hosts   map[string]hostEntry
 }
+
+// hostEntry is one host's resolved ingress under a gateway token.
+type hostEntry struct {
+	ingress     Ingress
+	lastChecked time.Time
+}
+
+// maxGatewayHostsPerToken bounds host resolutions cached under one gateway
+// token. A gateway serves at most the ingresses it hosts, so this is ample,
+// and it stops a flood of unknown hosts from growing the entry.
+const maxGatewayHostsPerToken = 256
 
 type AttestationVerifier struct {
 	reviewer TokenReviewer
@@ -116,8 +135,10 @@ func (v *AttestationVerifier) isGatewayPrincipal(namespace, serviceAccount strin
 }
 
 // Verify authenticates an attestation token for a request to host. Per-ingress
-// attestors are resolved from their service account; the shared tailnet
-// gateway is resolved from host, so cache entries are keyed by both.
+// attestors are resolved from their service account. The shared tailnet
+// gateway is resolved from host; its cache entry is still keyed by token so
+// host values cannot force repeated token reviews, and each host's resolution
+// is cached and rechecked beneath that entry.
 func (v *AttestationVerifier) Verify(ctx context.Context, token, source, host string) (ingress Ingress, err error) {
 	started := time.Now()
 	result, reason, provider := ResultError, ReasonDependencyFailed, ""
@@ -139,12 +160,19 @@ func (v *AttestationVerifier) Verify(ctx context.Context, token, source, host st
 		return Ingress{}, fmt.Errorf("%w: invalid bearer token", ErrAttestationRejected)
 	}
 
-	hash := sha256.Sum256([]byte(token + "\x00" + host))
+	hash := sha256.Sum256([]byte(token))
 	now := v.now()
 	if cached, ok := v.cached(hash, now); ok {
 		if cached.rejected {
 			reason = ReasonNegativeCacheHit
 			return Ingress{}, fmt.Errorf("%w: token was recently rejected", ErrAttestationRejected)
+		}
+		if cached.gateway {
+			ingress, reason, err = v.gatewayHost(ctx, hash, host, now)
+			if err == nil {
+				provider = ingress.Provider
+			}
+			return ingress, err
 		}
 		if now.Sub(cached.lastChecked) >= servingStateRecheckTTL {
 			provider = cached.ingress.Provider
@@ -196,11 +224,22 @@ func (v *AttestationVerifier) Verify(ctx context.Context, token, source, host st
 		return Ingress{}, fmt.Errorf("%w: token expiry is invalid", ErrAttestationRejected)
 	}
 
-	if v.isGatewayPrincipal(namespace, serviceAccount) {
-		ingress, err = v.lookup.ByDNSName(ctx, host)
-	} else {
-		ingress, err = v.lookup.ByAttestor(ctx, namespace, serviceAccount)
+	cacheExpiry := now.Add(v.maxTTL)
+	if expiresAt.Before(cacheExpiry) {
+		cacheExpiry = expiresAt
 	}
+	if v.isGatewayPrincipal(namespace, serviceAccount) {
+		// The token is valid for any gateway-hosted ingress; which one is
+		// decided per host below and cached under this entry.
+		v.storeCached(hash, cacheEntry{ingress: zeroIngress(), expiresAt: cacheExpiry, rejected: false, lastChecked: now, gateway: true, hosts: make(map[string]hostEntry)})
+		ingress, reason, err = v.gatewayHost(ctx, hash, host, now)
+		if err == nil {
+			provider = ingress.Provider
+		}
+		return ingress, err
+	}
+
+	ingress, err = v.lookup.ByAttestor(ctx, namespace, serviceAccount)
 	if errors.Is(err, ErrIngressUnavailable) {
 		reason = ReasonAuthorityRejected
 		v.storeRejected(hash, now)
@@ -211,13 +250,101 @@ func (v *AttestationVerifier) Verify(ctx context.Context, token, source, host st
 		return Ingress{}, fmt.Errorf("lookup attestor ingress: %w", err)
 	}
 
-	cacheExpiry := now.Add(v.maxTTL)
-	if expiresAt.Before(cacheExpiry) {
-		cacheExpiry = expiresAt
-	}
 	reason = ReasonNone
-	v.storeCached(hash, cacheEntry{ingress: ingress, expiresAt: cacheExpiry, rejected: false, lastChecked: now})
+	v.storeCached(hash, cacheEntry{ingress: ingress, expiresAt: cacheExpiry, rejected: false, lastChecked: now, gateway: false, hosts: nil})
 	return ingress, nil
+}
+
+// gatewayHost resolves host under a cached gateway token. A fresh resolution
+// is served from the entry; a stale or missing one re-reads the host mapping,
+// which also confirms the ingress is still the single enabled gateway owner
+// of that name, before rechecking its serving state.
+func (v *AttestationVerifier) gatewayHost(ctx context.Context, hash [32]byte, host string, now time.Time) (Ingress, string, error) {
+	canonical, err := requestorigin.CanonicalHost(host)
+	if err != nil || canonical == "" {
+		return Ingress{}, ReasonAuthorityRejected, fmt.Errorf("%w: invalid request host", ErrAttestationRejected)
+	}
+	if cached, ok := v.cachedHost(hash, canonical); ok && now.Sub(cached.lastChecked) < servingStateRecheckTTL {
+		return cached.ingress, ReasonCacheHit, nil
+	}
+
+	results := v.rechecks.DoChan(string(hash[:])+"\x00"+canonical, func() (any, error) {
+		recheckCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), servingStateRecheckTimeout)
+		defer cancel()
+		previous, had := v.cachedHost(hash, canonical)
+		ingress, err := v.lookup.ByDNSName(recheckCtx, canonical)
+		if errors.Is(err, ErrIngressUnavailable) || (had && err == nil && ingress.ID != previous.ingress.ID) {
+			v.deleteHost(hash, canonical)
+			return zeroIngress(), fmt.Errorf("%w: host is not served by the gateway", ErrAttestationRejected)
+		}
+		if err != nil {
+			return zeroIngress(), fmt.Errorf("lookup gateway ingress by host: %w", err)
+		}
+		if err := v.lookup.Recheck(recheckCtx, ingress); err != nil {
+			if errors.Is(err, ErrIngressUnavailable) || errors.Is(err, ErrIngressChanged) {
+				v.deleteHost(hash, canonical)
+				return zeroIngress(), fmt.Errorf("%w: ingress authority is no longer active", ErrAttestationRejected)
+			}
+			return zeroIngress(), fmt.Errorf("recheck gateway ingress authority: %w", err)
+		}
+		v.storeHost(hash, canonical, hostEntry{ingress: ingress, lastChecked: v.now()})
+		return ingress, nil
+	})
+	if v.recheckJoined != nil {
+		v.recheckJoined()
+	}
+	var result singleflight.Result
+	select {
+	case result = <-results:
+	case <-ctx.Done():
+		return Ingress{}, ReasonDependencyFailed, fmt.Errorf("wait for gateway host resolution: %w", ctx.Err())
+	}
+	if result.Err != nil {
+		if errors.Is(result.Err, ErrAttestationRejected) {
+			return Ingress{}, ReasonAuthorityRejected, result.Err
+		}
+		return Ingress{}, ReasonDependencyFailed, result.Err
+	}
+	ingress, ok := result.Val.(Ingress)
+	if !ok {
+		return Ingress{}, ReasonDependencyFailed, errors.New("gateway host resolution returned an invalid result")
+	}
+	return ingress, ReasonNone, nil
+}
+
+func (v *AttestationVerifier) cachedHost(hash [32]byte, host string) (hostEntry, bool) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	entry, ok := v.cache[hash]
+	if !ok || !entry.gateway {
+		return hostEntry{ingress: zeroIngress(), lastChecked: time.Time{}}, false
+	}
+	cached, ok := entry.hosts[host]
+	return cached, ok
+}
+
+func (v *AttestationVerifier) storeHost(hash [32]byte, host string, cached hostEntry) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	entry, ok := v.cache[hash]
+	if !ok || !entry.gateway {
+		return
+	}
+	if _, exists := entry.hosts[host]; !exists && len(entry.hosts) >= maxGatewayHostsPerToken {
+		for key := range entry.hosts {
+			delete(entry.hosts, key)
+			break
+		}
+	}
+	entry.hosts[host] = cached
+}
+
+func (v *AttestationVerifier) deleteHost(hash [32]byte, host string) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if entry, ok := v.cache[hash]; ok && entry.gateway {
+		delete(entry.hosts, host)
+	}
 }
 
 func (v *AttestationVerifier) cached(hash [32]byte, now time.Time) (cacheEntry, bool) {
@@ -225,11 +352,11 @@ func (v *AttestationVerifier) cached(hash [32]byte, now time.Time) (cacheEntry, 
 	defer v.mu.Unlock()
 	entry, ok := v.cache[hash]
 	if !ok {
-		return cacheEntry{ingress: zeroIngress(), expiresAt: time.Time{}, rejected: false, lastChecked: time.Time{}}, false
+		return cacheEntry{ingress: zeroIngress(), expiresAt: time.Time{}, rejected: false, lastChecked: time.Time{}, gateway: false, hosts: nil}, false
 	}
 	if !now.Before(entry.expiresAt) {
 		delete(v.cache, hash)
-		return cacheEntry{ingress: zeroIngress(), expiresAt: time.Time{}, rejected: false, lastChecked: time.Time{}}, false
+		return cacheEntry{ingress: zeroIngress(), expiresAt: time.Time{}, rejected: false, lastChecked: time.Time{}, gateway: false, hosts: nil}, false
 	}
 	return entry, true
 }
@@ -245,7 +372,7 @@ func (v *AttestationVerifier) storeRejected(hash [32]byte, now time.Time) {
 	v.storeCached(hash, cacheEntry{ingress: Ingress{
 		ID: uuid.Nil, OrganizationID: "", Provider: "", DNSName: "", IdentityRequired: false,
 		AttestorNamespace: "", AttestorServiceAccount: "",
-	}, expiresAt: now.Add(negativeCacheTTL), rejected: true, lastChecked: time.Time{}})
+	}, expiresAt: now.Add(negativeCacheTTL), rejected: true, lastChecked: time.Time{}, gateway: false, hosts: nil})
 }
 
 func (v *AttestationVerifier) sweepAndBoundCache(now time.Time) {
