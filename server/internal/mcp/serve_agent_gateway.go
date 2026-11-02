@@ -280,7 +280,11 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 }
 
 func agentMemberCredentialError(member metaMember) error {
-	return &metaMemberError{message: fmt.Sprintf("server %q's connection is unavailable or not permitted; reconnect it before retrying", member.slug)}
+	return agentServerCredentialError(member.slug)
+}
+
+func agentServerCredentialError(slug string) error {
+	return &metaMemberError{message: fmt.Sprintf("server %q's connection is unavailable or not permitted; reconnect it before retrying", slug)}
 }
 
 // authorizeAgentMemberClient checks the existing catalog and the exact attached
@@ -288,19 +292,36 @@ func agentMemberCredentialError(member metaMember) error {
 // or grant. Off/shadow keep their connect-equivalent policy; enforced uses the
 // same owner-sensitive permit as selected members.
 func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGateContext, member metaMember, issuer uuid.UUID, registration uuid.NullUUID, clientType string) (authClientConnectionOwner, error) {
+	return s.authorizeAgentServerClient(ctx, agentServerTarget{organizationID: gate.organizationID, agentID: gate.agentID, serverID: member.serverID, projectID: member.projectID, slug: member.slug}, issuer, registration, clientType)
+}
+
+// agentServerTarget is the server an agent key reaches, through its agent
+// gateway or on the server's own endpoint.
+type agentServerTarget struct {
+	organizationID string
+	agentID        uuid.UUID
+	serverID       uuid.UUID
+	projectID      uuid.UUID
+	slug           string
+}
+
+// authorizeAgentServerClient is authorizeAgentMemberClient for any surface an
+// agent key reaches a server through, so the server's own endpoint applies
+// the same catalog, attachment and mcp:auth checks as the agent gateway.
+func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentServerTarget, issuer uuid.UUID, registration uuid.NullUUID, clientType string) (authClientConnectionOwner, error) {
 	var none authClientConnectionOwner
 	rows, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
 		Proposed: true, ProposedAuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ProposedRegistrationID: registration, CredentialKind: upstreamclients.CredentialKindUserSession,
-		CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{member.serverID}, OrganizationID: gate.organizationID,
+		CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{target.serverID}, OrganizationID: target.organizationID,
 	})
 	if err != nil {
 		return none, fmt.Errorf("load agent member auth client: %w", err)
 	}
 	if len(rows) != 1 {
-		return none, agentMemberCredentialError(member)
+		return none, agentServerCredentialError(target.slug)
 	}
 	res := decideAuthClient(rows[0])
-	mode, err := s.authClientMode(ctx, gate.organizationID)
+	mode, err := s.authClientMode(ctx, target.organizationID)
 	if err != nil {
 		return none, err
 	}
@@ -311,12 +332,12 @@ func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGate
 		return none, nil
 	}
 	if (res.outcome == authClientGap && (mode == feature.AuthClientResolverEnforced || !registration.Valid)) || (res.outcome == authClientLegacy && res.clientID == uuid.Nil && mode == feature.AuthClientResolverEnforced) {
-		return none, agentMemberCredentialError(member)
+		return none, agentServerCredentialError(target.slug)
 	}
 	permit := authClientPermitRequest{
-		OrganizationID: gate.organizationID, ProjectID: member.projectID, ServerID: member.serverID,
+		OrganizationID: target.organizationID, ProjectID: target.projectID, ServerID: target.serverID,
 		ClientID: res.clientID, ClientType: clientType, RegistrationID: registration,
-		Subject: urn.NewAgentSubject(gate.agentID), UserSessionIssuerID: issuer,
+		Subject: urn.NewAgentSubject(target.agentID), UserSessionIssuerID: issuer,
 		CredentialKind: "", CredentialID: uuid.Nil, ConnectionOwner: "",
 	}
 	if res.clientType != "" {
@@ -334,11 +355,11 @@ func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGate
 		connection = none
 	}
 	if permit.ClientType == authClientTypeRemoteSession && connection.attachedSession == uuid.Nil && !connection.authorizer {
-		return none, agentMemberCredentialError(member)
+		return none, agentServerCredentialError(target.slug)
 	}
 	permit.ConnectionOwner = connection.owner
 	if res.clientID != uuid.Nil {
-		permitter, err := s.authClientPermitFor(ctx, gate.organizationID)
+		permitter, err := s.authClientPermitFor(ctx, target.organizationID)
 		if err != nil {
 			return none, err
 		}
@@ -347,7 +368,7 @@ func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGate
 			return none, fmt.Errorf("authorize agent member client: %w", err)
 		}
 		if !allowed {
-			return none, agentMemberCredentialError(member)
+			return none, agentServerCredentialError(target.slug)
 		}
 	}
 	return connection, nil

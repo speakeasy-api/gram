@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"sync"
 
 	"github.com/google/uuid"
@@ -364,6 +365,15 @@ func (s *Service) directPrincipalChoice(ctx context.Context, w http.ResponseWrit
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent key choice unusable", issuerGateReasonUpstreamSelectionUnavailable)
 		return none, true, writeRemoteSessionReconnectChallenge(w, authentication)
 	}
+	if agentID, ok := directAgentKeyActor(ctx, authentication.endpoint); ok {
+		// A key without a choice for the server keeps the issuer-derived path,
+		// but only after the checks its agent gateway applies to the same
+		// server, so a block or missing permission cannot be bypassed here.
+		if err := s.authorizeDirectAgentKey(ctx, authentication, agentID); err != nil {
+			return none, true, err
+		}
+		return none, false, nil
+	}
 	authenticated, ok := principalcredential.FromContext(ctx)
 	if !ok {
 		return none, false, nil
@@ -377,6 +387,79 @@ func (s *Service) directPrincipalChoice(ctx context.Context, w http.ResponseWrit
 	}
 	s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: no execution profile choice", issuerGateReasonUpstreamSelectionUnavailable)
 	return none, true, writeRemoteSessionReconnectChallenge(w, authentication)
+}
+
+// directAgentKeyActor returns the agent a principal agent key in ctx
+// authenticates for endpoint's organization.
+func directAgentKeyActor(ctx context.Context, endpoint *ResolvedMcpEndpoint) (uuid.UUID, bool) {
+	mode, byKey := contextvalues.APIKeyAuthorization(ctx)
+	actor, hasActor := contextvalues.AuthenticatedActor(ctx)
+	authCtx, hasAuth := contextvalues.GetAuthContext(ctx)
+	if !byKey || mode != contextvalues.APIKeyAuthorizationModePrincipal || !hasActor || actor.Type != urn.PrincipalTypeAgent ||
+		!hasAuth || authCtx == nil || authCtx.ActiveOrganizationID != endpoint.OrganizationID || !endpoint.McpServerID.Valid {
+		return uuid.Nil, false
+	}
+	agentID, err := uuid.Parse(actor.ID)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return agentID, true
+}
+
+// authorizeDirectAgentKey applies the agent gateway's checks for a key
+// without a credential choice to the server's own endpoint: every client the
+// server's issuer binds for it must be one the agent may use, through the
+// exact connection it is attached to. A sole attached connection is pinned,
+// so the request is served by the connection the check was decided for.
+func (s *Service) authorizeDirectAgentKey(ctx context.Context, authentication *issuerGateAuthentication, agentID uuid.UUID) error {
+	endpoint := authentication.endpoint
+	target := agentServerTarget{organizationID: endpoint.OrganizationID, agentID: agentID, serverID: endpoint.McpServerID.UUID, projectID: endpoint.ProjectID, slug: endpoint.Slug}
+	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load agent key clients").LogError(ctx, s.logger)
+	}
+	associated, err := s.serverAssociatedClients(ctx, endpoint.OrganizationID, []uuid.UUID{target.serverID})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load agent key clients").LogError(ctx, s.logger)
+	}
+	// An issuer can also bind clients belonging to sibling servers.
+	clients = slices.DeleteFunc(clients, func(client remotesessions.Client) bool {
+		return !associated[target.serverID][client.ID]
+	})
+	if len(clients) == 0 {
+		_, err := s.authorizeAgentServerClient(ctx, target, endpoint.UserSessionIssuerID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "")
+		return s.directAgentKeyError(ctx, authentication, err)
+	}
+	attached := uuid.Nil
+	for _, client := range clients {
+		clientType := authClientTypeRemoteSession
+		if client.CredentialOwner == remotesessions.CredentialOwnerSelf {
+			clientType = authClientTypeServiceAccount
+		}
+		connection, err := s.authorizeAgentServerClient(ctx, target, endpoint.UserSessionIssuerID, uuid.NullUUID{UUID: client.ID, Valid: true}, clientType)
+		if err != nil {
+			return s.directAgentKeyError(ctx, authentication, err)
+		}
+		if len(clients) == 1 {
+			attached = connection.attachedSession
+		}
+	}
+	authentication.attachedSession = attached
+	return nil
+}
+
+// directAgentKeyError answers a refused agent key on a server's own endpoint.
+func (s *Service) directAgentKeyError(ctx context.Context, authentication *issuerGateAuthentication, err error) error {
+	var refused *metaMemberError
+	switch {
+	case err == nil:
+		return nil
+	case errors.As(err, &refused):
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent may not use the server's connection", issuerGateReasonUpstreamSelectionUnavailable)
+		return oops.E(oops.CodeForbidden, err, "this agent may not use this server's connection")
+	default:
+		return oops.E(oops.CodeUnexpected, err, "authorize agent key").LogError(ctx, s.logger)
+	}
 }
 
 // resolveAccessTokens resolves the authenticated caller's upstream
