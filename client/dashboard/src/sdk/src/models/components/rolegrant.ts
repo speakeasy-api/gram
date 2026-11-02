@@ -56,6 +56,8 @@ export const Scope = {
   ChatWrite: "chat:write",
   InferenceExecute: "inference:execute",
   LogRead: "log:read",
+  MemoryRead: "memory:read",
+  MemoryWrite: "memory:write",
   AgentRead: "agent:read",
   AgentWrite: "agent:write",
   AgentAuthorize: "agent:authorize",

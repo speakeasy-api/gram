@@ -111,6 +111,8 @@ var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
 	authz.ScopeChatWrite:               activeRuntimeScope(),
 	authz.ScopeInferenceExecute:        safeRuntimeScopeSince(RuntimeScopeRegistryVersion6),
 	authz.ScopeLogRead:                 activeRuntimeScope(),
+	authz.ScopeMemoryRead:              activeRuntimeScope(),
+	authz.ScopeMemoryWrite:             activeRuntimeScope(),
 	authz.ScopeAgentRead:               activeRuntimeScope(),
 	authz.ScopeAgentWrite:              activeRuntimeScope(),
 	authz.ScopeAgentAuthorize:          activeRuntimeScope(),
