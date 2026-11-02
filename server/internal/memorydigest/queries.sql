@@ -63,10 +63,10 @@ LIMIT @row_limit;
 -- excluded from memory, deleted, moved to a personal account, or gone.
 -- Their text may still carry what was removed, so they are deleted and the
 -- job rebuilds the day from the sources still eligible. Parents that folded
--- them go next, through DeleteOrphanedRollups.
+-- them go next, through DeleteOrphanedRollups. It runs for every
+-- organization, flag or not: removal from memory must not depend on rollout.
 DELETE FROM memory_digests d
 WHERE d.level = 'day'
-  AND d.organization_id = ANY(@organization_ids::text[])
   AND (
     cardinality(d.chat_ids) > (
       SELECT count(*)
@@ -74,6 +74,7 @@ WHERE d.level = 'day'
       LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
       WHERE c.id = ANY(d.chat_ids)
         AND c.summary_redacted IS TRUE
+        AND c.summary IS NOT NULL
         AND c.memory_excluded_at IS NULL
         AND c.deleted IS FALSE
         AND (ua.id IS NULL OR ua.account_type <> 'personal')
@@ -96,7 +97,6 @@ RETURNING d.id;
 -- it. They are rebuilt from the replacement children.
 DELETE FROM memory_digests d
 WHERE d.level = @level::text
-  AND d.organization_id = ANY(@organization_ids::text[])
   AND cardinality(d.child_digest_ids) > (
     SELECT count(*) FROM memory_digests c WHERE c.id = ANY(d.child_digest_ids)
   )

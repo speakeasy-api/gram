@@ -15,23 +15,17 @@ import (
 const deleteOrphanedRollups = `-- name: DeleteOrphanedRollups :many
 DELETE FROM memory_digests d
 WHERE d.level = $1::text
-  AND d.organization_id = ANY($2::text[])
   AND cardinality(d.child_digest_ids) > (
     SELECT count(*) FROM memory_digests c WHERE c.id = ANY(d.child_digest_ids)
   )
 RETURNING d.id
 `
 
-type DeleteOrphanedRollupsParams struct {
-	Level           string
-	OrganizationIds []string
-}
-
 // Week or month digests that folded a child digest which no longer exists,
 // because DeleteStaleDayDigests (or an earlier pass of this query) removed
 // it. They are rebuilt from the replacement children.
-func (q *Queries) DeleteOrphanedRollups(ctx context.Context, arg DeleteOrphanedRollupsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, deleteOrphanedRollups, arg.Level, arg.OrganizationIds)
+func (q *Queries) DeleteOrphanedRollups(ctx context.Context, level string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, deleteOrphanedRollups, level)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +47,6 @@ func (q *Queries) DeleteOrphanedRollups(ctx context.Context, arg DeleteOrphanedR
 const deleteStaleDayDigests = `-- name: DeleteStaleDayDigests :many
 DELETE FROM memory_digests d
 WHERE d.level = 'day'
-  AND d.organization_id = ANY($1::text[])
   AND (
     cardinality(d.chat_ids) > (
       SELECT count(*)
@@ -61,6 +54,7 @@ WHERE d.level = 'day'
       LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
       WHERE c.id = ANY(d.chat_ids)
         AND c.summary_redacted IS TRUE
+        AND c.summary IS NOT NULL
         AND c.memory_excluded_at IS NULL
         AND c.deleted IS FALSE
         AND (ua.id IS NULL OR ua.account_type <> 'personal')
@@ -82,9 +76,10 @@ RETURNING d.id
 // excluded from memory, deleted, moved to a personal account, or gone.
 // Their text may still carry what was removed, so they are deleted and the
 // job rebuilds the day from the sources still eligible. Parents that folded
-// them go next, through DeleteOrphanedRollups.
-func (q *Queries) DeleteStaleDayDigests(ctx context.Context, organizationIds []string) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, deleteStaleDayDigests, organizationIds)
+// them go next, through DeleteOrphanedRollups. It runs for every
+// organization, flag or not: removal from memory must not depend on rollout.
+func (q *Queries) DeleteStaleDayDigests(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, deleteStaleDayDigests)
 	if err != nil {
 		return nil, err
 	}

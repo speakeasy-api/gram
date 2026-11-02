@@ -129,6 +129,13 @@ func (m *MemoryDigests) Build(ctx context.Context, args BuildMemoryDigestsArgs) 
 	stopHeartbeat := startActivityHeartbeat(ctx)
 	defer stopHeartbeat()
 
+	// Invalidation runs before anything else and for every organization, so
+	// a source removed from memory leaves every digest that folded it even
+	// when the flag is off or the run stops before higher levels.
+	if err := m.invalidate(ctx); err != nil {
+		return result, err
+	}
+
 	now := args.Now.UTC()
 	orgIDs, err := m.enabledOrganizations(ctx, now)
 	if err != nil {
@@ -136,10 +143,6 @@ func (m *MemoryDigests) Build(ctx context.Context, args BuildMemoryDigestsArgs) 
 	}
 	if len(orgIDs) == 0 {
 		return result, nil
-	}
-
-	if err := m.invalidate(ctx, level, orgIDs); err != nil {
-		return result, err
 	}
 
 	candidates, err := m.listCandidates(ctx, level, now, orgIDs)
@@ -186,25 +189,27 @@ func (m *MemoryDigests) Build(ctx context.Context, args BuildMemoryDigestsArgs) 
 	return result, nil
 }
 
-// invalidate deletes digests at level whose sources changed after they were
-// written, so this run rebuilds them: day digests that folded a chat or memo
-// no longer eligible, and week or month digests that folded a deleted child.
-// Levels run in order, so a stale day removes its week and month in the same
-// run. A period older than the lookback is deleted but not rebuilt; its
-// sources then fall back to search.
-func (m *MemoryDigests) invalidate(ctx context.Context, level memorydigest.Level, orgIDs []string) error {
-	var ids []uuid.UUID
-	var err error
-	if level == memorydigest.LevelDay {
-		ids, err = m.repo.DeleteStaleDayDigests(ctx, orgIDs)
-	} else {
-		ids, err = m.repo.DeleteOrphanedRollups(ctx, repo.DeleteOrphanedRollupsParams{Level: string(level), OrganizationIds: orgIDs})
-	}
+// invalidate deletes digests whose sources changed after they were written,
+// so the job rebuilds them: day digests that folded a chat or memo no longer
+// eligible, then week digests that folded a deleted day, then month digests
+// that folded a deleted week. One pass removes the whole chain. A period
+// older than the lookback is deleted but not rebuilt; its sources then fall
+// back to search.
+func (m *MemoryDigests) invalidate(ctx context.Context) error {
+	ids, err := m.repo.DeleteStaleDayDigests(ctx)
 	if err != nil {
-		return fmt.Errorf("invalidate %s digests: %w", level, err)
+		return fmt.Errorf("invalidate day digests: %w", err)
 	}
-	if len(ids) > 0 {
-		m.logger.InfoContext(ctx, "invalidated stale memory digests", attr.SlogDBDeletedRowsCount(int64(len(ids))))
+	deleted := len(ids)
+	for _, level := range []memorydigest.Level{memorydigest.LevelWeek, memorydigest.LevelMonth} {
+		ids, err := m.repo.DeleteOrphanedRollups(ctx, string(level))
+		if err != nil {
+			return fmt.Errorf("invalidate %s digests: %w", level, err)
+		}
+		deleted += len(ids)
+	}
+	if deleted > 0 {
+		m.logger.InfoContext(ctx, "invalidated stale memory digests", attr.SlogDBDeletedRowsCount(int64(deleted)))
 	}
 	return nil
 }

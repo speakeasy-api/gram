@@ -28,9 +28,10 @@ const (
 	// skipped tick only delays digests.
 	memoryDigestsCatchupWindow = 23 * time.Hour
 
-	// memoryDigestsRunTimeout covers a full backfill run: up to
-	// maxMemoryDigestBatchesPerLevel batches for each of the three levels.
-	// It stays under a day so a run never overlaps the next tick.
+	// memoryDigestsRunTimeout fits a full backfill run when each batch takes
+	// about ten minutes (up to maxMemoryDigestBatchesPerLevel batches for each
+	// of the three levels). A run that hits it stops, and the next night
+	// resumes. It stays under a day so a run never overlaps the next tick.
 	memoryDigestsRunTimeout = 20 * time.Hour
 
 	// maxMemoryDigestBatchesPerLevel bounds one run's work per level. Each
