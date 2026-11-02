@@ -167,7 +167,11 @@ func linkedMemberOutage(member metaMember, err error, connectURL string) error {
 	if connectURL != "" {
 		fallback = "If it keeps happening, reconnect at " + connectURL
 	}
-	return memberUnavailableError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q can't renew its sign-in because its provider isn't responding. %s %s", member.slug, retry, fallback)}, session: err}
+	cause := "because its provider isn't responding"
+	if remotesessions.OutageKindOf(err) == remotesessions.RefreshOutageNone {
+		cause = "right now"
+	}
+	return memberUnavailableError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q can't renew its sign-in %s. %s %s", member.slug, cause, retry, fallback)}, session: err}
 }
 
 // withMemberConnectLink adds the member's connect page to a connection outage.

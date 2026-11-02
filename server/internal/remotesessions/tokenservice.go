@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
@@ -295,6 +296,10 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, sess remo
 		m.logger.WarnContext(ctx, "remote session unusable: upstream token refresh failed", refreshFailureAttrs(sess, err)...)
 		if refreshErr, ok := errors.AsType[*RefreshError](err); ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeCanceled {
 			return zero, fmt.Errorf("refresh canceled: %w", err)
+		}
+		// A broken query is ours to fix: neither an outage nor a reconnect.
+		if oops.IsStoreFailure(err) && !oops.IsInfrastructureFailure(err) {
+			return zero, fmt.Errorf("refresh store failure: %w", err)
 		}
 		switch {
 		case errors.Is(err, ErrRemoteSessionUnavailable):
@@ -1357,7 +1362,7 @@ func (s *RefreshService) postRefreshGrant(
 
 	doer, err := upstreamHTTPDoer(noRedirectClient(s.policy.PooledClient()), s.tunnels, client.TunneledMcpServerID)
 	if err != nil {
-		return zero, newTokenRefreshError("the tunnel transport for this identity provider is unavailable", err, refreshRemedyRetry)
+		return zero, newTokenRefreshError("the tunnel transport for this identity provider is unavailable", fmt.Errorf("%w: %w", errRefreshTunnelTransport, err), refreshRemedyRetry)
 	}
 
 	resp, err := doer.Do(req)

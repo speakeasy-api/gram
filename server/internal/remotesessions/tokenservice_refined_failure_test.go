@@ -98,17 +98,18 @@ func TestResolveAccessTokens_ProviderRetryAfterExtendsTheCooldown(t *testing.T) 
 	require.Equal(t, 2*time.Minute, remotesessions.RetryAfter(err))
 }
 
-// An old grant's long Retry-After never holds back the grant that replaced it,
-// even when a late failure from the old grant's snapshot lands after the reconnect.
+// A POST in flight when a reconnect lands paces only the grant it presented, so
+// its late Retry-After never holds back the grant that replaced it.
 func TestResolveAccessTokens_ReconnectEscapesTheOldGrantsCooldown(t *testing.T) {
 	t.Parallel()
 
-	var down atomic.Bool
-	down.Store(true)
+	entered := make(chan struct{})
+	release := make(chan struct{})
 	var refreshAttempts atomic.Int32
 	ctx, env := newExpiredRefreshEnv(t, "refresh-reconnect-cooldown", func(w http.ResponseWriter, _ *http.Request) {
-		refreshAttempts.Add(1)
-		if down.Load() {
+		if refreshAttempts.Add(1) == 1 {
+			close(entered)
+			<-release
 			w.Header().Set("Retry-After", "300")
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
@@ -117,12 +118,15 @@ func TestResolveAccessTokens_ReconnectEscapesTheOldGrantsCooldown(t *testing.T) 
 		_, _ = w.Write([]byte(`{"access_token":"recovered-access","refresh_token":"rotated-refresh","expires_in":3600}`))
 	})
 
-	_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
-	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
-	require.Equal(t, 5*time.Minute, remotesessions.RetryAfter(err))
+	late := make(chan error, 1)
+	go func() {
+		_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+		late <- err
+	}()
+	<-entered
+
 	old, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
-
 	reconnected, err := env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
 		SubjectUrn:            env.subject,
 		UserSessionIssuerID:   old.UserSessionIssuerID,
@@ -134,25 +138,19 @@ func TestResolveAccessTokens_ReconnectEscapesTheOldGrantsCooldown(t *testing.T) 
 	})
 	require.NoError(t, err)
 	require.Greater(t, reconnected.GrantGeneration, old.GrantGeneration)
+	close(release)
 
-	// A late failure from the old grant's snapshot paces only that grant.
-	redisClient, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-	require.NoError(t, cache.NewRedisCacheAdapter(redisClient).Delete(ctx, remotesessions.RefreshCooldownKey(old)))
-	before := refreshAttempts.Load()
-	_, err = env.refresher.RefreshNow(ctx, old, "", remotesessionmetrics.RefreshTriggerRequest)
-	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
-	attempts := refreshAttempts.Load()
-	require.Equal(t, before+1, attempts, "the late failure did reach the provider")
+	lateErr := <-late
+	require.ErrorIs(t, lateErr, remotesessions.ErrRemoteSessionUnavailable)
+	require.Equal(t, 5*time.Minute, remotesessions.RetryAfter(lateErr))
 
-	down.Store(false)
 	tokens, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.NoError(t, err)
 	require.Len(t, tokens, 1)
 	for _, token := range tokens {
 		require.Equal(t, "recovered-access", token.Token)
 	}
-	require.Equal(t, attempts+1, refreshAttempts.Load(), "the replacement grant reached the recovered provider")
+	require.EqualValues(t, 2, refreshAttempts.Load(), "the replacement grant reached the provider")
 }
 
 func TestConnectionOutage_RecordedOnFailureClearedBySuccessAndReconnect(t *testing.T) {
@@ -281,6 +279,24 @@ func TestConnectionOutage_ProviderBehindLiveTunnelRecordsTunnel(t *testing.T) {
 	require.Equal(t, remotesessions.RefreshOutageTunnel, kind)
 	require.Equal(t, tunnelID, tunnel.UUID)
 	require.NotEmpty(t, gateway.paths, "the refresh reached the provider through the live tunnel")
+}
+
+// A tunnel-bound issuer with no transport at all is recorded and paced like any tunnel outage.
+func TestConnectionOutage_TunnelTransportMissingIsRecorded(t *testing.T) {
+	t.Parallel()
+
+	var posts atomic.Int32
+	ctx, env := newExpiredRefreshEnv(t, "refresh-outage-no-transport", func(http.ResponseWriter, *http.Request) {
+		posts.Add(1)
+	})
+	bindIssuerToTunnel(t, env)
+
+	_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	kind, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
+	require.Equal(t, remotesessions.RefreshOutageTunnel, kind)
+	require.Positive(t, remotesessions.RetryAfter(err))
+	require.Zero(t, posts.Load())
 }
 
 func TestResolveAccessToken_UpstreamServerErrorIsNoToken(t *testing.T) {

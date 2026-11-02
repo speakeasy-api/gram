@@ -119,7 +119,11 @@ func (s *Service) probeRemoteSession(
 		}
 		if candidate, ok := resolved[client.RemoteSessionIssuerID]; ok && candidate.RemoteSessionClientID == client.ID {
 			if candidate.SessionUnavailable() {
-				return fmt.Errorf("validate remote session: %w", oops.WithBrowserReason(oops.E(oops.CodeUnavailable, candidate.ClientCredentialErr, "%s", remoteSessionUnavailableMessage).LogWarn(ctx, logger), oauthui.ReasonProviderUnavailable))
+				failure := oops.E(oops.CodeUnavailable, candidate.ClientCredentialErr, "%s", remoteSessionUnavailableMessage)
+				if remotesessions.OutageKindOf(candidate.ClientCredentialErr) == remotesessions.RefreshOutageNone {
+					return fmt.Errorf("validate remote session: %w", oops.WithBrowserReason(failure.LogError(ctx, logger), oauthui.ReasonUnavailable))
+				}
+				return fmt.Errorf("validate remote session: %w", oops.WithBrowserReason(failure.LogWarn(ctx, logger), oauthui.ReasonProviderUnavailable))
 			}
 			tokens, entry, tokenProjectID, usable = resolved, candidate, projectID, true
 			break

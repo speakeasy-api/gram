@@ -13,6 +13,7 @@ import (
 
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -96,6 +97,11 @@ func TestRefreshErrorIs(t *testing.T) {
 			name: "upstream unreachable",
 			err:  fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, errors.New("dial tcp: connection refused")),
 			want: ErrRemoteSessionUnavailable,
+		},
+		{
+			name: "client load hits a broken query",
+			err:  refreshClientLoadError(&pgconn.PgError{Code: "42P01"}),
+			want: nil,
 		},
 		{
 			name: "caller canceled mid-POST",

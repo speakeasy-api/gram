@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -112,7 +113,7 @@ func (e *RefreshError) Is(target error) bool {
 		// database, cache, or response-decoding failure that clears on retry.
 		tokenErr, ok := errors.AsType[*TokenRefreshError](e.err)
 		if !ok {
-			return target == ErrRemoteSessionUnavailable
+			return target == ErrRemoteSessionUnavailable && (!oops.IsStoreFailure(e.err) || oops.IsInfrastructureFailure(e.err))
 		}
 		switch tokenErr.remedy {
 		case refreshRemedyRetry:
@@ -385,6 +386,19 @@ func (s *RefreshService) RecordedOutage(ctx context.Context, sess remotesessions
 	return kind
 }
 
+// errRefreshTunnelTransport marks a refresh that couldn't reach the tunnel's transport at all.
+var errRefreshTunnelTransport = errors.New("refresh tunnel transport unavailable")
+
+// refreshOutagePaced reports a failure that clears on its own and isn't helped by asking again now.
+func refreshOutagePaced(outcome remotesessionmetrics.RefreshOutcome, err error) bool {
+	switch outcome {
+	case remotesessionmetrics.RefreshOutcomeUpstreamError, remotesessionmetrics.RefreshOutcomeRateLimited, remotesessionmetrics.RefreshOutcomeUnreachable:
+		return true
+	default:
+		return errors.Is(err, errRefreshTunnelTransport)
+	}
+}
+
 // refreshDeferredError is a refresh that made no upstream call; retry after wait.
 type refreshDeferredError struct{ wait time.Duration }
 
@@ -395,6 +409,9 @@ func (e *refreshDeferredError) Error() string {
 // parseRetryAfter reads RFC 9110 §10.2.3 seconds or an HTTP date, zero when absent or past.
 func parseRetryAfter(value string, now time.Time) time.Duration {
 	if seconds, err := strconv.Atoi(value); err == nil {
+		if seconds > int(refreshOutageCooldownMax/time.Second) {
+			return refreshOutageCooldownMax
+		}
 		return max(time.Duration(seconds)*time.Second, 0)
 	}
 	if at, err := http.ParseTime(value); err == nil {
@@ -496,7 +513,9 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		}
 	}
 
-	result, postLockClient, restatement, err := s.refresh(ctx, q, sess, callerResource)
+	// The grant the POST actually presented, which a concurrent reconnect can move past sess.
+	attempted := sess
+	result, postLockClient, restatement, err := s.refresh(ctx, q, sess, callerResource, &attempted)
 	issuerURL := client.IssuerUrl
 	if postLockClient != nil {
 		issuerURL = postLockClient.IssuerUrl
@@ -509,19 +528,21 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 			noteTokenEndpointMissing(ctx, s.issuerMetadata, *postLockClient, tokenErr.statusCode, tokenErr.code != "")
 		}
 		var retryAfter time.Duration
-		switch outcome {
-		case remotesessionmetrics.RefreshOutcomeUpstreamError, remotesessionmetrics.RefreshOutcomeRateLimited, remotesessionmetrics.RefreshOutcomeUnreachable:
-			retryAfter = s.startRefreshCooldown(ctx, sess, kind, err)
-		case remotesessionmetrics.RefreshOutcomeDeferred:
+		failureKind := RefreshOutageNone
+		switch {
+		case refreshOutagePaced(outcome, err):
+			failureKind = kind
+			retryAfter = s.startRefreshCooldown(ctx, attempted, kind, err)
+		case outcome == remotesessionmetrics.RefreshOutcomeDeferred:
+			failureKind = kind
 			if deferred, ok := errors.AsType[*refreshDeferredError](err); ok {
 				retryAfter = deferred.wait
 			}
-		default:
 		}
-		return zero, &RefreshError{IssuerURL: issuerURL, Outcome: outcome, retryAfter: retryAfter, outageKind: kind, err: err}
+		return zero, &RefreshError{IssuerURL: issuerURL, Outcome: outcome, retryAfter: retryAfter, outageKind: failureKind, err: err}
 	}
 	if result.Outcome == remotesessionmetrics.RefreshOutcomeRefreshed {
-		s.clearRefreshOutage(ctx, sess)
+		s.clearRefreshOutage(ctx, attempted)
 	}
 	if restatement != nil {
 		// Outside the single-flight lease: verifying an ID token may wait on
@@ -607,6 +628,7 @@ func (s *RefreshService) refresh(
 	q *remotesessions_repo.Queries,
 	sess remotesessions_repo.RemoteSession,
 	callerResource string,
+	attempted *remotesessions_repo.RemoteSession,
 ) (RefreshResult, *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, *identityRestatement, error) {
 	var zero RefreshResult
 
@@ -682,6 +704,7 @@ func (s *RefreshService) refresh(
 	}
 
 	sess = current
+	*attempted = current
 
 	if current.UpdatedAt.Time.After(snapshotAt) {
 		if accessTokenLive(current, time.Now()) {
