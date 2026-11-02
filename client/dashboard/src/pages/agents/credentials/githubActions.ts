@@ -1,6 +1,8 @@
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import { AGENT_PROVIDERS } from "@/components/agent-providers/agent-providers";
 import { hooksIngestPolicyGrant } from "../agent-hook-events";
+import { standsInForToolset } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { SetupServer } from "./setupInstructions";
 import { SUBJECT_CHOICE } from "./workloadCatalog";
@@ -343,18 +345,60 @@ function serverNames(
 }
 
 /**
+ * Whether a plugin server has no Speakeasy authorization server, which is a
+ * server with no user session issuer. It is read from the organization's row
+ * for the server the plugin names, or for the one wrapping the toolset it
+ * names; a server missing from that list is not guessed at.
+ */
+function lacksAuthorizationServer(
+  server: PluginServer,
+  mcpServers: McpServer[],
+): boolean {
+  // A toolset is served by the row that stands in for it, not by any
+  // wrapper that names it, such as a gateway member's.
+  const row = mcpServers.find((candidate) =>
+    server.mcpServerId
+      ? candidate.id === server.mcpServerId
+      : candidate.toolsetId === server.toolsetId &&
+        standsInForToolset(candidate),
+  );
+  return row !== undefined && !row.userSessionIssuerId;
+}
+
+/**
+ * The servers in these plugins with no Speakeasy authorization server.
+ * Speakeasy gives a job's device agent no token endpoint for one, so the job
+ * skips it, as it does a gateway.
+ */
+export function pluginServersWithoutAuthorization(
+  plugins: Plugin[],
+  mcpServers: McpServer[],
+): string[] {
+  return serverNames(plugins, (server) =>
+    lacksAuthorizationServer(server, mcpServers),
+  );
+}
+
+/**
  * The servers in these plugins the agent was not given. The job is told
  * about them and cannot get a token for them, so its tools show them as
- * needing authentication.
+ * needing authentication. One the job skips anyway, for having no Speakeasy
+ * authorization server, is not among them: giving it to the agent would not
+ * help.
  */
 export function unreachablePluginServers(
   plugins: Plugin[],
   servers: SetupServer[],
+  mcpServers: McpServer[],
 ): string[] {
   const reachable = new Set(servers.flatMap((s) => [s.id, s.resourceId]));
   return serverNames(plugins, (server) => {
     const ids = grantableIds(server);
-    return ids.length > 0 && !ids.some((id) => reachable.has(id));
+    return (
+      ids.length > 0 &&
+      !ids.some((id) => reachable.has(id)) &&
+      !lacksAuthorizationServer(server, mcpServers)
+    );
   });
 }
 

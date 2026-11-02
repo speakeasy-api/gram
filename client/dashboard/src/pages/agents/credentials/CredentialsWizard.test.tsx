@@ -3668,6 +3668,54 @@ describe("Connecting a GitHub repository", () => {
         assignmentCount: 0,
       },
     ]);
+    const servers = [
+      {
+        id: "s1",
+        displayName: "GitHub",
+        toolsetId: "toolset_one",
+        policy: "required",
+        sortOrder: 0,
+        createdAt: new Date(0),
+      },
+      {
+        id: "s2",
+        displayName: "Billing",
+        toolsetId: "toolset_billing",
+        policy: "required",
+        sortOrder: 1,
+        createdAt: new Date(0),
+      },
+    ];
+    // GitHub signs in through Speakeasy; Billing's own row has no
+    // authorization server, so the job skips it whether or not it is given.
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [
+        {
+          id: "server_one",
+          name: "GitHub",
+          slug: "github",
+          projectId: "project_one",
+          toolsetId: "toolset_one",
+          userSessionIssuerId: "issuer_one",
+          visibility: "private",
+          networkAccessMode: "dual",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: "server_billing",
+          name: "Billing",
+          slug: "billing",
+          projectId: "project_one",
+          toolsetId: "toolset_billing",
+          toolset: { hostingMcpServerId: "server_billing" },
+          visibility: "private",
+          networkAccessMode: "dual",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    });
     mocks.getPlugin.mockResolvedValue({
       ...everyone,
       assignments: [
@@ -3679,20 +3727,13 @@ describe("Connecting a GitHub repository", () => {
         },
       ],
       servers: [
+        ...servers,
         {
-          id: "s1",
-          displayName: "GitHub",
-          toolsetId: "toolset_one",
+          id: "s3",
+          displayName: "Analytics",
+          toolsetId: "toolset_analytics",
           policy: "required",
-          sortOrder: 0,
-          createdAt: new Date(0),
-        },
-        {
-          id: "s2",
-          displayName: "Billing",
-          toolsetId: "toolset_billing",
-          policy: "required",
-          sortOrder: 1,
+          sortOrder: 2,
           createdAt: new Date(0),
         },
       ],
@@ -3704,9 +3745,13 @@ describe("Connecting a GitHub repository", () => {
     await screen.findByRole("heading", { name: "What the job gets" });
     expect(await screen.findByText("CI tools")).toBeTruthy();
     expect(mocks.getPlugin).toHaveBeenCalledTimes(1);
+    expect((await screen.findByText(/The job skips Billing/)).textContent).toBe(
+      "The job skips Billing: a job gets its token from a Speakeasy authorization server, and that server has none.",
+    );
     expect(
-      await screen.findByText(/Release Bot cannot use Billing/),
+      await screen.findByText(/Release Bot cannot use Analytics,/),
     ).toBeTruthy();
+    expect(screen.queryByText(/cannot use .*Billing/)).toBeNull();
   });
 
   it("fills the workflow with the organization and the hook events project", async () => {

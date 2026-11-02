@@ -1,11 +1,13 @@
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import {
   ACTION_DEFAULT_CONTROL_PLANE,
   controlPlaneProblem,
   githubActionsAgentGrants,
   jobScope,
   pluginGateways,
+  pluginServersWithoutAuthorization,
   pluginsForEveryAgent,
   repositoryProblem,
   unreachablePluginServers,
@@ -553,12 +555,13 @@ describe("plugins a job receives", () => {
             mcpUrl: "https://x",
           },
         ],
+        [],
       ),
     ).toEqual(["Unreachable"]);
   });
 
   it("name the servers the agent cannot use", () => {
-    expect(unreachablePluginServers([everyone], [])).toEqual(["Linear"]);
+    expect(unreachablePluginServers([everyone], [], [])).toEqual(["Linear"]);
     expect(
       unreachablePluginServers(
         [everyone],
@@ -570,12 +573,52 @@ describe("plugins a job receives", () => {
             mcpUrl: "https://x",
           },
         ],
+        [],
       ),
     ).toEqual([]);
   });
 
   it("set gateways apart, since a job skips them", () => {
     expect(pluginGateways([everyone])).toEqual(["Gateway"]);
-    expect(unreachablePluginServers([everyone], [])).not.toContain("Gateway");
+    expect(unreachablePluginServers([everyone], [], [])).not.toContain(
+      "Gateway",
+    );
+  });
+
+  it("set apart servers with no Speakeasy authorization server, since a job skips them too", () => {
+    const mixed = plugin(
+      "mixed",
+      [{ principalUrn: "*", installMode: "required" }],
+      [
+        { displayName: "Signed in", mcpServerId: "mcp-issuer" },
+        { displayName: "Legacy OAuth", toolsetId: "toolset-legacy" },
+        { displayName: "Unknown", mcpServerId: "mcp-missing" },
+      ],
+    );
+    const rows = [
+      { id: "mcp-issuer", userSessionIssuerId: "issuer-1" },
+      // A gateway member's wrapper names the toolset too, with an issuer of
+      // its own, but it is not the server the toolset is reached at.
+      {
+        id: "member-wrapper",
+        toolsetId: "toolset-legacy",
+        userSessionIssuerId: "issuer-2",
+        toolset: { hostingMcpServerId: "mcp-legacy" },
+      },
+      {
+        id: "mcp-legacy",
+        toolsetId: "toolset-legacy",
+        toolset: { hostingMcpServerId: "mcp-legacy" },
+      },
+    ] as McpServer[];
+    expect(pluginServersWithoutAuthorization([mixed], rows)).toEqual([
+      "Legacy OAuth",
+    ]);
+    // Giving the agent a server it skips would not help, so it is not named
+    // as one to add; a server the list does not have is not guessed at.
+    expect(unreachablePluginServers([mixed], [], rows)).toEqual([
+      "Signed in",
+      "Unknown",
+    ]);
   });
 });

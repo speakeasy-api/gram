@@ -9,6 +9,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
+import { useListMcpServersForOrg } from "@gram/client/react-query/listMcpServersForOrg.js";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
 import { useQueries } from "@tanstack/react-query";
 import { useState, type JSX } from "react";
@@ -20,6 +21,7 @@ import {
   WORKFLOW_AGENTS,
   WORKFLOW_AGENT_OPTIONS,
   pluginGateways,
+  pluginServersWithoutAuthorization,
   pluginsForEveryAgent,
   unreachablePluginServers,
   workflowYaml,
@@ -64,13 +66,23 @@ export function PluginsStep({
       staleTime: PLUGIN_STALE_TIME_MS,
     })),
   });
+  // The list the server step read, reused while it is fresh.
+  const mcpServers =
+    useListMcpServersForOrg(undefined, undefined, {
+      throwOnError: false,
+      staleTime: PLUGIN_STALE_TIME_MS,
+    }).data?.mcpServers ?? [];
   const pending = plugins.isPending || details.some((query) => query.isPending);
   const failed = plugins.isError || details.some((query) => query.isError);
   const delivered = pluginsForEveryAgent(
     details.flatMap((query) => (query.data === undefined ? [] : [query.data])),
   );
-  const unreachable = unreachablePluginServers(delivered, servers);
+  const unreachable = unreachablePluginServers(delivered, servers, mcpServers);
   const gateways = pluginGateways(delivered);
+  const withoutAuthorization = pluginServersWithoutAuthorization(
+    delivered,
+    mcpServers,
+  );
   const agent = agentName || "the agent";
   const them = unreachable.length === 1 ? "it" : "them";
 
@@ -96,6 +108,14 @@ export function PluginsStep({
         <p className="text-muted-foreground">
           The job skips {gateways.join(", ")}: gateways do not accept agents
           yet.
+        </p>
+      )}
+      {withoutAuthorization.length > 0 && (
+        <p className="text-muted-foreground">
+          The job skips {withoutAuthorization.join(", ")}: a job gets its token
+          from a Speakeasy authorization server, and{" "}
+          {withoutAuthorization.length === 1 ? "that server has" : "they have"}{" "}
+          none.
         </p>
       )}
       {unreachable.length > 0 && (
