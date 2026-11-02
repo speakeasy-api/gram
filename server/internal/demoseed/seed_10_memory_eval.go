@@ -68,7 +68,7 @@ func (s *seeder) seedMemoryEval(ctx context.Context) error {
 	projects := make(map[memoryeval.ProjectKey]uuid.UUID, len(memoryEvalProjects))
 	for _, p := range memoryEvalProjects {
 		id := s.fixed(p.rest)
-		if err := s.q.MemoryEvalInsertProject(ctx, repo.MemoryEvalInsertProjectParams{ProjectID: id, Name: p.name, Slug: p.slug, OrgID: org}); err != nil {
+		if err := s.q.MemoryEvalInsertProject(ctx, repo.MemoryEvalInsertProjectParams{ProjectID: id, Name: p.name, Slug: p.slug, OrgID: org, CreatedAt: conv.ToPGTimestamptz(s.now)}); err != nil {
 			return fmt.Errorf("insert memory eval project %s: %w", p.slug, err)
 		}
 		projects[p.key] = id
