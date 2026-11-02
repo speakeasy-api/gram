@@ -3291,7 +3291,7 @@ describe("Connecting a GitHub repository", () => {
   }
 
   /** Chooses GitHub Actions for a new agent and fills in the repository. */
-  async function reachRepositoryStep() {
+  async function reachRepositoryStep({ fill = true } = {}) {
     mocks.platforms.mockReturnValue([githubActions]);
     setup();
     fireEvent.change(screen.getByLabelText("Name"), {
@@ -3307,7 +3307,7 @@ describe("Connecting a GitHub repository", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("heading", { name: "Your repository" });
-    fillRepository();
+    if (fill) fillRepository();
   }
 
   /** Sets up GitHub Actions for an agent that already exists. */
@@ -3624,6 +3624,15 @@ describe("Connecting a GitHub repository", () => {
       );
     }
     expect(screen.queryByText(/issuer_other/)).toBeNull();
+  });
+
+  // Nothing can shadow a rule that does not exist yet, so no project is read
+  // until the repository makes one.
+  it("reads no project's issuers until the setup makes a rule", async () => {
+    await reachRepositoryStep({ fill: false });
+    expect(mocks.workloadList).not.toHaveBeenCalled();
+    fillRepository();
+    await waitFor(() => expect(mocks.workloadList).toHaveBeenCalledTimes(2));
   });
 
   it("says which projects it could not check for an issuer of their own", async () => {

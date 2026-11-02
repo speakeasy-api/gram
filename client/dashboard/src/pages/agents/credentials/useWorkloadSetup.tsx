@@ -260,8 +260,7 @@ export function useWorkloadSetup({
   // different identity or not at all. The rule is organization-wide, so every
   // project is checked, not only this one.
   const { shadows, unchecked } = useProjectIssuers(
-    organizationTier && entry !== undefined,
-    connection?.issuer ?? null,
+    organizationTier && connection !== null ? connection.issuer : null,
   );
   const conflicting =
     connection === null || ours
@@ -497,18 +496,19 @@ const PROJECT_ISSUERS_STALE_TIME_MS = 60_000;
 
 /**
  * Every project that trusts this issuer URL on its own, with that issuer.
- * Workload identities are listed per project, so each of the organization's
- * projects is read while `enabled`; one that cannot be read is reported as
- * unchecked rather than taken as trusting nothing.
+ * Workload identities are listed per project, so each project the reader can
+ * open is read once there is an issuer to look for; one that cannot be read
+ * is reported as unchecked rather than taken as trusting nothing. Projects
+ * the reader cannot open are not listed to them, so they are never checked.
  *
  * The reads are keyed apart from the policy lists the setup invalidates after
  * every save: a save never writes another project's issuers, so refetching
  * every project then would only make Connect wait.
  */
-function useProjectIssuers(
-  enabled: boolean,
-  issuer: string | null,
-): { shadows: ProjectIssuer[]; unchecked: { name: string }[] } {
+function useProjectIssuers(issuer: string | null): {
+  shadows: ProjectIssuer[];
+  unchecked: { name: string }[];
+} {
   const organization = useOrganization();
   const sdk = useSdkClient();
   const projects = (organization.projects ?? []).filter(
@@ -521,13 +521,15 @@ function useProjectIssuers(
         sdk.workloadIdentities.list({ gramProject: project.slug }, undefined, {
           signal,
         }),
-      enabled,
+      enabled: issuer !== null,
       retry: false,
       throwOnError: false,
       staleTime: PROJECT_ISSUERS_STALE_TIME_MS,
+      // One read per project; returning to the tab is no reason to repeat it.
+      refetchOnWindowFocus: false,
     })),
   });
-  if (!enabled || issuer === null) return { shadows: [], unchecked: [] };
+  if (issuer === null) return { shadows: [], unchecked: [] };
   const shadows = projects.flatMap((project, index) =>
     (reads[index]?.data?.issuers ?? [])
       .filter(
