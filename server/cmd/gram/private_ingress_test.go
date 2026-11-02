@@ -62,3 +62,14 @@ func TestPrivateIngressRuntimeClosesInReverseOrderAfterCancellation(t *testing.T
 	runtime.Close(ctx)
 	require.Equal(t, []int{2, 1, 0}, closed)
 }
+
+func TestPrivateGatewayPrincipalMustBeConfiguredTogether(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, validatePrivateGatewayPrincipal("", ""))
+	require.NoError(t, validatePrivateGatewayPrincipal("gram-gateway", "gram-tailnet-gateway"))
+	require.Error(t, validatePrivateGatewayPrincipal("gram-gateway", ""))
+	require.Error(t, validatePrivateGatewayPrincipal("", "gram-tailnet-gateway"))
+	for _, name := range []string{"netingress-gateway-namespace", "netingress-gateway-service-account"} {
+		requireFlag(t, newNetworkIngressServerCommand().Flags, name)
+	}
+}

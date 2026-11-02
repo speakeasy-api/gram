@@ -64,7 +64,7 @@ func TestAttestationTelemetryClassifiesUnavailableVerifierAsError(t *testing.T) 
 	telemetry := NewTelemetry(testenv.NewLogger(t), provider)
 	verifier := NewAttestationVerifier(nil, nil, DefaultTokenAudience, time.Second, telemetry)
 
-	_, err := verifier.Verify(t.Context(), "opaque-token", "192.0.2.1:1234")
+	_, err := verifier.Verify(t.Context(), "opaque-token", "192.0.2.1:1234", "private.example.ts.net")
 	require.Error(t, err)
 
 	var resourceMetrics metricdata.ResourceMetrics
@@ -92,10 +92,10 @@ func TestAttestationTelemetryRetainsCachedProviderOnRecheckFailure(t *testing.T)
 	lookup := &fakeAttestorLookup{ingress: Ingress{Provider: ProviderTailscale}, recheckErr: errors.New("database unavailable")}
 	verifier := NewAttestationVerifier(&fakeTokenReviewer{response: authenticatedTokenReview(DefaultTokenAudience, "system:serviceaccount:ns:sa")}, lookup, DefaultTokenAudience, time.Minute, telemetry)
 	verifier.now = func() time.Time { return now }
-	_, err := verifier.Verify(t.Context(), token, "192.0.2.1:1234")
+	_, err := verifier.Verify(t.Context(), token, "192.0.2.1:1234", "private.example.ts.net")
 	require.NoError(t, err)
 	verifier.now = func() time.Time { return now.Add(servingStateRecheckTTL) }
-	_, err = verifier.Verify(t.Context(), token, "192.0.2.1:1234")
+	_, err = verifier.Verify(t.Context(), token, "192.0.2.1:1234", "private.example.ts.net")
 	require.ErrorContains(t, err, "database unavailable")
 
 	var resourceMetrics metricdata.ResourceMetrics
