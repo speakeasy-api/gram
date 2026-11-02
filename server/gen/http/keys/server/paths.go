@@ -17,6 +17,11 @@ func RotateKeyKeysPath() string {
 	return "/rpc/keys.rotate"
 }
 
+// ExtendAgentKeysKeysPath returns the URL path to the keys service extendAgentKeys HTTP endpoint.
+func ExtendAgentKeysKeysPath() string {
+	return "/rpc/keys.extendAgentKeys"
+}
+
 // ListKeysKeysPath returns the URL path to the keys service listKeys HTTP endpoint.
 func ListKeysKeysPath() string {
 	return "/rpc/keys.list"

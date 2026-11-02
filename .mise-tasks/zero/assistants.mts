@@ -14,6 +14,9 @@ const LOCAL_PROVIDER = "local";
 const LOCAL_IMAGE = "gram-assistant-runtime";
 const PROVIDER_KEY = "GRAM_ASSISTANT_RUNTIME_PROVIDER";
 const IMAGE_KEY = "GRAM_ASSISTANT_RUNTIME_OCI_IMAGE";
+// The providers the server accepts (see server/cmd/gram/flags_assistants.go).
+// A retired one, such as flyio, stops the worker from starting.
+const SUPPORTED_PROVIDERS = new Set(["gke", LOCAL_PROVIDER]);
 
 function isSet(value: string | undefined): boolean {
   return typeof value === "string" && value !== "" && value !== "unset";
@@ -56,23 +59,32 @@ async function ensureLocalConfig(
   key: string,
   fallback: string,
   restart: boolean,
+  supported: (value: string) => boolean = () => true,
 ): Promise<string> {
   const existing = localConfigValue(key);
-  if (!restart && existing) {
+  if (!restart && existing && supported(existing)) {
     console.log(`✅ ${key} is already set.`);
     return existing;
   }
 
   // Persist a value already in the process environment (intentional override
   // or a leftover from the old mise.toml defaults) so a later clean shell
-  // still has it. Fall back to the local default when nothing is set.
-  const value = restart
-    ? fallback
-    : isSet(process.env[key])
-      ? process.env[key]!
-      : fallback;
-  await saveConfig(key, value);
-  return value;
+  // still has it. Fall back to the local default when nothing is set or the
+  // value is no longer supported.
+  const current = existing || process.env[key];
+  if (restart || !isSet(current)) {
+    await saveConfig(key, fallback);
+    return fallback;
+  }
+  if (!supported(current!)) {
+    console.log(
+      `⚠️ ${key}=${current} is no longer supported; using ${fallback}.`,
+    );
+    await saveConfig(key, fallback);
+    return fallback;
+  }
+  await saveConfig(key, current!);
+  return current!;
 }
 
 async function run() {
@@ -83,6 +95,7 @@ async function run() {
     PROVIDER_KEY,
     LOCAL_PROVIDER,
     restart,
+    (value) => SUPPORTED_PROVIDERS.has(value),
   );
   const imageName = await ensureLocalConfig(IMAGE_KEY, LOCAL_IMAGE, restart);
   const imageRef = `${imageName}:dev`;

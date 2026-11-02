@@ -5,10 +5,12 @@ import {
 } from "@/pages/skills/ServedSkillsSection";
 import { useRoutes } from "@/routes";
 import { gatewayTabHref } from "./GatewayDetailsRouting";
+import { GatewayInheritedSkillsSection } from "./GatewayInheritedSkillsSection";
 
 /**
  * The gateway Skills tab: the skills agents load over MCP when they connect
- * to this gateway. Shown only while skills over MCP is on.
+ * to this gateway, both linked to it directly and inherited from its member
+ * servers. Shown only while skills over MCP is on.
  */
 export function GatewaySkillsTab({
   metaMcpServer,
@@ -22,6 +24,10 @@ export function GatewaySkillsTab({
     >
       <ServedSkillsSection
         target={{ kind: "meta_mcp_server", metaMcpServerId: metaMcpServer.id }}
+        surfaceName={metaMcpServer.name}
+      />
+      <GatewayInheritedSkillsSection
+        metaMcpServerId={metaMcpServer.id}
         surfaceName={metaMcpServer.name}
       />
     </SkillsOverMcpTabRoute>

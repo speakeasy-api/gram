@@ -141,7 +141,7 @@ func Describe(ctx context.Context, db DBTX, target Target) (View, error) {
 	for _, row := range servers {
 		server := ServerView{
 			MCPServerID: row.McpServerID, Choice: nil, Gap: nil, Options: options[row.McpServerID],
-			NoAuthAllowed: row.RequiresUpstreamAuth.Valid && !row.RequiresUpstreamAuth.Bool,
+			NoAuthAllowed: len(row.AuthClientIds) == 0 && !row.UpstreamAuthPending,
 		}
 		if server.Options == nil {
 			server.Options = []Option{}
@@ -155,15 +155,12 @@ func Describe(ctx context.Context, db DBTX, target Target) (View, error) {
 				reason := GapNoClient
 				server.Gap = &reason
 			case !choice.AuthClientID.Valid && !server.NoAuthAllowed:
-				// A no-auth choice serves nothing once the server needs, or
-				// has not decided whether it needs, upstream authentication.
+				// A no-auth choice serves nothing once the server offers an
+				// enabled auth client, or while it has upstream credentials no
+				// auth client records yet.
 				reason := GapSelectionRequired
-				switch {
-				case len(server.Options) > 0:
-				case row.RequiresUpstreamAuth.Valid:
+				if row.UpstreamAuthPending {
 					reason = GapSetupIncomplete
-				default:
-					reason = GapUpstreamAuthUndecided
 				}
 				server.Gap = &reason
 			}

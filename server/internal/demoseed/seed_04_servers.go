@@ -675,12 +675,6 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 			return fmt.Errorf("associate demo auth client %s: %w", a.key, err)
 		}
 	}
-	if err := s.q.ServersMarkRequiresUpstreamAuth(ctx, repo.ServersMarkRequiresUpstreamAuthParams{
-		ProjectID: proj,
-		Ids:       []uuid.UUID{s.det("mcpserver-linear"), s.det("mcpserver-github")},
-	}); err != nil {
-		return fmt.Errorf("mark demo servers as requiring upstream auth: %w", err)
-	}
 	if err := s.q.ServersInsertAuthClientRoleGrants(ctx, repo.ServersInsertAuthClientRoleGrantsParams{
 		OrgID: org, AuthClientID: s.det("auth-client-github-token"),
 		UseID: s.det("auth-client-github-token-use"), BlockID: s.det("auth-client-github-token-block"),

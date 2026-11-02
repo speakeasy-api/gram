@@ -8,8 +8,9 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import type { ReactNode } from "react";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import PluginDetail from "./PluginDetail";
 vi.mock("@gram/client/react-query/requestAccess", () => ({
   useRequestAccessMutation: () => ({ mutateAsync: vi.fn() }),
@@ -28,12 +29,30 @@ vi.mock("@/hooks/usePluginWriteAccess", () => ({
 const features = vi.hoisted(() => vi.fn(() => ({})));
 const publish = vi.hoisted(() => vi.fn());
 const update = vi.hoisted(() => vi.fn());
+// Runs after each update mutate with the hook's options, so a test can play the
+// server's answer back through onSuccess or onError.
+const updateOutcome = vi.hoisted(() =>
+  vi.fn<
+    (
+      options: {
+        onSuccess?: (data: unknown) => void;
+        onError?: (error: unknown) => void;
+      },
+      variables: unknown,
+    ) => void
+  >(),
+);
 const remove = vi.hoisted(() => vi.fn());
 const deletion = vi.hoisted(() => ({
   success: undefined as (() => Promise<void>) | undefined,
   invalidate: vi.fn(),
 }));
 const adminQuery = vi.hoisted(() => vi.fn());
+const toastSuccess = vi.hoisted(() => vi.fn());
+const toastError = vi.hoisted(() => vi.fn());
+vi.mock("sonner", () => ({
+  toast: Object.assign(vi.fn(), { success: toastSuccess, error: toastError }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     isLoading: state.loading,
@@ -135,7 +154,15 @@ vi.mock("@gram/client/react-query/publishPlugins", () => ({
   usePublishPluginsMutation: () => ({ mutate: publish }),
 }));
 vi.mock("@gram/client/react-query/updatePlugin", () => ({
-  useUpdatePluginMutation: () => ({ mutate: update }),
+  useUpdatePluginMutation: (options: {
+    onSuccess?: (data: unknown) => void;
+    onError?: (error: unknown) => void;
+  }) => ({
+    mutate: (variables: unknown) => {
+      update(variables);
+      updateOutcome(options, variables);
+    },
+  }),
 }));
 vi.mock("@gram/client/react-query/deletePlugin", () => ({
   useDeletePluginMutation: (options: { onSuccess: () => Promise<void> }) => {
@@ -157,14 +184,47 @@ const hostedServer = {
   mcpServerId: "toolset-a",
   createdAt: new Date(),
 };
-function renderAdmin(section = "overview", servers: object[] = [hostedServer]) {
+const autoSyncRefusal =
+  "This plugin has changes that haven't been synced yet. Sync changes first, then turn off auto sync.";
+function updateError(status: number, message: string): GramError {
+  return new GramError(message, {
+    response: new Response(null, { status }),
+    request: new Request("https://app.getgram.ai/rpc/plugins.update"),
+    body: "",
+  });
+}
+// Moves to another plugin while PluginDetail stays mounted, as following a link
+// from one plugin to another does.
+function OpenPlugin({ id }: { id: string }) {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      onClick={() => void navigate(`/plugins/${id}/settings`)}
+    >
+      Open {id}
+    </button>
+  );
+}
+function renderAdmin(
+  section = "overview",
+  servers: object[] = [hostedServer],
+  plugin: object = {},
+  outside?: ReactNode,
+) {
   adminQuery.mockReturnValue({
-    data: { name: "Example plugin", slug: "example-plugin", servers },
+    data: {
+      name: "Example plugin",
+      slug: "example-plugin",
+      servers,
+      ...plugin,
+    },
   });
   return render(
     <TooltipProvider>
       <QueryClientProvider client={new QueryClient()}>
         <MemoryRouter initialEntries={[`/plugins/plugin-a/${section}`]}>
+          {outside}
           <Routes>
             <Route path="/plugins" element={<h1>Plugins</h1>} />
             <Route
@@ -204,6 +264,12 @@ describe("plugin detail permission boundary", () => {
     expect(deletion.invalidate).toHaveBeenCalledWith(expect.any(QueryClient), {
       refetchType: "none",
     });
+    // A connected marketplace republishes on its own, so the toast must not
+    // ask for a manual publish.
+    expect(toastSuccess).toHaveBeenCalledWith("Plugin deleted", {
+      description: "Changes sync to your marketplace automatically.",
+    });
+    expect(publish).not.toHaveBeenCalled();
   });
   it("allows writer-only edit and delete actions", () => {
     state.pluginWrite = true;
@@ -220,6 +286,98 @@ describe("plugin detail permission boundary", () => {
     expect(remove).toHaveBeenCalled();
     for (const query of Object.values(assignments))
       expect(query).not.toHaveBeenCalled();
+  });
+  it("turns auto sync off from settings and shows the server's refusal", () => {
+    state.pluginWrite = true;
+    renderAdmin("settings", [hostedServer], { autoSyncEnabled: true });
+    const toggle = screen.getByRole("switch", {
+      name: "Sync changes automatically",
+    });
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+
+    updateOutcome.mockImplementationOnce((options) =>
+      options.onError?.(updateError(412, autoSyncRefusal)),
+    );
+    fireEvent.click(toggle);
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: {
+          updatePluginForm: expect.objectContaining({
+            id: "plugin-a",
+            name: "Example plugin",
+            slug: "example-plugin",
+            autoSyncEnabled: false,
+          }),
+        },
+      }),
+    );
+    expect(screen.getByText(autoSyncRefusal)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sync changes" }));
+    expect(publish).toHaveBeenCalled();
+  });
+  // A failure that isn't the 412 for changes waiting to sync is a toast, with
+  // no Sync changes beside the switch: a server fault, or a 400 a sync can't
+  // fix such as packages that share a directory. handleError logs a 4xx as a
+  // warning and anything else as an error.
+  it.each([
+    [503, "service unavailable", "error"],
+    [400, "This plugin's packages share a directory.", "warn"],
+  ] as const)(
+    "toasts a %i from the auto sync switch without offering a sync",
+    (status, message, logged) => {
+      state.pluginWrite = true;
+      const consoleLog = vi.spyOn(console, logged).mockImplementation(() => {});
+      renderAdmin("settings", [hostedServer], { autoSyncEnabled: true });
+      updateOutcome.mockImplementationOnce((options) =>
+        options.onError?.(updateError(status, message)),
+      );
+      fireEvent.click(
+        screen.getByRole("switch", { name: "Sync changes automatically" }),
+      );
+      expect(toastError).toHaveBeenCalled();
+      expect(consoleLog).toHaveBeenCalled();
+      expect(screen.queryByText(message)).toBeNull();
+      expect(screen.queryByRole("button", { name: "Sync changes" })).toBeNull();
+      consoleLog.mockRestore();
+    },
+  );
+  it("drops an auto sync refusal when moving to another plugin", () => {
+    state.pluginWrite = true;
+    renderAdmin(
+      "settings",
+      [hostedServer],
+      { autoSyncEnabled: true },
+      <OpenPlugin id="plugin-b" />,
+    );
+    updateOutcome.mockImplementationOnce((options) =>
+      options.onError?.(updateError(412, autoSyncRefusal)),
+    );
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Sync changes automatically" }),
+    );
+    expect(screen.getByText(autoSyncRefusal)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open plugin-b" }));
+    expect(screen.queryByText(autoSyncRefusal)).toBeNull();
+  });
+  it("says a paused plugin's changes wait for Sync changes", () => {
+    state.pluginWrite = true;
+    renderAdmin("settings", [hostedServer], { autoSyncEnabled: false });
+    expect(
+      screen
+        .getByRole("switch", { name: "Sync changes automatically" })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
+    expect(screen.getByLabelText("Slug").hasAttribute("readonly")).toBe(true);
+    updateOutcome.mockImplementationOnce((options) => options.onSuccess?.({}));
+    fireEvent.submit(screen.getByLabelText("Name").closest("form")!);
+    expect(toastSuccess).toHaveBeenCalledWith("Plugin updated", {
+      description:
+        "Auto sync is off for this plugin, so changes publish when someone clicks Sync changes.",
+    });
   });
   it("mounts only distribution UI without org:read", () => {
     render(<PluginDetail />);

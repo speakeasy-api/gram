@@ -65,6 +65,11 @@ func TestRoleDistributionSetup_PopulatesExistingGrants(t *testing.T) {
 		require.Equal(t, "system", record.ActorType)
 		require.Equal(t, "automatic-role-distribution", record.ActorID)
 	}
+	created, err := audittest.LatestAuditLogByAction(ctx, f.db, audit.ActionPluginCreate)
+	require.NoError(t, err)
+	createdSnapshot, err := audittest.DecodeAuditData(created.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, true, createdSnapshot["auto_sync_enabled"], "a role plugin is created with auto sync on")
 	automatic, err := testrepo.New(f.db).PipelineEngineeringPlugin(ctx, f.project)
 	require.NoError(t, err)
 	for _, pluginID := range []uuid.UUID{automatic, manual.ID} {
