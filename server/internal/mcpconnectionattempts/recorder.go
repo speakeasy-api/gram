@@ -331,7 +331,11 @@ type Recorder struct {
 	stop     chan struct{}
 	done     chan struct{}
 	stopOnce sync.Once
-	stopped  atomic.Bool
+
+	// stopMu makes enqueueing and stopping exclusive, so each row is drained or counted.
+	stopMu  sync.RWMutex
+	stopped bool
+
 	lastDrop map[dropReason]*atomic.Int64
 }
 
@@ -390,7 +394,8 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		stop:        make(chan struct{}),
 		done:        make(chan struct{}),
 		stopOnce:    sync.Once{},
-		stopped:     atomic.Bool{},
+		stopMu:      sync.RWMutex{},
+		stopped:     false,
 		lastDrop:    lastDropTimes(),
 	}
 	go r.run()
@@ -412,7 +417,8 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 		stop:        nil,
 		done:        nil,
 		stopOnce:    sync.Once{},
-		stopped:     atomic.Bool{},
+		stopMu:      sync.RWMutex{},
+		stopped:     false,
 		lastDrop:    lastDropTimes(),
 	}
 }
@@ -453,7 +459,10 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		return
 	}
 
-	if r.stopped.Load() {
+	r.stopMu.RLock()
+	defer r.stopMu.RUnlock()
+
+	if r.stopped {
 		r.drop(ctx, dropShutdown, 1, nil)
 		return
 	}
@@ -470,7 +479,9 @@ func (r *Recorder) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	r.stopOnce.Do(func() {
-		r.stopped.Store(true)
+		r.stopMu.Lock()
+		r.stopped = true
+		r.stopMu.Unlock()
 		close(r.stop)
 	})
 	select {

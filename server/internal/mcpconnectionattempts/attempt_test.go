@@ -65,6 +65,8 @@ func TestAppOf(t *testing.T) {
 		{"credentials dropped", "https://user:secret@client.example.com/m", App{"client.example.com"}},
 		{"dynamically registered", "3fa85f64-5717-4562-b3fc-2c963f66afa6", AppDCR},
 		{"dashboard", "", AppFirstParty},
+		{"host spelled like a kind", "https://dcr/meta.json", AppUnverified},
+		{"other host spelled like a kind", "https://workload:8443/meta.json", App{"workload:8443"}},
 		{"too long", long, AppUnverified},
 		{"unparsable", "https://bad host/", AppUnverified},
 	}
