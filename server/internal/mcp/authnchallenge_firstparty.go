@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -76,6 +77,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 
 	codeReconnect, err := s.codeReconnectTicket(r, endpoint, false)
 	if err != nil {
+		s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppCodeMode), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeExpired)
 		return err
 	}
 	focusServer := r.URL.Query().Get("server")
@@ -148,16 +150,25 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").LogError(ctx, logger)
 	}
 
+	attempt := challengeState.connectionAttempt(endpoint)
+	ending := mcpconnectionattempts.CodeInternalError
+	recorded := false
 	defer func() {
+		if retErr != nil && !recorded {
+			s.connections.End(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, ending)
+		}
 		if retErr != nil && codeReconnect != nil {
 			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
 		}
 	}()
 	s.metrics.RecordOAuthFlowStarted(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
+	s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted, mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
 
 	federatedURL, err := s.prepareFederatedLogin(w, r, endpoint, &challengeState)
 	if err != nil {
 		_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+		recorded = true
+		s.connections.End(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, federatedHappened(err))
 		failureCode, cause := federatedFailure(err)
 		return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageAuthorize, failureCode, cause, "Federated login configuration is unavailable. Restart login or contact your administrator", false)
 	}
@@ -178,6 +189,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 			Prompt:          "",
 		})
 		if err != nil {
+			ending = mcpconnectionattempts.CodeIDPUnavailable
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 			return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
 		}
@@ -185,6 +197,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	// Claim only after all validation and login setup succeeded, so a failed
 	// preparation does not consume the dashboard's one-time decision.
 	if codeReconnect != nil {
+		ending = mcpconnectionattempts.CodeExpired
 		claimed, err := s.codeReconnectTicket(r, endpoint, true)
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
@@ -194,6 +207,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 			return oops.E(oops.CodeBadRequest, nil, "connection request changed; request a new link")
 		}
+		ending = mcpconnectionattempts.CodeInternalError
 	}
 	if attemptID != "" {
 		if err := s.bindingRefresh.Start(ctx, attemptID, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID); err != nil {

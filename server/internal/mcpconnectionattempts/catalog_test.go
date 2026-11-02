@@ -110,6 +110,7 @@ var frozenCodes = []string{
 	"renewal_ambiguous",
 	"needs_sign_in",
 	"consent_not_approved",
+	"provider_token_inactive",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.

@@ -11,6 +11,7 @@ import (
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -116,11 +117,22 @@ func (s *Service) completeFederatedBrowserHandoff(w http.ResponseWriter, r *http
 // The remote state is immutable and single-use. Peek before the manager can
 // exchange a code or persist credentials; it still owns the atomic consumption.
 // Dashboard-owned linking (FinalRedirectURI) does not have a consent parent.
-func (s *Service) validateRemoteLoginBrowser(r *http.Request) error {
+func (s *Service) validateRemoteLoginBrowser(r *http.Request) (retErr error) {
 	remote, err := s.remoteLoginCache.Get(r.Context(), "remoteLogin:"+r.URL.Query().Get("state"))
 	if err != nil {
 		return fmt.Errorf("validate remote login browser: %w", s.remoteLoginStateError(r.Context(), err))
 	}
+	// The login state is not spent here, so the right browser can still finish.
+	defer func() {
+		if retErr == nil {
+			return
+		}
+		what := mcpconnectionattempts.CodeSessionChanged
+		if errors.Is(retErr, redisCache.ErrCacheMiss) {
+			what = mcpconnectionattempts.CodeExpired
+		}
+		s.connections.Step(r.Context(), remote.Attempt, mcpconnectionattempts.StepProviderSignIn, what, mcpconnectionattempts.Provider(remote.ProviderHost), mcpconnectionattempts.Subject(remote.Subject))
+	}()
 	if recovery, err := s.verifyConnectionRecoveryCompletion(r, remote); recovery {
 		return err
 	}

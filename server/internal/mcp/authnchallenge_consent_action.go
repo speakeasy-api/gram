@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -86,12 +87,14 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	// must not consume the state the approve POST needs.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
+		s.recordConsentStateGone(ctx, endpoint, err)
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if challengeState.FirstParty {
 		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
+		s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.Subject(challengeState.Subject))
 		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
@@ -337,7 +340,19 @@ func (s *Service) buildRemoteConnectURL(
 	bound []remotesessions.Client,
 	autoRefresh *bool,
 	focusServer string,
-) (string, bool, error) {
+) (target string, hop bool, retErr error) {
+	notSetUp := false
+	defer func() {
+		if retErr == nil {
+			return
+		}
+		what := mcpconnectionattempts.CodeInternalError
+		if notSetUp || errors.Is(retErr, remotesessions.ErrIssuerNoAuthorizationEndpoint) {
+			what = mcpconnectionattempts.CodeUpstreamSignInNotSetUp
+		}
+		s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepProviderSignIn, what,
+			mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID), mcpconnectionattempts.Subject(challengeState.Subject))
+	}()
 	// endpoint.UpstreamResource only when no other bound client can claim
 	// it: under multi-binding it may belong to a different client's
 	// upstream, while a client shared by servers with different upstreams
@@ -367,6 +382,7 @@ func (s *Service) buildRemoteConnectURL(
 			return "", false, oops.E(oops.CodeUnexpected, herr, "resolve gateway members for connection").LogError(ctx, logger)
 		}
 		if !hosted {
+			notSetUp = true
 			return "", false, oops.E(oops.CodeBadRequest, nil, "this connection is not configured for any server this gateway serves").LogWarn(ctx, logger)
 		}
 	}

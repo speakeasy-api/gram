@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -35,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -721,11 +723,17 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	// deliberately records neither: refresh is not part of an initial flow.
 	issuerID := endpoint.UserSessionIssuerID.String()
 	mcpSlug := endpoint.Slug
+	tokenOpts := []mcpconnectionattempts.Option{mcpconnectionattempts.Grant(oauthwire.GrantTypeAuthorizationCode), mcpconnectionattempts.UserSessionClient(clientRow.ID)}
+	// A refusal that leaves the code usable is its own attempt: the sign-in it belongs to can still finish.
+	refused := func(what mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
+		s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppOf(clientRow.ClientID)), mcpconnectionattempts.StepInboundToken, what, append(opts, tokenOpts...)...)
+	}
 
 	req := usersessions.AuthCodeTokenRequestFromForm(r.PostForm)
 	req.SetDefaults()
 	if err := req.Validate(); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "invalid_request")
+		refused(mcpconnectionattempts.CodeInvalidRequest)
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
@@ -739,6 +747,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	}
 	if err := oauthwire.ValidateResourceIndicators(req.Resources, canonicalResource); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "resource_mismatch")
+		refused(mcpconnectionattempts.CodeResourceMismatch)
 		s.recordSharedTokenResourceMismatch(ctx, logger, endpoint, req.Resources)
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
@@ -753,6 +762,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	grant, err := s.userSessionGrantCache.Get(ctx, grantKey)
 	if err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_not_found_or_expired")
+		refused(mcpconnectionattempts.CodeCodeNotFoundOrExpired)
 		// Deliberately NOT counted as a flow failure: a missing/expired code is
 		// ambiguous. An expired code is closer to abandonment than an errant
 		// config, and a replayed or retried code would double-count an outcome
@@ -772,6 +782,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	if grant.Endpoint != nil {
 		if err := endpoint.ValidateGrant(ctx, *grant.Endpoint, grant.UserSessionIssuerID, baseURL); err != nil {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_endpoint_mismatch")
+			refused(mcpconnectionattempts.CodeResourceMismatch, mcpconnectionattempts.Detail("code_endpoint_mismatch"))
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
 		}
@@ -780,8 +791,10 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 			s.recordPrivateOAuthAuthority(ctx, grant.Endpoint.Authority, authorityStarted, err)
 			if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
 				s.metrics.RecordOAuthAuthorityUnavailable(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+				s.connections.Step(ctx, grant.Attempt, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("endpoint_authority_unavailable"))
 				return oops.E(oops.CodeUnavailable, err, "private OAuth authority lookup is unavailable").LogError(ctx, logger)
 			}
+			refused(mcpconnectionattempts.CodeConnectionChanged, mcpconnectionattempts.Detail("endpoint_authority"))
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
 		}
@@ -800,9 +813,16 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	}
 	// Invalid proofs and definitive admission failures still burn the code.
 	// Only operational preflight failures leave it available for retry.
-	rejectGrant := func(description string) error {
+	grantOpts := append(slices.Clone(tokenOpts), mcpconnectionattempts.Subject(&grant.Subject))
+	endGrant := func(what mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
+		s.connections.End(ctx, grant.Attempt, mcpconnectionattempts.StepInboundToken, what, append(opts, grantOpts...)...)
+	}
+	rejectGrant := func(what mcpconnectionattempts.Code, description string, opts ...mcpconnectionattempts.Option) error {
 		if err := consumeGrant(); err != nil {
 			description = "code not found or expired"
+			refused(mcpconnectionattempts.CodeCodeNotFoundOrExpired)
+		} else {
+			endGrant(what, opts...)
 		}
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", description)
 	}
@@ -810,23 +830,23 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	if grant.ClientID != clientRow.ClientID {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_client_mismatch")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-		return rejectGrant("code was issued to a different client")
+		return rejectGrant(mcpconnectionattempts.CodeCodeNotFoundOrExpired, "code was issued to a different client", mcpconnectionattempts.Detail("code_client_mismatch"))
 	}
 	if grant.RedirectURI != req.RedirectURI {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "redirect_uri_mismatch")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-		return rejectGrant("redirect_uri does not match the original request")
+		return rejectGrant(mcpconnectionattempts.CodeRedirectURIMismatch, "redirect_uri does not match the original request")
 	}
 	if !verifyPKCES256(req.CodeVerifier, grant.CodeChallenge) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "pkce_mismatch")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-		return rejectGrant("code_verifier does not match code_challenge")
+		return rejectGrant(mcpconnectionattempts.CodePKCEMismatch, "code_verifier does not match code_challenge")
 	}
 
 	if grant.AgentAuthorization == nil && grant.Subject.Kind == urn.SessionSubjectKindAgent {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "agent_handoff_missing")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-		return rejectGrant("agent authorization handoff is missing")
+		return rejectGrant(mcpconnectionattempts.CodeInternalError, "agent authorization handoff is missing", mcpconnectionattempts.Detail("agent_handoff_missing"))
 	}
 	subject := grant.Subject
 	var admissionTx pgx.Tx
@@ -843,12 +863,12 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		if !agentAuthorization.Target.matches(endpoint) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "agent_target_mismatch")
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-			return rejectGrant("authorization code is bound to a different MCP endpoint")
+			return rejectGrant(mcpconnectionattempts.CodeResourceMismatch, "authorization code is bound to a different MCP endpoint")
 		}
 		credential, cerr := newAgentSessionCredential(agentAuthorization.Target, agentAuthorization.AuthorizerUserID)
 		if cerr != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-			return rejectGrant("agent authorization is invalid")
+			return rejectGrant(mcpconnectionattempts.CodeInternalError, "agent authorization is invalid", mcpconnectionattempts.Detail("agent_authorization_invalid"))
 		}
 		subject = urn.NewAgentSubject(agentAuthorization.AgentID)
 		authorizationCtx, cerr := s.contextForSessionSubject(ctx, endpoint, subject, "", clientRow.ClientID)
@@ -858,7 +878,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		if cerr != nil {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "agent_admission_denied")
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-			return rejectGrant("agent authorization is no longer valid")
+			return rejectGrant(mcpconnectionattempts.CodeNoServerAccess, "agent authorization is no longer valid")
 		}
 		admissionTx, err = s.db.Begin(ctx)
 		if err != nil {
@@ -885,6 +905,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		// Recheck before persisting an agent session or issuing its tokens.
 		if cerr := s.remoteChallengeMgr.CheckAccessTokens(authorizationCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); cerr != nil {
 			if errors.Is(cerr, remotesessions.ErrRemoteSessionUnavailable) {
+				s.connections.Step(ctx, grant.Attempt, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRemoteSessionUnavailable, grantOpts...)
 				return remoteSessionUnavailableError(w, cerr).LogWarn(ctx, logger)
 			}
 			if !errors.Is(cerr, remotesessions.ErrNoValidToken) {
@@ -894,9 +915,9 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 			// Redeeming this code again cannot succeed either way, so the grant
 			// is spent; the description names who can repair the connection.
 			if errors.Is(cerr, remotesessions.ErrRemoteSessionMisconfigured) {
-				return rejectGrant(remoteSessionMisconfiguredDescription)
+				return rejectGrant(mcpconnectionattempts.CodeCredentialMisconfigured, remoteSessionMisconfiguredDescription)
 			}
-			return rejectGrant("required agent connections are no longer available")
+			return rejectGrant(mcpconnectionattempts.CodeInvalidRemoteSession, "required agent connections are no longer available")
 		}
 		ctx = authorizationCtx
 		authorizerUserID = pgtype.Text{String: credential.AuthorizerUserID, Valid: true}
@@ -915,11 +936,11 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	gatewayCode := catalogCode || strings.HasPrefix(req.Code, gatewayAuthorizationCodePrefix)
 	if grant.GatewayPolicy != nil {
 		if toolPolicy != nil || !gatewayCode || catalogCode != (grant.GatewayPolicy.Catalog != nil) {
-			return rejectGrant("invalid gateway connection options; reauthorize")
+			return rejectGrant(mcpconnectionattempts.CodeInternalError, "invalid gateway connection options; reauthorize", mcpconnectionattempts.Detail("gateway_options_invalid"))
 		}
 		toolPolicy = grant.GatewayPolicy
 	} else if gatewayCode {
-		return rejectGrant("missing gateway connection options; reauthorize")
+		return rejectGrant(mcpconnectionattempts.CodeInternalError, "missing gateway connection options; reauthorize", mcpconnectionattempts.Detail("gateway_options_missing"))
 	}
 	if toolPolicy != nil {
 		// Codes are cached issuer-wide, so a sibling endpoint sharing the
@@ -930,7 +951,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		if toolPolicy.Resource != endpointToolSelectionResource(endpoint) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "tool_selection_resource_mismatch")
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-			return rejectGrant("authorization code is bound to a different MCP endpoint")
+			return rejectGrant(mcpconnectionattempts.CodeResourceMismatch, "authorization code is bound to a different MCP endpoint")
 		}
 		encoded, merr := json.Marshal(toolPolicy)
 		if merr != nil {
@@ -944,9 +965,10 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	if toolPolicy != nil && toolPolicy.Catalog != nil {
 		catalog, err = s.loadConnectionCatalog(contextvalues.SetOAuthClientID(ctx, clientRow.ClientID), endpoint, subject, toolPolicy.Catalog, time.Now())
 		if errors.Is(err, errConnectionCatalogExpired) {
-			return rejectGrant("approved tools expired; give consent again")
+			return rejectGrant(mcpconnectionattempts.CodeExpired, "approved tools expired; give consent again", mcpconnectionattempts.Detail("approved_tools_expired"))
 		}
 		if err != nil {
+			s.connections.Step(ctx, grant.Attempt, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInternalError, append(grantOpts, mcpconnectionattempts.Detail("approved_tools_unavailable"))...)
 			return oops.E(oops.CodeUnavailable, err, "could not load approved tools; try again later")
 		}
 	}
@@ -970,6 +992,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	// Consume only after retryable preflight work. Exactly one exchange wins,
 	// and the consumed value must be the immutable grant we just validated.
 	if err := consumeGrant(); err != nil {
+		refused(mcpconnectionattempts.CodeCodeNotFoundOrExpired)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
 	}
 
@@ -1003,18 +1026,23 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		// keeps completed meaning "a token the client could actually use."
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		if errors.Is(err, errSignInRevoked) {
+			endGrant(mcpconnectionattempts.CodeSignInRevoked)
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "the sign-in that authorized this grant was revoked; sign in again")
 		}
+		endGrant(mcpconnectionattempts.CodeInternalError)
 		return err
 	}
 	if err := admissionTx.Commit(ctx); err != nil {
+		endGrant(mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("session_not_committed"))
 		return oops.E(oops.CodeUnavailable, err, "commit session issuance")
 	}
 	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
+		endGrant(mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("response_not_written"))
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return err
 	}
 
+	endGrant(mcpconnectionattempts.ResultCodeIssued)
 	s.metrics.RecordOAuthFlowCompleted(ctx, issuerID, mcpSlug)
 	logger.InfoContext(ctx, "oauth flow completed")
 	return nil

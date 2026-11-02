@@ -219,6 +219,7 @@ var (
 	CodeProviderUnreachable        = define("provider_unreachable", OutcomeFailed, WhoProvider, "We could not reach the service.", "Wait a few minutes and try again.")
 	CodeLoginExpired               = define("login_expired", OutcomeFailed, WhoPerson, "A newer sign-in replaced this one.", "Finish the most recent sign-in, or start again.")
 	CodeSharedCredentialRejected   = define("shared_credential_rejected", OutcomeFailed, WhoAdmin, "The server rejected your organization's shared sign-in.", "Update the shared credential for this server.")
+	CodeProviderTokenInactive      = define("provider_token_inactive", OutcomeFailed, WhoProvider, "The service says this sign-in is not active.", "Sign in again. If it keeps happening, ask your admin to check with the service.")
 	CodeStaticKeyRejected          = define("static_key_rejected", OutcomeFailed, WhoAdmin, "The server rejected the saved key.", "Update the key for this server.")
 
 	// Upstream enterprise-managed sign-in.

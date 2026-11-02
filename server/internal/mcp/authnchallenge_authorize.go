@@ -62,12 +62,30 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 
 // ServeAuthorize is the post-resolution entry point for the OAuth 2.1
 // authorize endpoint, called by HandleAuthorize after slug resolution.
-func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) (retErr error) {
 	if s.redirectToAuthorizationServer(w, r, endpoint) {
 		return nil
 	}
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
+
+	app := mcpconnectionattempts.AppUnverified
+	attempt := mcpconnectionattempts.NoAttempt
+	ending := mcpconnectionattempts.CodeInternalError
+	recorded := false
+	refuse := func(what mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
+		recorded = true
+		s.connections.Once(ctx, connectionScope(endpoint, app), mcpconnectionattempts.StepInboundAuthorize, what, opts...)
+	}
+	defer func() {
+		switch {
+		case retErr == nil || recorded:
+		case attempt.IsZero():
+			refuse(ending)
+		default:
+			s.connections.End(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, ending)
+		}
+	}()
 
 	req := usersessions.AuthorizationRequestFromQuery(r.URL.Query())
 	req.SetDefaults()
@@ -87,6 +105,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// otherwise. That motivates the two-phase split: validate the fields
 	// needed to match the URI first, then validate the rest.
 	if err := req.ValidateRedirectableFields(); err != nil {
+		refuse(mcpconnectionattempts.CodeInvalidRequest)
 		return writeAuthorizeOAuthError(ctx, w, logger, http.StatusBadRequest, page, err)
 	}
 
@@ -108,6 +127,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	}
 	if namesEndpoint {
 		logger.InfoContext(ctx, "oauth authorize rejected client_id naming this endpoint", attr.SlogOAuthFailureReason(clientIDNamesEndpointReason))
+		refuse(mcpconnectionattempts.CodeCIMDMetadataInvalid, mcpconnectionattempts.Detail(clientIDNamesEndpointReason))
 		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, oautherr.CodeInvalidClient, clientIDNamesEndpointDescription)
 	}
 
@@ -121,6 +141,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
 			page.Reason = oauthui.ReasonOrganizationBlocked
+			refuse(mcpconnectionattempts.CodeCIMDAdmissionDenied)
 			// Checked before the generic *oauthwire.Error branch below, since an
 			// admission denial is policy rather than a spec violation and
 			// carries its own actionable description. Already logged with
@@ -128,6 +149,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, oautherr.CodeInvalidClient, admissionErr.Description())
 		}
 		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
+			refuse(mcpconnectionattempts.CodeCIMDMetadataInvalid)
 			code := oauthErr.Code
 			if code == oautherr.CodeInvalidClientMetadata || code == oautherr.CodeInvalidRedirectURI {
 				code = oautherr.CodeInvalidClient
@@ -143,15 +165,19 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			// rather than a permanent invalid_client that would make SDKs
 			// stop retrying.
 			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
+			refuse(mcpconnectionattempts.CodeCIMDFetchFailed)
 			return writeAuthorizeError(ctx, w, logger, http.StatusServiceUnavailable, page, "temporarily_unavailable", "failed to fetch client metadata document")
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
+			refuse(mcpconnectionattempts.CodeUnknownClientID)
 			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, oautherr.CodeInvalidClient, "unknown client_id")
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
 	page = authorizationErrorPage(client, req.ClientID, endpoint.Slug)
+	app = mcpconnectionattempts.AppOf(req.ClientID)
 	if !redirectURIMatches(client, req.RedirectURI) {
+		refuse(mcpconnectionattempts.CodeRedirectURIMismatch, mcpconnectionattempts.UserSessionClient(client.ID))
 		page.Reason = oauthui.ReasonInvalidClient
 		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, "invalid_request", "redirect_uri is not registered for this client")
 	}
@@ -164,11 +190,13 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// verified.
 	if err := s.checkAIToolGatewayBlock(ctx, logger, endpoint.OrganizationID, req.ClientID); err != nil {
 		if blockedErr, ok := errors.AsType[*AIToolBlockedError](err); ok {
+			refuse(mcpconnectionattempts.CodeAIToolBlocked, mcpconnectionattempts.UserSessionClient(client.ID))
 			page.Reason = oauthui.ReasonOrganizationBlocked
 			page.ClientName = blockedErr.DisplayName
 			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, oautherr.CodeInvalidClient, blockedErr.Description())
 		}
 		if errors.Is(err, ErrAIToolBlockCheckUnavailable) {
+			refuse(mcpconnectionattempts.CodeAIToolCheckUnavailable, mcpconnectionattempts.UserSessionClient(client.ID))
 			return writeAuthorizeError(ctx, w, logger, http.StatusServiceUnavailable, page, "temporarily_unavailable", "cannot determine whether this client is permitted right now")
 		}
 		return oops.E(oops.CodeUnexpected, err, "check ai tool gateway block").LogError(ctx, logger)
@@ -192,6 +220,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// Registered callbacks can still be attacker-controlled. Before authentication,
 	// only loopback destinations receive automatic error redirects.
 	if err := req.ValidatePostRedirect(); err != nil {
+		refuse(mcpconnectionattempts.CodeInvalidRequest, mcpconnectionattempts.UserSessionClient(client.ID))
 		return writePreAuthenticationAuthorizeError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "", authorizationErrorPage(client, req.ClientID, endpoint.Slug), err)
 	}
 	// RFC 8707 §2: a resource naming some other server means the client
@@ -199,6 +228,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// for. Rejecting makes that misconfiguration visible at the point it
 	// happens instead of at first use.
 	if err := oauthwire.ValidateResourceIndicators(req.Resources, resource); err != nil {
+		refuse(mcpconnectionattempts.CodeResourceMismatch, mcpconnectionattempts.UserSessionClient(client.ID))
 		return writePreAuthenticationAuthorizeError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "resource_mismatch", authorizationErrorPage(client, req.ClientID, endpoint.Slug), err)
 	}
 
@@ -281,7 +311,8 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// companion completion-ratio monitor divides terminal outcomes against.
 	s.metrics.RecordOAuthFlowStarted(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
 	logger.InfoContext(ctx, "oauth flow started")
-	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted,
+	attempt = challengeState.connectionAttempt(endpoint)
+	s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted,
 		mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID),
 		mcpconnectionattempts.UserSessionClient(client.ID),
 		mcpconnectionattempts.Subject(subject),
@@ -291,6 +322,8 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		federatedURL, err := s.prepareFederatedLogin(w, r, endpoint, &challengeState)
 		if err != nil {
 			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+			recorded = true
+			s.connections.End(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, federatedHappened(err))
 			failureCode, cause := federatedFailure(err)
 			return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageAuthorize, failureCode, cause, "Federated login configuration is unavailable. Restart login or contact your administrator", false)
 		}
@@ -315,6 +348,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			Prompt:          "",
 		})
 		if err != nil {
+			ending = mcpconnectionattempts.CodeIDPUnavailable
 			// A failure to build the IDP authorization URL typically means the
 			// issuer's IDP wiring is misconfigured — a config-class flow failure.
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)

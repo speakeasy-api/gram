@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -538,14 +539,21 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
+		s.recordConsentStateGone(ctx, endpoint, err)
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if challengeState.FirstParty {
 		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
+		s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.Subject(challengeState.Subject))
 		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 	}
+	defer func() {
+		if retErr != nil {
+			s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Subject(challengeState.Subject))
+		}
+	}()
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
 		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
@@ -800,6 +808,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 	var gatewayInventory string
 	var approvalError *consentApprovalError
+	var consentProblem mcpconnectionattempts.Happened
 	if showToolsIsland && gateway != nil {
 		lockedDown, lockErr := s.endpointCustomDomainLockdown(ctx, logger, endpoint)
 		if lockErr != nil {
@@ -811,7 +820,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 				return oops.E(oops.CodeUnavailable, domainErr, "could not load the gateway's custom domain")
 			}
 			approvalError = &consentApprovalError{Message: "This gateway's custom domain is not ready. Ask an administrator to finish setup before reconnecting your client.", ActionURL: "", ActionLabel: ""}
+			consentProblem = mcpconnectionattempts.CodeCustomDomainNotReady
 			if domain.Verified && domain.Activated {
+				consentProblem = mcpconnectionattempts.CodeCustomDomainRequired
 				gatewayURL, err := endpoint.RootURL("https://" + domain.Domain)
 				if err != nil {
 					return oops.E(oops.CodeUnexpected, err, "build custom-domain gateway URL").LogError(ctx, logger)
@@ -823,7 +834,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			if err != nil {
 				logger.WarnContext(ctx, "gateway consent capture failed", attr.SlogError(err))
 				approvalError = &consentApprovalError{Message: "Tools could not be captured. This gateway cannot be approved. Try again later.", ActionURL: "", ActionLabel: ""}
+				consentProblem = mcpconnectionattempts.CodeMemberToolsMissing
 				if denied, ok := errors.AsType[*oops.ShareableError](err); ok && denied.Code == oops.CodeForbidden {
+					consentProblem = mcpconnectionattempts.CodeNoServerAccess
 					approvalError.Message = "You do not have access to this gateway. Request access before approving it."
 					approvalError.ActionURL = s.requestAccessURL(ctx, endpoint.connectResourceID().String(), endpoint.Slug)
 					approvalError.ActionLabel = "Request access"
@@ -841,6 +854,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 				}
 			} else if !gateway.AnyReady() {
 				approvalError = &consentApprovalError{Message: "No servers could be verified. Resolve the server statuses above before approving access.", ActionURL: "", ActionLabel: ""}
+				consentProblem = mcpconnectionattempts.CodeMemberToolsMissing
 			}
 		}
 	} else if showToolsIsland {
@@ -856,7 +870,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	var selfApprovalError *consentApprovalError
 	if approvalError == nil && upstreamAuth != nil && (upstreamAuth.Status == consentAuthNoAccess || upstreamAuth.Status == consentAuthSetupIncomplete) {
 		problem := &consentApprovalError{Message: upstreamAuth.Problem(), ActionURL: "", ActionLabel: ""}
+		consentProblem = mcpconnectionattempts.CodeUpstreamSignInNotSetUp
 		if upstreamAuth.Status == consentAuthNoAccess {
+			consentProblem = mcpconnectionattempts.CodeNoServerAccess
 			// The link names the person's organization, which their own
 			// context carries.
 			accessCtx := ctx
@@ -965,6 +981,8 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		UpstreamAuth:            upstreamAuth,
 	}
 
+	s.recordConsentPage(ctx, logger, endpoint, challengeState, gateway, cards, consentProblem)
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	// Consent cannot be embedded, even by the same origin. Do not restrict
@@ -1000,12 +1018,14 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// against the consumed value, which stays the single-use authority.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
+		s.recordConsentStateGone(ctx, endpoint, err)
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if challengeState.FirstParty {
 		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
+		s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.Subject(challengeState.Subject))
 		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
@@ -1030,6 +1050,20 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if action != "approve" && action != "approve_agent" && action != "deny" && action != "reuse" {
 		return oops.E(oops.CodeBadRequest, nil, `action must be "approve", "approve_agent", "reuse", or "deny"`).LogError(ctx, logger)
 	}
+
+	// Until the state is consumed the page stays usable, so a failure does not end the attempt.
+	attempt := challengeState.connectionAttempt(endpoint)
+	consumed, recorded := false, false
+	ending := mcpconnectionattempts.CodeInternalError
+	defer func() {
+		switch {
+		case retErr == nil || recorded:
+		case consumed:
+			s.connections.End(ctx, attempt, mcpconnectionattempts.StepInboundConsent, ending, mcpconnectionattempts.Subject(challengeState.Subject))
+		default:
+			s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, ending, mcpconnectionattempts.Subject(challengeState.Subject))
+		}
+	}()
 
 	reuse := action == "reuse"
 	if reuse {
@@ -1063,8 +1097,10 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// and chose "no" — a decline, not an errant config. A lost consume
 		// race (double submit) reads as expired state.
 		if _, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID); err != nil {
+			recorded = true
 			return consentChallengeCacheError(ctx, logger, err)
 		}
+		consumed = true
 		s.evictConsentToolInventory(ctx, stateID)
 		s.retireDeniedConsentCredentials(ctx, logger, endpoint, challengeState)
 		denyURL, err := buildClientRedirect(clientRedirectParams{
@@ -1084,6 +1120,8 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 		s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		logger.InfoContext(ctx, "oauth flow declined at consent", attr.SlogOAuthError("access_denied"))
+		recorded = true
+		s.connections.End(ctx, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeCanceled, mcpconnectionattempts.Subject(challengeState.Subject))
 		http.Redirect(w, r, denyURL, http.StatusSeeOther)
 		return nil
 	}
@@ -1100,6 +1138,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			return err
 		}
 		if lockedDown {
+			ending = mcpconnectionattempts.CodeCustomDomainRequired
 			return oops.E(oops.CodeForbidden, nil, "Start authorization from this gateway's custom domain to approve access.")
 		}
 	}
@@ -1118,6 +1157,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if selectedAgentID != "" {
 		selectedAgent, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID)
 		if err != nil {
+			ending = mcpconnectionattempts.CodeNoServerAccess
 			return consentAgentAuthorizationError(err, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
 		// Keep the challenge retryable while the human connects and attaches
@@ -1314,10 +1354,15 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// and get "not found or expired", so only one grant is ever minted per
 	// authorization request. The consumed value is the authority — re-run
 	// the guards against it in case the preflighted copy went stale.
+	preflighted := challengeState
 	challengeState, err = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
 	if err != nil {
+		// Lost the race to a double submit: the winner records the attempt.
+		challengeState = preflighted
+		recorded = true
 		return consentChallengeCacheError(ctx, logger, err)
 	}
+	consumed = true
 	if err := s.validateConsentChallenge(ctx, endpoint, &challengeState, r.PostForm.Get("csrf_token")); err != nil {
 		return err.LogError(ctx, logger)
 	}
@@ -1330,11 +1375,13 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if selectedAgentID != "" {
 		finalEndpoint, ferr := s.loadResolvedMcpEndpointByRef(ctx, challengeState.Endpoint)
 		if ferr != nil {
+			ending = mcpconnectionattempts.CodeNoServerAccess
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return oops.E(oops.CodeForbidden, ferr, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
 		agentAuthorization, ferr = s.authorizeConsentAgent(ctx, challengeState, finalEndpoint, selectedAgentID)
 		if ferr != nil {
+			ending = mcpconnectionattempts.CodeNoServerAccess
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return consumedConsentAgentAuthorizationError(ferr).LogWarn(ctx, logger)
 		}
@@ -1377,7 +1424,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	grant := UserSessionGrant{
 		Code:                        code,
 		FlowID:                      challengeState.FlowID,
-		Attempt:                     challengeState.connectionAttempt(endpoint),
+		Attempt:                     attempt,
 		UserSessionIssuerID:         endpoint.UserSessionIssuerID,
 		UserSessionClientID:         clientRow.ID,
 		ClientID:                    challengeState.ClientID,
@@ -1425,6 +1472,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "build client redirect").LogError(ctx, logger)
 	}
+	s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultAccepted, mcpconnectionattempts.Subject(&subject), mcpconnectionattempts.UserSessionClient(clientRow.ID))
 	// 303 See Other (POST → GET): the consent submit is a POST; we want
 	// the user agent to GET the redirect target with NO body re-submission.
 	http.Redirect(w, r, clientRedirect, http.StatusSeeOther)

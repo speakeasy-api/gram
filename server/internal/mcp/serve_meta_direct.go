@@ -91,6 +91,10 @@ func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, 
 	tools := make([]gatewayTool, 0)
 	names := map[string]bool{}
 	described := s.describeMetaMembers(ctx, logger, gate, members)
+	// A consent capture records its members on the sign-in's own attempt.
+	if unavailable == nil {
+		s.recordMemberListing(ctx, gate, members, described)
+	}
 	for i, member := range members {
 		catalog, err := described[i].catalog, described[i].err
 		if err != nil {

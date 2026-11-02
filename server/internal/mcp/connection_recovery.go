@@ -164,6 +164,9 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage)
 	}
 	if _, err := s.verifyConnectionRecoveryUser(ctx, r, recovery); err != nil {
+		if errors.Is(err, errRecoveryNoAccess) {
+			s.connections.Once(ctx, mcpconnectionattempts.ServerScope(recovery.OrganizationID, recovery.ProjectID, recovery.McpServerID, mcpconnectionattempts.AppRecoveryLink), mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeNoServerAccess)
+		}
 		return s.answerConnectionRecoveryRefusal(w, r, recovery, err)
 	}
 	// Used once, and only by the person it names.
@@ -201,6 +204,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 		return oops.E(oops.CodeUnexpected, err, "store connection login").LogError(ctx, s.logger)
 	}
 	subject := urn.NewUserSubject(recovery.UserID)
+	attempt := mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(recovery.OrganizationID, recovery.ProjectID, recovery.McpServerID, mcpconnectionattempts.AppRecoveryLink))
 	authorizationURL, err := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
 		ConnectionPopup:     false,
 		ID:                  login.ID,
@@ -221,15 +225,17 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 		Authority:           networkingress.Authority{Surface: "", BaseURL: "", OrganizationID: "", NetworkIngressID: uuid.Nil, NamespaceKind: "", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 		BrowserCookieID:     "",
 		BrowserHash:         "",
-		Attempt:             mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(recovery.OrganizationID, recovery.ProjectID, recovery.McpServerID, mcpconnectionattempts.AppRecoveryLink)),
+		Attempt:             attempt,
 	}, clients[0])
 	if err != nil {
+		s.connections.End(ctx, attempt, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Subject(&subject))
 		return oops.E(oops.CodeUnexpected, err, "start connection login").LogError(ctx, s.logger)
 	}
 	target := authorizationURL
 	if login.BrowserHop {
 		target, err = s.startConnectionRecoveryHop(ctx, login, browser, callbackOrigin, linkOrigin, authorizationURL)
 		if err != nil {
+			s.connections.End(ctx, attempt, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Subject(&subject))
 			return oops.E(oops.CodeUnexpected, err, "start connection login").LogError(ctx, s.logger)
 		}
 	} else {

@@ -54,6 +54,10 @@ var connectionEndings = []connectionEnding{
 	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeTunnelUnavailable},
 	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderDenied},
 	{mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeNotOrgMember},
+	{mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeCanceled},
+	{mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete},
+	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodePKCEMismatch},
+	{mcpconnectionattempts.StepProviderToken, mcpconnectionattempts.CodeProviderOAuthInvalidGrant},
 }
 
 // chConnectionEvents seeds connection attempts on a project server, a project
@@ -120,7 +124,7 @@ func (s *seeder) connectionAttemptRows(attempt mcpconnectionattempts.Attempt, ke
 
 	subject := urn.NewUserSubject(s.userID("amara"))
 	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&subject)}
-	if ending.step == mcpconnectionattempts.StepProviderSignIn {
+	if ending.step == mcpconnectionattempts.StepProviderSignIn || ending.step == mcpconnectionattempts.StepProviderToken {
 		opts = append(opts, mcpconnectionattempts.Provider(demoConnectionProvider))
 	}
 	if ending.what == mcpconnectionattempts.ResultCodeIssued {

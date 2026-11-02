@@ -231,3 +231,64 @@ func TestCompleteRemoteLogin_CancelWithAFinalDestinationEndsTheAttempt(t *testin
 	row := rec.RequireEnded(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderDenied)
 	require.Equal(t, string(mcpconnectionattempts.OutcomeDeclined), row.Outcome)
 }
+
+// Reaching the provider is a row, so an attempt that stops there is not invisible.
+func TestBuildAuthorizationUrl_RecordsReachingTheProvider(t *testing.T) {
+	t.Parallel()
+
+	var spy upstreamSpy
+	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-accepted", &spy)
+	rec := mcpconnectionattemptstest.New(t)
+	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
+	parent := fx.parent
+	parent.Attempt = mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(fx.parent.OrganizationID, fx.parent.ProjectID, uuid.New(), mcpconnectionattempts.AppRecoveryLink))
+
+	_, err := fx.mgr.BuildAuthorizationUrl(ctx, parent, fx.clients[0])
+	require.NoError(t, err)
+
+	row := rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultAccepted)
+	require.NotEmpty(t, row.ProviderHost)
+	require.Equal(t, fx.clients[0].ID.String(), row.RemoteSessionClientID)
+	rec.RequireNotEnded()
+}
+
+// A provider error ends a login with its own destination. One from consent stays
+// open, because the person can go back and connect again on the same attempt.
+func TestCompleteRemoteLogin_ProviderErrorsAreRecorded(t *testing.T) {
+	t.Parallel()
+
+	for name, final := range map[string]string{"returns to consent": "", "final destination": "https://app.example.com/done"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var spy upstreamSpy
+			ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-provider-error", &spy)
+			rec := mcpconnectionattemptstest.New(t)
+			remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
+			parent := fx.parent
+			parent.FinalRedirectURI = final
+			parent.Attempt = mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(fx.parent.OrganizationID, fx.parent.ProjectID, uuid.New(), mcpconnectionattempts.AppDCR))
+
+			authURL, err := fx.mgr.BuildAuthorizationUrl(ctx, parent, fx.clients[0])
+			require.NoError(t, err)
+			req := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=invalid_scope&state="+url.QueryEscape(loginState(t, authURL)), nil)
+			_, err = fx.mgr.CompleteRemoteLogin(req.WithContext(ctx))
+			require.Error(t, err)
+
+			require.Equal(t, final != "", rowFor(t, rec, mcpconnectionattempts.CodeProviderOAuthInvalidScope).IsFinal)
+			require.Equal(t, "invalid_scope", rowFor(t, rec, mcpconnectionattempts.CodeProviderOAuthInvalidScope).SubReason)
+			rec.RequireOneAttempt()
+		})
+	}
+}
+
+func rowFor(t *testing.T, rec *mcpconnectionattemptstest.Recording, what mcpconnectionattempts.Code) mcpconnectionattempts.Row {
+	t.Helper()
+	for _, row := range rec.Rows() {
+		if row.Reason == what.String() {
+			return row
+		}
+	}
+	require.Failf(t, "not recorded", "%s in %+v", what, rec.Rows())
+	return mcpconnectionattempts.Row{}
+}
