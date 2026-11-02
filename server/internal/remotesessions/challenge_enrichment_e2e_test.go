@@ -555,7 +555,7 @@ func TestEnrichRemoteSessionRefreshIntrospectionIgnoresPastExp(t *testing.T) {
 	sess := reloadSession(t, env)
 	require.False(t, sess.RefreshExpiresAt.Valid)
 	doc := decodeEnrichment(t, sess.Enrichment)
-	require.Equal(t, "no exp", doc.Interfaces["refresh_introspection"].Reason)
+	require.Equal(t, "exp passed", doc.Interfaces["refresh_introspection"].Reason)
 }
 
 func introspectionHints(requests []enrichmentRequest) []string {
