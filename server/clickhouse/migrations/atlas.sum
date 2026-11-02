@@ -1,4 +1,4 @@
-h1:MkbFhht9S70GpyxFLIU/BwxVRKV93hlOnBIRlkoHpeA=
+h1:HeFRVf+h6Q5FDcf3nQOE/bVkMbH49devAoTpw1SlTs0=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -135,3 +135,4 @@ h1:MkbFhht9S70GpyxFLIU/BwxVRKV93hlOnBIRlkoHpeA=
 20261023122040_sigint-source-time-pruning.sql h1:xymKd/vcLI8RBGatzYYoqghJx/fstOi5AHpwJUDCyKY=
 20261023160527_trace-summaries-mcp-server-id.sql h1:VAT6mnAXtfYlLqhgfVutMZ+YnNV7BwYXqy6RHG9Hixo=
 20261026212708_attribute-agent-hook-events.sql h1:1OvSLMcqrxbheQ1GaGqeshqLPS1HKnOqM3Be/XzE+5E=
+20261102182809_connection-events.sql h1:E21/4CZeajNGlN7eYj27tgdPeUdfd1wDQnftNhzSSDQ=

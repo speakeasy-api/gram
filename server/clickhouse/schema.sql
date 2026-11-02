@@ -1749,6 +1749,118 @@ WHERE event_urn = 'urn:telemetry:gram_service:log:mcp_network_request'
   AND surface IN ('public', 'private')
 GROUP BY gram_project_id, hour, server_kind, server_id, surface;
 
+CREATE TABLE IF NOT EXISTS mcp_connection_events (
+    organization_id String COMMENT 'Organization the attempt belongs to. Readers always filter on it.\n@access: confidential' CODEC(ZSTD),
+    project_id UUID COMMENT 'Project the attempt belongs to, nil for organization gateways. Must be the same on every step of an attempt. Readers always filter on organization_id.\n@access: confidential',
+    attempt_id UUID COMMENT 'Shared by every step of one connection attempt.\n@access: confidential',
+    attempt_started_at DateTime64(9, 'UTC') COMMENT 'Time the attempt started, the same on every step. Partitioning, sort order, retention and rollup buckets all use it, so an attempt stays together.\n@access: confidential' CODEC(DoubleDelta, ZSTD),
+    event_time DateTime64(9, 'UTC') COMMENT 'Time this step ended.\n@access: confidential' CODEC(DoubleDelta, ZSTD),
+    server_kind LowCardinality(String) COMMENT 'Kind of server the attempt reached, such as mcp or meta.\n@access: confidential',
+    server_id String COMMENT 'ID of the MCP server or gateway the attempt reached. Must be the same on every step of an attempt.\n@access: confidential' CODEC(ZSTD),
+    member_id String COMMENT 'Gateway member MCP server ID for member-level steps, empty otherwise.\n@access: confidential' CODEC(ZSTD),
+    step LowCardinality(String) COMMENT 'Step this row records, such as discovery_member.\n@access: confidential',
+    step_result LowCardinality(String) COMMENT 'How this step ended, such as listed or needs_sign_in.\n@access: confidential',
+    outcome LowCardinality(String) COMMENT 'Overall result of the attempt, set on its final step only: connected, failed, blocked or declined. Abandoned is never stored, it is worked out when read.\n@access: confidential',
+    reason LowCardinality(String) COMMENT 'Reason code for the step result, empty for success.\n@access: confidential',
+    sub_reason LowCardinality(String) COMMENT 'Finer label within the reason, such as org_lookup_failed for a gate, empty otherwise.\n@access: confidential',
+    who_fixes LowCardinality(String) COMMENT 'Party that has to act: person, admin, provider or speakeasy. Empty when nothing needs fixing.\n@access: confidential',
+    grant_type LowCardinality(String) COMMENT 'OAuth grant type for token steps, empty otherwise.\n@access: confidential',
+    is_final Bool COMMENT 'True on the row that ends the attempt. An attempt with no such row is unfinished or abandoned.\n@access: confidential',
+    retries UInt32 COMMENT 'Retries spent within this step.\n@access: confidential',
+    auth_client_id String COMMENT 'ID in mcp_auth_clients, empty when none applies.\n@access: confidential' CODEC(ZSTD),
+    remote_session_issuer_id String COMMENT 'ID in remote_session_issuers of the upstream provider, empty when none applies.\n@access: confidential' CODEC(ZSTD),
+    user_session_issuer_id String COMMENT 'ID in user_session_issuers of the Speakeasy issuer, empty when none applies.\n@access: confidential' CODEC(ZSTD),
+    user_session_client_id String COMMENT 'ID in user_session_clients of the AI app, empty when none applies.\n@access: confidential' CODEC(ZSTD),
+    remote_session_client_id String COMMENT 'ID in remote_session_clients, empty when none applies.\n@access: confidential' CODEC(ZSTD),
+    subject_urn String COMMENT 'Session subject URN of the user, API key, agent or workload, empty before sign-in.\n@access: confidential-pii' CODEC(ZSTD),
+    user_session_id String COMMENT 'ID in user_sessions, empty when none applies.\n@access: confidential' CODEC(ZSTD),
+    remote_session_id String COMMENT 'ID in remote_sessions, empty when none applies.\n@access: confidential' CODEC(ZSTD),
+    trace_id String COMMENT 'Trace ID of the request that recorded this step.\n@access: confidential' CODEC(ZSTD),
+    provider_host String COMMENT 'Normalized issuer host of the provider, shared across orgs. A tenant host can name the customer.\n@access: restricted',
+    app_key String COMMENT 'Client metadata URL of the app, or the client kind for dynamically registered apps. A URL can name the customer.\n@access: restricted'
+) ENGINE = MergeTree
+PARTITION BY toDate(attempt_started_at)
+ORDER BY (organization_id, project_id, server_kind, server_id, attempt_started_at, attempt_id, event_time)
+TTL toDateTime(attempt_started_at) + INTERVAL 30 DAY
+SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1
+COMMENT 'One row per step of an MCP connection attempt, successes included. Metadata only and never updated.';
+
+CREATE INDEX IF NOT EXISTS idx_mcp_connection_events_attempt_id ON mcp_connection_events (attempt_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_mcp_connection_events_subject_urn ON mcp_connection_events (subject_urn) TYPE bloom_filter(0.01) GRANULARITY 1;
+
+CREATE TABLE IF NOT EXISTS mcp_connection_attempt_summaries (
+    organization_id String COMMENT 'Organization the attempt belongs to. Readers always filter on it.\n@access: confidential',
+    project_id UUID COMMENT 'Project the attempt belongs to, nil for organization gateways. Must be the same on every step of an attempt. Readers always filter on organization_id.\n@access: confidential',
+    server_kind LowCardinality(String) COMMENT 'Kind of server the attempt reached, such as mcp or meta.\n@access: confidential',
+    server_id String COMMENT 'ID of the MCP server or gateway the attempt reached.\n@access: confidential',
+    bucket DateTime('UTC') COMMENT 'UTC 30-minute bucket containing the start of the attempt, not the time of the step.\n@access: confidential',
+    step LowCardinality(String) COMMENT 'Step of the attempt. Step counts are only comparable within one step.\n@access: confidential',
+    step_result LowCardinality(String) COMMENT 'How the step ended.\n@access: confidential',
+    outcome LowCardinality(String) COMMENT 'Overall result of the attempt on final steps, empty on other steps.\n@access: confidential',
+    reason LowCardinality(String) COMMENT 'Reason code for the step result, empty for success.\n@access: confidential',
+    who_fixes LowCardinality(String) COMMENT 'Party that has to act: person, admin, provider or speakeasy.\n@access: confidential',
+    grant_type LowCardinality(String) COMMENT 'OAuth grant type for token steps, empty otherwise.\n@access: confidential',
+    member_id String COMMENT 'Gateway member MCP server ID for member-level steps, empty otherwise.\n@access: confidential',
+    provider_host String COMMENT 'Normalized issuer host of the provider. A tenant host can name the customer.\n@access: restricted',
+    app_key String COMMENT 'Client metadata URL of the app, or the client kind for dynamically registered apps. A URL can name the customer.\n@access: restricted',
+    step_events SimpleAggregateFunction(sum, UInt64) COMMENT 'Step rows observed. An attempt can count more than once, so this is not a number of attempts.\n@access: confidential',
+    attempts_seen AggregateFunction(uniqExact, UUID) COMMENT 'Distinct attempts with a step here. Abandoned is seen minus ended, exact only per org, project, server and bucket. Per provider, step or person comes from mcp_connection_events at attempt level, for 30 days. A browser attempt can stay live about 50 minutes because each store restarts the 10-minute clock, so readers wait at least 90 minutes past the bucket start before calling an attempt abandoned.\n@access: confidential',
+    attempts_ended AggregateFunction(uniqExact, UUID) COMMENT 'Distinct attempts with a final step here, however late it arrived. See attempts_seen for how to read abandoned. A lost final row reads as abandoned.\n@access: confidential',
+    retries SimpleAggregateFunction(sum, UInt64) COMMENT 'Retries spent across these steps.\n@access: confidential',
+    recovered SimpleAggregateFunction(sum, UInt64) COMMENT 'Gateway members listed only after at least one retry.\n@access: confidential',
+    first_seen SimpleAggregateFunction(min, DateTime64(9, 'UTC')) COMMENT 'Time of the earliest step.\n@access: confidential',
+    last_seen SimpleAggregateFunction(max, DateTime64(9, 'UTC')) COMMENT 'Time of the latest step.\n@access: confidential'
+) ENGINE = AggregatingMergeTree
+PARTITION BY toMonday(bucket)
+PRIMARY KEY (organization_id, project_id, server_kind, server_id, bucket)
+ORDER BY (organization_id, project_id, server_kind, server_id, bucket, step, step_result, outcome, reason, who_fixes, grant_type, member_id, provider_host, app_key)
+TTL bucket + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1
+COMMENT 'Connection attempt counts per 30-minute bucket of attempt start, from mcp_connection_events';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS mcp_connection_attempt_summaries_mv TO mcp_connection_attempt_summaries AS
+SELECT
+    organization_id,
+    project_id,
+    server_kind,
+    server_id,
+    toStartOfInterval(toDateTime(attempt_started_at, 'UTC'), INTERVAL 30 MINUTE) AS bucket,
+    step,
+    step_result,
+    outcome,
+    reason,
+    who_fixes,
+    grant_type,
+    member_id,
+    provider_host,
+    app_key,
+    toUInt64(count()) AS step_events,
+    uniqExactState(attempt_id) AS attempts_seen,
+    uniqExactStateIf(attempt_id, is_final) AS attempts_ended,
+    sum(toUInt64(mcp_connection_events.retries)) AS retries,
+    toUInt64(countIf(step = 'discovery_member' AND step_result = 'listed' AND mcp_connection_events.retries > 0)) AS recovered,
+    min(event_time) AS first_seen,
+    max(event_time) AS last_seen
+FROM mcp_connection_events
+GROUP BY organization_id, project_id, server_kind, server_id, bucket, step, step_result, outcome, reason, who_fixes, grant_type, member_id, provider_host, app_key;
+
+CREATE TABLE IF NOT EXISTS mcp_connection_outcomes_daily (
+    day Date COMMENT 'UTC day the attempts started.\n@access: confidential',
+    provider LowCardinality(String) COMMENT 'Known vendor, otherwise other. Only the daily job enforces that a value cannot name a customer.\n@access: opaque-confidential',
+    app LowCardinality(String) COMMENT 'Known app, otherwise other. Only the daily job enforces that a value cannot name a customer.\n@access: opaque-confidential',
+    step LowCardinality(String) COMMENT 'Step the attempt ended at.\n@access: confidential',
+    outcome LowCardinality(String) COMMENT 'Overall result of the attempt, including abandoned.\n@access: confidential',
+    reason LowCardinality(String) COMMENT 'Reason code, empty for success.\n@access: confidential',
+    fixed_by LowCardinality(String) COMMENT 'What fixed the failure: admin_change, system_change, reconnect or retry. Empty when it was not fixed or nothing failed.\n@access: confidential',
+    attempts UInt64 COMMENT 'Attempts counted.\n@access: confidential',
+    computed_at DateTime64(9, 'UTC') COMMENT 'Time of the daily job run that wrote this row. Every row of a run for a day shares one value, and readers keep only the latest run per day.\n@access: confidential'
+) ENGINE = MergeTree
+PARTITION BY toYYYYMM(day)
+ORDER BY (provider, app, step, day, outcome, reason, fixed_by, computed_at)
+TTL day + INTERVAL 13 MONTH
+SETTINGS index_granularity = 8192
+COMMENT 'Daily connection outcomes across orgs for long-term learning. Filled by a daily job, not a materialized view. Holds no org, project or person. A rerun adds rows, so readers keep only the latest computed_at per day.';
+
 CREATE TABLE IF NOT EXISTS authz_challenge_bucket_summaries (
     challenge_date Date COMMENT 'UTC date of the summarized challenge rows.\n@access: confidential',
 
