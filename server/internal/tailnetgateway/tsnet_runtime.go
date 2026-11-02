@@ -31,6 +31,11 @@ const (
 	// serveShutdownTimeout bounds how long Close waits for in-flight requests
 	// when the caller's context has no deadline.
 	serveShutdownTimeout = 20 * time.Second
+
+	// requestReadTimeout bounds reading one request including its body, so a
+	// peer cannot hold a connection by trickling bytes. MCP request bodies are
+	// small; streaming happens on the response side, which this does not limit.
+	requestReadTimeout = 2 * time.Minute
 )
 
 // TsnetRuntime starts real tailnet nodes with tsnet.
@@ -113,6 +118,7 @@ func (n *tsnetNode) Serve(handler http.Handler) error {
 	n.server = &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       requestReadTimeout,
 		IdleTimeout:       620 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return context.Background() },
 	}

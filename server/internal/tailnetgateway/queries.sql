@@ -1,6 +1,8 @@
--- name: ListDesiredGatewayIngresses :many
--- Enabled ingresses served by the tsnet gateway for one shard. Gateway pods
--- poll this to decide which hosts to run.
+-- name: ListDesiredGatewayIngressesForSlot :many
+-- Enabled ingresses the gateway pod with this ordinal must host: the ingress
+-- is served by the gateway on this shard and its slot row exists and is not
+-- retired. A retired or missing slot drops the ingress from the result, which
+-- is how a running host learns to stop.
 SELECT
     i.id,
     i.organization_id,
@@ -10,6 +12,11 @@ SELECT
     i.updated_at
 FROM network_ingresses i
 JOIN organization_metadata om ON om.id = i.organization_id
+JOIN network_ingress_nodes n
+  ON n.organization_id = i.organization_id
+ AND n.network_ingress_id = i.id
+ AND n.slot = @slot
+ AND n.retired_at IS NULL
 WHERE i.enabled IS TRUE
   AND i.deleted IS FALSE
   AND i.runtime = 'gateway'
@@ -115,6 +122,13 @@ WHERE network_ingress_id = @network_ingress_id
   AND organization_id = @organization_id
   AND slot = @slot
   AND state_key = @state_key;
+
+-- name: DeleteNetworkIngressNodeSlotStates :exec
+-- Hard delete of one slot's partial state after a failed first login.
+DELETE FROM network_ingress_node_states
+WHERE network_ingress_id = @network_ingress_id
+  AND organization_id = @organization_id
+  AND slot = @slot;
 
 -- name: HasNetworkIngressNodeState :one
 SELECT EXISTS (

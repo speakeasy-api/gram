@@ -3,6 +3,7 @@ package tailnetgateway
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -96,14 +97,42 @@ func (s *PostgresStateStore) WriteState(id ipn.StateKey, bs []byte) error {
 	return nil
 }
 
-// HasState reports whether any state has been persisted for this node, which
-// means it has already registered with the tailnet.
-func (s *PostgresStateStore) HasState(ctx context.Context) (bool, error) {
-	exists, err := repo.New(s.db).HasNetworkIngressNodeState(ctx, repo.HasNetworkIngressNodeStateParams{
-		NetworkIngressID: s.ingressID, OrganizationID: s.orgID, Slot: s.slot,
+// Registered reports whether this node completed a tailnet login. tsnet
+// writes the machine key before registering, so a failed first login leaves
+// state behind; only a persisted login profile proves the node has a device
+// identity and no longer needs a one-shot auth key.
+func (s *PostgresStateStore) Registered(ctx context.Context) (bool, error) {
+	ciphertext, err := repo.New(s.db).GetNetworkIngressNodeState(ctx, repo.GetNetworkIngressNodeStateParams{
+		NetworkIngressID: s.ingressID, OrganizationID: s.orgID, Slot: s.slot, StateKey: string(ipn.KnownProfilesStateKey),
 	})
-	if err != nil {
-		return false, fmt.Errorf("check tailnet node state: %w", err)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
 	}
-	return exists, nil
+	if err != nil {
+		return false, fmt.Errorf("read tailnet login profiles: %w", err)
+	}
+	encoded, err := s.enc.Decrypt(ciphertext)
+	if err != nil {
+		return false, fmt.Errorf("decrypt tailnet login profiles: %w", err)
+	}
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return false, fmt.Errorf("decode tailnet login profiles: %w", err)
+	}
+	var profiles []json.RawMessage
+	if err := json.Unmarshal(raw, &profiles); err != nil {
+		return false, fmt.Errorf("parse tailnet login profiles: %w", err)
+	}
+	return len(profiles) > 0, nil
+}
+
+// Reset deletes every persisted key so the next start registers afresh. It is
+// used after a failed first login left partial state behind.
+func (s *PostgresStateStore) Reset(ctx context.Context) error {
+	if err := repo.New(s.db).DeleteNetworkIngressNodeSlotStates(ctx, repo.DeleteNetworkIngressNodeSlotStatesParams{
+		NetworkIngressID: s.ingressID, OrganizationID: s.orgID, Slot: s.slot,
+	}); err != nil {
+		return fmt.Errorf("reset tailnet node state: %w", err)
+	}
+	return nil
 }
