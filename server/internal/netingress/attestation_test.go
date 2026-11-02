@@ -33,9 +33,11 @@ type fakeAttestorLookup struct {
 	byAttestorErr   error
 	recheckErr      error
 	byAttestorCalls int
+	byDNSNameCalls  int
 	recheckCalls    int
 	namespace       string
 	serviceAccount  string
+	host            string
 	recheckStarted  chan struct{}
 	recheckRelease  chan struct{}
 	mu              sync.Mutex
@@ -45,6 +47,12 @@ func (f *fakeAttestorLookup) ByAttestor(_ context.Context, namespace, serviceAcc
 	f.byAttestorCalls++
 	f.namespace = namespace
 	f.serviceAccount = serviceAccount
+	return f.ingress, f.byAttestorErr
+}
+
+func (f *fakeAttestorLookup) ByDNSName(_ context.Context, host string) (Ingress, error) {
+	f.byDNSNameCalls++
+	f.host = host
 	return f.ingress, f.byAttestorErr
 }
 
@@ -84,7 +92,7 @@ func TestAttestationVerifierSuccessAndCache(t *testing.T) {
 	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, 30*time.Second)
 	verifier.now = func() time.Time { return now }
 
-	got, err := verifier.Verify(t.Context(), token, "10.0.0.1:1234")
+	got, err := verifier.Verify(t.Context(), token, "10.0.0.1:1234", "private.example.ts.net")
 	require.NoError(t, err)
 	require.Equal(t, ingress, got)
 	require.Len(t, reviewer.requests, 1)
@@ -93,7 +101,7 @@ func TestAttestationVerifierSuccessAndCache(t *testing.T) {
 	require.Equal(t, "attestor-ns", lookup.namespace)
 	require.Equal(t, "attestor-sa", lookup.serviceAccount)
 
-	got, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234")
+	got, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234", "private.example.ts.net")
 	require.NoError(t, err)
 	require.Equal(t, ingress, got)
 	require.Len(t, reviewer.requests, 1, "cache hit must not repeat TokenReview")
@@ -112,15 +120,15 @@ func TestAttestationVerifierCacheBoundedByTokenExpiry(t *testing.T) {
 	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Minute)
 	verifier.now = func() time.Time { return current }
 
-	_, err := verifier.Verify(t.Context(), token, "10.0.0.1:1234")
+	_, err := verifier.Verify(t.Context(), token, "10.0.0.1:1234", "private.example.ts.net")
 	require.NoError(t, err)
 	current = now.Add(4 * time.Second)
-	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234")
+	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234", "private.example.ts.net")
 	require.NoError(t, err)
 	require.Len(t, reviewer.requests, 1)
 
 	current = now.Add(5 * time.Second)
-	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234")
+	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234", "private.example.ts.net")
 	require.ErrorIs(t, err, ErrAttestationRejected)
 	require.Len(t, reviewer.requests, 2, "expired cache entry must perform a fresh TokenReview")
 }
@@ -150,7 +158,7 @@ func TestAttestationVerifierRejectsInvalidReview(t *testing.T) {
 			lookup := &fakeAttestorLookup{ingress: Ingress{ID: uuid.New()}}
 			verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Second)
 			verifier.now = func() time.Time { return now }
-			_, err := verifier.Verify(t.Context(), test.token, "10.0.0.1:1234")
+			_, err := verifier.Verify(t.Context(), test.token, "10.0.0.1:1234", "private.example.ts.net")
 			require.Error(t, err)
 			if test.token != "" {
 				require.NotContains(t, err.Error(), test.token, "attestation token must never appear in errors")
@@ -170,14 +178,14 @@ func TestAttestationVerifierNegativeCacheAndBoundedSize(t *testing.T) {
 	verifier.now = func() time.Time { return current }
 
 	invalid := unsignedToken(t, now.Add(time.Minute))
-	_, err := verifier.Verify(t.Context(), invalid, "10.0.0.1:1234")
+	_, err := verifier.Verify(t.Context(), invalid, "10.0.0.1:1234", "private.example.ts.net")
 	require.ErrorIs(t, err, ErrAttestationRejected)
-	_, err = verifier.Verify(t.Context(), invalid, "10.0.0.1:1234")
+	_, err = verifier.Verify(t.Context(), invalid, "10.0.0.1:1234", "private.example.ts.net")
 	require.ErrorIs(t, err, ErrAttestationRejected)
 	require.Len(t, reviewer.requests, 1, "negative cache must suppress repeated TokenReview calls")
 
 	current = now.Add(negativeCacheTTL)
-	_, err = verifier.Verify(t.Context(), invalid, "10.0.0.1:1234")
+	_, err = verifier.Verify(t.Context(), invalid, "10.0.0.1:1234", "private.example.ts.net")
 	require.ErrorIs(t, err, ErrAttestationRejected)
 	require.Len(t, reviewer.requests, 2, "expired negative cache entry must permit a fresh review")
 
@@ -202,12 +210,12 @@ func TestAttestationVerifierRateLimitIsRetryableAndNotCached(t *testing.T) {
 	verifier.now = func() time.Time { return now }
 	verifier.sourceLimiters["10.0.0.1"] = rate.NewLimiter(0, 0)
 
-	_, err := verifier.Verify(t.Context(), token, "10.0.0.1")
+	_, err := verifier.Verify(t.Context(), token, "10.0.0.1", "private.example.ts.net")
 	require.Error(t, err)
 	require.NotErrorIs(t, err, ErrAttestationRejected)
 	require.Empty(t, reviewer.requests)
 
-	_, err = verifier.Verify(t.Context(), token, "10.0.0.2")
+	_, err = verifier.Verify(t.Context(), token, "10.0.0.2", "private.example.ts.net")
 	require.NoError(t, err, "one source limiter must not block another source or poison the token hash")
 	require.Len(t, reviewer.requests, 1)
 }
@@ -224,33 +232,33 @@ func TestAttestationVerifierLookupAndCacheRecheckFailures(t *testing.T) {
 	verifier.now = func() time.Time { return current }
 
 	lookup.byAttestorErr = ErrIngressUnavailable
-	_, err := verifier.Verify(t.Context(), token, "10.0.0.1:1234")
+	_, err := verifier.Verify(t.Context(), token, "10.0.0.1:1234", "private.example.ts.net")
 	require.ErrorIs(t, err, ErrAttestationRejected)
 
 	lookup.byAttestorErr = nil
 	current = now.Add(negativeCacheTTL)
-	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234")
+	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234", "private.example.ts.net")
 	require.NoError(t, err)
 
 	lookup.recheckErr = errors.New("database unavailable")
 	current = current.Add(servingStateRecheckTTL)
-	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234")
+	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234", "private.example.ts.net")
 	require.ErrorContains(t, err, "database unavailable")
 	require.NotErrorIs(t, err, ErrAttestationRejected)
 	require.Len(t, reviewer.requests, 2)
 	lookup.recheckErr = nil
-	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234")
+	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234", "private.example.ts.net")
 	require.NoError(t, err, "transient recheck failure must preserve the positive cache")
 	require.Len(t, reviewer.requests, 2)
 
 	lookup.recheckErr = ErrIngressChanged
 	current = current.Add(servingStateRecheckTTL)
-	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234")
+	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234", "private.example.ts.net")
 	require.ErrorIs(t, err, ErrAttestationRejected)
 
 	lookup.recheckErr = nil
 	current = current.Add(negativeCacheTTL)
-	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234")
+	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234", "private.example.ts.net")
 	require.NoError(t, err)
 	require.Len(t, reviewer.requests, 3, "rejected cache entry must be removed before retry")
 }
@@ -273,7 +281,7 @@ func TestAttestationVerifierCoalescesConcurrentRechecks(t *testing.T) {
 	joined := make(chan struct{}, requests)
 	verifier.recheckJoined = func() { joined <- struct{}{} }
 	require.NoError(t, func() error {
-		_, err := verifier.Verify(t.Context(), token, "10.0.0.1")
+		_, err := verifier.Verify(t.Context(), token, "10.0.0.1", "private.example.ts.net")
 		return err
 	}())
 	current = now.Add(servingStateRecheckTTL)
@@ -281,7 +289,7 @@ func TestAttestationVerifierCoalescesConcurrentRechecks(t *testing.T) {
 	errorsCh := make(chan error, requests)
 	for range requests {
 		go func() {
-			_, err := verifier.Verify(t.Context(), token, "10.0.0.1")
+			_, err := verifier.Verify(t.Context(), token, "10.0.0.1", "private.example.ts.net")
 			errorsCh <- err
 		}()
 	}
@@ -318,14 +326,14 @@ func TestAttestationVerifierCanceledWaiterDoesNotCancelSharedRecheck(t *testing.
 	}
 	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Minute)
 	verifier.now = func() time.Time { return current }
-	_, err := verifier.Verify(t.Context(), token, "10.0.0.1")
+	_, err := verifier.Verify(t.Context(), token, "10.0.0.1", "private.example.ts.net")
 	require.NoError(t, err)
 	current = now.Add(servingStateRecheckTTL)
 
 	canceledCtx, cancel := context.WithCancel(t.Context())
 	canceledErr := make(chan error, 1)
 	go func() {
-		_, err := verifier.Verify(canceledCtx, token, "10.0.0.1")
+		_, err := verifier.Verify(canceledCtx, token, "10.0.0.1", "private.example.ts.net")
 		canceledErr <- err
 	}()
 	select {
@@ -338,7 +346,7 @@ func TestAttestationVerifierCanceledWaiterDoesNotCancelSharedRecheck(t *testing.
 
 	healthyErr := make(chan error, 1)
 	go func() {
-		_, err := verifier.Verify(t.Context(), token, "10.0.0.1")
+		_, err := verifier.Verify(t.Context(), token, "10.0.0.1", "private.example.ts.net")
 		healthyErr <- err
 	}()
 	close(lookup.recheckRelease)
@@ -359,12 +367,12 @@ func TestAttestationVerifierGlobalRateLimitBoundsSourceChurn(t *testing.T) {
 	verifier.now = func() time.Time { return now }
 	verifier.globalLimiter = rate.NewLimiter(0, 1)
 
-	_, err := verifier.Verify(t.Context(), unsignedToken(t, now.Add(time.Minute)), "10.0.0.1")
+	_, err := verifier.Verify(t.Context(), unsignedToken(t, now.Add(time.Minute)), "10.0.0.1", "private.example.ts.net")
 	require.NoError(t, err)
 	_, err = verifier.Verify(t.Context(), unsignedTokenWithClaims(t, jwt.RegisteredClaims{
 		ExpiresAt: jwt.NewNumericDate(now.Add(time.Minute)),
 		ID:        "second",
-	}), "10.0.0.2")
+	}), "10.0.0.2", "private.example.ts.net")
 	require.ErrorContains(t, err, "rate limit")
 }
 
@@ -372,7 +380,7 @@ func TestAttestationVerifierFailsClosedWhenUnconfigured(t *testing.T) {
 	t.Parallel()
 
 	verifier := NewAttestationVerifier(nil, nil, "", 0)
-	_, err := verifier.Verify(t.Context(), "opaque", "10.0.0.1:1234")
+	_, err := verifier.Verify(t.Context(), "opaque", "10.0.0.1:1234", "private.example.ts.net")
 	require.ErrorIs(t, err, ErrAttestationRejected)
 }
 
@@ -401,4 +409,55 @@ func unsignedTokenWithClaims(t *testing.T, claims jwt.RegisteredClaims) string {
 	signed, err := token.SignedString(jwt.UnsafeAllowNoneSignatureType)
 	require.NoError(t, err)
 	return signed
+}
+
+func TestAttestationVerifierGatewayPrincipalResolvesByHost(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	token := unsignedToken(t, now.Add(time.Minute))
+	ingress := Ingress{ID: uuid.New(), OrganizationID: "org_123", Provider: ProviderTailscale, DNSName: "speakeasy.example.ts.net", AttestorNamespace: "ns-derived", AttestorServiceAccount: "sa-derived"}
+	reviewer := &fakeTokenReviewer{response: authenticatedTokenReview(DefaultTokenAudience, "system:serviceaccount:gram-gateway:gram-tailnet-gateway")}
+	lookup := &fakeAttestorLookup{ingress: ingress}
+	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, 30*time.Second)
+	verifier.now = func() time.Time { return now }
+	require.NoError(t, verifier.UseGatewayPrincipal("gram-gateway", "gram-tailnet-gateway"))
+	require.Error(t, verifier.UseGatewayPrincipal("", "gram-tailnet-gateway"))
+
+	got, err := verifier.Verify(t.Context(), token, "10.0.0.1:1234", "Speakeasy.Example.ts.net")
+	require.NoError(t, err)
+	require.Equal(t, ingress, got)
+	require.Equal(t, 1, lookup.byDNSNameCalls)
+	require.Zero(t, lookup.byAttestorCalls, "the gateway principal never resolves by attestor identity")
+	require.Equal(t, "Speakeasy.Example.ts.net", lookup.host)
+
+	// The same token for another host is a separate cache entry and lookup.
+	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234", "other.example.ts.net")
+	require.NoError(t, err)
+	require.Equal(t, 2, lookup.byDNSNameCalls)
+	require.Len(t, reviewer.requests, 2)
+
+	// A cache hit for the first host repeats neither the review nor the lookup.
+	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234", "Speakeasy.Example.ts.net")
+	require.NoError(t, err)
+	require.Equal(t, 2, lookup.byDNSNameCalls)
+	require.Len(t, reviewer.requests, 2)
+}
+
+func TestAttestationVerifierOtherServiceAccountsStillResolveByAttestor(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	token := unsignedToken(t, now.Add(time.Minute))
+	ingress := Ingress{ID: uuid.New(), OrganizationID: "org_123", Provider: ProviderTailscale, DNSName: "private.example.ts.net"}
+	reviewer := &fakeTokenReviewer{response: authenticatedTokenReview(DefaultTokenAudience, "system:serviceaccount:attestor-ns:attestor-sa")}
+	lookup := &fakeAttestorLookup{ingress: ingress}
+	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, 30*time.Second)
+	verifier.now = func() time.Time { return now }
+	require.NoError(t, verifier.UseGatewayPrincipal("gram-gateway", "gram-tailnet-gateway"))
+
+	_, err := verifier.Verify(t.Context(), token, "10.0.0.1:1234", "private.example.ts.net")
+	require.NoError(t, err)
+	require.Equal(t, 1, lookup.byAttestorCalls)
+	require.Zero(t, lookup.byDNSNameCalls)
 }

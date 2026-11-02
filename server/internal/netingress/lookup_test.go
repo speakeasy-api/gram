@@ -20,6 +20,14 @@ type fakeIngressRepository struct {
 	versionParams  repo.GetIngressServingStateParams
 	versionRow     repo.GetIngressServingStateRow
 	versionErr     error
+	dnsName        string
+	dnsRows        []repo.GetActiveIngressesByDNSNameRow
+	dnsErr         error
+}
+
+func (f *fakeIngressRepository) GetActiveIngressesByDNSName(_ context.Context, dnsName string) ([]repo.GetActiveIngressesByDNSNameRow, error) {
+	f.dnsName = dnsName
+	return f.dnsRows, f.dnsErr
 }
 
 func (f *fakeIngressRepository) GetActiveIngressByAttestor(_ context.Context, params repo.GetActiveIngressByAttestorParams) (repo.GetActiveIngressByAttestorRow, error) {
@@ -139,6 +147,60 @@ func TestIngressLookupRecheck(t *testing.T) {
 				require.ErrorIs(t, err, test.want)
 			} else {
 				require.ErrorContains(t, err, test.want.Error())
+			}
+		})
+	}
+}
+
+func TestIngressLookupByDNSName(t *testing.T) {
+	t.Parallel()
+
+	ingressID := uuid.New()
+	row := repo.GetActiveIngressesByDNSNameRow{
+		ID: ingressID, OrganizationID: "org_123", Provider: ProviderTailscale,
+		DnsName: pgtype.Text{String: "speakeasy.example.ts.net", Valid: true}, IdentityRequired: true,
+		AttestorNamespace: "ns-derived", AttestorServiceAccount: "sa-derived",
+	}
+	fake := &fakeIngressRepository{dnsRows: []repo.GetActiveIngressesByDNSNameRow{row}}
+	lookup := &IngressLookup{repo: fake}
+
+	ingress, err := lookup.ByDNSName(t.Context(), "Speakeasy.Example.ts.net")
+	require.NoError(t, err)
+	require.Equal(t, "speakeasy.example.ts.net", fake.dnsName, "host is canonicalised before lookup")
+	require.Equal(t, Ingress{
+		ID: ingressID, OrganizationID: "org_123", Provider: ProviderTailscale,
+		DNSName: "speakeasy.example.ts.net", IdentityRequired: true,
+		AttestorNamespace: "ns-derived", AttestorServiceAccount: "sa-derived",
+	}, ingress)
+}
+
+func TestIngressLookupByDNSNameFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	valid := repo.GetActiveIngressesByDNSNameRow{
+		ID: uuid.New(), OrganizationID: "org_123", Provider: ProviderTailscale,
+		DnsName: pgtype.Text{String: "speakeasy.example.ts.net", Valid: true}, IdentityRequired: false,
+		AttestorNamespace: "ns", AttestorServiceAccount: "sa",
+	}
+	for _, test := range []struct {
+		name string
+		host string
+		rows []repo.GetActiveIngressesByDNSNameRow
+		err  error
+	}{
+		{name: "empty host", host: ""},
+		{name: "invalid host", host: "bad host"},
+		{name: "not found", host: "speakeasy.example.ts.net"},
+		{name: "ambiguous", host: "speakeasy.example.ts.net", rows: []repo.GetActiveIngressesByDNSNameRow{valid, valid}},
+		{name: "database error", host: "speakeasy.example.ts.net", err: errors.New("boom")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			lookup := &IngressLookup{repo: &fakeIngressRepository{dnsRows: test.rows, dnsErr: test.err}}
+			_, err := lookup.ByDNSName(t.Context(), test.host)
+			require.Error(t, err)
+			if test.err == nil {
+				require.ErrorIs(t, err, ErrIngressUnavailable)
 			}
 		})
 	}
