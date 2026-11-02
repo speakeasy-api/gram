@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -22,10 +23,12 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -196,6 +199,8 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type publicTunnelFixture struct {
+	issuerID      uuid.UUID
+	server        mcpserversrepo.McpServer
 	endpointSlug  string
 	tunnelID      uuid.UUID
 	gateway       *fakeTunnelGateway
@@ -262,6 +267,8 @@ func newPublicTunnelFixture(t *testing.T, ctx context.Context, ti *testInstance,
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunneledServer.ID.String(), gatewayServer.URL, time.Hour))
 
 	return publicTunnelFixture{
+		issuerID:      issuerID,
+		server:        mcpServer,
 		endpointSlug:  endpointSlug,
 		tunnelID:      tunneledServer.ID,
 		gateway:       gateway,
@@ -466,10 +473,10 @@ func TestServePublic_Tunneled_UnknownOrMalformedSessionIs404(t *testing.T) {
 }
 
 // An offline tunnel (no live route) means the user's tunnel client is not
-// running — that is not a platform fault, so it must surface as 404 rather
-// than polluting the platform 5xx error budget with 502s. The public message
-// must stay generic: tunnel internals are not exposed to callers.
-func TestServePublic_Tunneled_OfflineTunnelIs404(t *testing.T) {
+// running. It clears on its own, so it surfaces as a retryable 503 rather than
+// a 404 clients read as a lost session. The public message must stay generic:
+// tunnel internals are not exposed to callers.
+func TestServePublic_Tunneled_OfflineTunnelIsRetryable(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -478,12 +485,15 @@ func TestServePublic_Tunneled_OfflineTunnelIs404(t *testing.T) {
 
 	require.NoError(t, ti.tunnelRoutes.Delete(ctx, fixture.tunnelID.String()))
 
-	_, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeInitializeBody(), "")
+	w, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeInitializeBody(), "")
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
-	require.Equal(t, "not found", oopsErr.Error(), "public message must not expose tunnel internals")
+	require.Equal(t, oops.CodeUnavailable, oopsErr.Code)
+	require.NotEmpty(t, w.Header().Get("Retry-After"))
+	require.Equal(t, "1", w.Header().Get(constants.HeaderProxiedResponse), "the customer's tunnel being down doesn't alert on-call")
+	require.NotContains(t, oopsErr.Error(), "tunnel", "public message must not expose tunnel internals")
+	require.Contains(t, oopsErr.Error(), "Retry shortly")
 	require.Zero(t, gateway.forwardCount(), "an offline tunnel has nothing to forward to")
 }
 
@@ -865,4 +875,44 @@ func TestServePublic_Tunneled_StoredRateLimitsOverrideDefaults(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeRateLimitExceeded, oopsErr.Code)
+}
+
+// The authenticated path answers a down tunnel the same way, and the session
+// stays good.
+func TestServePublic_Tunneled_AuthenticatedOfflineTunnelIsRetryable(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: ""}
+	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, false)
+	_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
+		ID: fixture.server.ID, ProjectID: fixture.server.ProjectID,
+		Name: fixture.server.Name, Slug: fixture.server.Slug,
+		TunneledMcpServerID: fixture.server.TunneledMcpServerID, Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+	require.NoError(t, ti.tunnelRoutes.Delete(ctx, fixture.tunnelID.String()))
+	subject := createTestUser(t, ctx, ti, "offline-tunnel-user-"+uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, fixture.endpointSlug, fixture.issuerID, subject)
+
+	w, err := servePublicHTTP(t, ctx, ti, fixture.endpointSlug, makeInitializeBody(), bearer, nil)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnavailable, oopsErr.Code, err)
+	require.NotEmpty(t, w.Header().Get("Retry-After"))
+	require.Equal(t, "1", w.Header().Get(constants.HeaderProxiedResponse))
+}
+
+func TestTunnelOutageRetryAfter(t *testing.T) {
+	t.Parallel()
+
+	down := httptest.NewRecorder()
+	mcp.TunnelOutageRetryAfter(down, fmt.Errorf("build proxy: %w", mcp.ErrTunnelNoRoute))
+	require.NotEmpty(t, down.Header().Get("Retry-After"))
+	require.Equal(t, "1", down.Header().Get(constants.HeaderProxiedResponse))
+
+	other := httptest.NewRecorder()
+	mcp.TunnelOutageRetryAfter(other, errors.New("tunnel route is invalid"))
+	require.Empty(t, other.Header().Get("Retry-After"))
+	require.Empty(t, other.Header().Get(constants.HeaderProxiedResponse), "a fault on our side stays counted")
 }

@@ -480,6 +480,7 @@ func (s *Service) serveConsentProxiedMCP(
 			Request:            nil,
 		})
 		if err != nil {
+			tunnelOutageRetryAfter(w, err)
 			return err
 		}
 	}

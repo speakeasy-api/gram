@@ -185,6 +185,12 @@ func (s *Service) VerifyConnectionRecoveryCompletion(r *http.Request, remote rem
 	return s.verifyConnectionRecoveryCompletion(r, remote)
 }
 
+// TunnelOutageRetryAfter and ErrTunnelNoRoute expose the answer every tunneled path shares.
+var (
+	TunnelOutageRetryAfter = tunnelOutageRetryAfter
+	ErrTunnelNoRoute       = errTunnelNoRoute
+)
+
 // SetAuthzEngine swaps the authorization engine, to make it fail.
 func (s *Service) SetAuthzEngine(engine *authz.Engine) {
 	s.authz = engine

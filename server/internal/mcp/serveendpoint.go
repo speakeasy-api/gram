@@ -999,6 +999,7 @@ func (s *Service) serveTunneledBackend(
 		Request:            r,
 	}, buildOptions...)
 	if err != nil {
+		tunnelOutageRetryAfter(w, err)
 		return err
 	}
 	// Only observed traffic needs attribution; otherwise skip the Redis work.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -86,6 +88,20 @@ type buildProxyParams struct {
 	Request *http.Request
 }
 
+// errTunnelNoRoute marks a tunneled server whose tunnel has no live route.
+var errTunnelNoRoute = errors.New("tunnel has no live route")
+
+// tunnelUnavailableMessage stays free of tunnel internals: public callers read it.
+const tunnelUnavailableMessage = "This MCP server can't be reached right now. Retry shortly. If it keeps happening, ask your administrator to check that it's running."
+
+// tunnelOutageRetryAfter paces the retry and tags the 503 external: the customer runs the tunnel.
+func tunnelOutageRetryAfter(w http.ResponseWriter, err error) {
+	if errors.Is(err, errTunnelNoRoute) {
+		setOutageRetryAfter(w)
+		w.Header().Set(constants.HeaderProxiedResponse, "1")
+	}
+}
+
 // buildProxy constructs the tunnel-backed proxy for one request.
 func (m *tunnelManager) buildProxy(
 	ctx context.Context,
@@ -109,15 +125,9 @@ func (m *tunnelManager) buildProxy(
 	}
 	addr, ok := tunnelrouting.SelectRoute(params.ClientAffinityKey, candidates, nil)
 	if !ok {
-		// Nowhere to route the request. Tunnel outages are likely customer-side
-		// rather than something the platform administrators can control. While
-		// tunnel route selection may be a platform issue, this is not a great
-		// place to signal that class of issue, especially to a MCP Client user.
-		// If necessary, use another observability solution if this requires
-		// explicit monitoring, ideally alerting the customer instead of using
-		// the platform 5xx error budget which alerts platform administrators.
+		// Likely customer-side, so warn. A 404 would read as a lost session or server.
 		m.observeNoRoute(tunnelID, mcpServer.ID.String(), params.Request)
-		return nil, oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger.With(attr.SlogErrorMessage("tunnel has no live route")))
+		return nil, oops.E(oops.CodeUnavailable, errTunnelNoRoute, "%s", tunnelUnavailableMessage).LogWarn(ctx, logger.With(attr.SlogErrorMessage("tunnel has no live route")))
 	}
 
 	gatewayURL, err := tunnelrouting.GatewayURL(addr)
