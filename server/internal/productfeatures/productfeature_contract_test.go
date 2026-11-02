@@ -81,6 +81,7 @@ func TestClientSnapshot_ReturnsCompleteProductFeatureState(t *testing.T) {
 		SignalsIntelligenceEnabled:              false,
 		OrganizationGatewayDisabled:             true,
 		DeviceAgent:                             true,
+		UpstreamAuthEnforced:                    false,
 	}, ti.client.Snapshot(ctx, orgID))
 }
 

@@ -97,6 +97,10 @@ export type ProductFeatures = {
    * Whether tool I/O logging is enabled
    */
   toolIoLogsEnabled: boolean;
+  /**
+   * Whether upstream auth enforcement is on for the organization. Staff change it through the admin enforcement endpoint.
+   */
+  upstreamAuthEnforced: boolean;
 };
 
 /** @internal */
@@ -127,6 +131,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
     skills_enabled: z.boolean(),
     sso_enabled: z.boolean(),
     tool_io_logs_enabled: z.boolean(),
+    upstream_auth_enforced: z.boolean(),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -155,6 +160,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
       "skills_enabled": "skillsEnabled",
       "sso_enabled": "ssoEnabled",
       "tool_io_logs_enabled": "toolIoLogsEnabled",
+      "upstream_auth_enforced": "upstreamAuthEnforced",
     });
   }),
 );

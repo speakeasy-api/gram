@@ -88,3 +88,25 @@ func TestProductFeaturesService_SkillCaptureMetadataOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res.SkillCaptureMetadataOnly)
 }
+
+// GetProductFeatures reports the organization's upstream auth enforcement
+// state for members, though only the admin enforcement endpoint changes it.
+func TestProductFeaturesService_GetProductFeatures_UpstreamAuthEnforced(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	res, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx)})
+	require.NoError(t, err)
+	require.False(t, res.UpstreamAuthEnforced)
+
+	require.NoError(t, ti.client.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureUpstreamAuthEnforced, true))
+
+	res, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx)})
+	require.NoError(t, err)
+	require.True(t, res.UpstreamAuthEnforced)
+}

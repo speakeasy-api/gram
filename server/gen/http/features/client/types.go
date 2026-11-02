@@ -93,6 +93,9 @@ type GetProductFeaturesResponseBody struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent *bool `form:"device_agent,omitempty" json:"device_agent,omitempty" xml:"device_agent,omitempty"`
+	// Whether upstream auth enforcement is on for the organization. Staff change
+	// it through the admin enforcement endpoint.
+	UpstreamAuthEnforced *bool `form:"upstream_auth_enforced,omitempty" json:"upstream_auth_enforced,omitempty" xml:"upstream_auth_enforced,omitempty"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -706,6 +709,7 @@ func NewGetProductFeaturesProductFeaturesOK(body *GetProductFeaturesResponseBody
 		OrganizationGatewayDisabled:             body.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         body.CodeModeEnabled,
 		DeviceAgent:                             body.DeviceAgent,
+		UpstreamAuthEnforced:                    body.UpstreamAuthEnforced,
 	}
 
 	return v

@@ -120,6 +120,9 @@ type ProductFeatures struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool
+	// Whether upstream auth enforcement is on for the organization. Staff change
+	// it through the admin enforcement endpoint.
+	UpstreamAuthEnforced bool
 }
 
 // SetProductFeaturePayload is the payload type of the features service
@@ -277,6 +280,9 @@ func newProductFeatures(vres *featuresviews.ProductFeaturesView) *ProductFeature
 	if vres.DeviceAgent != nil {
 		res.DeviceAgent = *vres.DeviceAgent
 	}
+	if vres.UpstreamAuthEnforced != nil {
+		res.UpstreamAuthEnforced = *vres.UpstreamAuthEnforced
+	}
 	return res
 }
 
@@ -306,6 +312,7 @@ func newProductFeaturesView(res *ProductFeatures) *featuresviews.ProductFeatures
 		OrganizationGatewayDisabled:             &res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         &res.CodeModeEnabled,
 		DeviceAgent:                             &res.DeviceAgent,
+		UpstreamAuthEnforced:                    &res.UpstreamAuthEnforced,
 	}
 	return vres
 }

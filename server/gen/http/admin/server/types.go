@@ -707,6 +707,9 @@ type GetOrganizationFeaturesResponseBody struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
+	// Whether upstream auth enforcement is on for the organization. Staff change
+	// it through the admin enforcement endpoint.
+	UpstreamAuthEnforced bool `form:"upstream_auth_enforced" json:"upstream_auth_enforced" xml:"upstream_auth_enforced"`
 }
 
 // SetOrganizationFeatureResponseBody is the type of the "admin" service
@@ -769,6 +772,9 @@ type SetOrganizationFeatureResponseBody struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
+	// Whether upstream auth enforcement is on for the organization. Staff change
+	// it through the admin enforcement endpoint.
+	UpstreamAuthEnforced bool `form:"upstream_auth_enforced" json:"upstream_auth_enforced" xml:"upstream_auth_enforced"`
 }
 
 // GetOrganizationChatAnalysisSettingsResponseBody is the type of the "admin"
@@ -24336,6 +24342,7 @@ func NewGetOrganizationFeaturesResponseBody(res *adminviews.ProductFeaturesView)
 		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         *res.CodeModeEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
+		UpstreamAuthEnforced:                    *res.UpstreamAuthEnforced,
 	}
 	return body
 }
@@ -24366,6 +24373,7 @@ func NewSetOrganizationFeatureResponseBody(res *adminviews.ProductFeaturesView) 
 		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         *res.CodeModeEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
+		UpstreamAuthEnforced:                    *res.UpstreamAuthEnforced,
 	}
 	return body
 }

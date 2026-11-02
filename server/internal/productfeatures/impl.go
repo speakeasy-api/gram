@@ -260,6 +260,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		OrganizationGatewayDisabled:             snapshot.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         snapshot.CodeModeEnabled,
 		DeviceAgent:                             snapshot.DeviceAgent,
+		UpstreamAuthEnforced:                    snapshot.UpstreamAuthEnforced,
 	}, nil
 }
 

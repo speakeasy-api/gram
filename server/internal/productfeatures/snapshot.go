@@ -30,6 +30,7 @@ type ProductFeaturesSnapshot struct {
 	OrganizationGatewayDisabled             bool
 	CodeModeEnabled                         bool
 	DeviceAgent                             bool
+	UpstreamAuthEnforced                    bool
 }
 
 // Snapshot returns the complete product-feature state for an organization.
@@ -110,6 +111,7 @@ func (c *Client) snapshot(ctx context.Context, organizationID string, strict boo
 		OrganizationGatewayDisabled:             isEnabled(FeatureOrganizationGatewayDisabled),
 		CodeModeEnabled:                         isEnabled(FeatureCodeMode),
 		DeviceAgent:                             deviceAgent,
+		UpstreamAuthEnforced:                    isEnabled(FeatureUpstreamAuthEnforced),
 	}
 	if readErr != nil {
 		return ProductFeaturesSnapshot{}, readErr
