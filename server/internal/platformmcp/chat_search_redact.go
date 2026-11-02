@@ -37,14 +37,15 @@ func redactErr(err error) error {
 // chatSearchRedactor masks text exactly as search_chats masks transcripts, so
 // team memory never stores or shows a value chat search would hide.
 type chatSearchRedactor struct {
-	service *ChatSearchService
+	redactor *chatredact.Redactor
 }
 
 // NewChatSearchRedactor returns the search_chats redaction as a TextRedactor.
 func NewChatSearchRedactor() TextRedactor {
-	return chatSearchRedactor{service: &ChatSearchService{db: nil, engine: nil, audit: nil, budget: OperationBudget{Connection: nil, Organization: nil}, references: nil, redactor: chatredact.New()}}
+	return chatSearchRedactor{redactor: chatredact.New()}
 }
 
 func (r chatSearchRedactor) Text(ctx context.Context, text string) (string, bool, error) {
-	return r.service.redactText(ctx, text)
+	safe, changed, err := r.redactor.Text(ctx, text)
+	return safe, changed, redactErr(err)
 }

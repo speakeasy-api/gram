@@ -72,15 +72,14 @@ func (q *Queries) InsertMemoryMemo(ctx context.Context, arg InsertMemoryMemoPara
 
 const searchTeamMemory = `-- name: SearchTeamMemory :many
 WITH q AS (SELECT websearch_to_tsquery('english', $9::text) AS query)
-SELECT hits.kind::text AS kind, hits.id, hits.chat_id, hits.title::text AS title, hits.body::text AS body,
+SELECT hits.kind::text AS kind, hits.id, hits.chat_id, hits.body::text AS body,
        hits.author_user_id::text AS author_user_id, hits.level::text AS level, hits.period_start,
        hits.at::timestamptz AS at, hits.rank::real AS rank
 FROM (
   SELECT 'chat' AS kind, c.id, NULL::uuid AS chat_id,
-         COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '') AS title,
          c.summary AS body, '' AS author_user_id, '' AS level, NULL::date AS period_start,
          COALESCE(c.summary_generated_at, c.updated_at) AS at,
-         ts_rank(to_tsvector('english', c.summary), q.query) AS rank
+         ts_rank(to_tsvector('english', c.summary), q.query, 1) AS rank
   FROM chats c
   CROSS JOIN q
   JOIN projects p ON p.id = c.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
@@ -93,8 +92,8 @@ FROM (
     AND COALESCE(c.summary_generated_at, c.updated_at) >= $4 AND COALESCE(c.summary_generated_at, c.updated_at) < $5
     AND to_tsvector('english', c.summary) @@ q.query
   UNION ALL
-  SELECT 'memo', m.id, m.chat_id, '', m.content, COALESCE(m.author_user_id, ''), '', NULL::date,
-         m.created_at, ts_rank(m.search_vector, q.query)
+  SELECT 'memo', m.id, m.chat_id, m.content, COALESCE(m.author_user_id, ''), '', NULL::date,
+         m.created_at, 2 * ts_rank(m.search_vector, q.query, 1)
   FROM memory_memos m
   CROSS JOIN q
   JOIN projects p ON p.id = m.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
@@ -107,15 +106,15 @@ FROM (
     AND (m.chat_id IS NULL OR (mc.project_id = m.project_id AND mc.deleted IS FALSE AND mc.memory_excluded_at IS NULL
          AND (mua.id IS NULL OR mua.account_type <> 'personal')))
   UNION ALL
-  SELECT 'digest', d.id, NULL::uuid, '', d.content, '', d.level, d.period_start,
-         d.period_start::timestamptz, ts_rank(d.search_vector, q.query)
+  SELECT 'digest', d.id, NULL::uuid, d.content, '', d.level, d.period_start,
+         d.period_start::timestamp AT TIME ZONE 'UTC', ts_rank(d.search_vector, q.query, 1)
   FROM memory_digests d
   CROSS JOIN q
   JOIN projects p ON p.id = d.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
   WHERE $7::boolean
     AND d.project_id = $3 AND d.organization_id = $1
     AND octet_length(d.content) <= 65536
-    AND d.period_end::timestamptz > $4 AND d.period_start::timestamptz < $5
+    AND d.period_end::timestamp AT TIME ZONE 'UTC' > $4 AND d.period_start::timestamp AT TIME ZONE 'UTC' < $5
     AND d.search_vector @@ q.query
 ) hits
 ORDER BY hits.rank DESC, hits.at DESC, hits.id
@@ -138,7 +137,6 @@ type SearchTeamMemoryRow struct {
 	Kind         string
 	ID           uuid.UUID
 	ChatID       uuid.NullUUID
-	Title        string
 	Body         string
 	AuthorUserID string
 	Level        string
@@ -152,7 +150,10 @@ type SearchTeamMemoryRow struct {
 // the masked transcript, the chat is live, not excluded from memory and not a
 // personal-account session (an unclassified account is treated as personal).
 // Memos saved from a chat that fails those checks are hidden with it. Text
-// over 64 KiB is never returned.
+// over 64 KiB is never returned. Digest periods are UTC dates, so they are
+// compared as UTC midnights whatever the session time zone is. Ranks are
+// normalized by document length so long digests do not crowd out short
+// memos, and memos, which a person saved on purpose, count double.
 func (q *Queries) SearchTeamMemory(ctx context.Context, arg SearchTeamMemoryParams) ([]SearchTeamMemoryRow, error) {
 	rows, err := q.db.Query(ctx, searchTeamMemory,
 		arg.OrganizationID,
@@ -176,7 +177,6 @@ func (q *Queries) SearchTeamMemory(ctx context.Context, arg SearchTeamMemoryPara
 			&i.Kind,
 			&i.ID,
 			&i.ChatID,
-			&i.Title,
 			&i.Body,
 			&i.AuthorUserID,
 			&i.Level,
