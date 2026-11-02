@@ -678,6 +678,7 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			require.Contains(t, string(beforeApproval.Value), `"consent":"required"`)
 			reviewPage := consentGetPageWithContext(t, ctx, ti, slug, stateID)
 			require.Contains(t, reviewPage, "data-catalog-changes")
+			require.Contains(t, reviewPage, `data-gateway="true"`)
 			require.Contains(t, reviewPage, "Review updated tools")
 			require.Contains(t, reviewPage, "other-tracker")
 			require.Contains(t, reviewPage, "other-tracker--tool_002")
