@@ -553,16 +553,7 @@ func TestConnectionStatusWritesNoChoiceUnderEnforcement(t *testing.T) {
 	token := g.sessionWithoutCatalog(t, ctx, connection, true)
 	late := newCatalogUpstream(t, 1)
 	lateServer := seedMetaMemberWithUpstream(t, ctx, g.ti.conn, g.project, g.gateway, "Late", "late", 3, late.url)
-	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(g.issuer).String())
-	require.NoError(t, err)
-	queries := usersessionsrepo.New(g.ti.conn)
-	session, err := queries.GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{UserSessionIssuerID: g.issuer, Jti: claims.ID})
-	require.NoError(t, err)
-	choices := func() int {
-		rows, err := queries.ListUpstreamClientSelections(ctx, usersessionsrepo.ListUpstreamClientSelectionsParams{UserSessionIssuerID: g.issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: session.ID, McpServerIds: []uuid.UUID{lateServer}, OrganizationID: g.org})
-		require.NoError(t, err)
-		return len(rows)
-	}
+	choices := func() int { return g.lateChoices(t, ctx, connection.token, lateServer) }
 	require.Zero(t, choices())
 	w := g.post(t, token, metamcp.ToolConnectionStatus, map[string]any{})
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
@@ -602,4 +593,74 @@ func TestStaleNoAuthAgentRouteNamesTheAgentInItsLog(t *testing.T) {
 	require.NoError(t, err)
 	requireStaleError(t, w, staleOwnerCopy)
 	require.True(t, ti.service.StaleNoAuthWarned(subject.String(), serverID, "no_auth_forbidden"), "the warning names the agent")
+}
+
+// lateChoices counts the choices recorded for serverID on token's credential.
+func (g *staleChoiceGateway) lateChoices(t *testing.T, ctx context.Context, token string, serverID uuid.UUID) int {
+	t.Helper()
+	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(token, urn.NewUserSessionIssuer(g.issuer).String())
+	require.NoError(t, err)
+	queries := usersessionsrepo.New(g.ti.conn)
+	session, err := queries.GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{UserSessionIssuerID: g.issuer, Jti: claims.ID})
+	require.NoError(t, err)
+	credential := session.ID
+	if session.CredentialID.Valid {
+		credential = session.CredentialID.UUID
+	}
+	rows, err := queries.ListUpstreamClientSelections(ctx, usersessionsrepo.ListUpstreamClientSelectionsParams{UserSessionIssuerID: g.issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credential, McpServerIds: []uuid.UUID{serverID}, OrganizationID: g.org})
+	require.NoError(t, err)
+	return len(rows)
+}
+
+func TestReadOnlyPreviewResolvesANewMembersReadyClient(t *testing.T) {
+	t.Parallel()
+	ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeProgressive)
+	g.enforce(t, ctx)
+	g.ti.service.SetAuthClientPermission(func() bool { return true })
+	connection := g.approve(t, ctx)
+	token := g.sessionWithoutCatalog(t, ctx, connection, true)
+	late := newCatalogUpstream(t, 1)
+	lateServer := seedMetaMemberWithUpstream(t, ctx, g.ti.conn, g.project, g.gateway, "Late", "late", 3, late.url)
+	registration := createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "late-"+uuid.NewString()[:8], "", []uuid.UUID{g.issuer})
+	_, err := upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: lateServer, RemoteSessionClientID: registration})
+	require.NoError(t, err)
+	fixtures := authclientfixtures.New(g.ti.conn)
+	id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: g.org, ProjectID: uuid.NullUUID{UUID: g.project, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: g.project, OrganizationID: g.org, McpServerID: lateServer, AuthClientID: id, Source: "admin"}))
+	insertQualifiedRemoteSessionToken(t, ctx, g.ti, g.issuer, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", late.url)
+
+	status := g.post(t, token, metamcp.ToolConnectionStatus, map[string]any{})
+	require.Equal(t, http.StatusOK, status.Code, status.Body.String())
+	require.Contains(t, status.Body.String(), "Late: signed in", "the preview resolves to the ready client")
+	described := g.post(t, token, metamcp.ToolDescribeServer, map[string]any{"server": "late"})
+	require.Contains(t, described.Body.String(), "late--tool_000")
+	require.Zero(t, g.lateChoices(t, ctx, connection.token, lateServer), "reading records no choice")
+
+	requireExecuted(t, g.call(t, token, "late--tool_000"))
+	require.Equal(t, "Bearer fixture-token", late.callAuthorization.Load())
+	require.Equal(t, 1, g.lateChoices(t, ctx, connection.token, lateServer))
+}
+
+func TestCodeModeVerifyWritesNoChoice(t *testing.T) {
+	t.Parallel()
+	ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeCode)
+	g.enforce(t, ctx)
+	mcp.SetTestCodeExecutor(g.ti.service.Service, &recordingCodeExecutor{})
+	enableCodeMode(t, ctx, g.ti)
+	token := mintGatewayTestSession(t, ctx, g.ti, g.gateway, g.issuer, g.slug, metamcp.DiscoveryModeCode)
+	ran := false
+	var lateServer uuid.UUID
+	mcp.SetTestCodeExecutor(g.ti.service.Service, &recordingCodeExecutor{run: func(runCtx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
+		ran = true
+		// Joining after admission, so only the verify below can record it.
+		lateServer = seedMetaMemberWithUpstream(t, ctx, g.ti.conn, g.project, g.gateway, "Late", "late", 3, newCatalogUpstream(t, 1).url)
+		_, err := host.Servers(runCtx, codemode.PageArgs{Server: "", Verify: true})
+		require.NoError(t, err)
+		return &codemode.ExecutionResult{}, nil
+	}})
+	w := g.post(t, token, "execute", map[string]any{"code": "verify"})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.True(t, ran, w.Body.String())
+	require.Zero(t, g.lateChoices(t, ctx, token, lateServer))
 }

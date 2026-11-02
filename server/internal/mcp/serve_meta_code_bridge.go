@@ -192,7 +192,7 @@ func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bo
 	// Helpers read the live choice so they agree with a call, and write nothing.
 	gate.execute = true
 	if gate.memberChoices != nil {
-		gate.memberChoices.readOnly = !execute
+		gate.memberChoices.readOnly = !execute || recovery
 	}
 	ctx = b.boundary.Apply(ctx)
 	freshCtx, err = b.service.authz.RefreshContext(ctx)
@@ -419,7 +419,8 @@ type metaCodeInvocation struct {
 	dispatched bool
 	// rejected marks a call refused unexecuted for a reason the program can
 	// fix: the member's own unknown-tool or invalid-params error, a hosted
-	// lookup refusal before dispatch, or hosted input-schema validation.
+	// lookup refusal before dispatch, hosted input-schema validation, or a
+	// stale no-auth choice.
 	rejected bool
 	// message is the member-scoped failure the program would otherwise lose.
 	message string
