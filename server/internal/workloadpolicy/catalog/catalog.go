@@ -23,9 +23,11 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"regexp/syntax"
 	"slices"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 
@@ -543,13 +545,16 @@ func validateSubject(s Subject, variables map[string]Variable) error {
 		return errors.New("subject.label is required when there are alternatives")
 	}
 
-	// Two choices making the same rule could not be told apart when an
-	// existing rule is read back.
-	type rule struct {
+	// A saved rule is read back as the choice of its match kind whose
+	// template it fits, a wildcard rule by its stem, so no subject may fit
+	// two of them. The check is conservative: it also refuses choices it
+	// cannot show apart, such as a wildcard stem that extends another.
+	type choice struct {
+		name     string
 		template string
 		wildcard bool
 	}
-	rules := map[rule]bool{{template: s.Template, wildcard: s.Wildcard}: true}
+	choices := []choice{{name: "the default", template: s.Template, wildcard: s.Wildcard}}
 	keys := make(map[string]bool, len(s.Alternatives))
 	for _, alternative := range s.Alternatives {
 		if !variableKeyPattern.MatchString(alternative.Key) {
@@ -566,13 +571,107 @@ func validateSubject(s Subject, variables map[string]Variable) error {
 		if err := validateSubjectTemplate(field, alternative.Template, alternative.Wildcard, variables); err != nil {
 			return err
 		}
-		made := rule{template: alternative.Template, wildcard: alternative.Wildcard}
-		if rules[made] {
-			return fmt.Errorf("subject alternative %q makes the same rule as another choice", alternative.Key)
+		for _, other := range choices {
+			if other.wildcard == alternative.Wildcard && !templatesDisjoint(other.template, alternative.Template, variables) {
+				return fmt.Errorf("subject alternative %q could match the same subject as %s: their text must differ where no variable can reach", alternative.Key, other.name)
+			}
 		}
-		rules[made] = true
+		choices = append(choices, choice{name: fmt.Sprintf("alternative %q", alternative.Key), template: alternative.Template, wildcard: alternative.Wildcard})
 	}
 	return nil
+}
+
+// templateToken is one piece of a template: literal text, or the key of the
+// variable a placeholder names.
+type templateToken struct {
+	literal  string
+	variable string
+}
+
+func templateTokens(template string) []templateToken {
+	var tokens []templateToken
+	last := 0
+	for _, match := range placeholderPattern.FindAllStringSubmatchIndex(template, -1) {
+		if match[0] > last {
+			tokens = append(tokens, templateToken{literal: template[last:match[0]], variable: ""})
+		}
+		tokens = append(tokens, templateToken{literal: "", variable: template[match[2]:match[3]]})
+		last = match[1]
+	}
+	if last < len(template) {
+		tokens = append(tokens, templateToken{literal: template[last:], variable: ""})
+	}
+	return tokens
+}
+
+// templatesDisjoint reports whether no subject can fit both templates, which
+// share a match kind. It is conservative: true only when, after identical
+// leading tokens, their literals differ with neither a prefix of the other,
+// and each shared variable refuses the first character of the literal after
+// it, so both templates read a subject up to that literal the same way.
+func templatesDisjoint(a, b string, variables map[string]Variable) bool {
+	ta, tb := templateTokens(a), templateTokens(b)
+	// The shared variable whose end the next literal fixes.
+	pending := ""
+	for i := 0; i < len(ta) && i < len(tb); i++ {
+		x, y := ta[i], tb[i]
+		if x.variable != "" || y.variable != "" {
+			if x != y || pending != "" {
+				return false
+			}
+			pending = x.variable
+			continue
+		}
+		if pending != "" {
+			for _, literal := range []string{x.literal, y.literal} {
+				first, _ := utf8.DecodeRuneInString(literal)
+				if variableMayHold(variables[pending], first) {
+					return false
+				}
+			}
+			pending = ""
+		}
+		if x.literal != y.literal {
+			return !strings.HasPrefix(x.literal, y.literal) && !strings.HasPrefix(y.literal, x.literal)
+		}
+	}
+	// One is the other followed by more, or they are the same.
+	return false
+}
+
+// variableMayHold reports whether a value of v could contain r, from the
+// characters its pattern names. It errs towards true.
+func variableMayHold(v Variable, r rune) bool {
+	re, err := syntax.Parse(v.Pattern, syntax.Perl)
+	if err != nil {
+		return true
+	}
+	return patternMayHold(re, r)
+}
+
+func patternMayHold(re *syntax.Regexp, r rune) bool {
+	switch re.Op {
+	case syntax.OpLiteral:
+		for _, literal := range re.Rune {
+			if literal == r || (re.Flags&syntax.FoldCase != 0 && strings.EqualFold(string(literal), string(r))) {
+				return true
+			}
+		}
+		return false
+	case syntax.OpCharClass:
+		for i := 0; i+1 < len(re.Rune); i += 2 {
+			if re.Rune[i] <= r && r <= re.Rune[i+1] {
+				return true
+			}
+		}
+		return false
+	case syntax.OpAnyCharNotNL:
+		return r != '\n'
+	case syntax.OpAnyChar:
+		return true
+	default:
+		return slices.ContainsFunc(re.Sub, func(sub *syntax.Regexp) bool { return patternMayHold(sub, r) })
+	}
 }
 
 // validateSubjectTemplate holds one subject template to the rules every rule

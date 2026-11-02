@@ -1,6 +1,7 @@
 package catalog_test
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -225,6 +226,12 @@ var withAlternatives = strings.NewReplacer(
 `,
 ).Replace(validPlatform)
 
+// extraAlternative replaces the end of withAlternatives' one alternative with
+// that end followed by another exact alternative.
+func extraAlternative(key, template string) string {
+	return fmt.Sprintf("      wildcard: false\n    - key: %s\n      label: %s\n      template: %q\n      wildcard: false\n", key, key, template)
+}
+
 func TestParseAcceptsSubjectAlternatives(t *testing.T) {
 	t.Parallel()
 
@@ -252,11 +259,14 @@ func TestParseRefusesInvalidSubjectAlternatives(t *testing.T) {
 		{name: "default without a label", from: "  label: Every agent\n", to: "", wantErr: "subject.label is required"},
 		{name: "alternative without a label", from: "      label: One agent\n", to: "", wantErr: `"one_agent": label is required`},
 		{name: "alternative key not snake_case", from: "key: one_agent", to: "key: One-Agent", wantErr: "lowercase snake_case"},
-		{name: "same rule as the default", from: alternativeTemplate + "\n      wildcard: false", to: "\"wimse://issuer.example.com/org/{org_id}/agent/\"\n      wildcard: true", wantErr: "same rule as another choice"},
+		{name: "same rule as the default", from: alternativeTemplate + "\n      wildcard: false", to: "\"wimse://issuer.example.com/org/{org_id}/agent/\"\n      wildcard: true", wantErr: "could match the same subject as the default"},
+		{name: "wildcard alternative inside the default", from: alternativeTemplate + "\n      wildcard: false", to: "\"wimse://issuer.example.com/org/{org_id}/agent/{agent_id}/\"\n      wildcard: true", wantErr: "could match the same subject as the default"},
+		{name: "alternatives differing only in a variable", from: "      wildcard: false\n", to: extraAlternative("other_agent", "wimse://issuer.example.com/org/{org_id}/agent/{org_id}"), wantErr: `could match the same subject as alternative "one_agent"`},
+		{name: "alternative extending another", from: "      wildcard: false\n", to: extraAlternative("agent_run", "wimse://issuer.example.com/org/{org_id}/agent/{agent_id}/run"), wantErr: `could match the same subject as alternative "one_agent"`},
 		{name: "star in an alternative", from: alternativeTemplate, to: `"wimse://issuer.example.com/org/{org_id}/agent/*"`, wantErr: `"*"`},
 		{name: "wildcard alternative ending on a variable", from: alternativeTemplate + "\n      wildcard: false", to: alternativeTemplate + "\n      wildcard: true", wantErr: "wildcard stem"},
 		{name: "undeclared variable in an alternative", from: "{agent_id}\"", to: "{agent}\"", wantErr: "undeclared variable"},
-		{name: "alternative declared twice", from: "      wildcard: false\n", to: "      wildcard: false\n    - key: one_agent\n      label: The same agent\n      template: \"wimse://issuer.example.com/org/{org_id}/agents/{agent_id}\"\n      wildcard: false\n", wantErr: "declared twice"},
+		{name: "alternative declared twice", from: "      wildcard: false\n", to: extraAlternative("one_agent", "wimse://issuer.example.com/org/{org_id}/agents/{agent_id}"), wantErr: "declared twice"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -267,6 +277,22 @@ func TestParseRefusesInvalidSubjectAlternatives(t *testing.T) {
 			require.ErrorContains(t, err, tc.wantErr)
 		})
 	}
+}
+
+// Two exact rules are told apart by literal text both readings of a subject
+// reach at the same place, which holds only while every variable before it
+// refuses the character that ends it.
+func TestParseTellsAlternativesApartByTextNoVariableReaches(t *testing.T) {
+	t.Parallel()
+
+	team := strings.Replace(withAlternatives, "      wildcard: false\n", extraAlternative("one_team", "wimse://issuer.example.com/org/{org_id}/team/{agent_id}"), 1)
+	_, err := catalog.Parse([]byte(team))
+	require.NoError(t, err, `organization IDs refuse "/", so "/agent/" and "/team/" start at the same place`)
+
+	// An organization ID that may hold "/" could reach past "/team", so the
+	// two can no longer be shown apart and the catalog is refused.
+	_, err = catalog.Parse([]byte(strings.Replace(team, `pattern: "[a-z0-9-]+"`, `pattern: "[a-z0-9/-]+"`, 1)))
+	require.ErrorContains(t, err, `alternative "one_team" could match the same subject as alternative "one_agent"`)
 }
 
 func TestLoadRequiresTheFileNameToBeTheKey(t *testing.T) {
