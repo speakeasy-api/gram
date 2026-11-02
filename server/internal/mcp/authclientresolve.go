@@ -121,7 +121,7 @@ type authClientResolution struct {
 	// headers are the client's own headers, loaded only when it serves.
 	headers []proxy.ConfiguredHeader
 
-	// noAuthChoice is a recorded choice that the server needs no upstream auth.
+	// noAuthChoice is a recorded no-auth choice, whether or not the server still needs none.
 	noAuthChoice bool
 
 	// noAuthAllowed is a server that needs no upstream authentication: it

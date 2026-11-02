@@ -706,7 +706,7 @@ func NewService(
 		),
 		connectionCatalogCache: cacheImpl,
 		staleNoAuthLog:         newOnceLog(),
-		staleChoiceConsent:     expirable.NewLRU[string, bool](onceLogSize, nil, staleChoiceConsentTTL),
+		staleChoiceConsent:     expirable.NewLRU[string, bool](staleChoiceConsentSize, nil, staleChoiceConsentTTL),
 		codeExecutor:           codeExecutor,
 		codeSessions:           newCodeMemberSessions(logger, codeSessionIdleTTL, codeSessionMaxAge, codeSessionPingAfter, codeSessionMaxEntries),
 		sessionClientInfo:      sessionClientInfo,

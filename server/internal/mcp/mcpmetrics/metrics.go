@@ -141,7 +141,7 @@ type Metrics struct {
 	// client resolver against the upstream client choice, by whether they
 	// agreed and each side's outcome.
 	authClientParityCounter metric.Int64Counter
-	// metaMemberFailureCounter counts failed attempts on a gateway member, by bounded reason.
+	// metaMemberFailureCounter counts gateway member attempts refused for a stale choice, by reason.
 	metaMemberFailureCounter metric.Int64Counter
 	// mandatoryAuthzShadowCounter counts shadowed mandatory checks.
 	mandatoryAuthzShadowCounter metric.Int64Counter
@@ -582,7 +582,7 @@ func (m *Metrics) RecordAuthClientParity(ctx context.Context, agreed bool, outco
 	))
 }
 
-// RecordMetaMemberFailure counts one failed attempt on a gateway member. Reasons are a closed set.
+// RecordMetaMemberFailure counts one attempt refused for a stale choice. Reasons are a closed set.
 func (m *Metrics) RecordMetaMemberFailure(ctx context.Context, reason string) {
 	if m == nil || m.metaMemberFailureCounter == nil {
 		return

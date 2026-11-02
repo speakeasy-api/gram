@@ -264,5 +264,5 @@ func (s *Service) SetIDJAGTrust(store idjag.Store) {
 
 // StaleNoAuthWarned reports whether the stale choice warning already fired for this subject, server and reason.
 func (s *Service) StaleNoAuthWarned(subject string, serverID uuid.UUID, reason string) bool {
-	return !s.staleNoAuthLog.first(subject + "|" + serverID.String() + "|" + reason)
+	return s.staleNoAuthLog.seen.Contains(subject + "|" + serverID.String() + "|" + reason)
 }

@@ -61,9 +61,6 @@ const (
 	onceLogSize = 4096
 )
 
-// staleChoiceConsentTTL bounds how long a stale choice's remedy can lag its setup.
-const staleChoiceConsentTTL = 45 * time.Second
-
 // onceLog keeps one log line per key per window; counters see every occurrence.
 type onceLog struct {
 	mu   sync.Mutex

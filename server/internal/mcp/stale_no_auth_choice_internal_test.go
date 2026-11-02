@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
@@ -221,6 +223,11 @@ func TestStaleChoiceRemedyIsCachedPerPersonAndServer(t *testing.T) {
 	fresh, err := f.service.consentCanReplaceChoice(t.Context(), gate("user_2"), member)
 	require.NoError(t, err)
 	require.True(t, fresh, "another person gets their own")
+	organizationGate := gate("user_3")
+	organizationGate.projectID = uuid.Nil
+	reached, err := f.service.consentCanReplaceChoice(t.Context(), organizationGate, member)
+	require.NoError(t, err)
+	require.True(t, reached, "an organization gateway has no project; the member's project scopes its clients")
 }
 
 func TestStaleChoiceCountsEveryAttemptPastLogDedupe(t *testing.T) {
@@ -260,4 +267,15 @@ func TestCodeModeHelperFailureNonPersonGetsOwnerCopy(t *testing.T) {
 	require.True(t, ok)
 	require.Contains(t, refused.Message, "Ask whoever set this up")
 	require.NotErrorIs(t, err, codemode.ErrConsentRequired)
+}
+
+func TestStaleChoiceFailureInCodeModeKeepsItsMessage(t *testing.T) {
+	t.Parallel()
+	invocation := &metaCodeInvocation{}
+	ctx := context.WithValue(t.Context(), metaCodeInvocationKey{}, invocation)
+	_, err := marshalMetaMemberFailure(ctx, testenv.NewLogger(t), mcpjsonrpc.StringID("1"), staleMemberError(authClientReasonNoAuthForbidden), "ask your administrator")
+	refusal, ok := errors.AsType[*codemode.DispatchError](err)
+	require.True(t, ok)
+	require.Equal(t, "ask your administrator", refusal.Rejection)
+	require.False(t, invocation.credential)
 }

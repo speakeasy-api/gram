@@ -87,3 +87,12 @@ func TestConnectionStatusText_NeedsConsentClaimsNoVerification(t *testing.T) {
 	require.Contains(t, text, "Start authorization again")
 	require.NotContains(t, text, "To sign in")
 }
+
+func TestConnectionStatusText_ActionRequiredOffersNoSignIn(t *testing.T) {
+	t.Parallel()
+	text := ConnectionStatusResult{ConnectURL: "https://example.com/connect", Servers: []ConnectionStatusServer{
+		{Slug: "source", Name: "Source", Status: SignInActionRequired, Detail: "Ask your administrator"},
+	}}.Text()
+	require.Contains(t, text, "- Source: needs attention (Ask your administrator)")
+	require.NotContains(t, text, "To sign in")
+}

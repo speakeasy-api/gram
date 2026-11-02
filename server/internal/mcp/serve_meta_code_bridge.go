@@ -189,7 +189,11 @@ func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bo
 	if expired {
 		gate.catalog = nil
 	}
-	gate.execute = execute
+	// Helpers read the live choice so they agree with a call, and write nothing.
+	gate.execute = true
+	if gate.memberChoices != nil {
+		gate.memberChoices.readOnly = !execute
+	}
 	ctx = b.boundary.Apply(ctx)
 	freshCtx, err = b.service.authz.RefreshContext(ctx)
 	if err != nil {
@@ -224,10 +228,7 @@ func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bo
 func (b *metaCodeBackend) helperFailure(ctx context.Context, gate *metaGateContext, member metaMember, err error) error {
 	if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
 		message, reconnect := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
-		if !reconnect {
-			return &codemode.MemberRefusalError{Message: message}
-		}
-		return codemode.ErrConsentRequired
+		return &codemode.MemberRefusalError{Message: message, ConsentRequired: reconnect}
 	}
 	if needsNewConsent(err) {
 		return codemode.ErrConsentRequired

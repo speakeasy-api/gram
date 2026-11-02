@@ -50,9 +50,15 @@ func (e *ConnectionRequiredError) Error() string {
 // MemberRefusalError is a member failure whose message is safe to show the program.
 type MemberRefusalError struct {
 	Message string
+	// ConsentRequired makes it read as ErrConsentRequired.
+	ConsentRequired bool
 }
 
 func (e *MemberRefusalError) Error() string { return e.Message }
+
+func (e *MemberRefusalError) Is(target error) bool {
+	return e.ConsentRequired && target == ErrConsentRequired
+}
 
 // ErrExecutionRevoked is terminal for the admitted execution, even if its
 // credentials or policy become available again later.
@@ -254,7 +260,10 @@ func (h *CatalogHost) Search(ctx context.Context, args SearchArgs) (*SearchPage,
 					reason = "consent_required"
 				}
 				if refused, ok := errors.AsType[*MemberRefusalError](err); ok {
-					reason, message = "member_refused", refused.Message
+					message = refused.Message
+					if !refused.ConsentRequired {
+						reason = "member_refused"
+					}
 				}
 				failed = append(failed, FailedMember{Server: server.Slug, Reason: reason, Message: message})
 				return nil

@@ -651,6 +651,7 @@ func marshalMetaMemberFailure(ctx context.Context, logger *slog.Logger, id mcpjs
 		_, credential := errors.AsType[memberCredentialError](err)
 		_, stale := errors.AsType[memberStaleChoiceError](err)
 		invocation.credential = credential && !stale
+		invocation.rejected = invocation.rejected || stale
 	}
 	return marshalMetaToolError(ctx, logger, id, message)
 }

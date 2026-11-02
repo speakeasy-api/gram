@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -50,6 +51,13 @@ import (
 // detached or deleted since. Reconnecting issues a credential that records a
 // fresh choice.
 const issuerGateReasonUpstreamSelectionUnavailable = "upstream_selection_unavailable"
+
+const (
+	// staleChoiceConsentTTL bounds how long a stale choice's remedy can lag its setup.
+	staleChoiceConsentTTL = 45 * time.Second
+	// staleChoiceConsentSize bounds the remembered remedies.
+	staleChoiceConsentSize = 4096
+)
 
 var (
 	// errUpstreamSelectionMissing is a credential with no choice for the
@@ -788,7 +796,7 @@ func (s *Service) consentCanReplaceChoice(ctx context.Context, gate *metaGateCon
 // decideConsentCanReplaceChoice reports whether a new consent would offer member a usable connection.
 func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaGateContext, member metaMember) (bool, error) {
 	bound, err := remotesessionsrepo.New(s.db).ListRemoteSessionClientIDsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientIDsForUserSessionIssuerParams{
-		UserSessionIssuerID: gate.userSessionIssuerID, ProjectID: gate.projectID, OrganizationID: gate.organizationID,
+		UserSessionIssuerID: gate.userSessionIssuerID, ProjectID: member.projectID, OrganizationID: gate.organizationID,
 	})
 	if err != nil {
 		return false, fmt.Errorf("list issuer clients: %w", err)

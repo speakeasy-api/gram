@@ -445,29 +445,60 @@ func TestStaleNoAuthConnectionStatusMatchesTheCall(t *testing.T) {
 
 func TestStaleNoAuthCodeModeReachesTheProgram(t *testing.T) {
 	t.Parallel()
-	ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeLive, metamcp.DiscoveryModeCode)
-	mcp.SetTestCodeExecutor(g.ti.service.Service, &recordingCodeExecutor{})
-	enableCodeMode(t, ctx, g.ti)
-	connection := g.approve(t, ctx)
-	registration := createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "unbound-"+uuid.NewString()[:8], "", nil)
-	_, err := upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: g.serverID, RemoteSessionClientID: registration})
-	require.NoError(t, err)
-	ran := false
-	mcp.SetTestCodeExecutor(g.ti.service.Service, &recordingCodeExecutor{run: func(runCtx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
-		ran = true
-		_, callErr := host.Call(runCtx, "source--tool_000", json.RawMessage(`{}`))
-		refused, ok := errors.AsType[*codemode.MemberRefusalError](callErr)
-		require.True(t, ok, "got %v", callErr)
-		require.Contains(t, refused.Message, staleAdminCopy)
-		_, describeErr := host.Describe(runCtx, "source--tool_000")
-		refused, ok = errors.AsType[*codemode.MemberRefusalError](describeErr)
-		require.True(t, ok, "got %v", describeErr)
-		require.Contains(t, refused.Message, staleAdminCopy)
-		return &codemode.ExecutionResult{}, nil
-	}})
-	w := g.post(t, connection.token, "execute", map[string]any{"code": "call"})
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	require.True(t, ran, w.Body.String())
+	for _, mode := range []toolfilter.CatalogMode{toolfilter.CatalogModeCached, toolfilter.CatalogModeLive} {
+		for name, tc := range map[string]struct {
+			fixable bool
+			remedy  string
+		}{
+			"consent can fix it": {fixable: true, remedy: staleReconnectCopy},
+			"consent cannot":     {fixable: false, remedy: staleAdminCopy},
+		} {
+			t.Run(string(mode)+"/"+name, func(t *testing.T) {
+				t.Parallel()
+				ctx, g := newStaleChoiceGateway(t, mode, metamcp.DiscoveryModeCode)
+				mcp.SetTestCodeExecutor(g.ti.service.Service, &recordingCodeExecutor{})
+				enableCodeMode(t, ctx, g.ti)
+				connection := g.approve(t, ctx)
+				if tc.fixable {
+					g.attachSignIn(t, ctx, true)
+				} else {
+					registration := createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "unbound-"+uuid.NewString()[:8], "", nil)
+					_, err := upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: g.serverID, RemoteSessionClientID: registration})
+					require.NoError(t, err)
+				}
+				requireRefusal := func(err error) {
+					t.Helper()
+					refused, ok := errors.AsType[*codemode.MemberRefusalError](err)
+					require.True(t, ok, "got %v", err)
+					require.Contains(t, refused.Message, `"source"`)
+					require.Contains(t, refused.Message, tc.remedy)
+					require.Equal(t, tc.fixable, errors.Is(err, codemode.ErrConsentRequired))
+				}
+				ran := false
+				mcp.SetTestCodeExecutor(g.ti.service.Service, &recordingCodeExecutor{run: func(runCtx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
+					ran = true
+					_, callErr := host.Call(runCtx, "source--tool_000", json.RawMessage(`{}`))
+					requireRefusal(callErr)
+					_, describeErr := host.Describe(runCtx, "source--tool_000")
+					requireRefusal(describeErr)
+					search, searchErr := host.Search(runCtx, codemode.SearchArgs{Query: "", Server: "source", Limit: 10})
+					require.NoError(t, searchErr)
+					require.Len(t, search.FailedMembers, 1)
+					require.Contains(t, search.FailedMembers[0].Message, tc.remedy)
+					page, serversErr := host.Servers(runCtx, codemode.PageArgs{Server: "source", Verify: true})
+					require.NoError(t, serversErr)
+					require.Len(t, page.Items, 1)
+					connection := page.Items[0].Connection
+					require.Contains(t, connection.Instructions, map[bool]string{true: "reconnect this gateway", false: staleAdminCopy}[tc.fixable])
+					require.Equal(t, map[bool]string{true: "reauth_required", false: "unknown"}[tc.fixable], connection.Authentication)
+					return &codemode.ExecutionResult{}, nil
+				}})
+				w := g.post(t, connection.token, "execute", map[string]any{"code": "call"})
+				require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+				require.True(t, ran, w.Body.String())
+			})
+		}
+	}
 }
 
 func TestStaleNoAuthDirectServerKeepsReconnectChallenge(t *testing.T) {

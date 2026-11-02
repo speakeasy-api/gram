@@ -28,13 +28,13 @@ import (
 func (c *memberChoices) recordNewMemberChoices(ctx context.Context, logger *slog.Logger, members []metaMember, resolved map[uuid.UUID]authClientResolution) bool {
 	queries := upstreamclientsrepo.New(c.selector.service.db)
 	recorded := false
-	for serverID, choice := range c.decideNewMemberChoices(ctx, logger, members, resolved) {
+	for serverID, decision := range c.decideNewMemberChoices(ctx, logger, members, resolved) {
 		if _, err := queries.RecordAuthClientChoice(ctx, upstreamclientsrepo.RecordAuthClientChoiceParams{
 			CredentialKind: upstreamclients.CredentialKindUserSession,
 			CredentialID:   c.selector.credentialID,
 			Source:         upstreamclients.SelectionSourceNewMember,
 			OrganizationID: c.selector.organizationID,
-			AuthClientID:   choice,
+			AuthClientID:   decision.authClientID,
 			McpServerID:    serverID,
 		}); err != nil {
 			logger.ErrorContext(ctx, "record new gateway member choice", attr.SlogMcpServerID(serverID.String()), attr.SlogError(err))
@@ -50,7 +50,11 @@ func (c *memberChoices) recordNewMemberChoices(ctx context.Context, logger *slog
 // previewNewMemberChoices resolves what recording would decide, writing nothing.
 func (c *memberChoices) previewNewMemberChoices(ctx context.Context, logger *slog.Logger, members []metaMember, resolved map[uuid.UUID]authClientResolution) {
 	service := c.selector.service
-	for serverID, choice := range c.decideNewMemberChoices(ctx, logger, members, resolved) {
+	for serverID, decision := range c.decideNewMemberChoices(ctx, logger, members, resolved) {
+		if decision.authClientID.Valid {
+			resolved[serverID] = decision.resolution
+			continue
+		}
 		projectID := uuid.Nil
 		for _, member := range members {
 			if member.serverID == serverID {
@@ -58,13 +62,7 @@ func (c *memberChoices) previewNewMemberChoices(ctx context.Context, logger *slo
 				break
 			}
 		}
-		var res authClientResolution
-		var err error
-		if choice.Valid {
-			res, err = service.resolveAuthClientChoiceForConsent(ctx, c.selector.organizationID, serverID, projectID, choice.UUID, c.subject)
-		} else {
-			res, err = service.resolveAuthClientForConsent(ctx, c.selector.organizationID, serverID, projectID, choice, c.subject)
-		}
+		res, err := service.resolveAuthClientForConsent(ctx, c.selector.organizationID, serverID, projectID, decision.authClientID, c.subject)
 		if err != nil {
 			logger.ErrorContext(ctx, "preview new gateway member choice", attr.SlogMcpServerID(serverID.String()), attr.SlogError(err))
 			continue
@@ -73,9 +71,15 @@ func (c *memberChoices) previewNewMemberChoices(ctx context.Context, logger *slo
 	}
 }
 
+// newMemberDecision is a new member's decided client and, when it names one, its resolution.
+type newMemberDecision struct {
+	authClientID uuid.NullUUID
+	resolution   authClientResolution
+}
+
 // decideNewMemberChoices is the choice for each proxied member with none that
 // joined after the credential was issued, where nobody has to pick.
-func (c *memberChoices) decideNewMemberChoices(ctx context.Context, logger *slog.Logger, members []metaMember, resolved map[uuid.UUID]authClientResolution) map[uuid.UUID]uuid.NullUUID {
+func (c *memberChoices) decideNewMemberChoices(ctx context.Context, logger *slog.Logger, members []metaMember, resolved map[uuid.UUID]authClientResolution) map[uuid.UUID]newMemberDecision {
 	if c.selector.credentialKindOrDefault() != upstreamclients.CredentialKindUserSession {
 		return nil
 	}
@@ -103,7 +107,7 @@ func (c *memberChoices) decideNewMemberChoices(ctx context.Context, logger *slog
 		logger.ErrorContext(ctx, "list gateway members added after issuance", attr.SlogError(err))
 		return nil
 	}
-	decided := make(map[uuid.UUID]uuid.NullUUID, len(added))
+	decided := make(map[uuid.UUID]newMemberDecision, len(added))
 	for _, serverID := range added {
 		var member metaMember
 		for _, candidate := range members {
@@ -112,13 +116,13 @@ func (c *memberChoices) decideNewMemberChoices(ctx context.Context, logger *slog
 				break
 			}
 		}
-		choice, ok, err := service.newMemberChoice(ctx, c.selector.organizationID, c.selector.userSessionIssuerID, c.subject, member)
+		choice, resolution, ok, err := service.newMemberChoice(ctx, c.selector.organizationID, c.selector.userSessionIssuerID, c.subject, member)
 		if err != nil {
 			logger.ErrorContext(ctx, "decide new gateway member choice", attr.SlogMcpServerID(serverID.String()), attr.SlogError(err))
 			continue
 		}
 		if ok {
-			decided[serverID] = choice
+			decided[serverID] = newMemberDecision{authClientID: choice, resolution: resolution}
 		}
 	}
 	return decided
@@ -129,15 +133,17 @@ func (c *memberChoices) decideNewMemberChoices(ctx context.Context, logger *slog
 // subject may use that is ready without any action, a personal connection
 // counting once it is live. With several such clients, or one needing a
 // connection or an identity-provider check, the person chooses by
-// reconnecting, so nothing is decided. authClientID is invalid for no-auth.
-func (s *Service) newMemberChoice(ctx context.Context, organizationID string, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, member metaMember) (authClientID uuid.NullUUID, decided bool, err error) {
+// reconnecting, so nothing is decided. authClientID is invalid for no-auth,
+// and resolution is set only when it names a client.
+func (s *Service) newMemberChoice(ctx context.Context, organizationID string, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, member metaMember) (authClientID uuid.NullUUID, resolution authClientResolution, decided bool, err error) {
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	unresolved := gapResolution("")
 	rows, err := upstreamclientsrepo.New(s.db).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: []uuid.UUID{member.serverID}})
 	if err != nil {
-		return none, false, fmt.Errorf("list member auth clients: %w", err)
+		return none, unresolved, false, fmt.Errorf("list member auth clients: %w", err)
 	}
 	if len(rows) == 0 {
-		return none, false, nil
+		return none, unresolved, false, nil
 	}
 	var offered []upstreamclientsrepo.ListServerConsentAuthClientsRow
 	for _, row := range rows {
@@ -149,11 +155,12 @@ func (s *Service) newMemberChoice(ctx context.Context, organizationID string, us
 		// A server offering no enabled client needs no upstream
 		// authentication, unless it has upstream credentials no auth client
 		// records yet; then nothing is decided.
-		return none, !rows[0].UpstreamAuthPending, nil
+		return none, unresolved, !rows[0].UpstreamAuthPending, nil
 	}
 
 	represented := subject.Kind == urn.SessionSubjectKindUser || subject.Kind == urn.SessionSubjectKindAgent
 	var ready []uuid.UUID
+	var readyResolution authClientResolution
 	for _, row := range offered {
 		clientType := row.ClientType.String
 		personal := clientType == authz.AuthClientTypeRemoteSession || clientType == authz.AuthClientTypeEMA
@@ -162,7 +169,7 @@ func (s *Service) newMemberChoice(ctx context.Context, organizationID string, us
 		}
 		res, err := s.resolveAuthClientChoiceForConsent(ctx, organizationID, member.serverID, member.projectID, row.AuthClientID.UUID, subject)
 		if err != nil {
-			return none, false, err
+			return none, unresolved, false, err
 		}
 		switch {
 		case res.outcome == authClientNoAccess, res.outcome == authClientGap:
@@ -170,23 +177,24 @@ func (s *Service) newMemberChoice(ctx context.Context, organizationID string, us
 		case clientType == authz.AuthClientTypeEMA:
 			// Whether the identity provider can sign the person in is only
 			// known by trying, so it is the person's choice to make.
-			return none, false, nil
+			return none, unresolved, false, nil
 		case clientType == authz.AuthClientTypeRemoteSession:
 			reconnect, err := s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
 				ProjectID: member.projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID,
 				Subject: subject, RegistrationID: row.RemoteSessionClientID.UUID, SkipUnusable: false,
 			})
 			if err != nil {
-				return none, false, fmt.Errorf("check member connection: %w", err)
+				return none, unresolved, false, fmt.Errorf("check member connection: %w", err)
 			}
 			if reconnect {
-				return none, false, nil
+				return none, unresolved, false, nil
 			}
 		}
 		ready = append(ready, row.AuthClientID.UUID)
+		readyResolution = res
 	}
 	if len(ready) != 1 {
-		return none, false, nil
+		return none, unresolved, false, nil
 	}
-	return uuid.NullUUID{UUID: ready[0], Valid: true}, true, nil
+	return uuid.NullUUID{UUID: ready[0], Valid: true}, readyResolution, true, nil
 }

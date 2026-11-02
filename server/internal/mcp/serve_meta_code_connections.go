@@ -207,7 +207,10 @@ func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateCo
 	state.CheckedAt = &now
 	if err != nil {
 		if needsNewConsent(err) {
-			state.Authentication = "reauth_required"
+			state.Authentication = "unknown"
+			if state.Consent == "required" {
+				state.Authentication = "reauth_required"
+			}
 			return state
 		}
 		_, needsSignIn := errors.AsType[memberCredentialError](err)
