@@ -149,10 +149,13 @@ func RequireTLS(u *url.URL) error {
 	if u == nil {
 		return errors.New("tailscale api base url is required")
 	}
+	host := u.Hostname()
+	if host == "" {
+		return fmt.Errorf("tailscale api base url %q has no host", u.String())
+	}
 	if strings.EqualFold(u.Scheme, "https") {
 		return nil
 	}
-	host := u.Hostname()
 	if strings.EqualFold(u.Scheme, "http") && (host == "localhost" || net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback()) {
 		return nil
 	}

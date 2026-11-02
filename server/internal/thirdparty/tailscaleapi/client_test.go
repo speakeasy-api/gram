@@ -206,4 +206,6 @@ func TestNewRequiresTLSOutsideLoopback(t *testing.T) {
 	require.NoError(t, err)
 	_, err = tailscaleapi.New(policy, "http://localhost:8080")
 	require.NoError(t, err)
+	_, err = tailscaleapi.New(policy, "https://:443")
+	require.Error(t, err, "a port without a hostname is not a usable base url")
 }
