@@ -17,7 +17,7 @@ type AdminContext struct {
 	WriteOperations []WriteOperation `json:"available_write_operations"`
 }
 
-func registerContextTool(server *mcp.Server, organizationReadsAvailable, projectReadsAvailable, configurationReadsAvailable, activityReadsAvailable, auditReadsAvailable, usageReadsAvailable, coverageReadsAvailable, issuerReadsAvailable, matrixReadsAvailable, onboardingReadsAvailable, projectMCPReadsAvailable, billingDiagnosticsAvailable, organizationStatsAvailable, organizationMembersAvailable, billingDetailsAvailable, registryAvailable, serverHealthAvailable bool, runtime *Runtime) {
+func registerContextTool(server *mcp.Server, organizationReadsAvailable, projectReadsAvailable, configurationReadsAvailable, activityReadsAvailable, auditReadsAvailable, usageReadsAvailable, coverageReadsAvailable, issuerReadsAvailable, matrixReadsAvailable, onboardingReadsAvailable, projectMCPReadsAvailable, billingDiagnosticsAvailable, organizationStatsAvailable, organizationMembersAvailable, billingDetailsAvailable, registryAvailable, serverHealthAvailable, memoryEvalsAvailable bool, runtime *Runtime) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_admin_context",
 		Title:       "Get Staff Admin Context",
@@ -79,6 +79,9 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 		}
 		if serverHealthAvailable {
 			workflows = append(workflows, "inspect one MCP server's authentication configuration, session counts and tool call outcomes")
+		}
+		if memoryEvalsAvailable {
+			workflows = append(workflows, "compare team memory eval runs: answer, summary and digest model scores on the synthetic demo corpus")
 		}
 		operations := []WriteOperation{}
 		if slices.Contains(principal.Scopes, ScopeWrite) && runtime.writes != nil {
