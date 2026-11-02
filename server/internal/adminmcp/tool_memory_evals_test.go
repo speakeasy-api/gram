@@ -76,9 +76,11 @@ func TestListMemoryEvalRunsBoundsLimit(t *testing.T) {
 	t.Parallel()
 	reads := testMemoryEvalReads()
 
-	_, body, _ := callStaffReadTool(t, reads, "list_memory_eval_runs", `{"limit":500}`)
-	require.Contains(t, body, "limit must be at most 50")
-	require.Nil(t, reads.listInput)
+	for _, limit := range []string{"500", "-1"} {
+		_, body, _ := callStaffReadTool(t, reads, "list_memory_eval_runs", `{"limit":`+limit+`}`)
+		require.Contains(t, body, "limit must be between 1 and 50", limit)
+		require.Nil(t, reads.listInput, limit)
+	}
 }
 
 func TestGetMemoryEvalRunProjectsScores(t *testing.T) {
@@ -94,11 +96,23 @@ func TestGetMemoryEvalRunProjectsScores(t *testing.T) {
 	require.Len(t, out.Scores, 2)
 	memory := out.Scores[1]
 	require.InDelta(t, 0.8, memory.Accuracy, 1e-9)
-	require.InDelta(t, 0.8, memory.ValidCitationRate, 1e-9)
+	require.NotNil(t, memory.ValidCitationRate)
+	require.InDelta(t, 0.8, *memory.ValidCitationRate, 1e-9)
 	require.Equal(t, 1, memory.Leaks)
+	require.Equal(t, 1, memory.Errors)
+	require.InDelta(t, 0.7, memory.CostUSD, 1e-9)
+	require.EqualValues(t, 5000, memory.LatencyP95MS)
 	// Leaked secret names stay out of the tool result.
 	require.NotContains(t, string(data), "planted-1")
-	require.Zero(t, out.Scores[0].ValidCitationRate)
+
+	none := out.Scores[0]
+	require.Nil(t, none.ValidCitationRate, "an arm without tools has no citation rate")
+	require.Contains(t, string(data), `"valid_citation_rate":null`)
+	require.Zero(t, none.Errors)
+	require.InDelta(t, 0.2, none.CostUSD, 1e-9)
+	require.EqualValues(t, 900, none.LatencyP95MS)
+
+	require.InDelta(t, 0.4, out.JudgeCostUSD, 1e-9)
 	require.InDelta(t, 0.8, out.MemoryWriteCostUSD, 1e-9)
 	require.Equal(t, 159, out.Summaries)
 }
@@ -110,5 +124,9 @@ func TestMemoryEvalToolsReportUnavailableReads(t *testing.T) {
 
 	_, body, _ := callStaffReadTool(t, reads, "get_memory_eval_run", `{"run_id":"run-1"}`)
 	require.Contains(t, body, "not found or unavailable")
+	require.NotContains(t, body, "database down")
+
+	_, body, _ = callStaffReadTool(t, reads, "list_memory_eval_runs", `{}`)
+	require.Contains(t, body, errMemoryEvalsUnavailable.Error())
 	require.NotContains(t, body, "database down")
 }

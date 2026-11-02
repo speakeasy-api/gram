@@ -59,15 +59,17 @@ type MemoryEvalRunPage struct {
 
 // MemoryEvalScore is one answer model in one arm.
 type MemoryEvalScore struct {
-	Model               string  `json:"model"`
-	Arm                 string  `json:"arm"`
-	Accuracy            float64 `json:"accuracy"`
-	ValidCitationRate   float64 `json:"valid_citation_rate,omitempty"`
-	Leaks               int     `json:"leaks"`
-	IsolationViolations int     `json:"isolation_violations"`
-	Errors              int     `json:"errors"`
-	CostUSD             float64 `json:"cost_usd"`
-	LatencyP95MS        int64   `json:"latency_p95_ms"`
+	Model    string  `json:"model"`
+	Arm      string  `json:"arm"`
+	Accuracy float64 `json:"accuracy"`
+	// ValidCitationRate is null for an arm without tools or with no
+	// answerable questions, where the metric does not apply.
+	ValidCitationRate   *float64 `json:"valid_citation_rate"`
+	Leaks               int      `json:"leaks"`
+	IsolationViolations int      `json:"isolation_violations"`
+	Errors              int      `json:"errors"`
+	CostUSD             float64  `json:"cost_usd"`
+	LatencyP95MS        int64    `json:"latency_p95_ms"`
 }
 
 // MemoryEvalRunDetail is one run with its per-arm scores and what writing
@@ -122,11 +124,11 @@ func registerMemoryEvalTools(server *mcp.Server, reader MemoryEvalReader) {
 			return nil, MemoryEvalRunPage{}, errMemoryEvalsUnavailable
 		}
 		limit := input.Limit
-		if limit <= 0 {
+		if limit == 0 {
 			limit = 20
 		}
-		if limit > 50 {
-			return nil, MemoryEvalRunPage{}, errors.New("limit must be at most 50")
+		if limit < 1 || limit > 50 {
+			return nil, MemoryEvalRunPage{}, errors.New("limit must be between 1 and 50")
 		}
 		payload := &gen.ListMemoryEvalRunsPayload{Limit: limit}
 		if input.Cursor != "" {
@@ -174,7 +176,8 @@ func registerMemoryEvalTools(server *mcp.Server, reader MemoryEvalReader) {
 				Errors: s.Errors, CostUSD: s.CostUSD, LatencyP95MS: s.LatencyP95MS,
 			}
 			if s.HasTools && s.Answerable > 0 {
-				score.ValidCitationRate = float64(s.ValidCited) / float64(s.Answerable)
+				rate := float64(s.ValidCited) / float64(s.Answerable)
+				score.ValidCitationRate = &rate
 			}
 			detail.Scores = append(detail.Scores, score)
 		}

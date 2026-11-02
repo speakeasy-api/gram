@@ -81,7 +81,7 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 			workflows = append(workflows, "inspect one MCP server's authentication configuration, session counts and tool call outcomes")
 		}
 		if memoryEvalsAvailable {
-			workflows = append(workflows, "compare team memory eval runs: answer, summary and digest model scores on the synthetic demo corpus")
+			workflows = append(workflows, "compare team memory eval runs: answer model scores by arm on the synthetic demo corpus, with summary and digest model cost")
 		}
 		operations := []WriteOperation{}
 		if slices.Contains(principal.Scopes, ScopeWrite) && runtime.writes != nil {
