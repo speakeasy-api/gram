@@ -32,6 +32,19 @@ var ErrToolUnavailable = errors.New("tool unavailable")
 // matches its configuration. Only a new consent fixes it.
 var ErrConsentRequired = errors.New("consent required")
 
+// ConnectionRequiredError reports a visible, permitted member whose upstream
+// refused the caller's missing, expired or rejected credential before the tool
+// was called. The user fixes it through Connect; naming the server reveals
+// nothing the caller's Servers listing does not.
+type ConnectionRequiredError struct {
+	// Server is the member slug to pass to Connect.
+	Server string
+}
+
+func (e *ConnectionRequiredError) Error() string {
+	return fmt.Sprintf("server %q requires the user to connect", e.Server)
+}
+
 // ErrExecutionRevoked is terminal for the admitted execution, even if its
 // credentials or policy become available again later.
 var ErrExecutionRevoked = errors.New("execution authorization revoked")
@@ -330,7 +343,7 @@ func (h *CatalogHost) Call(ctx context.Context, path string, arguments json.RawM
 	}
 	raw, err := h.backend.Call(ctx, path, arguments)
 	if err != nil {
-		if errors.Is(err, ErrExecutionRevoked) || errors.Is(err, ErrConsentRequired) {
+		if _, connect := errors.AsType[*ConnectionRequiredError](err); connect || errors.Is(err, ErrExecutionRevoked) || errors.Is(err, ErrConsentRequired) {
 			return nil, &callNotDispatchedError{cause: fmt.Errorf("invoke tool: %w", err)}
 		}
 		var dispatch *DispatchError

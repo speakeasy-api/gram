@@ -357,7 +357,7 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 		}
 	}
 	req := &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.StringID(uuid.NewString()), Method: "tools/call", Params: nil}
-	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: ""}
+	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: "", credential: false}
 	ctx = context.WithValue(ctx, metaCodeInvocationKey{}, invocation)
 	ctx = context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions)
 	raw, err := b.service.executeMetaMemberTool(ctx, b.service.logger, &callGate, members, req, path, arguments, b.meta)
@@ -365,6 +365,15 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 		failure := invocation.failure()
 		if refusal, ok := errors.AsType[*codemode.DispatchError](err); ok {
 			failure = refusal
+		}
+		// The member's own remedy names a connect page the program cannot
+		// open; point it at tools.connect, which binds the link to this user.
+		if invocation.credential && !invocation.dispatched {
+			if slug, _, splitErr := metamcp.SplitQualifiedName(path); splitErr == nil {
+				if member, ok := findMetaMember(members, slug); ok && codeConnectAvailable(&callGate) && callGate.memberConnectURL(member) != "" {
+					failure = &codemode.ConnectionRequiredError{Server: member.slug}
+				}
+			}
 		}
 		if invocation.message != "" {
 			level := slog.LevelInfo
@@ -399,6 +408,8 @@ type metaCodeInvocation struct {
 	rejected bool
 	// message is the member-scoped failure the program would otherwise lose.
 	message string
+	// credential marks a member failure the user fixes by connecting it.
+	credential bool
 }
 
 func (i *metaCodeInvocation) failure() error {

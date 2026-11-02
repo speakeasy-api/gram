@@ -134,6 +134,7 @@ func TestCallbackReplyCarriesExactlyOneResult(t *testing.T) {
 		{"null value", json.RawMessage(`null`), nil, `{"type":"callback_result","id":1,"value":null}`},
 		{"refusal", nil, ErrToolUnavailable, `{"type":"callback_result","id":1,"error":"tool operation unavailable or arguments invalid"}`},
 		{"consent", nil, fmt.Errorf("call: %w", ErrConsentRequired), `{"type":"callback_result","id":1,"error":"this server changed since consent; the user must reconnect and give consent again"}`},
+		{"connection", nil, &callNotDispatchedError{cause: fmt.Errorf("invoke tool: %w", &ConnectionRequiredError{Server: "tracker"})}, `{"type":"callback_result","id":1,"error":"server \"tracker\" needs the user to connect or sign in again; the tool was not called. Call tools.connect(server=\"tracker\"), show the user its authorization_url and instructions, then stop"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

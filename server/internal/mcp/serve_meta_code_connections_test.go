@@ -310,3 +310,42 @@ func TestCodeServersVerifyFrozenConnection(t *testing.T) {
 	require.True(t, ran)
 	require.Greater(t, upstream.requests.Load(), before)
 }
+
+// A member that refuses the caller for want of a sign-in fails the call
+// before dispatch with the member to pass to tools.connect, rather than the
+// generic refusal, and Connect issues that member's link.
+func TestCodeCallNeedingSignInNamesConnect(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *auth.ProjectID
+	orgID := auth.ActiveOrganizationID
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	slug := "code-sign-in-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, slug, issuer)
+	deny := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(deny.Close)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "code-sign-in", "", []uuid.UUID{issuer})
+	remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
+	createMetaMember(t, ctx, ti.conn, projectID, gateway.ID, "member", deny.URL, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, 0)
+	token := mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode)
+	ran := false
+	mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(runCtx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
+		ran = true
+		_, err := host.Call(runCtx, "member--ping", json.RawMessage(`{}`))
+		connect, ok := errors.AsType[*codemode.ConnectionRequiredError](err)
+		require.True(t, ok, "want a connection-required refusal, got %v", err)
+		require.Equal(t, "member", connect.Server)
+		action, err := host.Connect(runCtx, connect.Server)
+		require.NoError(t, err)
+		require.NotEmpty(t, action.AuthorizationURL)
+		return &codemode.ExecutionResult{}, nil
+	}})
+	enableCodeMode(t, ctx, ti)
+	response, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "call"}}), token, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.True(t, ran)
+}

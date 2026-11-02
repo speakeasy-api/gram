@@ -451,6 +451,10 @@ requesting user, gateway and member; the browser must authenticate that user.
 The same execution reuses its link. Neither helper expands the optional tool
 allowlist, so they also work with `tools=[]`.
 
+A tool call refused before dispatch because the member needs the user's
+sign-in raises an error naming the server and `tools.connect`, instead of the
+generic refusal, when a user-bound link can be issued for that member.
+
 An authenticated code-mode connection whose catalogue expired can run these
 recovery helpers, but cannot invoke or discover business tools. Expired or
 revoked gateway credentials still fail normal MCP authentication. Upstream

@@ -111,6 +111,8 @@ func callbackReply(id uint32, value json.RawMessage, callbackErr error) runnerRe
 	message := "tool operation unavailable or arguments invalid"
 	if errors.Is(callbackErr, ErrConsentRequired) {
 		message = "this server changed since consent; the user must reconnect and give consent again"
+	} else if connect, ok := errors.AsType[*ConnectionRequiredError](callbackErr); ok {
+		message = fmt.Sprintf("server %q needs the user to connect or sign in again; the tool was not called. Call tools.connect(server=%q), show the user its authorization_url and instructions, then stop", connect.Server, connect.Server)
 	}
 	return runnerReply{Type: "callback_result", ID: id, Value: nil, Error: &message}
 }

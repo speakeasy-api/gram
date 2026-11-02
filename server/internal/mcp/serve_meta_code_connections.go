@@ -78,7 +78,7 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
 	}
-	if gate.authentication == nil || gate.authentication.subject.Kind != urn.SessionSubjectKindUser || gate.authentication.subject.ID == "" || gate.connectRoot == "" {
+	if !codeConnectAvailable(gate) {
 		return nil, codemode.ErrToolUnavailable
 	}
 	needsConsent := b.knownConnectionState(ctx, gate, member).Consent == "required"
@@ -125,6 +125,13 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	}
 	b.connections.actions[server] = action
 	return action, nil
+}
+
+// codeConnectAvailable reports whether Connect can mint a link bound to the
+// signed-in user for this gateway.
+func codeConnectAvailable(gate *metaGateContext) bool {
+	return gate.authentication != nil && gate.authentication.subject.Kind == urn.SessionSubjectKindUser &&
+		gate.authentication.subject.ID != "" && gate.connectRoot != ""
 }
 
 // Per-execution reuse prevents concurrent helpers from issuing duplicate tickets.
