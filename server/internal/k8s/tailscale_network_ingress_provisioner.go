@@ -125,7 +125,7 @@ func (p *TailscaleNetworkIngressProvisioner) Apply(ctx context.Context, desired 
 	if desired.Provider != NetworkIngressProviderTailscale {
 		return NetworkIngressObservation{Status: NetworkIngressStatusError, ErrorCode: NetworkIngressErrorUnsupportedProvider}, ErrNetworkIngressUnsupportedProvider
 	}
-	credentials, err := parseTailscaleCredentials(desired.Credentials)
+	credentials, err := ParseTailscaleCredentials(desired.Credentials)
 	if err != nil {
 		return NetworkIngressObservation{Status: NetworkIngressStatusError, ErrorCode: NetworkIngressErrorInvalidCredentials}, err
 	}
@@ -524,7 +524,9 @@ func (p *TailscaleNetworkIngressProvisioner) teardown(ctx context.Context, resou
 	return runNetworkIngressDeletionPhase(deleteNamespace)
 }
 
-func parseTailscaleCredentials(encoded []byte) (TailscaleCredentials, error) {
+// ParseTailscaleCredentials decodes the encrypted-at-rest OAuth client document
+// stored for a Tailscale ingress. Unknown fields and trailing data are rejected.
+func ParseTailscaleCredentials(encoded []byte) (TailscaleCredentials, error) {
 	var credentials TailscaleCredentials
 	decoder := json.NewDecoder(bytes.NewReader(encoded))
 	decoder.DisallowUnknownFields()
