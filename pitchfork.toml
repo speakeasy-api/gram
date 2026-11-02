@@ -136,6 +136,13 @@ ready_output = "Assistant relay ready:"
 run = "mise run start:tunnel-gateway"
 ready_cmd = "mise run check:daemon --name {{name}}"
 
+# Opt-in: hosts private network ingresses on a real customer tailnet, so it is
+# not part of the default groups. Start it with `pitchfork start tailnet-gateway`
+# after setting the GRAM_TAILNET_GATEWAY_* listener settings in mise.local.toml.
+[daemons.tailnet-gateway]
+run = "mise run start:tailnet-gateway"
+ready_cmd = "mise run check:daemon --name {{name}}"
+
 # Started by start only when the local code provider is configured.
 [daemons.code-runtime]
 run = "exec mise run start:code-runtime"
