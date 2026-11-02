@@ -56,7 +56,7 @@ import { CredentialPicker } from "./CredentialPicker";
 import { SignInPath } from "./SignInPath";
 import { StepWorkload } from "./StepWorkload";
 import { useWorkloadSetup } from "./useWorkloadSetup";
-import { platformSetup } from "./platformSetups";
+import { hasPlatformSetup, platformSetup } from "./platformSetups";
 import {
   DEVICE_AGENT_SYNC_SCOPE,
   GITHUB_ACTIONS_KEY,
@@ -443,10 +443,15 @@ export function CredentialsWizard({
   // The credential the agent already holds, when one is being edited: an
   // agent that signs in with a platform's tokens must not open on "API key".
   const admitted = useAgentAdmissions(agent?.id ?? "").admissions[0];
+  // An issuer whose catalog entry this wizard cannot set up, such as one not
+  // offered yet, is edited as the custom issuer it would otherwise be.
   const admittedEntry =
     admitted === undefined
       ? undefined
-      : catalogEntryForIssuer(catalog.entries, admitted.issuer);
+      : catalogEntryForIssuer(
+          catalog.entries.filter(hasPlatformSetup),
+          admitted.issuer,
+        );
   const [credential, setCredential] = useState<Credential>(
     initialPlatformKey === undefined ? "api-key" : "workload",
   );

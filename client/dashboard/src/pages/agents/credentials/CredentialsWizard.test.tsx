@@ -750,6 +750,27 @@ async function reachPlatformSetup() {
   });
 }
 
+/** Opens the wizard on a preselected catalog entry's credential step. */
+async function reachPreselectedCredentialStep(entry: typeof platform) {
+  mocks.platforms.mockReturnValue([entry]);
+  setup(entry.key);
+  fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  await continueFromAuthentication();
+}
+
+/** The preset offers no radio, Continue goes nowhere, and nothing is written. */
+function expectNoPresetSetup() {
+  expect(screen.queryByRole("radio", { name: /Claude Tag/ })).toBeNull();
+  const next = screen.getByRole("button", { name: "Continue" });
+  expect(next.hasAttribute("disabled")).toBe(true);
+  fireEvent.click(next);
+  expect(screen.queryByLabelText("Anthropic organization ID")).toBeNull();
+  expect(mocks.createAgent).not.toHaveBeenCalled();
+  expect(mocks.registerIssuer).not.toHaveBeenCalled();
+  expect(mocks.admitSubject).not.toHaveBeenCalled();
+}
+
 describe("Federating a platform's own tokens", () => {
   it.each([
     [
@@ -787,27 +808,14 @@ describe("Federating a platform's own tokens", () => {
         })),
       },
     ],
-    ["disabled platform", { ...platform, enabled: false }],
     ["unknown platform", { ...platform, key: "constructor" }],
   ])(
     "keeps %s visible without allowing preselected setup",
     async (_case, unavailable) => {
-      mocks.platforms.mockReturnValue([unavailable]);
-      setup(unavailable.key);
-      fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
-      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-
-      await continueFromAuthentication();
+      await reachPreselectedCredentialStep(unavailable);
       expect(await screen.findByText("Unavailable")).toBeTruthy();
       expect(screen.getByText(platform.description)).toBeTruthy();
-      expect(screen.queryByRole("radio", { name: /Claude Tag/ })).toBeNull();
-      const next = screen.getByRole("button", { name: "Continue" });
-      expect(next.hasAttribute("disabled")).toBe(true);
-      fireEvent.click(next);
-      expect(screen.queryByLabelText("Anthropic organization ID")).toBeNull();
-      expect(mocks.createAgent).not.toHaveBeenCalled();
-      expect(mocks.registerIssuer).not.toHaveBeenCalled();
-      expect(mocks.admitSubject).not.toHaveBeenCalled();
+      expectNoPresetSetup();
 
       // The independent custom flow remains an available recovery path,
       // under the advanced options.
@@ -822,6 +830,17 @@ describe("Federating a platform's own tokens", () => {
       ).toBe(false);
     },
   );
+
+  // A platform listed but not offered yet, such as one waiting on a release,
+  // is named among the platforms coming soon rather than shown as a setup
+  // that cannot be finished.
+  it("names a disabled platform as coming soon without allowing preselected setup", async () => {
+    await reachPreselectedCredentialStep({ ...platform, enabled: false });
+    expect(await screen.findByText(/Coming soon: .*Claude Tag\./)).toBeTruthy();
+    expect(screen.queryByText("Unavailable")).toBeNull();
+    expect(screen.queryByText(platform.description)).toBeNull();
+    expectNoPresetSetup();
+  });
 
   it("keeps the credential to API keys without permission to trust a platform", async () => {
     mocks.canFederate = false;
@@ -862,12 +881,21 @@ describe("Federating a platform's own tokens", () => {
   });
 
   it("names the platforms still to come once the catalog has answered", async () => {
-    mocks.platforms.mockReturnValue([platform]);
+    // GitHub Actions is in the catalog but not offered yet.
+    mocks.platforms.mockReturnValue([
+      platform,
+      {
+        ...platform,
+        key: "github-actions",
+        displayName: "GitHub Actions",
+        enabled: false,
+      },
+    ]);
     await reachCredentialStep();
 
     expect(
       screen.getByText(
-        /Coming soon: GitHub Actions, Kubernetes, SPIFFE, Google Cloud\./,
+        /Coming soon: Kubernetes, SPIFFE, Google Cloud, GitHub Actions\./,
       ),
     ).toBeTruthy();
   });
@@ -2715,6 +2743,33 @@ describe("Editing an agent that already exists", () => {
       expect(mocks.withdrawSubject.mock.calls[0]?.[0]).toEqual({
         request: { id: "admission_tag" },
       });
+    });
+
+    // An issuer registered through the custom flow stays editable there when
+    // the catalog later lists its platform but does not offer it yet.
+    it("edits a rule under a platform not offered yet as a custom issuer's", async () => {
+      mocks.platforms.mockReturnValue([{ ...platform, enabled: false }]);
+      trust("issuer_tag", "https://issuer.example");
+      mocks.workloadAdmissions.mockReturnValue([
+        {
+          ...base,
+          id: "admission_tag",
+          issuer: "https://issuer.example",
+          issuerName: "Trusted platform",
+          matchKind: "exact",
+          subject: "spiffe://example/org/org-123/agent/one",
+          workloadIssuerId: "issuer_tag",
+        },
+      ]);
+      editing();
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Identity provider" });
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Which workloads" });
+      expect((screen.getByLabelText("Subject") as HTMLInputElement).value).toBe(
+        "spiffe://example/org/org-123/agent/one",
+      );
     });
 
     it("keeps a custom rule with its project under an organization issuer", async () => {

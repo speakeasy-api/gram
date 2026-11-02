@@ -22,7 +22,6 @@ const PLATFORM_PREFIX = "platform:";
 
 /** Platforms whose issuer is known but whose preset has not shipped yet. */
 const PLANNED = [
-  { key: "github-actions", displayName: "GitHub Actions" },
   { key: "kubernetes", displayName: "Kubernetes" },
   { key: "spiffe", displayName: "SPIFFE" },
   { key: "gcp", displayName: "Google Cloud" },
@@ -132,6 +131,8 @@ function PlatformPresets({
   return (
     <>
       {entries.map((entry) => {
+        // Not offered yet, so named among the platforms coming soon instead.
+        if (!entry.enabled) return null;
         if (!hasPlatformSetup(entry)) {
           return <UnavailablePreset key={entry.key} entry={entry} />;
         }
@@ -198,13 +199,17 @@ export function CredentialPicker({
   // hidden behind a collapsed section.
   const advancedShown = advancedOpen || customChosen;
   // Only an answered catalog can say which platforms it lacks. While it loads
-  // or fails, every planned platform would read as absent.
+  // or fails, every planned platform would read as absent. One the catalog
+  // lists but does not offer yet is still coming.
   const planned =
     isPending || isError
       ? []
-      : PLANNED.filter(
-          (plan) => !entries.some((entry) => entry.key === plan.key),
-        );
+      : [
+          ...PLANNED.filter(
+            (plan) => !entries.some((entry) => entry.key === plan.key),
+          ),
+          ...entries.filter((entry) => !entry.enabled),
+        ];
 
   return (
     <RadioCardGroup

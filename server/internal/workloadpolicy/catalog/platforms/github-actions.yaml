@@ -38,7 +38,10 @@ key: github-actions
 display_name: GitHub Actions
 description: Let jobs in one GitHub repository fetch an agent's plugins, call its MCP servers and send hook events, with no Speakeasy secret stored in GitHub.
 icon: /access-hub/github-actions.svg
-enabled: true
+# Off until a stable speakeasyd release supports GitHub Actions (device-agent
+# #296): the workflow installs the latest stable release, and every release
+# before that one stops the job at "did not pick up the GitHub identity".
+enabled: false
 
 issuer:
   value: https://token.actions.githubusercontent.com
