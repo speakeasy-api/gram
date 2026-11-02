@@ -125,13 +125,14 @@ func TestRejectedBearer(t *testing.T) {
 	require.Error(t, err)
 	rec.RequireNothing()
 
-	token, _, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
+	token, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
 		Subject:  subject,
 		Audience: urn.NewToolset(fixture.Toolset.ID).String(),
 		Issuer:   "https://another-host.example.com/mcp/" + fixture.Toolset.McpSlug.String,
 		Lifetime: time.Hour,
 	})
 	require.NoError(t, err)
+	persistTestUserSession(t, ti, fixture.UserSessionIssuer.ID, subject, jti)
 	_, err = servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), token, nil)
 	require.Error(t, err)
 

@@ -81,15 +81,15 @@ func TestInboundRefreshHappened(t *testing.T) {
 	t.Parallel()
 
 	for reason, want := range map[string]mcpconnectionattempts.Code{
-		"refresh_token_resource_mismatch":       mcpconnectionattempts.CodeResourceMismatch,
-		"refresh_token_client_mismatch":         mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed,
-		"refresh_token_expired":                 mcpconnectionattempts.CodeRefreshTokenExpired,
-		"sign_in_revoked":                       mcpconnectionattempts.CodeSignInRevoked,
-		"refresh_token_revoked":                 mcpconnectionattempts.CodeRefreshTokenRevoked,
-		"agent_admission_denied":                mcpconnectionattempts.CodeNoServerAccess,
-		"agent_admission_unavailable":           mcpconnectionattempts.CodeInternalError,
-		"upstream_reconnect_required":           mcpconnectionattempts.CodeUpstreamReconnectRequired,
-		"upstream_ema_refused":                  mcpconnectionattempts.CodeUpstreamEMARefused,
+		"refresh_token_resource_mismatch": mcpconnectionattempts.CodeResourceMismatch,
+		"refresh_token_client_mismatch":   mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed,
+		"refresh_token_expired":           mcpconnectionattempts.CodeRefreshTokenExpired,
+		"sign_in_revoked":                 mcpconnectionattempts.CodeSignInRevoked,
+		"refresh_token_revoked":           mcpconnectionattempts.CodeRefreshTokenRevoked,
+		"agent_admission_denied":          mcpconnectionattempts.CodeNoServerAccess,
+		"agent_admission_unavailable":     mcpconnectionattempts.CodeInternalError,
+		"upstream_reconnect_required":     mcpconnectionattempts.CodeUpstreamReconnectRequired,
+		"upstream_ema_refused":            mcpconnectionattempts.CodeUpstreamEMARefused,
 	} {
 		code, ok := inboundRefreshHappened(reason)
 		require.True(t, ok, reason)
