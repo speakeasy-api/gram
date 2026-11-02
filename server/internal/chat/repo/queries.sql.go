@@ -4764,15 +4764,16 @@ func (q *Queries) UpdateAIIntegrationConfigChatCursor(ctx context.Context, arg U
 const updateChatSummary = `-- name: UpdateChatSummary :one
 UPDATE chats
 SET summary = $1,
-    summary_generated_at = NOW(),
-    summary_redacted = $2,
+    summary_generated_at = COALESCE($2::timestamptz, NOW()),
+    summary_redacted = $3,
     updated_at = NOW()
-WHERE id = $3 AND project_id = $4 AND deleted IS FALSE
+WHERE id = $4 AND project_id = $5 AND deleted IS FALSE
 RETURNING summary, summary_generated_at
 `
 
 type UpdateChatSummaryParams struct {
 	Summary         pgtype.Text
+	CoveredThrough  pgtype.Timestamptz
 	SummaryRedacted bool
 	ID              uuid.UUID
 	ProjectID       uuid.UUID
@@ -4786,10 +4787,14 @@ type UpdateChatSummaryRow struct {
 // Persist an LLM session summary. Project-scoped so a summarize write can
 // never touch another project's chat. summary_redacted records whether the
 // summary was built from the risk-redacted transcript; team memory reads only
-// redacted summaries. Returns the updated row timestamps.
+// redacted summaries. covered_through, when set, stamps summary_generated_at
+// with the newest message the summary read instead of NOW(), so a message that
+// lands while the summary is generated still reads as newer and the chat is
+// summarized again. Returns the updated row timestamps.
 func (q *Queries) UpdateChatSummary(ctx context.Context, arg UpdateChatSummaryParams) (UpdateChatSummaryRow, error) {
 	row := q.db.QueryRow(ctx, updateChatSummary,
 		arg.Summary,
+		arg.CoveredThrough,
 		arg.SummaryRedacted,
 		arg.ID,
 		arg.ProjectID,

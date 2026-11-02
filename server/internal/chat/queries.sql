@@ -1611,10 +1611,13 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 -- Persist an LLM session summary. Project-scoped so a summarize write can
 -- never touch another project's chat. summary_redacted records whether the
 -- summary was built from the risk-redacted transcript; team memory reads only
--- redacted summaries. Returns the updated row timestamps.
+-- redacted summaries. covered_through, when set, stamps summary_generated_at
+-- with the newest message the summary read instead of NOW(), so a message that
+-- lands while the summary is generated still reads as newer and the chat is
+-- summarized again. Returns the updated row timestamps.
 UPDATE chats
 SET summary = @summary,
-    summary_generated_at = NOW(),
+    summary_generated_at = COALESCE(sqlc.narg(covered_through)::timestamptz, NOW()),
     summary_redacted = @summary_redacted,
     updated_at = NOW()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
