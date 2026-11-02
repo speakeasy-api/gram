@@ -24,16 +24,20 @@ type recordedRequest struct {
 // stubAPI is a minimal Tailscale API: an OAuth token endpoint plus whatever
 // handler the test installs for the resource under test.
 type stubAPI struct {
-	mu       sync.Mutex
-	requests []recordedRequest
-	status   int
-	response any
-	token    string
+	mu            sync.Mutex
+	requests      []recordedRequest
+	tokenRequests int
+	status        int
+	response      any
+	token         string
 }
 
 func (s *stubAPI) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v2/oauth/token", func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		s.tokenRequests++
+		s.mu.Unlock()
 		id, secret := r.FormValue("client_id"), r.FormValue("client_secret")
 		if id == "" || secret == "" {
 			user, pass, ok := r.BasicAuth()
@@ -72,6 +76,12 @@ func (s *stubAPI) handler() http.Handler {
 	return mux
 }
 
+func (s *stubAPI) tokenExchanges() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.tokenRequests
+}
+
 func (s *stubAPI) recorded() []recordedRequest {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -93,7 +103,7 @@ var creds = tailscaleapi.Credentials{ClientID: "cid", ClientSecret: "csecret"}
 
 func TestCreateAuthKeySendsOneShotTaggedKey(t *testing.T) {
 	t.Parallel()
-	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, status: http.StatusOK, token: "tok", response: map[string]any{
+	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, status: http.StatusOK, token: "tok", response: map[string]any{
 		"id": "k123", "key": "tskey-auth-secret", "expires": time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC),
 	}}
 	client := newClient(t, stub)
@@ -124,7 +134,7 @@ func TestCreateAuthKeySendsOneShotTaggedKey(t *testing.T) {
 
 func TestCreateAuthKeyRejectedCredentials(t *testing.T) {
 	t.Parallel()
-	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, status: http.StatusOK, token: "tok", response: nil}
+	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, status: http.StatusOK, token: "tok", response: nil}
 	client := newClient(t, stub)
 
 	_, err := client.CreateAuthKey(t.Context(), tailscaleapi.Credentials{ClientID: "cid", ClientSecret: "wrong"}, tailscaleapi.AuthKeyRequest{Tag: "tag:speakeasy", Description: "", TTL: time.Hour})
@@ -134,7 +144,7 @@ func TestCreateAuthKeyRejectedCredentials(t *testing.T) {
 
 func TestForbiddenMapsToUnauthorized(t *testing.T) {
 	t.Parallel()
-	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, status: http.StatusForbidden, token: "tok", response: map[string]any{"message": "missing scope"}}
+	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, status: http.StatusForbidden, token: "tok", response: map[string]any{"message": "missing scope"}}
 	client := newClient(t, stub)
 
 	err := client.UpsertService(t.Context(), creds, tailscaleapi.Service{Name: "svc:speakeasy", Ports: []string{"tcp:443"}, Tags: []string{"tag:speakeasy"}, Comment: ""})
@@ -143,7 +153,7 @@ func TestForbiddenMapsToUnauthorized(t *testing.T) {
 
 func TestUpsertServiceBody(t *testing.T) {
 	t.Parallel()
-	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, status: http.StatusOK, token: "tok", response: nil}
+	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, status: http.StatusOK, token: "tok", response: nil}
 	client := newClient(t, stub)
 
 	require.NoError(t, client.UpsertService(t.Context(), creds, tailscaleapi.Service{
@@ -162,7 +172,7 @@ func TestUpsertServiceBody(t *testing.T) {
 
 func TestDeleteMissingResourcesSucceed(t *testing.T) {
 	t.Parallel()
-	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, status: http.StatusNotFound, token: "tok", response: map[string]any{"message": "not found"}}
+	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, status: http.StatusNotFound, token: "tok", response: map[string]any{"message": "not found"}}
 	client := newClient(t, stub)
 
 	require.NoError(t, client.DeleteDevice(t.Context(), creds, "nABC"))
@@ -175,6 +185,28 @@ func TestDeleteMissingResourcesSucceed(t *testing.T) {
 
 	require.Error(t, client.DeleteDevice(t.Context(), creds, " "))
 	require.Error(t, client.DeleteService(t.Context(), creds, "speakeasy"))
+}
+
+func TestClientReusesTokensPerCredential(t *testing.T) {
+	t.Parallel()
+	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, status: http.StatusOK, token: "tok", response: nil}
+	client := newClient(t, stub)
+	svc := tailscaleapi.Service{Name: "svc:speakeasy", Ports: []string{"tcp:443"}, Tags: []string{"tag:speakeasy"}, Comment: ""}
+
+	require.NoError(t, client.UpsertService(t.Context(), creds, svc))
+	require.NoError(t, client.UpsertService(t.Context(), creds, svc))
+	require.Equal(t, 1, stub.tokenExchanges(), "the same OAuth client reuses its access token")
+	require.Len(t, stub.recorded(), 2)
+
+	// Credentials are rotated: the same client id with a new secret is a
+	// different client and exchanges a token of its own.
+	rotated := tailscaleapi.Credentials{ClientID: "cid", ClientSecret: "wrong"}
+	err := client.UpsertService(t.Context(), rotated, svc)
+	require.ErrorIs(t, err, tailscaleapi.ErrUnauthorized)
+	require.Equal(t, 2, stub.tokenExchanges())
+
+	require.NoError(t, client.UpsertService(t.Context(), creds, svc))
+	require.Equal(t, 2, stub.tokenExchanges(), "the original client's token is still cached")
 }
 
 func TestFakeRecordsCalls(t *testing.T) {
