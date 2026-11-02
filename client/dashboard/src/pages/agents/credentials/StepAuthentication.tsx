@@ -17,6 +17,7 @@ import {
 } from "@/components/sessions/connection-lifetime";
 import { useOAuthPopup } from "@/components/sessions/useOAuthPopup";
 import { AlertTriangle, Check, LockKeyhole, RefreshCw, X } from "lucide-react";
+import { SignInPath } from "./SignInPath";
 import { WizardStepHeader } from "./WizardChrome";
 import type { OwnerConnections } from "./useOwnerConnections";
 import type { InventoryServer } from "./useServerInventory";
@@ -34,9 +35,7 @@ export function StepAuthentication({
 }): JSX.Element {
   const { user } = useSession();
   const oauth = useOAuthPopup(connections.refetch);
-  // Controlled so the first row opens even when the server list arrives after
-  // mount; until someone toggles a row, the default tracks the list.
-  const [openRows, setOpenRows] = useState<string[] | null>(null);
+  const [openRows, setOpenRows] = useState<string[]>([]);
   // Editing shows the agent's assigned connection, unless it no longer works
   // and the editor has a usable one: saving assigns that in its place,
   // exactly as creating does. Until the editor's own connection is known,
@@ -60,9 +59,10 @@ export function StepAuthentication({
   return (
     <div className="space-y-5">
       <WizardStepHeader
-        title="MCP Authentication"
-        description="Choose how the agent connects to each selected MCP server. Open a row to manage its connection, or remove a server here."
+        title="MCP sign-in"
+        description="Choose how Speakeasy signs in to each selected MCP server when the agent calls it. Open a row to manage its connection, or remove a server here."
       />
+      <SignInPath hop="mcp" />
       {allServers && missing.length > 0 && (
         <Text role="alert" warning small>
           No usable connection available for:{" "}
@@ -74,11 +74,11 @@ export function StepAuthentication({
           Allow popups, then try connecting again.
         </Text>
       )}
-      {/* The first row starts open, so the step shows what a connection
-          looks like without a click. */}
+      {/* Every row starts closed: its badge already says how Speakeasy signs
+          in, and a row opens only to manage that connection. */}
       <Accordion
         type="multiple"
-        value={openRows ?? (servers[0] ? [servers[0].id] : [])}
+        value={openRows}
         onValueChange={setOpenRows}
         className="border-border border"
       >
@@ -139,10 +139,14 @@ export function StepAuthentication({
                       />
                     )}
                     <Badge
+                      // Blue, like the step's MCP sign-in arrow: each pill
+                      // says how Speakeasy signs in to that server.
                       variant={
                         expired || connection?.status === "missing"
                           ? "warning"
-                          : "neutral"
+                          : shared || connection?.status === "ready"
+                            ? "information"
+                            : "neutral"
                       }
                       size="sm"
                     >
