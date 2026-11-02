@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   listKeys: vi.fn(),
   listDelegableGrants: vi.fn(),
   checkPolicyGrants: vi.fn(),
+  checkAuthGrant: vi.fn(),
+  authEnforced: false as boolean | undefined,
   mcpServers: vi.fn(),
   toolsets: vi.fn(),
   fetch: vi.fn(),
@@ -54,6 +56,17 @@ vi.mock("@gram/client/react-query/mcpServerAuthClientChoices.js", () => ({
     isError: false,
     isSuccess: true,
     data: { choices: [] },
+  }),
+}));
+
+// Whether staff turned on upstream auth enforcement for the organization.
+vi.mock("@gram/client/react-query/productFeatures.js", () => ({
+  useProductFeatures: () => ({
+    isLoading: mocks.authEnforced === undefined,
+    data:
+      mocks.authEnforced === undefined
+        ? undefined
+        : { upstreamAuthEnforced: mocks.authEnforced },
   }),
 }));
 
@@ -109,7 +122,14 @@ vi.mock("@/contexts/Sdk", () => ({
       },
       create: mocks.createAgent,
       listDelegableGrants: mocks.listDelegableGrants,
-      checkPolicyGrants: mocks.checkPolicyGrants,
+      // The up-front sign-in check is answered apart from the server checks,
+      // so tests about those count and read only their own requests.
+      checkPolicyGrants: (request: CheckRequest) =>
+        request.checkAgentPolicyGrantsForm.policyGrants.some(
+          (grant) => grant.scope === "mcp:auth",
+        )
+          ? mocks.checkAuthGrant(request)
+          : mocks.checkPolicyGrants(request),
     },
     keys: { create: mocks.createKey, list: mocks.listKeys },
     authClients: {
@@ -321,7 +341,7 @@ async function reachCredentialStep() {
 
 type CheckRequest = {
   checkAgentPolicyGrantsForm: {
-    policyGrants: { selector: { resourceId: string } }[];
+    policyGrants: { scope: string; selector: { resourceId: string } }[];
   };
 };
 
@@ -404,6 +424,8 @@ beforeEach(() => {
   mocks.createAgent.mockResolvedValue({ id: "agent_new", name: "Release Bot" });
   mocks.listDelegableGrants.mockResolvedValue([grant]);
   mocks.checkPolicyGrants.mockImplementation(answerChecks());
+  mocks.checkAuthGrant.mockResolvedValue({ results: [{ allowed: true }] });
+  mocks.authEnforced = false;
   mocks.createKey.mockResolvedValue({ id: "key_new", key: "gram_secret" });
   mocks.listKeys.mockResolvedValue({ keys: [] });
   mocks.fetch.mockResolvedValue({
@@ -603,6 +625,69 @@ describe("Provisioning a new agent", () => {
       ),
     );
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops on its first step when the organization requires the sign-in grant its creator cannot give", async () => {
+    mocks.authEnforced = true;
+    mocks.checkAuthGrant.mockResolvedValue({
+      results: [{ allowed: false, limitedBy: "caller" }],
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+
+    expect(
+      await screen.findByText(/You cannot give this agent mcp:auth/),
+    ).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(mocks.createAgent).not.toHaveBeenCalled();
+  });
+
+  it("waits for the organization's settings before letting a refused creator on", async () => {
+    mocks.authEnforced = undefined;
+    mocks.checkAuthGrant.mockResolvedValue({
+      results: [{ allowed: false, limitedBy: "caller" }],
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+
+    expect(
+      await screen.findByText(
+        "Checking whether this organization requires sign-in permission…",
+      ),
+    ).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
+  it("leaves the sign-in grant out where the organization does not require it", async () => {
+    mocks.checkAuthGrant.mockResolvedValue({
+      results: [{ allowed: false, limitedBy: "caller" }],
+    });
+    fireEvent.click(await reachCredentialStep());
+
+    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants,
+    ).toEqual([
+      {
+        effect: "allow",
+        scope: "mcp:connect",
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "toolset_one",
+          projectId: "project_one",
+        },
+      },
+    ]);
   });
 
   it("gives a new agent hook ingestion in its project, and asks its first key for it", async () => {
@@ -1722,7 +1807,7 @@ describe("Editing an agent that already exists", () => {
     updatedAt: new Date(),
   };
 
-  function editing(over: { grants?: unknown } = {}) {
+  function editing(over: { grants?: unknown; withoutAuth?: boolean } = {}) {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -1733,7 +1818,12 @@ describe("Editing an agent that already exists", () => {
           <CredentialsWizard
             agent={agent}
             editing
-            grants={[...((over.grants ?? grants) as never[]), AUTH] as never}
+            grants={
+              [
+                ...((over.grants ?? grants) as never[]),
+                ...(over.withoutAuth ? [] : [AUTH]),
+              ] as never
+            }
             onDone={(id) => {
               onDone(id);
             }}
@@ -1751,6 +1841,50 @@ describe("Editing an agent that already exists", () => {
     }
     return screen.findByRole("button", { name: "Save changes and exit" });
   }
+
+  it("does not ask about the sign-in grant an agent already holds", async () => {
+    mocks.authEnforced = true;
+    editing();
+    await screen.findByLabelText("Name");
+    expect(mocks.checkAuthGrant).not.toHaveBeenCalled();
+  });
+
+  it("will not save an agent without the sign-in grant its editor cannot give where it is required", async () => {
+    mocks.authEnforced = true;
+    mocks.checkAuthGrant.mockResolvedValue({
+      results: [{ allowed: false, limitedBy: "owner" }],
+    });
+    editing({ withoutAuth: true });
+
+    expect(
+      await screen.findByText(/This agent's owner cannot give it mcp:auth/),
+    ).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      mocks.checkAuthGrant.mock.calls[0]?.[0]?.checkAgentPolicyGrantsForm
+        ?.agentId,
+    ).toBe("agent_one");
+  });
+
+  it("saves without adding the sign-in grant where it is not required and refused", async () => {
+    mocks.checkAuthGrant.mockResolvedValue({
+      results: [{ allowed: false, limitedBy: "caller" }],
+    });
+    const { onDone } = editing({ withoutAuth: true });
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Renamed Bot" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("checkbox", { name: "GitHub" });
+    fireEvent.click(await authenticationSave());
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+  });
 
   it("opens on the agent's own name, which it lets you change", () => {
     editing();

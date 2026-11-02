@@ -74,6 +74,9 @@ type ProductFeaturesView struct {
 	OrganizationGatewayDisabled *bool
 	// Whether the organization has the staff-managed gateway Code Mode entitlement
 	CodeModeEnabled *bool
+	// Whether staff turned on upstream auth enforcement, so using an auth client
+	// needs mcp:auth on it
+	UpstreamAuthEnforced *bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -106,6 +109,7 @@ var (
 			"signals_intelligence_enabled",
 			"organization_gateway_disabled",
 			"code_mode_enabled",
+			"upstream_auth_enforced",
 			"device_agent",
 		},
 	}
@@ -188,6 +192,9 @@ func ValidateProductFeaturesView(result *ProductFeaturesView) (err error) {
 	}
 	if result.CodeModeEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("code_mode_enabled", "result"))
+	}
+	if result.UpstreamAuthEnforced == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("upstream_auth_enforced", "result"))
 	}
 	if result.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "result"))

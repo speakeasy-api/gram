@@ -12313,6 +12313,9 @@ components:
         tool_io_logs_enabled:
           type: boolean
           description: Whether tool I/O logging is enabled
+        upstream_auth_enforced:
+          type: boolean
+          description: Whether staff turned on upstream auth enforcement, so using an auth client needs mcp:auth on it
       required:
         - logs_enabled
         - tool_io_logs_enabled
@@ -12335,6 +12338,7 @@ components:
         - signals_intelligence_enabled
         - organization_gateway_disabled
         - code_mode_enabled
+        - upstream_auth_enforced
         - device_agent
     PromoteRegistryCandidateRequestBody:
       type: object
