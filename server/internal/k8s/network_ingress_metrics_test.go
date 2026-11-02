@@ -169,3 +169,53 @@ func TestNetworkIngressObservationErrorTelemetry(t *testing.T) {
 		}
 	}
 }
+
+type telemetryCredentialedProvisioner struct {
+	telemetryNetworkIngressProvisioner
+	received []byte
+}
+
+func (p *telemetryCredentialedProvisioner) DeleteWithCredentials(_ context.Context, _ NetworkIngressResourceNames, credentials []byte) error {
+	p.received = credentials
+	return p.err
+}
+
+func TestObservedProvisionerExposesCredentialedTeardownOnlyWhenWrapped(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+	logger := slog.New(slog.DiscardHandler)
+	metrics := NewNetworkIngressMetrics(logger, provider)
+
+	plain := ObserveNetworkIngressProvisioner(NetworkIngressProviderTailscale, telemetryNetworkIngressProvisioner{err: nil}, logger, metrics)
+	_, ok := plain.(NetworkIngressCredentialedDeleter)
+	require.False(t, ok, "a provider without credentialed teardown must not gain one by being observed")
+
+	inner := &telemetryCredentialedProvisioner{telemetryNetworkIngressProvisioner: telemetryNetworkIngressProvisioner{err: nil}, received: nil}
+	wrapped := ObserveNetworkIngressProvisioner(NetworkIngressProviderTailscale, inner, logger, metrics)
+	deleter, ok := wrapped.(NetworkIngressCredentialedDeleter)
+	require.True(t, ok)
+	require.NoError(t, deleter.DeleteWithCredentials(t.Context(), NetworkIngressResourceNames{}, []byte("creds")))
+	require.Equal(t, []byte("creds"), inner.received)
+
+	var data metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &data))
+	deletes := int64(0)
+	for _, scope := range data.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if m.Name != networkIngressOperationsMetric {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			for _, point := range sum.DataPoints {
+				if op, found := point.Attributes.Value(attr.NetworkIngressOperationKey); found && op.AsString() == networkIngressOperationDelete {
+					deletes += point.Value
+				}
+			}
+		}
+	}
+	require.EqualValues(t, 1, deletes, "the credentialed teardown is recorded as one delete operation")
+}
