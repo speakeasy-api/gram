@@ -281,6 +281,10 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 				var empty delegationCredential
 				next = empty
 			}
+			// A new subject must not reopen downstream tokens an earlier sign-in invalidated.
+			if current.config == hash && current.subject != "" && !sameIdentity {
+				next.obtainedAt = now
+			}
 			next.assertion = assertion
 			next.assertionExpiry = identity.Expiration()
 			if assertion == "" {
@@ -746,7 +750,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	outcome := ErrTemporary
 	retained := configurationFailureRetained(c)
 	kind := failure.Kind
-	// The token was not consumed, and a kept token must not wedge on a held claim.
+	// A 429 is usually a WAF, and if one hid a rotation the replay's invalid_grant costs the same sign-in a held claim would.
 	if kind == RefreshRateLimited && retained {
 		kind = RefreshRetryable
 	}

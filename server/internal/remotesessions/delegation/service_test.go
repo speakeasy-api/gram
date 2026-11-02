@@ -1023,6 +1023,28 @@ func TestDelegationConfigurationFailureRecoversAfterRateLimitedRetry(t *testing.
 	require.Equal(t, "new-id", a.Value())
 }
 
+func TestDelegationConfigurationFailureInvalidGrantAfterRateLimitedRetry(t *testing.T) {
+	t.Parallel()
+	s, store, _, b, allow := failedConfigurationFixture(t)
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		return nil, &RefreshError{Kind: RefreshRateLimited}
+	}
+	delegationMoveClock(s, configurationRetryDelay)
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrTemporary)
+
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		return nil, &RefreshError{Kind: RefreshInvalidGrant}
+	}
+	delegationMoveClock(s, time.Minute)
+	_, err = s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrReauthentication)
+	c, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Empty(t, c.refresh)
+	require.Equal(t, "reauthentication_required", c.status)
+}
+
 func TestDelegationRateLimitWithoutRetainedFailureHoldsClaim(t *testing.T) {
 	t.Parallel()
 	s, store, p, b, allow := newDelegationUnitFixture(t)
