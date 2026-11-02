@@ -2430,7 +2430,8 @@ decided AS (
 -- remote_session or service_account auth client of its registration linked
 -- to the server, and a no-auth choice the server's linked, enabled
 -- static_credential or pass_through client that carries exactly the server
--- source's current credential headers, while the server links no enabled
+-- source's current credential headers or, when the source has none, that an
+-- administrator created or linked, while the server links no enabled
 -- OAuth-backed client. A header client whose headers no longer match was
 -- derived from a configuration since changed, so it is not the server's
 -- headers: the choice is recorded unmapped, and the backfill maps it once it
@@ -2460,36 +2461,57 @@ mapped AS (
            -- compared as stored. authclientbackfill.ListSelectionMappings
            -- repeats this comparison; the two must stay identical.
            AND (
-             SELECT string_agg(format('%L|%L|%L', lower(h.name), h.value, h.value_from_request_header), ',' ORDER BY lower(h.name), h.value, h.value_from_request_header)
-             FROM mcp_auth_client_headers AS h
-             WHERE h.auth_client_id = ac.id
-               AND h.deleted IS FALSE
-           ) = (
-             SELECT string_agg(format('%L|%L|%L', lower(src.name), src.value, src.value_from_request_header), ',' ORDER BY lower(src.name), src.value, src.value_from_request_header)
+             SELECT COALESCE(
+                      cmp.client_headers = cmp.source_headers,
+                      -- A source with no credential headers has none to carry. A
+                      -- client or association an administrator created there is
+                      -- the server's own configuration and mirrors nothing, as
+                      -- GetAuthClientSelection reads it.
+                      cmp.source_headers IS NULL
+                      AND NOT (ac.source = 'backfill' AND NOT EXISTS (
+                        SELECT 1
+                        FROM mcp_server_auth_clients AS admin_link
+                        WHERE admin_link.mcp_server_id = d.mcp_server_id
+                          AND admin_link.auth_client_id = ac.id
+                          AND admin_link.organization_id = ac.organization_id
+                          AND admin_link.deleted IS FALSE
+                          AND admin_link.source <> 'backfill'
+                      ))
+                    )
              FROM (
-               SELECT rh.name, rh.value, rh.value_from_request_header, rh.is_secret
-               FROM mcp_servers AS s
-               JOIN remote_mcp_servers AS r
-                 ON r.id = s.remote_mcp_server_id
-                AND r.project_id = s.project_id
-                AND r.deleted IS FALSE
-               JOIN remote_mcp_server_headers AS rh
-                 ON rh.remote_mcp_server_id = r.id
-                AND rh.deleted IS FALSE
-               WHERE s.id = d.mcp_server_id
-               UNION ALL
-               SELECT th.name, th.value, th.value_from_request_header, th.is_secret
-               FROM mcp_servers AS s
-               JOIN tunneled_mcp_servers AS t
-                 ON t.id = s.tunneled_mcp_server_id
-                AND t.project_id = s.project_id
-                AND t.deleted IS FALSE
-               JOIN tunneled_mcp_server_headers AS th
-                 ON th.tunneled_mcp_server_id = t.id
-                AND th.deleted IS FALSE
-               WHERE s.id = d.mcp_server_id
-             ) AS src
-             WHERE lower(src.name) = 'authorization' OR src.value_from_request_header IS NOT NULL OR src.is_secret
+               SELECT (
+                 SELECT string_agg(format('%L|%L|%L', lower(h.name), h.value, h.value_from_request_header), ',' ORDER BY lower(h.name), h.value, h.value_from_request_header)
+                 FROM mcp_auth_client_headers AS h
+                 WHERE h.auth_client_id = ac.id
+                   AND h.deleted IS FALSE
+               ) AS client_headers, (
+                 SELECT string_agg(format('%L|%L|%L', lower(src.name), src.value, src.value_from_request_header), ',' ORDER BY lower(src.name), src.value, src.value_from_request_header)
+                 FROM (
+                   SELECT rh.name, rh.value, rh.value_from_request_header, rh.is_secret
+                   FROM mcp_servers AS s
+                   JOIN remote_mcp_servers AS r
+                     ON r.id = s.remote_mcp_server_id
+                    AND r.project_id = s.project_id
+                    AND r.deleted IS FALSE
+                   JOIN remote_mcp_server_headers AS rh
+                     ON rh.remote_mcp_server_id = r.id
+                    AND rh.deleted IS FALSE
+                   WHERE s.id = d.mcp_server_id
+                   UNION ALL
+                   SELECT th.name, th.value, th.value_from_request_header, th.is_secret
+                   FROM mcp_servers AS s
+                   JOIN tunneled_mcp_servers AS t
+                     ON t.id = s.tunneled_mcp_server_id
+                    AND t.project_id = s.project_id
+                    AND t.deleted IS FALSE
+                   JOIN tunneled_mcp_server_headers AS th
+                     ON th.tunneled_mcp_server_id = t.id
+                    AND th.deleted IS FALSE
+                   WHERE s.id = d.mcp_server_id
+                 ) AS src
+                 WHERE lower(src.name) = 'authorization' OR src.value_from_request_header IS NOT NULL OR src.is_secret
+               ) AS source_headers
+             ) AS cmp
            )
            AND NOT EXISTS (
              SELECT 1
