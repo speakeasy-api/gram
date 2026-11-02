@@ -15,16 +15,20 @@ import (
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-func TestDelegationSubjectResetKeepsInvalidatedDownstreamTokenClosed(t *testing.T) {
+func TestDelegationResetKeepsInvalidatedDownstreamTokenClosed(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name             string
-		refresh          string
-		offlineRequested bool
+		name                string
+		registrationChanged bool
+		refresh             string
+		offlineRequested    bool
 	}{
-		{name: "no refresh token, offline not requested"},
-		{name: "no refresh token, offline requested", offlineRequested: true},
-		{name: "new refresh token", refresh: "other-refresh", offlineRequested: true},
+		{name: "new subject, no refresh token, offline not requested"},
+		{name: "new subject, no refresh token, offline requested", offlineRequested: true},
+		{name: "new subject, new refresh token", refresh: "other-refresh", offlineRequested: true},
+		{name: "new registration, no refresh token, offline not requested", registrationChanged: true},
+		{name: "new registration, no refresh token, offline requested", registrationChanged: true, offlineRequested: true},
+		{name: "new registration, new refresh token", registrationChanged: true, refresh: "other-refresh", offlineRequested: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -89,23 +93,31 @@ func TestDelegationSubjectResetKeepsInvalidatedDownstreamTokenClosed(t *testing.
 			require.NoError(t, s.RetainVerifiedLogin(ctx, p, b.HumanID, delegationLogin(p, signedIn, "second-id", "second-refresh", 30*time.Second), true))
 			require.False(t, downstreamUsable())
 
-			// A refresh hits a configuration failure.
-			s.refreshIdentity = func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error) {
-				return nil, &FederatedRefreshError{Kind: FederatedRefreshConfiguration}
-			}
-			_, err = s.Resolve(ctx, b, allow)
-			require.ErrorIs(t, err, ErrDelegationConfiguration)
-			require.False(t, downstreamUsable())
-
-			// A different upstream subject mapped to the same person signs in.
 			resetAt := start.Add(3 * time.Hour)
-			moveTo(resetAt)
 			login := delegationLogin(p, resetAt, "other-id", tc.refresh, time.Hour)
-			login.Subject = "other-subject"
+			wantSubject := login.Subject
+			if tc.registrationChanged {
+				// An administrator rotates the client secret, then the person signs in.
+				before := p.DelegationConfigurationHash()
+				p.client.ClientSecretEncrypted = pgtype.Text{String: "rotated-secret", Valid: true}
+				require.NotEqual(t, before, p.DelegationConfigurationHash())
+			} else {
+				// A refresh hits a configuration failure, then a different upstream
+				// subject mapped to the same person signs in.
+				s.refreshIdentity = func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error) {
+					return nil, &FederatedRefreshError{Kind: FederatedRefreshConfiguration}
+				}
+				_, err = s.Resolve(ctx, b, allow)
+				require.ErrorIs(t, err, ErrDelegationConfiguration)
+				require.False(t, downstreamUsable())
+				login.Subject = "other-subject"
+				wantSubject = "other-subject"
+			}
+			moveTo(resetAt)
 			require.NoError(t, s.RetainVerifiedLogin(ctx, p, b.HumanID, login, tc.offlineRequested))
 			row, err := store.load(ctx, b)
 			require.NoError(t, err)
-			require.Equal(t, "other-subject", delegationPlain(t, s, row.UpstreamSubjectEncrypted.String))
+			require.Equal(t, wantSubject, delegationPlain(t, s, row.UpstreamSubjectEncrypted.String))
 			require.False(t, downstreamUsable(), "a token invalidated before the reset must stay closed")
 			require.WithinDuration(t, resetAt, row.CredentialObtainedAt.Time, time.Microsecond)
 

@@ -280,10 +280,10 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 			if !sameIdentity {
 				var empty delegationCredential
 				next = empty
-			}
-			// A new subject must not reopen downstream tokens an earlier sign-in invalidated.
-			if current.config == hash && current.subject != "" && !sameIdentity {
-				next.obtainedAt = now
+				// A reset must not reopen downstream tokens an earlier sign-in invalidated.
+				if current.config != "" {
+					next.obtainedAt = now
+				}
 			}
 			next.assertion = assertion
 			next.assertionExpiry = identity.Expiration()
