@@ -18,8 +18,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -136,7 +136,7 @@ func WithAnonymousCaller() BuildOption {
 }
 
 type ProxyManager struct {
-	TunnelMetrics  *metrics.Collector
+	TunnelMetrics *metrics.Collector
 
 	// Connections records refused and failed tools/call requests; nil records nothing.
 	Connections *mcpconnectionattempts.Recorder

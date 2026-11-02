@@ -19,10 +19,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -405,7 +408,8 @@ func TestRemoteSessionRefreshActivity_SweepBackfillsNullResource(t *testing.T) {
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	refresher := remotesessions.NewRefreshService(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), policy, nil, cache.NoopCache)
+	rec := mcpconnectionattemptstest.New(t)
+	refresher := remotesessions.NewRefreshService(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), policy, nil, cache.NoopCache, remotesessions.WithRefreshConnectionRecorder(rec.Recorder))
 	activity := activities.NewRemoteSessionRefresh(testenv.NewLogger(t), ti.conn, refresher)
 
 	res, err := activity.Do(ctx, activities.RefreshRemoteSessionInput{
@@ -416,6 +420,12 @@ func TestRemoteSessionRefreshActivity_SweepBackfillsNullResource(t *testing.T) {
 	require.False(t, res.RateLimited)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refresh_token", spy.form.Get("grant_type"), "the sweep must have executed the refresh grant")
+
+	attemptRow := rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.ResultRefreshed)
+	require.Equal(t, authCtx.ActiveOrganizationID, attemptRow.OrganizationID)
+	require.Equal(t, "provider_session", attemptRow.ServerKind)
+	require.Equal(t, mcpconnectionattempts.AppBackground.String(), attemptRow.AppKey)
+	require.Equal(t, string(remotesessionmetrics.RefreshTriggerScheduled), attemptRow.SubReason)
 
 	sess := getRemoteSessionRow(t, ctx, ti, clientID, subject)
 	require.Equal(t, mcpURL, conv.FromPGTextOrEmpty[string](sess.Resource), "the sweep must stamp the client-derived fallback")

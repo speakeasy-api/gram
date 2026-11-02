@@ -43,8 +43,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/metering"
@@ -80,6 +80,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
+
+// connectionRecorderDrainTimeout bounds flushing queued connection attempts at
+// shutdown: a full queue is nine batches, each bounded by a 3s insert timeout.
+const connectionRecorderDrainTimeout = 30 * time.Second
 
 func workerRuntimeFlags() []cli.Flag {
 	return []cli.Flag{
@@ -948,7 +952,9 @@ func newWorkerCommand() *cli.Command {
 					logger.ErrorContext(ctx, "flush pending spend rule usage signals", attr.SlogError(ferr))
 				}
 				// Before the After hook, which closes the ClickHouse client this drains to.
-				if ferr := connectionRecorder.Shutdown(ctx); ferr != nil {
+				drainCtx, cancelDrain := context.WithTimeout(context.WithoutCancel(ctx), connectionRecorderDrainTimeout)
+				defer cancelDrain()
+				if ferr := connectionRecorder.Shutdown(drainCtx); ferr != nil {
 					logger.ErrorContext(ctx, "flush pending connection attempts", attr.SlogError(ferr))
 				}
 			}()

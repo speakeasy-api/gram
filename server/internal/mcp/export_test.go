@@ -30,6 +30,9 @@ import (
 // SetConnectionRecorder replaces the connection attempt recorder.
 func (s *Service) SetConnectionRecorder(recorder *mcpconnectionattempts.Recorder) {
 	s.connections = recorder
+	if s.remoteProxyManager != nil {
+		s.remoteProxyManager.Connections = recorder
+	}
 }
 
 // ConnectionAttempt exposes the state's connection attempt.

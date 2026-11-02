@@ -135,14 +135,14 @@ func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext
 	s.connections.Once(ctx, gate.connectionScope(ctx), mcpconnectionattempts.StepMCPRequest, what, mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx))
 }
 
-// memberConnectionFailure carries what a member's failure means, without changing its text or type.
-type memberConnectionFailure struct {
+// memberConnectionError carries what a member's failure means, without changing its text or type.
+type memberConnectionError struct {
 	error
 
 	code mcpconnectionattempts.Code
 }
 
-func (f memberConnectionFailure) Unwrap() error { return f.error }
+func (f memberConnectionError) Unwrap() error { return f.error }
 
 // recordHostedToolsCallRefusal records a refused hosted tools/call. Any other error writes nothing.
 func (s *Service) recordHostedToolsCallRefusal(ctx context.Context, payload *mcpInputs, err error) {
