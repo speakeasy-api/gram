@@ -145,22 +145,42 @@ describe("keyCredentialChoices", () => {
     ).rejects.toThrow("Choose which credential");
   });
 
-  it("checks each server's accounts separately", async () => {
+  it("checks each server's accounts against its own sign-in", async () => {
+    const sdk = sdkWith(["client_a"], "configured");
+    listAccounts.mockImplementation(
+      ({ userSessionIssuerId }: { userSessionIssuerId: string }) =>
+        Promise.resolve(
+          (async function* () {
+            yield {
+              result: {
+                items:
+                  userSessionIssuerId === "issuer"
+                    ? [{ id: "oauth_client" }]
+                    : [],
+              },
+            };
+          })(),
+        ),
+    );
     await expect(
-      keyCredentialChoices(
-        sdkWith(["client_a"], "configured", [{ id: "oauth_client" }]),
-        [
-          { ...server, projectSlug: "project", issuerId: "issuer" },
-          {
-            ...server,
-            id: "server_two",
-            name: "Second server",
-            projectSlug: "project",
-            issuerId: "issuer_two",
-          },
-        ],
-      ),
-    ).resolves.toEqual([]);
-    expect(listAccounts).toHaveBeenCalledTimes(2);
+      keyCredentialChoices(sdk, [
+        { ...server, projectSlug: "project", issuerId: "issuer" },
+        {
+          ...server,
+          id: "server_two",
+          name: "Second server",
+          projectSlug: "project",
+          issuerId: "issuer_two",
+        },
+      ]),
+    ).rejects.toThrow("Choose which credential the key uses on Second server.");
+    expect(listAccounts).toHaveBeenCalledWith({
+      gramProject: "project",
+      userSessionIssuerId: "issuer",
+    });
+    expect(listAccounts).toHaveBeenCalledWith({
+      gramProject: "project",
+      userSessionIssuerId: "issuer_two",
+    });
   });
 });
