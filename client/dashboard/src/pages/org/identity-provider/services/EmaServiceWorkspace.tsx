@@ -295,7 +295,11 @@ function useProviderCandidates(enabled: boolean): {
       ...new Set(
         (signIns.data?.pages ?? []).flatMap((page) =>
           page.result.items.flatMap((issuer) =>
-            issuer.projectId === "" && issuer.trustedRemoteSessionIssuerId
+            // A provider linked without a sign-in client accepts inbound
+            // ID-JAGs only and never vouches outbound.
+            issuer.projectId === "" &&
+            issuer.trustedRemoteSessionIssuerId &&
+            issuer.trustedRemoteSessionClientId
               ? [issuer.trustedRemoteSessionIssuerId]
               : [],
           ),

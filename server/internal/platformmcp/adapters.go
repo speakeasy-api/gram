@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -368,6 +369,8 @@ type PostgresReader struct {
 	chatMetadata              *ChatMetadataService
 	chatSearch                *ChatSearchService
 	organizationGateway       *OrganizationGatewayService
+	inboundEMATrust           *InboundEMATrustService
+	gatewayProxy              *GatewayProxyService
 	gatewaySessions           GatewaySessionManagement
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
@@ -382,6 +385,7 @@ type PostgresReader struct {
 	shadowDecisions           *ShadowDecisionService
 	shadowAI                  *ShadowAIService
 	deviceCoverage            *DeviceCoverageService
+	gatewayActivity           *OrganizationGatewayActivityService
 	reviewRequests            MCPReviewRequestService
 	reviewRequestBudget       OperationBudget
 	reviewLinks               ShadowMCPReviewLinker
@@ -411,6 +415,8 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		chatMetadata:              nil,
 		chatSearch:                nil,
 		organizationGateway:       nil,
+		inboundEMATrust:           nil,
+		gatewayProxy:              nil,
 		gatewaySessions:           nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
@@ -427,6 +433,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		shadowDecisions:           nil,
 		shadowAI:                  nil,
 		deviceCoverage:            nil,
+		gatewayActivity:           nil,
 		reviewRequests:            nil,
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
 		reviewLinks:               nil,
@@ -660,6 +667,15 @@ func (r *PostgresReader) WithOrganizationGateway(service *OrganizationGatewaySer
 func (r *PostgresReader) WithShadowAI(service *ShadowAIService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.shadowAI = service
+	}
+	return r
+}
+
+// WithOrganizationGatewayActivity serves the organization-wide gateway
+// activity read.
+func (r *PostgresReader) WithOrganizationGatewayActivity(service *OrganizationGatewayActivityService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.gatewayActivity = service
 	}
 	return r
 }
@@ -1134,6 +1150,16 @@ func inventoryQueryResult(mcps []MCP, query string, limit int) []MCP {
 		}
 	}
 	return mcps[:min(len(mcps), limit)]
+}
+
+// WithGatewayProxy serves the caller's own MCP servers through their
+// organization gateway. Call it after WithOrganizationGateway, whose
+// availability answer the proxy tools share.
+func (r *PostgresReader) WithGatewayProxy(proxy GatewayProxy, flags feature.Provider) *PostgresReader {
+	if r != nil {
+		r.gatewayProxy = &GatewayProxyService{gateway: r.organizationGateway, proxy: proxy, flags: flags}
+	}
+	return r
 }
 
 // WithGatewaySessions shares the dashboard gateway connection reads.

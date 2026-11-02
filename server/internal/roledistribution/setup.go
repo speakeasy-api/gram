@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -117,6 +119,9 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 	// preserve concurrent admin edits and prevent assigning a deleted plugin.
 	err = tx.QueryRow(ctx, `SELECT id FROM plugins WHERE organization_id = $1 AND project_id = $2 AND deleted IS FALSE AND slug = $3 FOR UPDATE`, organizationID, projectID, slug).Scan(&pluginID)
 	if errors.Is(err, pgx.ErrNoRows) {
+		if err := plugins.RequirePluginSlugPackagesFree(ctx, repo.New(tx), organizationID, projectID, uuid.Nil, slug); err != nil {
+			return false, fmt.Errorf("choose role plugin slug: %w", err)
+		}
 		created = true
 		pluginID = uuid.New()
 		// The existing slug constraint rejects empty or overlong normalized names.
@@ -155,7 +160,7 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 	actor := urn.NewPrincipal(urn.PrincipalTypeSystem, "automatic-role-distribution")
 	actorDisplayName := "Speakeasy"
 	if created {
-		if err := auditLogger.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{OrganizationID: organizationID, ProjectID: projectID, Actor: actor, ActorDisplayName: &actorDisplayName, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug}); err != nil {
+		if err := auditLogger.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{OrganizationID: organizationID, ProjectID: projectID, Actor: actor, ActorDisplayName: &actorDisplayName, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug, PluginSnapshotAfter: plugins.PluginAuditSnapshot(plugin)}); err != nil {
 			return false, fmt.Errorf("audit role plugin creation: %w", err)
 		}
 	}
@@ -211,16 +216,14 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 		}
 		changedProjects[target.ProjectID] = changedProjects[target.ProjectID] || changed
 	}
-	for changedProject, changed := range changedProjects {
-		if !changed || changedProject == projectID {
+	changedProjects[projectID] = true
+	for _, changedProject := range slices.SortedFunc(maps.Keys(changedProjects), func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) }) {
+		if !changedProjects[changedProject] {
 			continue
 		}
 		if err := publication.Project(ctx, tx, organizationID, changedProject, ""); err != nil {
 			return false, fmt.Errorf("request role content publication: %w", err)
 		}
-	}
-	if err := publication.Project(ctx, tx, organizationID, projectID, ""); err != nil {
-		return false, fmt.Errorf("request role plugin publication: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, fmt.Errorf("commit role plugin setup: %w", err)

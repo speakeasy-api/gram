@@ -207,6 +207,8 @@ type AuthnChallengeState struct {
 	ReauthenticateClientID uuid.UUID `json:"reauthenticate_client_id,omitzero"`
 	// WorkloadReconnect binds a workload-started first-party flow to its owner.
 	WorkloadReconnect *WorkloadReconnectBinding `json:"workload_reconnect,omitempty"`
+	// CodeReconnect binds a code-mode browser sign-in to its requesting user.
+	CodeReconnect *CodeReconnectBinding `json:"code_reconnect,omitempty"`
 	// AutoConnectDone records that the consent page has already sent this
 	// challenge straight to an upstream provider without the user clicking
 	// Connect (see maybeAutoConnect). It is a latch, not a success flag: it is
@@ -1045,6 +1047,10 @@ type issuerGateAuthentication struct {
 	// selects how the request is served, so a compatibility handback to the
 	// upstream client choice still serves only that connection.
 	attachedSession uuid.UUID
+
+	// authorizerOwner is the validated authorizer whose own connection an
+	// unattached agent key's permit was decided for, typed or handed back.
+	authorizerOwner string
 }
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
@@ -1182,6 +1188,7 @@ func (s *Service) authenticateIssuerGate(
 		authClient:             nil,
 		chainingAuthClient:     nil,
 		attachedSession:        uuid.Nil,
+		authorizerOwner:        "",
 	}, toolSelection, nil
 }
 
@@ -1228,6 +1235,9 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 	case errors.Is(err, remotesessions.ErrChosenClientUnbound):
 		// The credential's chosen client is no longer bound to its issuer, the
 		// same unusable choice the selection read reports.
+		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication); ok {
+			return recoveryErr
+		}
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable)
 		return writeRemoteSessionReconnectChallenge(w, authentication)
 	case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
@@ -1250,6 +1260,11 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 		header := bearerErrorChallengeHeader(authentication.protectedResourceURL, "", remoteSessionMisconfiguredDescription)
 		return writeChallenge(w, header, remoteSessionMisconfiguredDescription)
 	case errors.Is(err, remotesessions.ErrNoValidToken):
+		// A turn acting for a person cannot reauthorize on their behalf; the
+		// person gets a link to connect their own account instead.
+		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication); ok {
+			return recoveryErr
+		}
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session missing or unusable", issuerGateReasonInvalidRemoteSession)
 		if authentication.directWorkloadHandoff && authentication.subject.Kind == urn.SessionSubjectKindWorkload {
 			return errWorkloadReconnectRequired
@@ -1402,7 +1417,7 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	return nil
 }
 
-func logOAuthClientCredentialEvent(ctx context.Context, logger *slog.Logger, r *http.Request, message, clientID, presentedMethod, grantType, failureReason string) {
+func logOAuthClientCredentialEvent(ctx context.Context, logger *slog.Logger, r *http.Request, message, clientID, presentedMethod, grantType, failureReason string, extra ...slog.Attr) {
 	args := []any{
 		attr.SlogURLOriginal(r.URL.Path),
 		attr.SlogHTTPRequestHeaderUserAgent(r.UserAgent()),
@@ -1418,6 +1433,9 @@ func logOAuthClientCredentialEvent(ctx context.Context, logger *slog.Logger, r *
 	}
 	if failureReason != "" {
 		args = append(args, attr.SlogOAuthFailureReason(failureReason))
+	}
+	for _, a := range extra {
+		args = append(args, a)
 	}
 	logger.InfoContext(ctx, message, args...)
 }

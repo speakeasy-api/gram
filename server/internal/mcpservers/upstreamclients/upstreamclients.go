@@ -144,6 +144,11 @@ func inTx(ctx context.Context, dbtx repo.DBTX, fn func(tx pgx.Tx) error) error {
 // COALESCE(credential_id, id).
 const CredentialKindUserSession = "user_session"
 
+// CredentialKindIssuanceProfile identifies an issuance selection profile:
+// the choices a headless caller's new sessions are given, copied onto each
+// once validated.
+const CredentialKindIssuanceProfile = "issuance_profile"
+
 // CredentialKindAPIKey identifies an agent API key credential by its
 // api_keys row id. A rotation's replacement key gets the choices of the key
 // it replaces.
@@ -167,4 +172,7 @@ const (
 	// SelectionSourceNewMember is a choice recorded for a gateway member
 	// added after the credential was issued, the first time it was used.
 	SelectionSourceNewMember = "new_member"
+
+	// SelectionSourceAdmin is a choice an administrator made.
+	SelectionSourceAdmin = "admin"
 )

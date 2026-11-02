@@ -16,16 +16,18 @@ import (
 
 // Endpoints wraps the "assistants" service endpoints.
 type Endpoints struct {
-	ListAssistants           goa.Endpoint
-	GetAssistant             goa.Endpoint
-	CreateAssistant          goa.Endpoint
-	UpgradeAssistantIdentity goa.Endpoint
-	UpdateAssistant          goa.Endpoint
-	DeleteAssistant          goa.Endpoint
-	SendMessage              goa.Endpoint
-	InterruptTurn            goa.Endpoint
-	GetManagedAssistant      goa.Endpoint
-	EnsureManagedAssistant   goa.Endpoint
+	ListAssistants            goa.Endpoint
+	GetAssistant              goa.Endpoint
+	CreateAssistant           goa.Endpoint
+	UpgradeAssistantIdentity  goa.Endpoint
+	UpdateAssistant           goa.Endpoint
+	DeleteAssistant           goa.Endpoint
+	SendMessage               goa.Endpoint
+	InterruptTurn             goa.Endpoint
+	GetManagedAssistant       goa.Endpoint
+	EnsureManagedAssistant    goa.Endpoint
+	ListExecutionProfiles     goa.Endpoint
+	SetExecutionProfileChoice goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "assistants" service with endpoints.
@@ -33,16 +35,18 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListAssistants:           NewListAssistantsEndpoint(s, a.APIKeyAuth),
-		GetAssistant:             NewGetAssistantEndpoint(s, a.APIKeyAuth),
-		CreateAssistant:          NewCreateAssistantEndpoint(s, a.APIKeyAuth),
-		UpgradeAssistantIdentity: NewUpgradeAssistantIdentityEndpoint(s, a.APIKeyAuth),
-		UpdateAssistant:          NewUpdateAssistantEndpoint(s, a.APIKeyAuth),
-		DeleteAssistant:          NewDeleteAssistantEndpoint(s, a.APIKeyAuth),
-		SendMessage:              NewSendMessageEndpoint(s, a.APIKeyAuth),
-		InterruptTurn:            NewInterruptTurnEndpoint(s, a.APIKeyAuth),
-		GetManagedAssistant:      NewGetManagedAssistantEndpoint(s, a.APIKeyAuth),
-		EnsureManagedAssistant:   NewEnsureManagedAssistantEndpoint(s, a.APIKeyAuth),
+		ListAssistants:            NewListAssistantsEndpoint(s, a.APIKeyAuth),
+		GetAssistant:              NewGetAssistantEndpoint(s, a.APIKeyAuth),
+		CreateAssistant:           NewCreateAssistantEndpoint(s, a.APIKeyAuth),
+		UpgradeAssistantIdentity:  NewUpgradeAssistantIdentityEndpoint(s, a.APIKeyAuth),
+		UpdateAssistant:           NewUpdateAssistantEndpoint(s, a.APIKeyAuth),
+		DeleteAssistant:           NewDeleteAssistantEndpoint(s, a.APIKeyAuth),
+		SendMessage:               NewSendMessageEndpoint(s, a.APIKeyAuth),
+		InterruptTurn:             NewInterruptTurnEndpoint(s, a.APIKeyAuth),
+		GetManagedAssistant:       NewGetManagedAssistantEndpoint(s, a.APIKeyAuth),
+		EnsureManagedAssistant:    NewEnsureManagedAssistantEndpoint(s, a.APIKeyAuth),
+		ListExecutionProfiles:     NewListExecutionProfilesEndpoint(s, a.APIKeyAuth),
+		SetExecutionProfileChoice: NewSetExecutionProfileChoiceEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -58,6 +62,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.InterruptTurn = m(e.InterruptTurn)
 	e.GetManagedAssistant = m(e.GetManagedAssistant)
 	e.EnsureManagedAssistant = m(e.EnsureManagedAssistant)
+	e.ListExecutionProfiles = m(e.ListExecutionProfiles)
+	e.SetExecutionProfileChoice = m(e.SetExecutionProfileChoice)
 }
 
 // NewListAssistantsEndpoint returns an endpoint function that calls the method
@@ -407,5 +413,75 @@ func NewEnsureManagedAssistantEndpoint(s Service, authAPIKeyFn security.AuthAPIK
 			return nil, err
 		}
 		return s.EnsureManagedAssistant(ctx, p)
+	}
+}
+
+// NewListExecutionProfilesEndpoint returns an endpoint function that calls the
+// method "listExecutionProfiles" of service "assistants".
+func NewListExecutionProfilesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListExecutionProfilesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListExecutionProfiles(ctx, p)
+	}
+}
+
+// NewSetExecutionProfileChoiceEndpoint returns an endpoint function that calls
+// the method "setExecutionProfileChoice" of service "assistants".
+func NewSetExecutionProfileChoiceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetExecutionProfileChoicePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SetExecutionProfileChoice(ctx, p)
 	}
 }

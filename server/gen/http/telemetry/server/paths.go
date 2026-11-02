@@ -62,6 +62,16 @@ func GetMetaMcpServerUsageTelemetryPath() string {
 	return "/rpc/telemetry.getMetaMcpServerUsage"
 }
 
+// GetOrganizationGatewayOverviewTelemetryPath returns the URL path to the telemetry service getOrganizationGatewayOverview HTTP endpoint.
+func GetOrganizationGatewayOverviewTelemetryPath() string {
+	return "/rpc/telemetry.getOrganizationGatewayOverview"
+}
+
+// GetOrganizationGatewayUsageTelemetryPath returns the URL path to the telemetry service getOrganizationGatewayUsage HTTP endpoint.
+func GetOrganizationGatewayUsageTelemetryPath() string {
+	return "/rpc/telemetry.getOrganizationGatewayUsage"
+}
+
 // GetProjectOverviewTelemetryPath returns the URL path to the telemetry service getProjectOverview HTTP endpoint.
 func GetProjectOverviewTelemetryPath() string {
 	return "/rpc/telemetry.getProjectOverview"

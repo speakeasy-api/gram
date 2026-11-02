@@ -517,7 +517,7 @@ func TestKitProtocolSourceContextIsPerTurn(t *testing.T) {
 	t.Parallel()
 	contexts := []string{}
 	for _, channel := range []string{"CHANNEL_ONE", "CHANNEL_TWO"} {
-		source, err := composeInstructions("", assistantThreadRecord{SourceKind: sourceKindSlack, SourceRefJSON: []byte(`{"channel_id":"` + channel + `","thread_id":"123.456"}`)}, nil)
+		source, err := composeInstructions("", assistantThreadRecord{SourceKind: sourceKindSlack, SourceRefJSON: []byte(`{"channel_id":"` + channel + `","thread_id":"123.456"}`)}, nil, "")
 		require.NoError(t, err)
 		prompt, err := kitProtocolPrompt(runTurnRequest{SourceInstructions: source, Prompt: "Please reply"})
 		require.NoError(t, err)
@@ -543,7 +543,7 @@ func TestKitProtocolSourceContextIsPerTurn(t *testing.T) {
 
 func TestKitProtocolPreservesUpstreamSignInAction(t *testing.T) {
 	t.Parallel()
-	source, err := composeInstructions("", assistantThreadRecord{SourceKind: sourceKindSlack, SourceRefJSON: []byte(`{"channel_id":"CHANNEL","thread_id":"123.456"}`)}, nil)
+	source, err := composeInstructions("", assistantThreadRecord{SourceKind: sourceKindSlack, SourceRefJSON: []byte(`{"channel_id":"CHANNEL","thread_id":"123.456"}`)}, nil, "")
 	require.NoError(t, err)
 	action := "<message-context>\nEventType: assistant_mcp_auth_required\nMCPSlug: tools\nAuthURL: https://auth.example/authorize?state=opaque-state&code_challenge=opaque-challenge\n</message-context>"
 	prompt, err := kitProtocolPrompt(runTurnRequest{SourceInstructions: source, Prompt: action})

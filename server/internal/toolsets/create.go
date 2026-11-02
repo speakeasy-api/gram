@@ -50,16 +50,18 @@ type ToolsetCreateInput struct {
 
 // ToolsetCreateResult reports what the creation decided as well as what it
 // wrote, because two of those decisions have consequences the caller has to act
-// on after commit: an MCP-enabled toolset joined the Default plugin, so a
-// publish is owed, and pluginCreated means that plugin did not exist before.
+// on after commit: a toolset that joined the Default plugin owes a publish, and
+// pluginCreated means that plugin did not exist before.
 type ToolsetCreateResult struct {
-	Toolset    repo.Toolset
-	McpEnabled bool
+	Toolset repo.Toolset
+
 	// AddedToDefaultPlugin is what the attach actually did, not what the
-	// auto-enable implies: true only when the toolset joined the project's
-	// Default plugin in this transaction.
+	// first-server rule implies: true only when the toolset joined the
+	// project's Default plugin in this transaction.
 	AddedToDefaultPlugin bool
-	PluginCreated        bool
+
+	// PluginCreated is true when that attach lazily created the Default plugin.
+	PluginCreated bool
 }
 
 // ErrToolsetSlugTaken is the toolset's derived slug colliding with a live
@@ -94,9 +96,9 @@ func ToolsetSlugFromName(name string) string {
 
 // CreateToolsetInTransaction is the one implementation of toolset creation.
 // The management API's createToolset and the Platform MCP's server authoring
-// both call it inside a transaction they own, so the slug rules, the
-// first-server auto-enable, the default environment, the initial version, the
-// audit entry and the Default plugin attachment cannot drift between them.
+// both call it inside a transaction they own, so the slug rules, the private
+// MCP default, the default environment, the initial version, the audit entry
+// and the first-server Default plugin attachment cannot drift between them.
 //
 // It returns oops errors with the same codes the management API has always
 // returned, so that handler passes them straight through.
@@ -136,15 +138,17 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 		Description:            conv.PtrToPGText(input.Description),
 		DefaultEnvironmentSlug: conv.PtrToPGText(nil),
 	}
-	// The first toolset in an organization is enabled as an MCP server and
-	// joins the Default plugin, which publishes it to everyone holding that
-	// plugin. That is the widest reach a creation can have, so a failure to
-	// read the count fails the creation rather than defaulting to "first".
+	// Only the first server in an organization joins the Default plugin, which
+	// publishes it to everyone holding that plugin; later servers reach nobody
+	// until they are put into a plugin. Joining is the widest reach a creation
+	// can have, so a failure to read the count fails the creation rather than
+	// defaulting to "first". The count is read before the insert, so it never
+	// includes the toolset being created.
 	enabled, err := usageRepo.New(tx).GetEnabledServerCount(ctx, input.OrganizationID)
 	if err != nil {
 		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "error getting enabled server count").LogError(ctx, logger)
 	}
-	mcpEnabled := enabled == 0
+	joinsDefaultPlugin := enabled == 0
 
 	environments := environmentsRepo.New(tx)
 	if input.DefaultEnvironmentSlug != nil {
@@ -208,12 +212,10 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 	}); err != nil {
 		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "failed to log toolset creation").LogError(ctx, logger)
 	}
-	visibility := mcpservers.VisibilityDisabled
-	if mcpEnabled {
-		visibility = mcpservers.VisibilityPrivate
-	}
+	// Every new toolset is served as a private MCP server, so it is usable
+	// with credentials without a separate enable step.
 	if _, err := hostedmcp.CreateCanonical(ctx, tx, auditLogger, hostedmcp.Actor{UserID: input.ActorUserID, Email: input.ActorEmail, System: ""}, hostedmcp.CreateCanonicalInput{
-		Toolset: created, Slug: mcpSlug, Visibility: visibility,
+		Toolset: created, Slug: mcpSlug, Visibility: mcpservers.VisibilityPrivate,
 	}); err != nil {
 		return ToolsetCreateResult{}, err //nolint:wrapcheck // oops errors pass through.
 	}
@@ -222,8 +224,8 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "reload created toolset").LogError(ctx, logger)
 	}
 
-	result := ToolsetCreateResult{Toolset: created, McpEnabled: mcpEnabled, AddedToDefaultPlugin: false, PluginCreated: false}
-	if mcpEnabled {
+	result := ToolsetCreateResult{Toolset: created, AddedToDefaultPlugin: false, PluginCreated: false}
+	if joinsDefaultPlugin {
 		projectID := input.ProjectID
 		actor := &contextvalues.AuthContext{ActiveOrganizationID: input.OrganizationID, UserID: input.ActorUserID, Email: input.ActorEmail, ProjectID: &projectID}
 		outcome, err := attachToDefaultPluginWithOutcome(ctx, tx, logger, auditLogger, actor, created.ID, created.Name)
