@@ -33,3 +33,19 @@ func redactErr(err error) error {
 		return fmt.Errorf("redact chat text: %w", err)
 	}
 }
+
+// chatSearchRedactor masks text exactly as search_chats masks transcripts, so
+// team memory never stores or shows a value chat search would hide.
+type chatSearchRedactor struct {
+	redactor *chatredact.Redactor
+}
+
+// NewChatSearchRedactor returns the search_chats redaction as a TextRedactor.
+func NewChatSearchRedactor() TextRedactor {
+	return chatSearchRedactor{redactor: chatredact.New()}
+}
+
+func (r chatSearchRedactor) Text(ctx context.Context, text string) (string, bool, error) {
+	safe, changed, err := r.redactor.Text(ctx, text)
+	return safe, changed, redactErr(err)
+}
