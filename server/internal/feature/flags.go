@@ -43,6 +43,11 @@ const (
 	// Targeted by PostHog organization group (org slug), like FlagBudgets.
 	// Removed once device-level matching is GA.
 	FlagDeviceLevelCoverage Flag = "device-level-coverage"
+	// FlagTeamMemory gates team chat memory end to end: the background masked
+	// chat summary job, its backfill, the period digests, and the Platform MCP
+	// memory tools. Targeted by PostHog organization group (org slug), like
+	// FlagBudgets. Removed once team memory is GA.
+	FlagTeamMemory Flag = "team-memory"
 
 	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
 	// policy and exclusion writes exposed through Platform MCP. It is evaluated
@@ -75,10 +80,6 @@ const (
 	// both surfaces; targeted by organization group (org slug), like
 	// FlagBudgets. A rollout gate, not authorization. Removed once Explore is GA.
 	FlagExplore Flag = "gram-explore"
-	// FlagTeamMemory gates the Platform MCP team memory tools and the jobs that
-	// build team memory. Targeted by organization group (org slug). A rollout
-	// gate, not authorization: memory:read and memory:write still apply.
-	FlagTeamMemory Flag = "team-memory"
 	// FlagRiskLLMAnalyzer selects the engine behind an organization's secret,
 	// PII, prompt injection and destructive tool call detection on both the
 	// realtime enforcement lane and the batch flag lane. It is multivariate:
