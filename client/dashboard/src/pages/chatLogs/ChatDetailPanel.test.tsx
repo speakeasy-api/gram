@@ -308,7 +308,8 @@ describe("ChatDetailSheet session actor", () => {
   });
 
   it("keeps the neutral assistant label when the agent has been deleted", () => {
-    renderPanel(makeChat({ agentId: "agent-1" }));
+    // A deleted agent has no name and is gone from the readable inventory.
+    renderPanel(makeChat({ agentId: "agent-deleted" }));
 
     expect(turnNames()).toEqual(["User", "Assistant"]);
   });
