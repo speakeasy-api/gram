@@ -190,12 +190,17 @@ func (p *TailscaleNetworkIngressProvisioner) HasResources(ctx context.Context, r
 		return false, err
 	}
 	ownerID := resources.OwnerID.String()
-	// A namespace owned by someone else is not ours, exactly as teardown
-	// treats it; the cluster-scoped operator resources are checked on their own.
+	// The namespace follows teardown's rule: a validly foreign-owned namespace
+	// is not ours and the cluster-scoped resources are checked on their own,
+	// while invalid ownership labels are refused.
 	namespace, err := p.clientset.CoreV1().Namespaces().Get(ctx, resources.Namespace, metav1.GetOptions{})
 	switch {
 	case err == nil:
-		if ensureResourceOwned(namespace.GetLabels(), ownerID) == nil {
+		if err := ensureResourceOwned(namespace.GetLabels(), ownerID); err != nil {
+			if !foreignNetworkIngressOwner(namespace.GetLabels(), ownerID) {
+				return false, fmt.Errorf("refuse to inspect namespace with invalid ownership: %w", err)
+			}
+		} else {
 			return true, nil
 		}
 	case !k8serrors.IsNotFound(err):
@@ -400,15 +405,7 @@ func (p *TailscaleNetworkIngressProvisioner) teardown(ctx context.Context, resou
 	} else if err != nil {
 		return fmt.Errorf("get namespace before teardown: %w", err)
 	} else if err := ensureResourceOwned(namespace.Labels, ownerID); err != nil {
-		actualOwner := namespace.Labels[networkIngressIDLabel]
-		parsedOwner, parseErr := uuid.Parse(actualOwner)
-		foreignOwner :=
-			namespace.Labels[managedByLabelKey] == networkIngressManagedBy &&
-				parseErr == nil &&
-				parsedOwner != uuid.Nil &&
-				parsedOwner.String() == actualOwner &&
-				actualOwner != ownerID
-		if !foreignOwner {
+		if !foreignNetworkIngressOwner(namespace.Labels, ownerID) {
 			return fmt.Errorf("refuse to delete namespace with invalid ownership: %w", err)
 		}
 		// A foreign namespace may reuse the deterministic name after the original
@@ -598,6 +595,19 @@ func ingressLabels(desired NetworkIngressDesired) map[string]string {
 
 func resourceOwnerLabels(ownerID string) map[string]string {
 	return map[string]string{managedByLabelKey: networkIngressManagedBy, networkIngressIDLabel: ownerID}
+}
+
+// foreignNetworkIngressOwner reports whether labels name a different, valid
+// ingress owner: managed by this provider with a well-formed id that is not
+// ownerID. Anything else is invalid ownership, not foreign ownership.
+func foreignNetworkIngressOwner(labels map[string]string, ownerID string) bool {
+	actualOwner := labels[networkIngressIDLabel]
+	parsedOwner, err := uuid.Parse(actualOwner)
+	return labels[managedByLabelKey] == networkIngressManagedBy &&
+		err == nil &&
+		parsedOwner != uuid.Nil &&
+		parsedOwner.String() == actualOwner &&
+		actualOwner != ownerID
 }
 
 func ensureResourceOwned(labels map[string]string, ownerID string) error {

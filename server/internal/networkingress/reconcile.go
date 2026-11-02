@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
@@ -39,6 +41,11 @@ type ExecutorOptions struct {
 
 	// CanApply is checked on every attempt before credential decryption.
 	CanApply func(context.Context) error
+
+	// Logger receives operational failures that are not reflected in the
+	// bounded status codes, such as saved credentials that no longer decrypt.
+	// Nil discards them.
+	Logger *slog.Logger
 
 	// PublicationRequester atomically records organization invalidations for
 	// committed DNS authority changes. A nil requester keeps the producer off.
@@ -74,6 +81,9 @@ type Executor struct {
 }
 
 func NewExecutor(db *pgxpool.Pool, enc *encryption.Client, registry *k8s.NetworkIngressProvisionerRegistry, options ExecutorOptions) *Executor {
+	if options.Logger == nil {
+		options.Logger = slog.New(slog.DiscardHandler)
+	}
 	return &Executor{db: db, enc: enc, registry: registry, options: options}
 }
 
@@ -276,7 +286,14 @@ func (e *Executor) deleteProviderResources(ctx context.Context, provider k8s.Net
 	}
 	var credentials []byte
 	if e.enc != nil && row.CredentialsEncrypted.Valid && row.CredentialsEncrypted.String != "" {
-		if plaintext, err := e.enc.Decrypt(row.CredentialsEncrypted.String); err == nil && plaintext != "" {
+		plaintext, err := e.enc.Decrypt(row.CredentialsEncrypted.String)
+		switch {
+		case err != nil:
+			// Distinguishable from "nothing saved": the provider still reports
+			// the cleanup blocker, and this names the server-side cause.
+			e.options.Logger.ErrorContext(ctx, "saved network ingress credentials do not decrypt; cleanup proceeds without them",
+				attr.SlogError(err), attr.SlogNetworkIngressID(row.ID.String()))
+		case plaintext != "":
 			credentials = []byte(plaintext)
 		}
 	}
