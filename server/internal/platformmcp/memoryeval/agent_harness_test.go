@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"regexp"
 	"strconv"
@@ -15,11 +14,11 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/stretchr/testify/require"
-	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -192,8 +191,8 @@ func (keyResolverSentinel) ResolveKey(context.Context, string, string, billing.M
 func TestCompletionRequestPassesClientValidation(t *testing.T) {
 	t.Parallel()
 	client := openrouter.NewUnifiedClient(
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		guardian.NewDefaultPolicy(tracenoop.NewTracerProvider()),
+		slog.New(slog.DiscardHandler),
+		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
 		openrouter.NewDevelopment("unused"),
 		keyResolverSentinel{},
 		nil, nil, nil, nil,
