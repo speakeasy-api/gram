@@ -31,12 +31,13 @@ func registerTeamMemoryTools(reg *Registrar, service *TeamMemoryService) {
 	addTool(reg, remember, rememberMeta, teamMemoryHandler(service.Remember))
 }
 
-// teamMemoryProjectSchema requires exactly one project selector.
+// teamMemoryProjectSchema requires exactly one project selector; oneOf
+// rejects a call naming both before it reaches the service.
 func teamMemoryProjectSchema(properties map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {
 	schema := projectSelectorSchema(properties, required)
 	schema.Properties["project_id"].Description = "Exact project ID. Provide exactly one project selector."
 	schema.Properties["project_slug"].Description = "Exact project slug. Provide exactly one project selector."
-	schema.AnyOf = []*jsonschema.Schema{{Required: []string{"project_id"}}, {Required: []string{"project_slug"}}}
+	schema.OneOf = []*jsonschema.Schema{{Required: []string{"project_id"}}, {Required: []string{"project_slug"}}}
 	return schema
 }
 

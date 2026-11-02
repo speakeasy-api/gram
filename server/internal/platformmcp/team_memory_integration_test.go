@@ -2,7 +2,6 @@ package platformmcp
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -71,21 +71,20 @@ func TestRememberStoresRedactedMemoAttributedToCaller(t *testing.T) {
 	require.True(t, strings.HasPrefix(output.Memo.Content, "We chose the retry queue for webhooks."))
 	require.NotContains(t, output.Memo.Content, secret[:12])
 
-	var stored, author string
-	var storedChat uuid.NullUUID
-	require.NoError(t, f.db.QueryRow(ctx, `SELECT content, author_user_id, chat_id FROM memory_memos WHERE id = $1 AND project_id = $2`, output.Memo.Source.ID, f.project.ID).Scan(&stored, &author, &storedChat))
-	require.Equal(t, output.Memo.Content, stored)
-	require.NotContains(t, stored, secret[:12])
-	require.Equal(t, f.principal.UserID, author)
-	require.Equal(t, chatID, storedChat.UUID)
+	stored, err := testrepo.New(f.db).GetMemoryMemoFixture(ctx, testrepo.GetMemoryMemoFixtureParams{ID: uuid.MustParse(output.Memo.Source.ID), ProjectID: f.project.ID})
+	require.NoError(t, err)
+	require.Equal(t, output.Memo.Content, stored.Content)
+	require.NotContains(t, stored.Content, secret[:12])
+	require.Equal(t, f.principal.UserID, stored.AuthorUserID.String)
+	require.Equal(t, chatID, stored.ChatID.UUID)
 
 	event, err := audittest.LatestAuditLogByAction(ctx, f.db, audit.ActionMemoryMemoCreate)
 	require.NoError(t, err)
 	require.Equal(t, f.principal.UserID, event.ActorID)
 	require.Equal(t, output.Memo.Source.ID, event.SubjectID)
-	encoded, err := json.Marshal(event)
-	require.NoError(t, err)
-	require.NotContains(t, string(encoded), "retry queue")
+	for _, recorded := range [][]byte{event.Metadata, event.BeforeSnapshot, event.AfterSnapshot, []byte(event.SubjectDisplay)} {
+		require.NotContains(t, string(recorded), "retry queue")
+	}
 }
 
 func TestRememberRequiresExplicitProjectMemoryWriteGrant(t *testing.T) {
@@ -121,8 +120,8 @@ func TestRememberRequiresExplicitProjectMemoryWriteGrant(t *testing.T) {
 	_, err = limited.Remember(ctx, f.principal, f.remember("limited fact"))
 	require.Error(t, err)
 
-	var count int
-	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM memory_memos`).Scan(&count))
+	count, err := testrepo.New(f.db).CountMemoryMemosFixture(t.Context())
+	require.NoError(t, err)
 	require.Zero(t, count)
 	audits, err := audittest.AuditLogCountByAction(t.Context(), f.db, audit.ActionMemoryMemoCreate)
 	require.NoError(t, err)
@@ -156,8 +155,8 @@ func TestRememberRefusesWhenFlagOffOrInputInvalid(t *testing.T) {
 	_, err = f.service.Remember(ctx, f.principal, f.remember("flag off"))
 	require.ErrorIs(t, err, errTeamMemoryNotEnabled)
 
-	var count int
-	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM memory_memos`).Scan(&count))
+	count, err := testrepo.New(f.db).CountMemoryMemosFixture(t.Context())
+	require.NoError(t, err)
 	require.Zero(t, count)
 }
 
@@ -168,7 +167,48 @@ func TestRememberFailsClosedWhenAuditFails(t *testing.T) {
 	require.NoError(t, audittest.RejectAction(ctx, f.db, audit.ActionMemoryMemoCreate))
 	_, err := f.service.Remember(ctx, f.principal, f.remember("audit failure fact"))
 	require.Error(t, err)
-	var count int
-	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM memory_memos`).Scan(&count))
+	count, err := testrepo.New(f.db).CountMemoryMemosFixture(t.Context())
+	require.NoError(t, err)
 	require.Zero(t, count)
+}
+
+func TestTeamMemoryUnknownProjectRefusesLikeMissingGrant(t *testing.T) {
+	t.Parallel()
+	f := newTeamMemoryFixture(t)
+	ctx := f.writer(t.Context())
+
+	_, unknown := f.service.Remember(ctx, f.principal, RememberInput{ProjectSlug: "no-such-memory-project", Content: "fact"})
+	var unknownDenied *ExternalAuthorizationError
+	require.ErrorAs(t, unknown, &unknownDenied)
+
+	other, err := projectsrepo.New(f.db).CreateProject(t.Context(), projectsrepo.CreateProjectParams{OrganizationID: f.principal.OrganizationID, Name: "Ungranted memory project", Slug: "ungranted-memory-project"})
+	require.NoError(t, err)
+	_, ungranted := f.service.Remember(ctx, f.principal, RememberInput{ProjectSlug: other.Slug, Content: "fact"})
+	var ungrantedDenied *ExternalAuthorizationError
+	require.ErrorAs(t, ungranted, &ungrantedDenied)
+
+	unknownResult, ok := teamMemoryToolResult(unknown)
+	require.True(t, ok)
+	ungrantedResult, ok := teamMemoryToolResult(ungranted)
+	require.True(t, ok)
+	require.Equal(t, ungrantedResult.Content, unknownResult.Content)
+}
+
+func TestTeamMemoryBudgetChargedOnlyAfterGrantAndFlag(t *testing.T) {
+	t.Parallel()
+	f := newTeamMemoryFixture(t)
+	limited := *f.service
+	limited.budget = denyBudget()
+
+	// A spent budget never masks a missing grant or a disabled flag.
+	other, err := projectsrepo.New(f.db).CreateProject(t.Context(), projectsrepo.CreateProjectParams{OrganizationID: f.principal.OrganizationID, Name: "Unmetered memory project", Slug: "unmetered-memory-project"})
+	require.NoError(t, err)
+	ctx := f.writer(t.Context())
+	_, err = limited.Remember(ctx, f.principal, RememberInput{ProjectSlug: other.Slug, Content: "ungranted"})
+	var denied *ExternalAuthorizationError
+	require.ErrorAs(t, err, &denied)
+
+	f.flags.SetFlag(feature.FlagTeamMemory, f.principal.OrganizationID, false)
+	_, err = limited.Remember(ctx, f.principal, f.remember("flag off"))
+	require.ErrorIs(t, err, errTeamMemoryNotEnabled)
 }
