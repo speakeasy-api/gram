@@ -251,6 +251,12 @@ WHERE (SELECT count(*) FROM live) = 26
      AND no_auth IS TRUE)
     OR
     (credential_id = ANY(@org_session_ids::uuid[])
+     AND mcp_server_id = @github_server_id::uuid
+     AND remote_session_client_id IS NULL
+     AND auth_client_id = @github_auth_client_id::uuid
+     AND no_auth IS FALSE)
+    OR
+    (credential_id = ANY(@org_session_ids::uuid[])
      AND no_auth IS FALSE
      AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
                  JOIN remote_session_clients c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
@@ -264,8 +270,9 @@ WHERE (SELECT count(*) FROM live) = 26
   );
 
 -- Count live choices outside the intended set: Linear through its main client,
--- Slack with no upstream authentication, and the organization gateway's GitHub
--- and tunneled inventory choices, each on a seeded session.
+-- Slack with no upstream authentication, the organization gateway's GitHub
+-- choice of the caller's own token and its tunneled inventory choice, each on a
+-- seeded session.
 -- name: PostflightIDMisassignedUpstreamClientChoices :one
 SELECT count(*)
 FROM upstream_client_selections u
@@ -278,6 +285,9 @@ WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
       OR (u.mcp_server_id = @slack_server_id::uuid AND u.no_auth)
       OR (u.credential_id = ANY(@org_session_ids::uuid[])
           AND u.mcp_server_id = ANY(@org_no_auth_server_ids::uuid[]) AND u.no_auth)
+      OR (u.credential_id = ANY(@org_session_ids::uuid[])
+          AND u.mcp_server_id = @github_server_id::uuid AND u.remote_session_client_id IS NULL
+          AND u.auth_client_id = @github_auth_client_id::uuid AND NOT u.no_auth)
       OR (u.credential_id = ANY(@org_session_ids::uuid[]) AND NOT u.no_auth
           AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
                       WHERE a.mcp_server_id = u.mcp_server_id

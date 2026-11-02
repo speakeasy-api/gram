@@ -784,6 +784,9 @@ WHERE u.project_id = $1::uuid AND u.deleted IS FALSE
       OR (u.mcp_server_id = $4::uuid AND u.no_auth)
       OR (u.credential_id = ANY($5::uuid[])
           AND u.mcp_server_id = ANY($6::uuid[]) AND u.no_auth)
+      OR (u.credential_id = ANY($5::uuid[])
+          AND u.mcp_server_id = $7::uuid AND u.remote_session_client_id IS NULL
+          AND u.auth_client_id = $8::uuid AND NOT u.no_auth)
       OR (u.credential_id = ANY($5::uuid[]) AND NOT u.no_auth
           AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
                       WHERE a.mcp_server_id = u.mcp_server_id
@@ -800,11 +803,14 @@ type PostflightIDMisassignedUpstreamClientChoicesParams struct {
 	SlackServerID      uuid.UUID
 	OrgSessionIds      []uuid.UUID
 	OrgNoAuthServerIds []uuid.UUID
+	GithubServerID     uuid.UUID
+	GithubAuthClientID uuid.UUID
 }
 
 // Count live choices outside the intended set: Linear through its main client,
-// Slack with no upstream authentication, and the organization gateway's GitHub
-// and tunneled inventory choices, each on a seeded session.
+// Slack with no upstream authentication, the organization gateway's GitHub
+// choice of the caller's own token and its tunneled inventory choice, each on a
+// seeded session.
 func (q *Queries) PostflightIDMisassignedUpstreamClientChoices(ctx context.Context, arg PostflightIDMisassignedUpstreamClientChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDMisassignedUpstreamClientChoices,
 		arg.ProjectID,
@@ -813,6 +819,8 @@ func (q *Queries) PostflightIDMisassignedUpstreamClientChoices(ctx context.Conte
 		arg.SlackServerID,
 		arg.OrgSessionIds,
 		arg.OrgNoAuthServerIds,
+		arg.GithubServerID,
+		arg.GithubAuthClientID,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -1377,7 +1385,7 @@ func (q *Queries) PostflightIDUnregisteredConnections(ctx context.Context, proje
 const postflightIDUpstreamClientChoices = `-- name: PostflightIDUpstreamClientChoices :one
 WITH live AS (
   SELECT id, project_id, organization_id, credential_kind, credential_id, mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth, source, auth_client_id, auth_client_attachment_scope, created_at, updated_at, deleted_at, deleted FROM upstream_client_selections
-  WHERE project_id = $8::uuid AND deleted IS FALSE
+  WHERE project_id = $10::uuid AND deleted IS FALSE
     AND credential_kind = 'user_session'
 )
 SELECT count(*) FROM live
@@ -1402,6 +1410,12 @@ WHERE (SELECT count(*) FROM live) = 26
      AND no_auth IS TRUE)
     OR
     (credential_id = ANY($6::uuid[])
+     AND mcp_server_id = $8::uuid
+     AND remote_session_client_id IS NULL
+     AND auth_client_id = $9::uuid
+     AND no_auth IS FALSE)
+    OR
+    (credential_id = ANY($6::uuid[])
      AND no_auth IS FALSE
      AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
                  JOIN remote_session_clients c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
@@ -1423,6 +1437,8 @@ type PostflightIDUpstreamClientChoicesParams struct {
 	SlackServerID      uuid.UUID
 	OrgSessionIds      []uuid.UUID
 	OrgNoAuthServerIds []uuid.UUID
+	GithubServerID     uuid.UUID
+	GithubAuthClientID uuid.UUID
 	ProjectID          uuid.UUID
 }
 
@@ -1437,6 +1453,8 @@ func (q *Queries) PostflightIDUpstreamClientChoices(ctx context.Context, arg Pos
 		arg.SlackServerID,
 		arg.OrgSessionIds,
 		arg.OrgNoAuthServerIds,
+		arg.GithubServerID,
+		arg.GithubAuthClientID,
 		arg.ProjectID,
 	)
 	var count int64

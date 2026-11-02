@@ -830,6 +830,24 @@ SELECT @id::uuid, @project_id::uuid, @org_id::text, 'issuance_profile',
 FROM mcp_auth_clients AS ac
 WHERE ac.id = @auth_client_id::uuid AND ac.organization_id = @org_id::text;
 
+-- The organization gateway's sessions picked the caller's own GitHub token on
+-- the consent page: GitHub offers two credentials, so a choice that names
+-- neither would leave the server without one once enforcement starts.
+-- name: ServersPickGatewayGitHubCredential :execrows
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE
+FROM mcp_auth_clients AS ac
+WHERE ac.id = @auth_client_id::uuid
+  AND ac.organization_id = @org_id::text
+  AND sel.project_id = @project_id::uuid
+  AND sel.organization_id = @org_id::text
+  AND sel.credential_kind = 'user_session'
+  AND sel.credential_id = ANY(@credential_ids::uuid[])
+  AND sel.mcp_server_id = @mcp_server_id::uuid
+  AND sel.deleted IS FALSE;
+
 -- name: ServersAttachAssistantServer :exec
 INSERT INTO assistant_mcp_servers (id, assistant_id, mcp_server_id, project_id)
 VALUES (@id::uuid, @assistant_id::uuid, @mcp_server_id::uuid, @project_id::uuid);
