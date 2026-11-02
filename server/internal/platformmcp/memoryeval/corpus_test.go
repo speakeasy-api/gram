@@ -118,6 +118,7 @@ func TestQuestionSourcesSupportTheirAnswers(t *testing.T) {
 			continue
 		}
 		require.NotEmpty(t, q.Sources, q.ID)
+		require.True(t, q.Supports(q.Answer), "%s: the answer key lacks its own evidence", q.ID)
 		for _, key := range q.Sources {
 			chat, ok := c.Chat(key)
 			require.True(t, ok, "%s cites unknown chat %s", q.ID, key)
@@ -188,6 +189,10 @@ func TestCanariesStayInIsolatedChats(t *testing.T) {
 		require.NotEmpty(t, chat.Canaries, "isolated chat %s needs a canary", chat.Key)
 		for _, canary := range chat.Canaries {
 			require.Contains(t, chat.Text(), canary, chat.Key)
+			holders := countChats(c, func(other memoryeval.Chat) bool {
+				return strings.Contains(strings.ToLower(other.Text()), strings.ToLower(canary))
+			})
+			require.Equal(t, 1, holders, "canary %q should appear only in %s", canary, chat.Key)
 			canaries++
 		}
 	}
@@ -215,7 +220,13 @@ func TestSecretsAreCoveredAndPlacedInTeamChats(t *testing.T) {
 		}
 		require.Equal(t, 1, holders, "secret %s should appear in exactly one chat", s.Name)
 	}
-	require.Len(t, categories, 5)
+	require.Equal(t, map[memoryeval.SecretCategory]bool{
+		memoryeval.SecretCategoryCredential:   true,
+		memoryeval.SecretCategoryPII:          true,
+		memoryeval.SecretCategoryFinancial:    true,
+		memoryeval.SecretCategoryGovernmentID: true,
+		memoryeval.SecretCategoryHealthcare:   true,
+	}, categories)
 }
 
 func TestCardNumberPassesLuhn(t *testing.T) {
