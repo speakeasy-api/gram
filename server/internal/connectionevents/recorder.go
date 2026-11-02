@@ -497,6 +497,8 @@ func (r *Recorder) run() {
 		if len(rows) > 0 {
 			r.surviving(len(rows), func() { r.insert(rows) })
 		}
+		// A tick from during a slow insert would flush a nearly empty batch and let a backlog grow.
+		ticker.Reset(r.cfg.flushInterval)
 	}
 	add := func(row Row) {
 		r.surviving(1, func() {

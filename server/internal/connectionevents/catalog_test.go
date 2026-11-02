@@ -97,6 +97,7 @@ var frozenCodes = []string{
 	"upstream_reconnect_required",
 	"upstream_ema_refused",
 	"invalid_grant",
+	"refresh_invalid_client",
 	"no_grant",
 	"refresh_rejected",
 	"internal_error",
@@ -219,15 +220,17 @@ func TestCatalog_StageDependentPartiesAreSeparateCodes(t *testing.T) {
 	t.Parallel()
 
 	cases := map[Code]WhoFixes{
-		CodeTransientFailure:          WhoSpeakeasy,
-		CodeIDPTransientFailure:       WhoProvider,
-		CodeProviderTransientFailure:  WhoProvider,
-		CodeProviderRejected:          WhoPerson,
-		CodeEMAProviderRejected:       WhoAdmin,
-		CodeUpstreamReconnectRequired: WhoPerson,
-		CodeUpstreamEMARefused:        WhoAdmin,
-		CodeUpstreamCredentialChoice:  WhoApp,
-		CodeUpstreamSignInNotSetUp:    WhoAdmin,
+		CodeTransientFailure:           WhoSpeakeasy,
+		CodeIDPTransientFailure:        WhoProvider,
+		CodeProviderTransientFailure:   WhoProvider,
+		CodeProviderRejected:           WhoPerson,
+		CodeEMAProviderRejected:        WhoAdmin,
+		CodeUpstreamReconnectRequired:  WhoPerson,
+		CodeUpstreamEMARefused:         WhoAdmin,
+		CodeUpstreamCredentialChoice:   WhoApp,
+		CodeUpstreamSignInNotSetUp:     WhoAdmin,
+		CodeProviderOAuthInvalidClient: WhoAdmin,
+		CodeRefreshInvalidClient:       WhoPerson,
 	}
 	for code, who := range cases {
 		meaning, ok := MeaningOf(code.String())

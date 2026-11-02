@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
@@ -751,4 +752,70 @@ func TestDrop_LogsAreThrottledPerReason(t *testing.T) {
 	require.Equal(t, 1, strings.Count(logged.String(), string(dropQueueFull)))
 	require.Equal(t, 1, strings.Count(logged.String(), string(dropTableMissing)))
 	require.NotContains(t, logged.String(), string(dropLogsOff))
+}
+
+// slowConn accepts every insert after a delay and keeps each batch's size.
+type slowConn struct {
+	driver.Conn
+
+	delay time.Duration
+	sizes []int
+}
+
+func (c *slowConn) PrepareBatch(context.Context, string, ...driver.PrepareBatchOption) (driver.Batch, error) {
+	return &slowBatch{Batch: nil, conn: c, rows: 0}, nil
+}
+
+type slowBatch struct {
+	driver.Batch
+
+	conn *slowConn
+	rows int
+}
+
+func (b *slowBatch) Append(...any) error {
+	b.rows++
+	return nil
+}
+
+func (b *slowBatch) Send() error {
+	time.Sleep(b.conn.delay) //nolint:forbidigo // GG013: advances the synctest fake clock inside a synctest.Test bubble
+	b.conn.sizes = append(b.conn.sizes, b.rows)
+	return nil
+}
+
+func (b *slowBatch) Abort() error { return nil }
+
+// An insert slower than the flush interval must not leave a tick that flushes a
+// nearly empty batch, or the queue overflows when full batches would keep up.
+func TestRecord_SlowInsertsStillSendFullBatchesFromABacklog(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		const (
+			maxBatch = 8
+			batches  = 20
+		)
+		conn := &slowConn{Conn: nil, delay: 1200 * time.Millisecond, sizes: nil}
+		cfg := testConfig()
+		cfg.maxBatch = maxBatch
+		cfg.queueSize = maxBatch * batches
+		cfg.flushInterval = time.Second
+		reader := sdkmetric.NewManualReader()
+		recorder := testRecorder{Recorder: newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), conn, logsOn, cfg), reader: reader}
+
+		attempt := Begin(testScope())
+		for range maxBatch * batches {
+			recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+		}
+		// Shutting down drains without ticks, so the writer has to work through the backlog first.
+		time.Sleep(batches * 2 * conn.delay) //nolint:forbidigo // GG013: advances the synctest fake clock inside a synctest.Test bubble
+		require.NoError(t, recorder.Shutdown(t.Context()))
+
+		require.Zero(t, recorder.dropped(t, dropQueueFull))
+		require.Len(t, conn.sizes, batches)
+		for _, size := range conn.sizes {
+			require.Equal(t, maxBatch, size)
+		}
+	})
 }

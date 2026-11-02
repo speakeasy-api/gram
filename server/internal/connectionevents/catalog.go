@@ -248,7 +248,7 @@ var (
 	CodeRemoteSessionUnavailable   = define("remote_session_unavailable", OutcomeFailed, WhoProvider, "The service's sign-in system is temporarily unavailable.", "Wait a few minutes and try again.")
 	CodeProviderRejected           = define("provider_rejected", OutcomeFailed, WhoPerson, "The service rejected your access.", "Reconnect. If it keeps happening, ask your admin.")
 	CodeEMAProviderRejected        = define("ema_provider_rejected", OutcomeFailed, WhoAdmin, "The service refused the managed sign-in.", "Check the service's setup for managed sign-in.")
-	CodeTunnelUnavailable          = define("tunnel_unavailable", OutcomeFailed, WhoAdmin, "The private connection to this server is down.", "Check the tunnel for this server is running.")
+	CodeTunnelUnavailable          = define("tunnel_unavailable", OutcomeFailed, WhoAdmin, "The private connection is down.", "Check that its tunnel is running.")
 	CodeKillswitchCheckUnavailable = define("killswitch_check_unavailable", OutcomeFailed, WhoSpeakeasy, "We could not check whether tool use is allowed.", "Try again in a few minutes.")
 	CodeMemberToolsMissing         = defineResult("member_tools_missing", resultPartial, OutcomeFailed, WhoAdmin, "Some of this gateway's servers did not list their tools.", "Check those servers' status on the gateway.")
 
@@ -261,6 +261,7 @@ var (
 	CodeUpstreamReconnectRequired        = define("upstream_reconnect_required", OutcomeFailed, WhoPerson, "Your connection to the service needs renewing.", "Reconnect to the service.")
 	CodeUpstreamEMARefused               = define("upstream_ema_refused", OutcomeFailed, WhoAdmin, "The service refused to renew the managed sign-in.", "Check the service's setup for managed sign-in.")
 	CodeInvalidGrant                     = define("invalid_grant", OutcomeFailed, WhoPerson, "The service no longer accepts this sign-in.", "Reconnect to the service.")
+	CodeRefreshInvalidClient             = define("refresh_invalid_client", OutcomeFailed, WhoPerson, "The service no longer recognizes this connection.", "Reconnect to the service.")
 	CodeNoGrant                          = define("no_grant", OutcomeFailed, WhoPerson, "There is no saved sign-in to renew.", "Reconnect to the service.")
 	CodeRefreshRejected                  = define("refresh_rejected", OutcomeFailed, WhoAdmin, "The service refused to renew the connection.", "Check the connection settings for this service.")
 	CodeInternalError                    = define("internal_error", OutcomeFailed, WhoSpeakeasy, "Something went wrong on our side.", "Try again in a few minutes.")
