@@ -661,18 +661,14 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	connectedCardCount := 0
-	chainedCardCount := 0
 	autoRefreshHasSessions := false
 	// Every card already carries the organization's policy applied to its own
 	// stored preference, so the page value is on only when none of them is off.
 	everyCardAutoRefreshes := true
 	for _, c := range cards {
-		// A chained service counts once its exchange is known to work; access rules use chainedCardCount.
+		// A chained service counts once its exchange is known to work.
 		if c.Connected || c.ChainCheck == chainCheckConnected {
 			connectedCardCount++
-		}
-		if c.Chained {
-			chainedCardCount++
 		}
 		if c.Connected || c.Expired || c.Unroutable {
 			autoRefreshHasSessions = true
@@ -681,7 +677,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 	autoRefreshOn := len(cards) > 0 && everyCardAutoRefreshes
 	// Gateway capture below decides whether any member can be approved.
-	consentEnabled := gateway != nil || len(cards) == 0 || connectedCardCount > 0 || chainedCardCount > 0
+	consentEnabled := gateway != nil || consentCardsApprovable(cards)
 	if upstreamAuth != nil {
 		// The chosen credential decides, not whether some service card is
 		// connected: a shared credential needs no connection at all.
@@ -1280,8 +1276,8 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 	authClientPicks, err := s.consentDirectAuthClientPick(ctx, endpoint, pickState, r.PostForm.Get("auth_client"), upstreamPicks, cards)
 	if err != nil {
-		if errors.Is(err, errConsentConnectionsExpired) {
-			// Keeps the challenge: the page offers Reconnect and no approval.
+		if errors.Is(err, errConsentNoUsableConnection) {
+			// Keeps the challenge, so the person can connect and approve.
 			logger.InfoContext(ctx, "consent approval refused", attr.SlogError(err))
 			http.Redirect(w, r, consentFullPageURL(endpoint, challengeState), http.StatusSeeOther)
 			return nil

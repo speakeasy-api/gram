@@ -114,6 +114,14 @@ func TestCombineUpstreamVerdict(t *testing.T) {
 	}
 }
 
+func TestUnservedCredentialReason(t *testing.T) {
+	t.Parallel()
+
+	require.Contains(t, unservedCredentialReason(0, false), "no project")
+	require.Contains(t, unservedCredentialReason(1, true), "different client")
+	require.Empty(t, unservedCredentialReason(1, false))
+}
+
 func TestDescribeNoUsableCredential(t *testing.T) {
 	t.Parallel()
 
@@ -135,29 +143,6 @@ func TestDescribeNoUsableCredential(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			require.Contains(t, describeNoUsableCredential(tc.state, tc.connected, now), tc.contains)
-		})
-	}
-}
-
-func TestConsentCardsAllExpired(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name  string
-		cards []remoteSessionCard
-		want  bool
-	}{
-		{name: "no cards", cards: nil, want: false},
-		{name: "never connected", cards: []remoteSessionCard{{}}, want: false},
-		{name: "expired", cards: []remoteSessionCard{{Expired: true}}, want: true},
-		{name: "expired and never connected", cards: []remoteSessionCard{{Expired: true}, {}}, want: true},
-		{name: "expired and connected", cards: []remoteSessionCard{{Expired: true}, {Connected: true}}, want: false},
-		{name: "expired and chained", cards: []remoteSessionCard{{Expired: true}, {Chained: true}}, want: false},
-		{name: "expired card chained", cards: []remoteSessionCard{{Expired: true, Chained: true}}, want: false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tc.want, consentCardsAllExpired(tc.cards))
 		})
 	}
 }

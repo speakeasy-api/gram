@@ -2,7 +2,6 @@ package remotesessions
 
 import (
 	"encoding/json"
-	"math"
 	"strconv"
 	"testing"
 	"time"
@@ -138,34 +137,57 @@ func TestTokenResponseStandardExpirationFields(t *testing.T) {
 	require.EqualValues(t, 7200, seconds)
 }
 
-func TestTokenResponseUnusableLifetimesAreUnreported(t *testing.T) {
+func TestTokenResponseLifetimeDecoding(t *testing.T) {
 	t.Parallel()
 
-	for _, value := range []int64{0, -1, -86400, math.MinInt64, math.MaxInt64} {
-		seconds, reported := (tokenResponse{RefreshTokenTimeout: &value}).RefreshTokenTimeoutSeconds()
-		require.False(t, reported, value)
-		require.Zero(t, seconds)
-
-		seconds, reported = (tokenResponse{AuthorizationExpiresIn: &value}).AuthorizationLifetimeSeconds()
-		require.False(t, reported, value)
-		require.Zero(t, seconds)
-
-		seconds, reported = (tokenResponse{RefreshExpiresIn: value, RefreshTokenExpiresIn: value}).RefreshTokenTimeoutSeconds()
-		require.False(t, reported, value)
-		require.Zero(t, seconds)
-
-		seconds, reported = (tokenResponse{RefreshTokenTimeout: &value, RefreshExpiresIn: 1800}).RefreshTokenTimeoutSeconds()
-		require.True(t, reported, "a usable alias still counts")
-		require.EqualValues(t, 1800, seconds)
+	for _, tc := range []struct {
+		value   string
+		seconds int64
+	}{
+		{value: `0`},
+		{value: `-1`},
+		{value: `-86400`},
+		{value: `null`},
+		{value: `9223372036854775807`},
+		{value: `18446744073709551615`},
+		{value: `3600.5`},
+		{value: `1e3`},
+		{value: `true`},
+		{value: `{}`},
+		{value: `[]`},
+		{value: `"0"`},
+		{value: `"-1"`},
+		{value: `"soon"`},
+		{value: `""`},
+		{value: `1`, seconds: 1},
+		{value: `3600`, seconds: 3600},
+		{value: `"3600"`, seconds: 3600},
+	} {
+		for _, member := range []string{"refresh_token_timeout", "authorization_expires_in", "refresh_expires_in", "refresh_token_expires_in"} {
+			t.Run(member+" "+tc.value, func(t *testing.T) {
+				t.Parallel()
+				var response tokenResponse
+				require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a","`+member+`":`+tc.value+`}`), &response))
+				require.Equal(t, "a", response.AccessToken)
+				seconds, reported := response.RefreshTokenTimeoutSeconds()
+				if member == "authorization_expires_in" {
+					seconds, reported = response.AuthorizationLifetimeSeconds()
+				}
+				require.Equal(t, tc.seconds > 0, reported)
+				require.Equal(t, tc.seconds, seconds)
+			})
+		}
 	}
+}
 
-	one := int64(1)
-	seconds, reported := (tokenResponse{AuthorizationExpiresIn: &one}).AuthorizationLifetimeSeconds()
+func TestTokenResponseUnusableTimeoutFallsBackToAlias(t *testing.T) {
+	t.Parallel()
+
+	var response tokenResponse
+	require.NoError(t, json.Unmarshal([]byte(`{"refresh_token_timeout":0,"refresh_expires_in":1800}`), &response))
+	seconds, reported := response.RefreshTokenTimeoutSeconds()
 	require.True(t, reported)
-	require.EqualValues(t, 1, seconds)
-	seconds, reported = (tokenResponse{RefreshTokenTimeout: &one}).RefreshTokenTimeoutSeconds()
-	require.True(t, reported)
-	require.EqualValues(t, 1, seconds)
+	require.EqualValues(t, 1800, seconds)
 }
 
 // mintJWT signs claims with a throwaway HMAC key. AccessExpiresAt decodes

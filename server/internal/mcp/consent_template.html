@@ -911,9 +911,9 @@
             >
               Give access
             </button>
-            {{if and (not .ConsentEnabled) (not .ShowToolsIsland) (not .ApprovalError) (not .SelfApprovalError)}}
+            {{if and (not .ConsentEnabled) (not .ApprovalError) (not .SelfApprovalError)}}
             <p data-agent-self-only class="text-muted-foreground mt-2 text-xs">
-              Connect a service above to enable access.
+              Connect or reconnect a service above to give access.
             </p>
             {{end}}
           </form>

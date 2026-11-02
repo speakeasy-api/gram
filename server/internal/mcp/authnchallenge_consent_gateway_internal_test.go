@@ -268,7 +268,7 @@ func TestConsentTemplate_GatewayListsServers(t *testing.T) {
 	require.NotContains(t, page, "data-gateway-server-page")
 	require.Contains(t, page, `id="consent-approve-button"`)
 	require.NotContains(t, page, "data-service-connections")
-	require.NotContains(t, page, "Connect a service above to enable access")
+	require.NotContains(t, page, "Connect or reconnect a service above to give access.")
 }
 
 // A server's connect page shows its services with no approval: connecting is

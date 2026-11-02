@@ -401,6 +401,12 @@ func seedMetaValidationFixture(t *testing.T, prefix string) (context.Context, va
 
 	reader, provider := newValidationMeterProvider()
 	ctx, ti := newTestMCPServiceWithValidationTimeout(t, provider, validationProbeTimeout)
+	return ctx, seedMetaValidationFixtureOn(t, ctx, ti, reader, prefix)
+}
+
+func seedMetaValidationFixtureOn(t *testing.T, ctx context.Context, ti *testInstance, reader *sdkmetric.ManualReader, prefix string) validationFixture {
+	t.Helper()
+
 	projectID, orgID := consentTestTenant(t, ctx)
 
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
@@ -414,7 +420,7 @@ func seedMetaValidationFixture(t *testing.T, prefix string) (context.Context, va
 	createMetaMember(t, ctx, ti.conn, projectID, metaServerID, prefix+"-member", member.url, conv.ToNullUUID(issuerID), 0)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-"+prefix, member.url)
 
-	return ctx, validationFixture{
+	return validationFixture{
 		ti:       ti,
 		reader:   reader,
 		endpoint: endpoint,

@@ -110,16 +110,22 @@ func (s *Service) probeRemoteSession(
 		entry          remotesessions.UpstreamToken
 		tokenProjectID uuid.UUID
 		usable         bool
+		otherClient    bool
 	)
 	for _, projectID := range tokenProjectIDs {
 		resolved, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 		if rerr != nil {
 			return oops.E(oops.CodeUnexpected, rerr, "resolve upstream tokens for validation").LogError(ctx, logger)
 		}
-		if candidate, ok := resolved[client.RemoteSessionIssuerID]; ok && candidate.RemoteSessionClientID == client.ID {
+		candidate, ok := resolved[client.RemoteSessionIssuerID]
+		if ok && candidate.RemoteSessionClientID == client.ID {
 			tokens, entry, tokenProjectID, usable = resolved, candidate, projectID, true
 			break
 		}
+		otherClient = otherClient || ok
+	}
+	if reason := unservedCredentialReason(len(tokenProjectIDs), otherClient); !usable && reason != "" {
+		return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "Connect this service before verifying it.").LogWarn(ctx, logger, attr.SlogReason(reason))
 	}
 	if !usable {
 		return oops.E(oops.CodeBadRequest, errRemoteSessionNoUsableCredential, "Connect this service before verifying it.").LogWarn(ctx, logger,
@@ -198,6 +204,18 @@ func (s *Service) probeRemoteSession(
 	}
 	logger.InfoContext(ctx, "remote session validated", attr.SlogReason(reason))
 	return nil
+}
+
+// unservedCredentialReason names why this client's grant is not what the endpoint would hand upstream; empty when it is.
+func unservedCredentialReason(projects int, otherClient bool) string {
+	switch {
+	case projects == 0:
+		return "this client serves no project on this endpoint"
+	case otherClient:
+		return "a different client holds the credential for this issuer"
+	default:
+		return ""
+	}
 }
 
 // noUsableCredentialReason names why the subject's grant on client yielded no token, from its stored state.

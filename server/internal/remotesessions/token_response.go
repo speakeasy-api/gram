@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
 )
 
@@ -50,8 +51,12 @@ func (w *tokenResponseWire) UnmarshalJSON(data []byte) error {
 	var decoded plain
 	response := struct {
 		*plain
-		ExpiresIn json.RawMessage `json:"expires_in"`
-	}{plain: &decoded, ExpiresIn: nil}
+		ExpiresIn              json.RawMessage `json:"expires_in"`
+		RefreshTokenTimeout    json.RawMessage `json:"refresh_token_timeout"`
+		AuthorizationExpiresIn json.RawMessage `json:"authorization_expires_in"`
+		RefreshExpiresIn       json.RawMessage `json:"refresh_expires_in"`
+		RefreshTokenExpiresIn  json.RawMessage `json:"refresh_token_expires_in"`
+	}{plain: &decoded, ExpiresIn: nil, RefreshTokenTimeout: nil, AuthorizationExpiresIn: nil, RefreshExpiresIn: nil, RefreshTokenExpiresIn: nil}
 	if err := json.Unmarshal(data, &response); err != nil {
 		return fmt.Errorf("decode token response fields: %w", err)
 	}
@@ -72,8 +77,27 @@ func (w *tokenResponseWire) UnmarshalJSON(data []byte) error {
 		}
 		decoded.ExpiresIn = seconds
 	}
+	decoded.RefreshTokenTimeout = decodeLifetime(response.RefreshTokenTimeout)
+	decoded.AuthorizationExpiresIn = decodeLifetime(response.AuthorizationExpiresIn)
+	decoded.RefreshExpiresIn = conv.PtrValOr(decodeLifetime(response.RefreshExpiresIn), 0)
+	decoded.RefreshTokenExpiresIn = conv.PtrValOr(decodeLifetime(response.RefreshTokenExpiresIn), 0)
 	*w = tokenResponseWire(decoded)
 	return nil
+}
+
+// decodeLifetime reads an integer or integer string; anything else is unreported, so it cannot discard a token response.
+func decodeLifetime(raw json.RawMessage) *int64 {
+	value := string(bytes.TrimSpace(raw))
+	if len(value) > 0 && value[0] == '"' {
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return nil
+		}
+	}
+	seconds, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return nil
+	}
+	return &seconds
 }
 
 func (t *tokenResponse) UnmarshalJSON(data []byte) error {
@@ -200,13 +224,7 @@ func (t tokenResponse) ScopeReported() bool {
 	return t.scopePresent
 }
 
-// usableLifetime reports whether a provider's lifetime in seconds can be a
-// deadline. A zero or negative value is treated as unreported, as a zero
-// expires_in is: a token response issues a working grant (RFC 6749 §5.1), and
-// a grant that has really ended answers its next refresh with invalid_grant
-// (§5.2). Storing the literal value would make the grant dead on arrival, on
-// every reconnect. A value too large for time.Duration would wrap to a past
-// deadline.
+// usableLifetime reports whether a provider's lifetime in seconds can be a deadline.
 func usableLifetime(seconds int64) bool {
 	return seconds > 0 && seconds <= int64((1<<63-1)/time.Second)
 }

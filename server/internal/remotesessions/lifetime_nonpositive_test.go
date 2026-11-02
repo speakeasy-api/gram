@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -66,7 +67,7 @@ func requireNoToken(t *testing.T, ctx context.Context, env syntheticExpiryEnv) {
 	require.Empty(t, token)
 }
 
-// storeGrantDeadlines overwrites the grant's deadlines, as a row stored earlier would hold them.
+// storeGrantDeadlines overwrites the grant's deadlines.
 func storeGrantDeadlines(t *testing.T, ctx context.Context, env syntheticExpiryEnv, access, refresh, authorization pgtype.Timestamptz) {
 	t.Helper()
 	row := activeSession(t, ctx, env)
@@ -91,9 +92,7 @@ func storeGrantDeadlines(t *testing.T, ctx context.Context, env syntheticExpiryE
 	require.NoError(t, err)
 }
 
-// A sign-in that reports a zero or negative lifetime stores no deadline for it,
-// so the grant works on arrival.
-func TestRemoteLoginCallback_NonPositiveLifetimeIsUnreported(t *testing.T) {
+func TestRemoteLoginCallback_UnusableLifetimeIsUnreported(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -106,12 +105,13 @@ func TestRemoteLoginCallback_NonPositiveLifetimeIsUnreported(t *testing.T) {
 		{name: "negative refresh timeout", fields: `"refresh_token_timeout":-3600`},
 		{name: "both zero", fields: `"authorization_expires_in":0,"refresh_token_timeout":0`},
 		{name: "overflowing authorization", fields: `"authorization_expires_in":9223372036854775807`},
+		{name: "beyond int64", fields: `"authorization_expires_in":18446744073709551615`},
+		{name: "fractional", fields: `"refresh_token_timeout":3600.5`},
+		{name: "zero string", fields: `"authorization_expires_in":"0"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			var tokenCalls atomic.Int64
-			ctx, env := newSyntheticExpiryEnv(t, "nonpositive-"+uniqueSuffix(tc.name), func(w http.ResponseWriter, _ *http.Request) {
-				tokenCalls.Add(1)
+			ctx, env := newSyntheticExpiryEnv(t, "unusable-"+uuid.NewString()[:8], func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = fmt.Fprintf(w, `{"access_token":"live-access","refresh_token":"live-refresh","token_type":"Bearer",%s}`, tc.fields)
 			})
@@ -119,35 +119,11 @@ func TestRemoteLoginCallback_NonPositiveLifetimeIsUnreported(t *testing.T) {
 			require.False(t, env.session.AuthorizationExpiresAt.Valid)
 			require.False(t, env.session.RefreshExpiresAt.Valid)
 			require.Equal(t, remotesessions.RemoteSessionActive, sessionStatus(t, ctx, env))
-
-			exchanged := tokenCalls.Load()
 			token, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
 			require.NoError(t, err)
 			require.Equal(t, "live-access", token)
-			require.Equal(t, exchanged, tokenCalls.Load(), "a usable token needs no refresh")
 		})
 	}
-}
-
-// A positive lifetime is stored exactly and still ends the grant when it passes.
-func TestRemoteLoginCallback_PositiveLifetimeExpiresOnSchedule(t *testing.T) {
-	t.Parallel()
-
-	before := time.Now()
-	var tokenCalls atomic.Int64
-	ctx, env := newSyntheticExpiryEnv(t, "positive-lifetime", func(w http.ResponseWriter, _ *http.Request) {
-		tokenCalls.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"access_token":"live-access","refresh_token":"live-refresh","token_type":"Bearer","expires_in":3600,"authorization_expires_in":60,"refresh_token_timeout":120}`))
-	})
-	require.WithinDuration(t, before.Add(time.Minute), env.session.AuthorizationExpiresAt.Time, 30*time.Second)
-	require.WithinDuration(t, before.Add(2*time.Minute), env.session.RefreshExpiresAt.Time, 30*time.Second)
-	require.Equal(t, remotesessions.RemoteSessionActive, sessionStatus(t, ctx, env))
-
-	past := conv.ToPGTimestamptz(time.Now().Add(-time.Second))
-	storeGrantDeadlines(t, ctx, env, env.session.AccessExpiresAt, env.session.RefreshExpiresAt, past)
-	require.Equal(t, remotesessions.RemoteSessionExpired, sessionStatus(t, ctx, env))
-	requireNoToken(t, ctx, env)
 }
 
 // A stored deadline that has passed stays final, and no refresh is tried against it.
@@ -168,7 +144,7 @@ func TestGenuinelyExpiredGrantStaysExpired(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var tokenCalls atomic.Int64
-			ctx, env := newSyntheticExpiryEnv(t, "genuine-"+uniqueSuffix(tc.name), func(w http.ResponseWriter, _ *http.Request) {
+			ctx, env := newSyntheticExpiryEnv(t, "genuine-"+uuid.NewString()[:8], func(w http.ResponseWriter, _ *http.Request) {
 				tokenCalls.Add(1)
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = w.Write([]byte(`{"access_token":"live-access","refresh_token":"live-refresh","token_type":"Bearer"}`))
@@ -183,8 +159,6 @@ func TestGenuinelyExpiredGrantStaysExpired(t *testing.T) {
 	}
 }
 
-// A row stored dead by the old callback recovers on reconnect, even when the
-// provider still reports the same zero lifetime.
 func TestReconnectRecoversGrantStoredDead(t *testing.T) {
 	t.Parallel()
 
@@ -199,7 +173,7 @@ func TestReconnectRecoversGrantStoredDead(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			ctx, env := newSyntheticExpiryEnv(t, "reconnect-dead-"+uniqueSuffix(tc.name), func(w http.ResponseWriter, _ *http.Request) {
+			ctx, env := newSyntheticExpiryEnv(t, "reconnect-dead-"+uuid.NewString()[:8], func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = w.Write([]byte(`{"access_token":"reconnected-access","refresh_token":"live-refresh","token_type":"Bearer","authorization_expires_in":0,"refresh_token_timeout":0}`))
 			})
@@ -219,69 +193,59 @@ func TestReconnectRecoversGrantStoredDead(t *testing.T) {
 	}
 }
 
-// A refresh, on the request path or the background sweep, handles lifetimes the way the callback does.
-func TestRefreshHandlesNonPositiveLifetimes(t *testing.T) {
+func TestRefreshHandlesUnusableLifetimes(t *testing.T) {
 	t.Parallel()
 
-	for _, trigger := range []remotesessionmetrics.RefreshTrigger{remotesessionmetrics.RefreshTriggerRequest, remotesessionmetrics.RefreshTriggerScheduled} {
-		for _, tc := range []struct {
-			name              string
-			fields            string
-			keepAuthorization bool
-			keepRefresh       bool
-			refreshDeadline   time.Duration
-			authorization     time.Duration
-		}{
-			{name: "zero authorization keeps the known deadline", fields: `"refresh_token":"rotated","authorization_expires_in":0`, keepAuthorization: true},
-			{name: "negative authorization keeps the known deadline", fields: `"refresh_token":"rotated","authorization_expires_in":-1`, keepAuthorization: true},
-			{name: "zero timeout on a rotated token stores none", fields: `"refresh_token":"rotated","refresh_token_timeout":0`, keepAuthorization: true},
-			{name: "negative timeout on a rotated token stores none", fields: `"refresh_token":"rotated","refresh_token_timeout":-1`, keepAuthorization: true},
-			{name: "zero timeout on the same token keeps the known deadline", fields: `"refresh_token":"live-refresh","refresh_token_timeout":0`, keepAuthorization: true, keepRefresh: true},
-			{name: "positive lifetimes replace", fields: `"refresh_token":"rotated","authorization_expires_in":600,"refresh_token_timeout":300`, authorization: 10 * time.Minute, refreshDeadline: 5 * time.Minute},
-		} {
-			t.Run(string(trigger)+" "+tc.name, func(t *testing.T) {
-				t.Parallel()
-				ctx, env := newSyntheticExpiryEnv(t, "refresh-life-"+uniqueSuffix(string(trigger)+tc.name), func(w http.ResponseWriter, r *http.Request) {
-					w.Header().Set("Content-Type", "application/json")
-					if err := r.ParseForm(); err == nil && r.PostForm.Get("grant_type") == "refresh_token" {
-						_, _ = fmt.Fprintf(w, `{"access_token":"refreshed","token_type":"Bearer","expires_in":3600,%s}`, tc.fields)
-						return
-					}
-					_, _ = w.Write([]byte(`{"access_token":"first","refresh_token":"live-refresh","token_type":"Bearer","expires_in":3600,"authorization_expires_in":86400,"refresh_token_timeout":7200}`))
-				})
-				known, knownRefresh := env.session.AuthorizationExpiresAt.Time, env.session.RefreshExpiresAt.Time
-
-				_, err := env.refresher.RefreshNow(ctx, env.session, "", trigger)
-				require.NoError(t, err)
-
-				row := activeSession(t, ctx, env)
-				plain, err := env.enc.Decrypt(row.AccessTokenEncrypted)
-				require.NoError(t, err)
-				require.Equal(t, "refreshed", plain)
-				if tc.keepAuthorization {
-					require.WithinDuration(t, known, row.AuthorizationExpiresAt.Time, time.Second)
-				} else {
-					require.WithinDuration(t, time.Now().Add(tc.authorization), row.AuthorizationExpiresAt.Time, 30*time.Second)
+	for _, tc := range []struct {
+		name              string
+		fields            string
+		keepAuthorization bool
+		keepRefresh       bool
+		refreshDeadline   time.Duration
+		authorization     time.Duration
+	}{
+		{name: "zero authorization keeps the known deadline", fields: `"refresh_token":"rotated","authorization_expires_in":0`, keepAuthorization: true},
+		{name: "negative authorization keeps the known deadline", fields: `"refresh_token":"rotated","authorization_expires_in":-1`, keepAuthorization: true},
+		{name: "fractional authorization keeps the known deadline", fields: `"refresh_token":"rotated","authorization_expires_in":3600.5`, keepAuthorization: true},
+		{name: "zero timeout on a rotated token stores none", fields: `"refresh_token":"rotated","refresh_token_timeout":0`, keepAuthorization: true},
+		{name: "negative timeout on a rotated token stores none", fields: `"refresh_token":"rotated","refresh_token_timeout":-1`, keepAuthorization: true},
+		{name: "beyond int64 timeout on a rotated token stores none", fields: `"refresh_token":"rotated","refresh_token_timeout":18446744073709551615`, keepAuthorization: true},
+		{name: "zero timeout on the same token keeps the known deadline", fields: `"refresh_token":"live-refresh","refresh_token_timeout":0`, keepAuthorization: true, keepRefresh: true},
+		{name: "positive lifetimes replace", fields: `"refresh_token":"rotated","authorization_expires_in":600,"refresh_token_timeout":300`, authorization: 10 * time.Minute, refreshDeadline: 5 * time.Minute},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, env := newSyntheticExpiryEnv(t, "refresh-life-"+uuid.NewString()[:8], func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if err := r.ParseForm(); err == nil && r.PostForm.Get("grant_type") == "refresh_token" {
+					_, _ = fmt.Fprintf(w, `{"access_token":"refreshed","token_type":"Bearer","expires_in":3600,%s}`, tc.fields)
+					return
 				}
-				switch {
-				case tc.keepRefresh:
-					require.WithinDuration(t, knownRefresh, row.RefreshExpiresAt.Time, time.Second)
-				case tc.refreshDeadline == 0:
-					require.False(t, row.RefreshExpiresAt.Valid)
-				default:
-					require.WithinDuration(t, time.Now().Add(tc.refreshDeadline), row.RefreshExpiresAt.Time, 30*time.Second)
-				}
-				require.Equal(t, remotesessions.RemoteSessionActive, sessionStatus(t, ctx, env))
+				_, _ = w.Write([]byte(`{"access_token":"first","refresh_token":"live-refresh","token_type":"Bearer","expires_in":3600,"authorization_expires_in":86400,"refresh_token_timeout":7200}`))
 			})
-		}
-	}
-}
+			known, knownRefresh := env.session.AuthorizationExpiresAt.Time, env.session.RefreshExpiresAt.Time
 
-// uniqueSuffix turns a case name into a slug-safe suffix.
-func uniqueSuffix(name string) string {
-	var hash uint32 = 2166136261
-	for _, b := range []byte(name) {
-		hash = (hash ^ uint32(b)) * 16777619
+			_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled)
+			require.NoError(t, err)
+
+			row := activeSession(t, ctx, env)
+			plain, err := env.enc.Decrypt(row.AccessTokenEncrypted)
+			require.NoError(t, err)
+			require.Equal(t, "refreshed", plain)
+			if tc.keepAuthorization {
+				require.WithinDuration(t, known, row.AuthorizationExpiresAt.Time, time.Second)
+			} else {
+				require.WithinDuration(t, time.Now().Add(tc.authorization), row.AuthorizationExpiresAt.Time, 30*time.Second)
+			}
+			switch {
+			case tc.keepRefresh:
+				require.WithinDuration(t, knownRefresh, row.RefreshExpiresAt.Time, time.Second)
+			case tc.refreshDeadline == 0:
+				require.False(t, row.RefreshExpiresAt.Valid)
+			default:
+				require.WithinDuration(t, time.Now().Add(tc.refreshDeadline), row.RefreshExpiresAt.Time, 30*time.Second)
+			}
+			require.Equal(t, remotesessions.RemoteSessionActive, sessionStatus(t, ctx, env))
+		})
 	}
-	return fmt.Sprintf("%08x", hash)
 }

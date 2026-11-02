@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"github.com/jackc/pgx/v5/pgtype"
 	"net/http"
 	"net/http/httptest"
@@ -39,21 +40,31 @@ func seedTwoClientConsentEndpoint(t *testing.T, tag string) (context.Context, co
 	return ctx, fx
 }
 
+// postApproveResult posts the fixture's approval and returns what the handler did.
+func postApproveResult(t *testing.T, ctx context.Context, fx consentActionFixture) (*httptest.ResponseRecorder, error) {
+	t.Helper()
+	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}, "tool_filtering": {"off"}}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	if err := fx.ti.service.ServeConsent(w, req.WithContext(ctx), fx.endpoint); err != nil {
+		return w, fmt.Errorf("serve consent approval: %w", err)
+	}
+	return w, nil
+}
+
+func postApprove(t *testing.T, ctx context.Context, fx consentActionFixture) *httptest.ResponseRecorder {
+	t.Helper()
+	w, err := postApproveResult(t, ctx, fx)
+	require.NoError(t, err)
+	return w
+}
+
 // approveConsent approves the fixture's consent and returns the grant its
 // authorization code redeems.
 func approveConsent(t *testing.T, ctx context.Context, fx consentActionFixture) mcp.UserSessionGrant {
 	t.Helper()
-	form := url.Values{}
-	form.Set("state", fx.stateID)
-	form.Set("csrf_token", "csrf-token")
-	form.Set("action", "approve")
-	form.Set("tool_filtering", "off")
-	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req = req.WithContext(ctx)
-
-	w := httptest.NewRecorder()
-	require.NoError(t, fx.ti.service.ServeConsent(w, req, fx.endpoint))
+	w := postApprove(t, ctx, fx)
 	require.Equal(t, http.StatusSeeOther, w.Code, w.Body.String())
 	loc, err := url.Parse(w.Header().Get("Location"))
 	require.NoError(t, err)
@@ -67,8 +78,8 @@ func approveConsent(t *testing.T, ctx context.Context, fx consentActionFixture) 
 }
 
 // The card a person goes through is the server's pick, whether they connected
-// it interactively or identity chaining serves it; with no such card, or
-// several, the server gets no pick.
+// it interactively or identity chaining serves it; with several, the server
+// gets no pick.
 func TestConsentPost_RecordsTheUpstreamClientPicked(t *testing.T) {
 	t.Parallel()
 
@@ -88,14 +99,6 @@ func TestConsentPost_RecordsTheUpstreamClientPicked(t *testing.T) {
 
 		grant := approveConsent(t, ctx, fx)
 		require.Equal(t, map[uuid.UUID]uuid.UUID{fx.endpoint.McpServerID.UUID: fx.clientA}, grant.UpstreamClientPicks)
-	})
-
-	t.Run("no usable card", func(t *testing.T) {
-		t.Parallel()
-		ctx, fx := seedTwoClientConsentEndpoint(t, "pick-none")
-
-		grant := approveConsent(t, ctx, fx)
-		require.Empty(t, grant.UpstreamClientPicks)
 	})
 
 	t.Run("several usable cards", func(t *testing.T) {

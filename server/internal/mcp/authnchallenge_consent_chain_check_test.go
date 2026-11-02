@@ -236,7 +236,7 @@ func TestConsentChainCheck_UnknownAllowsAuthorizationWithoutPersonalOAuth(t *tes
 	require.Nil(t, redirect, "must not redirect to personal upstream OAuth")
 	require.Contains(t, page, `data-consent-enabled="true"`)
 	require.Contains(t, page, "Use a separate sign-in instead")
-	require.NotContains(t, page, "Connect a service above to enable access.")
+	require.NotContains(t, page, "Connect or reconnect a service above to give access.")
 	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}}
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

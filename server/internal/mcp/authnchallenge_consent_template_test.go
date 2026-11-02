@@ -804,7 +804,7 @@ func TestConsentTemplateAgentSelectionMarksSelfOnlyReadinessHint(t *testing.T) {
 	require.NoError(t, err)
 
 	html := page.String()
-	hint := strings.Index(html, "Connect a service above to enable access.")
+	hint := strings.Index(html, "Connect or reconnect a service above to give access.")
 	require.NotEqual(t, -1, hint)
 	require.Contains(t, html[hint-100:hint], "data-agent-self-only")
 }
@@ -1032,7 +1032,7 @@ func TestConsentTemplateExplainsWhyThePersonCannotApproveForThemselves(t *testin
 	require.NoError(t, err)
 
 	html := normalizeWhitespace(page.String())
-	require.NotContains(t, html, "Connect a service above to enable access.")
+	require.NotContains(t, html, "Connect or reconnect a service above to give access.")
 	require.Contains(t, html, `<div role="alert" data-agent-self-only data-self-approval-error`, "hidden once the page approves for an agent")
 	require.Contains(t, html, "You don&#39;t have access to any of the ways this server signs in.")
 	require.Contains(t, html, `<a class="underline" href="https://example.com/request-access">Request access</a>`)

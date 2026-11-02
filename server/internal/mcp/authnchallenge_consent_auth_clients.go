@@ -387,20 +387,14 @@ func (s *Service) directConsentAuthChoice(ctx context.Context, endpoint *Resolve
 	return choices[serverID], nil
 }
 
-// errConsentConnectionsExpired refuses an approval that could only issue a
-// token whose every call fails until the person reconnects.
-var errConsentConnectionsExpired = errors.New("every connection serving this approval has expired")
+// errConsentNoUsableConnection refuses an approval no connection could serve.
+var errConsentNoUsableConnection = errors.New("no connection can serve this approval")
 
-// consentCardsAllExpired reports that a connection has expired and no card can serve instead.
-func consentCardsAllExpired(cards []remoteSessionCard) bool {
-	expired := false
-	for _, card := range cards {
-		if card.Connected || card.Chained {
-			return false
-		}
-		expired = expired || card.Expired
-	}
-	return expired
+// consentCardsApprovable is the rule for approving through service cards.
+func consentCardsApprovable(cards []remoteSessionCard) bool {
+	return len(cards) == 0 || slices.ContainsFunc(cards, func(card remoteSessionCard) bool {
+		return card.Connected || card.Chained
+	})
 }
 
 // consentDirectAuthClientPick validates the credential posted with a direct
@@ -408,8 +402,11 @@ func consentCardsAllExpired(cards []remoteSessionCard) bool {
 // the grant's typed pick. The registration it names replaces the card-derived
 // pick in upstreamPicks; a headers-only client removes it. A pick that is no
 // longer usable, or a missing one where a choice is required, is
-// errConsentConfigurationChanged. It returns nil where the page offers no
-// typed choice.
+// errConsentConfigurationChanged. Where the page offers no typed choice the
+// cards decide, and failing consentCardsApprovable is
+// errConsentNoUsableConnection. A gateway is judged by its inventory instead.
+// So is an agent by CheckAccessTokens: an attached connection is stored under
+// its owner, so the agent's cards read as not connected while it still works.
 func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, posted string, upstreamPicks map[uuid.UUID]uuid.UUID, cards []remoteSessionCard) (map[uuid.UUID]uuid.UUID, error) {
 	picked := uuid.Nil
 	if posted != "" {
@@ -424,11 +421,9 @@ func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *Res
 		return nil, err
 	}
 	if auth == nil {
-		// Without a typed choice the cards decide, as they do on the page. A
-		// gateway is judged by its inventory; an agent by its own connections.
 		agent := challengeState.Subject != nil && challengeState.Subject.Kind == urn.SessionSubjectKindAgent
-		if !endpoint.MetaMcpServerID.Valid && !agent && consentCardsAllExpired(cards) {
-			return nil, errConsentConnectionsExpired
+		if !endpoint.MetaMcpServerID.Valid && !agent && !consentCardsApprovable(cards) {
+			return nil, errConsentNoUsableConnection
 		}
 		return nil, nil
 	}

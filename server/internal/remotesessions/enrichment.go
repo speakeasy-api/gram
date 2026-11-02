@@ -943,7 +943,7 @@ func (m *ChallengeManager) backfillRefreshDeadline(ctx context.Context, q *remot
 	switch {
 	case !refresh.ok():
 		return &record
-	case !refresh.active || refresh.expiresAt.IsZero():
+	case !refresh.active || !refresh.expiresAt.After(time.Now()):
 		record.fail(interfaceReasonNoExp)
 		return &record
 	}
