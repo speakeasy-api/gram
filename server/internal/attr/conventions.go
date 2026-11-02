@@ -767,6 +767,7 @@ const (
 	DirectoryMembershipsOpenedKey     = attribute.Key("gram.directory_group.memberships_opened")
 	DirectoryMembershipsClosedKey     = attribute.Key("gram.directory_group.memberships_closed")
 	OutcomeKey                        = attribute.Key("gram.outcome")
+	ConnectionDropCountsKey           = attribute.Key("gram.connection.drop_counts")
 	ConnectionDropReasonKey           = attribute.Key("gram.connection.drop_reason")
 	ConnectionOutcomeKey              = attribute.Key("gram.connection.outcome")
 	ConnectionReasonKey               = attribute.Key("gram.connection.reason")
@@ -2933,6 +2934,10 @@ func PKCEMethod(v string) attribute.KeyValue { return PKCEMethodKey.String(v) }
 func SlogPKCEMethod(v string) slog.Attr      { return slog.String(string(PKCEMethodKey), v) }
 
 func PKCESupport[V ~string](v V) attribute.KeyValue { return PKCESupportKey.String(string(v)) }
+
+func SlogConnectionDropCounts(v string) slog.Attr {
+	return slog.String(string(ConnectionDropCountsKey), v)
+}
 
 func ConnectionDropReason(v string) attribute.KeyValue { return ConnectionDropReasonKey.String(v) }
 func SlogConnectionDropReason(v string) slog.Attr {

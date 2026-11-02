@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -49,6 +51,9 @@ const (
 	// defaultInsertTimeout bounds one insert, so a stalled ClickHouse only costs queued rows.
 	defaultInsertTimeout = 3 * time.Second
 
+	// drainLogWait bounds the wait for Shutdown's one log line.
+	drainLogWait = time.Second
+
 	// dropLogInterval limits logging per reason during an outage.
 	dropLogInterval = time.Minute
 
@@ -71,6 +76,7 @@ const (
 	dropLogsOff      dropReason = "logs_off"
 	dropLogsCheck    dropReason = "logs_check_failed"
 	dropPanic        dropReason = "panic"
+	dropRateLimited  dropReason = "rate_limited"
 )
 
 // shortLabel is the shape of a sub-reason or grant type. It is what keeps a raw
@@ -321,6 +327,7 @@ type config struct {
 type Recorder struct {
 	logger      *slog.Logger
 	conn        driver.Conn
+	limiter     *onceLimiter
 	logsEnabled func(context.Context, string) (bool, error)
 	capture     func(Row)
 	cfg         config
@@ -337,9 +344,15 @@ type Recorder struct {
 	stopped bool
 
 	lastDrop map[dropReason]*atomic.Int64
+
+	// unfinished counts rows accepted but not yet written or dropped, wherever they are.
+	unfinished atomic.Int64
+
+	// dropTotals counts rows per reason, so Shutdown can report what its drain lost.
+	dropTotals map[dropReason]*atomic.Int64
 }
 
-func lastDropTimes() map[dropReason]*atomic.Int64 {
+func newDropCounters() map[dropReason]*atomic.Int64 {
 	return map[dropReason]*atomic.Int64{
 		dropQueueFull:    {},
 		dropTableMissing: {},
@@ -349,6 +362,7 @@ func lastDropTimes() map[dropReason]*atomic.Int64 {
 		dropLogsOff:      {},
 		dropLogsCheck:    {},
 		dropPanic:        {},
+		dropRateLimited:  {},
 	}
 }
 
@@ -385,6 +399,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 	r := &Recorder{
 		logger:      logger,
 		conn:        conn,
+		limiter:     newOnceLimiter(),
 		logsEnabled: logsEnabled,
 		capture:     nil,
 		cfg:         cfg,
@@ -396,7 +411,9 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		stopOnce:    sync.Once{},
 		stopMu:      sync.RWMutex{},
 		stopped:     false,
-		lastDrop:    lastDropTimes(),
+		lastDrop:    newDropCounters(),
+		unfinished:  atomic.Int64{},
+		dropTotals:  newDropCounters(),
 	}
 	go r.run()
 	return r
@@ -408,6 +425,7 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 	return &Recorder{
 		logger:      slog.New(slog.DiscardHandler),
 		conn:        nil,
+		limiter:     nil,
 		logsEnabled: logsEnabled,
 		capture:     capture,
 		cfg:         config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second},
@@ -419,33 +437,40 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 		stopOnce:    sync.Once{},
 		stopMu:      sync.RWMutex{},
 		stopped:     false,
-		lastDrop:    lastDropTimes(),
+		lastDrop:    newDropCounters(),
+		unfinished:  atomic.Int64{},
+		dropTotals:  newDropCounters(),
 	}
 }
 
 // Step records a step that does not end the attempt.
 func (r *Recorder) Step(ctx context.Context, attempt Attempt, step Step, what Happened, opts ...Option) {
-	r.record(ctx, attempt, step, what, false, opts)
+	r.record(ctx, attempt, step, what, false, false, opts)
 }
 
 // End records the step that ends the attempt. Its outcome is Connected for a
 // Result and the catalog's outcome for a Code. A flow ends an attempt once.
 func (r *Recorder) End(ctx context.Context, attempt Attempt, step Step, what Happened, opts ...Option) {
-	r.record(ctx, attempt, step, what, true, opts)
+	r.record(ctx, attempt, step, what, true, false, opts)
 }
 
-// Once records an attempt that is one request: one row, final.
+// Once records an attempt that is one request: one row, final. It has no proof of a real
+// flow behind it, so repeats are held back and count as rate_limited.
 func (r *Recorder) Once(ctx context.Context, scope Scope, step Step, what Happened, opts ...Option) {
-	r.End(ctx, Begin(scope), step, what, opts...)
+	r.record(ctx, Begin(scope), step, what, true, true, opts)
 }
 
-func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what Happened, final bool, opts []Option) {
+func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what Happened, final, limited bool, opts []Option) {
 	if r == nil || attempt.IsZero() {
 		return
 	}
 	row, err := RowAt(attempt, step, what, final, time.Now(), opts...)
 	if err != nil {
 		r.drop(ctx, dropInvalidEvent, 1, err)
+		return
+	}
+	if limited && r.limiter != nil && !r.limiter.allow(row, time.Now()) {
+		r.drop(ctx, dropRateLimited, 1, nil)
 		return
 	}
 	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.HasTraceID() {
@@ -472,31 +497,78 @@ func (r *Recorder) enqueue(row Row) dropReason {
 	if r.stopped {
 		return dropShutdown
 	}
+	r.unfinished.Add(1)
 	select {
 	case r.queue <- row:
 		return ""
 	default:
+		r.unfinished.Add(-1)
 		return dropQueueFull
 	}
 }
 
-// Shutdown writes what is queued, each batch once, and stops the goroutine.
+// Shutdown writes what is queued, each batch once, and stops the goroutine. It logs
+// what the drain lost, because metrics may not be exported by then.
 func (r *Recorder) Shutdown(ctx context.Context) error {
 	if r == nil || r.stop == nil {
 		return nil
 	}
+	first := false
+	var before map[dropReason]int64
 	r.stopOnce.Do(func() {
+		first = true
 		r.stopMu.Lock()
 		r.stopped = true
 		r.stopMu.Unlock()
+		before = r.dropSnapshot()
 		close(r.stop)
 	})
+
+	var err error
 	select {
 	case <-r.done:
-		return nil
 	case <-ctx.Done():
-		return fmt.Errorf("drain connection events: %w", ctx.Err())
+		err = fmt.Errorf("drain connection events: %w", ctx.Err())
 	}
+	if first {
+		// A stuck log handler must not hold Shutdown past its deadline.
+		logged := make(chan struct{})
+		go func() {
+			defer close(logged)
+			r.logDrainLosses(context.WithoutCancel(ctx), before)
+		}()
+		select {
+		case <-logged:
+		case <-time.After(drainLogWait):
+		}
+	}
+	return err
+}
+
+func (r *Recorder) dropSnapshot() map[dropReason]int64 {
+	snapshot := make(map[dropReason]int64, len(r.dropTotals))
+	for reason, total := range r.dropTotals {
+		snapshot[reason] = total.Load()
+	}
+	return snapshot
+}
+
+// logDrainLosses logs one line of rows lost since the drain began. Logs-off rows are not a loss.
+func (r *Recorder) logDrainLosses(ctx context.Context, before map[dropReason]int64) {
+	var parts []string
+	for reason, count := range r.dropSnapshot() {
+		if lost := count - before[reason]; lost > 0 && reason != dropLogsOff {
+			parts = append(parts, fmt.Sprintf("%s=%d", reason, lost))
+		}
+	}
+	if unfinished := r.unfinished.Load(); unfinished > 0 {
+		parts = append(parts, fmt.Sprintf("unfinished=%d", unfinished))
+	}
+	if len(parts) == 0 {
+		return
+	}
+	slices.Sort(parts)
+	r.logger.WarnContext(ctx, "connection events lost during shutdown", attr.SlogConnectionDropCounts(strings.Join(parts, " ")))
 }
 
 func (r *Recorder) run() {
@@ -514,11 +586,13 @@ func (r *Recorder) run() {
 		batch = make([]Row, 0, r.cfg.maxBatch)
 		if len(rows) > 0 {
 			r.surviving(len(rows), func() { r.insert(rows) })
+			r.unfinished.Add(-int64(len(rows)))
 		}
 		// A tick from during a slow insert would flush a nearly empty batch and let a backlog grow.
 		ticker.Reset(r.cfg.flushInterval)
 	}
 	add := func(row Row) {
+		pending := len(batch)
 		r.surviving(1, func() {
 			reason, checked := organizations[row.OrganizationID]
 			if !checked {
@@ -536,6 +610,9 @@ func (r *Recorder) run() {
 			}
 			batch = append(batch, row)
 		})
+		if len(batch) == pending {
+			r.unfinished.Add(-1)
+		}
 		if len(batch) >= r.cfg.maxBatch {
 			flush()
 		}
@@ -620,6 +697,7 @@ func (r *Recorder) countStep(ctx context.Context, row Row) {
 }
 
 func (r *Recorder) drop(ctx context.Context, reason dropReason, rows int, cause error) {
+	r.dropTotals[reason].Add(int64(rows))
 	if r.dropped != nil {
 		r.dropped.Add(ctx, int64(rows), metric.WithAttributes(attr.ConnectionDropReason(string(reason))))
 	}
