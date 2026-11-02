@@ -18,6 +18,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -109,6 +111,27 @@ func TestCreateSessionHandoff_MintsAndServesOnce(t *testing.T) {
 	gone, err := ti.blobs.Exists(ctx, blobURL)
 	require.NoError(t, err)
 	require.False(t, gone, "burning a handoff must delete the document from object storage")
+}
+
+func TestSessionHandoffMinterSeparatesCanonicalChatAndProductSessionIDs(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	canonicalChatID := uuid.New()
+	const externalSessionID = "external-session-not-a-chat-uuid"
+	minter := sessionhandoff.NewSessionHandoffMinter(testenv.NewLogger(t), ti.conn, ti.blobs, "https://example.test", audit.NewLogger())
+	result, err := minter.Mint(ctx, sessionhandoff.SessionHandoffMintInput{
+		OrganizationID: ti.orgID, ProjectID: ti.projectID, UserID: "user_canonical_audit",
+		ChatID: canonicalChatID, SessionID: externalSessionID, Content: "# redacted handoff", SourceSurface: "platform-mcp",
+	})
+	require.NoError(t, err)
+	token := result.URL[strings.LastIndex(result.URL, "/")+1:]
+	var persistedSessionID string
+	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT session_id FROM session_handoff_links WHERE token = $1`, token).Scan(&persistedSessionID))
+	require.Equal(t, externalSessionID, persistedSessionID)
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionChatSessionHandoffExport)
+	require.NoError(t, err)
+	require.Equal(t, canonicalChatID.String(), record.SubjectID)
+	require.Equal(t, "chat_session", record.SubjectType)
 }
 
 // The fleet-shared org install key must not be able to upload content and

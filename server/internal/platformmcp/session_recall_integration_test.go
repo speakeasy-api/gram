@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -35,6 +36,16 @@ func newRecallService(t *testing.T, conn *pgxpool.Pool, enabled *bool) (*Session
 	return NewSessionRecallService(testenv.NewLogger(t), conn, platformrepo.New(conn), audit.NewLogger(), func(_ context.Context, _ string) (bool, error) {
 		return *enabled, nil
 	}, findings, allowBudget()), findings
+}
+
+type recordingHandoffMinter struct {
+	inputs []sessionhandoff.SessionHandoffMintInput
+}
+
+func (m *recordingHandoffMinter) Valid() bool { return true }
+func (m *recordingHandoffMinter) Mint(_ context.Context, input sessionhandoff.SessionHandoffMintInput) (sessionhandoff.SessionHandoffMintResult, error) {
+	m.inputs = append(m.inputs, input)
+	return sessionhandoff.SessionHandoffMintResult{URL: "https://example.test/shared/handoffs/token", ExpiresAt: "2026-08-20T10:15:00Z"}, nil
 }
 
 // seedRecallChat inserts a captured chat the way hook ingest records one: the
@@ -230,6 +241,8 @@ func TestSessionRecallContinueMasksAndRecords(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	enabled := true
 	svc, findings := newRecallService(t, conn, &enabled)
+	minter := &recordingHandoffMinter{}
+	svc.WithHandoffMinter(minter)
 
 	sessionID := "ses_" + uuid.NewString()
 	chatID := seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, sessionID, "fix flaky auth test", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
@@ -283,6 +296,14 @@ func TestSessionRecallContinueMasksAndRecords(t *testing.T) {
 	require.Contains(t, out.NotCarriedOver, "tool inputs and outputs (redacted; tool names retained)")
 	require.Contains(t, out.NotCarriedOver, "files touched (derived from tool inputs, which are redacted)")
 	require.Contains(t, out.Notes, "1 messages are awaiting risk analysis; their content was withheld")
+
+	_, err = svc.CreateSessionHandoffLink(ctx, principal, CreateSessionHandoffLinkInput{SessionID: sessionID, Confirmed: true})
+	require.NoError(t, err)
+	require.Len(t, minter.inputs, 1)
+	require.Equal(t, out.Digest, minter.inputs[0].Content)
+	require.Contains(t, minter.inputs[0].Content, masked)
+	require.NotContains(t, minter.inputs[0].Content, secret)
+	require.NotContains(t, minter.inputs[0].Content, "/repo/auth/login.go")
 
 	// Case 3: one NULL-child recall edge and one content-free audit record,
 	// committed together.
