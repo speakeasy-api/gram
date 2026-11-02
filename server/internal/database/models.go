@@ -3681,6 +3681,10 @@ type NetworkIngress struct {
 	// @access: confidential
 	ConnectedSince pgtype.Timestamptz
 	// @access: confidential
+	Runtime pgtype.Text
+	// @access: confidential
+	GatewayShard string
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -3688,6 +3692,60 @@ type NetworkIngress struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type NetworkIngressNode struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	NetworkIngressID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Slot int32
+	// @access: confidential
+	PodName pgtype.Text
+	// @access: secret-restricted
+	AuthKeyEncrypted pgtype.Text
+	// @access: confidential
+	AuthKeyExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	Status string
+	// @access: restricted
+	NodeID pgtype.Text
+	// @access: restricted
+	DnsName pgtype.Text
+	// @access: confidential
+	LastError pgtype.Text
+	// @access: confidential
+	LastSeenAt pgtype.Timestamptz
+	// @access: confidential
+	ConnectedSince pgtype.Timestamptz
+	// @access: confidential
+	RetiredAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type NetworkIngressNodeState struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	NetworkIngressID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Slot int32
+	// @access: confidential
+	StateKey string
+	// @access: secret-restricted
+	ValueEncrypted string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type OauthProxyClientInfo struct {
