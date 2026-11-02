@@ -36,8 +36,8 @@ Arms C (`search_team_memory`) and D (`recall_team_history` + `zoom` +
 `search_team_memory` with hybrid retrieval: the same masked items are embedded
 in memory (`--embedding-model`, default the business memory model) and each
 query fuses the vector ranks with the full-text ranks (reciprocal rank
-fusion). It needs no schema change and decides whether team memory needs
-embeddings at all. The judged report adds a retrieval recall table for arms C
+fusion). It needs no schema change. Its results on this synthetic corpus
+inform, rather than settle, whether team memory needs embeddings. The judged report adds a retrieval recall table for arms C
 and E, querying with evidence words and with each question's own text, so
 retrieval can be compared without the answering agent.
 
