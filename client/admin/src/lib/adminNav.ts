@@ -22,6 +22,7 @@ import {
   ActivityIcon,
   GlobeIcon,
   MessageSquareIcon,
+  FlaskConicalIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -109,6 +110,13 @@ export const ADMIN_NAV_GROUPS = [
         label: "Custom domains",
         keywords: "dns cname routing target hostname domain vanity",
         icon: GlobeIcon,
+      },
+      {
+        to: "/memory-evals",
+        label: "Organizational Memory evals",
+        keywords:
+          "organizational memory team memory eval evals benchmark models summary digest accuracy compare",
+        icon: FlaskConicalIcon,
       },
       {
         to: "/fleet-health",

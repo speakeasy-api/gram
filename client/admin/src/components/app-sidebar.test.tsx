@@ -233,6 +233,7 @@ describe("AppSidebar", () => {
             href: "/upstream-oauth-migration",
           },
           { label: "Custom domains", href: "/custom-domains" },
+          { label: "Organizational Memory evals", href: "/memory-evals" },
           { label: "Fleet health", href: "/fleet-health" },
           {
             label: "Platform MCP feedback",
