@@ -11,12 +11,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
-	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // Per-request rows record refusals and failures only. A request that is served
@@ -225,23 +223,14 @@ func (c upstreamRefreshCheck) reconnect() bool {
 	return c == upstreamRefreshReconnect || c == upstreamRefreshEMARefused
 }
 
-func (s *Service) recordInboundRefreshed(ctx context.Context, endpoint *ResolvedMcpEndpoint, client *usersessions_repo.UserSessionClient, check upstreamRefreshCheck, subject *urn.SessionSubject) {
-	var what mcpconnectionattempts.Happened = mcpconnectionattempts.ResultRefreshed
-	if check == upstreamRefreshUnverified {
-		what = mcpconnectionattempts.CodeRefreshedUnverified
-	}
-	s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppOf(client.ClientID)), mcpconnectionattempts.StepInboundToken, what,
-		mcpconnectionattempts.Grant(oauthwire.GrantTypeRefreshToken), mcpconnectionattempts.UserSessionClient(client.ID), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID), mcpconnectionattempts.Subject(subject))
-}
-
-// recordInboundRefreshRejection records a refused refresh under the reason its log line carries.
-func (s *Service) recordInboundRefreshRejection(ctx context.Context, endpoint *ResolvedMcpEndpoint, client *usersessions_repo.UserSessionClient, reason string, opts ...mcpconnectionattempts.Option) {
+// refuseInboundRefresh gives a refused refresh its verdict from the reason its log line carries.
+func refuseInboundRefresh(ctx context.Context, tracker *mcpconnectionattempts.Tracker, reason string, opts ...mcpconnectionattempts.Option) {
 	code, ok := inboundRefreshHappened(reason)
 	if !ok {
+		tracker.Continue()
 		return
 	}
-	opts = append(opts, mcpconnectionattempts.Grant(oauthwire.GrantTypeRefreshToken), mcpconnectionattempts.UserSessionClient(client.ID), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID), mcpconnectionattempts.Detail(reason))
-	s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppOf(client.ClientID)), mcpconnectionattempts.StepInboundToken, code, opts...)
+	tracker.Refuse(ctx, code, append(opts, mcpconnectionattempts.Detail(reason))...)
 }
 
 // inboundRefreshHappened leaves out what proves no real session: a malformed

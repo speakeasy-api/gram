@@ -128,11 +128,12 @@ func TestRejectedBearer(t *testing.T) {
 	token, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
 		Subject:  subject,
 		Audience: urn.NewToolset(fixture.Toolset.ID).String(),
-		Issuer:   "https://another-host.example.com/mcp/" + fixture.Toolset.McpSlug.String,
+		Issuer:   ti.serverURL.String() + "/mcp/" + fixture.Toolset.McpSlug.String,
 		Lifetime: time.Hour,
 	})
 	require.NoError(t, err)
 	persistTestUserSession(t, ti, fixture.UserSessionIssuer.ID, subject, jti)
+	require.NoError(t, ti.chatSessionsManager.RevokeToken(ctx, jti))
 	_, err = servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), token, nil)
 	require.Error(t, err)
 
@@ -269,4 +270,19 @@ func TestInboundRefresh_UpstreamReconnect(t *testing.T) {
 
 	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeUpstreamReconnectRequired)
 	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+}
+
+// A malformed-looking token has no verdict to give, and leaves without a no_verdict row.
+func TestInboundRefresh_NoProofLeavesNoVerdictRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	toolset, _, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+
+	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken+"-not-it")
+	require.NoError(t, refused.err)
+	require.Equal(t, http.StatusBadRequest, refused.code, refused.body)
+	rec.RequireNothing()
 }
