@@ -273,8 +273,9 @@ WITH sources AS (
     AND c.deleted IS FALSE
     AND (ua.id IS NULL OR ua.account_type <> 'personal')
     AND c.organization_id = ANY($2::text[])
-    AND c.summary_generated_at >= $3::timestamptz
-    AND c.summary_generated_at < $4::timestamptz
+    AND (cardinality($3::uuid[]) = 0 OR c.project_id = ANY($3::uuid[]))
+    AND c.summary_generated_at >= $4::timestamptz
+    AND c.summary_generated_at < $5::timestamptz
   UNION
   SELECT m.organization_id, m.project_id, (m.created_at AT TIME ZONE 'UTC')::date AS day
   FROM memory_memos m
@@ -284,8 +285,9 @@ WITH sources AS (
   WHERE m.deleted IS FALSE
     AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
     AND m.organization_id = ANY($2::text[])
-    AND m.created_at >= $3::timestamptz
-    AND m.created_at < $4::timestamptz
+    AND (cardinality($3::uuid[]) = 0 OR m.project_id = ANY($3::uuid[]))
+    AND m.created_at >= $4::timestamptz
+    AND m.created_at < $5::timestamptz
 )
 SELECT s.organization_id, s.project_id, s.day::date AS period_start
 FROM sources s
@@ -302,6 +304,7 @@ LIMIT $1
 type ListDayDigestCandidatesParams struct {
 	RowLimit        int32
 	OrganizationIds []string
+	ProjectIds      []uuid.UUID
 	Since           pgtype.Timestamptz
 	Until           pgtype.Timestamptz
 }
@@ -315,10 +318,12 @@ type ListDayDigestCandidatesRow struct {
 // Project-days in [@since, @until) with eligible chat summaries or memos and
 // no day digest yet. Chats are bucketed by when their summary was written,
 // so a summary that lands after its day closed goes into the next open day.
+// An empty @project_ids means every project; the memory eval passes its own.
 func (q *Queries) ListDayDigestCandidates(ctx context.Context, arg ListDayDigestCandidatesParams) ([]ListDayDigestCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listDayDigestCandidates,
 		arg.RowLimit,
 		arg.OrganizationIds,
+		arg.ProjectIds,
 		arg.Since,
 		arg.Until,
 	)
@@ -727,8 +732,9 @@ SELECT d.organization_id, d.project_id, date_trunc($1::text, d.period_start::tim
 FROM memory_digests d
 WHERE d.level = $2::text
   AND d.organization_id = ANY($3::text[])
-  AND d.period_start >= $4::date
-  AND d.period_start < $5::date
+  AND (cardinality($4::uuid[]) = 0 OR d.project_id = ANY($4::uuid[]))
+  AND d.period_start >= $5::date
+  AND d.period_start < $6::date
   AND EXISTS (SELECT 1 FROM projects p WHERE p.id = d.project_id AND p.deleted IS FALSE)
   AND NOT EXISTS (
     SELECT 1 FROM memory_digests p
@@ -738,13 +744,14 @@ WHERE d.level = $2::text
   )
 GROUP BY d.organization_id, d.project_id, date_trunc($1::text, d.period_start::timestamp)::date
 ORDER BY 3, d.project_id
-LIMIT $6
+LIMIT $7
 `
 
 type ListRollupDigestCandidatesParams struct {
 	ParentLevel     string
 	ChildLevel      string
 	OrganizationIds []string
+	ProjectIds      []uuid.UUID
 	Since           pgtype.Date
 	Until           pgtype.Date
 	RowLimit        int32
@@ -759,11 +766,13 @@ type ListRollupDigestCandidatesRow struct {
 // Parent periods (week or month) that have child digests starting in
 // [@since, @until) and no digest of their own yet. A week rolls into the
 // month its Monday falls in, which date_trunc('month', period_start) gives.
+// An empty @project_ids means every project.
 func (q *Queries) ListRollupDigestCandidates(ctx context.Context, arg ListRollupDigestCandidatesParams) ([]ListRollupDigestCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listRollupDigestCandidates,
 		arg.ParentLevel,
 		arg.ChildLevel,
 		arg.OrganizationIds,
+		arg.ProjectIds,
 		arg.Since,
 		arg.Until,
 		arg.RowLimit,

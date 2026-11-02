@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -74,21 +75,20 @@ func TestRememberStoresRedactedMemoAttributedToCaller(t *testing.T) {
 	require.True(t, strings.HasPrefix(output.Memo.Content, "We chose the retry queue for webhooks."))
 	require.NotContains(t, output.Memo.Content, secret[:12])
 
-	var stored, author string
-	var storedChat uuid.NullUUID
-	require.NoError(t, f.db.QueryRow(ctx, `SELECT content, author_user_id, chat_id FROM memory_memos WHERE id = $1 AND project_id = $2`, output.Memo.Source.ID, f.project.ID).Scan(&stored, &author, &storedChat))
-	require.Equal(t, output.Memo.Content, stored)
-	require.NotContains(t, stored, secret[:12])
-	require.Equal(t, f.principal.UserID, author)
-	require.Equal(t, chatID, storedChat.UUID)
+	stored, err := testrepo.New(f.db).GetMemoryMemoFixture(ctx, testrepo.GetMemoryMemoFixtureParams{ID: uuid.MustParse(output.Memo.Source.ID), ProjectID: f.project.ID})
+	require.NoError(t, err)
+	require.Equal(t, output.Memo.Content, stored.Content)
+	require.NotContains(t, stored.Content, secret[:12])
+	require.Equal(t, f.principal.UserID, stored.AuthorUserID.String)
+	require.Equal(t, chatID, stored.ChatID.UUID)
 
 	event, err := audittest.LatestAuditLogByAction(ctx, f.db, audit.ActionMemoryMemoCreate)
 	require.NoError(t, err)
 	require.Equal(t, f.principal.UserID, event.ActorID)
 	require.Equal(t, output.Memo.Source.ID, event.SubjectID)
-	encoded, err := json.Marshal(event)
-	require.NoError(t, err)
-	require.NotContains(t, string(encoded), "retry queue")
+	for _, recorded := range [][]byte{event.Metadata, event.BeforeSnapshot, event.AfterSnapshot, []byte(event.SubjectDisplay)} {
+		require.NotContains(t, string(recorded), "retry queue")
+	}
 }
 
 func TestRememberRequiresExplicitProjectMemoryWriteGrant(t *testing.T) {
@@ -124,8 +124,8 @@ func TestRememberRequiresExplicitProjectMemoryWriteGrant(t *testing.T) {
 	_, err = limited.Remember(ctx, f.principal, f.remember("limited fact"))
 	require.Error(t, err)
 
-	var count int
-	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM memory_memos`).Scan(&count))
+	count, err := testrepo.New(f.db).CountMemoryMemosFixture(t.Context())
+	require.NoError(t, err)
 	require.Zero(t, count)
 	audits, err := audittest.AuditLogCountByAction(t.Context(), f.db, audit.ActionMemoryMemoCreate)
 	require.NoError(t, err)
@@ -159,8 +159,8 @@ func TestRememberRefusesWhenFlagOffOrInputInvalid(t *testing.T) {
 	_, err = f.service.Remember(ctx, f.principal, f.remember("flag off"))
 	require.ErrorIs(t, err, errTeamMemoryNotEnabled)
 
-	var count int
-	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM memory_memos`).Scan(&count))
+	count, err := testrepo.New(f.db).CountMemoryMemosFixture(t.Context())
+	require.NoError(t, err)
 	require.Zero(t, count)
 }
 
@@ -171,8 +171,8 @@ func TestRememberFailsClosedWhenAuditFails(t *testing.T) {
 	require.NoError(t, audittest.RejectAction(ctx, f.db, audit.ActionMemoryMemoCreate))
 	_, err := f.service.Remember(ctx, f.principal, f.remember("audit failure fact"))
 	require.Error(t, err)
-	var count int
-	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM memory_memos`).Scan(&count))
+	count, err := testrepo.New(f.db).CountMemoryMemosFixture(t.Context())
+	require.NoError(t, err)
 	require.Zero(t, count)
 }
 
@@ -181,8 +181,7 @@ func TestRememberFailsClosedWhenAuditFails(t *testing.T) {
 func (f teamMemoryFixture) summarizedChat(t *testing.T, ctx context.Context, projectID uuid.UUID, title, summary string, at time.Time, account uuid.NullUUID) uuid.UUID {
 	t.Helper()
 	chatID := seedRecallChat(t, ctx, f.db, projectID, f.principal.OrganizationID, "user_fixture_other_owner", "memory-"+uuid.NewString(), title, account)
-	_, err := f.db.Exec(ctx, `UPDATE chats SET summary = $2, summary_generated_at = $3, summary_redacted = true WHERE id = $1`, chatID, summary, at)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(f.db).SetChatMemorySummaryFixture(ctx, testrepo.SetChatMemorySummaryFixtureParams{ID: chatID, Summary: conv.ToPGText(summary), SummaryGeneratedAt: conv.ToPGTimestamptz(at)}))
 	return chatID
 }
 
@@ -210,9 +209,13 @@ func TestSearchTeamMemoryFindsSummariesMemosAndDigests(t *testing.T) {
 	chatID := f.summarizedChat(t, ctx, f.project.ID, "Webhook retries", "We moved webhook retries onto the durable queue because the in-memory one dropped jobs.\n\nSecond paragraph with deploy steps.", now.Add(-48*time.Hour), uuid.NullUUID{})
 	memo, err := f.service.Remember(ctx, f.principal, RememberInput{ProjectSlug: f.project.Slug, ChatID: chatID.String(), Content: "Webhook retries use the durable queue, decided after dropped jobs."})
 	require.NoError(t, err)
-	var digestID uuid.UUID
-	require.NoError(t, f.db.QueryRow(ctx, `INSERT INTO memory_digests (organization_id, project_id, level, period_start, period_end, content) VALUES ($1, $2, 'day', $3, $4, 'The team settled webhook retries on the durable queue.') RETURNING id`,
-		f.principal.OrganizationID, f.project.ID, now.Add(-48*time.Hour).Format(time.DateOnly), now.Add(-24*time.Hour).Format(time.DateOnly)).Scan(&digestID))
+	digestID, err := testrepo.New(f.db).InsertMemoryDigestFixture(ctx, testrepo.InsertMemoryDigestFixtureParams{
+		OrganizationID: f.principal.OrganizationID, ProjectID: f.project.ID, Level: "day",
+		PeriodStart: pgtype.Date{Time: now.Add(-48 * time.Hour).Truncate(24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		PeriodEnd:   pgtype.Date{Time: now.Add(-24 * time.Hour).Truncate(24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		Content:     "The team settled webhook retries on the durable queue.",
+	})
+	require.NoError(t, err)
 	f.summarizedChat(t, ctx, f.project.ID, "Unrelated", "Billing page copy changes.", now.Add(-time.Hour), uuid.NullUUID{})
 
 	output, err := f.service.Search(f.reader(ctx), f.principal, f.search("webhook retries"))
@@ -221,9 +224,8 @@ func TestSearchTeamMemoryFindsSummariesMemosAndDigests(t *testing.T) {
 	for _, hit := range output.Hits {
 		switch hit.Source.Kind {
 		case TeamMemorySourceChat:
-			require.Equal(t, "Webhook retries", hit.Title)
-			require.NotContains(t, hit.Text, "Second paragraph")
-			require.True(t, hit.Truncated)
+			require.Contains(t, hit.Text, "webhook retries onto the durable queue")
+			require.False(t, hit.Truncated)
 		case TeamMemorySourceMemo:
 			require.Equal(t, chatID.String(), hit.Source.ChatID)
 			require.Equal(t, f.principal.UserID, hit.AuthorUserID)
@@ -261,20 +263,17 @@ func TestSearchTeamMemoryHidesIneligibleAndForeignItems(t *testing.T) {
 
 	visible := f.summarizedChat(t, ctx, f.project.ID, "Visible", "canary-visible decision about caching", at, uuid.NullUUID{})
 	excluded := f.summarizedChat(t, ctx, f.project.ID, "Excluded", "canary-excluded decision about caching", at, uuid.NullUUID{})
-	_, err := f.db.Exec(ctx, `UPDATE chats SET memory_excluded_at = now() WHERE id = $1`, excluded)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(f.db).ExcludeChatFromMemoryFixture(ctx, excluded))
 	unmasked := f.summarizedChat(t, ctx, f.project.ID, "Unmasked", "canary-unmasked decision about caching", at, uuid.NullUUID{})
-	_, err = f.db.Exec(ctx, `UPDATE chats SET summary_redacted = false WHERE id = $1`, unmasked)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(f.db).SetChatSummaryUnredactedFixture(ctx, unmasked))
 	deleted := f.summarizedChat(t, ctx, f.project.ID, "Deleted", "canary-deleted decision about caching", at, uuid.NullUUID{})
-	_, err = f.db.Exec(ctx, `UPDATE chats SET deleted_at = now() WHERE id = $1`, deleted)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(f.db).ForceSoftDeleteChat(ctx, deleted))
 	personal := seedRecallUserAccount(t, ctx, f.db, f.principal.OrganizationID, conv.ToPGText("personal"))
 	f.summarizedChat(t, ctx, f.project.ID, "Personal", "canary-personal decision about caching", at, uuid.NullUUID{UUID: personal, Valid: true})
 	unclassified := seedRecallUserAccount(t, ctx, f.db, f.principal.OrganizationID, pgtype.Text{})
 	f.summarizedChat(t, ctx, f.project.ID, "Unclassified", "canary-unclassified decision about caching", at, uuid.NullUUID{UUID: unclassified, Valid: true})
 	f.summarizedChat(t, ctx, f.project.ID, "Old", "canary-old decision about caching", now.Add(-200*24*time.Hour), uuid.NullUUID{})
-	_, err = f.service.Remember(ctx, f.principal, RememberInput{ProjectSlug: f.project.Slug, ChatID: excluded.String(), Content: "canary-excluded-memo decision about caching"})
+	_, err := f.service.Remember(ctx, f.principal, RememberInput{ProjectSlug: f.project.Slug, ChatID: excluded.String(), Content: "canary-excluded-memo decision about caching"})
 	require.NoError(t, err)
 
 	other, err := projectsrepo.New(f.db).CreateProject(ctx, projectsrepo.CreateProjectParams{OrganizationID: f.principal.OrganizationID, Name: "Other memory project", Slug: "other-memory-search"})
@@ -357,4 +356,109 @@ func TestSearchTeamMemoryFailsClosedWhenAuditFails(t *testing.T) {
 	output, err := f.service.Search(ctx, f.principal, f.search("audit failure"))
 	require.Error(t, err)
 	require.Empty(t, output.Hits)
+}
+
+func TestTeamMemoryUnknownProjectRefusesLikeMissingGrant(t *testing.T) {
+	t.Parallel()
+	f := newTeamMemoryFixture(t)
+	ctx := f.writer(t.Context())
+
+	_, unknown := f.service.Remember(ctx, f.principal, RememberInput{ProjectSlug: "no-such-memory-project", Content: "fact"})
+	var unknownDenied *ExternalAuthorizationError
+	require.ErrorAs(t, unknown, &unknownDenied)
+
+	other, err := projectsrepo.New(f.db).CreateProject(t.Context(), projectsrepo.CreateProjectParams{OrganizationID: f.principal.OrganizationID, Name: "Ungranted memory project", Slug: "ungranted-memory-project"})
+	require.NoError(t, err)
+	_, ungranted := f.service.Remember(ctx, f.principal, RememberInput{ProjectSlug: other.Slug, Content: "fact"})
+	var ungrantedDenied *ExternalAuthorizationError
+	require.ErrorAs(t, ungranted, &ungrantedDenied)
+
+	unknownResult, ok := teamMemoryToolResult(unknown)
+	require.True(t, ok)
+	ungrantedResult, ok := teamMemoryToolResult(ungranted)
+	require.True(t, ok)
+	require.Equal(t, ungrantedResult.Content, unknownResult.Content)
+}
+
+func TestTeamMemoryBudgetChargedOnlyAfterGrantAndFlag(t *testing.T) {
+	t.Parallel()
+	f := newTeamMemoryFixture(t)
+	limited := *f.service
+	limited.budget = denyBudget()
+
+	// A spent budget never masks a missing grant or a disabled flag.
+	other, err := projectsrepo.New(f.db).CreateProject(t.Context(), projectsrepo.CreateProjectParams{OrganizationID: f.principal.OrganizationID, Name: "Unmetered memory project", Slug: "unmetered-memory-project"})
+	require.NoError(t, err)
+	ctx := f.writer(t.Context())
+	_, err = limited.Remember(ctx, f.principal, RememberInput{ProjectSlug: other.Slug, Content: "ungranted"})
+	var denied *ExternalAuthorizationError
+	require.ErrorAs(t, err, &denied)
+
+	f.flags.SetFlag(feature.FlagTeamMemory, f.principal.OrganizationID, false)
+	_, err = limited.Remember(ctx, f.principal, f.remember("flag off"))
+	require.ErrorIs(t, err, errTeamMemoryNotEnabled)
+}
+
+func TestSearchTeamMemoryDropsHitsMatchedOnlyByMaskedText(t *testing.T) {
+	t.Parallel()
+	f := newTeamMemoryFixture(t)
+	ctx := f.reader(t.Context())
+	secret := "ghp_" + strings.Join([]string{"z9X8c7V6b5N4", "m3L2k1J0h9G8", "f7D6s5A4p3O2"}, "")
+	// The stored summary predates the masking rule, so the query matches the
+	// raw token; masking on the way out leaves no evidence, so no hit.
+	f.summarizedChat(t, ctx, f.project.ID, "Rotation", "Rotated "+secret+" yesterday.", time.Now().Add(-time.Hour), uuid.NullUUID{})
+	output, err := f.service.Search(ctx, f.principal, f.search(secret))
+	require.NoError(t, err)
+	require.Empty(t, output.Hits)
+}
+
+func TestSearchTeamMemorySnippetShowsTheMatch(t *testing.T) {
+	t.Parallel()
+	f := newTeamMemoryFixture(t)
+	ctx := f.reader(t.Context())
+	summary := "Opening paragraph about release planning.\n\n" + strings.Repeat("Filler sentence about unrelated work. ", 80) + "Final call: the flaky checkout test was quarantined."
+	f.summarizedChat(t, ctx, f.project.ID, "Release", summary, time.Now().Add(-time.Hour), uuid.NullUUID{})
+	output, err := f.service.Search(ctx, f.principal, f.search("quarantined checkout"))
+	require.NoError(t, err)
+	require.Len(t, output.Hits, 1)
+	require.True(t, output.Hits[0].Truncated)
+	require.Contains(t, output.Hits[0].Text, "flaky checkout test was quarantined")
+	require.NotContains(t, output.Hits[0].Text, "Opening paragraph")
+}
+
+func TestSnippetAnchorFallsBackToStem(t *testing.T) {
+	t.Parallel()
+	anchor, ok := snippetAnchor("We changed the retry policy.", queryTerms(`retries -cron OR "policy"`))
+	require.True(t, ok)
+	require.Equal(t, "policy", anchor)
+	anchor, ok = snippetAnchor("We changed the retry budget.", queryTerms("retries"))
+	require.True(t, ok)
+	require.Equal(t, "retr", anchor)
+	_, ok = snippetAnchor("Nothing relevant.", queryTerms("kubernetes"))
+	require.False(t, ok)
+}
+
+func TestSearchTeamMemoryRanksShortMemosAboveLongDigests(t *testing.T) {
+	t.Parallel()
+	f := newTeamMemoryFixture(t)
+	ctx := f.writer(t.Context())
+	now := time.Now().UTC()
+	for i := range 3 {
+		day := now.Add(time.Duration(-24*(i+2)) * time.Hour).Truncate(24 * time.Hour)
+		_, err := testrepo.New(f.db).InsertMemoryDigestFixture(ctx, testrepo.InsertMemoryDigestFixtureParams{
+			OrganizationID: f.principal.OrganizationID, ProjectID: f.project.ID, Level: "day",
+			PeriodStart: pgtype.Date{Time: day, InfinityModifier: pgtype.Finite, Valid: true},
+			PeriodEnd:   pgtype.Date{Time: day.Add(24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+			Content:     strings.Repeat("The team reviewed the missing database index migration and other release work. ", 20),
+		})
+		require.NoError(t, err)
+	}
+	memo, err := f.service.Remember(ctx, f.principal, f.remember("The missing database index migration must run before the deploy."))
+	require.NoError(t, err)
+
+	input := f.search("missing database index migration")
+	input.Limit = 2
+	output, err := f.service.Search(ctx, f.principal, input)
+	require.NoError(t, err)
+	require.Contains(t, hitRefs(output.Hits), memo.Memo.Source.Ref())
 }

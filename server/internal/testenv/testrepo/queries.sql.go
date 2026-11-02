@@ -6151,6 +6151,50 @@ func (q *Queries) SetAttachmentSourceSubjectFixture(ctx context.Context, arg Set
 	return result.RowsAffected(), nil
 }
 
+const setChatMemorySweepFixture = `-- name: SetChatMemorySweepFixture :exec
+UPDATE chats
+SET updated_at = $1,
+    summary_generated_at = COALESCE($2, summary_generated_at),
+    memory_excluded_at = COALESCE($3, memory_excluded_at)
+WHERE id = $4
+`
+
+type SetChatMemorySweepFixtureParams struct {
+	UpdatedAt          pgtype.Timestamptz
+	SummaryGeneratedAt pgtype.Timestamptz
+	MemoryExcludedAt   pgtype.Timestamptz
+	ID                 uuid.UUID
+}
+
+// Test-only fixture: backdates a chat and, when given, its summary and
+// memory-exclusion timestamps so the team memory sweep sees it as idle,
+// excluded or stale.
+func (q *Queries) SetChatMemorySweepFixture(ctx context.Context, arg SetChatMemorySweepFixtureParams) error {
+	_, err := q.db.Exec(ctx, setChatMemorySweepFixture,
+		arg.UpdatedAt,
+		arg.SummaryGeneratedAt,
+		arg.MemoryExcludedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const setChatMessagesCreatedAtFixture = `-- name: SetChatMessagesCreatedAtFixture :exec
+UPDATE chat_messages SET created_at = $1 WHERE chat_id = $2
+`
+
+type SetChatMessagesCreatedAtFixtureParams struct {
+	CreatedAt pgtype.Timestamptz
+	ChatID    uuid.UUID
+}
+
+// Test-only fixture: backdates every message in a chat so the team memory
+// sweep reads the chat's last activity as created_at.
+func (q *Queries) SetChatMessagesCreatedAtFixture(ctx context.Context, arg SetChatMessagesCreatedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setChatMessagesCreatedAtFixture, arg.CreatedAt, arg.ChatID)
+	return err
+}
+
 const setDeploymentFunctionInfraOverrides = `-- name: SetDeploymentFunctionInfraOverrides :exec
 UPDATE deployments_functions SET memory_mib_override = $1, scale_override = $2 WHERE deployment_id = $3
 `

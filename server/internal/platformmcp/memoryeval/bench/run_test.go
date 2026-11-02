@@ -24,28 +24,43 @@ func TestSummarizeLeavesErrorsOutOfAccuracy(t *testing.T) {
 	t.Parallel()
 	corpus := memoryeval.Build(testNow)
 	a := NoMemoryArm()
-	cfg := Config{AnswerModels: []string{"anthropic/claude-sonnet-5.5"}, JudgeModel: "openai/gpt-5.5", Runs: 1, Concurrency: 1}
+	cfg := Config{AnswerModels: []string{"anthropic/claude-sonnet-5.5", "google/gemini-3.1-flash-lite"}, JudgeModel: "openai/gpt-5.5", Runs: 2, Concurrency: 1}
 	answers := []answer{
-		{model: cfg.AnswerModels[0], arm: a.Name, question: corpus.Questions[0], text: "right", usage: usage{promptTokens: 10, completionTokens: 5, costUSD: 0.25, latency: time.Second}},
-		{model: cfg.AnswerModels[0], arm: a.Name, question: corpus.Questions[1], err: errors.New("rate limited"), usage: usage{latency: 3 * time.Second}},
+		{model: cfg.AnswerModels[0], arm: a.Name, run: 0, question: corpus.Questions[0], text: "right", usage: usage{promptTokens: 10, completionTokens: 5, costUSD: 0.25, latency: time.Second}},
+		{model: cfg.AnswerModels[0], arm: a.Name, run: 0, question: corpus.Questions[1], err: errors.New("rate limited"), usage: usage{latency: 3 * time.Second}},
+		// Run 1 of the first model graded nothing, so it stays out of accuracy.
+		{model: cfg.AnswerModels[0], arm: a.Name, run: 1, question: corpus.Questions[0], err: errors.New("rate limited"), usage: usage{latency: 3 * time.Second}},
+		{model: cfg.AnswerModels[1], arm: a.Name, run: 0, question: corpus.Questions[0], text: "wrong", usage: usage{promptTokens: 7, completionTokens: 3, costUSD: 0.01, latency: time.Second}},
+		{model: cfg.AnswerModels[1], arm: a.Name, run: 1, question: corpus.Questions[0], text: "right", usage: usage{promptTokens: 7, completionTokens: 3, costUSD: 0.01, latency: time.Second}},
 	}
 	verdicts := []verdict{
 		{Correct: true, Miss: "", Reason: "ok", usage: usage{costUSD: 0.5}},
 		// An errored answer is never sent to the judge, so no client is needed.
 		judge(t.Context(), nil, cfg.JudgeModel, answers[1]),
+		judge(t.Context(), nil, cfg.JudgeModel, answers[2]),
+		{Correct: false, Miss: "reasoning", Reason: "wrong", usage: usage{costUSD: 0.5}},
+		{Correct: true, Miss: "", Reason: "ok", usage: usage{costUSD: 0.5}},
 	}
 
 	report := summarize(corpus, cfg, []Arm{a}, answers, verdicts)
-	require.Len(t, report.Scores, 1)
+	require.Len(t, report.Scores, 2)
+	other := report.Scores[1]
+	require.Equal(t, cfg.AnswerModels[1], other.Model)
+	require.Equal(t, []float64{0, 1}, other.AccuracyByRun)
+	require.InDelta(t, 0.5, other.Accuracy, 1e-9)
+	require.Equal(t, 14, other.PromptTokens)
+	require.InDelta(t, 0.02, other.CostUSD, 1e-9)
+	require.InDelta(t, 1.5, report.JudgeCostUSD, 1e-9)
 	s := report.Scores[0]
+	require.Equal(t, cfg.AnswerModels[0], s.Model)
+	require.Len(t, s.AccuracyByRun, 1)
 	require.InDelta(t, 1.0, s.AccuracyByRun[0], 1e-9)
 	require.InDelta(t, 1.0, s.Accuracy, 1e-9)
-	require.Equal(t, 1, s.Errors)
+	require.Equal(t, 2, s.Errors)
 	require.Equal(t, 10, s.PromptTokens)
 	require.Equal(t, 5, s.CompletionTokens)
 	require.InDelta(t, 0.25, s.CostUSD, 1e-9)
-	require.InDelta(t, 0.5, report.JudgeCostUSD, 1e-9)
-	require.Equal(t, int64(2000), s.LatencyMeanMS)
+	require.Equal(t, int64(2333), s.LatencyMeanMS)
 	require.Equal(t, int64(3000), s.LatencyP95MS)
 }
 

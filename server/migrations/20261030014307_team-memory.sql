@@ -87,11 +87,13 @@ CREATE TABLE "memory_memos" (
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
   CONSTRAINT "memory_memos_author_agent_id_fkey" FOREIGN KEY ("author_agent_id") REFERENCES "agents" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
-  CONSTRAINT "memory_memos_chat_id_fkey" FOREIGN KEY ("chat_id") REFERENCES "chats" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "memory_memos_chat_id_fkey" FOREIGN KEY ("chat_id") REFERENCES "chats" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "memory_memos_project_tenant_fkey" FOREIGN KEY ("organization_id", "project_id") REFERENCES "projects" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "memory_memos_author_check" CHECK (num_nonnulls(author_user_id, author_agent_id) <= 1),
   CONSTRAINT "memory_memos_content_check" CHECK ((content <> ''::text) AND (char_length(content) <= 4000))
 );
+-- Create index "memory_memos_author_agent_id_idx" to table: "memory_memos"
+CREATE INDEX "memory_memos_author_agent_id_idx" ON "memory_memos" ("author_agent_id") WHERE (author_agent_id IS NOT NULL);
 -- Create index "memory_memos_chat_id_idx" to table: "memory_memos"
 CREATE INDEX "memory_memos_chat_id_idx" ON "memory_memos" ("chat_id") WHERE (chat_id IS NOT NULL);
 -- Create index "memory_memos_project_id_created_at_idx" to table: "memory_memos"
