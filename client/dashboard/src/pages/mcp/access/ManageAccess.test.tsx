@@ -845,7 +845,7 @@ it("keeps an unsupported principal visible with all audience edits disabled", ()
 });
 
 it("forwards remote discovery failures and retry into the actual narrowing dialog", () => {
-  const retry = vi.fn();
+  const retry = vi.fn<() => void>();
   render(
     <TooltipProvider>
       <ManageAccess

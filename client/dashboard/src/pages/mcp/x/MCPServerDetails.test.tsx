@@ -18,7 +18,8 @@ const mocks = vi.hoisted(() => ({
     ],
   } as import("@/pages/access/useServerTools").ToolSource,
   readTools: vi.fn(),
-  saveNarrowing: vi.fn(),
+  saveNarrowing:
+    vi.fn<(narrowing: { tools: string[]; dispositions: string[] }) => void>(),
   openNarrowing: true,
   hostedToolset: undefined as unknown,
 }));
@@ -142,7 +143,7 @@ vi.mock("../access/ManageAccess", async () => {
           dispositions={[]}
           pending={false}
           onSave={mocks.saveNarrowing}
-          onClose={vi.fn()}
+          onClose={vi.fn<() => void>()}
         />
       ) : null,
   };
@@ -311,7 +312,7 @@ describe("Team access remote tool source states", () => {
   });
 
   it("offers retry when remote discovery fails", async () => {
-    const retry = vi.fn();
+    const retry = vi.fn<() => void>();
     mocks.openNarrowing = false;
     mocks.toolSource = { status: "error", retry };
     visit("/acme/projects/default/mcp/my-server/team-access");
@@ -322,7 +323,7 @@ describe("Team access remote tool source states", () => {
   });
 
   it("offers the shared first-party connect action when needed", async () => {
-    const connect = vi.fn();
+    const connect = vi.fn<() => void>();
     mocks.openNarrowing = false;
     mocks.toolSource = { status: "needs-connect", connect };
     visit("/acme/projects/default/mcp/my-server/team-access");
@@ -346,13 +347,16 @@ describe("Team access remote tool source states", () => {
 describe("Team access unavailable tool picker states", () => {
   it.each([
     [{ status: "loading" }, "Loading tools…"],
-    [{ status: "error", retry: vi.fn() }, "Couldn't load this server's tools."],
+    [
+      { status: "error", retry: vi.fn<() => void>() },
+      "Couldn't load this server's tools.",
+    ],
     [
       { status: "needs-write" },
       "Someone with write access to this server must load its tools before they can be selected here.",
     ],
     [
-      { status: "needs-connect", connect: vi.fn() },
+      { status: "needs-connect", connect: vi.fn<() => void>() },
       "Connect to this server to load its tools.",
     ],
     [

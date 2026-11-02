@@ -1,10 +1,14 @@
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { useMemo } from "react";
+import { useMemo, type JSX } from "react";
 import { useServerTools } from "@/pages/access/useServerTools";
 import { MCPTeamAccessTab } from "../../MCPTeamAccessTab";
 
 /** Reuse the role editor's stored-first, write-gated remote tool discovery. */
-export function RemoteTeamAccessTab({ server }: { server: McpServer }) {
+export function RemoteTeamAccessTab({
+  server,
+}: {
+  server: McpServer;
+}): JSX.Element {
   const entry = useMemo(
     () => ({
       projectId: server.projectId,
