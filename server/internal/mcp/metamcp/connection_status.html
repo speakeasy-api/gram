@@ -63,6 +63,10 @@
         state.className = "warn";
         state.textContent = s.detail || "Give consent again to review access";
         li.append(state);
+      } else if (s.status === "action_required") {
+        state.className = "warn";
+        state.textContent = s.detail || "Needs attention";
+        li.append(state);
       } else if (s.status === "hidden") {
         hidden++;
         state.textContent = "Hidden by you";

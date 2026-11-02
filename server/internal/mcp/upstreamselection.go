@@ -472,7 +472,7 @@ type memberChoices struct {
 	// choices for some servers at most.
 	onlyChosen bool
 
-	// readOnly stops apply recording new members' choices.
+	// readOnly previews new members' choices instead of recording them.
 	readOnly bool
 
 	// chosen are the members apply found a choice for, when onlyChosen.
@@ -600,8 +600,12 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	var err error
 	if typed {
 		resolved, err = c.selector.resolveAuthClients(ctx, ids)
-		if err == nil && c.enforced && !c.profile && !c.readOnly && c.recordNewMemberChoices(ctx, logger, members, resolved) {
-			resolved, err = c.selector.resolveAuthClients(ctx, ids)
+		if err == nil && c.enforced && !c.profile {
+			if c.readOnly {
+				c.previewNewMemberChoices(ctx, logger, members, resolved)
+			} else if c.recordNewMemberChoices(ctx, logger, members, resolved) {
+				resolved, err = c.selector.resolveAuthClients(ctx, ids)
+			}
 		}
 		ids = ids[:0]
 		for id, res := range resolved {
@@ -803,8 +807,10 @@ func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaG
 		if auth == nil || auth.Status != consentAuthChoose {
 			return false, nil
 		}
-		// Consent gives a card to the issuer's clients and to any typed registration in reach.
-		registrations := []uuid.UUID{}
+		associated, err := s.serverAssociatedClients(ctx, gate.organizationID, []uuid.UUID{member.serverID})
+		if err != nil {
+			return false, err
+		}
 		for _, option := range auth.Options {
 			switch option.State {
 			case consentClientReady:
@@ -813,21 +819,25 @@ func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaG
 				if !option.registrationID.Valid {
 					continue
 				}
-				if slices.Contains(bound, option.registrationID.UUID) {
+				// Connect needs a client the member claims and the issuer is bound to.
+				if associated[member.serverID][option.registrationID.UUID] && slices.Contains(bound, option.registrationID.UUID) {
 					return true, nil
 				}
-				registrations = append(registrations, option.registrationID.UUID)
+				// An existing connection needs no Connect.
+				reconnect, err := s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
+					ProjectID: member.projectID, OrganizationID: gate.organizationID, UserSessionIssuerID: gate.userSessionIssuerID,
+					Subject: subject, RegistrationID: option.registrationID.UUID, SkipUnusable: false,
+				})
+				if err != nil {
+					return false, fmt.Errorf("check member connection: %w", err)
+				}
+				if !reconnect {
+					return true, nil
+				}
 			case consentClientSetup:
 			}
 		}
-		if len(registrations) == 0 {
-			return false, nil
-		}
-		loaded, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, member.projectID, gate.organizationID, registrations)
-		if err != nil {
-			return false, fmt.Errorf("list typed auth client registrations: %w", err)
-		}
-		return len(loaded) > 0, nil
+		return false, nil
 	}
 	associated, err := s.serverAssociatedClients(ctx, gate.organizationID, []uuid.UUID{member.serverID})
 	if err != nil {
@@ -860,7 +870,10 @@ func (s *Service) memberFailureMessage(ctx context.Context, logger *slog.Logger,
 func (s *Service) noteStaleChoiceCall(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, stale memberStaleChoiceError) {
 	s.metrics.RecordMetaMemberFailure(ctx, stale.reason)
 	subject := ""
-	if gate.authentication != nil {
+	switch {
+	case gate.memberChoices != nil:
+		subject = gate.memberChoices.subject.String()
+	case gate.authentication != nil:
 		subject = gate.authentication.subject.String()
 	}
 	if !s.staleNoAuthLog.first(subject + "|" + member.serverID.String() + "|" + stale.reason) {

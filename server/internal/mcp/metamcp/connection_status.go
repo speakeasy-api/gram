@@ -62,6 +62,8 @@ const (
 	SignInNotRequired = "not_required"
 	// SignInError: a credential exists but cannot be used; Detail says why.
 	SignInError = "error"
+	// SignInActionRequired: signing in here won't help; Detail says who can fix it.
+	SignInActionRequired = "action_required"
 	// SignInHidden: the caller hid the member, so its tools are not served.
 	SignInHidden = "hidden"
 )
@@ -137,6 +139,8 @@ func (r ConnectionStatusResult) Text() string {
 		case SignInNotConnected:
 			needsConnect = true
 			fmt.Fprintf(&b, "- %s: not signed in\n", label)
+		case SignInActionRequired:
+			fmt.Fprintf(&b, "- %s: needs attention (%s)\n", label, s.Detail)
 		case SignInHidden:
 			hidden = true
 			fmt.Fprintf(&b, "- %s: hidden by the user\n", label)

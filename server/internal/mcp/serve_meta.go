@@ -558,9 +558,10 @@ func (s *Service) callMetaServerTool(
 	if !served {
 		return nil, oops.E(oops.CodeNotFound, nil, "tool %q is not available on this connection; the gateway's tools may have changed, so reconnect to refresh the tool list", params.Name).LogWarn(ctx, logger)
 	}
-	// connection_status reads the live choice so it agrees with a call, and writes nothing.
-	gate.execute = gate.discoveryMode == metamcp.DiscoveryModeDirect || params.Name == metamcp.ToolExecuteTool || params.Name == metamcp.ToolConnectionStatus
-	if params.Name == metamcp.ToolConnectionStatus && gate.memberChoices != nil {
+	// Status and describe read the live choice so they agree with a call, and write nothing.
+	liveRead := params.Name == metamcp.ToolConnectionStatus || params.Name == metamcp.ToolDescribeServer || params.Name == metamcp.ToolDescribeTools
+	gate.execute = gate.discoveryMode == metamcp.DiscoveryModeDirect || params.Name == metamcp.ToolExecuteTool || liveRead
+	if liveRead && gate.memberChoices != nil {
 		gate.memberChoices.readOnly = true
 	}
 	start := time.Now()
