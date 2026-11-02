@@ -8,7 +8,6 @@ import {
   serverSetupType,
   extractAuthType,
   parseServerMetadata,
-  isCatalogServer,
 } from "./serverMetadata";
 
 function server(
@@ -143,7 +142,6 @@ describe("filterAndSortServers setup filter", () => {
 describe("native catalog metadata", () => {
   it("keeps sparse records unknown without fabricated tool or popularity evidence", () => {
     const sparse = { ...server("example/sparse", false), meta: undefined };
-    expect(isCatalogServer(sparse)).toBe(true);
     expect(parseServerMetadata(sparse)).toEqual({
       authType: "unknown",
       authTypeDisplay: "Unknown",

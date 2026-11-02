@@ -1,7 +1,6 @@
 import {
   CatalogAuthType,
   extractAuthType,
-  isCatalogServer,
 } from "@/pages/catalog/hooks/serverMetadata";
 
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
@@ -40,7 +39,6 @@ const useCatalogAuthMap = (enabled = true): Map<string, CatalogAuthType> => {
     }
 
     for (const server of catalogData.servers) {
-      if (!isCatalogServer(server)) continue;
       const auth = extractAuthType(server);
       result.set(server.registrySpecifier, auth);
     }

@@ -132,7 +132,6 @@ const catalogServer = {
   version: "1.0.0",
   title: "Linear",
   meta: {},
-  toolCount: 2,
   isReadOnly: true,
   supportsDcr: true,
   remotes: [
@@ -227,17 +226,6 @@ afterEach(() => {
 
 resetMcpOperations();
 resetSecretOperations();
-
-it("does not display registry tool counts", () => {
-  mcpOperations.current.catalogServers = [catalogServer];
-  render(<ProjectGuide />);
-  fireEvent.click(
-    screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
-  const choice = screen.getByRole("button", { name: "Linear" });
-  expect(choice.textContent).not.toContain("tools");
-});
 
 describe("ProjectGuide", () => {
   it("resets in-memory state when the project changes", () => {

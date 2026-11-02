@@ -25,7 +25,6 @@ import { getServerURL } from "@/lib/utils";
 import { type CatalogServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import {
   extractAuthType,
-  isCatalogServer,
   supportsAutomaticOAuth,
 } from "@/pages/catalog/hooks/serverMetadata";
 import {
@@ -40,7 +39,6 @@ import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js"
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
-import type { ExternalMCPServer } from "@gram/client/models/components/externalmcpserver.js";
 import {
   invalidateAllGetMcpServerActivity,
   useGetMcpServerActivity,
@@ -104,11 +102,10 @@ function canConfigureWithoutUserCredentials(server: CatalogServer): boolean {
 }
 
 function curateCatalogServers(
-  servers: ExternalMCPServer[] | undefined,
+  servers: CatalogServer[] | undefined,
 ): CatalogServer[] | undefined {
   if (!servers) return undefined;
   return servers
-    .filter(isCatalogServer)
     .filter(canConfigureWithoutUserCredentials)
     .filter((server) =>
       AUTOMATIC_CATALOG_SERVER_SPECIFIERS.includes(
@@ -306,8 +303,7 @@ export function useMcpGuideOperations(): {
   });
 
   const allCatalogServers = useMemo(
-    () =>
-      catalog.data?.servers?.filter(isCatalogServer).map(filterToHttpRemotes),
+    () => catalog.data?.servers?.map(filterToHttpRemotes),
     [catalog.data?.servers],
   );
   const catalogServers = useMemo(

@@ -1,4 +1,3 @@
-import type { ExternalMCPServer } from "@gram/client/models/components/externalmcpserver.js";
 import type { CatalogServer } from "../hooks";
 import type { SetupType } from "../filter-defaults";
 import type { FilterState } from "./useFilterState";
@@ -10,13 +9,6 @@ export interface ParsedServerMetadata {
   setupType: SetupType;
   publishedAt?: Date;
   updatedAt?: Date;
-}
-
-// Catalog responses may legitimately contain no optional metadata.
-export function isCatalogServer(
-  server: ExternalMCPServer,
-): server is CatalogServer {
-  return typeof server.registrySpecifier === "string";
 }
 
 function authSetup(server: CatalogServer) {
