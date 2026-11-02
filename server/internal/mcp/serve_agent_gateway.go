@@ -207,7 +207,8 @@ func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext
 	}
 	if !server.UserSessionIssuerID.Valid {
 		if member.backend == metaMemberBackendProxied {
-			_, _, err := s.authorizeAgentMemberClient(ctx, gate, member, uuid.Nil, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "")
+			_, credential, err := s.authorizeAgentMemberClient(ctx, gate, member, uuid.Nil, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "")
+			gate.recordServedCredential(uuid.Nil, credential)
 			return nil, err
 		}
 		return nil, nil
@@ -237,7 +238,8 @@ func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext
 	if len(clients) == 0 {
 		// Distinguish a legitimate header/no-auth member from a required OAuth
 		// member whose last client was removed. No runtime catalog repairs.
-		_, _, err := s.authorizeAgentMemberClient(ctx, gate, member, server.UserSessionIssuerID.UUID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "")
+		_, credential, err := s.authorizeAgentMemberClient(ctx, gate, member, server.UserSessionIssuerID.UUID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "")
+		gate.recordServedCredential(uuid.Nil, credential)
 		return nil, err
 	}
 	tokens := make(map[uuid.UUID]remotesessions.UpstreamToken, len(clients))
@@ -265,9 +267,7 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 	if err != nil {
 		return nil, err
 	}
-	if gate.servedCredentials != nil {
-		gate.servedCredentials[clientID] = credential
-	}
+	gate.recordServedCredential(clientID, credential)
 	subject := urn.NewAgentSubject(gate.agentID)
 	if connection.authorizer {
 		subject = urn.NewUserSubject(connection.owner)
@@ -314,7 +314,10 @@ func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGate
 	// served by the proxy even when no catalog client has been provisioned.
 	// This does not waive the enforced catalog/permit barrier.
 	if mode != feature.AuthClientResolverEnforced && !registration.Valid && (rows[0].CredentialHeadersUncovered || (rows[0].ServerHasHeaderClients && !rows[0].ServerHasOauthClients && !rows[0].HeadersStale)) {
-		return none, noCredential, nil
+		// The proxy serves the server's own headers; name the header client
+		// the catalog resolved for them, when it resolved one.
+		credential, _ := res.servedCredential()
+		return none, credential, nil
 	}
 	if (res.outcome == authClientGap && (mode == feature.AuthClientResolverEnforced || !registration.Valid)) || (res.outcome == authClientLegacy && res.clientID == uuid.Nil && mode == feature.AuthClientResolverEnforced) {
 		return none, noCredential, agentMemberCredentialError(member)

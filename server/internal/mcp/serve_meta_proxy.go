@@ -22,6 +22,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
@@ -32,6 +33,7 @@ import (
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -317,6 +319,36 @@ func dispatchOutcome(anonymous bool) mcpmetrics.MetaDispatchOutcome {
 	return mcpmetrics.MetaDispatchCredentialed
 }
 
+// memberServerContext names the member server's own project as the owner its
+// proxied tool call is metered and logged under, when the caller's
+// authentication names no project to fall back to. An agent gateway's key is
+// scoped to its organization, not a project, so without this the remotemcp
+// interceptors find no owner and the call is neither metered nor logged.
+// Best effort: a lookup failure leaves the context as it was.
+func (s *Service) memberServerContext(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) context.Context {
+	if serverCtx, ok := remotemcp.GetServerContext(ctx); ok && serverCtx.OrganizationID != "" && serverCtx.ProjectID != uuid.Nil {
+		return ctx
+	}
+	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, member.projectID)
+	if err != nil {
+		logger.WarnContext(ctx, "resolve meta MCP member owner", attr.SlogError(err))
+		return ctx
+	}
+	// A member is always in the gateway's organization; one that is not is
+	// never charged or logged under another tenant.
+	if project.ID != gate.organizationID {
+		return ctx
+	}
+	accountType, _ := mv.ResolveOrganizationTier(ctx, logger, s.billingRepository, project.ID, billing.Tier(project.GramAccountType))
+	return remotemcp.WithServerContext(ctx, remotemcp.ServerContext{
+		OrganizationID:   project.ID,
+		OrganizationSlug: project.Slug,
+		ProjectID:        project.ProjectID,
+		ProjectSlug:      project.ProjectSlug,
+		AccountType:      string(accountType),
+	})
+}
+
 // memberAttributionContext gives member exchanges the identity billing and
 // telemetry read: the caller's own when authenticated, else the endpoint's
 // organization. Best effort: attribution must never fail the call.
@@ -416,6 +448,7 @@ func (s *Service) executeProxiedMemberTool(
 	meta *mcprequests.WireMeta,
 ) (json.RawMessage, error) {
 	ctx = s.memberAttributionContext(ctx, logger, gate)
+	ctx = s.memberServerContext(ctx, logger, gate, member)
 	// A proxied member's tool-call log is written by the remotemcp interceptor,
 	// which never sees the gate, so carry the caller's identity down to it.
 	clientIdentity, _ := resolveClientIdentity(ctx, logger, s.sessionClientInfo, &mcpInputs{ //nolint:exhaustruct // only the record's identity fields matter here

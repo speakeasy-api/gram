@@ -44,9 +44,26 @@ func memberServedCredential(gate metaGateContext, member metaMember, routed remo
 	if gate.memberChoices != nil && member.backend == metaMemberBackendProxied && gate.memberChoices.serves(member) {
 		return member.authClient.servedCredential()
 	}
-	credential, ok := gate.servedCredentials[routed.RemoteSessionClientID]
-	if !ok || routed.Token == "" || credential.AuthClientType == "" {
+	// A header member sends no token; its credential is recorded under no
+	// registration.
+	registration := routed.RemoteSessionClientID
+	if routed.Token == "" {
+		registration = uuid.Nil
+	}
+	credential, ok := gate.servedCredentials[registration]
+	if !ok || credential.AuthClientType == "" {
 		return contextvalues.UpstreamCredential{AuthClientID: "", AuthClientType: "", ConnectionOwnerUserID: ""}, false
 	}
 	return credential, true
+}
+
+// recordServedCredential notes, during a member dial that collects them, the
+// auth client a registration's agent credential was authorized for. A header
+// member, which has no registration, records under uuid.Nil. A use that named
+// no auth client type records nothing.
+func (g *metaGateContext) recordServedCredential(registration uuid.UUID, credential contextvalues.UpstreamCredential) {
+	if g.servedCredentials == nil || credential.AuthClientType == "" {
+		return
+	}
+	g.servedCredentials[registration] = credential
 }
