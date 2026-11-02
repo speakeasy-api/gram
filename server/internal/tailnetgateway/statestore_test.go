@@ -1,7 +1,6 @@
 package tailnetgateway_test
 
 import (
-	"encoding/base64"
 	"testing"
 
 	"github.com/google/uuid"
@@ -71,12 +70,10 @@ func TestPostgresStateStoreRoundTrip(t *testing.T) {
 		NetworkIngressID: ingressID, OrganizationID: orgID, Slot: 0, StateKey: string(ipn.MachineKeyStateKey),
 	})
 	require.NoError(t, err)
-	require.NotEqual(t, base64.StdEncoding.EncodeToString(value), row, "state must not be stored as plain base64")
+	require.NotEqual(t, string(value), row, "state must not be stored in the clear")
 	decrypted, err := enc.Decrypt(row)
 	require.NoError(t, err)
-	decoded, err := base64.StdEncoding.DecodeString(decrypted)
-	require.NoError(t, err)
-	require.Equal(t, value, decoded, "the column holds the application-encrypted value")
+	require.Equal(t, value, []byte(decrypted), "the column holds the application-encrypted value")
 
 	require.NoError(t, store.WriteState(ipn.MachineKeyStateKey, []byte("second")))
 	got, err = store.ReadState(ipn.MachineKeyStateKey)
