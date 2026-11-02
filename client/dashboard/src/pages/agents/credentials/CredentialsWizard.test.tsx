@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   withdrawSubject: vi.fn(),
   workloadIssuers: vi.fn(),
   workloadAdmissions: vi.fn(),
+  workloadList: vi.fn(),
   projectId: "project_one",
   canFederate: true,
   canReadWorkloads: true,
@@ -125,12 +126,7 @@ vi.mock("@/contexts/Sdk", () => ({
     plugins: { getPlugin: mocks.getPlugin },
     // Read per project, for the projects that trust a platform on their own.
     // Each project sees its own rows among every issuer listed.
-    workloadIdentities: {
-      list: async () => ({
-        issuers: mocks.workloadIssuers(),
-        admissions: mocks.workloadAdmissions(),
-      }),
-    },
+    workloadIdentities: { list: mocks.workloadList },
     authClients: {
       listMcpServerChoices: async () => ({ choices: [] }),
       // How each server signs in upstream, read from its own auth clients.
@@ -402,6 +398,10 @@ beforeEach(() => {
   mocks.withdrawSubject.mockResolvedValue({});
   mocks.workloadIssuers.mockReturnValue([]);
   mocks.workloadAdmissions.mockReturnValue([]);
+  mocks.workloadList.mockImplementation(async () => ({
+    issuers: mocks.workloadIssuers(),
+    admissions: mocks.workloadAdmissions(),
+  }));
   vi.stubGlobal("fetch", mocks.fetch);
   mocks.mcpServers.mockResolvedValue({
     mcpServers: [
@@ -3625,6 +3625,24 @@ describe("Connecting a GitHub repository", () => {
       );
     }
     expect(screen.queryByText(/issuer_other/)).toBeNull();
+  });
+
+  it("says which projects it could not check for an issuer of their own", async () => {
+    mocks.workloadList.mockImplementation(
+      async (request: { gramProject: string }) => {
+        if (request.gramProject === "project-two") throw new Error("denied");
+        return { issuers: [], admissions: [] };
+      },
+    );
+    await reachRepositoryStep();
+    expect(
+      await screen.findByText(
+        "Speakeasy could not check whether Project two also trusts GitHub Actions on its own.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(/also trusts GitHub Actions on its own, at/),
+    ).toBeNull();
   });
 
   it("creates nothing when the device agent's permissions cannot be given", async () => {

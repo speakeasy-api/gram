@@ -259,7 +259,7 @@ export function useWorkloadSetup({
   // the organization-tier one this flow saves, so a job reaches them as a
   // different identity or not at all. The rule is organization-wide, so every
   // project is checked, not only this one.
-  const shadows = useProjectIssuers(
+  const { shadows, unchecked } = useProjectIssuers(
     organizationTier && entry !== undefined,
     connection?.issuer ?? null,
   );
@@ -456,6 +456,14 @@ export function useWorkloadSetup({
             {step.phase === "create" && shadows.length > 0 && (
               <ShadowingIssuers shadows={shadows} platformName={platformName} />
             )}
+            {step.phase === "create" && unchecked.length > 0 && (
+              <p className="text-muted-foreground text-sm">
+                Speakeasy could not check whether{" "}
+                {unchecked.map((project) => project.name).join(", ")} also{" "}
+                {unchecked.length === 1 ? "trusts" : "trust"} {platformName} on
+                {unchecked.length === 1 ? " its" : " their"} own.
+              </p>
+            )}
             {step.phase === "create" && !isTrusted && (
               <AssertionReuseField
                 checked={
@@ -490,7 +498,8 @@ const PROJECT_ISSUERS_STALE_TIME_MS = 60_000;
 /**
  * Every project that trusts this issuer URL on its own, with that issuer.
  * Workload identities are listed per project, so each of the organization's
- * projects is read while `enabled`; one the reader cannot open is left out.
+ * projects is read while `enabled`; one that cannot be read is reported as
+ * unchecked rather than taken as trusting nothing.
  *
  * The reads are keyed apart from the policy lists the setup invalidates after
  * every save: a save never writes another project's issuers, so refetching
@@ -499,7 +508,7 @@ const PROJECT_ISSUERS_STALE_TIME_MS = 60_000;
 function useProjectIssuers(
   enabled: boolean,
   issuer: string | null,
-): ProjectIssuer[] {
+): { shadows: ProjectIssuer[]; unchecked: { name: string }[] } {
   const organization = useOrganization();
   const sdk = useSdkClient();
   const projects = (organization.projects ?? []).filter(
@@ -518,8 +527,8 @@ function useProjectIssuers(
       staleTime: PROJECT_ISSUERS_STALE_TIME_MS,
     })),
   });
-  if (!enabled || issuer === null) return [];
-  return projects.flatMap((project, index) =>
+  if (!enabled || issuer === null) return { shadows: [], unchecked: [] };
+  const shadows = projects.flatMap((project, index) =>
     (reads[index]?.data?.issuers ?? [])
       .filter(
         (row) =>
@@ -529,6 +538,8 @@ function useProjectIssuers(
       )
       .map((row) => ({ project, issuer: row })),
   );
+  const unchecked = projects.filter((_, index) => reads[index]?.isError);
+  return { shadows, unchecked };
 }
 
 /**
