@@ -188,8 +188,8 @@ func TestIngressLookupByDNSNameFailsClosed(t *testing.T) {
 		rows []repo.GetActiveIngressesByDNSNameRow
 		err  error
 	}{
-		{name: "empty host", host: ""},
-		{name: "invalid host", host: "bad host"},
+		{name: "empty host", host: "", rows: []repo.GetActiveIngressesByDNSNameRow{valid}},
+		{name: "invalid host", host: "bad host", rows: []repo.GetActiveIngressesByDNSNameRow{valid}},
 		{name: "not found", host: "speakeasy.example.ts.net"},
 		{name: "ambiguous", host: "speakeasy.example.ts.net", rows: []repo.GetActiveIngressesByDNSNameRow{valid, valid}},
 		{name: "database error", host: "speakeasy.example.ts.net", err: errors.New("boom")},

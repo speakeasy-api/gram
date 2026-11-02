@@ -34,6 +34,7 @@ type fakeAttestorLookup struct {
 	recheckErr      error
 	byAttestorCalls int
 	byDNSNameCalls  int
+	byDNSNameErr    error
 	recheckCalls    int
 	namespace       string
 	serviceAccount  string
@@ -51,9 +52,11 @@ func (f *fakeAttestorLookup) ByAttestor(_ context.Context, namespace, serviceAcc
 }
 
 func (f *fakeAttestorLookup) ByDNSName(_ context.Context, host string) (Ingress, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.byDNSNameCalls++
 	f.host = host
-	return f.ingress, f.byAttestorErr
+	return f.ingress, f.byDNSNameErr
 }
 
 func (f *fakeAttestorLookup) Recheck(_ context.Context, _ Ingress) error {
@@ -424,24 +427,67 @@ func TestAttestationVerifierGatewayPrincipalResolvesByHost(t *testing.T) {
 	require.NoError(t, verifier.UseGatewayPrincipal("gram-gateway", "gram-tailnet-gateway"))
 	require.Error(t, verifier.UseGatewayPrincipal("", "gram-tailnet-gateway"))
 
-	got, err := verifier.Verify(t.Context(), token, "10.0.0.1:1234", "Speakeasy.Example.ts.net")
+	got, err := verifier.Verify(t.Context(), token, "10.0.0.1:1234", "Speakeasy.Example.ts.net:443")
 	require.NoError(t, err)
 	require.Equal(t, ingress, got)
 	require.Equal(t, 1, lookup.byDNSNameCalls)
+	require.Equal(t, 1, lookup.recheckCount(), "a fresh host resolution also confirms serving state")
 	require.Zero(t, lookup.byAttestorCalls, "the gateway principal never resolves by attestor identity")
-	require.Equal(t, "Speakeasy.Example.ts.net", lookup.host)
+	require.Equal(t, "speakeasy.example.ts.net", lookup.host, "the host is canonicalised before lookup")
 
-	// The same token for another host is a separate cache entry and lookup.
+	// Another host under the same token resolves without a second token review.
 	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234", "other.example.ts.net")
 	require.NoError(t, err)
 	require.Equal(t, 2, lookup.byDNSNameCalls)
-	require.Len(t, reviewer.requests, 2)
+	require.Len(t, reviewer.requests, 1, "host values must not force token reviews")
 
 	// A cache hit for the first host repeats neither the review nor the lookup.
 	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234", "Speakeasy.Example.ts.net")
 	require.NoError(t, err)
 	require.Equal(t, 2, lookup.byDNSNameCalls)
-	require.Len(t, reviewer.requests, 2)
+	require.Len(t, reviewer.requests, 1)
+
+	// Once the recheck interval passes, the host mapping is re-read and a
+	// changed owner is rejected.
+	verifier.now = func() time.Time { return now.Add(servingStateRecheckTTL) }
+	lookup.ingress.ID = uuid.New()
+	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234", "Speakeasy.Example.ts.net")
+	require.ErrorIs(t, err, ErrAttestationRejected)
+	require.Equal(t, 3, lookup.byDNSNameCalls)
+	require.Len(t, reviewer.requests, 1)
+}
+
+func TestAttestationVerifierGatewayPrincipalRejectsUnknownHosts(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	token := unsignedToken(t, now.Add(time.Minute))
+	reviewer := &fakeTokenReviewer{response: authenticatedTokenReview(DefaultTokenAudience, "system:serviceaccount:gram-gateway:gram-tailnet-gateway")}
+	lookup := &fakeAttestorLookup{ingress: Ingress{ID: uuid.New(), OrganizationID: "org_123", Provider: ProviderTailscale, DNSName: "speakeasy.example.ts.net"}}
+	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, 30*time.Second)
+	verifier.now = func() time.Time { return now }
+	require.NoError(t, verifier.UseGatewayPrincipal("gram-gateway", "gram-tailnet-gateway"))
+
+	// No or ambiguous owner for the host: rejected, but the token stays valid.
+	lookup.byDNSNameErr = ErrIngressUnavailable
+	_, err := verifier.Verify(t.Context(), token, "10.0.0.1:1234", "unknown.example.ts.net")
+	require.ErrorIs(t, err, ErrAttestationRejected)
+	require.Len(t, reviewer.requests, 1)
+
+	lookup.byDNSNameErr = nil
+	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234", "speakeasy.example.ts.net")
+	require.NoError(t, err)
+	require.Len(t, reviewer.requests, 1, "a rejected host does not poison the token")
+
+	// A database failure is retryable, not a rejection.
+	lookup.byDNSNameErr = errors.New("boom")
+	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234", "another.example.ts.net")
+	require.Error(t, err)
+	require.NotErrorIs(t, err, ErrAttestationRejected)
+
+	// An unparseable host never reaches the lookup.
+	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234", "bad host")
+	require.ErrorIs(t, err, ErrAttestationRejected)
 }
 
 func TestAttestationVerifierOtherServiceAccountsStillResolveByAttestor(t *testing.T) {
