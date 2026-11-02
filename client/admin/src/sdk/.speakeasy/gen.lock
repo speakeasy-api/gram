@@ -62,6 +62,8 @@ trackedFiles:
   src/funcs/adminGetInferenceKeys.ts: {}
   src/funcs/adminGetInferenceSpendHistory.ts: {}
   src/funcs/adminGetMcpServerToolCalls.ts: {}
+  src/funcs/adminGetMemoryEvalOptions.ts: {}
+  src/funcs/adminGetMemoryEvalRun.ts: {}
   src/funcs/adminGetMeterUsage.ts: {}
   src/funcs/adminGetOnboardingStackOptions.ts: {}
   src/funcs/adminGetOrganization.ts: {}
@@ -87,6 +89,7 @@ trackedFiles:
   src/funcs/adminListExternalMcpMigrationCandidates.ts: {}
   src/funcs/adminListGlobalIssuerConvergenceCandidates.ts: {}
   src/funcs/adminListGlobalIssuers.ts: {}
+  src/funcs/adminListMemoryEvalRuns.ts: {}
   src/funcs/adminListOnboardingPlaybooks.ts: {}
   src/funcs/adminListOnboardingSteps.ts: {}
   src/funcs/adminListOnboardingUseCases.ts: {}
@@ -124,6 +127,7 @@ trackedFiles:
   src/funcs/adminSetRegistryEntryPublished.ts: {}
   src/funcs/adminSetStripeCustomer.ts: {}
   src/funcs/adminSetStripeSubscription.ts: {}
+  src/funcs/adminStartMemoryEvalRun.ts: {}
   src/funcs/adminStartTrial.ts: {}
   src/funcs/adminTriggerOrganizationChatAnalysis.ts: {}
   src/funcs/adminUpdateGlobalIssuer.ts: {}
@@ -197,6 +201,9 @@ trackedFiles:
   src/models/components/adminmcpservertoolcalloutcomes.ts: {}
   src/models/components/adminmcpservertoolcalls.ts: {}
   src/models/components/adminmdmvendoroption.ts: {}
+  src/models/components/adminmemoryevaloptions.ts: {}
+  src/models/components/adminmemoryevalrun.ts: {}
+  src/models/components/adminmemoryevalrunconfig.ts: {}
   src/models/components/adminmeterusagebucket.ts: {}
   src/models/components/adminmeterusageresponse.ts: {}
   src/models/components/adminonboardingplan.ts: {}
@@ -285,6 +292,7 @@ trackedFiles:
   src/models/components/issuermigratepreflight.ts: {}
   src/models/components/listglobalremotesessionissuersresult.ts: {}
   src/models/components/listissuerconvergencecandidatesresult.ts: {}
+  src/models/components/listmemoryevalrunsresponsebody.ts: {}
   src/models/components/listsignupoffersresponsebody.ts: {}
   src/models/components/markenterprisetrialconvertedrequestbody.ts: {}
   src/models/components/markenterprisetrialconvertedresult.ts: {}
@@ -317,6 +325,7 @@ trackedFiles:
   src/models/components/setstripesubscriptionrequestbody.ts: {}
   src/models/components/spendbucket.ts: {}
   src/models/components/spendproduct.ts: {}
+  src/models/components/startmemoryevalrunrequestbody.ts: {}
   src/models/components/starttrialrequestbody.ts: {}
   src/models/components/supportcapability.ts: {}
   src/models/components/supportcoveragecell.ts: {}
@@ -350,6 +359,7 @@ trackedFiles:
   src/models/operations/admingetinferencekeys.ts: {}
   src/models/operations/admingetinferencespendhistory.ts: {}
   src/models/operations/admingetmcpservertoolcalls.ts: {}
+  src/models/operations/admingetmemoryevalrun.ts: {}
   src/models/operations/admingetmeterusage.ts: {}
   src/models/operations/admingetorganization.ts: {}
   src/models/operations/admingetorganizationchatanalysissettings.ts: {}
@@ -369,6 +379,7 @@ trackedFiles:
   src/models/operations/adminlistcustomerusage.ts: {}
   src/models/operations/adminlistglobalissuerconvergencecandidates.ts: {}
   src/models/operations/adminlistglobalissuers.ts: {}
+  src/models/operations/adminlistmemoryevalruns.ts: {}
   src/models/operations/adminlistonboardingplaybooks.ts: {}
   src/models/operations/adminlistorganizationactivity.ts: {}
   src/models/operations/adminlistorganizationmembers.ts: {}
@@ -414,6 +425,10 @@ trackedFiles:
   src/react-query/adminGetInferenceSpendHistory.ts: {}
   src/react-query/adminGetMcpServerToolCalls.core.ts: {}
   src/react-query/adminGetMcpServerToolCalls.ts: {}
+  src/react-query/adminGetMemoryEvalOptions.core.ts: {}
+  src/react-query/adminGetMemoryEvalOptions.ts: {}
+  src/react-query/adminGetMemoryEvalRun.core.ts: {}
+  src/react-query/adminGetMemoryEvalRun.ts: {}
   src/react-query/adminGetMeterUsage.core.ts: {}
   src/react-query/adminGetMeterUsage.ts: {}
   src/react-query/adminGetOrganization.core.ts: {}
@@ -455,6 +470,8 @@ trackedFiles:
   src/react-query/adminListGlobalIssuerConvergenceCandidates.ts: {}
   src/react-query/adminListGlobalIssuers.core.ts: {}
   src/react-query/adminListGlobalIssuers.ts: {}
+  src/react-query/adminListMemoryEvalRuns.core.ts: {}
+  src/react-query/adminListMemoryEvalRuns.ts: {}
   src/react-query/adminListOrganizationActivity.core.ts: {}
   src/react-query/adminListOrganizationActivity.ts: {}
   src/react-query/adminListOrganizationMembers.core.ts: {}
@@ -514,6 +531,7 @@ trackedFiles:
   src/react-query/adminSetRegistryEntryPublished.ts: {}
   src/react-query/adminSetStripeCustomer.ts: {}
   src/react-query/adminSetStripeSubscription.ts: {}
+  src/react-query/adminStartMemoryEvalRun.ts: {}
   src/react-query/adminStartTrial.ts: {}
   src/react-query/adminTriggerOrganizationChatAnalysis.ts: {}
   src/react-query/adminUpdateGlobalIssuer.ts: {}
@@ -970,6 +988,27 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminGetMemoryEvalOptions:
+    speakeasy-default-admin-get-memory-eval-options:
+      responses:
+        "200":
+          application/json: {"allowed_models": ["<value 1>", "<value 2>"], "daily_run_limit": 261511, "defaults": {"answer_models": ["<value 1>"], "digest_model": "<value>", "judge_model": "<value>", "runs": 871521, "summary_model": "<value>"}, "runs_today": 959694}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminGetMemoryEvalRun:
+    speakeasy-default-admin-get-memory-eval-run:
+      parameters:
+        query:
+          id: "3a3561b5-a812-409a-86c6-2f33b1451073"
+      responses:
+        "200":
+          application/json: {"config": {"answer_models": ["<value 1>"], "digest_model": "<value>", "judge_model": "<value>", "runs": 573770, "summary_model": "<value>"}, "created_at": "2026-07-23T10:59:18.919Z", "id": "cc41e66a-0c52-45c0-bbe1-18ba6875a1ed", "requested_by": "<value>", "status": "running"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminGetMeterUsage:
     speakeasy-default-admin-get-meter-usage:
       parameters:
@@ -1293,6 +1332,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminListMemoryEvalRuns:
+    speakeasy-default-admin-list-memory-eval-runs:
+      parameters:
+        query:
+          limit: 25
+      responses:
+        "200":
+          application/json: {"runs": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminListOnboardingPlaybooks:
     speakeasy-default-admin-list-onboarding-playbooks:
       responses:
@@ -1720,6 +1771,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminStartMemoryEvalRun:
+    speakeasy-default-admin-start-memory-eval-run:
+      requestBody:
+        application/json: {"config": {"answer_models": ["<value 1>"], "digest_model": "<value>", "judge_model": "<value>", "runs": 149483, "summary_model": "<value>"}}
+      responses:
+        "200":
+          application/json: {"config": {"answer_models": ["<value 1>"], "digest_model": "<value>", "judge_model": "<value>", "runs": 149483, "summary_model": "<value>"}, "created_at": "2026-12-25T06:28:16.919Z", "id": "7c5dca54-b0c1-4a90-9a9d-d10b283afdc4", "requested_by": "<value>", "status": "succeeded"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminStartTrial:
     speakeasy-default-admin-start-trial:
       requestBody:
