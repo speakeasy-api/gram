@@ -1,4 +1,4 @@
-h1:nrrmQ3RlPVg5vgQGq5slwklmjBISitq7A3EluOupuiE=
+h1:a2rl2okDizTttaBlqRMU8lhd+KLxMnocIu3AAjK3Sss=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -519,5 +519,5 @@ h1:nrrmQ3RlPVg5vgQGq5slwklmjBISitq7A3EluOupuiE=
 20261103220901_slack-project-assistant.sql h1:yK7mdlpE+6yQr4pHOz+vfcLG97rdAr63ocOv9w0vrMg=
 20261104224205_internal_audit_events.sql h1:DIq3iSY/2oopuYmyd5v7FfWpcWqoL3cBwancSuQvatc=
 20261105033341_registry-promotion-candidates-add-docs-outcome.sql h1:qI9REJbTfJBd/g2c/ZYnXz5d0AQsCk/fxbGtAkMJbIs=
-20261105175811_remote-session-clients-add-forward-client-name.sql h1:NlgZYpmo1fvV19RdA7Jkcla8uXjZ9ZtCOW5kU3Lr+mw=
-20261105224000_team-memory.sql h1:lo3T4uCDR8hGoF3OQnKeu5DCeve3akbArJkNrzemPr4=
+20261105130000_team-memory.sql h1:16FKUmOZ/eSVVQRskXy4tTEfyZni0iyAlevvTsZfUXs=
+20261105130100_chats-memory-summary-idx.sql h1:u0qWLpE3p2cQe/4T/HEl88XjCpvqkv1Jsj+1+ZssViM=
