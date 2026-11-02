@@ -29,9 +29,10 @@ export const GITHUB_ACTIONS_KEY = "github-actions";
  * agent's access. The tag or branch each commit was taken from is kept
  * beside it, so bumping one is a matter of looking that ref up again.
  *
- * speakeasyd is the exception: the device agent action installs the latest
- * stable release, checked against Speakeasy's release records, unless the
- * step sets `version`.
+ * speakeasyd is the deliberate exception. The device agent action installs
+ * the latest stable release unless the step sets `version`, so a job picks
+ * up a fix without its workflow being edited, and it checks every download,
+ * pinned or not, against the stable release manifest in the same bucket.
  */
 const PINNED_ACTIONS = {
   checkout: {

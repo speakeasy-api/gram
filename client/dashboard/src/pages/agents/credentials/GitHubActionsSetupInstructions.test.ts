@@ -322,7 +322,11 @@ describe("workflowYaml", () => {
   });
 
   // The job grants id-token: write, so every step can mint its OIDC token: no
-  // action or CLI may come from a branch or tag that could move.
+  // action or CLI may come from a branch or tag that could move. speakeasyd is
+  // the deliberate exception: the device agent action installs the latest
+  // stable release unless the step sets version, so a job picks up a fix
+  // without its workflow being edited, and it checks every download, pinned
+  // or not, against the stable release manifest in the same bucket.
   it("pins every action and CLI", () => {
     for (const yaml of variants) {
       const used = yaml.match(/uses: \S+/g) ?? [];
