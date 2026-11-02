@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -274,6 +275,8 @@ type Service struct {
 	connectionCatalogCache cache.Cache
 	// staleNoAuthLog dedupes stale no-auth choice warnings.
 	staleNoAuthLog *onceLog
+	// staleChoiceConsent briefly remembers whether consent can replace a stale choice.
+	staleChoiceConsent *expirable.LRU[string, bool]
 	// sessionClientInfo holds the MCP client identity captured at initialize
 	// so tools/call on the same session can resolve it. Always usable: without
 	// Redis it records nothing and every caller resolves as unknown.
@@ -703,6 +706,7 @@ func NewService(
 		),
 		connectionCatalogCache: cacheImpl,
 		staleNoAuthLog:         newOnceLog(),
+		staleChoiceConsent:     expirable.NewLRU[string, bool](onceLogSize, nil, staleChoiceConsentTTL),
 		codeExecutor:           codeExecutor,
 		codeSessions:           newCodeMemberSessions(logger, codeSessionIdleTTL, codeSessionMaxAge, codeSessionPingAfter, codeSessionMaxEntries),
 		sessionClientInfo:      sessionClientInfo,

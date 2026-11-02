@@ -111,6 +111,8 @@ func callbackReply(id uint32, value json.RawMessage, callbackErr error) runnerRe
 	message := "tool operation unavailable or arguments invalid"
 	if errors.Is(callbackErr, ErrConsentRequired) {
 		message = "this server changed since consent; the user must reconnect and give consent again"
+	} else if refused, ok := errors.AsType[*MemberRefusalError](callbackErr); ok {
+		message = refused.Message
 	} else if connect, ok := errors.AsType[*ConnectionRequiredError](callbackErr); ok {
 		data, _ := json.Marshal(struct {
 			Server string `json:"server"`

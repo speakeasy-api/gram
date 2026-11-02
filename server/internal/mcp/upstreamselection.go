@@ -33,7 +33,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
@@ -51,9 +50,6 @@ import (
 // detached or deleted since. Reconnecting issues a credential that records a
 // fresh choice.
 const issuerGateReasonUpstreamSelectionUnavailable = "upstream_selection_unavailable"
-
-// issuerGateReasonStaleNoAuthChoice: a gateway call hit a member's outdated no-auth choice.
-const issuerGateReasonStaleNoAuthChoice = "stale_no_auth_choice"
 
 var (
 	// errUpstreamSelectionMissing is a credential with no choice for the
@@ -746,8 +742,14 @@ func staleNoAuthReason(res authClientResolution, err error) (string, bool) {
 // staleChoiceMessage says who can fix a stale choice, and whether reconnecting does.
 func (s *Service) staleChoiceMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, bool) {
 	authentication := gate.authentication
-	if authentication == nil || !authentication.refreshableUserSession || authentication.subject.Kind != urn.SessionSubjectKindUser || gate.memberChoices == nil {
+	choices := gate.memberChoices
+	person := authentication != nil && authentication.subject.Kind == urn.SessionSubjectKindUser &&
+		choices != nil && choices.selector != nil && !choices.profile && !choices.onlyChosen
+	if !person {
 		return fmt.Sprintf("Server %q's sign-in setup changed. Ask whoever set this up to update this connection.", member.slug), false
+	}
+	if !authentication.refreshableUserSession {
+		return fmt.Sprintf("Server %q's sign-in setup changed. Sign in to this gateway again in your AI app. If that doesn't help, ask your administrator.", member.slug), false
 	}
 	fixable, err := s.consentCanReplaceChoice(ctx, gate, member)
 	switch {
@@ -757,13 +759,28 @@ func (s *Service) staleChoiceMessage(ctx context.Context, logger *slog.Logger, g
 	case fixable:
 		return fmt.Sprintf("Server %q now needs a sign-in. Reconnect this gateway in your AI app and approve the new connection.", member.slug), true
 	}
-	return fmt.Sprintf("Server %q isn't set up for sign-in yet. Ask your administrator.", member.slug), false
+	return fmt.Sprintf("Server %q needs your administrator to finish setup or give you access.", member.slug), false
 }
 
-// consentCanReplaceChoice reports whether a new consent would offer member a usable connection.
+// consentCanReplaceChoice caches decideConsentCanReplaceChoice, since a retrying model repeats it.
 func (s *Service) consentCanReplaceChoice(ctx context.Context, gate *metaGateContext, member metaMember) (bool, error) {
+	key := gate.userSessionIssuerID.String() + "|" + gate.memberChoices.subject.String() + "|" + member.serverID.String()
+	if s.staleChoiceConsent != nil {
+		if fixable, ok := s.staleChoiceConsent.Get(key); ok {
+			return fixable, nil
+		}
+	}
+	fixable, err := s.decideConsentCanReplaceChoice(ctx, gate, member)
+	if err == nil && s.staleChoiceConsent != nil {
+		s.staleChoiceConsent.Add(key, fixable)
+	}
+	return fixable, err
+}
+
+// decideConsentCanReplaceChoice reports whether a new consent would offer member a usable connection.
+func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaGateContext, member metaMember) (bool, error) {
 	bound, err := remotesessionsrepo.New(s.db).ListRemoteSessionClientIDsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientIDsForUserSessionIssuerParams{
-		UserSessionIssuerID: gate.userSessionIssuerID, ProjectID: member.projectID, OrganizationID: gate.organizationID,
+		UserSessionIssuerID: gate.userSessionIssuerID, ProjectID: gate.projectID, OrganizationID: gate.organizationID,
 	})
 	if err != nil {
 		return false, fmt.Errorf("list issuer clients: %w", err)
@@ -782,16 +799,31 @@ func (s *Service) consentCanReplaceChoice(ctx context.Context, gate *metaGateCon
 		if auth == nil || auth.Status != consentAuthChoose {
 			return false, nil
 		}
-		return slices.ContainsFunc(auth.Options, func(option consentAuthClientOption) bool {
+		// Consent gives a card to the issuer's clients and to any typed registration in reach.
+		registrations := []uuid.UUID{}
+		for _, option := range auth.Options {
 			switch option.State {
 			case consentClientReady:
-				return true
+				return true, nil
 			case consentClientConnect, consentClientReconnect:
-				return option.registrationID.Valid && slices.Contains(bound, option.registrationID.UUID)
+				if !option.registrationID.Valid {
+					continue
+				}
+				if slices.Contains(bound, option.registrationID.UUID) {
+					return true, nil
+				}
+				registrations = append(registrations, option.registrationID.UUID)
 			case consentClientSetup:
 			}
-			return false
-		}), nil
+		}
+		if len(registrations) == 0 {
+			return false, nil
+		}
+		loaded, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, member.projectID, gate.organizationID, registrations)
+		if err != nil {
+			return false, fmt.Errorf("list typed auth client registrations: %w", err)
+		}
+		return len(loaded) > 0, nil
 	}
 	associated, err := s.serverAssociatedClients(ctx, gate.organizationID, []uuid.UUID{member.serverID})
 	if err != nil {
@@ -820,13 +852,13 @@ func (s *Service) memberFailureMessage(ctx context.Context, logger *slog.Logger,
 	return message
 }
 
-// noteStaleChoiceCall counts every call and warns once per subject, server and reason per window.
+// noteStaleChoiceCall counts every attempt and warns once per subject, server and reason per window.
 func (s *Service) noteStaleChoiceCall(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, stale memberStaleChoiceError) {
-	subject, mcpURL := "", ""
+	s.metrics.RecordMetaMemberFailure(ctx, stale.reason)
+	subject := ""
 	if gate.authentication != nil {
-		subject, mcpURL = gate.authentication.subject.String(), gate.authentication.mcpURL
+		subject = gate.authentication.subject.String()
 	}
-	s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonStaleNoAuthChoice, mcpURL, mcpmetrics.SurfaceMeta)
 	if !s.staleNoAuthLog.first(subject + "|" + member.serverID.String() + "|" + stale.reason) {
 		return
 	}

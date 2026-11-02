@@ -102,6 +102,8 @@ type FailedMember struct {
 	Server string `json:"server"`
 	// Reason is a bounded public error code.
 	Reason string `json:"reason"`
+	// Message says who can fix a refusal, when the reason alone can't.
+	Message string `json:"message,omitempty"`
 }
 
 // SearchPage reports partial discovery explicitly.

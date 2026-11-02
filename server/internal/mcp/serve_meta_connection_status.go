@@ -97,6 +97,13 @@ func (s *Service) handleMetaConnectionStatusCall(
 func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, string) {
 	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		if err := s.validateCatalogMember(ctx, gate, member); err != nil {
+			if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
+				message, reconnect := s.staleChoiceMessage(ctx, logger, gate, member)
+				if !reconnect {
+					return metamcp.SignInError, message
+				}
+				return metamcp.SignInNeedsConsent, message
+			}
 			return metamcp.SignInNeedsConsent, memberErrorMessage(err)
 		}
 		for _, outcome := range gate.catalog.MemberOutcomes {

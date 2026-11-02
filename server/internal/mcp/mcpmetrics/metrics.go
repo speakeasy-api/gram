@@ -141,6 +141,8 @@ type Metrics struct {
 	// client resolver against the upstream client choice, by whether they
 	// agreed and each side's outcome.
 	authClientParityCounter metric.Int64Counter
+	// metaMemberFailureCounter counts failed attempts on a gateway member, by bounded reason.
+	metaMemberFailureCounter metric.Int64Counter
 	// mandatoryAuthzShadowCounter counts shadowed mandatory checks.
 	mandatoryAuthzShadowCounter metric.Int64Counter
 
@@ -355,6 +357,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create auth client parity counter", attr.SlogError(err))
 	}
 
+	metaMemberFailureCounter, err := meter.Int64Counter(
+		"mcp.meta.member_failure",
+		metric.WithDescription("Failed attempts on a gateway member because its stored connection choice is stale, by reason"),
+		metric.WithUnit("{attempt}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create meta member failure counter", attr.SlogError(err))
+	}
+
 	mandatoryAuthzShadowCounter, err := meter.Int64Counter(
 		"mcp.authz.mandatory_shadow",
 		metric.WithDescription("Shadowed mandatory server and auth client checks beside today's decision, by organization, surface, caller, both outcomes, policy source and deny reason"),
@@ -380,6 +391,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		metaMemberDispatchCounter:            metaMemberDispatchCounter,
 		mcpRequestRejectedCounter:            mcpRequestRejectedCounter,
 		authClientParityCounter:              authClientParityCounter,
+		metaMemberFailureCounter:             metaMemberFailureCounter,
 		mandatoryAuthzShadowCounter:          mandatoryAuthzShadowCounter,
 		mcpProtocolVersionRejectedCounter:    mcpProtocolVersionRejectedCounter,
 		mcpSkillReadCounter:                  mcpSkillReadCounter,
@@ -568,6 +580,14 @@ func (m *Metrics) RecordAuthClientParity(ctx context.Context, agreed bool, outco
 		attr.AuthClientLegacyOutcome(legacyOutcome),
 		attr.AuthClientReason(reason),
 	))
+}
+
+// RecordMetaMemberFailure counts one failed attempt on a gateway member. Reasons are a closed set.
+func (m *Metrics) RecordMetaMemberFailure(ctx context.Context, reason string) {
+	if m == nil || m.metaMemberFailureCounter == nil {
+		return
+	}
+	m.metaMemberFailureCounter.Add(ctx, 1, metric.WithAttributes(attr.AuthClientReason(reason)))
 }
 
 // MandatoryAuthzShadow is one shadowed mandatory check. Every field but

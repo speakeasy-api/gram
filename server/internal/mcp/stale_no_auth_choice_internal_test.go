@@ -2,24 +2,25 @@ package mcp
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"log/slog"
-	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -167,7 +168,7 @@ func TestCodeModeStaleChoiceKeepsConsentInstruction(t *testing.T) {
 		text    string
 	}{
 		"consent can fix it": {bound: true, consent: "required", text: "reconnect this gateway"},
-		"consent cannot":     {bound: false, consent: "unknown", text: "Ask your administrator"},
+		"consent cannot":     {bound: false, consent: "unknown", text: "needs your administrator"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -183,9 +184,9 @@ func TestCodeModeStaleChoiceKeepsConsentInstruction(t *testing.T) {
 			member := metaMember{slug: "db", serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied, upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)}
 			member.authClient = ptr(gapWithChoice(authClientReasonNoAuthForbidden))
 			gate := &metaGateContext{
-				organizationID: f.orgID, userSessionIssuerID: issuerID,
+				organizationID: f.orgID, projectID: f.projectID, userSessionIssuerID: issuerID,
 				authentication: &issuerGateAuthentication{refreshableUserSession: true, subject: urn.NewUserSubject("user_1")},
-				memberChoices:  &memberChoices{subject: urn.NewUserSubject("user_1"), byServer: map[uuid.UUID]*memberTokens{}},
+				memberChoices:  &memberChoices{selector: &upstreamSelector{}, subject: urn.NewUserSubject("user_1"), byServer: map[uuid.UUID]*memberTokens{}},
 			}
 			state := (&metaCodeBackend{service: f.service}).verifyConnection(t.Context(), gate, []metaMember{member}, "db")
 			require.Equal(t, tc.consent, state.Consent)
@@ -195,42 +196,68 @@ func TestCodeModeStaleChoiceKeepsConsentInstruction(t *testing.T) {
 	}
 }
 
-// A direct server keeps its 401 reconnect challenge.
-func TestDirectStaleNoAuthKeepsReconnectChallenge(t *testing.T) {
+func TestStaleChoiceRemedyIsCachedPerPersonAndServer(t *testing.T) {
 	t.Parallel()
-	pool, err := TestInfra.CloneTestDatabase(t, "mcp_direct_stale_no_auth")
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_stale_choice_cache")
 	require.NoError(t, err)
-	for _, enforced := range []bool{false, true} {
-		f := newAuthClientFixture(t, pool)
-		if enforced {
-			f.enforce()
-		}
-		selector := f.choose(uuid.NullUUID{})
-		f.oauthClient(authClientTypeRemoteSession)
-		issuerID := uuid.New()
-		subject := urn.NewUserSubject("user_1")
-		proof := validatedSessionProof(t, subject)
-		ctx := mcpidentity.NewValidatorBoundary().StampValidatedSession(t.Context(), proof)
-		ctx = context.WithValue(ctx, liveSessionPolicyKey{}, true)
-		ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{UserID: "user_1", ActiveOrganizationID: f.orgID})
-		require.NoError(t, f.q.SeedUserSessionIssuerFixture(ctx, authclientbackfill.SeedUserSessionIssuerFixtureParams{ID: issuerID, ProjectID: validUUID(f.projectID), Slug: "issuer"}))
-		require.NoError(t, f.q.SeedUserSessionFixture(ctx, authclientbackfill.SeedUserSessionFixtureParams{
-			ProjectID: validUUID(f.projectID), OrganizationID: text(f.orgID), UserSessionIssuerID: issuerID,
-			SubjectUrn: subject, Jti: proof.JTI(), CredentialID: validUUID(selector.credentialID),
-		}))
-		w := httptest.NewRecorder()
-		_, handled, err := f.service.directUpstreamChoice(ctx, w, &issuerGateAuthentication{
-			endpoint:               &ResolvedMcpEndpoint{OrganizationID: f.orgID, ProjectID: f.projectID, UserSessionIssuerID: issuerID, McpServerID: validUUID(f.serverID)},
-			subject:                subject,
-			refreshableUserSession: true,
-			protectedResourceURL:   "https://example.com/.well-known/oauth-protected-resource/mcp/x",
-		})
-		require.True(t, handled)
-		var shareable *oops.ShareableError
-		require.ErrorAs(t, err, &shareable)
-		require.Equal(t, oops.CodeUnauthorized, shareable.Code)
-		require.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`)
-		_, choiceErr := selector.forServer(ctx, f.serverID)
-		require.ErrorIs(t, choiceErr, errUpstreamSelectionUnusable, "refresh refuses this choice too")
+	f := newAuthClientFixture(t, pool)
+	f.service.authEnforcement = authenforcement.NewGate(pool)
+	f.service.features = new(feature.InMemory)
+	f.service.staleChoiceConsent = expirable.NewLRU[string, bool](16, nil, time.Minute)
+	f.oauthClient(authClientTypeRemoteSession)
+	issuerID := uuid.New()
+	require.NoError(t, f.q.SeedUserSessionIssuerFixture(t.Context(), authclientbackfill.SeedUserSessionIssuerFixtureParams{ID: issuerID, ProjectID: validUUID(f.projectID), Slug: "issuer-" + issuerID.String()[:8]}))
+	member := metaMember{serverID: f.serverID, projectID: f.projectID}
+	gate := func(user string) *metaGateContext {
+		return &metaGateContext{organizationID: f.orgID, projectID: f.projectID, userSessionIssuerID: issuerID, memberChoices: &memberChoices{subject: urn.NewUserSubject(user)}}
 	}
+	first, err := f.service.consentCanReplaceChoice(t.Context(), gate("user_1"), member)
+	require.NoError(t, err)
+	require.False(t, first)
+	require.NoError(t, f.q.BindClientIssuerFixture(t.Context(), authclientbackfill.BindClientIssuerFixtureParams{RemoteSessionClientID: f.registration, UserSessionIssuerID: issuerID}))
+	cached, err := f.service.consentCanReplaceChoice(t.Context(), gate("user_1"), member)
+	require.NoError(t, err)
+	require.False(t, cached, "the same person and server reuse the answer")
+	fresh, err := f.service.consentCanReplaceChoice(t.Context(), gate("user_2"), member)
+	require.NoError(t, err)
+	require.True(t, fresh, "another person gets their own")
+}
+
+func TestStaleChoiceCountsEveryAttemptPastLogDedupe(t *testing.T) {
+	t.Parallel()
+	reader := sdkmetric.NewManualReader()
+	logger := testenv.NewLogger(t)
+	s := &Service{staleNoAuthLog: newOnceLog(), metrics: mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), logger)}
+	gate := &metaGateContext{authentication: &issuerGateAuthentication{subject: urn.NewUserSubject("user_1")}}
+	member := metaMember{serverID: uuid.New()}
+	for range 3 {
+		s.noteStaleChoiceCall(t.Context(), logger, gate, member, staleMemberError(authClientReasonNoAuthForbidden))
+	}
+	var collected metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &collected))
+	total := int64(0)
+	for _, scope := range collected.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if m.Name != "mcp.meta.member_failure" {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			for _, point := range sum.DataPoints {
+				total += point.Value
+			}
+		}
+	}
+	require.Equal(t, int64(3), total)
+}
+
+func TestCodeModeHelperFailureNonPersonGetsOwnerCopy(t *testing.T) {
+	t.Parallel()
+	backend := &metaCodeBackend{service: &Service{logger: testenv.NewLogger(t)}}
+	gate := &metaGateContext{authentication: &issuerGateAuthentication{refreshableUserSession: true, subject: urn.NewAgentSubject(uuid.New())}, memberChoices: &memberChoices{}}
+	err := backend.helperFailure(t.Context(), gate, metaMember{slug: "db"}, staleMemberError(authClientReasonNoAuthForbidden))
+	refused, ok := errors.AsType[*codemode.MemberRefusalError](err)
+	require.True(t, ok)
+	require.Contains(t, refused.Message, "Ask whoever set this up")
+	require.NotErrorIs(t, err, codemode.ErrConsentRequired)
 }

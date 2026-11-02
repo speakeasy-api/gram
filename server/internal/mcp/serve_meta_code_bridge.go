@@ -219,9 +219,16 @@ func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bo
 	return ctx, gate, permitted, nil
 }
 
-// codeHelperFailure keeps a member that needs a new consent distinguishable
-// from one that is merely unavailable.
-func codeHelperFailure(err error) error {
+// helperFailure keeps a member that needs a new consent, or someone else's fix,
+// distinguishable from one that is merely unavailable.
+func (b *metaCodeBackend) helperFailure(ctx context.Context, gate *metaGateContext, member metaMember, err error) error {
+	if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
+		message, reconnect := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
+		if !reconnect {
+			return &codemode.MemberRefusalError{Message: message}
+		}
+		return codemode.ErrConsentRequired
+	}
 	if needsNewConsent(err) {
 		return codemode.ErrConsentRequired
 	}
@@ -284,7 +291,7 @@ func (b *metaCodeBackend) catalog(ctx context.Context, gate *metaGateContext, me
 	}
 	catalog, err := b.service.describeMetaMember(context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions), b.service.logger, gate, member)
 	if err != nil {
-		return nil, codeHelperFailure(err)
+		return nil, b.helperFailure(ctx, gate, member, err)
 	}
 	result := &codemode.Catalog{Tools: make([]codemode.Tool, 0, len(catalog.entries)), Incomplete: catalog.incomplete}
 	for _, entry := range catalog.entries {
@@ -314,7 +321,10 @@ func (b *metaCodeBackend) Describe(ctx context.Context, path string) (*codemode.
 	}
 	catalog, err := b.service.describeMetaMember(context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions), b.service.logger, gate, member)
 	if err != nil {
-		return nil, codeHelperFailure(err)
+		if stale, ok := errors.AsType[memberStaleChoiceError](err); ok {
+			b.service.noteStaleChoiceCall(ctx, b.service.logger, gate, member, stale)
+		}
+		return nil, b.helperFailure(ctx, gate, member, err)
 	}
 	entry, ok := catalog.byName[name]
 	if !ok {
@@ -353,10 +363,7 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 		if member, ok := findMetaMember(members, slug); ok {
 			if stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); ok {
 				b.service.noteStaleChoiceCall(ctx, b.service.logger, &callGate, member, stale)
-				if message, reconnect := b.service.staleChoiceMessage(ctx, b.service.logger, &callGate, member); !reconnect {
-					return nil, &codemode.DispatchError{BeforeInvoke: true, Code: "tool_call_rejected", Rejection: message}
-				}
-				return nil, codemode.ErrConsentRequired
+				return nil, b.helperFailure(ctx, &callGate, member, stale)
 			}
 			if needsNewConsent(b.service.validateCatalogMember(ctx, &callGate, member)) {
 				return nil, codemode.ErrConsentRequired
