@@ -1836,6 +1836,21 @@ func testGetSubscriptionValidatesCatalog(t *testing.T, tt subscriptionCatalogCas
 	return c
 }
 
+func TestGetSubscriptionAdoptionRejectsInvalidFirstTUMPeriod(t *testing.T) {
+	t.Parallel()
+	subscription := testSubscription()
+	validItem := *subscription.Items.Data[0]
+	subscription.Items.Data[0].CurrentPeriodStart = 0
+	subscription.Items.Data = append(subscription.Items.Data, &validItem)
+	c := &client{api: &fakeStripeAPI{subscription: subscription}, catalog: Catalog{PriceIDTUM: "price_tum"}}
+
+	state, err := c.GetSubscription(t.Context(), "sub_test", RequireAdoptionEligibility)
+	require.Nil(t, state)
+	var eligibilityError *SubscriptionEligibilityError
+	require.ErrorAs(t, err, &eligibilityError)
+	require.Equal(t, "stripe subscription is missing the configured TUM service period", eligibilityError.Reason)
+}
+
 func TestGetSubscriptionRejectsIncompleteItems(t *testing.T) {
 	t.Parallel()
 	for _, items := range []*stripesdk.SubscriptionItemList{

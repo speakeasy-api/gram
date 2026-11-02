@@ -439,7 +439,9 @@ func testGetStripeSubscriptionByIDMapsReadErrors(t *testing.T, tt subscriptionRe
 	require.Equal(t, tt.options, client.subscriptionReadOptions)
 	require.Nil(t, state)
 	requireOopsCode(t, err, tt.code)
-	require.ErrorContains(t, err, tt.message)
+	var publicError *oops.ShareableError
+	require.ErrorAs(t, err, &publicError)
+	require.EqualError(t, publicError, tt.message)
 }
 
 type subscriptionReadErrorCase struct {

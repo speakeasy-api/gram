@@ -1006,7 +1006,11 @@ func (c *client) validateSubscriptionCatalog(subscription *stripesdk.Subscriptio
 			return &SubscriptionEligibilityError{Reason: "stripe subscription item is missing a price"}
 		}
 		priceID := item.Price.ID
-		if priceID == c.catalog.PriceIDTUM && item.CurrentPeriodStart > 0 && item.CurrentPeriodEnd > item.CurrentPeriodStart {
+		// Match subscriptionState: the first TUM item defines the service period.
+		if priceID == c.catalog.PriceIDTUM && !hasTUMServicePeriod {
+			if item.CurrentPeriodStart <= 0 || item.CurrentPeriodEnd <= item.CurrentPeriodStart {
+				return &SubscriptionEligibilityError{Reason: "stripe subscription is missing the configured TUM service period"}
+			}
 			hasTUMServicePeriod = true
 		}
 		if priceID != c.catalog.PriceIDTUM &&
