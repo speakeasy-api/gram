@@ -85,6 +85,14 @@ func (r *Recording) RequireNotEnded() {
 	}
 }
 
+// RequireNoUnclassifiedExit asserts every tracked exit said what happened.
+func (r *Recording) RequireNoUnclassifiedExit() {
+	r.t.Helper()
+	for _, row := range r.Rows() {
+		require.NotEqual(r.t, mcpconnectionattempts.NoVerdictDetail, row.SubReason, "a request left %s without a verdict", row.Step)
+	}
+}
+
 // RequireNothing asserts nothing was recorded.
 func (r *Recording) RequireNothing() {
 	r.t.Helper()
