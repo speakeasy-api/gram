@@ -1717,8 +1717,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		if !clientRow.TunneledMcpServerID.Valid {
 			provider = providerLabel(state.TokenEndpoint)
 		}
-		endpointErr, answered := errors.AsType[*tokenEndpointError](err)
-		return none, providerOutageError(failure, provider, answered && endpointErr.statusCode == http.StatusTooManyRequests)
+		return none, providerOutageError(failure, provider, true)
 	}
 	// The pair is live upstream from this line on, and every path out of here
 	// that does not store it strands it: unreachable through Speakeasy, and outside
@@ -1990,7 +1989,7 @@ func denied(ctx context.Context, logger *slog.Logger, q url.Values) error {
 	)
 }
 
-// ErrProviderOutageExternal marks a provider-caused 5xx that shouldn't alert on-call.
+// ErrProviderOutageExternal marks a provider-caused 5xx at sign-in that shouldn't alert on-call.
 var ErrProviderOutageExternal = errors.New("sign-in provider outage")
 
 // TagExternalOutage marks the response to err as caused outside Speakeasy.

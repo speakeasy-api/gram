@@ -166,13 +166,13 @@ func TestRemoteLoginCallback_ProviderOutagePage(t *testing.T) {
 		opts    []syntheticLoginOption
 		outage  bool
 
-		// external: the 5xx is new and the provider's, so it's tagged not to alert.
+		// external: the provider's own failure, so it's tagged not to alert.
 		external bool
 	}{
-		{name: "token endpoint 503", handler: failing(http.StatusServiceUnavailable, ""), outage: true},
-		{name: "token endpoint 500", handler: failing(http.StatusInternalServerError, ""), outage: true},
+		{name: "token endpoint 503", handler: failing(http.StatusServiceUnavailable, ""), outage: true, external: true},
+		{name: "token endpoint 500", handler: failing(http.StatusInternalServerError, ""), outage: true, external: true},
 		{name: "token endpoint 429", handler: failing(http.StatusTooManyRequests, ""), outage: true, external: true},
-		{name: "token endpoint unreachable", handler: func(http.ResponseWriter, *http.Request) { panic(http.ErrAbortHandler) }, outage: true},
+		{name: "token endpoint unreachable", handler: func(http.ResponseWriter, *http.Request) { panic(http.ErrAbortHandler) }, outage: true, external: true},
 		{name: "authorize temporarily_unavailable", handler: unused, opts: []syntheticLoginOption{authorizeError(oautherr.CodeTemporarilyUnavailable)}, outage: true, external: true},
 		{name: "authorize server_error", handler: unused, opts: []syntheticLoginOption{authorizeError(oautherr.CodeServerError)}, outage: true, external: true},
 		{name: "invalid_client is not an outage", handler: failing(http.StatusUnauthorized, `{"error":"invalid_client"}`), outage: false},
