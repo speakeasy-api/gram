@@ -118,8 +118,7 @@ vi.mock(
     }: {
       additionalSetupAction?: ReactNode;
     }) => (
-      <div>
-        <button>Attach identity provider</button>
+      <div data-testid="authentication-section-body">
         {additionalSetupAction}
       </div>
     ),
@@ -241,9 +240,7 @@ describe("unknown external MCP authentication", () => {
         screen.getByText("Upstream authentication requirements are unknown"),
       ).toBeTruthy();
       expect(screen.queryByText("OAuth is not applicable")).toBeNull();
-      expect(
-        screen.getByRole("button", { name: "Attach identity provider" }),
-      ).toBeTruthy();
+      expect(screen.getByTestId("authentication-section-body")).toBeTruthy();
       const setup = screen.queryByRole("button", {
         name: "Configure External OAuth",
       });
