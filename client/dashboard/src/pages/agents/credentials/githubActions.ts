@@ -33,6 +33,8 @@ export const GITHUB_ACTIONS_KEY = "github-actions";
  * the latest stable release unless the step sets `version`, so a job picks
  * up a fix without its workflow being edited, and it checks every download,
  * pinned or not, against the stable release manifest in the same bucket.
+ * That catches a download corrupted or tampered with in transit, not a
+ * compromised bucket.
  */
 const PINNED_ACTIONS = {
   checkout: {
