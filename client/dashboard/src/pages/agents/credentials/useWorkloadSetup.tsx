@@ -1,5 +1,5 @@
-import { Alert } from "@/components/ui/Alert";
 import { useOrganization, useProject } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
 import { WorkloadIssuerSelector } from "./WorkloadIssuerSelector";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import { AssertionReuseField } from "../WorkloadIssuerPolicy";
@@ -13,14 +13,18 @@ import {
   queryKeyWorkloadIdentities,
   useWorkloadIdentities,
 } from "@gram/client/react-query/workloadIdentities.js";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   customSetupInstructions,
   CUSTOM_PLATFORM_KEY,
 } from "./CustomSetupInstructions";
 import { platformSetup } from "./platformSetups";
-import { ComputedStatus } from "./SetupFields";
+import {
+  ComputedStatus,
+  ShadowingIssuers,
+  type ProjectIssuer,
+} from "./SetupFields";
 import type {
   PlatformSetup,
   SetupContext,
@@ -253,14 +257,12 @@ export function useWorkloadSetup({
   // A project that trusts the same issuer on its own takes precedence in that
   // project: its MCP servers match a token against the project's rules, not
   // the organization-tier one this flow saves, so a job reaches them as a
-  // different identity or not at all.
-  const shadowingIssuer =
-    !organizationTier || connection === null
-      ? undefined
-      : issuers.find(
-          (issuer) =>
-            issuer.projectId !== "" && issuer.issuer === connection.issuer,
-        );
+  // different identity or not at all. The rule is organization-wide, so every
+  // project is checked, not only this one.
+  const shadows = useProjectIssuers(
+    organizationTier && entry !== undefined,
+    connection?.issuer ?? null,
+  );
   const conflicting =
     connection === null || ours
       ? undefined
@@ -451,35 +453,8 @@ export function useWorkloadSetup({
         ) : (
           <div className="space-y-4">
             {step.body(context)}
-            {step.phase === "create" && shadowingIssuer !== undefined && (
-              <Alert variant="warning">
-                <div className="space-y-2 text-sm">
-                  <p>
-                    This project also trusts{" "}
-                    <strong>{shadowingIssuer.name}</strong> on its own, at the
-                    same issuer URL. Its MCP servers check a job against that
-                    issuer&apos;s rules instead of the one saved here, so the
-                    job reaches them as another identity, or not at all.
-                  </p>
-                  <p>
-                    Removing an agent&apos;s access does not fix this: the
-                    project&apos;s own issuer has to be withdrawn, which also
-                    withdraws every rule admitted under it. The dashboard has no
-                    control for that yet, so ask someone who can manage workload
-                    identities to withdraw it.
-                  </p>
-                  <details>
-                    <summary className="cursor-pointer">
-                      Technical details
-                    </summary>
-                    <p className="mt-2">
-                      Withdraw it through the API:{" "}
-                      <code>{`DELETE /rpc/workloadIdentities.withdrawIssuer?id=${shadowingIssuer.id}`}</code>{" "}
-                      with the header <code>Gram-Project: {project.slug}</code>.
-                    </p>
-                  </details>
-                </div>
-              </Alert>
+            {step.phase === "create" && shadows.length > 0 && (
+              <ShadowingIssuers shadows={shadows} platformName={platformName} />
             )}
             {step.phase === "create" && !isTrusted && (
               <AssertionReuseField
@@ -507,6 +482,53 @@ export function useWorkloadSetup({
     error,
     values,
   };
+}
+
+/** How long one project's issuers, read for the warning, are reused. */
+const PROJECT_ISSUERS_STALE_TIME_MS = 60_000;
+
+/**
+ * Every project that trusts this issuer URL on its own, with that issuer.
+ * Workload identities are listed per project, so each of the organization's
+ * projects is read while `enabled`; one the reader cannot open is left out.
+ *
+ * The reads are keyed apart from the policy lists the setup invalidates after
+ * every save: a save never writes another project's issuers, so refetching
+ * every project then would only make Connect wait.
+ */
+function useProjectIssuers(
+  enabled: boolean,
+  issuer: string | null,
+): ProjectIssuer[] {
+  const organization = useOrganization();
+  const sdk = useSdkClient();
+  const projects = (organization.projects ?? []).filter(
+    (project) => project.slug,
+  );
+  const reads = useQueries({
+    queries: projects.map((project) => ({
+      queryKey: ["workload-setup-project-issuers", organization.id, project.id],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        sdk.workloadIdentities.list({ gramProject: project.slug }, undefined, {
+          signal,
+        }),
+      enabled,
+      retry: false,
+      throwOnError: false,
+      staleTime: PROJECT_ISSUERS_STALE_TIME_MS,
+    })),
+  });
+  if (!enabled || issuer === null) return [];
+  return projects.flatMap((project, index) =>
+    (reads[index]?.data?.issuers ?? [])
+      .filter(
+        (row) =>
+          row.organizationId === organization.id &&
+          row.projectId === project.id &&
+          row.issuer === issuer,
+      )
+      .map((row) => ({ project, issuer: row })),
+  );
 }
 
 /**

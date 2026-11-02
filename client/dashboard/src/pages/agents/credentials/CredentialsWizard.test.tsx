@@ -123,6 +123,14 @@ vi.mock("@/contexts/Sdk", () => ({
       extendAgentKeys: mocks.extendAgentKeys,
     },
     plugins: { getPlugin: mocks.getPlugin },
+    // Read per project, for the projects that trust a platform on their own.
+    // Each project sees its own rows among every issuer listed.
+    workloadIdentities: {
+      list: async () => ({
+        issuers: mocks.workloadIssuers(),
+        admissions: mocks.workloadAdmissions(),
+      }),
+    },
     authClients: {
       listMcpServerChoices: async () => ({ choices: [] }),
       // How each server signs in upstream, read from its own auth clients.
@@ -3554,7 +3562,12 @@ describe("Connecting a GitHub repository", () => {
       },
     ]);
     await reachRepositoryStep();
-    expect(screen.getByText(/This project also trusts/)).toBeTruthy();
+    expect(
+      (await screen.findByText(/also trusts GitHub Actions on its own/))
+        .textContent,
+    ).toBe(
+      "The project Project one also trusts GitHub Actions on its own, at the same issuer URL. Its MCP servers check a job against the project's own issuer instead of the rule saved here, so the job reaches them as another identity, or not at all.",
+    );
     // The remedy is withdrawing the project's own issuer, not an agent's
     // access, which would leave the issuer shadowing the rule. The call that
     // does it is under the technical details.
@@ -3572,6 +3585,42 @@ describe("Connecting a GitHub repository", () => {
     );
     await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
     expect(mocks.registerIssuer).toHaveBeenCalledTimes(1);
+  });
+
+  // The rule is organization-wide, so a project the setup is not running in
+  // overrides it for that project's servers all the same.
+  it("names every project that trusts GitHub on its own, not only this one", async () => {
+    const own = (id: string, projectId: string) => ({
+      id,
+      organizationId: "org_example",
+      projectId,
+      name: "Project GitHub",
+      issuer: "https://token.actions.githubusercontent.com",
+      jwksUri: "https://token.actions.githubusercontent.com/.well-known/jwks",
+    });
+    mocks.workloadIssuers.mockReturnValue([
+      own("issuer_one", "project_one"),
+      own("issuer_two", "project_two"),
+      // Another platform's issuer in a project is no concern of this rule.
+      { ...own("issuer_other", "project_two"), issuer: "https://idp.example" },
+    ]);
+    await reachRepositoryStep();
+    expect(
+      (await screen.findByText(/also trust GitHub Actions on their own/))
+        .textContent,
+    ).toMatch(/^The projects Project one, Project two also trust/);
+    for (const [id, slug] of [
+      ["issuer_one", "project-one"],
+      ["issuer_two", "project-two"],
+    ]) {
+      const call = screen.getByText(
+        `DELETE /rpc/workloadIdentities.withdrawIssuer?id=${id}`,
+      );
+      expect(call.parentElement?.textContent).toContain(
+        `Gram-Project: ${slug}`,
+      );
+    }
+    expect(screen.queryByText(/issuer_other/)).toBeNull();
   });
 
   it("creates nothing when the device agent's permissions cannot be given", async () => {
