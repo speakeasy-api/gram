@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/tailscaleapi"
 )
 
 var runtimeQueuePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
@@ -138,8 +139,11 @@ func (c RuntimeConfig) Validate() error {
 	}
 	if c.Gateway.APIURL != "" {
 		parsed, err := url.Parse(c.Gateway.APIURL)
-		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		if err != nil || parsed.Host == "" {
 			return fmt.Errorf("invalid private ingress Tailscale API URL")
+		}
+		if err := tailscaleapi.RequireTLS(parsed); err != nil {
+			return fmt.Errorf("invalid private ingress Tailscale API URL: %w", err)
 		}
 	}
 	if c.IngressClass != "" && c.IngressClass != "tailscale" {

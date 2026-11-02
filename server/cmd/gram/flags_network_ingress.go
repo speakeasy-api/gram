@@ -206,7 +206,7 @@ func networkIngressConfigFromCLI(c *cli.Context) (networkingress.RuntimeConfig, 
 		Gateway: networkingress.GatewayRuntimeConfig{
 			Enabled: c.Bool("network-ingress-gateway-enabled"),
 			Tag:     c.String("network-ingress-gateway-tag"),
-			Slots:   int32(min(max(c.Int("network-ingress-gateway-slots"), 0), 1<<15)), // #nosec G115 -- clamped before conversion.
+			Slots:   int32(min(max(c.Int("network-ingress-gateway-slots"), -1), 1<<15)), // #nosec G115 -- clamped before conversion; -1 keeps negatives rejected by Validate.
 			APIURL:  c.String("network-ingress-tailscale-api-url"),
 		},
 		OperatorProviderEnabled: c.Bool("network-ingress-operator-provider-enabled"),

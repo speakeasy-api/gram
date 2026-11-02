@@ -168,6 +168,7 @@ func TestRuntimeConfigGatewayMutationReadiness(t *testing.T) {
 		{"bad tag", func(c *RuntimeConfig) { c.Gateway.Tag = "speakeasy" }},
 		{"too many slots", func(c *RuntimeConfig) { c.Gateway.Slots = 1000 }},
 		{"bad api url", func(c *RuntimeConfig) { c.Gateway.APIURL = "not a url" }},
+		{"plain http api url", func(c *RuntimeConfig) { c.Gateway.APIURL = "http://api.tailscale.com" }},
 	} {
 		invalid := config
 		test.set(&invalid)
