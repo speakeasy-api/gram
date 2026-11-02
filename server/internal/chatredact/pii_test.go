@@ -54,3 +54,15 @@ func TestTextKeepsLookalikeNumbers(t *testing.T) {
 		require.Equal(t, input, got, name)
 	}
 }
+
+func TestTextMasksCardNumbersInJSONNumbers(t *testing.T) {
+	t.Parallel()
+	r := chatredact.NewWithScanner(wordScanner{word: "\x00"})
+
+	safe, changed, err := r.Text(t.Context(), `{"card":4111111111111111,"order":4111111111111112,"prompt_tokens":1793324886494}`)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Contains(t, safe, `"card":"[REDACTED]"`)
+	require.Contains(t, safe, `"order":4111111111111112`)
+	require.Contains(t, safe, `"prompt_tokens":1793324886494`)
+}
