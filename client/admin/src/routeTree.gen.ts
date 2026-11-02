@@ -15,6 +15,7 @@ import { Route as ExternalMcpMigrationRouteImport } from './routes/external-mcp-
 import { Route as FleetHealthRouteImport } from './routes/fleet-health'
 import { Route as IntegrationCoverageRouteImport } from './routes/integration-coverage'
 import { Route as McpSetupRouteImport } from './routes/mcp-setup'
+import { Route as MemoryEvalsRouteImport } from './routes/memory-evals'
 import { Route as OnboardingPlaybooksRouteImport } from './routes/onboarding-playbooks'
 import { Route as OnboardingStepsRouteImport } from './routes/onboarding-steps'
 import { Route as OrganizationsRouteImport } from './routes/organizations'
@@ -78,6 +79,11 @@ const IntegrationCoverageRoute = IntegrationCoverageRouteImport.update({
 const McpSetupRoute = McpSetupRouteImport.update({
   id: '/mcp-setup',
   path: '/mcp-setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MemoryEvalsRoute = MemoryEvalsRouteImport.update({
+  id: '/memory-evals',
+  path: '/memory-evals',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OnboardingPlaybooksRoute = OnboardingPlaybooksRouteImport.update({
@@ -274,6 +280,7 @@ export interface FileRoutesByFullPath {
   '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
+  '/memory-evals': typeof MemoryEvalsRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
   '/onboarding-steps': typeof OnboardingStepsRoute
   '/organizations': typeof OrganizationsRouteWithChildren
@@ -316,6 +323,7 @@ export interface FileRoutesByTo {
   '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
+  '/memory-evals': typeof MemoryEvalsRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
   '/onboarding-steps': typeof OnboardingStepsRoute
   '/signup-offers': typeof SignupOffersRoute
@@ -351,6 +359,7 @@ export interface FileRoutesById {
   '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
+  '/memory-evals': typeof MemoryEvalsRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
   '/onboarding-steps': typeof OnboardingStepsRoute
   '/organizations': typeof OrganizationsRouteWithChildren
@@ -395,6 +404,7 @@ export interface FileRouteTypes {
     | '/fleet-health'
     | '/integration-coverage'
     | '/mcp-setup'
+    | '/memory-evals'
     | '/onboarding-playbooks'
     | '/onboarding-steps'
     | '/organizations'
@@ -437,6 +447,7 @@ export interface FileRouteTypes {
     | '/fleet-health'
     | '/integration-coverage'
     | '/mcp-setup'
+    | '/memory-evals'
     | '/onboarding-playbooks'
     | '/onboarding-steps'
     | '/signup-offers'
@@ -471,6 +482,7 @@ export interface FileRouteTypes {
     | '/fleet-health'
     | '/integration-coverage'
     | '/mcp-setup'
+    | '/memory-evals'
     | '/onboarding-playbooks'
     | '/onboarding-steps'
     | '/organizations'
@@ -514,6 +526,7 @@ export interface RootRouteChildren {
   FleetHealthRoute: typeof FleetHealthRoute
   IntegrationCoverageRoute: typeof IntegrationCoverageRoute
   McpSetupRoute: typeof McpSetupRoute
+  MemoryEvalsRoute: typeof MemoryEvalsRoute
   OnboardingPlaybooksRoute: typeof OnboardingPlaybooksRoute
   OnboardingStepsRoute: typeof OnboardingStepsRoute
   OrganizationsRoute: typeof OrganizationsRouteWithChildren
@@ -568,6 +581,13 @@ declare module '@tanstack/react-router' {
       path: '/mcp-setup'
       fullPath: '/mcp-setup'
       preLoaderRoute: typeof McpSetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/memory-evals': {
+      id: '/memory-evals'
+      path: '/memory-evals'
+      fullPath: '/memory-evals'
+      preLoaderRoute: typeof MemoryEvalsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/onboarding-playbooks': {
@@ -957,6 +977,7 @@ const rootRouteChildren: RootRouteChildren = {
   FleetHealthRoute: FleetHealthRoute,
   IntegrationCoverageRoute: IntegrationCoverageRoute,
   McpSetupRoute: McpSetupRoute,
+  MemoryEvalsRoute: MemoryEvalsRoute,
   OnboardingPlaybooksRoute: OnboardingPlaybooksRoute,
   OnboardingStepsRoute: OnboardingStepsRoute,
   OrganizationsRoute: OrganizationsRouteWithChildren,
