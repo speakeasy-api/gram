@@ -242,6 +242,7 @@ func TestMemoryDigests_DayDigestFoldsOnlyEligibleSources(t *testing.T) {
 		ID:                 kept1,
 	})
 	require.NoError(t, err)
+	require.NoError(t, job.Invalidate(ctx))
 	result, err = job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "day", Now: now})
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Built)
@@ -303,6 +304,7 @@ func TestMemoryDigests_RollupsWaitForClosedPeriods(t *testing.T) {
 	// remaining children.
 	require.NoError(t, memorydigesttest.New(conn).DeleteDigestFixture(ctx, dayIDs[0]))
 	later := time.Date(2026, 11, 3, 1, 0, 0, 0, time.UTC)
+	require.NoError(t, job.Invalidate(ctx))
 	result, err = job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "week", Now: later})
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Built)
