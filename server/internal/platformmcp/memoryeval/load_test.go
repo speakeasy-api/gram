@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/bench"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -29,6 +30,15 @@ type loadedCorpus struct {
 // userID is the stored user ID for a corpus handle.
 func (l loadedCorpus) userID(handle string) string {
 	return "user_memoryeval_" + handle
+}
+
+// target is the loaded corpus as the bench sees it.
+func (l loadedCorpus) target() bench.Target {
+	projects := make(map[memoryeval.ProjectKey]bench.Project, len(l.projects))
+	for key, project := range l.projects {
+		projects[key] = bench.Project{ID: project.ID, Slug: project.Slug}
+	}
+	return bench.Target{DB: l.db, Corpus: l.corpus, OrganizationID: l.organizationID, Projects: projects, UserID: l.userID}
 }
 
 // loadCorpus writes the corpus into a fresh database: one organization, both
