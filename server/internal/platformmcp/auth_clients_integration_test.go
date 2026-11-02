@@ -70,7 +70,8 @@ func TestPlatformMCPReportsUpstreamAuthClients(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, settings.UpstreamAuthentication)
-	require.Equal(t, authclients.StatusUndecided, settings.UpstreamAuthentication.Status)
+	require.Equal(t, authclients.StatusConfigured, settings.UpstreamAuthentication.Status, "the server offers enabled clients")
+	require.True(t, settings.UpstreamAuthentication.RequiresUpstreamAuth)
 	require.Len(t, settings.UpstreamAuthentication.Clients, 2)
 
 	role := seedAccessRole(t, ctx, conn, principal.OrganizationID, "ops", "Operations")

@@ -37,7 +37,7 @@ export type AdminUpstreamOAuthMigrationAuthClients = {
    */
   attachmentsWaiting?: number | undefined;
   /**
-   * Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, no server offering one is left undecided, and no phase failed.
+   * Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, and no phase failed.
    */
   complete: boolean;
   /**
@@ -69,7 +69,7 @@ export type AdminUpstreamOAuthMigrationAuthClients = {
    */
   pendingLinks: number;
   /**
-   * Servers offering a backfilled auth client whose need for upstream authentication is still undecided, not yet marked as needing it.
+   * Deprecated: always 0. Whether a server needs upstream authentication follows from the auth clients it offers, so no server is marked.
    */
   pendingMarkedServers: number;
   /**

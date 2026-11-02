@@ -76,15 +76,6 @@ describe("needsMigrationRun", () => {
     expect(needsMigrationRun(s)).toBe(false);
   });
 
-  it("includes an organization with servers to mark", () => {
-    const s = status(true, false);
-    if (s.authClients) {
-      s.authClients.pendingClients = 0;
-      s.authClients.pendingMarkedServers = 1;
-    }
-    expect(needsMigrationRun(s)).toBe(true);
-  });
-
   it("includes an organization with headers to update or a failed phase", () => {
     const headers = status(true, false);
     const failed = status(true, false);

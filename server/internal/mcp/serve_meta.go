@@ -89,6 +89,8 @@ type metaGateContext struct {
 	consentDiagnostics *consentDiagnostics
 	// catalogRef is the authenticated consent reference and discovery mode.
 	catalogRef *toolfilter.CatalogReference
+	// catalogRecoveryOnly admits recovery helpers without any tool authorization.
+	catalogRecoveryOnly bool
 	// authentication retains validated endpoint identity for lazy catalogue loading.
 	authentication *issuerGateAuthentication
 	// unapprovedMembers are current members the catalog did not approve. They
@@ -108,6 +110,13 @@ type metaGateContext struct {
 	protocolVersion mcpversions.Resolution
 	// connectURL is the gateway's browser connect page; empty when ungated.
 	connectURL string
+	// skillsOverMCP memoizes the Skills extension flag for this request once
+	// it is evaluated; see metaSkillsEnabled.
+	skillsOverMCP *bool
+	// servedCredentials collects, for one member dial, the auth client and
+	// connection each registration's agent credential was authorized for,
+	// keyed by registration. Nil outside a dial, which records nothing.
+	servedCredentials map[uuid.UUID]contextvalues.UpstreamCredential
 }
 
 // metaMembership names where a meta request's members come from. The zero
@@ -213,13 +222,17 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	if err := validateMCPRequestEnvelope(ctx, logger, prepared, oops.CodeRequestTooLarge, "meta mcp request body exceeds 1 MiB"); err != nil {
 		return err
 	}
-	if gate.catalogRef != nil && (req.Method == mcpversions.MethodToolsCall || (req.Method == mcpversions.MethodToolsList && (gate.discoveryMode == metamcp.DiscoveryModeDirect || gate.discoveryMode == metamcp.DiscoveryModeCode))) {
+	// A skills request loads the catalog too: a gateway inherits skills only
+	// from the members the connection approved. With the extension off it is
+	// rejected in dispatch, so it needs no catalog.
+	if gate.catalogRef != nil && (req.Method == mcpversions.MethodToolsCall || (req.Method == mcpversions.MethodToolsList && (gate.discoveryMode == metamcp.DiscoveryModeDirect || gate.discoveryMode == metamcp.DiscoveryModeCode)) || (metaSkillMethod(&req) && s.metaSkillsEnabled(ctx, gate))) {
 		authentication := gate.authentication
 		catalog, err := s.loadConnectionCatalog(ctx, authentication.endpoint, authentication.subject, gate.catalogRef, time.Now())
-		if errors.Is(err, errConnectionCatalogExpired) {
+		if errors.Is(err, errConnectionCatalogExpired) && gate.discoveryMode == metamcp.DiscoveryModeCode {
+			gate.catalogRecoveryOnly = true
+		} else if errors.Is(err, errConnectionCatalogExpired) {
 			return WriteAuthenticateChallenge(w, authentication.protectedResourceURL, err.Error())
-		}
-		if err != nil {
+		} else if err != nil {
 			return oops.E(oops.CodeUnavailable, err, "could not load approved tools; retry shortly").LogError(ctx, logger)
 		}
 		gate.catalog = catalog
@@ -307,7 +320,13 @@ func (s *Service) handleMetaMCPRequest(
 		}()
 	}
 
-	if !methodAvailable(req, gate.protocolVersion, mcpversions.SupportedMetaServer(), nil) {
+	// The declared extensions are resolved only for an extension method, as
+	// on the hosted surface: the flag behind them costs a lookup.
+	var extensions []string
+	if mcpversions.KnownExtensionMethod(req.Method) {
+		extensions = s.metaExtensions(ctx, gate)
+	}
+	if !methodAvailable(req, gate.protocolVersion, mcpversions.SupportedMetaServer(), extensions) {
 		return nil, unavailableMethod(req)
 	}
 
@@ -317,7 +336,7 @@ func (s *Service) handleMetaMCPRequest(
 	case mcpversions.MethodInitialize:
 		return s.handleMetaInitialize(ctx, logger, metaServer, gate, req, gate.protocolVersion.InEffect)
 	case mcpversions.MethodServerDiscover:
-		return handleServerDiscover(ctx, logger, req.ID, describeMetaServer(metaServer, gate.discoveryMode), mcpversions.SupportedMetaServer())
+		return handleServerDiscover(ctx, logger, req.ID, describeMetaServer(metaServer, gate.discoveryMode, s.metaSkillsEnabled(ctx, gate)), mcpversions.SupportedMetaServer())
 	case mcpversions.MethodNotificationsCancelled:
 		if gate.discoveryMode == metamcp.DiscoveryModeCode {
 			return nil, s.cancelMetaCode(ctx, gate, req)
@@ -338,7 +357,16 @@ func (s *Service) handleMetaMCPRequest(
 	case mcpversions.MethodResourcesList:
 		return handleMetaResourcesList(ctx, logger, req)
 	case mcpversions.MethodResourcesRead:
+		// With the extension off a skill:// URI is an ordinary resource URI,
+		// which the gateway does not serve.
+		if uri, ok := skillResourceURI(req.Params); ok && s.metaSkillsEnabled(ctx, gate) {
+			return s.readMetaSkill(ctx, logger, metaServer.ID, gate, req, uri)
+		}
 		return handleMetaResourcesRead(ctx, logger, req)
+	case mcpversions.MethodSkillsList:
+		return s.listMetaSkills(ctx, logger, metaServer.ID, gate, req)
+	case mcpversions.MethodSkillsGet:
+		return s.getMetaSkill(ctx, logger, metaServer.ID, gate, req)
 	default:
 		return nil, unavailableMethod(req)
 	}
@@ -440,7 +468,7 @@ func (s *Service) handleMetaInitialize(
 
 	result := &result[initializeResult]{
 		ID:             req.ID,
-		Result:         describeMetaServer(metaServer, gate.discoveryMode).initializeResult(negotiated),
+		Result:         describeMetaServer(metaServer, gate.discoveryMode, s.metaSkillsEnabled(ctx, gate)).initializeResult(negotiated),
 		serverIdentity: serverInfoMetaServer,
 		cacheHints:     nil,
 	}
@@ -652,10 +680,15 @@ func (s *Service) handleMetaListServersCall(
 	for _, member := range catalogSelectedMembers(gate, gate.hiddenMembers) {
 		result.Hidden = append(result.Hidden, metamcp.HiddenServer{Slug: member.slug, Name: member.name})
 	}
+	notes := make([]string, 0, 2)
 	if len(result.Hidden) > 0 && gate.connectURL != "" {
 		result.ConnectURL = gate.connectURL
-		result.Note = metamcp.HiddenNote
+		notes = append(notes, metamcp.HiddenNote)
 	}
+	if slices.ContainsFunc(servers, func(server metamcp.ListedServer) bool { return server.Status == metamcp.StatusUnknown }) {
+		notes = append(notes, metamcp.UnknownNote)
+	}
+	result.Note = strings.Join(notes, " ")
 	structured, err := json.Marshal(result)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize list_servers result").LogError(ctx, logger)
@@ -779,6 +812,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		catalog:             nil,
 		consentDiagnostics:  nil,
 		catalogRef:          nil,
+		catalogRecoveryOnly: false,
 		authentication:      gateAuthentication,
 		unapprovedMembers:   nil,
 		hiddenMembers:       nil,
@@ -792,8 +826,10 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		apiKeyID:            "",
 		// Member dispatch carries this InEffect verbatim; nothing on the
 		// tools/call path reads it (upstream dials pin their own version).
-		protocolVersion: request.resolution,
-		connectURL:      connectURL,
+		protocolVersion:   request.resolution,
+		connectURL:        connectURL,
+		skillsOverMCP:     nil,
+		servedCredentials: nil,
 	}
 	if gatePolicy != nil {
 		gate.catalogRef = gatePolicy.Catalog

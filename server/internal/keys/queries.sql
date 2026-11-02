@@ -249,6 +249,21 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: ExtendAgentAPIKeyDelegatedGrants :one
+-- Matches the policy the caller read, so a concurrent change to the same key
+-- is never overwritten with a policy built from the older one.
+UPDATE api_keys
+SET delegated_grants = @delegated_grants::jsonb,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND subject_urn = @subject_urn
+  AND created_by_user_id = @created_by_user_id
+  AND delegated_grants = @previous_delegated_grants::jsonb
+  AND deleted IS FALSE
+  AND expires_at > clock_timestamp()
+RETURNING *;
+
 -- name: DeleteAPIKeyByProject :one
 UPDATE api_keys
 SET deleted_at = clock_timestamp()

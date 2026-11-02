@@ -25,15 +25,14 @@ import (
 //
 // The seed writes the legacy configuration natively: upstream OAuth client
 // associations and each sign-in's client choice. The typed auth clients, their
-// server links and header copies, the servers marked as requiring upstream
-// auth, the mapped credential choices, the default mcp:auth grants and the
-// assistant execution profiles are recorded by the same backfills the admin
-// migration runs, in the same order, so the seeded organization is exactly a
-// migrated organization and cannot drift from what the resolver and the
-// readiness checks expect. The project delete at the start of every run
-// cascades all of these rows away, so every run records them again. Agent
-// attachment grants name upstream_client selectors, whose writes the seed
-// treats as rolled out for the seeded organization.
+// server links and header copies, the mapped credential choices, the default
+// mcp:auth grants and the assistant execution profiles are recorded by the
+// same backfills the admin migration runs, in the same order, so the seeded
+// organization is exactly a migrated organization and cannot drift from what
+// the resolver and the readiness checks expect. The project delete at the
+// start of every run cascades all of these rows away, so every run records
+// them again. Agent attachment grants name upstream_client selectors, whose
+// writes the seed treats as rolled out for the seeded organization.
 //
 // It runs after the Postgres transaction commits, because the backfills take
 // their own organization lock and transactions. Both backfills are scoped to
@@ -60,8 +59,8 @@ func migrateUpstreamAuth(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		return fmt.Errorf("record execution selection profiles: %w", err)
 	}
 	logger.InfoContext(ctx, fmt.Sprintf(
-		"demo seed recorded typed upstream auth: %d auth clients, %d links, %d header copies, %d servers marked, %d choices mapped, %d grants, %d profile versions",
-		clients.ClientsWritten, clients.LinksWritten, clients.HeadersWritten, clients.ServersMarked, clients.SelectionsMapped, clients.GrantsWritten, profiles.VersionsWritten,
+		"demo seed recorded typed upstream auth: %d auth clients, %d links, %d header copies, %d choices mapped, %d grants, %d profile versions",
+		clients.ClientsWritten, clients.LinksWritten, clients.HeadersWritten, clients.SelectionsMapped, clients.GrantsWritten, profiles.VersionsWritten,
 	), attr.SlogOrganizationID(organizationID))
 
 	return upstreamAuthReadiness(ctx, logger, db, organizationID)
@@ -139,7 +138,6 @@ func upstreamAuthReadiness(ctx context.Context, logger *slog.Logger, db *pgxpool
 	pending("typed auth client header copies to record", clients.PendingHeaders)
 	pending("typed auth client decisions unresolved", clients.Gaps)
 	pending("typed auth clients or links to retire", clients.PendingRetiredClients+clients.PendingRetiredLinks)
-	pending("servers to mark as requiring upstream auth", clients.PendingMarkedServers)
 	pending("credential choices to map onto auth clients", clients.PendingSelectionMappings)
 	pending("default auth permission grants to write", clients.PendingGrants)
 	pending("agent attachment grants to write", clients.AttachmentsWaiting)
