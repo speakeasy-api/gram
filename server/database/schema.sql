@@ -2824,6 +2824,15 @@ WHERE deleted IS FALSE AND dns_name IS NOT NULL;
 CREATE INDEX IF NOT EXISTS network_ingresses_organization_id_custom_domain_id_idx
 ON network_ingresses (organization_id, custom_domain_id);
 
+-- Tenant-qualified target for the gateway node and state rows.
+CREATE UNIQUE INDEX IF NOT EXISTS network_ingresses_organization_id_id_key
+ON network_ingresses (organization_id, id);
+
+-- Serves the tailnet gateway's poll for the ingresses its shard must host.
+CREATE INDEX IF NOT EXISTS network_ingresses_gateway_poll_idx
+ON network_ingresses (gateway_shard, id)
+WHERE enabled IS TRUE AND deleted IS FALSE AND runtime = 'gateway';
+
 CREATE INDEX IF NOT EXISTS network_ingresses_custom_domain_id_idx
 ON network_ingresses (custom_domain_id)
 WHERE deleted IS FALSE AND custom_domain_id IS NOT NULL;
@@ -2834,10 +2843,10 @@ WHERE deleted IS FALSE AND custom_domain_id IS NOT NULL;
 -- one-shot auth keys; gateway pods write the heartbeat columns.
 --
 -- Every hosted slot is rewritten by a heartbeat every few seconds, so the
--- table relies on HOT updates: no heartbeat column is indexed, and the
--- reduced fillfactor leaves room on each page for new row versions so they
--- are pruned in place instead of waiting for autovacuum. Keep status,
--- last_seen_at and the other heartbeat columns out of any index.
+-- table is laid out for HOT updates: no heartbeat column is indexed, and the
+-- reduced fillfactor makes same-page row versions and opportunistic pruning
+-- the common case; autovacuum still reclaims whatever pruning misses. Keep
+-- status, last_seen_at and the other heartbeat columns out of any index.
 CREATE TABLE IF NOT EXISTS network_ingress_nodes (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   network_ingress_id uuid NOT NULL,
@@ -2866,7 +2875,8 @@ CREATE TABLE IF NOT EXISTS network_ingress_nodes (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT network_ingress_nodes_pkey PRIMARY KEY (id),
-  CONSTRAINT network_ingress_nodes_network_ingress_id_fkey FOREIGN KEY (network_ingress_id) REFERENCES network_ingresses (id) ON DELETE NO ACTION
+  -- Tenant-qualified so a node row can never point at another organization's ingress.
+  CONSTRAINT network_ingress_nodes_organization_id_network_ingress_id_fkey FOREIGN KEY (organization_id, network_ingress_id) REFERENCES network_ingresses (organization_id, id) ON DELETE NO ACTION
 ) WITH (fillfactor = 70);
 
 COMMENT ON COLUMN network_ingress_nodes.id IS '@access: confidential';
@@ -2907,7 +2917,8 @@ CREATE TABLE IF NOT EXISTS network_ingress_node_states (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT network_ingress_node_states_pkey PRIMARY KEY (id),
-  CONSTRAINT network_ingress_node_states_network_ingress_id_fkey FOREIGN KEY (network_ingress_id) REFERENCES network_ingresses (id) ON DELETE NO ACTION
+  -- Tenant-qualified so state can never be attached to another organization's ingress.
+  CONSTRAINT network_ingress_node_states_organization_id_ingress_fkey FOREIGN KEY (organization_id, network_ingress_id) REFERENCES network_ingresses (organization_id, id) ON DELETE NO ACTION
 );
 
 COMMENT ON COLUMN network_ingress_node_states.id IS '@access: confidential';

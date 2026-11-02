@@ -1,5 +1,11 @@
+-- atlas:txmode none
+
 -- Modify "network_ingresses" table
 ALTER TABLE "network_ingresses" ADD COLUMN "runtime" text NULL, ADD COLUMN "gateway_shard" text NOT NULL DEFAULT 'shared';
+-- Create index "network_ingresses_gateway_poll_idx" to table: "network_ingresses"
+CREATE INDEX CONCURRENTLY "network_ingresses_gateway_poll_idx" ON "network_ingresses" ("gateway_shard", "id") WHERE ((enabled IS TRUE) AND (deleted IS FALSE) AND (runtime = 'gateway'::text));
+-- Create index "network_ingresses_organization_id_id_key" to table: "network_ingresses"
+CREATE UNIQUE INDEX CONCURRENTLY "network_ingresses_organization_id_id_key" ON "network_ingresses" ("organization_id", "id");
 -- Set comment to column: "runtime" on table: "network_ingresses"
 COMMENT ON COLUMN "network_ingresses"."runtime" IS '@access: confidential';
 -- Set comment to column: "gateway_shard" on table: "network_ingresses"
@@ -15,7 +21,7 @@ CREATE TABLE "network_ingress_node_states" (
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "network_ingress_node_states_network_ingress_id_fkey" FOREIGN KEY ("network_ingress_id") REFERENCES "network_ingresses" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT "network_ingress_node_states_organization_id_ingress_fkey" FOREIGN KEY ("organization_id", "network_ingress_id") REFERENCES "network_ingresses" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE NO ACTION,
   CONSTRAINT "network_ingress_node_states_state_key_check" CHECK (state_key <> ''::text)
 );
 -- Create index "network_ingress_node_states_network_ingress_id_slot_state_key_k" to table: "network_ingress_node_states"
@@ -55,7 +61,7 @@ CREATE TABLE "network_ingress_nodes" (
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "network_ingress_nodes_network_ingress_id_fkey" FOREIGN KEY ("network_ingress_id") REFERENCES "network_ingresses" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION
+  CONSTRAINT "network_ingress_nodes_organization_id_network_ingress_id_fkey" FOREIGN KEY ("organization_id", "network_ingress_id") REFERENCES "network_ingresses" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE NO ACTION
 ) WITH (fillfactor = 70);
 -- Create index "network_ingress_nodes_network_ingress_id_slot_key" to table: "network_ingress_nodes"
 CREATE UNIQUE INDEX "network_ingress_nodes_network_ingress_id_slot_key" ON "network_ingress_nodes" ("network_ingress_id", "slot");
