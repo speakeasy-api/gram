@@ -12,6 +12,6 @@ func kitMemoryVolume(name, limit string) (corev1.Volume, error) {
 		return corev1.Volume{}, fmt.Errorf("kit %s requires a positive memory volume size", name)
 	}
 	var source corev1.VolumeSource
-	source.EmptyDir = &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory, SizeLimit: &q}
+	source.EmptyDir = &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory, SizeLimit: &q, Mode: nil}
 	return corev1.Volume{Name: name, VolumeSource: source}, nil
 }

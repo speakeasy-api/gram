@@ -211,6 +211,20 @@ func logAnyValue(value otelattr.Value) (*otelv1.LogRecord_AnyValue, error) {
 		return (&otelv1.LogRecord_AnyValue_builder{
 			ArrayValue: (&otelv1.LogRecord_ArrayValue_builder{Values: values}).Build(),
 		}).Build(), nil
+	case otelattr.MAP:
+		input := value.AsMap()
+		values := make([]*otelv1.LogRecord_KeyValue, len(input))
+		for i, item := range input {
+			converted, err := logAnyValue(item.Value)
+			if err != nil {
+				return nil, fmt.Errorf("convert map item %d: %w", i, err)
+			}
+			key := string(item.Key)
+			values[i] = (&otelv1.LogRecord_KeyValue_builder{Key: &key, Value: converted}).Build()
+		}
+		return (&otelv1.LogRecord_AnyValue_builder{
+			KvlistValue: (&otelv1.LogRecord_KeyValueList_builder{Values: values}).Build(),
+		}).Build(), nil
 	case otelattr.EMPTY:
 		return (&otelv1.LogRecord_AnyValue_builder{}).Build(), nil
 	}

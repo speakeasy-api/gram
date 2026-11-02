@@ -210,6 +210,20 @@ func spanAnyValue(value otelattr.Value) (*otelv1.Span_AnyValue, error) {
 		return (&otelv1.Span_AnyValue_builder{
 			ArrayValue: (&otelv1.Span_ArrayValue_builder{Values: values}).Build(),
 		}).Build(), nil
+	case otelattr.MAP:
+		input := value.AsMap()
+		values := make([]*otelv1.Span_KeyValue, len(input))
+		for i, item := range input {
+			converted, err := spanAnyValue(item.Value)
+			if err != nil {
+				return nil, fmt.Errorf("convert map item %d: %w", i, err)
+			}
+			key := string(item.Key)
+			values[i] = (&otelv1.Span_KeyValue_builder{Key: &key, Value: converted}).Build()
+		}
+		return (&otelv1.Span_AnyValue_builder{
+			KvlistValue: (&otelv1.Span_KeyValueList_builder{Values: values}).Build(),
+		}).Build(), nil
 	case otelattr.EMPTY:
 		return (&otelv1.Span_AnyValue_builder{}).Build(), nil
 	}
