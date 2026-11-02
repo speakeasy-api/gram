@@ -3015,9 +3015,10 @@ type ProductFeatures struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool
-	// Whether upstream auth enforcement is on for the organization. Staff change
-	// it through the admin enforcement endpoint.
-	UpstreamAuthEnforced bool
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool
 }
 
 // PromoteRegistryCandidatePayload is the payload type of the admin service
@@ -3564,7 +3565,9 @@ func NewViewedProductFeatures(res *ProductFeatures, view string) *adminviews.Pro
 // newProductFeatures converts projected type ProductFeatures to service type
 // ProductFeatures.
 func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
-	res := &ProductFeatures{}
+	res := &ProductFeatures{
+		UpstreamAuthEnforced: vres.UpstreamAuthEnforced,
+	}
 	if vres.LogsEnabled != nil {
 		res.LogsEnabled = *vres.LogsEnabled
 	}
@@ -3631,9 +3634,6 @@ func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
 	if vres.DeviceAgent != nil {
 		res.DeviceAgent = *vres.DeviceAgent
 	}
-	if vres.UpstreamAuthEnforced != nil {
-		res.UpstreamAuthEnforced = *vres.UpstreamAuthEnforced
-	}
 	return res
 }
 
@@ -3663,7 +3663,7 @@ func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesVie
 		OrganizationGatewayDisabled:             &res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         &res.CodeModeEnabled,
 		DeviceAgent:                             &res.DeviceAgent,
-		UpstreamAuthEnforced:                    &res.UpstreamAuthEnforced,
+		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return vres
 }

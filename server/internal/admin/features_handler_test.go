@@ -116,7 +116,6 @@ func TestGetOrganizationFeatures_ReturnsEveryField(t *testing.T) {
 		"remote_session_auto_refresh_enabled": {}, "remote_session_auto_refresh_enforced_enabled": {},
 		"network_ingress_enabled": {}, "session_portability_enabled": {}, "device_agent": {},
 		"signals_intelligence_enabled": {}, "organization_gateway_disabled": {}, "code_mode_enabled": {},
-		"upstream_auth_enforced": {},
 	}
 	gotKeys := make(map[string]struct{}, len(result))
 	for key := range result {

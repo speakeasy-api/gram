@@ -78,8 +78,9 @@ type ProductFeaturesView struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent *bool
-	// Whether upstream auth enforcement is on for the organization. Staff change
-	// it through the admin enforcement endpoint.
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
 	UpstreamAuthEnforced *bool
 }
 
@@ -195,9 +196,6 @@ func ValidateProductFeaturesView(result *ProductFeaturesView) (err error) {
 	}
 	if result.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "result"))
-	}
-	if result.UpstreamAuthEnforced == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("upstream_auth_enforced", "result"))
 	}
 	return
 }

@@ -314,3 +314,32 @@ describe("SettingsTab upstream identity gate", () => {
     },
   );
 });
+
+describe("SettingsTab upstream identity gate state", () => {
+  it("keeps the last known surface when a refetch fails", () => {
+    productFeatures.result = {
+      isPending: false,
+      isError: true,
+      data: { upstreamAuthEnforced: true },
+    };
+    renderSettings(remoteServer());
+    expect(screen.getByTestId("upstream-credentials-section")).toBeTruthy();
+    expect(screen.queryByTestId("legacy-identity-section")).toBeNull();
+  });
+
+  it("shows neither surface when the server could not read the state", () => {
+    productFeatures.result = {
+      isPending: false,
+      isError: false,
+      data: {} as { upstreamAuthEnforced: boolean },
+    };
+    renderSettings(remoteServer());
+    expect(
+      screen.getByText("The identity settings could not be loaded.", {
+        exact: false,
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByTestId("legacy-identity-section")).toBeNull();
+    expect(screen.queryByTestId("upstream-credentials-section")).toBeNull();
+  });
+});

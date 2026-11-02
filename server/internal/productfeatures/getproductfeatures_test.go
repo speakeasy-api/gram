@@ -101,12 +101,14 @@ func TestProductFeaturesService_GetProductFeatures_UpstreamAuthEnforced(t *testi
 	res, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
 		OrganizationID: requestedOrganizationID(ctx)})
 	require.NoError(t, err)
-	require.False(t, res.UpstreamAuthEnforced)
+	require.NotNil(t, res.UpstreamAuthEnforced)
+	require.False(t, *res.UpstreamAuthEnforced)
 
 	require.NoError(t, ti.client.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureUpstreamAuthEnforced, true))
 
 	res, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
 		OrganizationID: requestedOrganizationID(ctx)})
 	require.NoError(t, err)
-	require.True(t, res.UpstreamAuthEnforced)
+	require.NotNil(t, res.UpstreamAuthEnforced)
+	require.True(t, *res.UpstreamAuthEnforced)
 }
