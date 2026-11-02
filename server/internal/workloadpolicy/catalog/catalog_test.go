@@ -146,12 +146,11 @@ func TestEmbeddedGitHubActionsPinsOneRepository(t *testing.T) {
 			require.False(t, pattern.MatchString(refused), "%s admits %q", key, refused)
 		}
 	}
-	for _, valid := range []string{"main", "release/v2.1", "dependabot/npm_and_yarn/left-pad-1.3.0", "Feature_X"} {
+	for _, valid := range []string{"main", "release/v2.1", "renovate/@types-node-20.x", "feat+1", "!main", "Feature_X"} {
 		require.True(t, branch.MatchString(valid), "branch refuses %q", valid)
 	}
-	// Branch names also feed a workflow's branch filter, where these are
-	// glob syntax, and git refuses a space.
-	for _, invalid := range []string{"/main", "main/", "a//b", "main+1", "feat?", "[x]", "!main", "my branch"} {
+	// Git refuses these in a branch name, so a rule naming one admits nothing.
+	for _, invalid := range []string{"/main", "main/", "a//b", "feat?", "[x]", "a\\b", "a^b", "a~1", "my branch"} {
 		require.False(t, branch.MatchString(invalid), "branch admits %q", invalid)
 	}
 	for _, valid := range []string{"production", "Production EU", "review/pr-12", "Production%3AV1", strings.Repeat("e", 255)} {

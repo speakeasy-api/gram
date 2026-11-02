@@ -47,7 +47,8 @@
 # exact rule, so a "/" in it cannot reach another segment: branch names
 # contain one often, and GitHub allows one in an environment name. Both refuse
 # ":" and "*". GitHub writes a ":" in a name as %3A, which the environment
-# pattern accepts as typed; git refuses ":" in a branch name.
+# pattern accepts as typed; git refuses ":" in a branch name, and the branch
+# pattern refuses the other characters git does too.
 key: github-actions
 display_name: GitHub Actions
 description: Let jobs in one GitHub repository fetch an agent's plugins, call its MCP servers and send hook events, with no Speakeasy secret stored in GitHub.
@@ -84,8 +85,8 @@ variables:
     label: Branch
     help: The branch's full name, such as main or release/v2, with the same capital letters GitHub shows.
     placeholder: main
-    pattern: "[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*"
-    pattern_message: A branch name is letters, numbers, dots, hyphens and underscores, in parts separated by single slashes.
+    pattern: '[^\x00-\x20\x7f/:*?\[\\^~]+(?:/[^\x00-\x20\x7f/:*?\[\\^~]+)*'
+    pattern_message: 'A branch name is its full name, in parts separated by single slashes, without spaces or the characters git refuses in one, such as ":", "*", "?", "[", "^", "~" and "\".'
   - key: environment
     tier: rule
     label: Environment

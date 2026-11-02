@@ -3244,7 +3244,11 @@ const githubActions = {
   variables: [
     ["owner", "Owner", "[A-Za-z0-9][A-Za-z0-9-]{0,38}(?:@[0-9]+)?"],
     ["repo", "Repository", "[A-Za-z0-9._-]{1,100}(?:@[0-9]+)?"],
-    ["branch", "Branch", "[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*"],
+    [
+      "branch",
+      "Branch",
+      "[^\\x00-\\x20\\x7f/:*?\\[\\\\^~]+(?:/[^\\x00-\\x20\\x7f/:*?\\[\\\\^~]+)*",
+    ],
     ["environment", "Environment", "[^:*\\x00-\\x1f\\x7f]{1,255}"],
   ].map(([key, label, pattern]) => ({
     key,

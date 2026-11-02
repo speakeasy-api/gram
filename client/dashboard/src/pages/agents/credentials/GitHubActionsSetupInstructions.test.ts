@@ -65,7 +65,8 @@ const github: CatalogEntry = {
       key: "branch",
       tier: "rule",
       label: "Branch",
-      pattern: "[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*",
+      pattern:
+        "[^\\x00-\\x20\\x7f/:*?\\[\\\\^~]+(?:/[^\\x00-\\x20\\x7f/:*?\\[\\\\^~]+)*",
     },
     {
       key: "environment",
@@ -399,6 +400,11 @@ describe("workflowYaml", () => {
   it("runs a narrower rule's workflow only where the rule admits its jobs", () => {
     const branch = workflow({ scope: { kind: "branch", name: "release/v2" } });
     expect(branch).toContain('    branches: ["release/v2"]');
+    // Glob syntax git allows in a name is escaped, so the filter matches the
+    // branch alone: YAML reads "\\+" as "\+".
+    expect(workflow({ scope: { kind: "branch", name: "!feat+x]" } })).toContain(
+      '    branches: ["\\\\!feat\\\\+x]"]',
+    );
     expect(branch).not.toContain("pull_request");
     expect(branch).not.toMatch(/^ {4}environment:/m);
 

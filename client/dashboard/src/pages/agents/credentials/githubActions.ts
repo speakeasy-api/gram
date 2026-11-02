@@ -247,30 +247,28 @@ export function workflowYaml({
   const controlPlane = trimmedControlPlane(controlPlaneUrl);
   const selected = WORKFLOW_AGENTS[agent];
   // A rule narrower than the repository refuses a pull request's job, so only
-  // the whole repository's workflow runs on one. Names are written as JSON
-  // strings, which YAML reads as they are; the catalog's branch pattern
-  // refuses the characters a branch filter reads as a glob.
+  // the whole repository's workflow runs on one, and only it needs the fork
+  // guard. Names are written as JSON strings, which YAML reads as they are.
+  const repository = scope.kind === "repository";
+  const branch =
+    scope.kind === "branch" ? branchFilter(scope.name || "BRANCH") : "main";
+  const pullRequest = repository ? ["  pull_request:"] : [];
+  const forkGuard = repository ? [FORK_GUARD] : [];
+  const environment =
+    scope.kind === "environment" ? [environmentKey(scope.name)] : [];
   const lines = [
     "name: Speakeasy",
     "",
     "on:",
     "  push:",
-    `    branches: [${scope.kind === "branch" ? JSON.stringify(scope.name || "BRANCH") : "main"}]`,
-    ...(scope.kind === "repository" ? ["  pull_request:"] : []),
+    `    branches: [${branch}]`,
+    ...pullRequest,
     "",
     "jobs:",
     "  agent:",
-    ...(scope.kind === "repository"
-      ? [
-          "    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false",
-        ]
-      : []),
+    ...forkGuard,
     "    runs-on: ubuntu-latest",
-    ...(scope.kind === "environment"
-      ? [
-          `    environment: ${JSON.stringify(scope.name || "ENVIRONMENT")} # its protection rules pass before the job starts`,
-        ]
-      : []),
+    ...environment,
     "    permissions:",
     "      id-token: write # lets the job request its GitHub OIDC token",
     "      contents: read",
@@ -301,6 +299,25 @@ export function workflowYaml({
     "          prompt: Describe this repository and list the Speakeasy MCP tools available to you. Do not modify files.",
   ];
   return { yaml: lines.join("\n"), problem: null };
+}
+
+/** Skips a fork's pull request before any step of the job runs. */
+const FORK_GUARD =
+  "    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false";
+
+/** The job's environment key, so GitHub applies the environment's rules. */
+function environmentKey(name: string): string {
+  return `    environment: ${JSON.stringify(name || "ENVIRONMENT")} # its protection rules pass before the job starts`;
+}
+
+/**
+ * A branch filter matching this branch alone. The filter reads "+" and "!"
+ * as glob syntax unless each is escaped with a backslash; the catalog's
+ * branch pattern refuses the other glob characters, "*", "?" and "[", and a
+ * "]" with no "[" before it is read as itself.
+ */
+function branchFilter(branch: string): string {
+  return JSON.stringify(branch.replace(/[+!]/g, "\\$&"));
 }
 
 /**
