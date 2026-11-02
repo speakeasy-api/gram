@@ -67,7 +67,7 @@ export class Keys extends ClientSDK {
    * extendAgentKeys keys
    *
    * @remarks
-   * Add mcp:connect grants to every live key the caller issued for an agent, so servers the agent is given reach the keys it already runs with. Each key's new policy is checked like issuance: the agent, its owner and the caller must all allow it. Keys issued by someone else are left as they are.
+   * Add mcp:connect grants to every live key the caller issued for an agent, so servers the agent is given reach the keys it already runs with. Each key's new policy is checked like issuance: the agent, its owner and the caller must all allow it. Keys issued by someone else are left as they are. The result lists only the keys this call changed: keys that already held the grants, expired keys and other people's keys are not in it.
    */
   async extendAgentKeys(
     request: ExtendAgentAPIKeysRequest,

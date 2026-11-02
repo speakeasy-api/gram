@@ -12,8 +12,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 func TestKeysService_ExtendAgentKeysAddsServerToExistingKey(t *testing.T) {
@@ -34,7 +38,7 @@ func TestKeysService_ExtendAgentKeysAddsServerToExistingKey(t *testing.T) {
 	require.NoError(t, err)
 
 	extended, err := ti.service.ExtendAgentKeys(ctx, &gen.ExtendAgentKeysPayload{
-		AgentID: agentID.String(), RequestedGrants: []*gen.AgentPolicyGrantForm{connectForm(second)},
+		AgentID: agentID.String(), RequestedGrants: []*gen.ExtendAgentKeyGrantForm{extendForm(second)},
 	})
 	require.NoError(t, err)
 	require.Len(t, extended.Keys, 1)
@@ -54,10 +58,50 @@ func TestKeysService_ExtendAgentKeysAddsServerToExistingKey(t *testing.T) {
 	require.Equal(t, auditBefore+1, auditAfter)
 
 	again, err := ti.service.ExtendAgentKeys(ctx, &gen.ExtendAgentKeysPayload{
-		AgentID: agentID.String(), RequestedGrants: []*gen.AgentPolicyGrantForm{connectForm(second)},
+		AgentID: agentID.String(), RequestedGrants: []*gen.ExtendAgentKeyGrantForm{extendForm(second)},
 	})
 	require.NoError(t, err)
 	require.Empty(t, again.Keys, "a key that already holds the grant is left as it is")
+}
+
+func TestKeysService_ExtendAgentKeysRecordsCredentialForAddedServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestKeysService(t)
+	authCtx := testAuthContext(t, ctx)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	agentID, first := connectAgentFixture(t, ctx, ti)
+	created, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
+		AgentID: new(agentID.String()), Name: "gateway key", DelegatedGrantsVersion: new(2),
+		RequestedGrants: []*gen.AgentPolicyGrantForm{connectForm(first)},
+	})
+	require.NoError(t, err)
+
+	// A server offering a shared credential, added to the agent after the key.
+	fixtures := testrepo.New(ti.conn)
+	remoteID := uuid.New()
+	require.NoError(t, fixtures.CreateRemoteMCPBackendFixture(ctx, testrepo.CreateRemoteMCPBackendFixtureParams{ID: remoteID, ProjectID: projectID, Url: "https://upstream.example.com/" + remoteID.String()}))
+	serverID := uuid.New()
+	require.NoError(t, fixtures.CreateRemoteBackedMCPServerFixture(ctx, testrepo.CreateRemoteBackedMCPServerFixtureParams{
+		ID: serverID, ProjectID: projectID, Slug: conv.ToPGText("srv-" + serverID.String()[:8]), RemoteMcpServerID: uuid.NullUUID{UUID: remoteID, Valid: true}, Visibility: "private",
+	}))
+	clients := authclientbackfill.New(ti.conn)
+	shared, err := clients.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ClientType: authz.AuthClientTypeStaticCredential, Source: "admin"})
+	require.NoError(t, err)
+	require.NoError(t, clients.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID, McpServerID: serverID, AuthClientID: shared, Source: "admin"}))
+	grantConnect(t, ctx, ti, agentID, serverID.String())
+
+	_, err = ti.service.ExtendAgentKeys(ctx, &gen.ExtendAgentKeysPayload{
+		AgentID:           agentID.String(),
+		RequestedGrants:   []*gen.ExtendAgentKeyGrantForm{extendForm(serverID.String())},
+		AuthClientChoices: []*gen.AgentKeyAuthClientChoice{{McpServerID: serverID.String(), AuthClientID: new(shared.String())}},
+	})
+	require.NoError(t, err)
+
+	choice, err := clients.GetSelectionFixture(ctx, authclientbackfill.GetSelectionFixtureParams{CredentialID: uuid.MustParse(created.ID), McpServerID: serverID})
+	require.NoError(t, err)
+	require.Equal(t, uuid.NullUUID{UUID: shared, Valid: true}, choice.AuthClientID)
 }
 
 func TestKeysService_ExtendAgentKeysRejectsServerOutsideAgentPolicy(t *testing.T) {
@@ -76,7 +120,7 @@ func TestKeysService_ExtendAgentKeysRejectsServerOutsideAgentPolicy(t *testing.T
 	upsertGrant(t, ctx, ti, urn.NewPrincipal(urn.PrincipalTypeUser, testAuthContext(t, ctx).UserID), authz.ScopeMCPConnect, ungranted)
 
 	_, err = ti.service.ExtendAgentKeys(ctx, &gen.ExtendAgentKeysPayload{
-		AgentID: agentID.String(), RequestedGrants: []*gen.AgentPolicyGrantForm{connectForm(ungranted)},
+		AgentID: agentID.String(), RequestedGrants: []*gen.ExtendAgentKeyGrantForm{extendForm(ungranted)},
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
@@ -104,10 +148,10 @@ func TestKeysService_ExtendAgentKeysLeavesAllServersKeyAlone(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	added := connectForm(uuid.NewString())
+	added := extendForm(uuid.NewString())
 	added.Selector.ProjectID = &projectID
 	extended, err := ti.service.ExtendAgentKeys(ctx, &gen.ExtendAgentKeysPayload{
-		AgentID: agentID.String(), RequestedGrants: []*gen.AgentPolicyGrantForm{added},
+		AgentID: agentID.String(), RequestedGrants: []*gen.ExtendAgentKeyGrantForm{added},
 	})
 	require.NoError(t, err)
 	require.Empty(t, extended.Keys, "a key that reaches every server in the project already reaches this one")
@@ -120,9 +164,58 @@ func TestKeysService_ExtendAgentKeysAcceptsOnlyServerConnectGrants(t *testing.T)
 	agentID, projectID := createAgentKeyFixture(t, ctx, ti)
 
 	_, err := ti.service.ExtendAgentKeys(ctx, &gen.ExtendAgentKeysPayload{
-		AgentID: agentID.String(), RequestedGrants: agentKeyPayload(agentID, projectID).RequestedGrants,
+		AgentID: agentID.String(), RequestedGrants: []*gen.ExtendAgentKeyGrantForm{{
+			Scope: string(authz.ScopeProjectRead), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: projectID.String()},
+		}},
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestKeysService_ExtendAgentKeysSkipsOtherIssuersAndExpiredKeys(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestKeysService(t)
+	agentID, first := connectAgentFixture(t, ctx, ti)
+	issue := func(name string) string {
+		created, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
+			AgentID: new(agentID.String()), Name: name, DelegatedGrantsVersion: new(2),
+			RequestedGrants: []*gen.AgentPolicyGrantForm{connectForm(first)},
+		})
+		require.NoError(t, err)
+		return created.ID
+	}
+	own, othersKey, expired := issue("own key"), issue("someone else's key"), issue("expired key")
+
+	// A key acts for whoever issued it, so this caller's authority must not
+	// widen another person's key.
+	otherID := "issuer-" + uuid.NewString()
+	_, err := usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID: otherID, Email: otherID + "@example.com", DisplayName: otherID, PhotoUrl: conv.PtrToPGText(nil), Admin: false,
+	})
+	require.NoError(t, err)
+	_, err = ti.conn.Exec(ctx, "UPDATE api_keys SET created_by_user_id = $1 WHERE id = $2", otherID, othersKey)
+	require.NoError(t, err)
+	_, err = ti.conn.Exec(ctx, "UPDATE api_keys SET created_at = now() - interval '2 hours', expires_at = now() - interval '1 hour' WHERE id = $1", expired)
+	require.NoError(t, err)
+
+	second := uuid.NewString()
+	grantConnect(t, ctx, ti, agentID, second)
+	extended, err := ti.service.ExtendAgentKeys(ctx, &gen.ExtendAgentKeysPayload{
+		AgentID: agentID.String(), RequestedGrants: []*gen.ExtendAgentKeyGrantForm{extendForm(second)},
+	})
+	require.NoError(t, err)
+	require.Len(t, extended.Keys, 1)
+	require.Equal(t, own, extended.Keys[0].ID)
+
+	listed, err := ti.service.ListKeys(ctx, &gen.ListKeysPayload{AgentID: new(agentID.String())})
+	require.NoError(t, err)
+	reach := map[string][]string{}
+	for _, key := range listed.Keys {
+		reach[key.ID] = requestedServers(key)
+	}
+	require.ElementsMatch(t, []string{first, second}, reach[own])
+	require.Equal(t, []string{first}, reach[othersKey])
+	require.Equal(t, []string{first}, reach[expired])
 }
 
 // connectAgentFixture is an agent, and its owner, that can both reach one
@@ -147,6 +240,12 @@ func grantConnect(t *testing.T, ctx context.Context, ti *testInstance, agentID u
 
 func connectForm(serverID string) *gen.AgentPolicyGrantForm {
 	return &gen.AgentPolicyGrantForm{
+		Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: serverID},
+	}
+}
+
+func extendForm(serverID string) *gen.ExtendAgentKeyGrantForm {
+	return &gen.ExtendAgentKeyGrantForm{
 		Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: serverID},
 	}
 }

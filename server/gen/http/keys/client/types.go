@@ -67,8 +67,11 @@ type RotateKeyRequestBody struct {
 type ExtendAgentKeysRequestBody struct {
 	// The agent whose keys gain the grants
 	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
-	// mcp:connect allow grants to add to each key
-	RequestedGrants []*AgentPolicyGrantFormRequestBody `form:"requested_grants" json:"requested_grants" xml:"requested_grants"`
+	// Server grants to add to each key
+	RequestedGrants []*ExtendAgentKeyGrantFormRequestBody `form:"requested_grants" json:"requested_grants" xml:"requested_grants"`
+	// The upstream credential each key uses on the servers it gains, checked as at
+	// issuance. Recorded only on keys that gain that server.
+	AuthClientChoices []*AgentKeyAuthClientChoiceRequestBody `form:"auth_client_choices,omitempty" json:"auth_client_choices,omitempty" xml:"auth_client_choices,omitempty"`
 }
 
 // UpdateKeyPolicyRequestBody is the type of the "keys" service
@@ -1615,6 +1618,16 @@ type APIKeyPolicySelectorResponseBody struct {
 	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
 }
 
+// ExtendAgentKeyGrantFormRequestBody is used to define fields on request body
+// types.
+type ExtendAgentKeyGrantFormRequestBody struct {
+	// The grant's scope
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// Grant effect
+	Effect   string                          `form:"effect" json:"effect" xml:"effect"`
+	Selector *AgentPolicySelectorRequestBody `form:"selector" json:"selector" xml:"selector"`
+}
+
 // KeyResponseBody is used to define fields on response body types.
 type KeyResponseBody struct {
 	// The ID of the key
@@ -1759,16 +1772,26 @@ func NewExtendAgentKeysRequestBody(p *keys.ExtendAgentKeysPayload) *ExtendAgentK
 		AgentID: p.AgentID,
 	}
 	if p.RequestedGrants != nil {
-		body.RequestedGrants = make([]*AgentPolicyGrantFormRequestBody, len(p.RequestedGrants))
+		body.RequestedGrants = make([]*ExtendAgentKeyGrantFormRequestBody, len(p.RequestedGrants))
 		for i, val := range p.RequestedGrants {
 			if val == nil {
 				body.RequestedGrants[i] = nil
 				continue
 			}
-			body.RequestedGrants[i] = marshalKeysAgentPolicyGrantFormToAgentPolicyGrantFormRequestBody(val)
+			body.RequestedGrants[i] = marshalKeysExtendAgentKeyGrantFormToExtendAgentKeyGrantFormRequestBody(val)
 		}
 	} else {
-		body.RequestedGrants = []*AgentPolicyGrantFormRequestBody{}
+		body.RequestedGrants = []*ExtendAgentKeyGrantFormRequestBody{}
+	}
+	if p.AuthClientChoices != nil {
+		body.AuthClientChoices = make([]*AgentKeyAuthClientChoiceRequestBody, len(p.AuthClientChoices))
+		for i, val := range p.AuthClientChoices {
+			if val == nil {
+				body.AuthClientChoices[i] = nil
+				continue
+			}
+			body.AuthClientChoices[i] = marshalKeysAgentKeyAuthClientChoiceToAgentKeyAuthClientChoiceRequestBody(val)
+		}
 	}
 	return body
 }
@@ -5104,6 +5127,26 @@ func ValidateAPIKeyPolicySelectorResponseBody(body *APIKeyPolicySelectorResponse
 	if body.ClientType != nil {
 		if !(*body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "*") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"service_account", "static_credential", "pass_through", "ema", "*"}))
+		}
+	}
+	return
+}
+
+// ValidateExtendAgentKeyGrantFormRequestBody runs the validations defined on
+// ExtendAgentKeyGrantFormRequestBody
+func ValidateExtendAgentKeyGrantFormRequestBody(body *ExtendAgentKeyGrantFormRequestBody) (err error) {
+	if body.Selector == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
+	}
+	if !(body.Scope == "mcp:connect") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"mcp:connect"}))
+	}
+	if !(body.Effect == "allow") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", body.Effect, []any{"allow"}))
+	}
+	if body.Selector != nil {
+		if err2 := ValidateAgentPolicySelectorRequestBody(body.Selector); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return

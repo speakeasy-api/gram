@@ -5,10 +5,15 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  AgentPolicyGrantForm,
-  AgentPolicyGrantForm$Outbound,
-  AgentPolicyGrantForm$outboundSchema,
-} from "./agentpolicygrantform.js";
+  AgentKeyAuthClientChoice,
+  AgentKeyAuthClientChoice$Outbound,
+  AgentKeyAuthClientChoice$outboundSchema,
+} from "./agentkeyauthclientchoice.js";
+import {
+  ExtendAgentKeyGrantForm,
+  ExtendAgentKeyGrantForm$Outbound,
+  ExtendAgentKeyGrantForm$outboundSchema,
+} from "./extendagentkeygrantform.js";
 
 export type ExtendAgentKeysForm = {
   /**
@@ -16,15 +21,20 @@ export type ExtendAgentKeysForm = {
    */
   agentId: string;
   /**
-   * mcp:connect allow grants to add to each key
+   * The upstream credential each key uses on the servers it gains, checked as at issuance. Recorded only on keys that gain that server.
    */
-  requestedGrants: Array<AgentPolicyGrantForm>;
+  authClientChoices?: Array<AgentKeyAuthClientChoice> | undefined;
+  /**
+   * Server grants to add to each key
+   */
+  requestedGrants: Array<ExtendAgentKeyGrantForm>;
 };
 
 /** @internal */
 export type ExtendAgentKeysForm$Outbound = {
   agent_id: string;
-  requested_grants: Array<AgentPolicyGrantForm$Outbound>;
+  auth_client_choices?: Array<AgentKeyAuthClientChoice$Outbound> | undefined;
+  requested_grants: Array<ExtendAgentKeyGrantForm$Outbound>;
 };
 
 /** @internal */
@@ -34,11 +44,15 @@ export const ExtendAgentKeysForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     agentId: z.string(),
-    requestedGrants: z.array(AgentPolicyGrantForm$outboundSchema),
+    authClientChoices: z.optional(
+      z.array(AgentKeyAuthClientChoice$outboundSchema),
+    ),
+    requestedGrants: z.array(ExtendAgentKeyGrantForm$outboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
       agentId: "agent_id",
+      authClientChoices: "auth_client_choices",
       requestedGrants: "requested_grants",
     });
   }),

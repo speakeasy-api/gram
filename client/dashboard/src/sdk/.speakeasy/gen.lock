@@ -1246,6 +1246,7 @@ trackedFiles:
   src/models/components/explainresourceaccessresult.ts: {}
   src/models/components/exportmcpmetadatarequestbody.ts: {}
   src/models/components/exprcompileresult.ts: {}
+  src/models/components/extendagentkeygrantform.ts: {}
   src/models/components/extendagentkeysform.ts: {}
   src/models/components/externalcredentialsummary.ts: {}
   src/models/components/externalkeysummary.ts: {}
@@ -3401,6 +3402,7 @@ trackedFiles:
   src/react-query/explainResourceAccess.core.ts: {}
   src/react-query/explainResourceAccess.ts: {}
   src/react-query/exportMcpMetadata.ts: {}
+  src/react-query/extendAgentAPIKeys.ts: {}
   src/react-query/featuresSet.ts: {}
   src/react-query/fetchGlobalRemoteSessionIssuerMetadata.ts: {}
   src/react-query/fetchImageFromURL.ts: {}
@@ -3598,7 +3600,6 @@ trackedFiles:
   src/react-query/issuanceProfiles.ts: {}
   src/react-query/jsonWebKeySetDeletePreflight.core.ts: {}
   src/react-query/jsonWebKeySetDeletePreflight.ts: {}
-  src/react-query/keysExtendAgentKeys.ts: {}
   src/react-query/keysRotate.ts: {}
   src/react-query/killswitch.core.ts: {}
   src/react-query/killswitch.ts: {}
@@ -7129,7 +7130,7 @@ examples:
   extendAgentAPIKeys:
     speakeasy-default-extend-agent-API-keys:
       requestBody:
-        application/json: {"agent_id": "16412b7c-ff76-47a4-aefb-d2800f86cf11", "requested_grants": [{"effect": "allow", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "project"}}]}
+        application/json: {"agent_id": "16412b7c-ff76-47a4-aefb-d2800f86cf11", "requested_grants": [{"effect": "allow", "scope": "mcp:connect", "selector": {"resource_id": "<id>", "resource_kind": "project"}}]}
       responses:
         "200":
           application/json: {"keys": []}

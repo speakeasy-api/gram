@@ -205,7 +205,7 @@ func BuildExtendAgentKeysPayload(keysExtendAgentKeysBody string, keysExtendAgent
 	{
 		err = json.Unmarshal([]byte(keysExtendAgentKeysBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         },\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"auth_client_choices\": [\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"mcp:connect\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         },\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"mcp:connect\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ]\n   }'")
 		}
 		if body.RequestedGrants == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("requested_grants", "body"))
@@ -219,7 +219,17 @@ func BuildExtendAgentKeysPayload(keysExtendAgentKeysBody string, keysExtendAgent
 		}
 		for _, e := range body.RequestedGrants {
 			if e != nil {
-				if err2 := ValidateAgentPolicyGrantFormRequestBody(e); err2 != nil {
+				if err2 := ValidateExtendAgentKeyGrantFormRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if len(body.AuthClientChoices) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.auth_client_choices", body.AuthClientChoices, len(body.AuthClientChoices), 100, false))
+		}
+		for _, e := range body.AuthClientChoices {
+			if e != nil {
+				if err2 := ValidateAgentKeyAuthClientChoiceRequestBody(e); err2 != nil {
 					err = goa.MergeErrors(err, err2)
 				}
 			}
@@ -238,16 +248,26 @@ func BuildExtendAgentKeysPayload(keysExtendAgentKeysBody string, keysExtendAgent
 		AgentID: body.AgentID,
 	}
 	if body.RequestedGrants != nil {
-		v.RequestedGrants = make([]*keys.AgentPolicyGrantForm, len(body.RequestedGrants))
+		v.RequestedGrants = make([]*keys.ExtendAgentKeyGrantForm, len(body.RequestedGrants))
 		for i, val := range body.RequestedGrants {
 			if val == nil {
 				v.RequestedGrants[i] = nil
 				continue
 			}
-			v.RequestedGrants[i] = marshalAgentPolicyGrantFormRequestBodyToKeysAgentPolicyGrantForm(val)
+			v.RequestedGrants[i] = marshalExtendAgentKeyGrantFormRequestBodyToKeysExtendAgentKeyGrantForm(val)
 		}
 	} else {
-		v.RequestedGrants = []*keys.AgentPolicyGrantForm{}
+		v.RequestedGrants = []*keys.ExtendAgentKeyGrantForm{}
+	}
+	if body.AuthClientChoices != nil {
+		v.AuthClientChoices = make([]*keys.AgentKeyAuthClientChoice, len(body.AuthClientChoices))
+		for i, val := range body.AuthClientChoices {
+			if val == nil {
+				v.AuthClientChoices[i] = nil
+				continue
+			}
+			v.AuthClientChoices[i] = marshalAgentKeyAuthClientChoiceRequestBodyToKeysAgentKeyAuthClientChoice(val)
+		}
 	}
 	v.SessionToken = sessionToken
 

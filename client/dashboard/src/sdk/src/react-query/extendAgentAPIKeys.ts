@@ -31,15 +31,15 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type KeysExtendAgentKeysMutationVariables = {
+export type ExtendAgentAPIKeysMutationVariables = {
   request: ExtendAgentAPIKeysRequest;
   security?: ExtendAgentAPIKeysSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type KeysExtendAgentKeysMutationData = ListKeysResult;
+export type ExtendAgentAPIKeysMutationData = ListKeysResult;
 
-export type KeysExtendAgentKeysMutationError =
+export type ExtendAgentAPIKeysMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -54,46 +54,46 @@ export type KeysExtendAgentKeysMutationError =
  * extendAgentKeys keys
  *
  * @remarks
- * Add mcp:connect grants to every live key the caller issued for an agent, so servers the agent is given reach the keys it already runs with. Each key's new policy is checked like issuance: the agent, its owner and the caller must all allow it. Keys issued by someone else are left as they are.
+ * Add mcp:connect grants to every live key the caller issued for an agent, so servers the agent is given reach the keys it already runs with. Each key's new policy is checked like issuance: the agent, its owner and the caller must all allow it. Keys issued by someone else are left as they are. The result lists only the keys this call changed: keys that already held the grants, expired keys and other people's keys are not in it.
  */
-export function useKeysExtendAgentKeysMutation(
+export function useExtendAgentAPIKeysMutation(
   options?: MutationHookOptions<
-    KeysExtendAgentKeysMutationData,
-    KeysExtendAgentKeysMutationError,
-    KeysExtendAgentKeysMutationVariables
+    ExtendAgentAPIKeysMutationData,
+    ExtendAgentAPIKeysMutationError,
+    ExtendAgentAPIKeysMutationVariables
   >,
 ): UseMutationResult<
-  KeysExtendAgentKeysMutationData,
-  KeysExtendAgentKeysMutationError,
-  KeysExtendAgentKeysMutationVariables
+  ExtendAgentAPIKeysMutationData,
+  ExtendAgentAPIKeysMutationError,
+  ExtendAgentAPIKeysMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildKeysExtendAgentKeysMutation(client, options),
+    ...buildExtendAgentAPIKeysMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyKeysExtendAgentKeys(): MutationKey {
+export function mutationKeyExtendAgentAPIKeys(): MutationKey {
   return ["@gram/client", "keys", "extendAgentKeys"];
 }
 
-export function buildKeysExtendAgentKeysMutation(
+export function buildExtendAgentAPIKeysMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: KeysExtendAgentKeysMutationVariables,
-  ) => Promise<KeysExtendAgentKeysMutationData>;
+    variables: ExtendAgentAPIKeysMutationVariables,
+  ) => Promise<ExtendAgentAPIKeysMutationData>;
 } {
   return {
-    mutationKey: mutationKeyKeysExtendAgentKeys(),
-    mutationFn: function keysExtendAgentKeysMutationFn({
+    mutationKey: mutationKeyExtendAgentAPIKeys(),
+    mutationFn: function extendAgentAPIKeysMutationFn({
       request,
       security,
       options,
-    }): Promise<KeysExtendAgentKeysMutationData> {
+    }): Promise<ExtendAgentAPIKeysMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,

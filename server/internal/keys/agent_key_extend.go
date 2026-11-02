@@ -42,6 +42,9 @@ func (s *Service) ExtendAgentKeys(ctx context.Context, payload *gen.ExtendAgentK
 	if err != nil {
 		return nil, err
 	}
+	if slices.Contains(payload.AuthClientChoices, nil) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "credential choice must not be null")
+	}
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -75,8 +78,8 @@ func (s *Service) ExtendAgentKeys(ctx context.Context, payload *gen.ExtendAgentK
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "decode agent API key policy").LogError(ctx, s.logger)
 		}
-		requested, changed := withGrants(current.Requested, additions)
-		if !changed {
+		requested, added := withGrants(current.Requested, additions)
+		if len(added) == 0 {
 			continue
 		}
 		policy, err := runtimepolicy.NewDelegatedPolicy(version, requested)
@@ -110,6 +113,9 @@ func (s *Service) ExtendAgentKeys(ctx context.Context, payload *gen.ExtendAgentK
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "extend agent API key").LogError(ctx, s.logger)
 		}
+		if err := recordAgentKeyAuthClientChoices(ctx, tx, human, updated.ID, choicesFor(payload.AuthClientChoices, added)); err != nil {
+			return nil, err
+		}
 		if err := s.audit.LogKeyPolicyUpdate(ctx, tx, audit.LogKeyPolicyUpdateEvent{
 			OrganizationID:     human.Auth.ActiveOrganizationID,
 			ProjectID:          row.ProjectID,
@@ -139,7 +145,7 @@ func (s *Service) ExtendAgentKeys(ctx context.Context, payload *gen.ExtendAgentK
 // connectGrantsFromForms accepts only what the agent editor grants a server:
 // an mcp:connect allow on servers. Anything broader is a new delegation and
 // goes through issuing a key, where the person sees what it carries.
-func connectGrantsFromForms(forms []*gen.AgentPolicyGrantForm) ([]authz.Grant, error) {
+func connectGrantsFromForms(forms []*gen.ExtendAgentKeyGrantForm) ([]authz.Grant, error) {
 	if len(forms) == 0 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "at least one grant is required")
 	}
@@ -157,13 +163,13 @@ func connectGrantsFromForms(forms []*gen.AgentPolicyGrantForm) ([]authz.Grant, e
 }
 
 // withGrants returns requested plus every addition it does not already hold,
-// and whether anything was added.
-func withGrants(requested []runtimepolicy.DelegatedPolicyGrant, additions []authz.Grant) ([]authz.Grant, bool) {
+// and the additions it took.
+func withGrants(requested []runtimepolicy.DelegatedPolicyGrant, additions []authz.Grant) ([]authz.Grant, []authz.Grant) {
 	merged := make([]authz.Grant, 0, len(requested)+len(additions))
 	for _, grant := range requested {
 		merged = append(merged, authz.NewGrantWithSelector(grant.Scope, grant.Selector))
 	}
-	changed := false
+	var added []authz.Grant
 	for _, addition := range additions {
 		held := slices.ContainsFunc(merged, func(grant authz.Grant) bool {
 			return grant.Scope == addition.Scope && (maps.Equal(grant.Selector, addition.Selector) || coversProjectServers(grant.Selector, addition.Selector))
@@ -172,17 +178,38 @@ func withGrants(requested []runtimepolicy.DelegatedPolicyGrant, additions []auth
 			continue
 		}
 		merged = append(merged, addition)
-		changed = true
+		added = append(added, addition)
 	}
-	return merged, changed
+	return merged, added
+}
+
+// choicesFor is the credential choices for the servers a key just gained. A
+// server it already reached keeps the choice it was issued with.
+func choicesFor(choices []*gen.AgentKeyAuthClientChoice, added []authz.Grant) []*gen.AgentKeyAuthClientChoice {
+	var picked []*gen.AgentKeyAuthClientChoice
+	for _, choice := range choices {
+		if slices.ContainsFunc(added, func(grant authz.Grant) bool {
+			return grant.Selector[authz.SelectorKeyResourceID] == choice.McpServerID
+		}) {
+			picked = append(picked, choice)
+		}
+	}
+	return picked
 }
 
 // coversProjectServers reports whether held is an "All servers" grant that
 // already reaches the server named by want. Such a key follows servers added
 // to its project on its own, so naming one beside the wildcard adds nothing.
+// A wildcard that also narrows by tool or anything else does not reach the
+// whole server, so it covers nothing here.
 func coversProjectServers(held, want authz.Selector) bool {
 	if held[authz.SelectorKeyResourceID] != "*" || held[authz.SelectorKeyResourceKind] != want[authz.SelectorKeyResourceKind] {
 		return false
+	}
+	for key := range held {
+		if key != authz.SelectorKeyResourceKind && key != authz.SelectorKeyResourceID && key != authz.SelectorKeyProjectID {
+			return false
+		}
 	}
 	project, scoped := held[authz.SelectorKeyProjectID]
 	return !scoped || project == want[authz.SelectorKeyProjectID]

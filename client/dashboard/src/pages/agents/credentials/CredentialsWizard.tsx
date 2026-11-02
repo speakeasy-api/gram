@@ -65,7 +65,7 @@ import {
 import { useAgentsCreatePolicyGrantMutation } from "@gram/client/react-query/agentsCreatePolicyGrant.js";
 import { useAgentsDeletePolicyGrantMutation } from "@gram/client/react-query/agentsDeletePolicyGrant.js";
 import { invalidateAllListAPIKeys } from "@gram/client/react-query/listAPIKeys.js";
-import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
+import type { ExtendAgentKeyGrantForm } from "@gram/client/models/components/extendagentkeygrantform.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
 import { useAgents } from "@gram/client/react-query/agents.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
@@ -138,6 +138,9 @@ const CHECK_BATCH_SIZE = 100;
  * refused on submit with nothing on screen to explain why.
  */
 const NAME_LIMIT = 120;
+
+/** As many grants as one request may add to an agent's keys. */
+const EXTEND_KEYS_BATCH = 100;
 
 /**
  * The preset name, with a number appended while the organization already
@@ -425,7 +428,7 @@ export function CredentialsWizard({
   // key stores the grants it was issued with, so without passing these on the
   // agent's gateway never lists the servers just added. Kept across a retry,
   // because the grants a failed save already wrote are not in the next diff.
-  const keysMissing = useRef<AgentPolicyGrantForm[]>([]);
+  const keysMissing = useRef<ExtendAgentKeyGrantForm[]>([]);
   useEffect(() => {
     if (reconciled || grants === undefined) return;
     if (inventory.isLoading || inventory.isError) return;
@@ -904,7 +907,7 @@ export function CredentialsWizard({
       if (allServers && appliedWildcard.current === undefined) {
         const form = {
           effect: "allow" as const,
-          scope: CONNECT_SCOPE,
+          scope: "mcp:connect" as const,
           selector: {
             resourceKind: "mcp" as const,
             resourceId: "*",
@@ -931,7 +934,7 @@ export function CredentialsWizard({
       for (const server of changes.add) {
         const form = {
           effect: "allow" as const,
-          scope: CONNECT_SCOPE,
+          scope: "mcp:connect" as const,
           selector: {
             resourceKind: "mcp" as const,
             resourceId: server.resourceId,
@@ -964,6 +967,69 @@ export function CredentialsWizard({
           },
         });
         appliedPolicies.current.set(created.id, created);
+      }
+      // Once the agent holds every grant its keys are given, and before the
+      // removals, so a removal that fails cannot keep the new servers from the
+      // keys. Removals need nothing here: a key only ever reaches what the
+      // agent still allows. The grants are saved by now, so a key that could
+      // not follow is reported rather than undoing them.
+      //
+      // Only what this save still chooses: a server added by an earlier
+      // attempt and unticked since is no longer the agent's to pass on.
+      keysMissing.current = keysMissing.current.filter((form) =>
+        form.selector.resourceId === "*"
+          ? allServers
+          : !allServers &&
+            selected.some(
+              (entry) => entry.server.resourceId === form.selector.resourceId,
+            ),
+      );
+      if (keysMissing.current.length > 0) {
+        try {
+          // The credential picked on MCP sign-in for each added server, as a
+          // key issued now would carry it.
+          const choices = await keyCredentialChoices(
+            sdk,
+            selected
+              .filter((entry) =>
+                keysMissing.current.some(
+                  (form) =>
+                    form.selector.resourceId === entry.server.resourceId,
+                ),
+              )
+              .map((entry) => ({
+                ...entry.server,
+                authClientId: entry.authClientId,
+              })),
+          );
+          for (
+            let start = 0;
+            start < keysMissing.current.length;
+            start += EXTEND_KEYS_BATCH
+          ) {
+            const batch = keysMissing.current.slice(
+              start,
+              start + EXTEND_KEYS_BATCH,
+            );
+            await sdk.keys.extendAgentKeys({
+              extendAgentKeysForm: {
+                agentId: agent.id,
+                requestedGrants: batch,
+                authClientChoices: choices.filter((choice) =>
+                  batch.some(
+                    (form) => form.selector.resourceId === choice.mcpServerId,
+                  ),
+                ),
+              },
+            });
+          }
+          keysMissing.current = [];
+          void invalidateAllListAPIKeys(queryClient);
+        } catch (failure) {
+          toast.warning(
+            `Saved, but the agent's existing keys still reach only their old servers: ${failure instanceof Error ? failure.message : String(failure)}. Issue a new key from the agent's page to use the new ones.`,
+          );
+        }
       }
       // Last, so a failure part-way through leaves the agent reaching more
       // than intended rather than less: the servers it is meant to keep are
@@ -1004,26 +1070,6 @@ export function CredentialsWizard({
           const left = wildcard.grantIds.filter((id) => id !== grantId);
           appliedWildcard.current =
             left.length === 0 ? undefined : { ...wildcard, grantIds: left };
-        }
-      }
-      // After every write, so the agent already holds each grant its keys are
-      // given. Removals need nothing here: a key only ever reaches what the
-      // agent still allows. The edit itself is saved by now, so a key that
-      // could not follow is reported rather than undoing it.
-      if (keysMissing.current.length > 0) {
-        try {
-          await sdk.keys.extendAgentKeys({
-            extendAgentKeysForm: {
-              agentId: agent.id,
-              requestedGrants: keysMissing.current,
-            },
-          });
-          keysMissing.current = [];
-          void invalidateAllListAPIKeys(queryClient);
-        } catch (failure) {
-          toast.warning(
-            `Saved, but the agent's existing keys still reach only their old servers: ${failure instanceof Error ? failure.message : String(failure)}. Issue a new key from the agent's page to use the new ones.`,
-          );
         }
       }
       // The agent's own page reads its servers from these, and it is where

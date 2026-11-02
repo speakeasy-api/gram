@@ -67,8 +67,11 @@ type RotateKeyRequestBody struct {
 type ExtendAgentKeysRequestBody struct {
 	// The agent whose keys gain the grants
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// mcp:connect allow grants to add to each key
-	RequestedGrants []*AgentPolicyGrantFormRequestBody `form:"requested_grants,omitempty" json:"requested_grants,omitempty" xml:"requested_grants,omitempty"`
+	// Server grants to add to each key
+	RequestedGrants []*ExtendAgentKeyGrantFormRequestBody `form:"requested_grants,omitempty" json:"requested_grants,omitempty" xml:"requested_grants,omitempty"`
+	// The upstream credential each key uses on the servers it gains, checked as at
+	// issuance. Recorded only on keys that gain that server.
+	AuthClientChoices []*AgentKeyAuthClientChoiceRequestBody `form:"auth_client_choices,omitempty" json:"auth_client_choices,omitempty" xml:"auth_client_choices,omitempty"`
 }
 
 // UpdateKeyPolicyRequestBody is the type of the "keys" service
@@ -1673,6 +1676,16 @@ type AgentKeyAuthClientChoiceRequestBody struct {
 	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
 }
 
+// ExtendAgentKeyGrantFormRequestBody is used to define fields on request body
+// types.
+type ExtendAgentKeyGrantFormRequestBody struct {
+	// The grant's scope
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Grant effect
+	Effect   *string                         `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
+	Selector *AgentPolicySelectorRequestBody `form:"selector,omitempty" json:"selector,omitempty" xml:"selector,omitempty"`
+}
+
 // NewCreateKeyResponseBody builds the HTTP response body from the result of
 // the "createKey" endpoint of the "keys" service.
 func NewCreateKeyResponseBody(res *keys.Key) *CreateKeyResponseBody {
@@ -2930,13 +2943,23 @@ func NewExtendAgentKeysPayload(body *ExtendAgentKeysRequestBody, sessionToken *s
 	v := &keys.ExtendAgentKeysPayload{
 		AgentID: *body.AgentID,
 	}
-	v.RequestedGrants = make([]*keys.AgentPolicyGrantForm, len(body.RequestedGrants))
+	v.RequestedGrants = make([]*keys.ExtendAgentKeyGrantForm, len(body.RequestedGrants))
 	for i, val := range body.RequestedGrants {
 		if val == nil {
 			v.RequestedGrants[i] = nil
 			continue
 		}
-		v.RequestedGrants[i] = unmarshalAgentPolicyGrantFormRequestBodyToKeysAgentPolicyGrantForm(val)
+		v.RequestedGrants[i] = unmarshalExtendAgentKeyGrantFormRequestBodyToKeysExtendAgentKeyGrantForm(val)
+	}
+	if body.AuthClientChoices != nil {
+		v.AuthClientChoices = make([]*keys.AgentKeyAuthClientChoice, len(body.AuthClientChoices))
+		for i, val := range body.AuthClientChoices {
+			if val == nil {
+				v.AuthClientChoices[i] = nil
+				continue
+			}
+			v.AuthClientChoices[i] = unmarshalAgentKeyAuthClientChoiceRequestBodyToKeysAgentKeyAuthClientChoice(val)
+		}
 	}
 	v.SessionToken = sessionToken
 
@@ -3104,7 +3127,17 @@ func ValidateExtendAgentKeysRequestBody(body *ExtendAgentKeysRequestBody) (err e
 	}
 	for _, e := range body.RequestedGrants {
 		if e != nil {
-			if err2 := ValidateAgentPolicyGrantFormRequestBody(e); err2 != nil {
+			if err2 := ValidateExtendAgentKeyGrantFormRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if len(body.AuthClientChoices) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.auth_client_choices", body.AuthClientChoices, len(body.AuthClientChoices), 100, false))
+	}
+	for _, e := range body.AuthClientChoices {
+		if e != nil {
+			if err2 := ValidateAgentKeyAuthClientChoiceRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -3255,6 +3288,36 @@ func ValidateAgentKeyAuthClientChoiceRequestBody(body *AgentKeyAuthClientChoiceR
 	}
 	if body.AuthClientID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateExtendAgentKeyGrantFormRequestBody runs the validations defined on
+// ExtendAgentKeyGrantFormRequestBody
+func ValidateExtendAgentKeyGrantFormRequestBody(body *ExtendAgentKeyGrantFormRequestBody) (err error) {
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.Effect == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("effect", "body"))
+	}
+	if body.Selector == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
+	}
+	if body.Scope != nil {
+		if !(*body.Scope == "mcp:connect") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"mcp:connect"}))
+		}
+	}
+	if body.Effect != nil {
+		if !(*body.Effect == "allow") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"allow"}))
+		}
+	}
+	if body.Selector != nil {
+		if err2 := ValidateAgentPolicySelectorRequestBody(body.Selector); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }

@@ -11,6 +11,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { invalidateAgentPolicy } from "../agent-policy-grants";
 import { CredentialsWizard } from "./CredentialsWizard";
@@ -1934,8 +1935,10 @@ describe("Editing an agent that already exists", () => {
             },
           },
         ],
+        authClientChoices: [],
       },
     });
+    expect(mocks.createGrant).toHaveBeenCalledTimes(1);
     expect(mocks.createGrant.mock.invocationCallOrder.at(-1) ?? 0).toBeLessThan(
       mocks.extendAgentKeys.mock.invocationCallOrder[0] ?? 0,
     );
@@ -1954,6 +1957,7 @@ describe("Editing an agent that already exists", () => {
 
   it("still finishes the edit when the keys cannot follow", async () => {
     mocks.extendAgentKeys.mockRejectedValue(new Error("forbidden"));
+    const warning = vi.spyOn(toast, "warning");
     const { onDone } = editing({ grants: [] });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
@@ -1962,6 +1966,12 @@ describe("Editing an agent that already exists", () => {
     // The grants are saved by then, so the edit is not undone over the keys.
     await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
     expect(mocks.createGrant).toHaveBeenCalled();
+    expect(warning).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "existing keys still reach only their old servers",
+      ),
+    );
+    warning.mockRestore();
   });
 
   it("leaves an unavailable assignment for an explicit detach when saving", async () => {

@@ -24,7 +24,9 @@ type Service interface {
 	// Add mcp:connect grants to every live key the caller issued for an agent, so
 	// servers the agent is given reach the keys it already runs with. Each key's
 	// new policy is checked like issuance: the agent, its owner and the caller
-	// must all allow it. Keys issued by someone else are left as they are.
+	// must all allow it. Keys issued by someone else are left as they are. The
+	// result lists only the keys this call changed: keys that already held the
+	// grants, expired keys and other people's keys are not in it.
 	ExtendAgentKeys(context.Context, *ExtendAgentKeysPayload) (res *ListKeysResult, err error)
 	// List all api keys for an organization
 	ListKeys(context.Context, *ListKeysPayload) (res *ListKeysResult, err error)
@@ -167,14 +169,27 @@ type CreateKeyPayload struct {
 	AuthClientChoices []*AgentKeyAuthClientChoice
 }
 
+// A server grant an agent key gains. Anything broader is a new delegation,
+// made by issuing a key.
+type ExtendAgentKeyGrantForm struct {
+	// The grant's scope
+	Scope string
+	// Grant effect
+	Effect   string
+	Selector *AgentPolicySelector
+}
+
 // ExtendAgentKeysPayload is the payload type of the keys service
 // extendAgentKeys method.
 type ExtendAgentKeysPayload struct {
 	SessionToken *string
 	// The agent whose keys gain the grants
 	AgentID string
-	// mcp:connect allow grants to add to each key
-	RequestedGrants []*AgentPolicyGrantForm
+	// Server grants to add to each key
+	RequestedGrants []*ExtendAgentKeyGrantForm
+	// The upstream credential each key uses on the servers it gains, checked as at
+	// issuance. Recorded only on keys that gain that server.
+	AuthClientChoices []*AgentKeyAuthClientChoice
 }
 
 // Key is the result type of the keys service createKey method.

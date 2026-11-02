@@ -1896,6 +1896,36 @@ func unmarshalAPIKeyPolicySelectorResponseBodyToKeysAPIKeyPolicySelector(v *APIK
 	return res
 }
 
+// marshalKeysExtendAgentKeyGrantFormToExtendAgentKeyGrantFormRequestBody
+// builds a value of type *ExtendAgentKeyGrantFormRequestBody from a value of
+// type *keys.ExtendAgentKeyGrantForm.
+func marshalKeysExtendAgentKeyGrantFormToExtendAgentKeyGrantFormRequestBody(v *keys.ExtendAgentKeyGrantForm) *ExtendAgentKeyGrantFormRequestBody {
+	res := &ExtendAgentKeyGrantFormRequestBody{
+		Scope:  v.Scope,
+		Effect: v.Effect,
+	}
+	if v.Selector != nil {
+		res.Selector = marshalKeysAgentPolicySelectorToAgentPolicySelectorRequestBody(v.Selector)
+	}
+
+	return res
+}
+
+// marshalExtendAgentKeyGrantFormRequestBodyToKeysExtendAgentKeyGrantForm
+// builds a value of type *keys.ExtendAgentKeyGrantForm from a value of type
+// *ExtendAgentKeyGrantFormRequestBody.
+func marshalExtendAgentKeyGrantFormRequestBodyToKeysExtendAgentKeyGrantForm(v *ExtendAgentKeyGrantFormRequestBody) *keys.ExtendAgentKeyGrantForm {
+	res := &keys.ExtendAgentKeyGrantForm{
+		Scope:  v.Scope,
+		Effect: v.Effect,
+	}
+	if v.Selector != nil {
+		res.Selector = marshalAgentPolicySelectorRequestBodyToKeysAgentPolicySelector(v.Selector)
+	}
+
+	return res
+}
+
 // unmarshalKeyResponseBodyToKeysKey builds a value of type *keys.Key from a
 // value of type *KeyResponseBody.
 func unmarshalKeyResponseBodyToKeysKey(v *KeyResponseBody) *keys.Key {

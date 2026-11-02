@@ -40807,7 +40807,7 @@ paths:
                 name: CreateAPIKey
     /rpc/keys.extendAgentKeys:
         post:
-            description: 'Add mcp:connect grants to every live key the caller issued for an agent, so servers the agent is given reach the keys it already runs with. Each key''s new policy is checked like issuance: the agent, its owner and the caller must all allow it. Keys issued by someone else are left as they are.'
+            description: 'Add mcp:connect grants to every live key the caller issued for an agent, so servers the agent is given reach the keys it already runs with. Each key''s new policy is checked like issuance: the agent, its owner and the caller must all allow it. Keys issued by someone else are left as they are. The result lists only the keys this call changed: keys that already held the grants, expired keys and other people''s keys are not in it.'
             operationId: extendAgentAPIKeys
             parameters:
                 - allowEmptyValue: true
@@ -40890,6 +40890,8 @@ paths:
             tags:
                 - keys
             x-speakeasy-name-override: extendAgentKeys
+            x-speakeasy-react-hook:
+                name: ExtendAgentAPIKeys
     /rpc/keys.list:
         get:
             description: List all api keys for an organization
@@ -107228,6 +107230,26 @@ components:
             required:
                 - ok
                 - error
+        ExtendAgentKeyGrantForm:
+            type: object
+            properties:
+                effect:
+                    type: string
+                    description: Grant effect
+                    enum:
+                        - allow
+                scope:
+                    type: string
+                    description: The grant's scope
+                    enum:
+                        - mcp:connect
+                selector:
+                    $ref: '#/components/schemas/AgentPolicySelector'
+            description: A server grant an agent key gains. Anything broader is a new delegation, made by issuing a key.
+            required:
+                - scope
+                - effect
+                - selector
         ExtendAgentKeysForm:
             type: object
             properties:
@@ -107235,11 +107257,17 @@ components:
                     type: string
                     description: The agent whose keys gain the grants
                     format: uuid
+                auth_client_choices:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentKeyAuthClientChoice'
+                    description: The upstream credential each key uses on the servers it gains, checked as at issuance. Recorded only on keys that gain that server.
+                    maxItems: 100
                 requested_grants:
                     type: array
                     items:
-                        $ref: '#/components/schemas/AgentPolicyGrantForm'
-                    description: mcp:connect allow grants to add to each key
+                        $ref: '#/components/schemas/ExtendAgentKeyGrantForm'
+                    description: Server grants to add to each key
                     minItems: 1
                     maxItems: 100
             required:
