@@ -819,6 +819,13 @@ func (a *Activities) BuildMemoryDigests(ctx context.Context, args activities.Bui
 	return result, nil
 }
 
+func (a *Activities) InvalidateMemoryDigests(ctx context.Context) error {
+	if err := a.memoryDigests.Invalidate(ctx); err != nil {
+		return fmt.Errorf("invalidate memory digests: %w", err)
+	}
+	return nil
+}
+
 func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.GenerateChatTitleArgs) error {
 	return a.generateChatTitle.Do(ctx, input)
 }
