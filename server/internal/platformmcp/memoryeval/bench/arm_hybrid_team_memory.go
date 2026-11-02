@@ -214,7 +214,7 @@ func loadMemoryItems(ctx context.Context, embedder Embedder, target Target, main
 	}
 	vectors, err := embedder.Embed(ctx, texts)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("embed team memory items: %w", err)
 	}
 	for i := range items {
 		items[i].vector = vectors[i]
