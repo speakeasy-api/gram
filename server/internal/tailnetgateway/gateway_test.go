@@ -116,7 +116,7 @@ func (r *fakeRuntime) Start(_ context.Context, spec tailnetgateway.NodeSpec) (ta
 	if err := spec.Store.WriteState(ipn.MachineKeyStateKey, []byte("machine-key")); err != nil {
 		return nil, fmt.Errorf("persist fake node state: %w", err)
 	}
-	if err := spec.Store.WriteState(ipn.KnownProfilesStateKey, []byte(`[{"ID":"p1"}]`)); err != nil {
+	if err := spec.Store.WriteState(ipn.KnownProfilesStateKey, []byte(`{"profile-1":{"ID":"profile-1","Name":"speakeasy-gw-0"}}`)); err != nil {
 		return nil, fmt.Errorf("persist fake node profile: %w", err)
 	}
 	node := &fakeNode{mu: sync.Mutex{}, spec: spec, online: false, fqdn: "speakeasy.example.ts.net", nodeID: "", handler: nil, closed: false, who: nil}
@@ -280,7 +280,7 @@ func TestGatewayWaitsForAuthKeyAndReconnectsWithState(t *testing.T) {
 	store, err := tailnetgateway.NewPostgresStateStore(f.db, f.enc, ingressID, orgID, 0)
 	require.NoError(t, err)
 	require.NoError(t, store.WriteState(ipn.MachineKeyStateKey, []byte("existing")))
-	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte(`[{"ID":"p1"}]`)))
+	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte(`{"profile-1":{"ID":"profile-1","Name":"speakeasy-gw-0"}}`)))
 
 	f.gateway.Poll(ctx)
 	f.waitForHosts(t, 1)
