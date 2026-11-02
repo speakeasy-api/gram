@@ -77,6 +77,13 @@ func TestService_Summarize_MaskedPathRedactsInputAndOutput(t *testing.T) {
 	require.True(t, stored.SummaryRedacted)
 	require.Equal(t, result.Summary, stored.Summary.String)
 
+	// The summary is stamped with the newest message it read, not the write
+	// time, so a message landing mid-generation still marks the chat stale.
+	messages, err := repo.New(ti.conn).ListChatMessages(ctx, repo.ListChatMessagesParams{ChatID: chatID, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	require.NotEmpty(t, messages)
+	require.True(t, stored.SummaryGeneratedAt.Time.Equal(messages[len(messages)-1].CreatedAt.Time))
+
 	// Served from the stored masked summary without another model call.
 	again, err := ti.service.Summarize(ctx, &gen.SummarizePayload{ID: chatID.String()})
 	require.NoError(t, err)

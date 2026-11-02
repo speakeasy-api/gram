@@ -2,7 +2,6 @@ package chatredact_test
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
@@ -55,7 +54,7 @@ func TestTextFailsClosedWhenScanIncomplete(t *testing.T) {
 	r := chatredact.NewWithScanner(wordScanner{word: "", failing: true})
 
 	_, _, err := r.Text(t.Context(), "anything")
-	require.True(t, errors.Is(err, chatredact.ErrScanFailed))
+	require.ErrorIs(t, err, chatredact.ErrScanFailed)
 }
 
 func TestTextRedactsSensitiveJSONKeysAndKeepsTokenCounts(t *testing.T) {
@@ -120,4 +119,14 @@ func TestTextMasksURLPasswords(t *testing.T) {
 	jsonSafe, _, err := r.Text(t.Context(), `{"dsn":"mysql://root:`+pw+`@localhost/x"}`)
 	require.NoError(t, err)
 	require.NotContains(t, jsonSafe, pw)
+}
+
+func TestTextMasksURLPasswordsWithoutUsername(t *testing.T) {
+	t.Parallel()
+	r := chatredact.NewWithScanner(wordScanner{word: "zzz-unused"})
+
+	safe, changed, err := r.Text(t.Context(), "cache at redis://:s3cretpass@cache.internal:6379/0")
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Equal(t, "cache at redis://:[REDACTED]@cache.internal:6379/0", safe)
 }
