@@ -116,6 +116,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		connectRoot:         connectRoot,
 		chainUpstream:       nil,
 		catalog:             nil,
+		catalogRecoveryOnly: false,
 		catalogRef:          nil,
 		authentication:      nil,
 		unapprovedMembers:   nil,
