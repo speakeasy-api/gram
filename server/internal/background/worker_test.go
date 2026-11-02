@@ -41,6 +41,7 @@ func TestWorkers_Run_RegistersSchedules(t *testing.T) {
 			chatAnalysisSweepScheduleID,
 			aiUsagePollerCoordinatorScheduleID,
 			deviceIntegrationSyncCoordinatorScheduleID,
+			memoryDigestsScheduleID,
 			indexToolsetSweepScheduleID(string(env.Queue())),
 		}, "the long-running worker owns the recurring sweeps")
 	}, 60*time.Second, 250*time.Millisecond, "Run should register the recurring schedules")
@@ -139,7 +140,7 @@ func TestWorkers_RegisterSchedulesPreservesManualPauses(t *testing.T) {
 		var err error
 		ids, err = scheduleIDs(ctx, env.Client())
 		assert.NoError(c, err)
-		assert.Len(c, ids, 32, "all unconditional schedules should be registered")
+		assert.Len(c, ids, 34, "all unconditional schedules should be registered")
 		assert.Contains(c, ids, fmt.Sprintf("v1:directory-review-emails:%s", env.Queue()), "directory review emails are an unconditional schedule")
 		assert.Contains(c, ids, fmt.Sprintf("v1:trusted-delegation-cleanup:%s", env.Queue()), "delegation cleanup is an unconditional schedule")
 		assert.Contains(c, ids, fmt.Sprintf("v1:mcp-finding-evidence-cleanup:%s", env.Queue()), "MCP finding evidence cleanup is an unconditional schedule")

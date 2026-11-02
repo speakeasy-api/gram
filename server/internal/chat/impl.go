@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -89,6 +90,19 @@ type Service struct {
 	turnStream *TurnStream
 
 	workloadInference WorkloadInferenceAuthorizer
+
+	// summaries and flags switch Summarize onto the masked summary path for
+	// organizations with the team-memory flag on. Nil keeps the legacy path.
+	summaries *SummaryGenerator
+	flags     feature.Provider
+}
+
+// WithMaskedSummaries routes Summarize through the masked summary generator
+// for organizations with the team-memory flag on.
+func (s *Service) WithMaskedSummaries(summaries *SummaryGenerator, flags feature.Provider) *Service {
+	s.summaries = summaries
+	s.flags = flags
+	return s
 }
 
 // WithTurnStream enables streaming assistant turn frames to subscribers.
@@ -158,6 +172,9 @@ func NewService(
 		turnStream:       nil, // opt in via WithTurnStream
 
 		workloadInference: nil, // opt in via WithWorkloadInference
+
+		summaries: nil, // opt in via WithMaskedSummaries
+		flags:     nil,
 	}
 }
 
@@ -2552,6 +2569,10 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 		}
 	}
 
+	if s.summaries != nil && TeamMemoryEnabled(ctx, s.logger, s.db, s.flags, authCtx.ActiveOrganizationID) {
+		return s.summarizeMasked(ctx, chat, payload.Regenerate)
+	}
+
 	if chat.Summary.Valid && strings.TrimSpace(chat.Summary.String) != "" && !payload.Regenerate {
 		return &gen.SummarizeChatResult{
 			Summary:            chat.Summary.String,
@@ -2628,9 +2649,11 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 	}
 
 	updated, err := s.repo.UpdateChatSummary(ctx, repo.UpdateChatSummaryParams{
-		Summary:   pgtype.Text{String: summary, Valid: true},
-		ID:        chatID,
-		ProjectID: *authCtx.ProjectID,
+		Summary:         pgtype.Text{String: summary, Valid: true},
+		SummaryRedacted: false,
+		CoveredThrough:  pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		ID:              chatID,
+		ProjectID:       *authCtx.ProjectID,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -2642,6 +2665,35 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 	return &gen.SummarizeChatResult{
 		Summary:            updated.Summary.String,
 		SummaryGeneratedAt: updated.SummaryGeneratedAt.Time.Format(time.RFC3339),
+		Cached:             false,
+	}, nil
+}
+
+// summarizeMasked serves Summarize from the shared masked summary. A stored
+// summary is reused only when it was built from the redacted transcript;
+// older unmasked summaries are replaced on first view.
+func (s *Service) summarizeMasked(ctx context.Context, chat repo.GetChatRow, regenerate bool) (*gen.SummarizeChatResult, error) {
+	if chat.SummaryRedacted && chat.Summary.Valid && strings.TrimSpace(chat.Summary.String) != "" && !regenerate {
+		return &gen.SummarizeChatResult{
+			Summary:            chat.Summary.String,
+			SummaryGeneratedAt: chat.SummaryGeneratedAt.Time.Format(time.RFC3339),
+			Cached:             true,
+		}, nil
+	}
+
+	generated, err := s.summaries.Generate(ctx, chat.OrganizationID, chat.ProjectID, chat.ID)
+	switch {
+	case errors.Is(err, ErrNothingToSummarize):
+		return nil, oops.E(oops.CodeBadRequest, err, "chat has no summarizable messages").LogError(ctx, s.logger)
+	case errors.Is(err, ErrSummaryChatNotFound):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate summary").LogError(ctx, s.logger)
+	}
+
+	return &gen.SummarizeChatResult{
+		Summary:            generated.Summary,
+		SummaryGeneratedAt: generated.GeneratedAt.Format(time.RFC3339),
 		Cached:             false,
 	}, nil
 }

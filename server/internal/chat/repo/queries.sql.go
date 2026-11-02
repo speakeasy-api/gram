@@ -312,6 +312,34 @@ func (q *Queries) CountInferenceMessages(ctx context.Context, arg CountInference
 	return count, err
 }
 
+const countMemorySummariesSince = `-- name: CountMemorySummariesSince :one
+SELECT COUNT(*)::bigint
+FROM chats c
+WHERE c.organization_id = $1
+  AND c.deleted IS FALSE
+  AND c.memory_excluded_at IS NULL
+  AND c.updated_at >= $2
+  AND c.summary_redacted IS TRUE
+  AND c.summary IS NOT NULL
+  AND c.summary_generated_at >= $2
+`
+
+type CountMemorySummariesSinceParams struct {
+	OrganizationID string
+	Since          pgtype.Timestamptz
+}
+
+// Masked summaries written for an organization since a point in time; the
+// sweep uses it to enforce the per-organization daily cap. Empty markers cost
+// no model call and do not count. A summary write bumps updated_at to the same
+// instant, so the updated_at bound lets the sweep index serve this.
+func (q *Queries) CountMemorySummariesSince(ctx context.Context, arg CountMemorySummariesSinceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countMemorySummariesSince, arg.OrganizationID, arg.Since)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 type CreateChatContentPartParams struct {
 	ChatID              uuid.UUID
 	ProjectID           uuid.UUID
@@ -774,7 +802,7 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT c.session_surface, c.slack_team_id, c.slack_channel_id, c.slack_channel_name, c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.inference_accepted_checkpoint, c.inference_actor_key, c.user_account_id, c.litellm_proxied, c.cwd, c.agent_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
+SELECT c.session_surface, c.slack_team_id, c.slack_channel_id, c.slack_channel_name, c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.summary_redacted, c.memory_excluded_at, c.inference_accepted_checkpoint, c.inference_actor_key, c.user_account_id, c.litellm_proxied, c.cwd, c.agent_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
   a.id AS assistant_id, a.name AS assistant_name, b.original_agent_id AS assistant_agent_id,
   -- Name of the agent principal that produced the session (chats.agent_id,
   -- selected by c.*). Resolved live so a rename shows, and NULL for a deleted
@@ -815,6 +843,8 @@ type GetChatRow struct {
 	PinnedAt                    pgtype.Timestamptz
 	Summary                     pgtype.Text
 	SummaryGeneratedAt          pgtype.Timestamptz
+	SummaryRedacted             bool
+	MemoryExcludedAt            pgtype.Timestamptz
 	InferenceAcceptedCheckpoint []byte
 	InferenceActorKey           []byte
 	UserAccountID               uuid.NullUUID
@@ -860,6 +890,8 @@ func (q *Queries) GetChat(ctx context.Context, arg GetChatParams) (GetChatRow, e
 		&i.PinnedAt,
 		&i.Summary,
 		&i.SummaryGeneratedAt,
+		&i.SummaryRedacted,
+		&i.MemoryExcludedAt,
 		&i.InferenceAcceptedCheckpoint,
 		&i.InferenceActorKey,
 		&i.UserAccountID,
@@ -3423,6 +3455,79 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 	return items, nil
 }
 
+const listChatsDueForMemorySummary = `-- name: ListChatsDueForMemorySummary :many
+WITH candidates AS (
+  SELECT
+    c.id,
+    c.project_id,
+    c.summary_generated_at,
+    c.summary_redacted,
+    (SELECT MAX(m.created_at) FROM chat_messages m WHERE m.chat_id = c.id) AS last_at
+  FROM chats c
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+  WHERE c.organization_id = $3
+    AND c.deleted IS FALSE
+    AND c.memory_excluded_at IS NULL
+    AND c.updated_at > $4
+    AND (ua.id IS NULL OR ua.account_type <> 'personal')
+)
+SELECT candidates.id, candidates.project_id
+FROM candidates
+WHERE candidates.last_at IS NOT NULL
+  AND candidates.last_at < $1::timestamptz
+  AND (
+    candidates.summary_generated_at IS NULL
+    OR candidates.summary_redacted IS FALSE
+    OR candidates.summary_generated_at < candidates.last_at
+  )
+ORDER BY candidates.last_at DESC
+LIMIT $2
+`
+
+type ListChatsDueForMemorySummaryParams struct {
+	IdleBefore     pgtype.Timestamptz
+	MaxChats       int32
+	OrganizationID string
+	Since          pgtype.Timestamptz
+}
+
+type ListChatsDueForMemorySummaryRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Team memory summary sweep: an organization's chats whose newest message is
+// older than idle_before and newer than their last masked summary, newest
+// first. Idleness is read from chat_messages because gateway turns do not bump
+// chats.updated_at; updated_at only narrows candidates to chats started or
+// touched within the lookback. Sessions of personal accounts, or of accounts
+// whose type is not known yet, and chats excluded from memory are never
+// returned.
+func (q *Queries) ListChatsDueForMemorySummary(ctx context.Context, arg ListChatsDueForMemorySummaryParams) ([]ListChatsDueForMemorySummaryRow, error) {
+	rows, err := q.db.Query(ctx, listChatsDueForMemorySummary,
+		arg.IdleBefore,
+		arg.MaxChats,
+		arg.OrganizationID,
+		arg.Since,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatsDueForMemorySummaryRow
+	for rows.Next() {
+		var i ListChatsDueForMemorySummaryRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listClaudeUserMessagesForPromptAttachmentParent = `-- name: ListClaudeUserMessagesForPromptAttachmentParent :many
 SELECT cm.id, cm.content
 FROM chat_messages cm
@@ -3621,6 +3726,56 @@ func (q *Queries) ListLatestGenerationChatMessages(ctx context.Context, arg List
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationsWithChatsForMemorySweep = `-- name: ListOrganizationsWithChatsForMemorySweep :many
+WITH RECURSIVE orgs AS (
+  (
+    SELECT c.organization_id
+    FROM chats c
+    WHERE c.deleted IS FALSE AND c.memory_excluded_at IS NULL
+    ORDER BY c.organization_id
+    LIMIT 1
+  )
+  UNION ALL
+  SELECT (
+    SELECT c.organization_id
+    FROM chats c
+    WHERE c.deleted IS FALSE
+      AND c.memory_excluded_at IS NULL
+      AND c.organization_id > orgs.organization_id
+    ORDER BY c.organization_id
+    LIMIT 1
+  )
+  FROM orgs
+  WHERE orgs.organization_id IS NOT NULL
+)
+SELECT orgs.organization_id::text AS organization_id
+FROM orgs
+WHERE orgs.organization_id IS NOT NULL
+`
+
+// Team memory summary sweep: every organization that has at least one
+// eligible chat, read as a loose index scan over chats_memory_summary_sweep_idx
+// so the cost is one index probe per organization, not per chat.
+func (q *Queries) ListOrganizationsWithChatsForMemorySweep(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithChatsForMemorySweep)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var organization_id string
+		if err := rows.Scan(&organization_id); err != nil {
+			return nil, err
+		}
+		items = append(items, organization_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -4068,6 +4223,27 @@ type MarkChatLiteLLMProxiedParams struct {
 // trace of the proxy.
 func (q *Queries) MarkChatLiteLLMProxied(ctx context.Context, arg MarkChatLiteLLMProxiedParams) error {
 	_, err := q.db.Exec(ctx, markChatLiteLLMProxied, arg.ID, arg.ProjectID)
+	return err
+}
+
+const markChatSummaryEmpty = `-- name: MarkChatSummaryEmpty :exec
+UPDATE chats
+SET summary = NULL,
+    summary_generated_at = NOW(),
+    summary_redacted = TRUE,
+    updated_at = NOW()
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+`
+
+type MarkChatSummaryEmptyParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Records that a chat had nothing to summarize so the sweep does not retry it
+// until new messages arrive. Project-scoped like UpdateChatSummary.
+func (q *Queries) MarkChatSummaryEmpty(ctx context.Context, arg MarkChatSummaryEmptyParams) error {
+	_, err := q.db.Exec(ctx, markChatSummaryEmpty, arg.ID, arg.ProjectID)
 	return err
 }
 
@@ -4760,16 +4936,25 @@ func (q *Queries) UpdateAIIntegrationConfigChatCursor(ctx context.Context, arg U
 const updateChatSummary = `-- name: UpdateChatSummary :one
 UPDATE chats
 SET summary = $1,
-    summary_generated_at = NOW(),
+    summary_generated_at = CASE
+      WHEN $2::timestamptz IS NOT NULL AND EXISTS (
+        SELECT 1 FROM chat_messages m
+        WHERE m.chat_id = chats.id AND m.created_at > $2::timestamptz
+      ) THEN $2::timestamptz
+      ELSE NOW()
+    END,
+    summary_redacted = $3,
     updated_at = NOW()
-WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+WHERE chats.id = $4 AND chats.project_id = $5 AND chats.deleted IS FALSE
 RETURNING summary, summary_generated_at
 `
 
 type UpdateChatSummaryParams struct {
-	Summary   pgtype.Text
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	Summary         pgtype.Text
+	CoveredThrough  pgtype.Timestamptz
+	SummaryRedacted bool
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
 }
 
 type UpdateChatSummaryRow struct {
@@ -4777,10 +4962,22 @@ type UpdateChatSummaryRow struct {
 	SummaryGeneratedAt pgtype.Timestamptz
 }
 
-// Persist an on-demand LLM session summary. Project-scoped so a summarize write
-// can never touch another project's chat. Returns the updated row timestamps.
+// Persist an LLM session summary. Project-scoped so a summarize write can
+// never touch another project's chat. summary_redacted records whether the
+// summary was built from the risk-redacted transcript; team memory reads only
+// redacted summaries. covered_through is the newest message the summary read:
+// when a newer message landed while the summary was generated, the summary is
+// stamped with covered_through instead of NOW() so the chat still reads as
+// changed and is summarized again. Otherwise summary_generated_at is the write
+// time, which the sweep's daily cap counts. Returns the updated row timestamps.
 func (q *Queries) UpdateChatSummary(ctx context.Context, arg UpdateChatSummaryParams) (UpdateChatSummaryRow, error) {
-	row := q.db.QueryRow(ctx, updateChatSummary, arg.Summary, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, updateChatSummary,
+		arg.Summary,
+		arg.CoveredThrough,
+		arg.SummaryRedacted,
+		arg.ID,
+		arg.ProjectID,
+	)
 	var i UpdateChatSummaryRow
 	err := row.Scan(&i.Summary, &i.SummaryGeneratedAt)
 	return i, err

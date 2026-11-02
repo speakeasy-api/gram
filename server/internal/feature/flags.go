@@ -26,6 +26,10 @@ const (
 	// cannot see the feature. Targeted by PostHog organization group (org
 	// slug), the same way the dashboard evaluates it.
 	FlagBudgets Flag = "gram-budgets"
+	// FlagTeamMemory gates team chat memory end to end: the masked summary
+	// job, its backfill, the digest rollup and the team memory Platform MCP
+	// tools. Targeted by PostHog organization group (org slug). Fails closed.
+	FlagTeamMemory Flag = "team-memory"
 	// FlagRiskEnforcementPubsub routes applicable realtime scanner lanes over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 	// FlagRiskEnforcementMaxContentBytes overrides the realtime enforcement
