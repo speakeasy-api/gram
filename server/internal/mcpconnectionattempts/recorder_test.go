@@ -940,7 +940,6 @@ func TestShutdown_LogsWhatTheDrainLostByReason(t *testing.T) {
 	conn := &scriptedConn{Conn: nil, block: nil, err: errors.New("refused"), prepares: atomic.Int64{}}
 	cfg := testConfig()
 	cfg.flushInterval = time.Hour
-	cfg.maxBatch = 2
 	recorder, logged := newLoggedRecorder(t, conn, logsOn, cfg)
 	attempt := Begin(testScope())
 
@@ -973,7 +972,7 @@ func TestShutdown_LogsNothingWhenNothingWasLost(t *testing.T) {
 	require.NotContains(t, logged.String(), drainLossLine)
 }
 
-// A drain cut off by its deadline says how many rows it never reached.
+// A drain cut off by its deadline counts every row it hasn't finished, the one in flight too.
 func TestShutdown_LogsRowsStillQueuedAtItsDeadline(t *testing.T) {
 	t.Parallel()
 
@@ -996,5 +995,23 @@ func TestShutdown_LogsRowsStillQueuedAtItsDeadline(t *testing.T) {
 	defer cancel()
 	require.ErrorIs(t, recorder.Shutdown(ctx), context.DeadlineExceeded)
 
-	require.Contains(t, logged.String(), `gram.connection.drop_counts="still_queued=3"`)
+	require.Contains(t, logged.String(), `gram.connection.drop_counts="unfinished=4"`)
+}
+
+// Rows in a batch that the writer holds count as unfinished, and nothing is left over after a clean drain.
+func TestShutdown_UnfinishedReturnsToZero(t *testing.T) {
+	t.Parallel()
+
+	conn := &scriptedConn{Conn: nil, block: nil, err: errors.New("refused"), prepares: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.flushInterval = time.Hour
+	recorder, logged := newLoggedRecorder(t, conn, logsOn, cfg)
+
+	for range 3 {
+		recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	}
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.Zero(t, recorder.unfinished.Load())
+	require.NotContains(t, logged.String(), "unfinished=")
 }
