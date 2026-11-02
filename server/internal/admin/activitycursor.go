@@ -60,7 +60,17 @@ func decodeActivityCursor(cursor string) (activityCursor, error) {
 	}
 	payload, ok := strings.CutPrefix(string(decoded), activityCursorPrefix)
 	if !ok {
-		return none, fmt.Errorf("invalid activity cursor format")
+		// A cursor issued before the security log existed pages the
+		// configuration log alone, so it resumes there and leaves the security
+		// log out rather than starting it over mid-pagination.
+		legacy, err := audit.DecodeCursor(cursor)
+		if err != nil || legacy.Category != audit.CategoryConfiguration {
+			return none, fmt.Errorf("invalid activity cursor format")
+		}
+		return activityCursor{
+			configuration: activityLogPosition{seq: pgtype.Int8{Int64: legacy.Seq, Valid: true}, done: false},
+			security:      activityLogPosition{seq: pgtype.Int8{Int64: 0, Valid: false}, done: true},
+		}, nil
 	}
 	configuration, security, ok := strings.Cut(payload, ":")
 	if !ok {
