@@ -114,6 +114,54 @@ func TestCombineUpstreamVerdict(t *testing.T) {
 	}
 }
 
+func TestDescribeNoUsableCredential(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	past, future := now.Add(-time.Minute), now.Add(time.Minute)
+	for _, tc := range []struct {
+		name      string
+		state     remotesessions.RemoteSessionState
+		connected bool
+		contains  string
+	}{
+		{name: "no grant", connected: false, contains: "no grant"},
+		{name: "authorization ended", connected: true, state: remotesessions.RemoteSessionState{AuthorizationExpiresAt: &past, RefreshExpiresAt: &future}, contains: "authorization lifetime"},
+		{name: "refresh ended", connected: true, state: remotesessions.RemoteSessionState{RefreshExpiresAt: &past}, contains: "refresh token lifetime"},
+		{name: "access expired without refresh", connected: true, state: remotesessions.RemoteSessionState{AccessExpiresAt: &past}, contains: "no refresh token"},
+		{name: "refresh failed", connected: true, state: remotesessions.RemoteSessionState{AccessExpiresAt: &past, CanRefresh: true}, contains: "could not be obtained"},
+		{name: "live deadlines", connected: true, state: remotesessions.RemoteSessionState{AuthorizationExpiresAt: &future, RefreshExpiresAt: &future}, contains: "could not be obtained"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Contains(t, describeNoUsableCredential(tc.state, tc.connected, now), tc.contains)
+		})
+	}
+}
+
+func TestConsentCardsAllExpired(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		cards []remoteSessionCard
+		want  bool
+	}{
+		{name: "no cards", cards: nil, want: false},
+		{name: "never connected", cards: []remoteSessionCard{{}}, want: false},
+		{name: "expired", cards: []remoteSessionCard{{Expired: true}}, want: true},
+		{name: "expired and never connected", cards: []remoteSessionCard{{Expired: true}, {}}, want: true},
+		{name: "expired and connected", cards: []remoteSessionCard{{Expired: true}, {Connected: true}}, want: false},
+		{name: "expired and chained", cards: []remoteSessionCard{{Expired: true}, {Chained: true}}, want: false},
+		{name: "expired card chained", cards: []remoteSessionCard{{Expired: true, Chained: true}}, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, consentCardsAllExpired(tc.cards))
+		})
+	}
+}
+
 func TestFormatTimeAgo(t *testing.T) {
 	t.Parallel()
 

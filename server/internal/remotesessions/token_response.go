@@ -200,17 +200,27 @@ func (t tokenResponse) ScopeReported() bool {
 	return t.scopePresent
 }
 
+// usableLifetime reports whether a provider's lifetime in seconds can be a
+// deadline. A zero or negative value is treated as unreported, as a zero
+// expires_in is: a token response issues a working grant (RFC 6749 §5.1), and
+// a grant that has really ended answers its next refresh with invalid_grant
+// (§5.2). Storing the literal value would make the grant dead on arrival, on
+// every reconnect. A value too large for time.Duration would wrap to a past
+// deadline.
+func usableLifetime(seconds int64) bool {
+	return seconds > 0 && seconds <= int64((1<<63-1)/time.Second)
+}
+
 // RefreshTokenTimeoutSeconds normalizes the standard sliding idle timeout and
-// two common provider aliases. The boolean distinguishes an omitted value from
-// an explicit zero-second timeout.
+// two common provider aliases. The boolean is false when no value is usable.
 func (t tokenResponse) RefreshTokenTimeoutSeconds() (int64, bool) {
-	if t.RefreshTokenTimeout != nil {
+	if t.RefreshTokenTimeout != nil && usableLifetime(*t.RefreshTokenTimeout) {
 		return *t.RefreshTokenTimeout, true
 	}
-	if t.RefreshExpiresIn > 0 {
+	if usableLifetime(t.RefreshExpiresIn) {
 		return t.RefreshExpiresIn, true
 	}
-	if t.RefreshTokenExpiresIn > 0 {
+	if usableLifetime(t.RefreshTokenExpiresIn) {
 		return t.RefreshTokenExpiresIn, true
 	}
 	return 0, false
@@ -245,9 +255,9 @@ func (t tokenResponse) AccessExpiresAt(now time.Time) *time.Time {
 }
 
 // AuthorizationLifetimeSeconds is the remaining absolute lifetime of the
-// upstream authorization, when the provider reports it.
+// upstream authorization, when the provider reports a usable one.
 func (t tokenResponse) AuthorizationLifetimeSeconds() (int64, bool) {
-	if t.AuthorizationExpiresIn == nil {
+	if t.AuthorizationExpiresIn == nil || !usableLifetime(*t.AuthorizationExpiresIn) {
 		return 0, false
 	}
 	return *t.AuthorizationExpiresIn, true

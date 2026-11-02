@@ -2,6 +2,7 @@ package remotesessions
 
 import (
 	"encoding/json"
+	"math"
 	"strconv"
 	"testing"
 	"time"
@@ -120,15 +121,10 @@ func TestTokenResponseRefreshTokenTimeoutSeconds(t *testing.T) {
 func TestTokenResponseStandardExpirationFields(t *testing.T) {
 	t.Parallel()
 
-	zero := int64(0)
 	refreshTimeout := int64(3600)
 	authorizationLifetime := int64(7200)
 
-	seconds, reported := (tokenResponse{RefreshTokenTimeout: &zero}).RefreshTokenTimeoutSeconds()
-	require.True(t, reported)
-	require.Zero(t, seconds)
-
-	seconds, reported = (tokenResponse{
+	seconds, reported := (tokenResponse{
 		RefreshTokenTimeout: &refreshTimeout,
 		RefreshExpiresIn:    1800,
 	}).RefreshTokenTimeoutSeconds()
@@ -140,6 +136,36 @@ func TestTokenResponseStandardExpirationFields(t *testing.T) {
 	}).AuthorizationLifetimeSeconds()
 	require.True(t, reported)
 	require.EqualValues(t, 7200, seconds)
+}
+
+func TestTokenResponseUnusableLifetimesAreUnreported(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []int64{0, -1, -86400, math.MinInt64, math.MaxInt64} {
+		seconds, reported := (tokenResponse{RefreshTokenTimeout: &value}).RefreshTokenTimeoutSeconds()
+		require.False(t, reported, value)
+		require.Zero(t, seconds)
+
+		seconds, reported = (tokenResponse{AuthorizationExpiresIn: &value}).AuthorizationLifetimeSeconds()
+		require.False(t, reported, value)
+		require.Zero(t, seconds)
+
+		seconds, reported = (tokenResponse{RefreshExpiresIn: value, RefreshTokenExpiresIn: value}).RefreshTokenTimeoutSeconds()
+		require.False(t, reported, value)
+		require.Zero(t, seconds)
+
+		seconds, reported = (tokenResponse{RefreshTokenTimeout: &value, RefreshExpiresIn: 1800}).RefreshTokenTimeoutSeconds()
+		require.True(t, reported, "a usable alias still counts")
+		require.EqualValues(t, 1800, seconds)
+	}
+
+	one := int64(1)
+	seconds, reported := (tokenResponse{AuthorizationExpiresIn: &one}).AuthorizationLifetimeSeconds()
+	require.True(t, reported)
+	require.EqualValues(t, 1, seconds)
+	seconds, reported = (tokenResponse{RefreshTokenTimeout: &one}).RefreshTokenTimeoutSeconds()
+	require.True(t, reported)
+	require.EqualValues(t, 1, seconds)
 }
 
 // mintJWT signs claims with a throwaway HMAC key. AccessExpiresAt decodes

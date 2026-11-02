@@ -9,6 +9,7 @@ package mcp
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -386,6 +387,22 @@ func (s *Service) directConsentAuthChoice(ctx context.Context, endpoint *Resolve
 	return choices[serverID], nil
 }
 
+// errConsentConnectionsExpired refuses an approval that could only issue a
+// token whose every call fails until the person reconnects.
+var errConsentConnectionsExpired = errors.New("every connection serving this approval has expired")
+
+// consentCardsAllExpired reports that a connection has expired and no card can serve instead.
+func consentCardsAllExpired(cards []remoteSessionCard) bool {
+	expired := false
+	for _, card := range cards {
+		if card.Connected || card.Chained {
+			return false
+		}
+		expired = expired || card.Expired
+	}
+	return expired
+}
+
 // consentDirectAuthClientPick validates the credential posted with a direct
 // server's approval against the choices computed again now, and returns it as
 // the grant's typed pick. The registration it names replaces the card-derived
@@ -403,8 +420,17 @@ func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *Res
 		picked = parsed
 	}
 	auth, err := s.directConsentAuthChoice(ctx, endpoint, challengeState, cards, picked)
-	if err != nil || auth == nil {
+	if err != nil {
 		return nil, err
+	}
+	if auth == nil {
+		// Without a typed choice the cards decide, as they do on the page. A
+		// gateway is judged by its inventory; an agent by its own connections.
+		agent := challengeState.Subject != nil && challengeState.Subject.Kind == urn.SessionSubjectKindAgent
+		if !endpoint.MetaMcpServerID.Valid && !agent && consentCardsAllExpired(cards) {
+			return nil, errConsentConnectionsExpired
+		}
+		return nil, nil
 	}
 	if !auth.Approvable() {
 		return nil, errConsentConfigurationChanged

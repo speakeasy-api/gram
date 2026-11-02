@@ -179,12 +179,24 @@ func TestFederatedRefreshExpiry(t *testing.T) {
 	}
 }
 
-func TestFederatedRefreshExplicitZeroExpiry(t *testing.T) {
+func TestFederatedRefreshNonPositiveLifetimesAreUnreported(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1700000000, 0)
+	for _, body := range []string{
+		`{"refresh_token_timeout":0}`,
+		`{"refresh_token_timeout":-1}`,
+		`{"authorization_expires_in":0}`,
+		`{"authorization_expires_in":-1}`,
+		`{"authorization_expires_in":9223372036854775807}`,
+	} {
+		var tok tokenResponse
+		require.NoError(t, json.Unmarshal([]byte(body), &tok))
+		require.Nil(t, federatedRefreshCredentials(tok, now).RefreshExpiresAt(), body)
+	}
+
 	var tok tokenResponse
-	require.NoError(t, json.Unmarshal([]byte(`{"refresh_token_timeout":0}`), &tok))
+	require.NoError(t, json.Unmarshal([]byte(`{"refresh_token_timeout":600,"authorization_expires_in":0}`), &tok))
 	expiry := federatedRefreshCredentials(tok, now).RefreshExpiresAt()
 	require.NotNil(t, expiry)
-	require.Equal(t, now, *expiry)
+	require.Equal(t, now.Add(600*time.Second), *expiry, "the usable bound still applies")
 }

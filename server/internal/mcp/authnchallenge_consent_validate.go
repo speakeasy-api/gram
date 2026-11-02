@@ -30,6 +30,9 @@ import (
 // errRemoteSessionUnroutable marks a credential no upstream on this endpoint is ever handed.
 var errRemoteSessionUnroutable = errors.New("remote session routes to no upstream on this endpoint")
 
+// errRemoteSessionNoUsableCredential marks a card whose grant cannot produce a token right now, so nothing was probed.
+var errRemoteSessionNoUsableCredential = errors.New("remote session has no usable credential")
+
 // errRemoteSessionVerdictNotRecorded: the upstream was dialled but the verdict could not be written.
 var errRemoteSessionVerdictNotRecorded = errors.New("remote session verdict not recorded")
 
@@ -119,7 +122,9 @@ func (s *Service) probeRemoteSession(
 		}
 	}
 	if !usable {
-		return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "Connect this service before verifying it.").LogWarn(ctx, logger)
+		return oops.E(oops.CodeBadRequest, errRemoteSessionNoUsableCredential, "Connect this service before verifying it.").LogWarn(ctx, logger,
+			attr.SlogReason(s.noUsableCredentialReason(ctx, logger, endpoint, subject, client)),
+		)
 	}
 	if expectedGrant != nil && expectedGrant.RemoteSessionID != uuid.Nil &&
 		(entry.RemoteSessionID != expectedGrant.RemoteSessionID || !entry.RemoteSessionResolvedFromUpdatedAt.Equal(expectedGrant.RemoteSessionUpdatedAt)) {
@@ -193,6 +198,34 @@ func (s *Service) probeRemoteSession(
 	}
 	logger.InfoContext(ctx, "remote session validated", attr.SlogReason(reason))
 	return nil
+}
+
+// noUsableCredentialReason names why the subject's grant on client yielded no token, from its stored state.
+func (s *Service) noUsableCredentialReason(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, client remotesessions.Client) string {
+	statuses, err := s.endpointRemoteSessionStatuses(ctx, subject, endpoint)
+	if err != nil {
+		logger.WarnContext(ctx, "read remote session status for validation", attr.SlogError(err))
+		return "grant state could not be read"
+	}
+	state, connected := statuses[client.ID]
+	return describeNoUsableCredential(state, connected, time.Now())
+}
+
+// describeNoUsableCredential is the log reason for a grant that yielded no token.
+func describeNoUsableCredential(state remotesessions.RemoteSessionState, connected bool, now time.Time) string {
+	lapsed := func(deadline *time.Time) bool { return deadline != nil && !deadline.After(now) }
+	switch {
+	case !connected:
+		return "no grant is stored for this subject and client"
+	case lapsed(state.AuthorizationExpiresAt):
+		return "grant authorization lifetime has ended"
+	case lapsed(state.RefreshExpiresAt):
+		return "grant refresh token lifetime has ended"
+	case lapsed(state.AccessExpiresAt) && !state.CanRefresh:
+		return "access token has expired and the grant has no refresh token"
+	default:
+		return "grant is stored but its token could not be obtained or refreshed"
+	}
 }
 
 // resolveValidationTarget finds the upstream this endpoint would hand the credential to, judged as the consent subject.
