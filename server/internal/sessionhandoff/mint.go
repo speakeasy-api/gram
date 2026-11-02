@@ -81,6 +81,13 @@ func validHTTPSBaseURL(raw string) (*url.URL, bool) {
 	return parsed, true
 }
 
+func publicHandoffURL(baseURL *url.URL, token string) string {
+	// validHTTPSBaseURL excludes query, fragment, and userinfo, so appending to
+	// the serialized base preserves its configured path without moving the
+	// capability token into another URL component.
+	return strings.TrimRight(baseURL.String(), "/") + PublicRoutePrefix + token
+}
+
 func ClampHandoffTTL(seconds *int) time.Duration {
 	if seconds == nil {
 		return DefaultHandoffTTL
@@ -158,5 +165,5 @@ func (m *SessionHandoffMinter) Mint(ctx context.Context, input SessionHandoffMin
 	if err := dbtx.Commit(ctx); err != nil {
 		return SessionHandoffMintResult{}, oops.E(oops.CodeUnexpected, err, "store handoff").LogError(ctx, m.logger)
 	}
-	return SessionHandoffMintResult{URL: (&url.URL{Scheme: baseURL.Scheme, Host: baseURL.Host, Path: PublicRoutePrefix + token}).String(), ExpiresAt: row.ExpiresAt.Time.UTC().Format(time.RFC3339)}, nil
+	return SessionHandoffMintResult{URL: publicHandoffURL(baseURL, token), ExpiresAt: row.ExpiresAt.Time.UTC().Format(time.RFC3339)}, nil
 }

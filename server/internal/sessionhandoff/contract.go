@@ -14,6 +14,6 @@ func ValidToken(token string) bool {
 	if len(token) != hex.EncodedLen(TokenBytes) {
 		return false
 	}
-	_, err := hex.DecodeString(token)
-	return err == nil
+	decoded, err := hex.DecodeString(token)
+	return err == nil && hex.EncodeToString(decoded) == token
 }
