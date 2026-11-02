@@ -173,8 +173,8 @@ type ExecutionProfileServer struct {
 	// How the choice was made: admin, issuance, backfill, or automatic for one the
 	// next turn makes on its own.
 	Source *ExecutionProfileChoiceSource
-	// Whether the server was decided to need no upstream authentication, so
-	// no-auth can be chosen.
+	// Whether the server offers no enabled auth client and has no upstream
+	// credentials left to record as one, so no-auth can be chosen.
 	NoAuthAllowed bool
 	// Why a server without a choice gets none on its own.
 	GapReason *string

@@ -62,17 +62,25 @@ func describePlatformServer(skillsEnabled bool) serverDescription {
 	return description
 }
 
-func describeMetaServer(meta *metamcprepo.MetaMcpServer, mode metamcp.DiscoveryMode) serverDescription {
+// describeMetaServer describes a gateway. skillsEnabled adds the Skills
+// extension; the resources capability it depends on is declared
+// unconditionally. The flag is the gateway organization's, so it does not
+// change who a description may be shared with.
+func describeMetaServer(meta *metamcprepo.MetaMcpServer, mode metamcp.DiscoveryMode, skillsEnabled bool) serverDescription {
 	hints := cacheHintsCallerUniform
 	if meta.UserSessionIssuerID.Valid {
 		hints = cacheHintsCallerVarying
 	}
-	return serverDescription{
+	description := serverDescription{
 		capabilities: map[string]json.RawMessage{"tools": json.RawMessage("{}"), "resources": json.RawMessage("{}")},
 		identity:     serverInfoMetaServer,
 		instructions: metamcp.ResolveDiscoveryInstructions(conv.FromPGText[string](meta.Instructions), mode),
 		cacheHints:   hints,
 	}
+	if skillsEnabled {
+		description.capabilities[capabilityExtensions] = skillsExtensionCapability
+	}
+	return description
 }
 
 // capabilityExtensions is the capabilities member under which a server

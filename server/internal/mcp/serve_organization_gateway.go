@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"net/http"
 	"slices"
 	"strings"
@@ -550,6 +551,18 @@ func (s *Service) consentSubjectMembers(ctx context.Context, endpoint *ResolvedM
 	}
 	if err := s.withTypedMemberRegistrations(ctx, endpoint.OrganizationID, members); err != nil {
 		return nil, err
+	}
+	if binding := challengeState.CodeReconnect; binding != nil {
+		hidden, err := hiddenmcpservers.HiddenServerIDs(ctx, s.db, endpoint.OrganizationID, binding.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("check connection visibility: %w", err)
+		}
+		for _, member := range members {
+			if member.serverID == binding.ServerID && member.slug == binding.Server && !hidden[member.serverID] {
+				return []metaMember{member}, nil
+			}
+		}
+		return nil, oops.E(oops.CodeForbidden, nil, "The requested server is no longer available. Request a new connection link.")
 	}
 	return members, nil
 }

@@ -217,7 +217,7 @@ export function CredentialPicker({
         onChoosePlatform(next.slice(PLATFORM_PREFIX.length));
       }}
       disabled={disabled}
-      aria-label="Credential"
+      aria-label="Agent sign-in"
       className="gap-4"
     >
       <div className="grid gap-3 sm:grid-cols-2">
