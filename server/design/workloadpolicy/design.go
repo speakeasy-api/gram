@@ -576,9 +576,8 @@ var WorkloadPlatformSubject = Type("WorkloadPlatformSubject", func() {
 
 	Attribute("template", String, "The subject with {key} placeholders for rule-tier variables; the stem, for a wildcard rule.")
 	Attribute("wildcard", Boolean, "Whether the rule is the filled template followed by *.")
-	// Optional, the label by its default: the dashboard and the server deploy
-	// separately, and a dashboard that expects these must still parse a
-	// catalog from a server that predates them.
+	// Both are optional, and label defaults to an empty string, so a dashboard
+	// deployed ahead of its server can still read a catalog that leaves them out.
 	Attribute("label", String, "Names the default rule beside its alternatives. Empty where there are none.", func() {
 		Default("")
 	})
