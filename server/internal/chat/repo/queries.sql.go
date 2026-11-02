@@ -73,6 +73,30 @@ func (q *Queries) AssistantExistsInProject(ctx context.Context, arg AssistantExi
 	return assistant_exists, err
 }
 
+const backdateChatSummary = `-- name: BackdateChatSummary :exec
+UPDATE chats
+SET summary_generated_at = $1,
+    updated_at = $1
+WHERE id = $2 AND project_id = $3 AND deleted IS FALSE AND summary IS NOT NULL
+`
+
+type BackdateChatSummaryParams struct {
+	GeneratedAt pgtype.Timestamptz
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// Move a stored summary's write time, and the chat's update time with it, to
+// the given time. Only the team memory eval uses it: it regenerates summaries
+// for a synthetic corpus and places each one on the day its chat happened, so
+// day digests bucket the chats the way the live job would have. Keeping
+// updated_at equal to summary_generated_at stops the idle-chat sweep from
+// treating the summary as stale.
+func (q *Queries) BackdateChatSummary(ctx context.Context, arg BackdateChatSummaryParams) error {
+	_, err := q.db.Exec(ctx, backdateChatSummary, arg.GeneratedAt, arg.ID, arg.ProjectID)
+	return err
+}
+
 const chatBelongsToProject = `-- name: ChatBelongsToProject :one
 SELECT EXISTS (
   SELECT 1

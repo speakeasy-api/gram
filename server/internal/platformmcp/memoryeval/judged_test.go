@@ -3,24 +3,25 @@
 package memoryeval_test
 
 import (
-	"context"
-	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/bench"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 const (
-	// defaultAnswerModel answers every question in every arm, so the tools are
-	// the only variable between arms.
-	defaultAnswerModel = "anthropic/claude-sonnet-5.5"
+	// defaultAnswerModels answer every question in every arm, so the tools are
+	// the only variable between arms. MEMORYEVAL_ANSWER_MODELS takes a comma
+	// separated list to compare models in one run.
+	defaultAnswerModels = "anthropic/claude-sonnet-5.5"
 
 	// defaultJudgeModel grades answers. It differs from the answering model so
 	// the judge does not favor its own phrasing.
@@ -62,13 +63,16 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 	if apiKey == "" || apiKey == "unset" {
 		t.Skip("set OPENROUTER_DEV_KEY to run the judged memory eval")
 	}
-	answerModel := envOr("MEMORYEVAL_ANSWER_MODEL", defaultAnswerModel)
-	judgeModel := envOr("MEMORYEVAL_JUDGE_MODEL", defaultJudgeModel)
-	require.NotEqual(t, answerModel, judgeModel, "the judge must differ from the answering model")
-	require.True(t, openrouter.IsModelAllowed(answerModel), answerModel)
-	require.True(t, openrouter.IsModelAllowed(judgeModel), judgeModel)
-	runs := envInt(t, "MEMORYEVAL_RUNS", defaultRuns)
-	concurrency := envInt(t, "MEMORYEVAL_CONCURRENCY", defaultConcurrency)
+	cfg := bench.Config{
+		AnswerModels: strings.Split(envOr("MEMORYEVAL_ANSWER_MODELS", envOr("MEMORYEVAL_ANSWER_MODEL", defaultAnswerModels)), ","),
+		JudgeModel:   envOr("MEMORYEVAL_JUDGE_MODEL", defaultJudgeModel),
+		Runs:         envInt(t, "MEMORYEVAL_RUNS", defaultRuns),
+		Concurrency:  envInt(t, "MEMORYEVAL_CONCURRENCY", defaultConcurrency),
+	}
+	for i := range cfg.AnswerModels {
+		cfg.AnswerModels[i] = strings.TrimSpace(cfg.AnswerModels[i])
+	}
+	require.NoError(t, cfg.Validate())
 
 	provisioner := openrouter.NewDevelopment(apiKey)
 	client := openrouter.NewUnifiedClient(
@@ -84,36 +88,33 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 
 	corpus := memoryeval.Build(corpusNow)
 	loaded := loadCorpus(t, "memoryeval_judged", corpus)
-	ctx, searchArm := searchChatsArm(t, loaded)
-	// Arm C gets its own copy of the corpus: it writes proxy summaries, which
-	// arm B must not see.
-	memoryCtx, memoryArm := searchTeamMemoryArm(t, loadCorpus(t, "memoryeval_judged_memory", corpus))
-	arms := []arm{
-		{name: "A: no memory", search: nil, sweep: nil, tools: nil, call: nil, instructions: ""},
-		searchArm,
-		boundArm(memoryCtx, memoryArm),
-	}
+	searchArm, err := bench.SearchChatsArm(testenv.NewLogger(t), loaded.target())
+	require.NoError(t, err)
 
-	answers, verdicts := runEval(ctx, t, client, answerModel, judgeModel, corpus, arms, runs, concurrency)
-	report := buildReport(corpus, answerModel, judgeModel, runs, arms, answers, verdicts)
-	t.Log("\n" + report)
+	// Team memory is written by the summary and digest models under test
+	// before the arms that read it run.
+	models := bench.MemoryModels{
+		Summary: envOr("MEMORYEVAL_SUMMARY_MODEL", bench.DefaultMemoryModels.Summary),
+		Digest:  envOr("MEMORYEVAL_DIGEST_MODEL", bench.DefaultMemoryModels.Digest),
+	}
+	prep, err := bench.Prepare(t.Context(), testenv.NewLogger(t), client, loaded.target(), models, cfg.Concurrency)
+	require.NoError(t, err)
+	memoryArm, err := bench.SearchTeamMemoryArm(testenv.NewLogger(t), loaded.target())
+	require.NoError(t, err)
+	// Arm E embeds the same masked items and fuses vector with full-text
+	// ranks, to decide whether team memory needs embeddings at all.
+	embedder := bench.NewOpenRouterEmbedder(client, loaded.organizationID, envOr("MEMORYEVAL_EMBEDDING_MODEL", bench.DefaultEmbeddingModel))
+	hybridArm, err := bench.HybridTeamMemoryArm(t.Context(), testenv.NewLogger(t), embedder, loaded.target())
+	require.NoError(t, err)
+	recall, err := bench.QuestionRecall(t.Context(), corpus, []bench.Arm{memoryArm, hybridArm})
+	require.NoError(t, err)
+
+	report, err := bench.Run(t.Context(), client, corpus, []bench.Arm{bench.NoMemoryArm(), searchArm, memoryArm, hybridArm}, cfg)
+	require.NoError(t, err)
+	report.Preparation = &prep
+	markdown := report.Markdown() + "\n" + recall.Markdown()
+	t.Log("\n" + markdown)
 	if out := os.Getenv("MEMORYEVAL_OUT"); out != "" {
-		require.NoError(t, os.WriteFile(out, []byte(report), 0o600))
+		require.NoError(t, os.WriteFile(out, []byte(markdown), 0o600))
 	}
-}
-
-// boundArm makes an arm's tool calls run with its own context, which carries
-// that arm's grants and principal, while still stopping when the eval's
-// context is cancelled.
-func boundArm(bound context.Context, a arm) arm {
-	if a.call != nil {
-		call := a.call
-		a.call = func(ctx context.Context, tool, arguments string) (string, error) {
-			if err := ctx.Err(); err != nil {
-				return "", fmt.Errorf("eval cancelled: %w", err)
-			}
-			return call(bound, tool, arguments)
-		}
-	}
-	return a
 }

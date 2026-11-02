@@ -73,6 +73,15 @@ func NewSummaryGenerator(db *pgxpool.Pool, client openrouter.CompletionClient, r
 	return &SummaryGenerator{repo: repo.New(db), client: client, redactor: redactor, model: SummaryModel}
 }
 
+// WithModel returns a copy of the generator that writes summaries with model.
+// The team memory eval uses it to compare summary models; the product always
+// uses SummaryModel.
+func (g *SummaryGenerator) WithModel(model string) *SummaryGenerator {
+	copied := *g
+	copied.model = model
+	return &copied
+}
+
 // Generate summarizes one chat and persists the result. The transcript is
 // masked before it reaches the model, and the model output is masked again
 // before it is stored, so a value the model echoes from its own knowledge or
