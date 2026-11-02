@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -28,6 +29,10 @@ const (
 	maxPrintBytes = 16 << 10
 	// callbackCleanupGrace allows cancelled dispatchers to report their final known outcomes.
 	callbackCleanupGrace = 2 * time.Second
+	// callbackBudgetMessage reports a reply over the per-reply or cumulative
+	// budget. The runner sends the same message with callback_limit when it
+	// detects the overrun first.
+	callbackBudgetMessage = "callback result budget exceeded; dispatched tool outcomes are recorded separately"
 	// runnerDeadlineLead is how much earlier the runner's wall deadline falls
 	// than the server's, so the runner reports its own deadline, with the
 	// output the program printed, before the server closes the stream. Half a
@@ -35,7 +40,13 @@ const (
 	runnerDeadlineLead = 500 * time.Millisecond
 )
 
+// errCallbackBudget is the cause of a run ended by its reply budget.
 var errCallbackBudget = errors.New("callback result budget exceeded")
+
+// runnerBudgetFailures are the execution_failed messages of a runner that
+// counts callback arguments toward the reply budget: it trips either on a
+// reply or on the arguments of a new callback.
+var runnerBudgetFailures = []string{"callback result budget exceeded", "callback budget exceeded"}
 var errRunnerTransport = errors.New("runner transport disconnected")
 
 // errRunnerFull reports that every stream the runner admits stayed busy for
@@ -186,7 +197,7 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 		case errors.Is(context.Cause(ctx), errRunnerTransport):
 			fail("outcome_unknown", "runtime disconnected; dispatched tool outcomes may be unknown; do not replay automatically")
 		case errors.Is(context.Cause(ctx), errCallbackBudget):
-			fail("callback_limit", "callback result budget exceeded; dispatched tool outcomes are recorded separately")
+			fail("callback_limit", callbackBudgetMessage)
 		default:
 			fail("cancelled", "execution cancelled; dispatched tool outcomes may be unknown")
 		}
@@ -204,10 +215,9 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 	}
 	defer stream.finish()
 	deadline, _ := ctx.Deadline()
-	if err := stream.SetDeadline(deadline); err != nil {
-		fail("runtime_unavailable", "code stream could not be bounded; program was not submitted")
-		return result
-	}
+	// The context alone bounds the stream. A stream deadline at the same
+	// instant can time out a read or reply a moment before the context
+	// reports the deadline, and the run would end as a lost runtime.
 	interruptDone := make(chan struct{})
 	stop := context.AfterFunc(ctx, func() { _ = stream.SetDeadline(time.Now()); close(interruptDone) })
 	defer func() {
@@ -241,6 +251,9 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 	err = writeRunnerFrame(stream, runnerStart{Type: "start", Version: ProtocolVersion, ExecutionID: executionID.String(), Code: code, WallMS: remaining})
 	if err != nil {
 		fail("outcome_unknown", "submission response lost; do not replay this program automatically")
+		if ctx.Err() != nil {
+			failCancelled()
+		}
 		return result
 	}
 	seen := make(map[uint32]bool)
@@ -337,7 +350,15 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 				fail("protocol_error", "invalid runtime error")
 				return result
 			}
-			fail(message.Code, message.Message)
+			// A runner that counts callback arguments toward the reply budget
+			// reports its overrun as execution_failed, and can still serve from
+			// the previous image pool during a rollout. Report the same code as
+			// the client's own budget check.
+			code, text := message.Code, message.Message
+			if code == "execution_failed" && slices.Contains(runnerBudgetFailures, text) {
+				code, text = "callback_limit", callbackBudgetMessage
+			}
+			fail(code, text)
 			// Output printed before the failure; a runner that omits it leaves it empty.
 			result.Output, result.OutputTruncated = message.Output, message.OutputTruncated
 			return result

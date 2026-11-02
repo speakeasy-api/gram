@@ -86,8 +86,11 @@ Host construction, including an optional exact tool allowlist, runs after
 admission under the 30-second execution context. Each helper reruns issuer
 admission and bypasses the usual session-policy cache, refreshes grants, and
 intersects them with the admission boundary. Cancellation stops new callbacks
-and joins dispatchers for up to two seconds before recording outcomes. Stream
-cleanup adds at most one second. The provider release path also has a bounded
+and joins dispatchers for up to two seconds before recording outcomes. Only the
+execution context bounds the runner stream, so a run that reaches its deadline
+reports `deadline_exceeded`, whichever of Speakeasy and the runner notices it
+first, and keeps its recorded tool outcomes. Stream cleanup adds at most one
+second. The provider release path also has a bounded
 cleanup context. Incomplete writes remain `unknown` even when Python fails.
 
 A failed run still returns what its program printed before the failure, within
@@ -158,6 +161,17 @@ large or malformed to expose produces a completed `tool_result_unavailable`
 result. These outcomes describe dispatch, not whether a remote service
 made a side effect. Only typed guard refusals prove `not_dispatched`; unclassified backend or host
 failures retain an unknown outcome.
+
+Callback replies are limited to 1 MiB each and 8 MiB per execution. Speakeasy
+and the runner count the same bytes, the encoded reply frames and not the
+callback arguments, and Speakeasy checks before sending each reply, so the
+runner's own check is only a backstop. A reply over either limit ends the
+execution with `callback_limit`, whichever side detects it. The printed
+output comes back only when the runner detects it, since Speakeasy's own check
+ends the run without a runner report. A call that
+returned keeps the outcome its result recorded. A call still in flight is
+cancelled: it is `not_dispatched` if it had not reached the member yet, and
+`unknown` otherwise. The runner connection stays open for later executions.
 
 ## Validation and product surfaces
 

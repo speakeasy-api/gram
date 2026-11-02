@@ -7,6 +7,8 @@ pub const VERSION: u32 = 1;
 pub const UPGRADE: &str = "gram-code-yamux";
 pub const MAX_FRAME: usize = (1 << 20) + 4096;
 pub const MAX_CALLBACK: usize = 1 << 20;
+/// Total callback result frame bytes per execution. Speakeasy counts the
+/// same bytes, and only those, before it sends each result.
 pub const MAX_CUMULATIVE: usize = 8 << 20;
 
 #[derive(Debug, Deserialize, Serialize)]
