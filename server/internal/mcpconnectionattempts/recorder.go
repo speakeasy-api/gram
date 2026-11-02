@@ -76,6 +76,7 @@ const (
 	dropLogsOff      dropReason = "logs_off"
 	dropLogsCheck    dropReason = "logs_check_failed"
 	dropPanic        dropReason = "panic"
+	dropRateLimited  dropReason = "rate_limited"
 )
 
 // shortLabel is the shape of a sub-reason or grant type. It is what keeps a raw
@@ -326,6 +327,7 @@ type config struct {
 type Recorder struct {
 	logger      *slog.Logger
 	conn        driver.Conn
+	limiter     *onceLimiter
 	logsEnabled func(context.Context, string) (bool, error)
 	capture     func(Row)
 	cfg         config
@@ -360,6 +362,7 @@ func newDropCounters() map[dropReason]*atomic.Int64 {
 		dropLogsOff:      {},
 		dropLogsCheck:    {},
 		dropPanic:        {},
+		dropRateLimited:  {},
 	}
 }
 
@@ -396,6 +399,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 	r := &Recorder{
 		logger:      logger,
 		conn:        conn,
+		limiter:     newOnceLimiter(),
 		logsEnabled: logsEnabled,
 		capture:     nil,
 		cfg:         cfg,
@@ -421,6 +425,7 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 	return &Recorder{
 		logger:      slog.New(slog.DiscardHandler),
 		conn:        nil,
+		limiter:     nil,
 		logsEnabled: logsEnabled,
 		capture:     capture,
 		cfg:         config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second},
@@ -440,27 +445,32 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 
 // Step records a step that does not end the attempt.
 func (r *Recorder) Step(ctx context.Context, attempt Attempt, step Step, what Happened, opts ...Option) {
-	r.record(ctx, attempt, step, what, false, opts)
+	r.record(ctx, attempt, step, what, false, false, opts)
 }
 
 // End records the step that ends the attempt. Its outcome is Connected for a
 // Result and the catalog's outcome for a Code. A flow ends an attempt once.
 func (r *Recorder) End(ctx context.Context, attempt Attempt, step Step, what Happened, opts ...Option) {
-	r.record(ctx, attempt, step, what, true, opts)
+	r.record(ctx, attempt, step, what, true, false, opts)
 }
 
-// Once records an attempt that is one request: one row, final.
+// Once records an attempt that is one request: one row, final. It has no proof of a real
+// flow behind it, so repeats are held back and count as rate_limited.
 func (r *Recorder) Once(ctx context.Context, scope Scope, step Step, what Happened, opts ...Option) {
-	r.End(ctx, Begin(scope), step, what, opts...)
+	r.record(ctx, Begin(scope), step, what, true, true, opts)
 }
 
-func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what Happened, final bool, opts []Option) {
+func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what Happened, final, limited bool, opts []Option) {
 	if r == nil || attempt.IsZero() {
 		return
 	}
 	row, err := RowAt(attempt, step, what, final, time.Now(), opts...)
 	if err != nil {
 		r.drop(ctx, dropInvalidEvent, 1, err)
+		return
+	}
+	if limited && r.limiter != nil && !r.limiter.allow(row, time.Now()) {
+		r.drop(ctx, dropRateLimited, 1, nil)
 		return
 	}
 	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.HasTraceID() {
