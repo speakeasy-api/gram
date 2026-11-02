@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/businessmemory/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
+	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -87,11 +88,12 @@ type extractionPromptPayload struct {
 // session. Inserts are keyed by evaluation and candidate index so Temporal and
 // score-sink retries are idempotent.
 type Judge struct {
-	logger  *slog.Logger
-	tracer  trace.Tracer
-	db      *pgxpool.Pool
-	client  openrouter.CompletionClient
-	limiter *ratelimit.Limiter
+	logger   *slog.Logger
+	tracer   trace.Tracer
+	db       *pgxpool.Pool
+	client   openrouter.CompletionClient
+	limiter  *ratelimit.Limiter
+	redactor *chatredact.Redactor
 }
 
 var (
@@ -107,11 +109,12 @@ func NewJudge(
 	limiter *ratelimit.Limiter,
 ) *Judge {
 	return &Judge{
-		logger:  logger.With(attr.SlogComponent("business-memory-judge")),
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/businessmemory"),
-		db:      db,
-		client:  client,
-		limiter: limiter,
+		logger:   logger.With(attr.SlogComponent("business-memory-judge")),
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/businessmemory"),
+		db:       db,
+		client:   client,
+		limiter:  limiter,
+		redactor: chatredact.New(),
 	}
 }
 
@@ -137,7 +140,18 @@ func (j *Judge) Judge(ctx context.Context, in analysis.JudgeInput) (analysis.Jud
 		return analysis.JudgeResult{}, err
 	}
 
-	prompt, err := json.Marshal(extractionPromptPayload{Transcript: in.Transcript})
+	// Facts outlive the chat and reach every project member, so the extractor
+	// only ever sees the masked transcript. A scan that cannot finish fails
+	// closed and is charged to the attempt budget, since a retry rescans the
+	// same transcript.
+	transcript, err := maskTranscript(ctx, j.redactor, in.Transcript)
+	if err != nil {
+		err = fmt.Errorf("mask business memory transcript: %w: %w", analysis.ErrModelFailure, err)
+		span.SetStatus(codes.Error, err.Error())
+		return analysis.JudgeResult{}, err
+	}
+
+	prompt, err := json.Marshal(extractionPromptPayload{Transcript: transcript})
 	if err != nil {
 		err = fmt.Errorf("marshal business memory extraction payload: %w", err)
 		span.SetStatus(codes.Error, err.Error())
@@ -188,6 +202,24 @@ func (j *Judge) Judge(ctx context.Context, in analysis.JudgeInput) (analysis.Jud
 		err = fmt.Errorf("parse business memory extraction: %w: %w", analysis.ErrModelFailure, err)
 		span.SetStatus(codes.Error, err.Error())
 		return analysis.JudgeResult{}, err
+	}
+
+	// Mask the extracted bodies too: a value the model reconstructs or echoes
+	// from its own knowledge never passed through the transcript masking.
+	for i := range candidates {
+		masked, _, maskErr := j.redactor.Text(ctx, candidates[i].Body)
+		if maskErr != nil {
+			err = fmt.Errorf("mask business memory body: %w: %w", analysis.ErrModelFailure, maskErr)
+			span.SetStatus(codes.Error, err.Error())
+			return analysis.JudgeResult{}, err
+		}
+		// Masking can lengthen a body, so check the stored limit again.
+		if len(masked) > maxMemoryBodyBytes {
+			err = fmt.Errorf("masked business memory body exceeds %d bytes: %w", maxMemoryBodyBytes, analysis.ErrModelFailure)
+			span.SetStatus(codes.Error, err.Error())
+			return analysis.JudgeResult{}, err
+		}
+		candidates[i].Body = masked
 	}
 
 	persisted, err := j.persist(ctx, in, projectID, model, candidates)
