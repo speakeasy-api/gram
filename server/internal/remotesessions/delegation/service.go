@@ -525,7 +525,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	if !usableRefresh(c, now) {
 		return Assertion{}, ErrReauthentication
 	}
-	// This says nothing about this person's token, so it must not touch their row.
+	// This says nothing about this person's token, so it leaves their credential state alone.
 	if s.refreshPaused != nil && s.refreshPaused(ctx, p) {
 		return Assertion{}, ErrConfiguration
 	}
