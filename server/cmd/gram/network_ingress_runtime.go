@@ -2,7 +2,6 @@ package gram
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -33,9 +32,8 @@ func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterPr
 	}
 	switch {
 	case config.Gateway.Enabled:
-		if enc == nil {
-			return nil, errors.New("tailnet gateway provider requires the application encryption key")
-		}
+		// A missing encryption key only disables Apply; observation and
+		// teardown still run, and the executor's gate reports the gap.
 		api, err := tailscaleapi.New(guardian.NewDefaultPolicy(otel.GetTracerProvider()), config.Gateway.APIURL)
 		if err != nil {
 			return nil, fmt.Errorf("configure Tailscale API client: %w", err)

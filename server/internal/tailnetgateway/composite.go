@@ -42,6 +42,11 @@ func NewCompositeProvisioner(operator OperatorProvisioner, gateway *Provisioner)
 
 //nolint:exhaustruct // observations populate only the state they know.
 func (c *CompositeProvisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
+	// Never dismantle the operator backend for a desired state the gateway
+	// would reject anyway.
+	if _, observation, err := c.gateway.ValidateDesired(desired); err != nil {
+		return observation, err
+	}
 	if c.operator != nil {
 		present, err := c.operator.HasResources(ctx, desired.Resources)
 		if err != nil {

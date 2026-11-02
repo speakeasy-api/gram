@@ -39,13 +39,15 @@ func newProvisionerFixture(t *testing.T, name string) *provisionerFixture {
 	require.NoError(t, err)
 	enc := testenv.NewEncryptionClient(t)
 	api := tailscaleapi.NewFake()
-	now := time.Date(2026, time.November, 2, 12, 0, 0, 0, time.UTC)
-	api.Now = func() time.Time { return now }
+	// Heartbeats are stamped by the database clock, so the provisioner's
+	// clock must be the real one for freshness to mean anything.
+	now := time.Now().UTC()
+	api.Now = time.Now
 	ingressID, orgID := seedIngress(t, db, name)
 	resources, err := k8s.NewNetworkIngressResourceNames(ingressID)
 	require.NoError(t, err)
 	provisioner, err := tailnetgateway.NewProvisioner(db, enc, api, tailnetgateway.ProvisionerConfig{
-		Tag: tailnetgateway.DefaultTag, Slots: 3, AuthKeyTTL: 24 * time.Hour, StaleAfter: 2 * time.Minute, Now: func() time.Time { return now },
+		Tag: tailnetgateway.DefaultTag, Slots: 3, AuthKeyTTL: 24 * time.Hour, StaleAfter: 2 * time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
 	// seedIngress marks the runtime for the state store tests; start unmarked so Apply is exercised.
@@ -114,15 +116,28 @@ func TestProvisionerApplyDefinesServiceAndMintsKeysPerSlot(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, f.api.Keys(), 3)
 
-	// A slot that registered no longer needs a key even when its key is gone.
+	// A slot that registered no longer needs a key even when its key is gone;
+	// a slot with only partial state still does.
 	store, err := tailnetgateway.NewPostgresStateStore(f.db, f.enc, f.ingressID, f.orgID, 1)
 	require.NoError(t, err)
-	require.NoError(t, store.WriteState(ipn.MachineKeyStateKey, []byte("registered")))
+	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte(`[{"ID":"p1"}]`)))
+	partial, err := tailnetgateway.NewPostgresStateStore(f.db, f.enc, f.ingressID, f.orgID, 2)
+	require.NoError(t, err)
+	require.NoError(t, partial.WriteState(ipn.MachineKeyStateKey, []byte("machine-only")))
 	require.NoError(t, repo.New(f.db).ClearNetworkIngressNodeAuthKey(ctx, repo.ClearNetworkIngressNodeAuthKeyParams{NetworkIngressID: f.ingressID, OrganizationID: f.orgID, Slot: 1}))
 	require.NoError(t, repo.New(f.db).ClearNetworkIngressNodeAuthKey(ctx, repo.ClearNetworkIngressNodeAuthKeyParams{NetworkIngressID: f.ingressID, OrganizationID: f.orgID, Slot: 2}))
 	_, err = f.provisioner.Apply(ctx, f.desired(t))
 	require.NoError(t, err)
 	require.Len(t, f.api.Keys(), 4, "only the unregistered slot without a key is re-minted")
+
+	// Renaming the label defines the new service and removes the old one.
+	f.heartbeat(t, 0, tailnetgateway.NodeStatusOnline, "nONE")
+	renamed := f.desired(t)
+	renamed.Hostname = "speakeasy"
+	_, err = f.provisioner.Apply(ctx, renamed)
+	require.NoError(t, err)
+	require.Contains(t, f.api.Services(), "svc:speakeasy")
+	require.NotContains(t, f.api.Services(), "svc:private", "the previous label's service is deleted")
 }
 
 func TestProvisionerApplyRejectsBadCredentialsAndInput(t *testing.T) {
@@ -206,8 +221,9 @@ func TestProvisionerDeleteWaitsForHostsThenRemovesDevices(t *testing.T) {
 	f.heartbeat(t, 0, tailnetgateway.NodeStatusOnline, "nONE")
 	f.heartbeat(t, 1, tailnetgateway.NodeStatusOnline, "nTWO")
 
-	// Credentials are mandatory once devices exist.
+	// Credentials are mandatory once the gateway has touched the tailnet.
 	require.ErrorIs(t, f.provisioner.Delete(ctx, f.resources), k8s.ErrNetworkIngressProviderCredentialsRejected)
+	require.ErrorIs(t, f.provisioner.DeleteWithCredentials(ctx, f.resources, nil), k8s.ErrNetworkIngressProviderCredentialsRejected)
 
 	err = f.provisioner.DeleteWithCredentials(ctx, f.resources, credentialsJSON(t, "cid", "csecret"))
 	require.ErrorIs(t, err, k8s.ErrNetworkIngressDeletionPending, "live hosts must stop before devices are deleted")
@@ -226,12 +242,18 @@ func TestProvisionerDeleteWaitsForHostsThenRemovesDevices(t *testing.T) {
 	nodes, err = repo.New(f.db).ListNetworkIngressNodes(ctx, repo.ListNetworkIngressNodesParams{NetworkIngressID: f.ingressID, OrganizationID: f.orgID})
 	require.NoError(t, err)
 	require.Empty(t, nodes)
-	exists, err := store.HasState(ctx)
-	require.NoError(t, err)
-	require.False(t, exists)
+	_, err = store.ReadState(ipn.MachineKeyStateKey)
+	require.ErrorIs(t, err, ipn.ErrStateNotExist, "node state is purged with the devices")
 
-	// Nothing left: credential-free delete is now a no-op.
-	require.NoError(t, f.provisioner.Delete(ctx, f.resources))
+	// The service may still exist even with no node rows, so a gateway
+	// ingress keeps requiring credentials until it is torn down with them.
+	require.ErrorIs(t, f.provisioner.Delete(ctx, f.resources), k8s.ErrNetworkIngressProviderCredentialsRejected)
+}
+
+func TestProvisionerDeleteWithoutCredentialsIsNoOpBeforeApply(t *testing.T) {
+	t.Parallel()
+	f := newProvisionerFixture(t, "tailnetprovuntouched")
+	require.NoError(t, f.provisioner.Delete(t.Context(), f.resources), "nothing was created on the tailnet yet")
 }
 
 func TestProvisionerDeleteSurfacesRejectedCredentials(t *testing.T) {
@@ -294,6 +316,13 @@ func TestCompositeMovesOperatorIngressToGatewayAfterTeardown(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "old.example.ts.net", observation.DNSName)
 	require.Equal(t, 1, operator.observed)
+
+	// Invalid desired state never dismantles the operator backend.
+	invalid := f.desired(t)
+	invalid.Hostname = "Not A Label"
+	_, err = composite.Apply(ctx, invalid)
+	require.ErrorIs(t, err, k8s.ErrNetworkIngressInvalidDesiredState)
+	require.Zero(t, operator.deleteCalls)
 
 	// Operator resources still exist: apply waits for their teardown.
 	observation, err = composite.Apply(ctx, f.desired(t))
