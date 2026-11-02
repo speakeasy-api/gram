@@ -169,6 +169,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 		connectURL:          "",
 		skillsOverMCP:       nil,
+		servedCredentials:   nil,
 	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:

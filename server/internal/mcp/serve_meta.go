@@ -111,6 +111,10 @@ type metaGateContext struct {
 	// skillsOverMCP memoizes the Skills extension flag for this request once
 	// it is evaluated; see metaSkillsEnabled.
 	skillsOverMCP *bool
+	// servedCredentials collects, for one member dial, the auth client and
+	// connection each registration's agent credential was authorized for,
+	// keyed by registration. Nil outside a dial, which records nothing.
+	servedCredentials map[uuid.UUID]contextvalues.UpstreamCredential
 }
 
 // metaMembership names where a meta request's members come from. The zero
@@ -818,9 +822,10 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		apiKeyID:            "",
 		// Member dispatch carries this InEffect verbatim; nothing on the
 		// tools/call path reads it (upstream dials pin their own version).
-		protocolVersion: request.resolution,
-		connectURL:      connectURL,
-		skillsOverMCP:   nil,
+		protocolVersion:   request.resolution,
+		connectURL:        connectURL,
+		skillsOverMCP:     nil,
+		servedCredentials: nil,
 	}
 	if gatePolicy != nil {
 		gate.catalogRef = gatePolicy.Catalog
