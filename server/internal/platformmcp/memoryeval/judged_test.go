@@ -5,20 +5,23 @@ package memoryeval_test
 import (
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/bench"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 const (
-	// defaultAnswerModel answers every question in every arm, so the tools are
-	// the only variable between arms.
-	defaultAnswerModel = "anthropic/claude-sonnet-5.5"
+	// defaultAnswerModels answer every question in every arm, so the tools are
+	// the only variable between arms. MEMORYEVAL_ANSWER_MODELS takes a comma
+	// separated list to compare models in one run.
+	defaultAnswerModels = "anthropic/claude-sonnet-5.5"
 
 	// defaultJudgeModel grades answers. It differs from the answering model so
 	// the judge does not favor its own phrasing.
@@ -60,13 +63,16 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 	if apiKey == "" || apiKey == "unset" {
 		t.Skip("set OPENROUTER_DEV_KEY to run the judged memory eval")
 	}
-	answerModel := envOr("MEMORYEVAL_ANSWER_MODEL", defaultAnswerModel)
-	judgeModel := envOr("MEMORYEVAL_JUDGE_MODEL", defaultJudgeModel)
-	require.NotEqual(t, answerModel, judgeModel, "the judge must differ from the answering model")
-	require.True(t, openrouter.IsModelAllowed(answerModel), answerModel)
-	require.True(t, openrouter.IsModelAllowed(judgeModel), judgeModel)
-	runs := envInt(t, "MEMORYEVAL_RUNS", defaultRuns)
-	concurrency := envInt(t, "MEMORYEVAL_CONCURRENCY", defaultConcurrency)
+	cfg := bench.Config{
+		AnswerModels: strings.Split(envOr("MEMORYEVAL_ANSWER_MODELS", envOr("MEMORYEVAL_ANSWER_MODEL", defaultAnswerModels)), ","),
+		JudgeModel:   envOr("MEMORYEVAL_JUDGE_MODEL", defaultJudgeModel),
+		Runs:         envInt(t, "MEMORYEVAL_RUNS", defaultRuns),
+		Concurrency:  envInt(t, "MEMORYEVAL_CONCURRENCY", defaultConcurrency),
+	}
+	for i := range cfg.AnswerModels {
+		cfg.AnswerModels[i] = strings.TrimSpace(cfg.AnswerModels[i])
+	}
+	require.NoError(t, cfg.Validate())
 
 	provisioner := openrouter.NewDevelopment(apiKey)
 	client := openrouter.NewUnifiedClient(
@@ -82,16 +88,14 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 
 	corpus := memoryeval.Build(corpusNow)
 	loaded := loadCorpus(t, "memoryeval_judged", corpus)
-	ctx, searchArm := searchChatsArm(t, loaded)
-	arms := []arm{
-		{name: "A: no memory", search: nil, sweep: nil, tools: nil, call: nil, instructions: ""},
-		searchArm,
-	}
+	searchArm, err := bench.SearchChatsArm(testenv.NewLogger(t), loaded.target())
+	require.NoError(t, err)
 
-	answers, verdicts := runEval(ctx, t, client, answerModel, judgeModel, corpus, arms, runs, concurrency)
-	report := buildReport(corpus, answerModel, judgeModel, runs, arms, answers, verdicts)
-	t.Log("\n" + report)
+	report, err := bench.Run(t.Context(), client, corpus, []bench.Arm{bench.NoMemoryArm(), searchArm}, cfg)
+	require.NoError(t, err)
+	markdown := report.Markdown()
+	t.Log("\n" + markdown)
 	if out := os.Getenv("MEMORYEVAL_OUT"); out != "" {
-		require.NoError(t, os.WriteFile(out, []byte(report), 0o600))
+		require.NoError(t, os.WriteFile(out, []byte(markdown), 0o600))
 	}
 }
