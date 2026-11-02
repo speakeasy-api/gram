@@ -45,7 +45,7 @@ func scriptedRunner(t *testing.T, capacityHeader string, upgraded func(), serve 
 					_ = conn.Close()
 					return
 				}
-				response := "HTTP/1.1 101 Switching Protocols\r\nConnection: upgrade\r\nUpgrade: gram-code-yamux\r\nGram-Code-Protocol: 1\r\n"
+				response := "HTTP/1.1 101 Switching Protocols\r\nConnection: upgrade\r\nUpgrade: gram-code-yamux\r\nGram-Code-Protocol: 2\r\n"
 				if capacityHeader != "" {
 					response += fmt.Sprintf("Gram-Code-Capacity: %s\r\n", capacityHeader)
 				}

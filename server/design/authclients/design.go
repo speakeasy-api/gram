@@ -12,7 +12,7 @@ func clientTypeEnum() {
 }
 
 func upstreamAuthStatusEnum() {
-	Enum("configured", "setup_incomplete", "no_auth_required", "undecided")
+	Enum("configured", "setup_incomplete", "no_auth_required")
 }
 
 var AuthClientSource = Type("AuthClientSource", String, func() {
@@ -75,11 +75,11 @@ var McpServerAuthentication = Type("McpServerAuthentication", func() {
 	Attribute("mcp_server_id", String, "The MCP server id.", func() { Format(FormatUUID) })
 	Attribute("project_id", String, "The MCP server's project.", func() { Format(FormatUUID) })
 	Attribute("public", Boolean, "Whether the MCP server is public.")
-	Attribute("requires_upstream_auth", Boolean, "Whether the upstream needs authentication. Omitted while undecided.")
-	Attribute("status", String, "configured when authentication is required and at least one enabled client is offered; setup_incomplete when it is required and none is; no_auth_required when the upstream explicitly needs none; undecided when nobody has said.", upstreamAuthStatusEnum)
+	Attribute("requires_upstream_auth", Boolean, "Whether the upstream needs authentication: true when the server offers at least one enabled auth client.")
+	Attribute("status", String, "configured when the server offers at least one enabled auth client; setup_incomplete when no auth client was ever linked to it, live or detached, but it has a live upstream OAuth client or a credential header on its source that no auth client records yet; no_auth_required otherwise.", upstreamAuthStatusEnum)
 	Attribute("clients", ArrayOf(AuthClient), "The auth clients the server offers.")
 
-	Required("mcp_server_id", "project_id", "public", "status", "clients")
+	Required("mcp_server_id", "project_id", "public", "requires_upstream_auth", "status", "clients")
 })
 
 func audienceLevelEnum() {
@@ -397,9 +397,10 @@ var _ = Service("authClients", func() {
 		})
 
 		Result(func() {
-			Attribute("requires_upstream_auth", Boolean, "Whether the upstream needs authentication. Omitted while undecided.")
+			Attribute("requires_upstream_auth", Boolean, "Whether the upstream needs authentication: true when the server offers at least one enabled auth client.")
+			Attribute("status", String, "configured when the server offers at least one enabled auth client; setup_incomplete when no auth client was ever linked to it, live or detached, but it has a live upstream OAuth client or a credential header on its source that no auth client records yet; no_auth_required otherwise.", upstreamAuthStatusEnum)
 			Attribute("choices", ArrayOf(AuthClientChoice), "The enabled shared credentials the server offers.")
-			Required("choices")
+			Required("requires_upstream_auth", "status", "choices")
 		})
 
 		HTTP(func() {
@@ -525,11 +526,11 @@ var _ = Service("authClients", func() {
 	})
 
 	Method("setMcpServerUpstreamAuthRequirement", func() {
-		Description("Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.")
+		Description("Return how an MCP server authenticates to its upstream. The requested requirement is ignored: whether the upstream needs authentication follows from the enabled auth clients the server offers. Not available for hosted toolsets. Requires org:admin.\n\nDeprecated: read getMcpServerAuthentication, and attach, detach, enable or disable auth clients instead.")
 
 		Payload(func() {
 			Attribute("mcp_server_id", String, "The MCP server id.", func() { Format(FormatUUID) })
-			Attribute("requires_upstream_auth", Boolean, "Whether the upstream needs authentication.")
+			Attribute("requires_upstream_auth", Boolean, "Ignored.")
 			Required("mcp_server_id", "requires_upstream_auth")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -539,6 +540,7 @@ var _ = Service("authClients", func() {
 
 		HTTP(func() {
 			POST("/rpc/authClients.setMcpServerUpstreamAuthRequirement")
+			Deprecated()
 			security.SessionHeader()
 			security.ByKeyHeader()
 			Response(StatusOK)

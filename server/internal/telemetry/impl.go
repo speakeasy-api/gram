@@ -3957,7 +3957,8 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		rows = rows[:params.limit]
 	}
 
-	return toToolUsageTracesResult(rows, nextCursor, gatewayNames, s.authorizerLabels(ctx, authCtx.ActiveOrganizationID, rows)), nil
+	credentials, ownerNames := s.toolCallCredentials(ctx, authCtx.ActiveOrganizationID, params.projectID, rows)
+	return toToolUsageTracesResult(rows, nextCursor, gatewayNames, s.authorizerLabels(ctx, authCtx.ActiveOrganizationID, rows), credentials, ownerNames), nil
 }
 
 // GetToolUsageFilterOptions returns selectable filter options for target-aware MCP and tool usage metrics.
@@ -4334,7 +4335,7 @@ func decodeToolUsageTraceCursor(cursor string) (int64, string, error) {
 	return startTimeUnixNano, parts[1], nil
 }
 
-func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor string, gatewayNames map[string]string, authorizerLabels map[string]string) *telem_gen.ListToolUsageTracesResult {
+func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor string, gatewayNames map[string]string, authorizerLabels map[string]string, credentials map[string]repo.ToolCallCredential, ownerNames map[string]string) *telem_gen.ListToolUsageTracesResult {
 	traces := make([]*telem_gen.ToolUsageTraceSummary, 0, len(rows))
 	for _, row := range rows {
 		// Only a dispatch to a member is routed through a gateway; a call on the gateway is the gateway.
@@ -4347,6 +4348,7 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 			}
 			viaGatewayName = conv.PtrEmpty(name)
 		}
+		credential := credentials[row.TraceID]
 		trace := &telem_gen.ToolUsageTraceSummary{
 			ID:      row.ID,
 			TraceID: conv.PtrEmpty(row.TraceID),
@@ -4354,31 +4356,35 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 				Kind:  telem_gen.ToolUsageTraceLogGroupKind(row.LogGroupKind),
 				Value: row.LogGroupValue,
 			},
-			StartTimeUnixNano:    strconv.FormatInt(row.StartTimeUnixNano, 10),
-			LogCount:             row.LogCount,
-			GramUrn:              row.GramURN,
-			ToolName:             row.ToolName,
-			TargetType:           telem_gen.ToolUsageTargetType(row.TargetType),
-			TargetKind:           telem_gen.ToolUsageTargetKind(row.TargetKind),
-			TargetID:             row.TargetID,
-			TargetLabel:          row.TargetLabel,
-			McpServerID:          conv.PtrEmpty(row.MCPServerID),
-			UserKey:              row.UserKey,
-			UserLabel:            row.UserLabel,
-			UserKind:             telem_gen.ToolUsageUserKind(row.UserKind),
-			AuthorizerUserID:     conv.PtrEmpty(row.AuthorizerUserID),
-			AuthorizerLabel:      conv.PtrEmpty(authorizerLabels[row.AuthorizerUserID]),
-			HookSource:           row.HookSource,
-			EventSource:          row.EventSource,
-			HTTPStatusCode:       row.HTTPStatusCode,
-			HookStatus:           row.HookStatus,
-			BlockReason:          row.BlockReason,
-			AccountType:          row.AccountType,
-			ViaMetaMcpServerID:   viaGatewayID,
-			ViaMetaMcpServerName: viaGatewayName,
-			ClientKey:            row.ClientKey,
-			ClientLabel:          row.ClientLabel,
-			ClientVersion:        row.ClientVersion,
+			StartTimeUnixNano:     strconv.FormatInt(row.StartTimeUnixNano, 10),
+			LogCount:              row.LogCount,
+			GramUrn:               row.GramURN,
+			ToolName:              row.ToolName,
+			TargetType:            telem_gen.ToolUsageTargetType(row.TargetType),
+			TargetKind:            telem_gen.ToolUsageTargetKind(row.TargetKind),
+			TargetID:              row.TargetID,
+			TargetLabel:           row.TargetLabel,
+			McpServerID:           conv.PtrEmpty(row.MCPServerID),
+			UserKey:               row.UserKey,
+			UserLabel:             row.UserLabel,
+			UserKind:              telem_gen.ToolUsageUserKind(row.UserKind),
+			AuthorizerUserID:      conv.PtrEmpty(row.AuthorizerUserID),
+			AuthorizerLabel:       conv.PtrEmpty(authorizerLabels[row.AuthorizerUserID]),
+			AuthClientType:        conv.PtrEmpty(credential.AuthClientType),
+			AuthClientID:          conv.PtrEmpty(credential.AuthClientID),
+			ConnectionOwnerUserID: conv.PtrEmpty(credential.ConnectionOwnerUserID),
+			ConnectionOwnerLabel:  conv.PtrEmpty(ownerNames[credential.ConnectionOwnerUserID]),
+			HookSource:            row.HookSource,
+			EventSource:           row.EventSource,
+			HTTPStatusCode:        row.HTTPStatusCode,
+			HookStatus:            row.HookStatus,
+			BlockReason:           row.BlockReason,
+			AccountType:           row.AccountType,
+			ViaMetaMcpServerID:    viaGatewayID,
+			ViaMetaMcpServerName:  viaGatewayName,
+			ClientKey:             row.ClientKey,
+			ClientLabel:           row.ClientLabel,
+			ClientVersion:         row.ClientVersion,
 		}
 		traces = append(traces, trace)
 	}

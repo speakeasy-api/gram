@@ -86,6 +86,27 @@ describe("ActingPrincipal", () => {
     }
   });
 
+  it("names how the call signed in in place of the key's authorizer", () => {
+    setup(
+      <ActingPrincipal
+        agent={{ id: "a1", name: "Release assistant" }}
+        authorizer={{ id: "u1", name: "Amara Okafor" }}
+        signedInWith={{
+          label: "shared credential",
+          detail: "Signed in with: Service account",
+        }}
+      />,
+    );
+    expect(screen.getByText("shared credential")).toBeTruthy();
+    expect(screen.queryByText(/on behalf of/)).toBeNull();
+    expect(screen.queryByText("Amara Okafor")).toBeNull();
+    expect(
+      screen
+        .getByText("shared credential")
+        .parentElement?.getAttribute("title"),
+    ).toBe("Signed in with: Service account");
+  });
+
   it("gives the same relation as plain text", () => {
     expect(
       actingPrincipalText({ id: "a1", name: "Bot" }, { id: "u1", name: "Ada" }),
