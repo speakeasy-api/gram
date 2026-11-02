@@ -581,7 +581,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ListProjectsForToolsetIndexing)
 	temporalWorker.RegisterActivity(activities.ListToolsetsForIndexing)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
-	temporalWorker.RegisterActivity(activities.SummarizeIdleChats)
 	temporalWorker.RegisterActivity(activities.SyncIdentityMap)
 	temporalWorker.RegisterActivity(activities.SyncTenantDimensions)
 	temporalWorker.RegisterActivity(activities.PromoteStagedTelemetry)
@@ -745,7 +744,6 @@ func NewTemporalWorker(
 		temporalWorker.RegisterActivityWithOptions(promotionActivities.dispatch, activity.RegisterOptions{Name: catalogPromotionDispatchActivity})
 	}
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
-	temporalWorker.RegisterWorkflow(SummarizeIdleChatsWorkflow)
 	temporalWorker.RegisterWorkflow(SyncIdentityMapWorkflow)
 	temporalWorker.RegisterWorkflow(SyncTenantDimensionsWorkflow)
 	temporalWorker.RegisterWorkflow(PromoteStagedTelemetryWorkflow)
@@ -934,10 +932,6 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add weekly usage summary schedule", attr.SlogError(err))
 		}
-	}
-
-	if err := AddSummarizeIdleChatsSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add summarize idle chats schedule", attr.SlogError(err))
 	}
 
 	if err := AddAssistantReaperSchedule(ctx, env); err != nil {

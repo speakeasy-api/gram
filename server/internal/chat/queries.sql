@@ -2240,91 +2240,25 @@ UPDATE api_keys SET scopes = ARRAY[]::text[], subject_urn = @subject_urn,
   expires_at = clock_timestamp() + interval '1 hour'
 WHERE id = @api_key_id AND project_id = @project_id;
 
--- name: ListOrganizationsWithChatsForMemorySweep :many
--- Team memory summary sweep: every organization that has at least one
--- eligible chat, read as a loose index scan over chats_memory_summary_sweep_idx
--- so the cost is one index probe per organization, not per chat.
-WITH RECURSIVE orgs AS (
-  (
-    SELECT c.organization_id
-    FROM chats c
-    WHERE c.deleted IS FALSE AND c.memory_excluded_at IS NULL
-    ORDER BY c.organization_id
-    LIMIT 1
-  )
-  UNION ALL
-  SELECT (
-    SELECT c.organization_id
-    FROM chats c
-    WHERE c.deleted IS FALSE
-      AND c.memory_excluded_at IS NULL
-      AND c.organization_id > orgs.organization_id
-    ORDER BY c.organization_id
-    LIMIT 1
-  )
-  FROM orgs
-  WHERE orgs.organization_id IS NOT NULL
-)
-SELECT orgs.organization_id::text AS organization_id
-FROM orgs
-WHERE orgs.organization_id IS NOT NULL;
-
--- name: ListChatsDueForMemorySummary :many
--- Team memory summary sweep: an organization's chats whose newest message is
--- older than idle_before and newer than their last masked summary, newest
--- first. Idleness is read from chat_messages because gateway turns do not bump
--- chats.updated_at; updated_at only narrows candidates to chats started or
--- touched within the lookback. Sessions of personal accounts, or of accounts
--- whose type is not known yet, and chats excluded from memory are never
--- returned.
-WITH candidates AS (
-  SELECT
-    c.id,
-    c.project_id,
-    c.summary_generated_at,
-    c.summary_redacted,
-    (SELECT MAX(m.created_at) FROM chat_messages m WHERE m.chat_id = c.id) AS last_at
-  FROM chats c
-  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-  WHERE c.organization_id = @organization_id
-    AND c.deleted IS FALSE
-    AND c.memory_excluded_at IS NULL
-    AND c.updated_at > @since
-    AND (ua.id IS NULL OR ua.account_type <> 'personal')
-)
-SELECT candidates.id, candidates.project_id
-FROM candidates
-WHERE candidates.last_at IS NOT NULL
-  AND candidates.last_at < sqlc.arg(idle_before)::timestamptz
-  AND (
-    candidates.summary_generated_at IS NULL
-    OR candidates.summary_redacted IS FALSE
-    OR candidates.summary_generated_at < candidates.last_at
-  )
-ORDER BY candidates.last_at DESC
-LIMIT @max_chats;
-
--- name: CountMemorySummariesSince :one
--- Masked summaries written for an organization since a point in time; the
--- sweep uses it to enforce the per-organization daily cap. Empty markers cost
--- no model call and do not count. A summary write bumps updated_at to the same
--- instant, so the updated_at bound lets the sweep index serve this.
-SELECT COUNT(*)::bigint
-FROM chats c
-WHERE c.organization_id = @organization_id
-  AND c.deleted IS FALSE
-  AND c.memory_excluded_at IS NULL
-  AND c.updated_at >= @since
-  AND c.summary_redacted IS TRUE
-  AND c.summary IS NOT NULL
-  AND c.summary_generated_at >= @since;
-
 -- name: MarkChatSummaryEmpty :exec
--- Records that a chat had nothing to summarize so the sweep does not retry it
--- until new messages arrive. Project-scoped like UpdateChatSummary.
+-- Records that a chat had nothing to summarize, so it reads as covered until
+-- new messages arrive. Project-scoped like UpdateChatSummary.
 UPDATE chats
 SET summary = NULL,
     summary_generated_at = NOW(),
     summary_redacted = TRUE,
     updated_at = NOW()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: GetChatMemorySummaryEligibility :one
+-- Whether the background summary judge may summarize a chat: live, not
+-- excluded from memory, and not a session of a personal account or of an
+-- account whose type is not known yet. Matches the team memory readers' rule.
+SELECT (
+  c.deleted IS FALSE
+  AND c.memory_excluded_at IS NULL
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+)::boolean AS eligible
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.id = @id AND c.project_id = @project_id;

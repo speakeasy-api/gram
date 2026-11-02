@@ -36,6 +36,8 @@ var (
 	ErrNothingToSummarize = errors.New("chat has no summarizable messages")
 	// ErrSummaryChatNotFound reports a chat that is gone or not in the project.
 	ErrSummaryChatNotFound = errors.New("chat not found")
+	// ErrEmptySummary reports a model response with no summary text.
+	ErrEmptySummary = errors.New("empty summary response")
 )
 
 const maskedSummarySystemPrompt = "You summarize agent session transcripts for a team's shared memory and an operations dashboard. " +
@@ -59,10 +61,12 @@ type GeneratedSummary struct {
 // marks it redacted. The dashboard Summarize action and the background summary
 // job share it, so one summary serves both the dashboard and team memory.
 type SummaryGenerator struct {
-	repo     *repo.Queries
-	client   openrouter.CompletionClient
-	redactor *chatredact.Redactor
-	model    string
+	repo        *repo.Queries
+	client      openrouter.CompletionClient
+	redactor    *chatredact.Redactor
+	model       string
+	usageSource billing.ModelUsageSource
+	keySlot     billing.ModelUsageSource
 }
 
 // NewSummaryGenerator returns nil when no completion client is configured.
@@ -70,7 +74,48 @@ func NewSummaryGenerator(db *pgxpool.Pool, client openrouter.CompletionClient, r
 	if db == nil || client == nil || redactor == nil {
 		return nil
 	}
-	return &SummaryGenerator{repo: repo.New(db), client: client, redactor: redactor, model: SummaryModel}
+	return &SummaryGenerator{repo: repo.New(db), client: client, redactor: redactor, model: SummaryModel, usageSource: billing.ModelUsageSourceGram, keySlot: ""}
+}
+
+// SummaryDraft is a masked summary that has not been stored yet.
+// CoveredThrough is the newest message the summary read; pass it to
+// UpdateChatSummary so a message that lands while the summary is written still
+// reads as newer.
+type SummaryDraft struct {
+	Summary        string
+	CoveredThrough pgtype.Timestamptz
+}
+
+// WithUsage returns a copy of the generator that bills its model calls to the
+// given usage source and internal key slot. The chat analysis judge uses it so
+// background summaries count against chat analysis spend.
+func (g *SummaryGenerator) WithUsage(source, keySlot billing.ModelUsageSource) *SummaryGenerator {
+	if g == nil {
+		return nil
+	}
+	copied := *g
+	copied.usageSource = source
+	copied.keySlot = keySlot
+	return &copied
+}
+
+// WithModel returns a copy of the generator that writes summaries with model.
+// The team memory eval uses it to compare summary models.
+func (g *SummaryGenerator) WithModel(model string) *SummaryGenerator {
+	if g == nil {
+		return nil
+	}
+	copied := *g
+	copied.model = model
+	return &copied
+}
+
+// Model is the model the generator writes summaries with.
+func (g *SummaryGenerator) Model() string {
+	if g == nil {
+		return SummaryModel
+	}
+	return g.model
 }
 
 // Generate summarizes one chat and persists the result. The transcript is
@@ -79,6 +124,33 @@ func NewSummaryGenerator(db *pgxpool.Pool, client openrouter.CompletionClient, r
 // reconstructs is still caught by the scanner.
 func (g *SummaryGenerator) Generate(ctx context.Context, orgID string, projectID, chatID uuid.UUID) (GeneratedSummary, error) {
 	empty := GeneratedSummary{Summary: "", GeneratedAt: time.Time{}}
+
+	draft, err := g.Draft(ctx, orgID, projectID, chatID)
+	if err != nil {
+		return empty, err
+	}
+
+	updated, err := g.repo.UpdateChatSummary(ctx, repo.UpdateChatSummaryParams{
+		Summary:         pgtype.Text{String: draft.Summary, Valid: true},
+		SummaryRedacted: true,
+		CoveredThrough:  draft.CoveredThrough,
+		ID:              chatID,
+		ProjectID:       projectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return empty, ErrSummaryChatNotFound
+	case err != nil:
+		return empty, fmt.Errorf("persist chat summary: %w", err)
+	}
+	return GeneratedSummary{Summary: updated.Summary.String, GeneratedAt: updated.SummaryGeneratedAt.Time}, nil
+}
+
+// Draft writes a masked summary of one chat without storing it. It returns
+// ErrNothingToSummarize when the chat holds no user or assistant prose, and
+// wraps the completion client's error when the model call fails.
+func (g *SummaryGenerator) Draft(ctx context.Context, orgID string, projectID, chatID uuid.UUID) (SummaryDraft, error) {
+	empty := SummaryDraft{Summary: "", CoveredThrough: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}}
 
 	messages, err := g.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
 		ChatID:    chatID,
@@ -115,9 +187,9 @@ func (g *SummaryGenerator) Generate(ctx context.Context, orgID string, projectID
 		Temperature:               nil,
 		Model:                     g.model,
 		Stream:                    false,
-		UsageSource:               billing.ModelUsageSourceGram,
+		UsageSource:               g.usageSource,
 		KeyType:                   openrouter.KeyTypeInternal,
-		KeySlot:                   "",
+		KeySlot:                   g.keySlot,
 		UserID:                    "",
 		ExternalUserID:            "",
 		UserEmail:                 "",
@@ -134,31 +206,17 @@ func (g *SummaryGenerator) Generate(ctx context.Context, orgID string, projectID
 		return empty, fmt.Errorf("generate summary: %w", err)
 	}
 	if response == nil || response.Message == nil {
-		return empty, errors.New("empty summary response")
+		return empty, ErrEmptySummary
 	}
 	text := strings.TrimSpace(openrouter.GetText(*response.Message))
 	if text == "" {
-		return empty, errors.New("empty summary response")
+		return empty, ErrEmptySummary
 	}
 	summary, _, err := g.redactor.Text(ctx, text)
 	if err != nil {
 		return empty, fmt.Errorf("redact summary: %w", err)
 	}
-
-	updated, err := g.repo.UpdateChatSummary(ctx, repo.UpdateChatSummaryParams{
-		Summary:         pgtype.Text{String: summary, Valid: true},
-		SummaryRedacted: true,
-		CoveredThrough:  newestMessageAt(messages),
-		ID:              chatID,
-		ProjectID:       projectID,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return empty, ErrSummaryChatNotFound
-	case err != nil:
-		return empty, fmt.Errorf("persist chat summary: %w", err)
-	}
-	return GeneratedSummary{Summary: updated.Summary.String, GeneratedAt: updated.SummaryGeneratedAt.Time}, nil
+	return SummaryDraft{Summary: summary, CoveredThrough: newestMessageAt(messages)}, nil
 }
 
 // newestMessageAt returns the latest created_at among messages, or an invalid

@@ -84,6 +84,22 @@ type ScorelessJudge interface {
 	SkipScoreSink() bool
 }
 
+// RearmingJudge judges a chat again whenever the chat has new messages since
+// its last scored evaluation, once the chat has gone quiet again. Judges whose
+// output must describe the whole chat, such as the chat summary, implement it;
+// other judges score a chat once.
+type RearmingJudge interface {
+	RearmOnNewMessages() bool
+}
+
+// SharedOptInJudge has no settings of its own: it runs for every organization
+// that enabled the named judge, with the same daily cap, counted separately.
+// A settings row for the judge itself still wins, so it can be capped or
+// switched off on its own.
+type SharedOptInJudge interface {
+	OptInWith() string
+}
+
 // judgeNamePattern keeps judge names safe to use as settings keys, sink
 // dimensions and log fields.
 var judgeNamePattern = regexp.MustCompile(`^[a-z0-9_-]+$`)
@@ -125,6 +141,16 @@ func (j *Judges) Names() []string {
 		names = append(names, judge.Name())
 	}
 	return names
+}
+
+// rearms reports whether the named judge re-judges chats that resume.
+func (j *Judges) rearms(name string) bool {
+	judge, ok := j.byName[name]
+	if !ok {
+		return false
+	}
+	rearming, ok := judge.(RearmingJudge)
+	return ok && rearming.RearmOnNewMessages()
 }
 
 // Get resolves a judge by name.
