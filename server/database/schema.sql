@@ -16756,8 +16756,7 @@ CREATE TABLE IF NOT EXISTS memory_eval_runs (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
-  CONSTRAINT memory_eval_runs_pkey PRIMARY KEY (id),
-  CONSTRAINT memory_eval_runs_status_check CHECK (status IN ('queued', 'running', 'succeeded', 'failed'))
+  CONSTRAINT memory_eval_runs_pkey PRIMARY KEY (id)
 );
 
 COMMENT ON COLUMN memory_eval_runs.id IS '@access: confidential';
@@ -16784,5 +16783,5 @@ COMMENT ON COLUMN memory_eval_runs.deleted IS '@access: confidential';
 
 -- Lists runs newest first on the admin page.
 CREATE INDEX IF NOT EXISTS memory_eval_runs_created_at_idx
-ON memory_eval_runs (created_at DESC)
+ON memory_eval_runs (created_at DESC, id DESC)
 WHERE deleted IS FALSE;
