@@ -1630,6 +1630,18 @@ SET summary = @summary,
 WHERE chats.id = @id AND chats.project_id = @project_id AND chats.deleted IS FALSE
 RETURNING summary, summary_generated_at;
 
+-- name: BackdateChatSummary :exec
+-- Move a stored summary's write time, and the chat's update time with it, to
+-- the given time. Only the team memory eval uses it: it regenerates summaries
+-- for a synthetic corpus and places each one on the day its chat happened, so
+-- day digests bucket the chats the way the live job would have. Keeping
+-- updated_at equal to summary_generated_at stops the idle-chat sweep from
+-- treating the summary as stale.
+UPDATE chats
+SET summary_generated_at = @generated_at,
+    updated_at = @generated_at
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE AND summary IS NOT NULL;
+
 -- name: GetToolCallSummaryContext :one
 -- Fetch the owning call message and its matching result within one project and
 -- chat. The handler validates that tool_calls contains the requested call id.

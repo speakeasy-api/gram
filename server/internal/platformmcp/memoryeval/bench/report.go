@@ -23,6 +23,11 @@ type Report struct {
 
 	// JudgeCostUSD is what grading cost across the run.
 	JudgeCostUSD float64 `json:"judge_cost_usd"`
+
+	// Preparation is how team memory was written before the arms ran, when
+	// the caller prepared it; arms that read summaries or digests depend on
+	// its models.
+	Preparation *Preparation `json:"preparation,omitempty"`
 }
 
 // KindScore counts correct over graded answers for one question kind,
@@ -99,7 +104,7 @@ func summarize(corpus *memoryeval.Corpus, cfg Config, arms []Arm, answers []answ
 		latencies  []time.Duration
 	}
 	tallies := map[scoreKey]*tally{}
-	report := &Report{JudgeModel: cfg.JudgeModel, Runs: cfg.Runs, Questions: len(corpus.Questions), StartedAt: time.Time{}, FinishedAt: time.Time{}, Scores: nil, JudgeCostUSD: 0}
+	report := &Report{JudgeModel: cfg.JudgeModel, Runs: cfg.Runs, Questions: len(corpus.Questions), StartedAt: time.Time{}, FinishedAt: time.Time{}, Scores: nil, JudgeCostUSD: 0, Preparation: nil}
 	for _, model := range cfg.AnswerModels {
 		for _, a := range arms {
 			report.Scores = append(report.Scores, ArmScore{
@@ -227,6 +232,13 @@ func sortedKeys(m map[string]bool) []string {
 func (r *Report) Markdown() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Team memory eval\n\nJudge %s, %d runs per model and arm, %d questions. Judging cost $%.2f.\n\n", r.JudgeModel, r.Runs, r.Questions, r.JudgeCostUSD)
+	if p := r.Preparation; p != nil {
+		fmt.Fprintf(&b, "Memory written by summary model %s (%d summaries, %d failed, $%.2f) and digest model %s (%d digests, $%.2f).\n\n",
+			p.Models.Summary, p.Summaries, p.Failed, p.SummarySpend.CostUSD, p.Models.Digest, p.Digests, p.DigestSpend.CostUSD)
+		if unpriced := p.SummarySpend.Unpriced + p.DigestSpend.Unpriced; unpriced > 0 {
+			fmt.Fprintf(&b, "%d memory-writing calls reported no cost, so those costs are a lower bound.\n\n", unpriced)
+		}
+	}
 	b.WriteString("| Model | Arm | Accuracy (mean, range) | Point | Timeline | Reversal | Negative | Isolation | Valid citations | Leaks | Isolation violations | Not found on negatives | Tool tokens/question | Misses (retrieval/reasoning/error) | Cost | Latency mean/p95 |\n")
 	b.WriteString("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
 	for _, s := range r.Scores {

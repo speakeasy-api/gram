@@ -118,7 +118,11 @@ func TestSearchTeamMemoryMechanical(t *testing.T) {
 	t.Parallel()
 	corpus := memoryeval.Build(corpusNow)
 	loaded := loadCorpus(t, "memoryeval_search_team_memory", corpus)
-	writeProxySummaries(t, loaded)
+	// The echo model writes each chat's masked transcript as its summary. A
+	// real summary carries less than this, so leaks and isolation measured
+	// here are an upper bound.
+	_, err := bench.Prepare(t.Context(), testenv.NewLogger(t), &echoModel{}, loaded.target(), bench.DefaultMemoryModels, 8)
+	require.NoError(t, err)
 	memoryArm, err := bench.SearchTeamMemoryArm(testenv.NewLogger(t), loaded.target())
 	require.NoError(t, err)
 

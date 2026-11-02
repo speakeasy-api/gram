@@ -22,6 +22,7 @@ WHERE m.deleted IS FALSE
 -- Project-days in [@since, @until) with eligible chat summaries or memos and
 -- no day digest yet. Chats are bucketed by when their summary was written,
 -- so a summary that lands after its day closed goes into the next open day.
+-- An empty @project_ids means every project; the memory eval passes its own.
 WITH sources AS (
   SELECT c.organization_id, c.project_id, (c.summary_generated_at AT TIME ZONE 'UTC')::date AS day
   FROM chats c
@@ -33,6 +34,7 @@ WITH sources AS (
     AND c.deleted IS FALSE
     AND (ua.id IS NULL OR ua.account_type <> 'personal')
     AND c.organization_id = ANY(@organization_ids::text[])
+    AND (cardinality(@project_ids::uuid[]) = 0 OR c.project_id = ANY(@project_ids::uuid[]))
     AND c.summary_generated_at >= @since::timestamptz
     AND c.summary_generated_at < @until::timestamptz
   UNION
@@ -44,6 +46,7 @@ WITH sources AS (
   WHERE m.deleted IS FALSE
     AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
     AND m.organization_id = ANY(@organization_ids::text[])
+    AND (cardinality(@project_ids::uuid[]) = 0 OR m.project_id = ANY(@project_ids::uuid[]))
     AND m.created_at >= @since::timestamptz
     AND m.created_at < @until::timestamptz
 )
@@ -106,10 +109,12 @@ RETURNING d.id;
 -- Parent periods (week or month) that have child digests starting in
 -- [@since, @until) and no digest of their own yet. A week rolls into the
 -- month its Monday falls in, which date_trunc('month', period_start) gives.
+-- An empty @project_ids means every project.
 SELECT d.organization_id, d.project_id, date_trunc(@parent_level::text, d.period_start::timestamp)::date AS period_start
 FROM memory_digests d
 WHERE d.level = @child_level::text
   AND d.organization_id = ANY(@organization_ids::text[])
+  AND (cardinality(@project_ids::uuid[]) = 0 OR d.project_id = ANY(@project_ids::uuid[]))
   AND d.period_start >= @since::date
   AND d.period_start < @until::date
   AND EXISTS (SELECT 1 FROM projects p WHERE p.id = d.project_id AND p.deleted IS FALSE)
@@ -278,3 +283,11 @@ WHERE m.id = ANY(@ids::uuid[])
   AND m.deleted IS FALSE
   AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
 ORDER BY m.created_at;
+
+-- name: DeleteProjectDigests :execrows
+-- Every digest of one organization's projects. Only the team memory eval
+-- uses it: it rebuilds a synthetic corpus's digests with each model it
+-- compares, so digests written by an earlier model must not survive.
+DELETE FROM memory_digests
+WHERE organization_id = @organization_id
+  AND project_id = ANY(@project_ids::uuid[]);

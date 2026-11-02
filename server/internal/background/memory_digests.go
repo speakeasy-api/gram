@@ -73,8 +73,9 @@ func MemoryDigestsWorkflow(ctx workflow.Context) error {
 		for range maxMemoryDigestBatchesPerLevel {
 			var result activities.BuildMemoryDigestsResult
 			if err := workflow.ExecuteActivity(ctx, a.BuildMemoryDigests, activities.BuildMemoryDigestsArgs{
-				Level: string(level),
-				Now:   now,
+				Level:      string(level),
+				Now:        now,
+				ProjectIDs: nil,
 			}).Get(ctx, &result); err != nil {
 				return fmt.Errorf("build %s digests: %w", level, err)
 			}
