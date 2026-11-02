@@ -103,16 +103,23 @@ func (r *RedisCacheAdapter) Add(ctx context.Context, key string, ttl time.Durati
 	return ok, nil
 }
 
-// LeaseOwner reads the ownership token at key, or "" when key is absent.
-func (r *RedisCacheAdapter) LeaseOwner(ctx context.Context, key string) (string, error) {
-	owner, err := r.client.Get(ctx, key).Result()
-	if errors.Is(err, redis.Nil) {
-		return "", nil
-	}
+// ClaimLease atomically takes key for owner if it is absent, and reports whether owner holds it.
+func (r *RedisCacheAdapter) ClaimLease(ctx context.Context, key, owner string, ttl time.Duration) (bool, error) {
+	const claim = `
+local current = redis.call("GET", KEYS[1])
+if not current then
+  redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2])
+  return 1
+end
+if current == ARGV[1] then
+  return 1
+end
+return 0`
+	held, err := r.client.Eval(ctx, claim, []string{key}, owner, ttl.Milliseconds()).Int64()
 	if err != nil {
-		return "", fmt.Errorf("read lease %s: %w", key, err)
+		return false, fmt.Errorf("claim lease %s: %w", key, err)
 	}
-	return owner, nil
+	return held == 1, nil
 }
 
 // AcquireLease sets a caller-provided ownership token only when key is absent.

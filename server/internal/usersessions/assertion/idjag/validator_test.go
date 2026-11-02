@@ -58,6 +58,7 @@ func (k *testKeys) VerificationKeyForAlgorithm(_ context.Context, _ jwks.Source,
 
 type testGuard struct {
 	claimed map[string]bool
+	owners  map[string]string
 	calls   int
 }
 
@@ -72,12 +73,25 @@ func (g *testGuard) Reserve(_ context.Context, key replay.Key, _ time.Time) (boo
 	return true, nil
 }
 
-func (g *testGuard) ReserveOwned(ctx context.Context, key replay.Key, holdUntil time.Time, _ string) (bool, error) {
-	return g.Reserve(ctx, key, holdUntil)
+func (g *testGuard) ReserveOwned(_ context.Context, key replay.Key, _ time.Time, owner string) (bool, error) {
+	g.calls++
+	if g.owners == nil {
+		g.owners = map[string]string{}
+	}
+	if current, held := g.owners[key.ID]; held {
+		return current == owner, nil
+	}
+	if g.claimed[key.ID] {
+		return false, nil
+	}
+	g.owners[key.ID] = owner
+	return true, nil
 }
 
-func (g *testGuard) Release(_ context.Context, key replay.Key, _ string) error {
-	delete(g.claimed, key.ID)
+func (g *testGuard) Release(_ context.Context, key replay.Key, owner string) error {
+	if g.owners[key.ID] == owner {
+		delete(g.owners, key.ID)
+	}
 	return nil
 }
 

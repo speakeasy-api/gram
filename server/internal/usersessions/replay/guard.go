@@ -123,18 +123,12 @@ func (g *Guard) ReserveOwned(ctx context.Context, key Key, holdUntil time.Time, 
 	storageKey := g.namespace + ":" + key.storageKey()
 	ttl := min(max(time.Until(holdUntil), minHoldTTL), g.maxHold)
 
-	claimed, err := g.leases.AcquireLease(ctx, storageKey, owner, ttl)
-	if err == nil && claimed {
-		return true, nil
-	}
+	claimed, err := g.leases.ClaimLease(ctx, storageKey, owner, ttl)
 	if err == nil {
-		current, readErr := g.leases.LeaseOwner(ctx, storageKey)
-		if readErr == nil {
-			return current == owner, nil
-		}
-		err = readErr
+		return claimed, nil
 	}
 
+	// A lost reply may have claimed it; the owner is unique to this attempt, so this frees only that claim.
 	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseBudget)
 	defer cancel()
 	_, _ = g.leases.ReleaseLeaseIfOwner(releaseCtx, storageKey, owner)
