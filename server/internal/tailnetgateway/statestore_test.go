@@ -126,7 +126,7 @@ func TestPostgresStateStoreRegisteredAndReset(t *testing.T) {
 
 	// tailscaled persists known profiles as a map keyed by profile id, in the
 	// shape ipn.LoginProfile serializes to.
-	profile := ipn.LoginProfile{ID: "profile-1", Name: "speakeasy-gw-0", Key: ipn.StateKey("profile-1")} //nolint:exhaustruct // only identifying fields matter
+	profile := ipn.LoginProfile{ID: "profile-1", Name: "speakeasy-gw-0", Key: ipn.StateKey("profile-1")}
 	encoded, err := json.Marshal(map[ipn.ProfileID]ipn.LoginProfile{profile.ID: profile})
 	require.NoError(t, err)
 	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, encoded))
