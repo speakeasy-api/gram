@@ -830,9 +830,9 @@ SELECT @id::uuid, @project_id::uuid, @org_id::text, 'issuance_profile',
 FROM mcp_auth_clients AS ac
 WHERE ac.id = @auth_client_id::uuid AND ac.organization_id = @org_id::text;
 
--- The organization gateway's sessions picked the caller's own GitHub token on
--- the consent page: GitHub offers two credentials, so a choice that names
--- neither would leave the server without one once enforcement starts.
+-- Sets the organization gateway's seeded GitHub choices to the caller's own
+-- GitHub token. The server offers two credentials, so a choice that names
+-- neither resolves to no credential under enforcement.
 -- name: ServersPickGatewayGitHubCredential :execrows
 UPDATE upstream_client_selections AS sel
 SET auth_client_id = ac.id,

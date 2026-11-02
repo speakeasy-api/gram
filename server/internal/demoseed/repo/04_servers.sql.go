@@ -2155,9 +2155,9 @@ type ServersPickGatewayGitHubCredentialParams struct {
 	McpServerID   uuid.UUID
 }
 
-// The organization gateway's sessions picked the caller's own GitHub token on
-// the consent page: GitHub offers two credentials, so a choice that names
-// neither would leave the server without one once enforcement starts.
+// Sets the organization gateway's seeded GitHub choices to the caller's own
+// GitHub token. The server offers two credentials, so a choice that names
+// neither resolves to no credential under enforcement.
 func (q *Queries) ServersPickGatewayGitHubCredential(ctx context.Context, arg ServersPickGatewayGitHubCredentialParams) (int64, error) {
 	result, err := q.db.Exec(ctx, serversPickGatewayGitHubCredential,
 		arg.AuthClientID,
