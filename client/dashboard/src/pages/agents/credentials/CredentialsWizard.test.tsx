@@ -726,6 +726,8 @@ const platform = {
   subject: {
     template: "spiffe://example/org/{org_id}/agent/",
     wildcard: true,
+    label: "",
+    alternatives: [],
   },
 };
 
@@ -1043,6 +1045,8 @@ const gke = {
   subject: {
     template: "system:serviceaccount:{namespace}:{service_account}",
     wildcard: false,
+    label: "",
+    alternatives: [],
   },
 };
 
@@ -3232,6 +3236,8 @@ const githubActions = {
   variables: [
     ["owner", "Owner", "[A-Za-z0-9][A-Za-z0-9-]{0,38}(?:@[0-9]+)?"],
     ["repo", "Repository", "[A-Za-z0-9._-]{1,100}(?:@[0-9]+)?"],
+    ["branch", "Branch", "[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*"],
+    ["environment", "Environment", "[^:*\\x00-\\x1f\\x7f]{1,255}"],
   ].map(([key, label, pattern]) => ({
     key,
     tier: "rule",
@@ -3241,7 +3247,25 @@ const githubActions = {
     pattern,
     patternMessage: "",
   })),
-  subject: { template: "repo:{owner}/{repo}:", wildcard: true },
+  subject: {
+    template: "repo:{owner}/{repo}:",
+    wildcard: true,
+    label: "Whole repository",
+    alternatives: [
+      {
+        key: "branch",
+        label: "One branch",
+        template: "repo:{owner}/{repo}:ref:refs/heads/{branch}",
+        wildcard: false,
+      },
+      {
+        key: "environment",
+        label: "One environment",
+        template: "repo:{owner}/{repo}:environment:{environment}",
+        wildcard: false,
+      },
+    ],
+  },
 };
 
 describe("Connecting a GitHub repository", () => {
@@ -3465,6 +3489,57 @@ describe("Connecting a GitHub repository", () => {
       ),
     ).toHaveLength(1);
     await screen.findByRole("heading", { name: "What the job gets" });
+  });
+
+  it("admits one environment's jobs alone, and runs the workflow in it", async () => {
+    await reachRepositoryStep();
+    const connect = screen.getByRole("button", {
+      name: "Connect GitHub Actions",
+    });
+    fireEvent.click(screen.getByRole("radio", { name: "One environment" }));
+    // The environment is now part of the rule, so it must be named first.
+    expect(connect.hasAttribute("disabled")).toBe(true);
+    fireEvent.change(screen.getByLabelText("Environment"), {
+      target: { value: "production" },
+    });
+    expect(
+      screen.getByText("repo:acme/payments-api:environment:production"),
+    ).toBeTruthy();
+    expect(screen.getByText(/protection rules pass/)).toBeTruthy();
+    fireEvent.click(connect);
+
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.admitSubject.mock.calls[0]?.[0]?.request?.admitWorkloadSubjectForm,
+    ).toMatchObject({
+      subject: "repo:acme/payments-api:environment:production",
+      matchKind: "exact",
+    });
+    await screen.findByRole("heading", { name: "What the job gets" });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const workflow = await screen.findByLabelText(
+      ".github/workflows/speakeasy.yml",
+    );
+    expect(workflow.textContent).toMatch(/^ {4}environment: "production" #/m);
+    expect(workflow.textContent).not.toContain("pull_request");
+  });
+
+  it("admits one branch's jobs alone with an exact rule", async () => {
+    await reachRepositoryStep();
+    fireEvent.click(screen.getByRole("radio", { name: "One branch" }));
+    fireEvent.change(screen.getByLabelText("Branch"), {
+      target: { value: "release/v2" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.admitSubject.mock.calls[0]?.[0]?.request?.admitWorkloadSubjectForm,
+    ).toMatchObject({
+      subject: "repo:acme/payments-api:ref:refs/heads/release/v2",
+      matchKind: "exact",
+    });
   });
 
   it("registers its own issuer when only a project trusts GitHub, and says that project's servers read the project's", async () => {

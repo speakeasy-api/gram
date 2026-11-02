@@ -3,6 +3,7 @@ import { AGENT_PROVIDERS } from "@/components/agent-providers/agent-providers";
 import { hooksIngestPolicyGrant } from "../agent-hook-events";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { SetupServer } from "./setupInstructions";
+import { SUBJECT_CHOICE } from "./workloadCatalog";
 
 /**
  * GitHub Actions' guided setup, as data: the grants a job's device agent
@@ -171,6 +172,30 @@ export function repositoryProblem(
   return null;
 }
 
+/**
+ * The catalog's rules narrower than the whole repository, by their keys. Each
+ * key is also the variable its template adds, which the catalog test pins.
+ */
+export const NARROWER_SCOPES = ["branch", "environment"] as const;
+
+/**
+ * Which of the repository's jobs the rule admits, which the workflow has to
+ * match: every job, the jobs on one branch, or the jobs that use one
+ * environment.
+ */
+export type JobScope =
+  | { kind: "repository" }
+  | { kind: (typeof NARROWER_SCOPES)[number]; name: string };
+
+/** The scope the setup's values choose; its name is empty until typed. */
+export function jobScope(values: Record<string, string>): JobScope {
+  const kind = NARROWER_SCOPES.find(
+    (scope) => scope === values[SUBJECT_CHOICE],
+  );
+  if (kind === undefined) return { kind: "repository" };
+  return { kind, name: values[kind]?.trim() ?? "" };
+}
+
 /** The repository as GitHub names it, for prose and the workflow. */
 export function repositoryName(values: Record<string, string>): string {
   const name = (key: string, fallback: string) =>
@@ -206,28 +231,43 @@ export function workflowYaml({
   organizationId,
   projectSlug,
   controlPlaneUrl,
+  scope,
 }: {
   agent: WorkflowAgent;
   organizationId: string;
   projectSlug: string;
   controlPlaneUrl: string;
+  scope: JobScope;
 }): { yaml: string; problem: null } | { yaml: null; problem: string } {
   const problem = controlPlaneProblem(controlPlaneUrl);
   if (problem !== null) return { yaml: null, problem };
   const controlPlane = trimmedControlPlane(controlPlaneUrl);
   const selected = WORKFLOW_AGENTS[agent];
+  // A rule narrower than the repository refuses a pull request's job, so only
+  // the whole repository's workflow runs on one. Names are written as JSON
+  // strings, which YAML reads as they are; the catalog's branch pattern
+  // refuses the characters a branch filter reads as a glob.
   const lines = [
     "name: Speakeasy",
     "",
     "on:",
     "  push:",
-    "    branches: [main]",
-    "  pull_request:",
+    `    branches: [${scope.kind === "branch" ? JSON.stringify(scope.name || "BRANCH") : "main"}]`,
+    ...(scope.kind === "repository" ? ["  pull_request:"] : []),
     "",
     "jobs:",
     "  agent:",
-    "    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false",
+    ...(scope.kind === "repository"
+      ? [
+          "    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false",
+        ]
+      : []),
     "    runs-on: ubuntu-latest",
+    ...(scope.kind === "environment"
+      ? [
+          `    environment: ${JSON.stringify(scope.name || "ENVIRONMENT")} # its protection rules pass before the job starts`,
+        ]
+      : []),
     "    permissions:",
     "      id-token: write # lets the job request its GitHub OIDC token",
     "      contents: read",

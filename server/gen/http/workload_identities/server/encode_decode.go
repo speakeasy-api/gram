@@ -2857,6 +2857,33 @@ func marshalWorkloadidentitiesWorkloadPlatformSubjectToWorkloadPlatformSubjectRe
 	res := &WorkloadPlatformSubjectResponseBody{
 		Template: v.Template,
 		Wildcard: v.Wildcard,
+		Label:    v.Label,
+	}
+	if v.Alternatives != nil {
+		res.Alternatives = make([]*WorkloadPlatformSubjectAlternativeResponseBody, len(v.Alternatives))
+		for i, val := range v.Alternatives {
+			if val == nil {
+				res.Alternatives[i] = nil
+				continue
+			}
+			res.Alternatives[i] = marshalWorkloadidentitiesWorkloadPlatformSubjectAlternativeToWorkloadPlatformSubjectAlternativeResponseBody(val)
+		}
+	} else {
+		res.Alternatives = []*WorkloadPlatformSubjectAlternativeResponseBody{}
+	}
+
+	return res
+}
+
+// marshalWorkloadidentitiesWorkloadPlatformSubjectAlternativeToWorkloadPlatformSubjectAlternativeResponseBody
+// builds a value of type *WorkloadPlatformSubjectAlternativeResponseBody from
+// a value of type *workloadidentities.WorkloadPlatformSubjectAlternative.
+func marshalWorkloadidentitiesWorkloadPlatformSubjectAlternativeToWorkloadPlatformSubjectAlternativeResponseBody(v *workloadidentities.WorkloadPlatformSubjectAlternative) *WorkloadPlatformSubjectAlternativeResponseBody {
+	res := &WorkloadPlatformSubjectAlternativeResponseBody{
+		Key:      v.Key,
+		Label:    v.Label,
+		Template: v.Template,
+		Wildcard: v.Wildcard,
 	}
 
 	return res

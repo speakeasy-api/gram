@@ -34,14 +34,26 @@ import (
 )
 
 // newGitHubActionsGrantFixture writes what the GitHub Actions guided setup
-// writes: the issuer and a wildcard over one repository, both at the
-// organization tier, assigned to one agent. That agent holds what the setup
-// grants it: mcp:connect on the fixture's server, org:device_agent_sync, and
-// org:hooks_ingest for the server's project alone.
+// writes by default: the issuer and a wildcard over one repository, both at
+// the organization tier, assigned to one agent. That agent holds what the
+// setup grants it: mcp:connect on the fixture's server, org:device_agent_sync,
+// and org:hooks_ingest for the server's project alone.
 //
 // Nobody can sign as GitHub in a test, so a dev-idp stands in for its issuer;
 // the subjects are GitHub's. The fixture's subject is a pull request job.
 func newGitHubActionsGrantFixture(t *testing.T, owner, repo string) deviceAgentGrantFixture {
+	t.Helper()
+
+	rule := catalogRule(t, "github-actions", map[string]string{"owner": owner, "repo": repo})
+	f := newGitHubActionsRuleFixture(t, rule, workloadidentity.MatchKindWildcard)
+	f.subject = strings.TrimSuffix(rule, "*") + "pull_request"
+	return f
+}
+
+// newGitHubActionsRuleFixture is newGitHubActionsGrantFixture for any rule
+// the setup can write. Its subject is the rule itself, so an exact rule's
+// fixture starts out admitted.
+func newGitHubActionsRuleFixture(t *testing.T, rule string, matchKind workloadidentity.MatchKind) deviceAgentGrantFixture {
 	t.Helper()
 
 	issuer := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: false, Key: nil, TLS: true})
@@ -67,7 +79,6 @@ func newGitHubActionsGrantFixture(t *testing.T, owner, repo string) deviceAgentG
 	seedPrincipalGrant(t, ctx, ti, fx.orgID, agentOwner, authz.ScopeOrgDeviceAgentSync, authz.WildcardResource)
 	seedPrincipalGrant(t, ctx, ti, fx.orgID, agentOwner, authz.ScopeOrgHooksIngest, authz.WildcardResource)
 
-	rule := catalogRule(t, "github-actions", map[string]string{"owner": owner, "repo": repo})
 	fixtures := testrepo.New(ti.conn)
 	issuerID, err := fixtures.CreateWorkloadIssuerFixture(ctx, testrepo.CreateWorkloadIssuerFixtureParams{
 		OrganizationID: fx.orgID,
@@ -82,13 +93,13 @@ func newGitHubActionsGrantFixture(t *testing.T, owner, repo string) deviceAgentG
 		ProjectID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		WorkloadIssuerID: issuerID,
 		Subject:          rule,
-		MatchKind:        string(workloadidentity.MatchKindWildcard),
+		MatchKind:        string(matchKind),
 	}))
 	require.NoError(t, fixtures.CreateWorkloadAgentAssignmentFixture(ctx, testrepo.CreateWorkloadAgentAssignmentFixtureParams{
 		OrganizationID:   fx.orgID,
 		WorkloadIssuerID: issuerID,
 		Subject:          rule,
-		MatchKind:        string(workloadidentity.MatchKindWildcard),
+		MatchKind:        string(matchKind),
 		AgentID:          agent.ID,
 	}))
 
@@ -103,7 +114,7 @@ func newGitHubActionsGrantFixture(t *testing.T, owner, repo string) deviceAgentG
 		issuerID:         issuerID,
 		agentID:          agent.ID,
 		assignmentID:     uuid.Nil,
-		subject:          strings.TrimSuffix(rule, "*") + "pull_request",
+		subject:          rule,
 		resource:         strings.TrimSuffix(ti.serverURL.String(), "/") + "/mcp/" + slug,
 		advertisedIssuer: advertisedIssuer,
 	}
@@ -214,6 +225,49 @@ func TestGitHubActionsRule_AdmitsEveryJobOfTheRepository(t *testing.T) {
 			f := f
 			f.subject = "repo:acme/payments-api:" + job
 			f.requireWorkloadSession(t, f.exchange(t, f.assertion(t, f.advertisedIssuer), f.resource), f.advertisedIssuer)
+		})
+	}
+}
+
+// The narrower choices admit one exact context. A branch rule admits jobs on
+// that branch alone, not its sub-branches or pull requests; an environment
+// rule admits only jobs that reference that environment, which GitHub runs
+// only after its protection rules pass, and not one that differs only in case.
+func TestGitHubActionsRule_NarrowerChoicesAdmitOneContext(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		choice string
+		values map[string]string
+		refuse []string
+	}{
+		{
+			choice: "branch",
+			values: map[string]string{"owner": "acme", "repo": "payments-api", "branch": "release/v2"},
+			refuse: []string{"ref:refs/heads/main", "ref:refs/heads/release/v2/x", "ref:refs/tags/release/v2", "pull_request", "environment:release/v2"},
+		},
+		{
+			choice: "environment",
+			values: map[string]string{"owner": "acme", "repo": "payments-api", "environment": "production"},
+			refuse: []string{"environment:Production", "environment:production-eu", "ref:refs/heads/main", "pull_request"},
+		},
+	} {
+		t.Run(tc.choice, func(t *testing.T) {
+			t.Parallel()
+
+			rule, matchKind := catalogChoiceRule(t, "github-actions", tc.choice, tc.values)
+			require.Equal(t, workloadidentity.MatchKindExact, matchKind)
+			f := newGitHubActionsRuleFixture(t, rule, matchKind)
+			f.requireWorkloadSession(t, f.exchange(t, f.assertion(t, f.advertisedIssuer), f.resource), f.advertisedIssuer)
+
+			for _, job := range tc.refuse {
+				t.Run(job, func(t *testing.T) {
+					t.Parallel()
+					f := f
+					f.subject = "repo:acme/payments-api:" + job
+					requireWorkloadGrantRefused(t, f.exchange(t, f.assertion(t, f.advertisedIssuer), f.resource))
+				})
+			}
 		})
 	}
 }

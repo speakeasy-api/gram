@@ -38,6 +38,10 @@ func TestListPlatforms_ReturnsTheCatalogPolicy(t *testing.T) {
 	require.Equal(t, "hidden", claudeTag.Issuer.Visibility)
 	require.True(t, claudeTag.Subject.Wildcard)
 	require.Equal(t, "org_id", claudeTag.Variables[0].Key)
+	// Empty rather than absent, as every other unset field is.
+	require.Empty(t, claudeTag.Subject.Label)
+	require.NotNil(t, claudeTag.Subject.Alternatives)
+	require.Empty(t, claudeTag.Subject.Alternatives)
 }
 
 func TestListPlatforms_RequiresWorkloadRead(t *testing.T) {
@@ -123,6 +127,14 @@ func TestCatalogGitHubActions_WritesOrganizationTierRows(t *testing.T) {
 	}
 	require.NotNil(t, github)
 	require.Equal(t, "read-only", github.Issuer.Visibility)
+	// Listed while it is not offered, with the narrower rules it offers in
+	// place of the whole repository.
+	require.False(t, github.Enabled)
+	require.Equal(t, "Whole repository", github.Subject.Label)
+	require.Equal(t, []*gen.WorkloadPlatformSubjectAlternative{
+		{Key: "branch", Label: "One branch", Template: "repo:{owner}/{repo}:ref:refs/heads/{branch}", Wildcard: false},
+		{Key: "environment", Label: "One environment", Template: "repo:{owner}/{repo}:environment:{environment}", Wildcard: false},
+	}, github.Subject.Alternatives)
 
 	_, err = ti.service.RegisterIssuer(orgCtx, &gen.RegisterIssuerPayload{
 		SessionToken:           nil,

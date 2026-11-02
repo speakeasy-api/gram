@@ -60,7 +60,9 @@ import { hasPlatformSetup, platformSetup } from "./platformSetups";
 import {
   DEVICE_AGENT_SYNC_SCOPE,
   GITHUB_ACTIONS_KEY,
+  jobScope,
   repositoryName,
+  type JobScope,
 } from "./githubActions";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
@@ -201,6 +203,8 @@ const SUMMARY_ROW_FOR_FIELD = new Map<string, string>([
   ["org_id", "Anthropic organization"],
   ["owner", "Repository"],
   ["repo", "Repository"],
+  ["branch", "Branch"],
+  ["environment", "Environment"],
   ["project", "Cluster"],
   ["location", "Cluster"],
   ["cluster", "Cluster"],
@@ -209,6 +213,22 @@ const SUMMARY_ROW_FOR_FIELD = new Map<string, string>([
   ["name", "Platform"],
   ["issuer", "Issuer"],
 ]);
+
+/**
+ * The rail's row for the branch or environment a GitHub Actions rule is
+ * narrowed to, once it is named. None for the whole repository.
+ */
+function githubActionsScopeRow(
+  scope: JobScope,
+): { label: string; value: ReactNode }[] {
+  if (scope.kind === "repository" || scope.name === "") return [];
+  return [
+    {
+      label: scope.kind === "branch" ? "Branch" : "Environment",
+      value: <code className="text-xs break-all">{scope.name}</code>,
+    },
+  ];
+}
 
 /**
  * Whether a grant the agent holds already covers one it would be given, by
@@ -1366,7 +1386,7 @@ export function CredentialsWizard({
         : admittedEntry !== undefined
           ? {
               ...valuesFromIssuer(admittedEntry, admitted.issuer),
-              ...valuesFromSubject(admittedEntry, admitted.subject),
+              ...valuesFromSubject(admittedEntry, admitted),
             }
           : // A custom issuer: the issuer picked from the trusted list, and
             // the subject as typed, without the `*` the match kind adds.
@@ -1670,6 +1690,10 @@ export function CredentialsWizard({
                 ),
               },
             ]
+          : []),
+        // The one branch or environment the rule narrows the repository to.
+        ...(credential === "workload" && platformKey === GITHUB_ACTIONS_KEY
+          ? githubActionsScopeRow(jobScope(workload.values))
           : []),
         // A GKE cluster by its name alone: the project and location are on
         // the step that asked for them, and the rail is too narrow for all

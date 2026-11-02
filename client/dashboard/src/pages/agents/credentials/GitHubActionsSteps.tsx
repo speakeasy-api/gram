@@ -1,6 +1,9 @@
 import { Alert } from "@/components/ui/Alert";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import { Label } from "@/components/ui/Label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
@@ -20,6 +23,7 @@ import {
   pluginsForEveryAgent,
   unreachablePluginServers,
   workflowYaml,
+  type JobScope,
   type WorkflowAgent,
 } from "./githubActions";
 import { Links, SetupError } from "./SetupFields";
@@ -186,7 +190,79 @@ function DeliveredPlugins({
   );
 }
 
-export function WorkflowStep(): JSX.Element {
+/** Which of the repository's jobs the rule admits, as the catalog labels them. */
+export function JobScopeChoice({
+  choices,
+  value,
+  onChange,
+}: {
+  choices: { key: string; label: string }[];
+  value: string;
+  onChange: (key: string) => void;
+}): JSX.Element {
+  return (
+    <div className="space-y-2">
+      <Label id="github-actions-scope">Which jobs</Label>
+      <RadioGroup
+        aria-labelledby="github-actions-scope"
+        value={value}
+        onValueChange={onChange}
+        className="gap-1.5"
+      >
+        {choices.map((choice) => {
+          const id = `github-actions-scope-${choice.key}`;
+          return (
+            <div key={choice.key} className="flex items-center gap-2">
+              <RadioGroupItem value={choice.key} id={id} />
+              <Label htmlFor={id} className="cursor-pointer font-normal">
+                {choice.label}
+              </Label>
+            </div>
+          );
+        })}
+      </RadioGroup>
+      <Text small muted>
+        The whole repository admits every branch and pull request. An
+        environment is the way to require GitHub&apos;s protection rules, such
+        as required reviewers, before a job signs in.
+      </Text>
+    </div>
+  );
+}
+
+/** What the workflow's triggers and the rule mean together, by scope. */
+function ScopeNote({ scope }: { scope: JobScope }): JSX.Element {
+  switch (scope.kind) {
+    case "repository":
+      return (
+        <li>
+          On <code>pull_request</code>, forks get no GitHub token, and the
+          job&apos;s <code>if:</code> skips them. Don&apos;t run it on{" "}
+          <code>pull_request_target</code>: that event gives a fork&apos;s pull
+          request a token the rule admits.
+        </li>
+      );
+    case "branch":
+      return (
+        <li>
+          The rule admits jobs on <code>{scope.name}</code> that use no
+          environment, so the workflow runs on pushes to it. A pull request job
+          is refused.
+        </li>
+      );
+    case "environment":
+      return (
+        <li>
+          The rule admits only jobs that use the <code>{scope.name}</code>{" "}
+          environment. Set its protection rules under Settings &gt; Environments
+          before you add the workflow: GitHub creates an environment a workflow
+          names with no rules.
+        </li>
+      );
+  }
+}
+
+export function WorkflowStep({ scope }: { scope: JobScope }): JSX.Element {
   const organization = useOrganization();
   const project = useProject();
   const [agent, setAgent] = useState<WorkflowAgent>("claude");
@@ -196,6 +272,7 @@ export function WorkflowStep(): JSX.Element {
     organizationId: organization.id,
     projectSlug: project.slug,
     controlPlaneUrl: getServerURL(),
+    scope,
   });
   return (
     <div className="space-y-4 text-sm">
@@ -249,12 +326,7 @@ export function WorkflowStep(): JSX.Element {
               them to <strong>{project.name || project.slug}</strong> only;
               leave it out to send none.
             </li>
-            <li>
-              On <code>pull_request</code>, forks get no GitHub token, and the
-              job&apos;s <code>if:</code> skips them. Don&apos;t run it on{" "}
-              <code>pull_request_target</code>: that event gives a fork&apos;s
-              pull request a token the rule admits.
-            </li>
+            <ScopeNote scope={scope} />
             <li>
               Keep <strong>Connect to Speakeasy</strong> before{" "}
               <strong>Run {selected.name}</strong> in the same job so it can use
@@ -270,5 +342,82 @@ export function WorkflowStep(): JSX.Element {
         </PanelTab>
       </PanelTabs>
     </div>
+  );
+}
+
+/**
+ * Who can sign in as the agent under the rule about to be saved. Every
+ * choice is open to someone who can push to the repository; only an
+ * environment's protection rules can put a review in front of it.
+ */
+export function RepositoryRuleWarning({
+  scope,
+  repository,
+  agent,
+  subject,
+}: {
+  scope: JobScope;
+  repository: string;
+  agent: string;
+  subject: string;
+}): JSX.Element {
+  const rule = (
+    <>
+      The rule is <code>{subject}</code>.
+    </>
+  );
+  const [who, risk] = (() => {
+    switch (scope.kind) {
+      case "repository":
+        return [
+          <>
+            Every job in <strong>{repository}</strong> can sign in as {agent}:
+            every branch, tag, environment and pull request. {rule}
+          </>,
+          <>
+            Anyone who can push a branch to the repository can run such a job
+            and use {agent}&apos;s access. On the <code>pull_request</code>{" "}
+            event, pull requests from forks get no GitHub token, so outside
+            contributors cannot. A <code>pull_request_target</code> workflow
+            with <code>id-token: write</code> is admitted too, and if it checks
+            out the pull request&apos;s head, code from a fork runs as {agent}.
+            To admit fewer jobs, choose one branch or one environment.
+          </>,
+        ];
+      case "branch":
+        return [
+          <>
+            Jobs on <strong>{scope.name}</strong> in {repository} can sign in as{" "}
+            {agent}, unless they use an environment. Pull request jobs cannot.{" "}
+            {rule}
+          </>,
+          <>
+            Anyone who can push to {scope.name} can run such a job, so protect
+            the branch if only reviewed code should use {agent}&apos;s access.
+          </>,
+        ];
+      case "environment":
+        return [
+          <>
+            Only jobs in {repository} that use the <strong>{scope.name}</strong>{" "}
+            environment can sign in as {agent}, and GitHub starts them only once
+            the environment&apos;s protection rules pass. {rule}
+          </>,
+          <>
+            Set those rules, such as required reviewers or the branches that may
+            deploy, under the repository&apos;s Settings &gt; Environments
+            before you add the workflow. A workflow that names an environment
+            nobody has set up creates it with no rules.
+          </>,
+        ];
+    }
+  })();
+  return (
+    <Alert variant={scope.kind === "environment" ? "info" : "warning"}>
+      <div className="space-y-2 text-sm">
+        <p>{who}</p>
+        <p>{risk}</p>
+      </div>
+    </Alert>
   );
 }

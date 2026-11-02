@@ -6,11 +6,23 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  WorkloadPlatformSubjectAlternative,
+  WorkloadPlatformSubjectAlternative$inboundSchema,
+} from "./workloadplatformsubjectalternative.js";
 
 /**
- * The access rule a catalog platform produces.
+ * The access rule a catalog platform produces by default, and the others the operator may choose instead.
  */
 export type WorkloadPlatformSubject = {
+  /**
+   * Other rules the operator may choose instead, in the order they are offered. Empty where there are none.
+   */
+  alternatives: Array<WorkloadPlatformSubjectAlternative>;
+  /**
+   * Names the default rule beside its alternatives. Empty where there are none.
+   */
+  label: string;
   /**
    * The subject with {key} placeholders for rule-tier variables; the stem, for a wildcard rule.
    */
@@ -26,6 +38,8 @@ export const WorkloadPlatformSubject$inboundSchema: z.ZodMiniType<
   WorkloadPlatformSubject,
   unknown
 > = z.object({
+  alternatives: z.array(WorkloadPlatformSubjectAlternative$inboundSchema),
+  label: z.string(),
   template: z.string(),
   wildcard: z.boolean(),
 });

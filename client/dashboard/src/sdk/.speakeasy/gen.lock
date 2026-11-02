@@ -2233,6 +2233,7 @@ trackedFiles:
   src/models/components/workloadplatformcatalog.ts: {}
   src/models/components/workloadplatformconstant.ts: {}
   src/models/components/workloadplatformsubject.ts: {}
+  src/models/components/workloadplatformsubjectalternative.ts: {}
   src/models/components/workloadplatformvariable.ts: {}
   src/models/components/workloadtokenendpoint.ts: {}
   src/models/components/workloadtokenendpoints.ts: {}

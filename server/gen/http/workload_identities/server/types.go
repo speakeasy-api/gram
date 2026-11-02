@@ -2637,6 +2637,25 @@ type WorkloadPlatformSubjectResponseBody struct {
 	Template string `form:"template" json:"template" xml:"template"`
 	// Whether the rule is the filled template followed by *.
 	Wildcard bool `form:"wildcard" json:"wildcard" xml:"wildcard"`
+	// Names the default rule beside its alternatives. Empty where there are none.
+	Label string `form:"label" json:"label" xml:"label"`
+	// Other rules the operator may choose instead, in the order they are offered.
+	// Empty where there are none.
+	Alternatives []*WorkloadPlatformSubjectAlternativeResponseBody `form:"alternatives" json:"alternatives" xml:"alternatives"`
+}
+
+// WorkloadPlatformSubjectAlternativeResponseBody is used to define fields on
+// response body types.
+type WorkloadPlatformSubjectAlternativeResponseBody struct {
+	// Identifies the choice within the platform.
+	Key string `form:"key" json:"key" xml:"key"`
+	// What the operator chooses it by.
+	Label string `form:"label" json:"label" xml:"label"`
+	// The subject with {key} placeholders for rule-tier variables; the stem, for a
+	// wildcard rule.
+	Template string `form:"template" json:"template" xml:"template"`
+	// Whether the rule is the filled template followed by *.
+	Wildcard bool `form:"wildcard" json:"wildcard" xml:"wildcard"`
 }
 
 // WorkloadFormResponseBody is used to define fields on response body types.

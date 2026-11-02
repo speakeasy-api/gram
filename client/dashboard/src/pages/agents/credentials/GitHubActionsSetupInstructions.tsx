@@ -1,4 +1,3 @@
-import { Alert } from "@/components/ui/Alert";
 import { getServerURL } from "@/lib/utils";
 import { CodeBlock } from "./CodeBlock";
 import {
@@ -6,13 +5,21 @@ import {
   OIDC_DOCS,
   controlPlaneProblem,
   githubActionsAgentGrants,
+  jobScope,
+  NARROWER_SCOPES,
   repositoryName,
   repositoryProblem,
 } from "./githubActions";
-import { PluginsStep, WorkflowStep } from "./GitHubActionsSteps";
+import {
+  JobScopeChoice,
+  PluginsStep,
+  RepositoryRuleWarning,
+  WorkflowStep,
+} from "./GitHubActionsSteps";
 import { Links, SetupError, VariableField } from "./SetupFields";
 import type { Connection, PlatformSetup } from "./setupInstructions";
 import {
+  SUBJECT_CHOICE,
   subjectRule,
   type CatalogEntry,
   type CatalogVariable,
@@ -25,15 +32,28 @@ import {
  * GitHub token at the organization's device-agent endpoint, fetches the
  * agent's plugins, writes each tool's MCP servers with a per-connection token
  * helper, and sends hook events. One access rule covers the whole repository,
- * and the agent it names supplies all three, so the agent needs the device
- * agent's grants as well as its servers.
+ * one branch or one environment, and the agent it names supplies all three, so
+ * the agent needs the device agent's grants as well as its servers.
  */
 export function githubActionsSetupInstructions(
   entry: CatalogEntry,
 ): PlatformSetup {
+  const variable = (key: string) =>
+    entry.variables.find((found) => found.key === key);
   const fields = ["owner", "repo"]
-    .map((key) => entry.variables.find((variable) => variable.key === key))
+    .map(variable)
     .filter((found): found is CatalogVariable => found !== undefined);
+  // The scopes this setup can write a workflow for, labelled by the catalog.
+  // The default rule is the whole repository, which the values leave unset.
+  const choices = [
+    {
+      key: "repository",
+      label: entry.subject.label ?? "Whole repository",
+    },
+    ...entry.subject.alternatives.filter((choice) =>
+      NARROWER_SCOPES.some((scope) => scope === choice.key),
+    ),
+  ];
   // A deployment the action cannot reach gets no rule and no grants: they
   // would trust GitHub for the organization with nothing able to use them.
   const unreachable = controlPlaneProblem(getServerURL());
@@ -95,6 +115,9 @@ export function githubActionsSetupInstructions(
           const problem = repositoryProblem(values);
           const repository = repositoryName(values);
           const agent = agentName || "this agent";
+          const scope = jobScope(values);
+          const scopeField =
+            scope.kind === "repository" ? undefined : variable(scope.kind);
           return (
             <>
               {unreachable !== null && <SetupError>{unreachable}</SetupError>}
@@ -112,6 +135,20 @@ export function githubActionsSetupInstructions(
                 />
               ))}
               {problem !== null && <SetupError>{problem}</SetupError>}
+              <JobScopeChoice
+                choices={choices}
+                value={scope.kind}
+                onChange={(key) =>
+                  setValue(SUBJECT_CHOICE, key === "repository" ? "" : key)
+                }
+              />
+              {scopeField !== undefined && (
+                <VariableField
+                  variable={scopeField}
+                  value={values[scopeField.key] ?? ""}
+                  onChange={(next) => setValue(scopeField.key, next)}
+                />
+              )}
               <details className="text-sm">
                 <summary className="text-muted-foreground hover:text-foreground cursor-pointer">
                   Repositories created, renamed or transferred since July 15,
@@ -137,26 +174,12 @@ export function githubActionsSetupInstructions(
                 </div>
               </details>
               {rule !== null && problem === null && (
-                <Alert variant="warning">
-                  <div className="space-y-2 text-sm">
-                    <p>
-                      Every job in <strong>{repository}</strong> can sign in as{" "}
-                      {agent}: every branch, tag, environment and pull request.
-                      The rule is <code>{rule.subject}</code>.
-                    </p>
-                    <p>
-                      Anyone who can push a branch to the repository can run
-                      such a job and use {agent}&apos;s access. On the{" "}
-                      <code>pull_request</code> event, pull requests from forks
-                      get no GitHub token, so outside contributors cannot. A{" "}
-                      <code>pull_request_target</code> workflow with{" "}
-                      <code>id-token: write</code> is admitted too, and if it
-                      checks out the pull request&apos;s head, code from a fork
-                      runs as {agent}. To admit only one branch or environment,
-                      use a custom platform with its exact subject instead.
-                    </p>
-                  </div>
-                </Alert>
+                <RepositoryRuleWarning
+                  scope={scope}
+                  repository={repository}
+                  agent={agent}
+                  subject={rule.subject}
+                />
               )}
               <p className="text-muted-foreground text-sm">
                 Connecting also lets {agent} fetch its plugins and send hook
@@ -181,7 +204,7 @@ export function githubActionsSetupInstructions(
         short: "Workflow",
         title: "Add the workflow",
         phase: "connect",
-        body: () => <WorkflowStep />,
+        body: ({ values }) => <WorkflowStep scope={jobScope(values)} />,
       },
       {
         id: "check",
@@ -201,7 +224,8 @@ export function githubActionsSetupInstructions(
               <li>
                 <strong>Speakeasy refused this job&apos;s GitHub token</strong>:
                 compare the subject it prints with the rule from the first step,
-                including capital letters and IDs.
+                including capital letters and IDs. A job that uses an
+                environment is named by the environment, not its branch.
               </li>
               <li>
                 <strong>

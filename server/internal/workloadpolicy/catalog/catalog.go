@@ -173,7 +173,7 @@ type Variable struct {
 	PatternMessage string `yaml:"pattern_message"`
 }
 
-// Subject is the access rule an entry produces.
+// Subject is the access rule an entry produces by default.
 type Subject struct {
 	// Template is the subject, with {key} placeholders for rule-tier
 	// variables. For a wildcard rule it is the stem, and must end on a
@@ -183,6 +183,29 @@ type Subject struct {
 
 	// Wildcard makes the rule the filled template followed by "*".
 	Wildcard bool `yaml:"wildcard"`
+
+	// Label names the default rule where the operator chooses between it and
+	// its alternatives. Required when there are any.
+	Label string `yaml:"label"`
+
+	// Alternatives are other rules the operator may choose instead, such as
+	// one branch of a repository rather than all of it. Each is validated
+	// exactly as the default is.
+	Alternatives []SubjectAlternative `yaml:"alternatives"`
+}
+
+// SubjectAlternative is an access rule an entry offers in place of its
+// default subject.
+type SubjectAlternative struct {
+	// Key identifies the choice within the entry.
+	Key string `yaml:"key"`
+
+	// Label is what the operator chooses it by.
+	Label string `yaml:"label"`
+
+	// Template and Wildcard are read as Subject's are.
+	Template string `yaml:"template"`
+	Wildcard bool   `yaml:"wildcard"`
 }
 
 // Block is one piece of a step. Which fields apply depends on Type.
@@ -506,21 +529,66 @@ func validateTemplate(field, template string, variables map[string]Variable, tie
 }
 
 func validateSubject(s Subject, variables map[string]Variable) error {
-	if strings.TrimSpace(s.Template) == "" {
-		return errors.New("subject.template is required")
-	}
-	if strings.Contains(s.Template, "*") {
-		return errors.New(`subject.template must not contain "*"; set wildcard instead`)
-	}
-	if err := validateTemplate("subject.template", s.Template, variables, TierRule); err != nil {
+	if err := validateSubjectTemplate("subject.template", s.Template, s.Wildcard, variables); err != nil {
 		return err
 	}
-	if s.Wildcard {
-		if !strings.ContainsAny(s.Template[len(s.Template)-1:], stemDelimiters) {
-			return fmt.Errorf("subject.template must end on one of %q to be a wildcard stem", stemDelimiters)
+	if len(s.Alternatives) == 0 {
+		return nil
+	}
+	if strings.TrimSpace(s.Label) == "" {
+		return errors.New("subject.label is required when there are alternatives")
+	}
+
+	// Two choices making the same rule could not be told apart when an
+	// existing rule is read back.
+	type rule struct {
+		template string
+		wildcard bool
+	}
+	rules := map[rule]bool{{template: s.Template, wildcard: s.Wildcard}: true}
+	keys := make(map[string]bool, len(s.Alternatives))
+	for _, alternative := range s.Alternatives {
+		if !variableKeyPattern.MatchString(alternative.Key) {
+			return fmt.Errorf("subject alternative key %q must be lowercase snake_case", alternative.Key)
 		}
-		if strings.HasSuffix(s.Template, "}") {
-			return errors.New("a wildcard subject.template must not end on a variable")
+		if keys[alternative.Key] {
+			return fmt.Errorf("subject alternative %q is declared twice", alternative.Key)
+		}
+		keys[alternative.Key] = true
+		if strings.TrimSpace(alternative.Label) == "" {
+			return fmt.Errorf("subject alternative %q: label is required", alternative.Key)
+		}
+		field := fmt.Sprintf("subject alternative %q template", alternative.Key)
+		if err := validateSubjectTemplate(field, alternative.Template, alternative.Wildcard, variables); err != nil {
+			return err
+		}
+		made := rule{template: alternative.Template, wildcard: alternative.Wildcard}
+		if rules[made] {
+			return fmt.Errorf("subject alternative %q makes the same rule as another choice", alternative.Key)
+		}
+		rules[made] = true
+	}
+	return nil
+}
+
+// validateSubjectTemplate holds one subject template to the rules every rule
+// an entry produces must meet. field names it in the error.
+func validateSubjectTemplate(field, template string, wildcard bool, variables map[string]Variable) error {
+	if strings.TrimSpace(template) == "" {
+		return fmt.Errorf("%s is required", field)
+	}
+	if strings.Contains(template, "*") {
+		return fmt.Errorf(`%s must not contain "*"; set wildcard instead`, field)
+	}
+	if err := validateTemplate(field, template, variables, TierRule); err != nil {
+		return err
+	}
+	if wildcard {
+		if !strings.ContainsAny(template[len(template)-1:], stemDelimiters) {
+			return fmt.Errorf("%s must end on one of %q to be a wildcard stem", field, stemDelimiters)
+		}
+		if strings.HasSuffix(template, "}") {
+			return fmt.Errorf("a wildcard %s must not end on a variable", field)
 		}
 	}
 	return nil

@@ -99,18 +99,24 @@ func TestEmbeddedGitHubActionsPinsOneRepository(t *testing.T) {
 	require.Equal(t, "https://token.actions.githubusercontent.com/.well-known/jwks", github.JWKSURI.Value)
 	require.Equal(t, "repo:{owner}/{repo}:", github.Subject.Template)
 	require.True(t, github.Subject.Wildcard)
+	require.Equal(t, "Whole repository", github.Subject.Label)
+	require.Equal(t, []catalog.SubjectAlternative{
+		{Key: "branch", Label: "One branch", Template: "repo:{owner}/{repo}:ref:refs/heads/{branch}", Wildcard: false},
+		{Key: "environment", Label: "One environment", Template: "repo:{owner}/{repo}:environment:{environment}", Wildcard: false},
+	}, github.Subject.Alternatives)
 
 	patterns := make(map[string]*regexp.Regexp, len(github.Variables))
 	for _, variable := range github.Variables {
 		require.Equal(t, catalog.TierRule, variable.Tier, "%s varies per repository, not per platform", variable.Key)
 		patterns[variable.Key] = regexp.MustCompile("^(?:" + variable.Pattern + ")$")
 	}
-	require.Len(t, patterns, 2)
+	require.Len(t, patterns, 4)
+	owner, repo, branch, environment := patterns["owner"], patterns["repo"], patterns["branch"], patterns["environment"]
 
 	// A value holding a delimiter could reach past its segment: an owner of
 	// "acme/app" or a repository of "app:ref" would move the stem, and a "*"
 	// would read as a second wildcard.
-	for key, pattern := range patterns {
+	for key, pattern := range map[string]*regexp.Regexp{"owner": owner, "repo": repo} {
 		for _, delimiter := range []string{":", "/", "*", " "} {
 			require.False(t, pattern.MatchString("ab"+delimiter+"cd"), "%s admits %q", key, delimiter)
 		}
@@ -120,7 +126,6 @@ func TestEmbeddedGitHubActionsPinsOneRepository(t *testing.T) {
 		require.False(t, pattern.MatchString("ab@1@2"), "%s admits two IDs", key)
 	}
 
-	owner, repo := patterns["owner"], patterns["repo"]
 	for _, valid := range []string{"octo-org", "Octo-Org", "a", "octo-org@123456", strings.Repeat("a", 39)} {
 		require.True(t, owner.MatchString(valid), "owner refuses %q", valid)
 	}
@@ -133,6 +138,26 @@ func TestEmbeddedGitHubActionsPinsOneRepository(t *testing.T) {
 	for _, invalid := range []string{"", strings.Repeat("a", 101)} {
 		require.False(t, repo.MatchString(invalid), "repository admits %q", invalid)
 	}
+
+	// A branch and an environment end an exact rule, so a "/" cannot reach
+	// another segment, but a ":" would forge a context and a "*" a wildcard.
+	for key, pattern := range map[string]*regexp.Regexp{"branch": branch, "environment": environment} {
+		for _, refused := range []string{"", "main:x", "main*", "release/*", "main\n", "main\x00"} {
+			require.False(t, pattern.MatchString(refused), "%s admits %q", key, refused)
+		}
+	}
+	for _, valid := range []string{"main", "release/v2.1", "dependabot/npm_and_yarn/left-pad-1.3.0", "Feature_X"} {
+		require.True(t, branch.MatchString(valid), "branch refuses %q", valid)
+	}
+	// Branch names also feed a workflow's branch filter, where these are
+	// glob syntax, and git refuses a space.
+	for _, invalid := range []string{"/main", "main/", "a//b", "main+1", "feat?", "[x]", "!main", "my branch"} {
+		require.False(t, branch.MatchString(invalid), "branch admits %q", invalid)
+	}
+	for _, valid := range []string{"production", "Production EU", "review/pr-12", "Production%3AV1", strings.Repeat("e", 255)} {
+		require.True(t, environment.MatchString(valid), "environment refuses %q", valid)
+	}
+	require.False(t, environment.MatchString(strings.Repeat("e", 256)), "environment admits 256 characters")
 }
 
 func TestParseAcceptsAValidPlatform(t *testing.T) {
@@ -177,6 +202,69 @@ func TestParseRefusesInvalidPlatforms(t *testing.T) {
 
 			require.Contains(t, validPlatform, tc.from, "test case must change the fixture")
 			_, err := catalog.Parse([]byte(strings.Replace(validPlatform, tc.from, tc.to, 1)))
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
+
+// withAlternatives is validPlatform offering an exact rule for one agent
+// beside its wildcard over the whole organization.
+var withAlternatives = strings.NewReplacer(
+	"    pattern: \"[a-z0-9-]+\"\n", `    pattern: "[a-z0-9-]+"
+  - key: agent_id
+    tier: rule
+    label: Agent ID
+    pattern: "[a-z0-9]+"
+`,
+	"  wildcard: true\n", `  wildcard: true
+  label: Every agent
+  alternatives:
+    - key: one_agent
+      label: One agent
+      template: "wimse://issuer.example.com/org/{org_id}/agent/{agent_id}"
+      wildcard: false
+`,
+).Replace(validPlatform)
+
+func TestParseAcceptsSubjectAlternatives(t *testing.T) {
+	t.Parallel()
+
+	platform, err := catalog.Parse([]byte(withAlternatives))
+	require.NoError(t, err)
+	require.Equal(t, "Every agent", platform.Subject.Label)
+	require.Equal(t, []catalog.SubjectAlternative{{
+		Key:      "one_agent",
+		Label:    "One agent",
+		Template: "wimse://issuer.example.com/org/{org_id}/agent/{agent_id}",
+		Wildcard: false,
+	}}, platform.Subject.Alternatives)
+}
+
+func TestParseRefusesInvalidSubjectAlternatives(t *testing.T) {
+	t.Parallel()
+
+	const alternativeTemplate = `"wimse://issuer.example.com/org/{org_id}/agent/{agent_id}"`
+	tests := []struct {
+		name    string
+		from    string
+		to      string
+		wantErr string
+	}{
+		{name: "default without a label", from: "  label: Every agent\n", to: "", wantErr: "subject.label is required"},
+		{name: "alternative without a label", from: "      label: One agent\n", to: "", wantErr: `"one_agent": label is required`},
+		{name: "alternative key not snake_case", from: "key: one_agent", to: "key: One-Agent", wantErr: "lowercase snake_case"},
+		{name: "same rule as the default", from: alternativeTemplate + "\n      wildcard: false", to: "\"wimse://issuer.example.com/org/{org_id}/agent/\"\n      wildcard: true", wantErr: "same rule as another choice"},
+		{name: "star in an alternative", from: alternativeTemplate, to: `"wimse://issuer.example.com/org/{org_id}/agent/*"`, wantErr: `"*"`},
+		{name: "wildcard alternative ending on a variable", from: alternativeTemplate + "\n      wildcard: false", to: alternativeTemplate + "\n      wildcard: true", wantErr: "wildcard stem"},
+		{name: "undeclared variable in an alternative", from: "{agent_id}\"", to: "{agent}\"", wantErr: "undeclared variable"},
+		{name: "alternative declared twice", from: "      wildcard: false\n", to: "      wildcard: false\n    - key: one_agent\n      label: The same agent\n      template: \"wimse://issuer.example.com/org/{org_id}/agents/{agent_id}\"\n      wildcard: false\n", wantErr: "declared twice"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Contains(t, withAlternatives, tc.from, "test case must change the fixture")
+			_, err := catalog.Parse([]byte(strings.Replace(withAlternatives, tc.from, tc.to, 1)))
 			require.ErrorContains(t, err, tc.wantErr)
 		})
 	}

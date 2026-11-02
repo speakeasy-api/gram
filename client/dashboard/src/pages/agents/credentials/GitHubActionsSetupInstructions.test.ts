@@ -4,16 +4,23 @@ import {
   ACTION_DEFAULT_CONTROL_PLANE,
   controlPlaneProblem,
   githubActionsAgentGrants,
+  jobScope,
   pluginGateways,
   pluginsForEveryAgent,
   repositoryProblem,
   unreachablePluginServers,
   workflowYaml,
+  type JobScope,
   type WorkflowAgent,
 } from "./githubActions";
 import { githubActionsSetupInstructions } from "./GitHubActionsSetupInstructions";
 import { hasPlatformSetup } from "./platformSetups";
-import { subjectRule, type CatalogEntry } from "./workloadCatalog";
+import {
+  SUBJECT_CHOICE,
+  subjectRule,
+  valuesFromSubject,
+  type CatalogEntry,
+} from "./workloadCatalog";
 
 const server = vi.hoisted(() => ({ url: "" }));
 vi.mock("@/lib/utils", async (importOriginal) => ({
@@ -52,8 +59,38 @@ const github: CatalogEntry = {
       label: "Repository",
       pattern: "[A-Za-z0-9._-]{1,100}(?:@[0-9]+)?",
     },
+    {
+      key: "branch",
+      tier: "rule",
+      label: "Branch",
+      pattern: "[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*",
+    },
+    {
+      key: "environment",
+      tier: "rule",
+      label: "Environment",
+      pattern: "[^:*\\x00-\\x1f\\x7f]{1,255}",
+    },
   ],
-  subject: { template: "repo:{owner}/{repo}:", wildcard: true },
+  subject: {
+    template: "repo:{owner}/{repo}:",
+    wildcard: true,
+    label: "Whole repository",
+    alternatives: [
+      {
+        key: "branch",
+        label: "One branch",
+        template: "repo:{owner}/{repo}:ref:refs/heads/{branch}",
+        wildcard: false,
+      },
+      {
+        key: "environment",
+        label: "One environment",
+        template: "repo:{owner}/{repo}:environment:{environment}",
+        wildcard: false,
+      },
+    ],
+  },
 };
 
 describe("GitHub Actions setup", () => {
@@ -91,6 +128,112 @@ describe("GitHub Actions setup", () => {
     ]) {
       expect(subjectRule(github, values)).toBeNull();
     }
+  });
+
+  it("admits one branch or one environment with an exact rule", () => {
+    const setup = githubActionsSetupInstructions(github);
+    const repository = { owner: "acme", repo: "payments-api" };
+    expect(
+      setup.connection({
+        ...repository,
+        [SUBJECT_CHOICE]: "branch",
+        branch: "release/v2",
+      }),
+    ).toMatchObject({
+      subject: "repo:acme/payments-api:ref:refs/heads/release/v2",
+      matchKind: "exact",
+    });
+    expect(
+      setup.connection({
+        ...repository,
+        [SUBJECT_CHOICE]: "environment",
+        environment: "Production EU",
+      }),
+    ).toMatchObject({
+      subject: "repo:acme/payments-api:environment:Production EU",
+      matchKind: "exact",
+    });
+    // The other choice's value is not part of the rule, and the chosen one
+    // must be filled in.
+    expect(
+      setup.connection({
+        ...repository,
+        [SUBJECT_CHOICE]: "environment",
+        branch: "main",
+      }),
+    ).toBeNull();
+    expect(
+      subjectRule(github, {
+        ...repository,
+        [SUBJECT_CHOICE]: "",
+        branch: "main",
+      }),
+    ).toEqual({ subject: "repo:acme/payments-api:*", matchKind: "wildcard" });
+  });
+
+  it("refuses a choice the catalog does not offer rather than widen the rule", () => {
+    expect(
+      subjectRule(github, {
+        owner: "acme",
+        repo: "app",
+        [SUBJECT_CHOICE]: "tag",
+      }),
+    ).toBeNull();
+  });
+
+  it("refuses a branch or environment that would forge a context", () => {
+    const repository = { owner: "acme", repo: "app" };
+    const forged: Record<string, string>[] = [
+      { [SUBJECT_CHOICE]: "branch", branch: "main:x" },
+      { [SUBJECT_CHOICE]: "branch", branch: "release/*" },
+      { [SUBJECT_CHOICE]: "branch", branch: "main/" },
+      { [SUBJECT_CHOICE]: "environment", environment: "prod:x" },
+      { [SUBJECT_CHOICE]: "environment", environment: "prod*" },
+    ];
+    for (const values of forged) {
+      expect(subjectRule(github, { ...repository, ...values })).toBeNull();
+    }
+  });
+
+  it("reads each choice back out of the rule it made", () => {
+    expect(
+      valuesFromSubject(github, {
+        subject: "repo:acme/payments-api:ref:refs/heads/a/b",
+        matchKind: "exact",
+      }),
+    ).toEqual({
+      owner: "acme",
+      repo: "payments-api",
+      branch: "a/b",
+      [SUBJECT_CHOICE]: "branch",
+    });
+    expect(
+      valuesFromSubject(github, {
+        subject: "repo:acme@1/payments-api@2:environment:review/pr-12",
+        matchKind: "exact",
+      }),
+    ).toEqual({
+      owner: "acme@1",
+      repo: "payments-api@2",
+      environment: "review/pr-12",
+      [SUBJECT_CHOICE]: "environment",
+    });
+    expect(
+      valuesFromSubject(github, {
+        subject: "repo:acme/payments-api:*",
+        matchKind: "wildcard",
+      }),
+    ).toEqual({
+      owner: "acme",
+      repo: "payments-api",
+    });
+    // A context the setup never writes is not read as one of its choices.
+    expect(
+      valuesFromSubject(github, {
+        subject: "repo:acme/payments-api:pull_request",
+        matchKind: "exact",
+      }),
+    ).toEqual({});
   });
 
   it("refuses an ID on only one of the two names", () => {
@@ -144,6 +287,7 @@ describe("workflowYaml", () => {
     organizationId: "org-123",
     projectSlug: "ci",
     controlPlaneUrl: ACTION_DEFAULT_CONTROL_PLANE,
+    scope: { kind: "repository" } as JobScope,
   };
 
   /** The workflow for these options, which must have one. */
@@ -153,10 +297,17 @@ describe("workflowYaml", () => {
     return yaml;
   }
 
+  const scopes: JobScope[] = [
+    { kind: "repository" },
+    { kind: "branch", name: "release/v2" },
+    { kind: "environment", name: "production" },
+  ];
+
   /** Every variant the setup can print. */
   const variants = (["claude", "codex"] as const).flatMap((agent) =>
-    [ACTION_DEFAULT_CONTROL_PLANE, "https://speakeasy.example.com"].map(
-      (controlPlaneUrl) => workflow({ agent, controlPlaneUrl }),
+    [ACTION_DEFAULT_CONTROL_PLANE, "https://speakeasy.example.com"].flatMap(
+      (controlPlaneUrl) =>
+        scopes.map((scope) => workflow({ agent, controlPlaneUrl, scope })),
     ),
   );
 
@@ -239,8 +390,38 @@ describe("workflowYaml", () => {
     }
   });
 
+  it("runs a narrower rule's workflow only where the rule admits its jobs", () => {
+    const branch = workflow({ scope: { kind: "branch", name: "release/v2" } });
+    expect(branch).toContain('    branches: ["release/v2"]');
+    expect(branch).not.toContain("pull_request");
+    expect(branch).not.toMatch(/^ {4}environment:/m);
+
+    const environment = workflow({
+      scope: { kind: "environment", name: "Production EU" },
+    });
+    expect(environment).toMatch(/^ {4}environment: "Production EU" #/m);
+    expect(environment).not.toContain("pull_request");
+    // The environment is the job's own key, before any step runs.
+    expect(environment.indexOf("    environment:")).toBeLessThan(
+      environment.indexOf("    steps:"),
+    );
+  });
+
+  it("reads the scope from the setup's values", () => {
+    expect(jobScope({})).toEqual({ kind: "repository" });
+    expect(jobScope({ [SUBJECT_CHOICE]: "", branch: "main" })).toEqual({
+      kind: "repository",
+    });
+    expect(
+      jobScope({ [SUBJECT_CHOICE]: "branch", branch: " release/v2 " }),
+    ).toEqual({ kind: "branch", name: "release/v2" });
+    expect(
+      jobScope({ [SUBJECT_CHOICE]: "environment", environment: "prod" }),
+    ).toEqual({ kind: "environment", name: "prod" });
+  });
+
   it("skips fork pull requests before the job starts", () => {
-    for (const yaml of variants) {
+    for (const yaml of variants.filter((v) => v.includes("pull_request:"))) {
       const lines = yaml.split("\n");
       const job = lines.indexOf("  agent:");
       expect(job).toBeGreaterThan(0);
