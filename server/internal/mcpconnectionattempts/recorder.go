@@ -343,6 +343,9 @@ type Recorder struct {
 
 	lastDrop map[dropReason]*atomic.Int64
 
+	// unfinished counts rows accepted but not yet written or dropped, wherever they are.
+	unfinished atomic.Int64
+
 	// dropTotals counts rows per reason, so Shutdown can report what its drain lost.
 	dropTotals map[dropReason]*atomic.Int64
 }
@@ -405,6 +408,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		stopMu:      sync.RWMutex{},
 		stopped:     false,
 		lastDrop:    newDropCounters(),
+		unfinished:  atomic.Int64{},
 		dropTotals:  newDropCounters(),
 	}
 	go r.run()
@@ -429,6 +433,7 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 		stopMu:      sync.RWMutex{},
 		stopped:     false,
 		lastDrop:    newDropCounters(),
+		unfinished:  atomic.Int64{},
 		dropTotals:  newDropCounters(),
 	}
 }
@@ -482,10 +487,12 @@ func (r *Recorder) enqueue(row Row) dropReason {
 	if r.stopped {
 		return dropShutdown
 	}
+	r.unfinished.Add(1)
 	select {
 	case r.queue <- row:
 		return ""
 	default:
+		r.unfinished.Add(-1)
 		return dropQueueFull
 	}
 }
@@ -544,8 +551,8 @@ func (r *Recorder) logDrainLosses(ctx context.Context, before map[dropReason]int
 			parts = append(parts, fmt.Sprintf("%s=%d", reason, lost))
 		}
 	}
-	if unwritten := len(r.queue); unwritten > 0 {
-		parts = append(parts, fmt.Sprintf("still_queued=%d", unwritten))
+	if unfinished := r.unfinished.Load(); unfinished > 0 {
+		parts = append(parts, fmt.Sprintf("unfinished=%d", unfinished))
 	}
 	if len(parts) == 0 {
 		return
@@ -569,11 +576,13 @@ func (r *Recorder) run() {
 		batch = make([]Row, 0, r.cfg.maxBatch)
 		if len(rows) > 0 {
 			r.surviving(len(rows), func() { r.insert(rows) })
+			r.unfinished.Add(-int64(len(rows)))
 		}
 		// A tick from during a slow insert would flush a nearly empty batch and let a backlog grow.
 		ticker.Reset(r.cfg.flushInterval)
 	}
 	add := func(row Row) {
+		pending := len(batch)
 		r.surviving(1, func() {
 			reason, checked := organizations[row.OrganizationID]
 			if !checked {
@@ -591,6 +600,9 @@ func (r *Recorder) run() {
 			}
 			batch = append(batch, row)
 		})
+		if len(batch) == pending {
+			r.unfinished.Add(-1)
+		}
 		if len(batch) >= r.cfg.maxBatch {
 			flush()
 		}
