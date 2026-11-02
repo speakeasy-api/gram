@@ -15,15 +15,21 @@ const (
 	// a year of team history in under 8k tokens.
 	DefaultRecallBudgetTokens = 8_000
 
-	// runesPerToken estimates tokens from text length. English prose with
+	// asciiRunesPerToken estimates tokens for ASCII text. English prose with
 	// identifiers averages about 4 characters per token for current
-	// tokenizers; the estimate only needs to keep the block under budget.
-	runesPerToken = 4
+	// tokenizers. Other runes (CJK, emoji, accented text) are counted as one
+	// token each, which overestimates them, so the block stays under budget
+	// whatever the language.
+	asciiRunesPerToken = 4
 
 	// maxChatSnippetRunes caps a chat summary in the recall block. Only the
 	// first paragraph is used, which the summary prompt requires to stand
 	// alone; the cap guards against a summary that ignores that.
 	maxChatSnippetRunes = 600
+
+	// maxMemoSnippetRunes caps a memo in the recall block. Memos are short
+	// by design (at most 4,000 runes); zoom returns the whole text.
+	maxMemoSnippetRunes = 600
 )
 
 // Digest is a stored digest as the recall block and zoom see it.
@@ -45,15 +51,27 @@ type Digest struct {
 
 	// ChatIDs lists the chats a day digest folded.
 	ChatIDs []uuid.UUID
+
+	// MemoIDs lists the memos a day digest folded.
+	MemoIDs []uuid.UUID
+}
+
+// MemoNote is a memo not yet folded into a digest.
+type MemoNote struct {
+	// ID is the memo id, cited as a memo source.
+	ID uuid.UUID
+
+	// CreatedAt is when the memo was saved.
+	CreatedAt time.Time
+
+	// Content is the memo text.
+	Content string
 }
 
 // ChatNote is a chat whose masked summary is not yet folded into a digest.
 type ChatNote struct {
 	// ID is the chat id, cited as a chat source.
 	ID uuid.UUID
-
-	// Title is the chat title. It may be empty.
-	Title string
 
 	// SummarizedAt is when the masked summary was written.
 	SummarizedAt time.Time
@@ -64,10 +82,10 @@ type ChatNote struct {
 
 // Entry is one section of the recall block.
 type Entry struct {
-	// Kind is SourceDigest or SourceChat.
+	// Kind is SourceDigest, SourceChat or SourceMemo.
 	Kind SourceKind
 
-	// ID is the digest or chat id to cite or zoom into.
+	// ID is the digest, chat or memo id to cite or zoom into.
 	ID uuid.UUID
 
 	// Heading names the period or chat, for example "October 2026 (month digest)".
@@ -82,16 +100,19 @@ type Entry struct {
 
 // Uncovered picks the recall entries for a project: every month digest, then
 // the week digests no month digest folded, the day digests no week digest
-// folded, and the chats no day digest folded. Older history therefore shows
-// at its most compressed level, and nothing appears twice. Entries come back
-// oldest first.
-func Uncovered(digests []Digest, chats []ChatNote) []Entry {
+// folded, and the chats and memos no day digest folded. Older history
+// therefore shows at its most compressed level, and nothing appears twice.
+// Entries come back oldest first.
+func Uncovered(digests []Digest, chats []ChatNote, memos []MemoNote) []Entry {
 	covered := map[uuid.UUID]bool{}
 	for _, d := range digests {
 		for _, id := range d.ChildDigestIDs {
 			covered[id] = true
 		}
 		for _, id := range d.ChatIDs {
+			covered[id] = true
+		}
+		for _, id := range d.MemoIDs {
 			covered[id] = true
 		}
 	}
@@ -127,16 +148,27 @@ func Uncovered(digests []Digest, chats []ChatNote) []Entry {
 		if covered[c.ID] {
 			continue
 		}
-		heading := "Chat " + c.SummarizedAt.UTC().Format(time.DateOnly)
-		if c.Title != "" {
-			heading += ": " + strings.Join(strings.Fields(c.Title), " ")
-		}
+		// Chat titles are generated from the raw transcript and are not
+		// masked at rest, so the heading carries only the date.
 		entries = append(entries, Entry{
 			Kind:    SourceChat,
 			ID:      c.ID,
-			Heading: heading,
+			Heading: "Chat " + c.SummarizedAt.UTC().Format(time.DateOnly),
 			At:      c.SummarizedAt,
 			Text:    firstParagraph(c.Summary, maxChatSnippetRunes),
+		})
+	}
+
+	for _, m := range memos {
+		if covered[m.ID] {
+			continue
+		}
+		entries = append(entries, Entry{
+			Kind:    SourceMemo,
+			ID:      m.ID,
+			Heading: "Memo " + m.CreatedAt.UTC().Format(time.DateOnly),
+			At:      m.CreatedAt,
+			Text:    snippet(strings.TrimSpace(m.Content), maxMemoSnippetRunes),
 		})
 	}
 
@@ -152,23 +184,37 @@ func Uncovered(digests []Digest, chats []ChatNote) []Entry {
 func Budget(entries []Entry, budgetTokens int) (kept []Entry, dropped int) {
 	entries = slices.Clone(entries)
 	slices.SortStableFunc(entries, func(a, b Entry) int { return a.At.Compare(b.At) })
-	// Reserve room for the omission notice Render adds when anything is dropped.
-	used := EstimateTokens(omittedNotice(len(entries)))
+	cost := func(e Entry) int { return EstimateTokens(renderEntry(e)) + EstimateTokens(entrySeparator) }
+	used := 0
 	start := len(entries)
 	for i := len(entries) - 1; i >= 0; i-- {
-		cost := EstimateTokens(renderEntry(entries[i])) + EstimateTokens(entrySeparator)
-		if used+cost > budgetTokens {
+		if used+cost(entries[i]) > budgetTokens {
 			break
 		}
-		used += cost
+		used += cost(entries[i])
 		start = i
+	}
+	// Render adds an omission notice only when something was dropped; make
+	// room for it by dropping more of the oldest kept entries.
+	for start > 0 && start < len(entries) && used+EstimateTokens(omittedNotice(start)) > budgetTokens {
+		used -= cost(entries[start])
+		start++
 	}
 	return entries[start:], start
 }
 
-// EstimateTokens approximates the token count of s.
+// EstimateTokens approximates the token count of s, erring high for
+// non-ASCII text.
 func EstimateTokens(s string) int {
-	return (utf8.RuneCountInString(s) + runesPerToken - 1) / runesPerToken
+	ascii, other := 0, 0
+	for _, r := range s {
+		if r < utf8.RuneSelf {
+			ascii++
+		} else {
+			other++
+		}
+	}
+	return (ascii+asciiRunesPerToken-1)/asciiRunesPerToken + other
 }
 
 // firstParagraph returns the first non-empty paragraph of s, cut to maxRunes.
@@ -179,6 +225,12 @@ func firstParagraph(s string, maxRunes int) string {
 			break
 		}
 	}
+	return snippet(s, maxRunes)
+}
+
+// snippet cuts s to maxRunes, ending a cut text with "…" so a reader knows
+// it is not complete.
+func snippet(s string, maxRunes int) string {
 	if utf8.RuneCountInString(s) <= maxRunes {
 		return s
 	}
