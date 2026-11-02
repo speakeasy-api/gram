@@ -21,12 +21,16 @@ func TestTextMasksPersonalIdentifiers(t *testing.T) {
 		"ssn":             "SSN entered was 123-45-6789.",
 		"medical record":  "The parser pulled MRN-48213377 as the certificate number.",
 		"labelled record": "Medical record number: 00482133 is on file.",
+		"short record":    "Chart shows MRN 482 for this visit.",
+		"paren intl":      "Reach me on +44 (20) 7946 0958.",
+		"undashed ssn":    "SSN 123456789 was rejected.",
+		"spaced ssn":      "Social security number: 123 45 6789.",
 	} {
 		got, changed, err := r.Text(t.Context(), input)
 		require.NoError(t, err, name)
 		require.True(t, changed, name)
 		require.Contains(t, got, "[REDACTED]", name)
-		for _, secret := range []string{"qtmzkwa", "555-0142", "7946", "1111 1111", "5555-5555", "45-6789", "48213377", "00482133"} {
+		for _, secret := range []string{"qtmzkwa", "555-0142", "7946", "1111 1111", "5555-5555", "45-6789", "48213377", "00482133", "MRN 482", "123456789", "123 45 6789"} {
 			require.NotContains(t, got, secret, name)
 		}
 	}
