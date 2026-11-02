@@ -1,20 +1,16 @@
 package mcp
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"slices"
-	"strings"
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -64,7 +60,8 @@ func (s *Service) completeCodeReconnect(r *http.Request, grant remotesessions.Re
 		return fmt.Errorf("reconnect catalogue no longer matches the connection")
 	}
 	ctx = contextvalues.SetOAuthClientID(ctx, binding.ClientID)
-	if _, err := s.loadConnectionCatalog(ctx, endpoint, grant.Subject, policy.Catalog, time.Now()); err != nil {
+	catalog, err := s.loadConnectionCatalog(ctx, endpoint, grant.Subject, policy.Catalog, time.Now())
+	if err != nil {
 		return err
 	}
 	r = r.WithContext(ctx)
@@ -110,8 +107,25 @@ func (s *Service) completeCodeReconnect(r *http.Request, grant remotesessions.Re
 		return err
 	}
 	member, ok := approved[binding.Server]
-	if !ok || member.ServerID != binding.ServerID || member.Auth == nil || !member.Auth.RegistrationID.Valid || member.Auth.RegistrationID.UUID != grant.RemoteSessionClientID {
+	if !ok || len(approved) != 1 || member.ServerID != binding.ServerID || member.Auth == nil || !member.Auth.RegistrationID.Valid || member.Auth.RegistrationID.UUID != grant.RemoteSessionClientID {
 		return fmt.Errorf("could not discover tools with the reconnected credential; request a new connection link")
+	}
+	// Use exactly the same completed inventory and freeze validation as initial
+	// consent, including current configuration, credential and definition checks.
+	var inventory consentToolInventory
+	inventory.StateID = state.ID
+	inventory.Resource = endpointToolSelectionResource(endpoint)
+	inventory.MemberBindings = approved
+	inventory.MemberOutcomes = outcomes
+	inventory, err = mergeConsentInventoryPage(inventory, "", tools, "")
+	if err != nil {
+		return err
+	}
+	consent := state
+	consent.ClientID = binding.ClientID
+	frozen, err := s.freezeConnectionCatalog(ctx, endpoint, consent, &inventory, nil, toolfilter.CatalogModeCached, map[uuid.UUID]uuid.UUID{member.ServerID: grant.RemoteSessionClientID}, catalog.ExpiresAt)
+	if err != nil {
+		return err
 	}
 	// Discovery binds the selected auth client and complete definitions. Persist
 	// just that selection, never the other servers reachable from this issuer.
@@ -125,103 +139,8 @@ func (s *Service) completeCodeReconnect(r *http.Request, grant remotesessions.Re
 	if count != 1 {
 		return fmt.Errorf("reconnected credential is no longer offered by the server")
 	}
-	conditional, ok := s.connectionCatalogCache.(cache.CompareAndSwapCache)
-	if !ok {
-		return fmt.Errorf("catalogue store does not support reconnect")
+	if err := s.replaceConnectionCatalogMember(ctx, endpoint, grant.Subject, policy.Catalog, binding.Server, frozen); err != nil {
+		return err
 	}
-	for range 3 {
-		catalog, err := s.loadConnectionCatalog(ctx, endpoint, grant.Subject, policy.Catalog, time.Now())
-		if err != nil {
-			return err
-		}
-		expected, err := json.Marshal(catalog)
-		if err != nil {
-			return fmt.Errorf("encode current catalogue: %w", err)
-		}
-		if err := mergeReconnectedCatalog(catalog, binding.Server, member, tools, outcomes, policy.Catalog.AllTools); err != nil {
-			return err
-		}
-		replacement, err := json.Marshal(catalog)
-		if err != nil {
-			return fmt.Errorf("encode reconnected catalogue: %w", err)
-		}
-		if len(replacement) > connectionCatalogMaxBytes {
-			return errConnectionCatalogTooLarge
-		}
-		ttl := time.Until(catalog.ExpiresAt)
-		if ttl <= 0 {
-			return errConnectionCatalogExpired
-		}
-		swapped, err := conditional.CompareAndSwap(ctx, catalog.CacheKey(), expected, replacement, ttl)
-		if err != nil {
-			return fmt.Errorf("update reconnected catalogue: %w", err)
-		}
-		if swapped {
-			// A connected card alone must not close this page before its catalogue
-			// update has succeeded (including pages offering several credentials).
-			for range 3 {
-				current, err := s.authnChallengeCache.Get(ctx, state.CacheKey())
-				if err != nil {
-					return fmt.Errorf("load completed reconnect: %w", err)
-				}
-				if current.CodeReconnect == nil || current.CodeReconnect.CatalogID != binding.CatalogID {
-					return fmt.Errorf("reconnect challenge changed")
-				}
-				updated := current
-				completed := *current.CodeReconnect
-				completed.CatalogComplete = true
-				updated.CodeReconnect = &completed
-				done, err := s.authnChallengeCache.CompareAndSwap(ctx, current, updated)
-				if err != nil {
-					return fmt.Errorf("complete reconnect challenge: %w", err)
-				}
-				if done {
-					return nil
-				}
-			}
-			return fmt.Errorf("reconnect challenge changed while completing consent")
-		}
-	}
-	return fmt.Errorf("catalogue changed while reconnecting; request a new connection link")
-}
-
-// mergeReconnectedCatalog preserves other members and existing tool selections.
-// A previously unapproved member gains its discovered tools through this consent.
-func mergeReconnectedCatalog(catalog *connectionCatalog, slug string, member connectionCatalogMember, tools []consentInventoryTool, outcomes []consentMemberOutcome, allTools bool) error {
-	_, alreadyApproved := catalog.Members[slug]
-	selected := map[string]bool{}
-	kept := make([]*toolListEntry, 0, len(catalog.Tools)+len(tools))
-	for _, tool := range catalog.Tools {
-		source, _, err := metamcp.SplitQualifiedName(tool.Name)
-		if err != nil {
-			return fmt.Errorf("parse catalogue tool name: %w", err)
-		}
-		if source == slug {
-			selected[tool.Name] = true
-		} else {
-			kept = append(kept, tool)
-		}
-	}
-	for _, tool := range tools {
-		source, _, err := metamcp.SplitQualifiedName(tool.Name)
-		if err != nil || source != slug || tool.Definition == nil || tool.Definition.Name != tool.Name || consentEvidenceHash(tool.Definition) != tool.DefinitionHash {
-			return fmt.Errorf("incomplete reconnect tool inventory")
-		}
-		if allTools || !alreadyApproved || len(selected) == 0 || selected[tool.Name] {
-			kept = append(kept, tool.Definition)
-		}
-	}
-	slices.SortFunc(kept, func(a, b *toolListEntry) int { return strings.Compare(a.Name, b.Name) })
-	catalog.Tools = kept
-	if catalog.Members == nil {
-		catalog.Members = map[string]connectionCatalogMember{}
-	}
-	catalog.Members[slug] = member
-	catalog.MemberOutcomes = slices.DeleteFunc(catalog.MemberOutcomes, func(outcome consentMemberOutcome) bool { return outcome.Slug == slug })
-	for _, outcome := range outcomes {
-		if outcome.Slug == slug {
-			catalog.MemberOutcomes = append(catalog.MemberOutcomes, outcome)
-		}
-	}
-	return nil
+	return s.completeCatalogConsent(ctx, state)
 }

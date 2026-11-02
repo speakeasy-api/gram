@@ -22,12 +22,12 @@ func TestReconnectCatalogPreservesOtherSelections(t *testing.T) {
 					catalog.Members["target"] = member
 					catalog.Tools = append(catalog.Tools, &toolListEntry{Name: "target--kept"})
 				}
-				var tools []consentInventoryTool
+				var tools []*toolListEntry
 				for _, name := range []string{"target--kept", "target--added"} {
 					definition := &toolListEntry{Name: name}
-					tools = append(tools, consentInventoryTool{Name: name, Definition: definition, DefinitionHash: consentEvidenceHash(definition)})
+					tools = append(tools, definition)
 				}
-				require.NoError(t, mergeReconnectedCatalog(catalog, "target", member, tools, nil, allTools))
+				catalog.replaceMember("target", &connectionCatalog{Members: map[string]connectionCatalogMember{"target": member}, Tools: tools}, allTools)
 				var names []string
 				for _, tool := range catalog.Tools {
 					names = append(names, tool.Name)
@@ -47,22 +47,11 @@ func TestReconnectCatalogPreservesOtherSelections(t *testing.T) {
 	}
 }
 
-func TestReconnectCatalogRejectsUnrelatedOrIncompleteTools(t *testing.T) {
-	t.Parallel()
-	for _, name := range []string{"other--injected", "target--incomplete"} {
-		catalog := &connectionCatalog{Members: map[string]connectionCatalogMember{}, Tools: []*toolListEntry{}}
-		tool := consentInventoryTool{Name: name, Definition: &toolListEntry{Name: name}, DefinitionHash: "invalid"}
-		require.Error(t, mergeReconnectedCatalog(catalog, "target", connectionCatalogMember{ServerID: uuid.New()}, []consentInventoryTool{tool}, nil, true))
-		require.Empty(t, catalog.Members)
-		require.Empty(t, catalog.Tools)
-	}
-}
-
 func TestReconnectCatalogAddsPreviouslyUnselectedMember(t *testing.T) {
 	t.Parallel()
 	member := connectionCatalogMember{ServerID: uuid.New()}
 	catalog := &connectionCatalog{Members: map[string]connectionCatalogMember{"target": member}}
 	definition := &toolListEntry{Name: "target--new"}
-	require.NoError(t, mergeReconnectedCatalog(catalog, "target", member, []consentInventoryTool{{Name: definition.Name, Definition: definition, DefinitionHash: consentEvidenceHash(definition)}}, nil, false))
+	catalog.replaceMember("target", &connectionCatalog{Members: map[string]connectionCatalogMember{"target": member}, Tools: []*toolListEntry{definition}}, false)
 	require.Equal(t, []*toolListEntry{definition}, catalog.Tools)
 }

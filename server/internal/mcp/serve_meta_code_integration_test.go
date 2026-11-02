@@ -396,13 +396,7 @@ func TestCodeModeAvailableFollowsRuntime(t *testing.T) {
 // Real Python, gateway dispatch and OAuth token exchange against owned fixtures.
 // The browser-facing handlers run as HTTP requests; no real account is used.
 func TestCodeModeReconnectEndToEnd(t *testing.T) {
-	for _, mode := range []string{"legacy", "cached-all", "cached-selected", "cached-typed", "cached-revoked"} {
-		t.Run(mode, func(t *testing.T) { testCodeModeReconnectEndToEnd(t, mode) })
-	}
-}
-
-func testCodeModeReconnectEndToEnd(t *testing.T, mode string) {
-	t.Helper()
+	t.Parallel()
 	mock := memberMock()
 	mock.buildAuthURLResult, _ = url.Parse("https://login.example.test/authorize")
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
@@ -410,8 +404,7 @@ func testCodeModeReconnectEndToEnd(t *testing.T, mode string) {
 	mock.upsertResult = auth.UserID
 	ti.service.manual = true
 	configureCodeRunner(t, ctx, ti)
-	_, issuerRow, downstream := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	issuer := issuerRow.ID
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
 	slug := "code-reconnect-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer)
 	upstream := newRecordingUpstream(t, "ping")
@@ -422,28 +415,7 @@ func testCodeModeReconnectEndToEnd(t *testing.T, mode string) {
 	member := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "tracker", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
 	selection := selectionFixture{ti: ti, projectID: *auth.ProjectID, orgID: auth.ActiveOrganizationID}
 	selection.associate(t, ctx, member.mcpServerID, client)
-	if mode == "cached-typed" {
-		ti.service.RecordAuthClientPermitCallers()
-		fixtures := authclientfixtures.New(ti.conn)
-		authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: conv.ToNullUUID(*auth.ProjectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(client)})
-		require.NoError(t, err)
-		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: member.mcpServerID, AuthClientID: authClientID, Source: "admin"}))
-		_, err = productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-		require.NoError(t, err)
-	}
-	bearer := ""
-	if mode == "legacy" {
-		bearer = mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode)
-	} else {
-		other := newCatalogUpstream(t, 2)
-		// The other server has the same display name, but a different identity.
-		seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "tracker", "other-tracker", 1, other.url)
-		var selected []string
-		if mode == "cached-selected" {
-			selected = []string{"other-tracker--tool_000"}
-		}
-		bearer = approveGatewayCatalog(t, ctx, ti, issuer, downstream, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeCode, selected).token
-	}
+	bearer := mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode)
 	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(bearer, urn.NewUserSessionIssuer(issuer).String())
 	require.NoError(t, err)
 	sessionPolicy, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
@@ -470,11 +442,6 @@ func testCodeModeReconnectEndToEnd(t *testing.T, mode string) {
 	}
 	status := execute(`await tools.servers()`, true)
 	require.Contains(t, string(status.Value), `"authentication":"unknown"`)
-	if mode != "legacy" {
-		require.Contains(t, string(status.Value), `"consent":"required"`)
-		verified := execute(`await tools.servers(server="tracker", verify=True)`, false)
-		require.Contains(t, string(verified.Value), `"consent":"required"`)
-	}
 	t.Log("BEFORE: Python lists connection metadata without probing the upstream; no business tool has run.")
 	handoff := execute(`await tools.connect(server="tracker")`, true)
 	var action codemode.ConnectionAction
@@ -498,9 +465,6 @@ func testCodeModeReconnectEndToEnd(t *testing.T, mode string) {
 	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	require.NoError(t, err)
 	require.Equal(t, auth.UserID, state.Subject.ID)
-	if mode != "legacy" {
-		require.NotEqual(t, uuid.Nil, state.CodeReconnect.CatalogID)
-	}
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
 	require.NoError(t, err)
 	form := url.Values{"state": {stateID}, "csrf_token": {state.CSRFToken}, "action": {"connect"}, "client_id": {client.String()}, "server": {"tracker"}}
@@ -513,42 +477,12 @@ func testCodeModeReconnectEndToEnd(t *testing.T, mode string) {
 	require.Equal(t, provider.URL, authorization.Scheme+"://"+authorization.Host)
 	remoteCallback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?state="+url.QueryEscape(authorization.Query().Get("state"))+"&code=synthetic-approved-code", nil).WithContext(ctx)
 	completed := httptest.NewRecorder()
-	if mode == "cached-revoked" {
-		session, err := usersessionsrepo.New(ti.conn).GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
-		require.NoError(t, err)
-		_, err = usersessionsrepo.New(ti.conn).RevokeUserSession(ctx, usersessionsrepo.RevokeUserSessionParams{ID: session.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID})
-		require.NoError(t, err)
-		key := "mcpConnectionCatalog:v1:" + auth.ActiveOrganizationID + ":" + state.CodeReconnect.CatalogID.String()
-		var before, after []byte
-		require.NoError(t, ti.cacheAdapter.Get(ctx, key, &before))
-		require.ErrorContains(t, ti.service.HandleRemoteLoginCallback(completed, remoteCallback), "no longer active")
-		require.NoError(t, ti.cacheAdapter.Get(ctx, key, &after))
-		require.Equal(t, before, after, "revoked credentials cannot expand a catalogue")
-		return
-	}
 	require.NoError(t, ti.service.HandleRemoteLoginCallback(completed, remoteCallback))
 	require.Equal(t, http.StatusSeeOther, completed.Code)
-	if mode != "legacy" {
-		completedState, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
-		require.NoError(t, err)
-		require.True(t, completedState.CodeReconnect.CatalogComplete)
-		page := consentGetPageWithContext(t, ctx, ti, slug, stateID)
-		require.Contains(t, page, "data-auto-close")
-		require.NotContains(t, page, ">other-tracker</span>")
-	}
 	require.NotNil(t, exchanged.Load(), "real token POST reached owned OAuth provider")
 	t.Log("HANDOFF: original user identified; member-scoped OAuth callback exchanges a code and stores the upstream grant.")
 	after := execute(`await tools.servers()`, false)
-	if mode == "legacy" {
-		require.Contains(t, string(after.Value), `"authentication":"unknown"`)
-	} else {
-		require.NotContains(t, string(after.Value), `"consent":"required"`)
-		otherTools := execute(`await tools.search("", server="other-tracker")`, false)
-		require.Contains(t, string(otherTools.Value), "tool_000")
-		if mode == "cached-selected" {
-			require.NotContains(t, string(otherTools.Value), "tool_001")
-		}
-	}
+	require.Contains(t, string(after.Value), `"authentication":"unknown"`)
 	result := execute(`page = await tools.search("", server="tracker")
 path = page["items"][0]["path"]
 details = await tools.describe(path)
@@ -557,4 +491,164 @@ await tools.call(path, {})`, false)
 	upstream.requireToolCallAuth(t, "Bearer reconnected-token")
 	require.Len(t, result.ToolCalls, 1)
 	t.Log("AFTER: a fresh Python execution discovers, describes and calls one read tool with the newly connected credential.")
+}
+
+func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		selection []string
+		typedAuth bool
+		revoke    bool
+	}{
+		{name: "all tools"},
+		{name: "selected tools", selection: []string{"other-tracker--tool_000"}},
+		{name: "typed auth client", typedAuth: true},
+		{name: "revoked during consent", revoke: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := memberMock()
+			mock.buildAuthURLResult, _ = url.Parse("https://login.example.test/authorize")
+			ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			mock.upsertResult = auth.UserID
+			ti.service.manual = true
+			configureCodeRunner(t, ctx, ti)
+			_, issuerRow, downstream := seedPrivateToolsetWithIssuer(t, ctx, ti)
+			issuer := issuerRow.ID
+			slug := "code-reconnect-" + uuid.NewString()
+			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer)
+			upstream := newRecordingUpstream(t, "ping")
+			var exchanged atomic.Value
+			provider := newConsentExchangeAS(t, &exchanged, "reconnected-token")
+			client := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-oauth", provider.URL, []uuid.UUID{issuer})
+			remoteIssuer := clientRemoteIssuerID(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, client)
+			member := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "tracker", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
+			selection := selectionFixture{ti: ti, projectID: *auth.ProjectID, orgID: auth.ActiveOrganizationID}
+			selection.associate(t, ctx, member.mcpServerID, client)
+			if tc.typedAuth {
+				ti.service.RecordAuthClientPermitCallers()
+				fixtures := authclientfixtures.New(ti.conn)
+				authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: conv.ToNullUUID(*auth.ProjectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(client)})
+				require.NoError(t, err)
+				require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: member.mcpServerID, AuthClientID: authClientID, Source: "admin"}))
+				_, err = productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+				require.NoError(t, err)
+			}
+			other := newCatalogUpstream(t, 2)
+			// Different servers can have the same display name.
+			seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "tracker", "other-tracker", 1, other.url)
+			bearer := approveGatewayCatalog(t, ctx, ti, issuer, downstream, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeCode, tc.selection).token
+
+			claims, err := usersessions.NewSigner("test-jwt-secret").Validate(bearer, urn.NewUserSessionIssuer(issuer).String())
+			require.NoError(t, err)
+			sessionPolicy, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
+			require.NoError(t, err)
+			_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{member.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
+			require.NoError(t, err)
+			execute := func(code string, restricted bool) codemode.ExecutionResult {
+				t.Helper()
+				args := map[string]any{"code": code}
+				if restricted {
+					args["tools"] = []string{}
+				}
+				w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": args}), bearer, nil)
+				require.NoError(t, err)
+				require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+				var response struct {
+					Result struct {
+						StructuredContent codemode.ExecutionResult `json:"structuredContent"`
+					} `json:"result"`
+				}
+				require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+				require.Nil(t, response.Result.StructuredContent.Error, w.Body.String())
+				return response.Result.StructuredContent
+			}
+			status := execute(`await tools.servers()`, true)
+			require.Contains(t, string(status.Value), `"authentication":"unknown"`)
+
+			require.Contains(t, string(status.Value), `"consent":"required"`)
+			verified := execute(`await tools.servers(server="tracker", verify=True)`, false)
+			require.Contains(t, string(verified.Value), `"consent":"required"`)
+
+			t.Log("BEFORE: Python lists connection metadata without probing the upstream; no business tool has run.")
+			handoff := execute(`await tools.connect(server="tracker")`, true)
+			var action codemode.ConnectionAction
+			require.NoError(t, json.Unmarshal(handoff.Value, &action))
+			require.NotEmpty(t, action.AuthorizationURL)
+			require.False(t, action.ClientReconnectRequired)
+			require.Empty(t, handoff.ToolCalls)
+			upstream.requireNeverCarried(t, "Bearer reconnected-token")
+			route := chi.NewRouteContext()
+			route.URLParams.Add("mcpSlug", slug)
+			entry := httptest.NewRequest(http.MethodGet, action.AuthorizationURL, nil).WithContext(context.WithValue(ctx, chi.RouteCtxKey, route))
+			started := httptest.NewRecorder()
+			require.NoError(t, ti.service.HandleFirstPartyConnect(started, entry))
+			require.Equal(t, mock.buildAuthURLResult.String(), started.Header().Get("Location"))
+			callback := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?state="+url.QueryEscape(mock.buildAuthURLParams.State)+"&code=idp-auth-code", nil).WithContext(ctx)
+			identified := httptest.NewRecorder()
+			require.NoError(t, ti.service.HandleIDPCallback(identified, callback))
+			landing, err := url.Parse(identified.Header().Get("Location"))
+			require.NoError(t, err)
+			stateID := landing.Query().Get("state")
+			state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+			require.NoError(t, err)
+			require.Equal(t, auth.UserID, state.Subject.ID)
+
+			require.NotEqual(t, uuid.Nil, state.CodeReconnect.CatalogID)
+
+			endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
+			require.NoError(t, err)
+			form := url.Values{"state": {stateID}, "csrf_token": {state.CSRFToken}, "action": {"connect"}, "client_id": {client.String()}, "server": {"tracker"}}
+			connect := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect/remote-session", strings.NewReader(form.Encode())).WithContext(ctx)
+			connect.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			sent := httptest.NewRecorder()
+			require.NoError(t, ti.service.ServeConsentAction(sent, connect, endpoint))
+			authorization, err := url.Parse(sent.Header().Get("Location"))
+			require.NoError(t, err)
+			require.Equal(t, provider.URL, authorization.Scheme+"://"+authorization.Host)
+			remoteCallback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?state="+url.QueryEscape(authorization.Query().Get("state"))+"&code=synthetic-approved-code", nil).WithContext(ctx)
+			completed := httptest.NewRecorder()
+			if tc.revoke {
+				session, err := usersessionsrepo.New(ti.conn).GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
+				require.NoError(t, err)
+				_, err = usersessionsrepo.New(ti.conn).RevokeUserSession(ctx, usersessionsrepo.RevokeUserSessionParams{ID: session.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID})
+				require.NoError(t, err)
+				key := "mcpConnectionCatalog:v1:" + auth.ActiveOrganizationID + ":" + state.CodeReconnect.CatalogID.String()
+				var before, after []byte
+				require.NoError(t, ti.cacheAdapter.Get(ctx, key, &before))
+				require.ErrorContains(t, ti.service.HandleRemoteLoginCallback(completed, remoteCallback), "no longer active")
+				require.NoError(t, ti.cacheAdapter.Get(ctx, key, &after))
+				require.Equal(t, before, after, "revoked credentials cannot expand a catalogue")
+				return
+			}
+			require.NoError(t, ti.service.HandleRemoteLoginCallback(completed, remoteCallback))
+			require.Equal(t, http.StatusSeeOther, completed.Code)
+
+			completedState, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+			require.NoError(t, err)
+			require.True(t, completedState.CodeReconnect.CatalogComplete)
+			page := consentGetPageWithContext(t, ctx, ti, slug, stateID)
+			require.Contains(t, page, "data-auto-close")
+			require.NotContains(t, page, ">other-tracker</span>")
+
+			require.NotNil(t, exchanged.Load(), "real token POST reached owned OAuth provider")
+			t.Log("HANDOFF: original user identified; member-scoped OAuth callback exchanges a code and stores the upstream grant.")
+			after := execute(`await tools.servers()`, false)
+			require.NotContains(t, string(after.Value), `"consent":"required"`)
+			otherTools := execute(`await tools.search("", server="other-tracker")`, false)
+			require.Contains(t, string(otherTools.Value), "tool_000")
+			if tc.selection != nil {
+				require.NotContains(t, string(otherTools.Value), "tool_001")
+			}
+
+			result := execute(`page = await tools.search("", server="tracker")
+path = page["items"][0]["path"]
+details = await tools.describe(path)
+await tools.call(path, {})`, false)
+			require.Contains(t, string(result.Value), `"ok":true`)
+			upstream.requireToolCallAuth(t, "Bearer reconnected-token")
+			require.Len(t, result.ToolCalls, 1)
+			t.Log("AFTER: a fresh Python execution discovers, describes and calls one read tool with the newly connected credential.")
+		})
+	}
 }

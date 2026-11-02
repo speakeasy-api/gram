@@ -1,7 +1,9 @@
 package mcp
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -88,4 +90,31 @@ func (s *Service) codeReconnectTicket(r *http.Request, endpoint *ResolvedMcpEndp
 	}
 	b.Ticket = false
 	return b, nil
+}
+
+// completeCatalogConsent closes the focused page only after publication. A
+// connected upstream card alone is insufficient evidence of catalogue consent.
+func (s *Service) completeCatalogConsent(ctx context.Context, state AuthnChallengeState) error {
+	binding := state.CodeReconnect
+	for range 3 {
+		current, err := s.authnChallengeCache.Get(ctx, state.CacheKey())
+		if err != nil {
+			return fmt.Errorf("load completed reconnect: %w", err)
+		}
+		if current.CodeReconnect == nil || current.CodeReconnect.CatalogID != binding.CatalogID {
+			return fmt.Errorf("reconnect challenge changed")
+		}
+		updated := current
+		completed := *current.CodeReconnect
+		completed.CatalogComplete = true
+		updated.CodeReconnect = &completed
+		done, err := s.authnChallengeCache.CompareAndSwap(ctx, current, updated)
+		if err != nil {
+			return fmt.Errorf("complete reconnect challenge: %w", err)
+		}
+		if done {
+			return nil
+		}
+	}
+	return fmt.Errorf("reconnect challenge changed while completing consent")
 }

@@ -131,12 +131,6 @@ func (c connectionCatalog) CacheKey() string { return connectionCatalogKey(c.Org
 // challenge remains retryable. A losing approval may leave an unreferenced
 // record, which expires; an authorization code never names a partial record.
 func (s *Service) publishConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, allTools bool, upstreamPicks map[uuid.UUID]uuid.UUID, durationHours int, now time.Time) (*toolfilter.CatalogReference, error) {
-	if inventory == nil || !inventory.Complete || inventory.StateID != state.ID || inventory.Resource != endpointToolSelectionResource(endpoint) {
-		return nil, fmt.Errorf("a completed gateway catalog is required; reload consent")
-	}
-	if state.Subject == nil || state.Subject.IsZero() || (mode != toolfilter.CatalogModeCached && mode != toolfilter.CatalogModeLive) {
-		return nil, fmt.Errorf("invalid connection catalog approval")
-	}
 	issuer, err := usersessionsrepo.New(s.db).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{
 		ID: endpoint.UserSessionIssuerID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
 	})
@@ -150,6 +144,37 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, endpoint *Resolv
 	}
 	if durationHours > 0 {
 		lifetime = min(lifetime, time.Duration(durationHours)*time.Hour)
+	}
+	catalog, err := s.freezeConnectionCatalog(ctx, endpoint, state, inventory, selection, mode, upstreamPicks, now.Add(lifetime+userSessionGrantTTL))
+	if err != nil {
+		return nil, err
+	}
+	raw, err := catalog.marshal()
+	if err != nil {
+		return nil, err
+	}
+	conditional, ok := s.connectionCatalogCache.(cache.ConditionalCache)
+	if !ok {
+		return nil, fmt.Errorf("connection catalog store does not support atomic publication")
+	}
+	stored, err := conditional.SetIfAbsent(ctx, catalog.CacheKey(), raw, catalog.ExpiresAt.Sub(now))
+	if err != nil {
+		return nil, fmt.Errorf("publish connection catalog: %w", err)
+	}
+	if !stored {
+		return nil, fmt.Errorf("connection catalog publication conflict")
+	}
+	return &toolfilter.CatalogReference{ID: catalog.ID, Mode: mode, AllTools: allTools}, nil
+}
+
+// freezeConnectionCatalog validates the captured routes, credentials and tool
+// definitions for both initial approval and a member's reconnect approval.
+func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, upstreamPicks map[uuid.UUID]uuid.UUID, expiresAt time.Time) (*connectionCatalog, error) {
+	if inventory == nil || !inventory.Complete || inventory.StateID != state.ID || inventory.Resource != endpointToolSelectionResource(endpoint) {
+		return nil, fmt.Errorf("a completed gateway catalog is required; reload consent")
+	}
+	if state.Subject == nil || state.Subject.IsZero() || (mode != toolfilter.CatalogModeCached && mode != toolfilter.CatalogModeLive) {
+		return nil, fmt.Errorf("invalid connection catalog approval")
 	}
 	ids := make([]uuid.UUID, 0, len(inventory.MemberBindings))
 	seen := make(map[uuid.UUID]bool, len(inventory.MemberBindings))
@@ -210,27 +235,20 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, endpoint *Resolv
 		Version: connectionCatalogVersion, ID: uuid.New(), OrganizationID: endpoint.OrganizationID,
 		IssuerID: endpoint.UserSessionIssuerID, ClientID: state.ClientID, Subject: *state.Subject,
 		Resource: inventory.Resource, Members: members, MemberOutcomes: outcomes, Tools: tools,
-		ExpiresAt: now.Add(lifetime + userSessionGrantTTL),
+		ExpiresAt: expiresAt,
 	}
-	raw, err := json.Marshal(catalog)
+	return &catalog, nil
+}
+
+func (c *connectionCatalog) marshal() ([]byte, error) {
+	raw, err := json.Marshal(c)
 	if err != nil {
 		return nil, fmt.Errorf("encode approved catalog: %w", err)
 	}
 	if len(raw) > connectionCatalogMaxBytes {
-		return nil, fmt.Errorf("%w (%d bytes)", errConnectionCatalogTooLarge, connectionCatalogMaxBytes)
+		return nil, errConnectionCatalogTooLarge
 	}
-	conditional, ok := s.connectionCatalogCache.(cache.ConditionalCache)
-	if !ok {
-		return nil, fmt.Errorf("connection catalog store does not support atomic publication")
-	}
-	stored, err := conditional.SetIfAbsent(ctx, catalog.CacheKey(), raw, catalog.ExpiresAt.Sub(now))
-	if err != nil {
-		return nil, fmt.Errorf("publish connection catalog: %w", err)
-	}
-	if !stored {
-		return nil, fmt.Errorf("connection catalog publication conflict")
-	}
-	return &toolfilter.CatalogReference{ID: catalog.ID, Mode: mode, AllTools: allTools}, nil
+	return raw, nil
 }
 
 // loadConnectionCatalog never substitutes a live upstream fetch for a missing
@@ -509,4 +527,67 @@ func (s *Service) validateCatalogMemberAuth(ctx context.Context, endpoint *Resol
 		return errConsentConfigurationChanged
 	}
 	return nil
+}
+
+// replaceConnectionCatalogMember publishes new consent for one member while
+// keeping concurrent approvals, other selections and the original expiry.
+func (s *Service) replaceConnectionCatalogMember(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, ref *toolfilter.CatalogReference, slug string, frozen *connectionCatalog) error {
+	conditional, ok := s.connectionCatalogCache.(cache.CompareAndSwapCache)
+	if !ok {
+		return fmt.Errorf("catalogue store does not support reconnect")
+	}
+	for range 3 {
+		catalog, err := s.loadConnectionCatalog(ctx, endpoint, subject, ref, time.Now())
+		if err != nil {
+			return err
+		}
+		expected, err := catalog.marshal()
+		if err != nil {
+			return err
+		}
+		catalog.replaceMember(slug, frozen, ref.AllTools)
+		replacement, err := catalog.marshal()
+		if err != nil {
+			return err
+		}
+		ttl := time.Until(catalog.ExpiresAt)
+		if ttl <= 0 {
+			return errConnectionCatalogExpired
+		}
+		swapped, err := conditional.CompareAndSwap(ctx, catalog.CacheKey(), expected, replacement, ttl)
+		if err != nil {
+			return fmt.Errorf("update reconnected catalogue: %w", err)
+		}
+		if swapped {
+			return nil
+		}
+	}
+	return fmt.Errorf("catalogue changed while reconnecting; request a new connection link")
+}
+
+// replaceMember accepts only definitions validated by freezeConnectionCatalog.
+func (c *connectionCatalog) replaceMember(slug string, frozen *connectionCatalog, allTools bool) {
+	prefix := metamcp.QualifyName(slug, "")
+	selected := map[string]bool{}
+	kept := make([]*toolListEntry, 0, len(c.Tools)+len(frozen.Tools))
+	for _, tool := range c.Tools {
+		if strings.HasPrefix(tool.Name, prefix) {
+			selected[tool.Name] = true
+		} else {
+			kept = append(kept, tool)
+		}
+	}
+	for _, tool := range frozen.Tools {
+		if allTools || len(selected) == 0 || selected[tool.Name] {
+			kept = append(kept, tool)
+		}
+	}
+	slices.SortFunc(kept, func(a, b *toolListEntry) int { return strings.Compare(a.Name, b.Name) })
+	c.Tools = kept
+	if c.Members == nil {
+		c.Members = map[string]connectionCatalogMember{}
+	}
+	c.Members[slug] = frozen.Members[slug]
+	c.MemberOutcomes = slices.DeleteFunc(c.MemberOutcomes, func(outcome consentMemberOutcome) bool { return outcome.Slug == slug })
+	c.MemberOutcomes = append(c.MemberOutcomes, frozen.MemberOutcomes...)
 }
