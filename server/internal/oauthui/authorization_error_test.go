@@ -217,6 +217,32 @@ func TestAuthorizationErrorPageReasonOverridesCode(t *testing.T) {
 	}
 }
 
+func TestAuthorizationErrorPageProviderOutage(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		provider string
+		want     string
+	}{
+		{"named provider", "auth.example.com", "auth.example.com"},
+		{"unknown provider", "", "The service you're signing in to"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			response := httptest.NewRecorder()
+			require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusServiceUnavailable, Code: "unavailable", Reason: oauthui.ReasonProviderUnavailable, ProviderName: tc.provider, ClientName: "Example Client", ServerName: "example-server"}))
+			page := response.Body.String()
+			require.Equal(t, http.StatusServiceUnavailable, response.Code)
+			require.Contains(t, page, tc.want)
+			require.Contains(t, page, "Try connecting again in a few minutes")
+			require.Contains(t, page, "This isn't something you did")
+			require.NotContains(t, page, "problem on our side")
+			require.NotContains(t, page, "isn't allowed")
+		})
+	}
+}
+
 func TestAuthorizationErrorRecoveryLink(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

@@ -401,6 +401,7 @@ func authorizationErrorPage(client *usersessions_repo.UserSessionClient, clientI
 		ClientID:       clientID,
 		ClientIDOrigin: "",
 		ServerName:     serverName,
+		ProviderName:   "",
 	}
 	if client == nil {
 		return page

@@ -931,6 +931,7 @@ func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Reque
 	}
 	result, err := s.remoteChallengeMgr.CompleteRemoteLogin(r)
 	if err != nil {
+		remotesessions.TagExternalOutage(w, err)
 		return err //nolint:wrapcheck // the manager's errors already carry the response
 	}
 	if result.Grant != nil {

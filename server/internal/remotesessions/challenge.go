@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -1495,6 +1496,7 @@ func storeRemoteSessionGrant(ctx context.Context, q *remotesessions_repo.Queries
 func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
 	result, err := m.CompleteRemoteLogin(r)
 	if err != nil {
+		TagExternalOutage(w, err)
 		return err
 	}
 	http.Redirect(w, r, result.RedirectURL, http.StatusSeeOther)
@@ -1591,6 +1593,10 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 			return m.retryWithoutResource(ctx, logger, state, cause)
 		}
 		m.recordCIMDAuthorizationFailure(ctx, state, errCode, q.Get("error_description"))
+		// RFC 6749 §4.1.2.1: the provider's own codes for an outage at authorize.
+		if errCode == oautherr.CodeTemporarilyUnavailable || errCode == oautherr.CodeServerError {
+			return none, providerOutageError(oops.E(oops.CodeUnavailable, nil, "remote authn challenge denied: %s", errCode).LogWarn(ctx, logger, attr.SlogOAuthError(errCode)), m.authorizeProviderLabel(ctx, state), true)
+		}
 		return none, denied(ctx, logger, q)
 	}
 
@@ -1687,7 +1693,16 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 			return m.retryWithoutResource(ctx, logger, state, err)
 		}
 		m.noteExchangeTokenEndpointMissing(ctx, logger, client.ID, err)
-		return none, exchangeFailure(ctx, logger, err, clientRow.TunneledMcpServerID.Valid)
+		failure := exchangeFailure(ctx, logger, err, clientRow.TunneledMcpServerID.Valid)
+		if !exchangeFailureIsProviderOutage(failure, err) {
+			return none, failure
+		}
+		provider := ""
+		if !clientRow.TunneledMcpServerID.Valid {
+			provider = providerLabel(state.TokenEndpoint)
+		}
+		endpointErr, answered := errors.AsType[*tokenEndpointError](err)
+		return none, providerOutageError(failure, provider, answered && endpointErr.statusCode == http.StatusTooManyRequests)
 	}
 	// The pair is live upstream from this line on, and every path out of here
 	// that does not store it strands it: unreachable through Speakeasy, and outside
@@ -1959,6 +1974,55 @@ func denied(ctx context.Context, logger *slog.Logger, q url.Values) error {
 	)
 }
 
+// ErrProviderOutageExternal marks a provider-caused 5xx that shouldn't alert on-call.
+var ErrProviderOutageExternal = errors.New("sign-in provider outage")
+
+// TagExternalOutage marks the response to err as caused outside Speakeasy.
+func TagExternalOutage(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrProviderOutageExternal) {
+		w.Header().Set(constants.HeaderProxiedResponse, "1")
+	}
+}
+
+// providerOutageError presents a provider outage as one to try again shortly.
+func providerOutageError(err *oops.ShareableError, provider string, external bool) error {
+	presented := oops.WithBrowserProvider(oops.WithBrowserReason(err, oauthui.ReasonProviderUnavailable), provider)
+	if external {
+		return fmt.Errorf("complete remote login: %w: %w", ErrProviderOutageExternal, presented)
+	}
+	return fmt.Errorf("complete remote login: %w", presented)
+}
+
+// authorizeProviderLabel keeps a tunneled provider's internal host off the page.
+func (m *ChallengeManager) authorizeProviderLabel(ctx context.Context, state RemoteLoginState) string {
+	row, err := remotesessions_repo.New(m.db).GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
+		ID:             state.RemoteSessionClientID,
+		ProjectID:      state.ProjectID,
+		OrganizationID: state.OrganizationID,
+	})
+	if err != nil || row.TunneledMcpServerID.Valid {
+		return ""
+	}
+	return providerLabel(state.TokenEndpoint)
+}
+
+// providerLabel is the token endpoint's host; never call it for a tunneled provider.
+func providerLabel(endpoint string) string {
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return ""
+	}
+	return parsed.Hostname()
+}
+
+// exchangeFailureIsProviderOutage excludes failures Speakeasy's own signing caused.
+func exchangeFailureIsProviderOutage(failure *oops.ShareableError, err error) bool {
+	if _, signing := errors.AsType[*tokenEndpointSigningError](err); signing {
+		return false
+	}
+	return failure.Code == oops.CodeUnavailable || failure.Code == oops.CodeGatewayError
+}
+
 // retryWithoutResource mints one resource-less leg of the same login after
 // invalid_target. Refused when the leg already omitted the resource or is the
 // retry itself, so an issuer cannot loop the user. Persists nothing: the
@@ -2159,7 +2223,7 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 // exchangeFailureCode answers a provider outage with 503 or 502 rather than blaming the user's credentials with 401.
 func exchangeFailureCode(status int, oauthCode string) oops.Code {
 	switch {
-	case oauthCode == oautherr.CodeTemporarilyUnavailable, status == http.StatusServiceUnavailable:
+	case oauthCode == oautherr.CodeTemporarilyUnavailable, status == http.StatusServiceUnavailable, status == http.StatusTooManyRequests:
 		return oops.CodeUnavailable
 	case oauthCode == oautherr.CodeServerError, status >= http.StatusInternalServerError:
 		return oops.CodeGatewayError

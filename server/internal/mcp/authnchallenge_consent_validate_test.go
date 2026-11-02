@@ -38,6 +38,7 @@ import (
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -1401,4 +1402,45 @@ func TestServeConsentAction_ValidateMemberProtocolRevisions(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A failing provider reads as an outage on the consent page's Verify, and the
+// grant survives it.
+func TestServeConsentAction_ValidateDuringProviderOutageSaysRetry(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedMetaValidationFixture(t, "aim866-outage")
+	projectID, orgID := consentTestTenant(t, ctx)
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(provider.Close)
+	rows, err := testrepo.New(fx.ti.conn).ForceRemoteSessionIssuerTokenEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerTokenEndpointFixtureParams{
+		TokenEndpoint: conv.ToPGText(provider.URL), RemoteSessionClientID: fx.clientID, ProjectID: projectID, OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+
+	sess := storedSession(t, ctx, fx)
+	refresh, err := fx.ti.enc.Encrypt([]byte("live-refresh"))
+	require.NoError(t, err)
+	access, err := fx.ti.enc.Encrypt([]byte("expired"))
+	require.NoError(t, err)
+	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		SubjectUrn: sess.SubjectUrn, UserSessionIssuerID: sess.UserSessionIssuerID, RemoteSessionClientID: sess.RemoteSessionClientID,
+		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
+		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: sess.Resource,
+	})
+	require.NoError(t, err)
+
+	_, err = postValidate(t, fx, fx.clientID)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnavailable, oopsErr.Code)
+	page := httptest.NewRecorder()
+	oops.BrowserErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error { return err }).ServeHTTP(page, httptest.NewRequest(http.MethodPost, "/connect", nil))
+	require.Contains(t, page.Body.String(), "responding right now")
+	require.NotContains(t, page.Body.String(), "problem on our side")
+	require.True(t, storedSession(t, ctx, fx).RefreshTokenEncrypted.Valid, "the outage keeps the grant")
+	require.Empty(t, fx.member.drain(), "no probe reached the member")
 }

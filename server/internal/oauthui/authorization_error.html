@@ -71,6 +71,10 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             {{else if eq .Kind "not-allowed"}}
             {{template "Client" .}} isn't allowed to connect to
             {{template "server" .}}.
+            {{else if eq .Kind "provider-unavailable"}}
+            {{if .ProviderName}}{{.ProviderName}}{{else}}The service you're signing in to{{end}}
+            isn't responding right now, so {{template "client" .}} couldn't connect to
+            {{template "server" .}}. This isn't something you did.
             {{else if eq .Kind "unavailable"}}
             Speakeasy couldn't finish connecting {{template "client" .}} to
             {{template "server" .}}. This is a problem on our side, not something
@@ -113,6 +117,10 @@ consent page shows, so the person recognizes the flow they started. */ -}}
           {{else if eq .Kind "not-allowed"}}
           Ask your IT administrators if you need access, and share the technical
           details below with them.
+          {{else if eq .Kind "provider-unavailable"}}
+          Try connecting again in a few minutes. You don't need to change anything.
+          If it keeps happening, share the technical details below with your IT
+          administrators.
           {{else if eq .Kind "unavailable"}}
           Try connecting again in a few minutes. If it keeps happening, share the
           technical details below with your IT administrators or Speakeasy

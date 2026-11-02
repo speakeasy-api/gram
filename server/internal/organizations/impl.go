@@ -1249,7 +1249,8 @@ func (s *Service) writeSetupCallbackError(w http.ResponseWriter, r *http.Request
 		Recovery: &oauthui.RecoveryLink{URL: strings.TrimRight(s.siteURL, "/") + "/@self/setup", Label: "Open organization setup"},
 		Setup:    true, Status: status, Reason: oauthui.ReasonDefault, Approval: false,
 		ErrorID: "", Code: oautherr.CodeInvalidRequest, Description: description,
-		CallbackURL: "", ClientName: "", ClientID: "", ClientIDOrigin: "", ServerName: "",
+		ProviderName: "",
+		CallbackURL:  "", ClientName: "", ClientID: "", ClientIDOrigin: "", ServerName: "",
 	}
 	switch {
 	case status >= http.StatusInternalServerError:
