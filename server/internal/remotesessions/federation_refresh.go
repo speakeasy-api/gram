@@ -216,7 +216,7 @@ func classifyFederatedRefreshResponse(status int, body []byte) (FederatedRefresh
 }
 
 func federatedRefreshNeedsSignIn(code string) bool {
-	return code == oautherr.OIDCCodeLoginRequired || code == oautherr.OIDCCodeInteractionRequired || code == oautherr.OIDCCodeConsentRequired
+	return code == oautherr.OIDCCodeLoginRequired || code == oautherr.OIDCCodeInteractionRequired || code == oautherr.OIDCCodeConsentRequired || code == oautherr.OIDCCodeAccountSelectionRequired
 }
 
 // oauthErrorCodeUnrecognized replaces a code outside the IETF registry in logs.

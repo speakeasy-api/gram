@@ -11,4 +11,7 @@ const (
 
 	// OIDCCodeConsentRequired means the provider needs the person's consent.
 	OIDCCodeConsentRequired = "consent_required"
+
+	// OIDCCodeAccountSelectionRequired means the person must choose an account.
+	OIDCCodeAccountSelectionRequired = "account_selection_required"
 )

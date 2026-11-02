@@ -282,6 +282,7 @@ func TestDelegationInvalidGrantClearsSavedToken(t *testing.T) {
 		{name: "login required", body: `{"error":"login_required","error_description":"secret-upstream"}`},
 		{name: "interaction required", body: `{"error":"interaction_required","error_description":"secret-upstream"}`},
 		{name: "consent required", body: `{"error":"consent_required","error_description":"secret-upstream"}`},
+		{name: "account selection required", body: `{"error":"account_selection_required","error_description":"secret-upstream"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
