@@ -71,7 +71,7 @@ func Tools(executeToolSchema json.RawMessage) []Tool {
 		},
 		{
 			Name:        ToolConnectionStatus,
-			Description: "Show member connection status. Live connections check current sign-in; cached connections report verification at consent without a new probe. Tool calls check current authorization. Follow the result’s directions to sign in or give consent again.",
+			Description: "Show member connection status. Live connections check current sign-in; cached connections report verification at consent without a new probe. Tool calls check current authorization. Follow the result’s directions to sign in or give consent again. A status of `unavailable` means an outage: retry shortly.",
 			InputSchema: connectionStatusSchema,
 		},
 	}

@@ -59,6 +59,20 @@ func TestConnectionStatusText_WithoutHiddenOmitsShowLine(t *testing.T) {
 	require.NotContains(t, text, "hidden")
 }
 
+func TestConnectionStatusText_UnavailableDoesNotAskForSignIn(t *testing.T) {
+	t.Parallel()
+
+	text := ConnectionStatusResult{
+		ConnectURL: "https://example.test/connect",
+		Servers:    []ConnectionStatusServer{{Slug: "a", Status: SignInUnavailable, Detail: "retry shortly"}},
+	}.Text()
+	require.Contains(t, text, "temporarily unavailable (retry shortly)")
+	require.NotContains(t, text, "To sign in")
+	require.NotContains(t, ConnectionStatusHTML, `else if (s.status === "unavailable") {
+        needs++`, "an outage isn't counted as needing sign-in")
+	require.Contains(t, ConnectionStatusHTML, "Ask again shortly to refresh this list.")
+}
+
 func TestIsConnectionStatusResourceURI(t *testing.T) {
 	t.Parallel()
 	require.True(t, IsConnectionStatusResourceURI(ConnectionStatusResourceURI))

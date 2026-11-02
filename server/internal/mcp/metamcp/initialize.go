@@ -23,7 +23,7 @@ Never execute a name you have not described: arguments guessed from a tool name 
 
 If a call fails, re-check list_servers before retrying. "unknown" means not checked, not broken: call connection_status to check sign-in. Such members usually answer describe and execute calls normally. Only "unavailable" means the member cannot currently be reached.
 
-If a member says it needs authentication, call connection_status. Live connections show current sign-in status and, when this gateway has a sign-in page, link to it. Cached connections report verification at consent without a new probe; tool calls check current authorization. If new consent is required, restart authorization in your AI client.`
+If a member says it needs authentication, call connection_status. A connection_status of "unavailable" means an outage: retry shortly. Live connections show current sign-in status and, when this gateway has a sign-in page, link to it. Cached connections report verification at consent without a new probe; tool calls check current authorization. If new consent is required, restart authorization in your AI client.`
 
 // ResolveInstructions returns custom instructions verbatim when nonblank,
 // otherwise falling back to the built-in gateway instructions.

@@ -424,7 +424,7 @@ func TestMemberClientFailurePreservesClientCredentialRenewalRemedy(t *testing.T)
 		err  error
 		want string
 	}{
-		{name: "outage", err: remotesessions.ErrClientCredentialUnavailable, want: "retry shortly"},
+		{name: "outage", err: remotesessions.ErrClientCredentialUnavailable, want: "Retry shortly"},
 		{name: "misconfigured", err: remotesessions.ErrClientCredentialMisconfigured, want: "contact the MCP server administrator"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

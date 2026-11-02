@@ -114,6 +114,9 @@ func (s *Service) probeRemoteSession(
 			return oops.E(oops.CodeUnexpected, rerr, "resolve upstream tokens for validation").LogError(ctx, logger)
 		}
 		if candidate, ok := resolved[client.RemoteSessionIssuerID]; ok && candidate.RemoteSessionClientID == client.ID {
+			if candidate.SessionUnavailable() {
+				return oops.E(oops.CodeUnavailable, candidate.ClientCredentialErr, "%s", remoteSessionUnavailableMessage).LogWarn(ctx, logger)
+			}
 			tokens, entry, tokenProjectID, usable = resolved, candidate, projectID, true
 			break
 		}

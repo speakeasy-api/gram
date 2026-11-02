@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -140,13 +141,37 @@ func clientCredentialRoutingError(w http.ResponseWriter, err error) error {
 }
 
 // metaMemberClientCredentialError is the member-scoped answer for a gateway
-// member whose self client credential could not be obtained.
+// member whose credential could not be obtained.
 func metaMemberClientCredentialError(member metaMember, err error) error {
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
-		return &metaMemberError{message: fmt.Sprintf("server %q cannot reach its upstream authorization server right now; retry shortly", member.slug)}
+		if _, session := errors.AsType[*remotesessions.SessionOutageError](err); session {
+			return linkedMemberOutage(member, err, "")
+		}
+		return memberUnavailableError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q can't get its credential because its provider isn't responding. Retry shortly. If it keeps happening, ask the MCP server's administrator", member.slug)}, session: nil}
 	}
 
 	return &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential that is misconfigured or was rejected; contact the MCP server administrator", member.slug)}
+}
+
+// linkedMemberOutage offers reconnecting as a fallback: a provider can answer 5xx for one bad token.
+func linkedMemberOutage(member metaMember, err error, connectURL string) error {
+	retry := "Retry shortly."
+	if wait := remotesessions.RetryAfter(err); wait > 0 {
+		retry = fmt.Sprintf("Retry in about %d seconds.", int(wait.Round(time.Second).Seconds()))
+	}
+	fallback := "If it keeps happening, ask your administrator"
+	if connectURL != "" {
+		fallback = "If it keeps happening, reconnect at " + connectURL
+	}
+	return memberUnavailableError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q can't renew its sign-in because its provider isn't responding. %s %s", member.slug, retry, fallback)}, session: err}
+}
+
+// withMemberConnectLink adds the member's connect page to a connection outage.
+func withMemberConnectLink(err error, member metaMember, connectURL string) error {
+	if outage, ok := errors.AsType[memberUnavailableError](err); ok && outage.session != nil && connectURL != "" {
+		return linkedMemberOutage(member, outage.session, connectURL)
+	}
+	return err
 }
 
 // subjectConnectedClients returns the clients that do not hold their upstream

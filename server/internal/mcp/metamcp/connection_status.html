@@ -43,7 +43,7 @@
       reportSize();
       return;
     }
-    let ready = 0, needs = 0, hidden = 0, consented = false, needsConsent = false;
+    let ready = 0, needs = 0, unavailable = 0, hidden = 0, consented = false, needsConsent = false;
     for (const s of data.servers) {
       const li = document.createElement("li");
       const name = document.createElement("div");
@@ -80,6 +80,11 @@
         state.className = "ok";
         state.textContent = s.status === "connected" ? "Signed in" : "No sign-in needed";
         li.append(state);
+      } else if (s.status === "unavailable") {
+        unavailable++;
+        state.className = "warn";
+        state.textContent = s.detail || "Temporarily unavailable. Retry shortly.";
+        li.append(state);
       } else {
         needs++;
         state.className = "warn";
@@ -102,8 +107,9 @@
     const hint = document.getElementById("hint");
     hint.textContent = needsConsent ? "Start authorization again in your AI client to review access."
       : consented ? "Current sign-in has not been checked. Tool calls check authorization."
-      : "After signing in, ask again to refresh this list.";
-    hint.hidden = !consented && needs === 0;
+      : needs > 0 ? "After signing in, ask again to refresh this list."
+      : "Ask again shortly to refresh this list.";
+    hint.hidden = !consented && needs === 0 && unavailable === 0;
     reportSize();
   };
 

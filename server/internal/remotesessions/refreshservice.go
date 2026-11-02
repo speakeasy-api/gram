@@ -15,9 +15,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -71,6 +73,9 @@ type RefreshError struct {
 	// this attempt.
 	Outcome remotesessionmetrics.RefreshOutcome
 
+	// retryAfter is how long the outage behind this failure is paced for.
+	retryAfter time.Duration
+
 	err error
 }
 
@@ -87,7 +92,8 @@ func (e *RefreshError) Is(target error) bool {
 	case remotesessionmetrics.RefreshOutcomeUpstreamError,
 		remotesessionmetrics.RefreshOutcomeRateLimited,
 		remotesessionmetrics.RefreshOutcomeUnreachable,
-		remotesessionmetrics.RefreshOutcomeCanceled:
+		remotesessionmetrics.RefreshOutcomeCanceled,
+		remotesessionmetrics.RefreshOutcomeDeferred:
 		return target == ErrRemoteSessionUnavailable
 	case remotesessionmetrics.RefreshOutcomeRejected,
 		remotesessionmetrics.RefreshOutcomeRejectedUnparsed:
@@ -310,10 +316,76 @@ const (
 	refreshWaitBudget     = 12 * time.Second
 	refreshWaitPoll       = 200 * time.Millisecond
 	refreshReleaseTimeout = 5 * time.Second
+
+	// refreshOutageCooldown paces retries after an outage: callers are told to retry.
+	refreshOutageCooldown = 30 * time.Second
+
+	// refreshOutageCooldownMax caps a provider's Retry-After against an odd header.
+	refreshOutageCooldownMax = 5 * time.Minute
 )
 
 func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
 	return "remotesession:refresh:" + subject.String() + ":" + clientID.String()
+}
+
+// RefreshCooldownKey is the cache key pacing refreshes of one binding after an outage.
+func RefreshCooldownKey(subject urn.SessionSubject, clientID uuid.UUID) string {
+	return "remotesession:refresh-cooldown:" + subject.String() + ":" + clientID.String()
+}
+
+// refreshDeferredError is a refresh that made no upstream call; retry after wait.
+type refreshDeferredError struct{ wait time.Duration }
+
+func (e *refreshDeferredError) Error() string {
+	return fmt.Sprintf("refresh deferred, retry after %s", e.wait)
+}
+
+// parseRetryAfter reads RFC 9110 §10.2.3 seconds or an HTTP date, zero when absent or past.
+func parseRetryAfter(value string, now time.Time) time.Duration {
+	if seconds, err := strconv.Atoi(value); err == nil {
+		return max(time.Duration(seconds)*time.Second, 0)
+	}
+	if at, err := http.ParseTime(value); err == nil {
+		return max(at.Sub(now), 0)
+	}
+	return 0
+}
+
+// refreshCooldownRemaining is how long an outage still paces this binding; fails open.
+func (s *RefreshService) refreshCooldownRemaining(ctx context.Context, sess remotesessions_repo.RemoteSession) time.Duration {
+	var until time.Time
+	err := s.locks.Get(ctx, RefreshCooldownKey(sess.SubjectUrn, sess.RemoteSessionClientID), &until)
+	if err != nil {
+		if !errors.Is(err, redisCache.ErrCacheMiss) {
+			s.logger.WarnContext(ctx, "remote session refresh cooldown unavailable; refreshing", attr.SlogError(err))
+		}
+		return 0
+	}
+	return max(time.Until(until), 0)
+}
+
+// startRefreshCooldown paces the binding after an outage answer and returns the wait.
+func (s *RefreshService) startRefreshCooldown(ctx context.Context, sess remotesessions_repo.RemoteSession, cause error) time.Duration {
+	wait := refreshOutageCooldown
+	if tokenErr, ok := errors.AsType[*TokenRefreshError](cause); ok {
+		wait = min(max(wait, tokenErr.retryAfter), refreshOutageCooldownMax)
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
+	defer cancel()
+	if err := s.locks.Set(ctx, RefreshCooldownKey(sess.SubjectUrn, sess.RemoteSessionClientID), time.Now().Add(wait), wait); err != nil {
+		s.logger.WarnContext(ctx, "remote session refresh cooldown not stored", attr.SlogError(err))
+		return 0
+	}
+	return wait
+}
+
+// clearRefreshCooldown ends the pacing once a refresh has worked.
+func (s *RefreshService) clearRefreshCooldown(ctx context.Context, sess remotesessions_repo.RemoteSession) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
+	defer cancel()
+	if err := s.locks.Delete(ctx, RefreshCooldownKey(sess.SubjectUrn, sess.RemoteSessionClientID)); err != nil {
+		s.logger.WarnContext(ctx, "remote session refresh cooldown not cleared", attr.SlogError(err))
+	}
 }
 
 // RefreshNow refreshes the upstream access token for sess, single-flighted per
@@ -351,9 +423,17 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		err = refreshClientLoadError(err)
 		outcome := refreshOutcomeForError(ctx, err)
 		s.metrics.Record(ctx, "", trigger, outcome)
-		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, err: err}
+		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, retryAfter: 0, err: err}
 	}
 	s.issuerMetadata.NoteUse(ctx, issuerUseFromClientRow(client))
+
+	// A person asking for a refresh gets one; everything else waits out an outage.
+	if trigger != remotesessionmetrics.RefreshTriggerManual {
+		if wait := s.refreshCooldownRemaining(ctx, sess); wait > 0 {
+			s.metrics.Record(ctx, client.IssuerUrl, trigger, remotesessionmetrics.RefreshOutcomeDeferred)
+			return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeDeferred, retryAfter: wait, err: &refreshDeferredError{wait: wait}}
+		}
+	}
 
 	result, postLockClient, restatement, err := s.refresh(ctx, q, sess, callerResource)
 	issuerURL := client.IssuerUrl
@@ -367,7 +447,20 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		if postLockClient != nil && errors.As(err, &tokenErr) {
 			noteTokenEndpointMissing(ctx, s.issuerMetadata, *postLockClient, tokenErr.statusCode, tokenErr.code != "")
 		}
-		return zero, &RefreshError{IssuerURL: issuerURL, Outcome: outcome, err: err}
+		var retryAfter time.Duration
+		switch outcome {
+		case remotesessionmetrics.RefreshOutcomeUpstreamError, remotesessionmetrics.RefreshOutcomeRateLimited, remotesessionmetrics.RefreshOutcomeUnreachable:
+			retryAfter = s.startRefreshCooldown(ctx, sess, err)
+		case remotesessionmetrics.RefreshOutcomeDeferred:
+			if deferred, ok := errors.AsType[*refreshDeferredError](err); ok {
+				retryAfter = deferred.wait
+			}
+		default:
+		}
+		return zero, &RefreshError{IssuerURL: issuerURL, Outcome: outcome, retryAfter: retryAfter, err: err}
+	}
+	if result.Outcome == remotesessionmetrics.RefreshOutcomeRefreshed {
+		s.clearRefreshCooldown(ctx, sess)
 	}
 	if restatement != nil {
 		// Outside the single-flight lease: verifying an ID token may wait on
@@ -412,6 +505,8 @@ func refreshClientLoadError(err error) error {
 func refreshOutcomeForError(ctx context.Context, err error) remotesessionmetrics.RefreshOutcome {
 	var tokenErr *TokenRefreshError
 	switch {
+	case errors.As(err, new(*refreshDeferredError)):
+		return remotesessionmetrics.RefreshOutcomeDeferred
 	case errors.Is(err, ErrNoValidToken):
 		return remotesessionmetrics.RefreshOutcomeNoGrant
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded) && ctx.Err() != nil:
@@ -458,6 +553,22 @@ func (s *RefreshService) refresh(
 	lockAcquiredAt := time.Now()
 	held, lockErr := s.locks.Add(ctx, lockKey, refreshLockTTL)
 
+	if lockErr == nil && !held {
+		winner, ok, wait := s.awaitRefreshedSession(ctx, q, sess)
+		switch {
+		case ok:
+			return winner, nil, nil, nil
+		case wait > 0:
+			return zero, nil, nil, &refreshDeferredError{wait: wait}
+		}
+		// Never post unserialized: two waiters presenting one token can revoke the family (BCP 4.13.2).
+		lockAcquiredAt = time.Now()
+		held, lockErr = s.locks.Add(ctx, lockKey, refreshLockTTL)
+		if lockErr == nil && !held {
+			return zero, nil, nil, &refreshDeferredError{wait: refreshOutageCooldown}
+		}
+	}
+
 	switch {
 	case lockErr != nil:
 		// Refreshing unserialized beats refusing to refresh; the CAS still
@@ -466,15 +577,6 @@ func (s *RefreshService) refresh(
 			attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
 			attr.SlogCacheKey(lockKey),
 			attr.SlogError(lockErr),
-		)
-	case !held:
-		if winner, ok := s.awaitRefreshedSession(ctx, q, sess); ok {
-			return winner, nil, nil, nil
-		}
-		// A duplicate POST beats a guaranteed reconnect prompt.
-		s.logger.WarnContext(ctx, "timed out waiting on a concurrent remote session refresh; refreshing directly",
-			attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
-			attr.SlogCacheKey(lockKey),
 		)
 	default:
 		defer o11y.LogDefer(ctx, s.logger, "failed to release remote session refresh lock", func() error {
@@ -712,12 +814,13 @@ func authorizationUsable(sess remotesessions_repo.RemoteSession, now time.Time) 
 // awaitRefreshedSession returns the session row and access token the lock
 // holder wrote, or a terminal inactive result if that exact row was revoked
 // or replaced. Reports false if the row has not moved within refreshWaitBudget,
-// rather than stranding the caller on a dead holder.
+// rather than stranding the caller on a dead holder, and a wait when the holder
+// hit an outage that now paces this binding.
 func (s *RefreshService) awaitRefreshedSession(
 	ctx context.Context,
 	q *remotesessions_repo.Queries,
 	sess remotesessions_repo.RemoteSession,
-) (RefreshResult, bool) {
+) (RefreshResult, bool, time.Duration) {
 	var zero RefreshResult
 
 	ticker := time.NewTicker(refreshWaitPoll)
@@ -729,9 +832,9 @@ func (s *RefreshService) awaitRefreshedSession(
 	for {
 		select {
 		case <-ctx.Done():
-			return zero, false
+			return zero, false, 0
 		case <-deadline.C:
-			return zero, false
+			return zero, false, 0
 		case <-ticker.C:
 		}
 
@@ -742,23 +845,26 @@ func (s *RefreshService) awaitRefreshedSession(
 		if errors.Is(err, pgx.ErrNoRows) || (err == nil && latest.ID != sess.ID) {
 			// Terminal for this exact row: do not fall through to a new POST.
 			zero.Outcome = remotesessionmetrics.RefreshOutcomeSessionInactive
-			return zero, true
+			return zero, true, 0
 		}
 		if err != nil {
-			return zero, false
+			return zero, false, 0
 		}
 		if !latest.UpdatedAt.Time.After(sess.UpdatedAt.Time) {
+			if wait := s.refreshCooldownRemaining(ctx, sess); wait > 0 {
+				return zero, false, wait
+			}
 			continue
 		}
 		if !accessTokenLive(latest, time.Now()) {
-			return zero, false
+			return zero, false, 0
 		}
 
 		plain, err := s.enc.Decrypt(latest.AccessTokenEncrypted)
 		if err != nil {
-			return zero, false
+			return zero, false, 0
 		}
 
-		return RefreshResult{Session: latest, AccessToken: plain, SourceUpdatedAt: latest.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, true
+		return RefreshResult{Session: latest, AccessToken: plain, SourceUpdatedAt: latest.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, true, 0
 	}
 }

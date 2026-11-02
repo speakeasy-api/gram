@@ -8,6 +8,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -193,7 +194,7 @@ func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext
 		if err == nil && gate.agentID != uuid.Nil && member.chosenClientID.Valid {
 			usable := false
 			for _, token := range tokens {
-				usable = usable || token.Token != ""
+				usable = usable || token.Token != "" || token.SessionUnavailable()
 			}
 			if !usable {
 				return nil, agentMemberCredentialError(member)
@@ -261,6 +262,9 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 		subject = urn.NewUserSubject(connection.owner)
 	}
 	resolved, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, member.projectID, gate.organizationID, issuer, subject, clientID, false)
+	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
+		return nil, metaMemberClientCredentialError(member, err)
+	}
 	if err != nil {
 		return nil, agentMemberCredentialError(member)
 	}

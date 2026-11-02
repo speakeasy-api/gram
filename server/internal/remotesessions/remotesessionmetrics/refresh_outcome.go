@@ -93,4 +93,7 @@ const (
 	// invalid client authentication method, an empty upstream response, a
 	// database or encryption failure, or a lost compare-and-swap on persist.
 	RefreshOutcomeInternalError RefreshOutcome = "internal_error"
+
+	// RefreshOutcomeDeferred: no upstream call, an outage is cooling down or the lock is held.
+	RefreshOutcomeDeferred RefreshOutcome = "deferred"
 )

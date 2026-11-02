@@ -6,9 +6,32 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
+
+func TestConnectionRouteFailure(t *testing.T) {
+	t.Parallel()
+
+	member := metaMember{slug: "m"}
+	for _, tc := range []struct {
+		name string
+		err  error
+		want string
+	}{
+		{name: "provider outage", err: metaMemberClientCredentialError(member, remotesessions.ErrRemoteSessionUnavailable), want: "unreachable"},
+		{name: "not connected", err: memberAuthFailure(member, memberDial{anonymous: true}), want: "reauth_required"},
+		{name: "grant gone", err: remotesessions.ErrNoValidToken, want: "reauth_required"},
+		{name: "misconfigured", err: metaMemberClientCredentialError(member, remotesessions.ErrClientCredentialMisconfigured), want: "unknown"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, _ := connectionRouteFailure(tc.err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
 
 func TestCodeVerificationLimiterFailureIsNotAThrottle(t *testing.T) {
 	t.Parallel()

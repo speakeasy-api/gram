@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestMemberResponseRecorderStatusStartsUnset(t *testing.T) {
@@ -241,8 +242,102 @@ func TestRouteMetaMemberToken_SelfCredential(t *testing.T) {
 		_, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{memberIssuer: self("", remotesessions.ErrClientCredentialUnavailable)}, remoteMember, "https://a.example.com/mcp")
 		memberErr, ok := errors.AsType[*metaMemberError](err)
 		require.True(t, ok, "error: %v", err)
-		require.Contains(t, memberErr.message, "retry shortly")
+		require.Contains(t, memberErr.message, "Retry shortly")
 	})
+}
+
+func TestRouteMetaMemberToken_SessionOutage(t *testing.T) {
+	t.Parallel()
+
+	const upstream = "https://a.example.com/mcp"
+	memberIssuer := uuid.New()
+	remoteMember := metaMember{slug: "m", remoteServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, remoteSessionIssuerID: uuid.NullUUID{UUID: memberIssuer, Valid: true}}
+	tunneledMember := metaMember{slug: "m", tunneledServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, remoteSessionIssuerID: uuid.NullUUID{UUID: memberIssuer, Valid: true}}
+	outage := func(resource string) remotesessions.UpstreamToken {
+		return remotesessions.UpstreamToken{Resource: resource, CredentialOwner: remotesessions.CredentialOwnerSubject, ClientCredentialErr: remotesessions.ErrRemoteSessionUnavailable}
+	}
+	requireRetry := func(t *testing.T, err error) {
+		t.Helper()
+		_, retryable := errors.AsType[memberUnavailableError](err)
+		require.True(t, retryable, "error: %v", err)
+		_, credential := errors.AsType[memberCredentialError](err)
+		require.False(t, credential, "an outage must not ask for a reconnect")
+	}
+
+	t.Run("remote member by recorded resource", func(t *testing.T) {
+		t.Parallel()
+		_, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): outage(upstream)}, remoteMember, upstream)
+		requireRetry(t, err)
+	})
+
+	t.Run("remote member by issuer when no resource was recorded", func(t *testing.T) {
+		t.Parallel()
+		_, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{memberIssuer: outage("")}, remoteMember, upstream)
+		requireRetry(t, err)
+	})
+
+	t.Run("tunneled member", func(t *testing.T) {
+		t.Parallel()
+		_, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{memberIssuer: outage("")}, tunneledMember, upstream)
+		requireRetry(t, err)
+	})
+
+	t.Run("a sibling's outage leaves this member anonymous", func(t *testing.T) {
+		t.Parallel()
+		got, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): outage("https://b.example.com/mcp")}, remoteMember, upstream)
+		require.NoError(t, err)
+		require.Empty(t, got.Token)
+	})
+
+	t.Run("a usable credential for the upstream outranks the outage", func(t *testing.T) {
+		t.Parallel()
+		got, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{
+			uuid.New(): outage(upstream),
+			uuid.New(): {Token: "good", Resource: upstream, CredentialOwner: remotesessions.CredentialOwnerSubject},
+		}, remoteMember, upstream)
+		require.NoError(t, err)
+		require.Equal(t, "good", got.Token)
+	})
+}
+
+func TestRouteUpstreamToken_LiveMatchOutranksOutage(t *testing.T) {
+	t.Parallel()
+
+	const upstream = "https://a.example.com/mcp"
+	outage := remotesessions.UpstreamToken{Resource: upstream, CredentialOwner: remotesessions.CredentialOwnerSubject, ClientCredentialErr: remotesessions.ErrRemoteSessionUnavailable}
+	none := uuid.NullUUID{}
+
+	got, err := routeUpstreamToken(t.Context(), testenv.NewLogger(t), map[uuid.UUID]remotesessions.UpstreamToken{
+		uuid.New(): outage,
+		uuid.New(): {Token: "good", Resource: upstream, CredentialOwner: remotesessions.CredentialOwnerSubject},
+	}, upstream, false, none)
+	require.NoError(t, err)
+	require.Equal(t, "good", got.Token)
+
+	_, err = routeUpstreamToken(t.Context(), testenv.NewLogger(t), map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): outage}, upstream, false, none)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+}
+
+func TestChainMetaMember_ChainingServesAnOutage(t *testing.T) {
+	t.Parallel()
+
+	routed := remotesessions.UpstreamToken{CredentialOwner: remotesessions.CredentialOwnerSubject, ClientCredentialErr: remotesessions.ErrRemoteSessionUnavailable}
+	routeErr := errors.New("outage")
+	chaining := func(token string) metaGateContext {
+		return metaGateContext{chainUpstream: func(context.Context, metaMember, string) (string, error) { return token, nil }}
+	}
+
+	_, token, err := chainMetaMember(t.Context(), chaining("chained"), metaMember{}, "r", routed, routeErr)
+	require.NoError(t, err)
+	require.Equal(t, "chained", token)
+
+	_, token, err = chainMetaMember(t.Context(), chaining(""), metaMember{}, "r", routed, routeErr)
+	require.ErrorIs(t, err, routeErr, "with nothing to chain the outage stands")
+	require.Empty(t, token)
+
+	self := remotesessions.UpstreamToken{CredentialOwner: remotesessions.CredentialOwnerSelf, ClientCredentialErr: remotesessions.ErrClientCredentialUnavailable}
+	_, _, err = chainMetaMember(t.Context(), chaining("chained"), metaMember{}, "r", self, routeErr)
+	require.ErrorIs(t, err, routeErr, "a self client's failure is never chained around")
 }
 
 func TestMemberAuthFailure_SelfCredentialNamesAdministrator(t *testing.T) {

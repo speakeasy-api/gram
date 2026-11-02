@@ -167,6 +167,18 @@ func (b *metaCodeBackend) VerifyConnections(ctx context.Context, servers []strin
 	return states, nil
 }
 
+// connectionRouteFailure names the state of a member that could not be routed.
+func connectionRouteFailure(err error) (authentication, instructions string) {
+	if _, unavailable := errors.AsType[memberUnavailableError](err); unavailable {
+		return "unreachable", "This server's provider isn't responding. Retry shortly. If it keeps happening, call tools.connect(server=...) to reconnect."
+	}
+	_, needsSignIn := errors.AsType[memberCredentialError](err)
+	if needsSignIn || (errors.Is(err, remotesessions.ErrNoValidToken) && !errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) && !errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured)) {
+		return "reauth_required", "Call tools.connect(server=...) to reconnect, then verify again in a fresh execution."
+	}
+	return "unknown", "Connection verification could not complete; try again later."
+}
+
 func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateContext, members []metaMember, server string) *codemode.ConnectionState {
 	member, ok := findMetaMember(members, server)
 	if !ok {
@@ -198,14 +210,7 @@ func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateCo
 	now := time.Now().UTC()
 	state.CheckedAt = &now
 	if err != nil {
-		_, needsSignIn := errors.AsType[memberCredentialError](err)
-		if needsSignIn || (errors.Is(err, remotesessions.ErrNoValidToken) && !errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) && !errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured)) {
-			state.Authentication = "reauth_required"
-			state.Instructions = "Call tools.connect(server=...) to reconnect, then verify again in a fresh execution."
-		} else {
-			state.Authentication = "unknown"
-			state.Instructions = "Connection verification could not complete; try again later."
-		}
+		state.Authentication, state.Instructions = connectionRouteFailure(err)
 		return state
 	}
 	verdict, _ := b.service.probeUpstream(ctx, b.service.logger, probeProxyBuilder(dial.build), member.name)

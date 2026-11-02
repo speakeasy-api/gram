@@ -112,11 +112,11 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		}
 		gateTokens, err := s.resolveMemberTokens(ctx, gate, member)
 		if err != nil {
-			return metamcp.SignInError, memberErrorMessage(err)
+			return memberFailureSignInStatus(err), memberErrorMessage(err)
 		}
 		tokens, err := hostedMemberTokens(gateTokens, member)
 		if err != nil {
-			return metamcp.SignInError, memberErrorMessage(err)
+			return memberFailureSignInStatus(err), memberErrorMessage(withMemberConnectLink(err, member, gate.memberConnectURL(member)))
 		}
 		if len(tokens) == 0 {
 			return metamcp.SignInNotConnected, ""
@@ -128,7 +128,7 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 	probe.chainUpstream = nil
 	dial, _, err := s.routeMetaMember(ctx, logger, probe, member, "")
 	if err != nil {
-		return metamcp.SignInError, memberErrorMessage(err)
+		return memberFailureSignInStatus(err), memberErrorMessage(err)
 	}
 	if !dial.anonymous {
 		return metamcp.SignInConnected, ""
@@ -137,6 +137,14 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		return metamcp.SignInNotRequired, ""
 	}
 	return metamcp.SignInNotConnected, ""
+}
+
+// memberFailureSignInStatus keeps an outage from reading as a broken sign-in.
+func memberFailureSignInStatus(err error) string {
+	if _, unavailable := errors.AsType[memberUnavailableError](err); unavailable {
+		return metamcp.SignInUnavailable
+	}
+	return metamcp.SignInError
 }
 
 func memberErrorMessage(err error) string {

@@ -56,6 +56,9 @@ import (
 // be obtained, or was requested for another resource, answers with the
 // member-scoped remedy rather than an anonymous call.
 //
+// A subject's connection in an outage answers retryably and returns its entry
+// for chaining. A usable credential for the same upstream outranks it.
+//
 // A tunneled member is routed by identity alone: only the entry keyed by its
 // own derived remote_session_issuer (mcpserverissuersync.go), accepted when
 // that grant is unqualified or names this member's recorded resource
@@ -69,6 +72,9 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	if member.tunneledServerID.Valid {
 		routed, err := tunneledIssuerToken(tokens, member.remoteSessionIssuerID, want)
 		if err != nil {
+			if entry := tokens[member.remoteSessionIssuerID.UUID]; entry.SessionUnavailable() {
+				return entry, metaMemberClientCredentialError(member, err)
+			}
 			return none, metaMemberClientCredentialError(member, err)
 		}
 		return routed, nil
@@ -76,9 +82,16 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	if want == "" {
 		return none, nil
 	}
-	var matched remotesessions.UpstreamToken
+	var matched, outage remotesessions.UpstreamToken
 	found := 0
 	for issuerID, entry := range tokens {
+		if entry.SessionUnavailable() {
+			// A grant from before resources were recorded still names its member by issuer.
+			if upstreamTokenRoutes(issuerID, entry, want, member.remoteSessionIssuerID) || (member.remoteSessionIssuerID.Valid && issuerID == member.remoteSessionIssuerID.UUID) {
+				outage = entry
+			}
+			continue
+		}
 		if upstreamTokenRoutes(issuerID, entry, want, member.remoteSessionIssuerID) {
 			matched = entry
 			found++
@@ -86,6 +99,9 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	}
 	switch found {
 	case 0:
+		if outage.SessionUnavailable() {
+			return outage, metaMemberClientCredentialError(member, outage.ClientCredentialErr)
+		}
 		if member.remoteSessionIssuerID.Valid {
 			if entry, ok := tokens[member.remoteSessionIssuerID.UUID]; ok && entry.CredentialOwner == remotesessions.CredentialOwnerSelf {
 				return none, &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential issued for a different resource; contact the MCP server administrator", member.slug)}
@@ -166,6 +182,33 @@ type memberCredentialError struct{ *metaMemberError }
 
 func (e memberCredentialError) Unwrap() error { return e.metaMemberError }
 
+// memberUnavailableError is a member failure a retry should clear.
+type memberUnavailableError struct {
+	*metaMemberError
+
+	// session is the refresh failure when the outage hit a person's connection.
+	session error
+}
+
+func (e memberUnavailableError) Unwrap() error { return e.metaMemberError }
+
+// chainMetaMember chains a member with no routed credential or one in an outage, which otherwise stands.
+func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMember, resource string, routed remotesessions.UpstreamToken, routeErr error) (remotesessions.UpstreamToken, string, error) {
+	outage := routed.SessionUnavailable()
+	if outage {
+		routeErr = withMemberConnectLink(routeErr, member, gate.memberConnectURL(member))
+	}
+	if (routeErr != nil && !outage) || (routed.Token != "") || gate.chainUpstream == nil || member.upstreamNoAuth || (member.authClient != nil && member.authClient.outcome != authClientLegacy) {
+		return routed, routed.Token, routeErr
+	}
+	chained, err := gate.chainUpstream(ctx, member, resource)
+	if outage && chained == "" {
+		return routed, "", routeErr
+	}
+	var none remotesessions.UpstreamToken
+	return none, chained, err
+}
+
 // dialMetaMember routes a member for dispatch and counts the routing outcome.
 func (s *Service) dialMetaMember(
 	ctx context.Context,
@@ -240,9 +283,7 @@ func (s *Service) routeMetaMember(
 		if terr == nil && gate.agentID != uuid.Nil && upstreamToken == "" && len(tokens) != 0 && !member.upstreamNoAuth {
 			return memberDial{}, "remote", agentMemberCredentialError(member)
 		}
-		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil && !member.upstreamNoAuth && (member.authClient == nil || member.authClient.outcome == authClientLegacy) {
-			upstreamToken, terr = gate.chainUpstream(ctx, member, remoteServer.Url)
-		}
+		routed, upstreamToken, terr = chainMetaMember(ctx, gate, member, remoteServer.Url, routed, terr)
 		if terr != nil {
 			return memberDial{}, "remote", terr
 		}
@@ -274,9 +315,7 @@ func (s *Service) routeMetaMember(
 		if terr == nil && gate.agentID != uuid.Nil && upstreamToken == "" && len(tokens) != 0 && !member.upstreamNoAuth {
 			return memberDial{}, "tunneled", agentMemberCredentialError(member)
 		}
-		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil && !member.upstreamNoAuth && (member.authClient == nil || member.authClient.outcome == authClientLegacy) {
-			upstreamToken, terr = gate.chainUpstream(ctx, member, member.tunneledResourceIdentifier)
-		}
+		routed, upstreamToken, terr = chainMetaMember(ctx, gate, member, member.tunneledResourceIdentifier, routed, terr)
 		if terr != nil {
 			return memberDial{}, "tunneled", terr
 		}

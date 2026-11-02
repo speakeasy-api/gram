@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -51,9 +52,9 @@ func TestResolveAccessTokens_UpstreamServerErrorIsUnavailable(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
 
-	_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
-	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
-	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "callers that only ask for a usable token still read it as absent")
+	_, firstErr := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	require.ErrorIs(t, firstErr, remotesessions.ErrRemoteSessionUnavailable)
+	require.ErrorIs(t, firstErr, remotesessions.ErrNoValidToken, "callers that only ask for a usable token still read it as absent")
 
 	// The grant survives a transient failure, so the next request retries it.
 	active, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
@@ -65,7 +66,29 @@ func TestResolveAccessTokens_UpstreamServerErrorIsUnavailable(t *testing.T) {
 
 	_, err = env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	require.EqualValues(t, 1, refreshAttempts.Load(), "the retry inside the cooldown never reaches the provider")
+	require.Equal(t, 30*time.Second, remotesessions.RetryAfter(firstErr).Round(30*time.Second))
+
+	// Once the cooldown ends the next request tries the provider again.
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	require.NoError(t, cache.NewRedisCacheAdapter(redisClient).Delete(ctx, remotesessions.RefreshCooldownKey(env.subject, env.clientID)))
+	_, err = env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.EqualValues(t, 2, refreshAttempts.Load())
+}
+
+func TestResolveAccessTokens_ProviderRetryAfterExtendsTheCooldown(t *testing.T) {
+	t.Parallel()
+
+	ctx, env := newExpiredRefreshEnv(t, "refresh-retry-after", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", "120")
+		w.WriteHeader(http.StatusTooManyRequests)
+	})
+
+	_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	require.Equal(t, 2*time.Minute, remotesessions.RetryAfter(err))
 }
 
 func TestResolveAccessToken_UpstreamServerErrorIsNoToken(t *testing.T) {
@@ -80,7 +103,7 @@ func TestResolveAccessToken_UpstreamServerErrorIsNoToken(t *testing.T) {
 	require.Empty(t, token)
 }
 
-func TestResolveAvailableAccessTokens_UpstreamServerErrorSkipsClient(t *testing.T) {
+func TestResolveAvailableAccessTokens_UpstreamServerErrorKeepsOutageEntry(t *testing.T) {
 	t.Parallel()
 
 	ctx, env := newExpiredRefreshEnv(t, "refresh-upstream-5xx-available", func(w http.ResponseWriter, _ *http.Request) {
@@ -89,7 +112,13 @@ func TestResolveAvailableAccessTokens_UpstreamServerErrorSkipsClient(t *testing.
 
 	tokens, err := env.mgr.ResolveAvailableAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.NoError(t, err)
-	require.Empty(t, tokens)
+	require.Len(t, tokens, 1)
+	for _, entry := range tokens {
+		require.Empty(t, entry.Token)
+		require.True(t, entry.SessionUnavailable())
+		require.Equal(t, env.session.ID, entry.RemoteSessionID, "an attached connection stays pinned through an outage")
+		require.Equal(t, env.clientID, entry.RemoteSessionClientID)
+	}
 }
 
 func TestResolveAccessTokens_UnauthorizedClientStaysMisconfigured(t *testing.T) {
@@ -239,4 +268,39 @@ func TestResolveAccessTokens_ReconnectOutranksUnavailableWithOneRefresh(t *testi
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable, "the user can repair the unlinked upstream, so it must win")
 	require.LessOrEqual(t, refreshAttempts.Load(), int32(1))
+}
+
+// A waiter behind a refresh that hits an outage waits it out instead of
+// presenting the same refresh token.
+func TestResolveAccessTokens_WaiterDuringOutageDoesNotPost(t *testing.T) {
+	t.Parallel()
+
+	var refreshAttempts atomic.Int32
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	ctx, env := newExpiredRefreshEnv(t, "refresh-waiter-outage", func(w http.ResponseWriter, _ *http.Request) {
+		if refreshAttempts.Add(1) == 1 {
+			close(entered)
+		}
+		<-release
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+
+	holder := make(chan error, 1)
+	go func() {
+		_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+		holder <- err
+	}()
+	<-entered
+
+	waiter := make(chan error, 1)
+	go func() {
+		_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+		waiter <- err
+	}()
+	close(release)
+
+	require.ErrorIs(t, <-holder, remotesessions.ErrRemoteSessionUnavailable)
+	require.ErrorIs(t, <-waiter, remotesessions.ErrRemoteSessionUnavailable)
+	require.EqualValues(t, 1, refreshAttempts.Load())
 }

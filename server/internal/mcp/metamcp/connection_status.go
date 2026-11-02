@@ -62,6 +62,8 @@ const (
 	SignInNotRequired = "not_required"
 	// SignInError: a credential exists but cannot be used; Detail says why.
 	SignInError = "error"
+	// SignInUnavailable: an outage stops the sign-in being used; Detail names the fallback.
+	SignInUnavailable = "unavailable"
 	// SignInHidden: the caller hid the member, so its tools are not served.
 	SignInHidden = "hidden"
 )
@@ -140,6 +142,8 @@ func (r ConnectionStatusResult) Text() string {
 		case SignInHidden:
 			hidden = true
 			fmt.Fprintf(&b, "- %s: hidden by the user\n", label)
+		case SignInUnavailable:
+			fmt.Fprintf(&b, "- %s: temporarily unavailable (%s)\n", label, s.Detail)
 		default:
 			needsConnect = true
 			fmt.Fprintf(&b, "- %s: needs attention (%s)\n", label, s.Detail)
