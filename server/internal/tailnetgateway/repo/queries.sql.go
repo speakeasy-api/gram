@@ -33,6 +33,26 @@ func (q *Queries) ClearNetworkIngressNodeAuthKey(ctx context.Context, arg ClearN
 	return err
 }
 
+const deleteNetworkIngressNodeSlot = `-- name: DeleteNetworkIngressNodeSlot :exec
+DELETE FROM network_ingress_nodes
+WHERE network_ingress_id = $1
+  AND organization_id = $2
+  AND slot = $3
+  AND retired_at IS NOT NULL
+`
+
+type DeleteNetworkIngressNodeSlotParams struct {
+	NetworkIngressID uuid.UUID
+	OrganizationID   string
+	Slot             int32
+}
+
+// Hard delete of one retired slot after its device left the tailnet.
+func (q *Queries) DeleteNetworkIngressNodeSlot(ctx context.Context, arg DeleteNetworkIngressNodeSlotParams) error {
+	_, err := q.db.Exec(ctx, deleteNetworkIngressNodeSlot, arg.NetworkIngressID, arg.OrganizationID, arg.Slot)
+	return err
+}
+
 const deleteNetworkIngressNodeSlotStates = `-- name: DeleteNetworkIngressNodeSlotStates :exec
 DELETE FROM network_ingress_node_states
 WHERE network_ingress_id = $1
@@ -253,6 +273,7 @@ SET pod_name = $1,
 WHERE network_ingress_id = $6
   AND organization_id = $7
   AND slot = $8
+  AND (retired_at IS NULL OR $2::text IN ('draining', 'stopped'))
 `
 
 type HeartbeatNetworkIngressNodeParams struct {
@@ -267,7 +288,9 @@ type HeartbeatNetworkIngressNodeParams struct {
 }
 
 // Written by the gateway pod hosting the slot. updated_at tracks the latest
-// heartbeat; the reconciler treats stale last_seen_at as an offline host.
+// heartbeat; the reconciler treats stale last_seen_at as an offline host. A
+// retired slot only accepts the draining and stopped beats of the host that
+// is shutting it down, so a late beat can never resurrect it.
 func (q *Queries) HeartbeatNetworkIngressNode(ctx context.Context, arg HeartbeatNetworkIngressNodeParams) (int64, error) {
 	result, err := q.db.Exec(ctx, heartbeatNetworkIngressNode,
 		arg.PodName,
@@ -442,23 +465,33 @@ type RetireNetworkIngressNodesParams struct {
 }
 
 // Marks every slot at or above min_slot as retired so gateway pods stop
-// hosting it and the reconciler deletes its device.
+// hosting it. Retirement is permanent for that node identity: once the host
+// has stopped, the reconciler deletes the device and purges the slot, and a
+// later slot count increase recreates it as a fresh identity.
 func (q *Queries) RetireNetworkIngressNodes(ctx context.Context, arg RetireNetworkIngressNodesParams) error {
 	_, err := q.db.Exec(ctx, retireNetworkIngressNodes, arg.NetworkIngressID, arg.OrganizationID, arg.MinSlot)
 	return err
 }
 
 const setNetworkIngressNodeAuthKey = `-- name: SetNetworkIngressNodeAuthKey :execrows
-UPDATE network_ingress_nodes
+UPDATE network_ingress_nodes AS n
 SET auth_key_encrypted = $1,
     auth_key_expires_at = $2,
     status = 'pending',
     last_error = NULL,
     updated_at = clock_timestamp()
-WHERE network_ingress_id = $3
-  AND organization_id = $4
-  AND slot = $5
-  AND retired_at IS NULL
+WHERE n.network_ingress_id = $3
+  AND n.organization_id = $4
+  AND n.slot = $5
+  AND n.retired_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1
+    FROM network_ingress_node_states s
+    WHERE s.network_ingress_id = n.network_ingress_id
+      AND s.organization_id = n.organization_id
+      AND s.slot = n.slot
+      AND s.state_key = '_profiles'
+  )
 `
 
 type SetNetworkIngressNodeAuthKeyParams struct {
@@ -469,8 +502,8 @@ type SetNetworkIngressNodeAuthKeyParams struct {
 	Slot             int32
 }
 
-// Installs a fresh one-shot auth key for a slot that has no persisted node
-// state yet. Retired slots never receive keys.
+// Installs a fresh one-shot auth key for a slot that has not completed a
+// login (no persisted profile list). Retired slots never receive keys.
 func (q *Queries) SetNetworkIngressNodeAuthKey(ctx context.Context, arg SetNetworkIngressNodeAuthKeyParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setNetworkIngressNodeAuthKey,
 		arg.AuthKeyEncrypted,

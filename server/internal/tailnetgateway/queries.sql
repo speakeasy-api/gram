@@ -45,22 +45,22 @@ ON CONFLICT (network_ingress_id, slot) DO NOTHING;
 -- name: SetNetworkIngressNodeAuthKey :execrows
 -- Installs a fresh one-shot auth key for a slot that has not completed a
 -- login (no persisted profile list). Retired slots never receive keys.
-UPDATE network_ingress_nodes
+UPDATE network_ingress_nodes AS n
 SET auth_key_encrypted = @auth_key_encrypted,
     auth_key_expires_at = @auth_key_expires_at,
     status = 'pending',
     last_error = NULL,
     updated_at = clock_timestamp()
-WHERE network_ingress_id = @network_ingress_id
-  AND organization_id = @organization_id
-  AND slot = @slot
-  AND retired_at IS NULL
+WHERE n.network_ingress_id = @network_ingress_id
+  AND n.organization_id = @organization_id
+  AND n.slot = @slot
+  AND n.retired_at IS NULL
   AND NOT EXISTS (
     SELECT 1
     FROM network_ingress_node_states s
-    WHERE s.network_ingress_id = network_ingress_nodes.network_ingress_id
-      AND s.organization_id = network_ingress_nodes.organization_id
-      AND s.slot = network_ingress_nodes.slot
+    WHERE s.network_ingress_id = n.network_ingress_id
+      AND s.organization_id = n.organization_id
+      AND s.slot = n.slot
       AND s.state_key = '_profiles'
   );
 
