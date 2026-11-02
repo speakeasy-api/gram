@@ -80,6 +80,9 @@ type gatewayServer struct {
 	// cardIDs are the services the server signs in through.
 	cardIDs []string
 
+	// connectionOutage marks a service of this server a provider outage stopped, which reconnecting may repair.
+	connectionOutage bool
+
 	// Auth is the server's upstream credential choice, where typed auth
 	// client resolution is enforced.
 	Auth *consentServerAuth
@@ -123,13 +126,18 @@ func (g gatewayServer) StatusLabel() string {
 
 // NeedsAttention reports whether the status line should warn.
 func (g gatewayServer) NeedsAttention() bool {
-	return g.Status == gatewayServerReconnect || g.Status == gatewayServerNotSetUp
+	return g.Status == gatewayServerReconnect || g.Status == gatewayServerNotSetUp || g.reconnectsOutage()
+}
+
+// reconnectsOutage reports an unavailable server whose connection a person can try replacing.
+func (g gatewayServer) reconnectsOutage() bool {
+	return g.Status == gatewayServerUnavailable && g.connectionOutage
 }
 
 // NeedsSignIn reports whether the server signs in through a service the
 // person can connect.
 func (g gatewayServer) NeedsSignIn() bool {
-	return len(g.cardIDs) > 0 && (g.Status == gatewayServerNotConnected || g.Status == gatewayServerReconnect || g.Status == gatewayServerConnected || g.Status == gatewayServerChained || g.Status == gatewayServerChainPending)
+	return len(g.cardIDs) > 0 && (g.reconnectsOutage() || g.Status == gatewayServerNotConnected || g.Status == gatewayServerReconnect || g.Status == gatewayServerConnected || g.Status == gatewayServerChained || g.Status == gatewayServerChainPending)
 }
 
 // NotSetUp reports whether no service the person can connect signs in to
@@ -297,17 +305,18 @@ func (s *Service) gatewayConsent(
 func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewayConsentView {
 	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, CanHide: false, members: members, cards: cards, auth: nil}
 	for _, member := range members {
-		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, Auth: nil}
+		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, connectionOutage: false, Auth: nil}
 		for _, card := range cards {
 			if cardServesMember(card, member) {
 				server.cardIDs = append(server.cardIDs, card.ClientID)
 				server.Status = strongerStatus(server.Status, cardStatus(card))
+				server.connectionOutage = server.connectionOutage || (card.Unavailable && !card.UnavailableTunnel)
 			}
 		}
 		if memberNeedsSignIn(member) && len(server.cardIDs) == 0 {
 			server.Status = gatewayServerNotSetUp
 		}
-		if len(server.cardIDs) == 1 && (server.Status == gatewayServerNotConnected || server.Status == gatewayServerReconnect) {
+		if len(server.cardIDs) == 1 && (server.Status == gatewayServerNotConnected || server.Status == gatewayServerReconnect || server.reconnectsOutage()) {
 			server.ConnectClientID = server.cardIDs[0]
 		}
 		view.Servers = append(view.Servers, server)
@@ -335,7 +344,7 @@ func (v *gatewayConsentView) applyOutcomes(outcomes []consentMemberOutcome) {
 			}
 		}
 		server.ConnectClientID = ""
-		if len(server.cardIDs) == 1 && (server.Status == gatewayServerReconnect || server.Status == gatewayServerNotConnected) {
+		if len(server.cardIDs) == 1 && (server.Status == gatewayServerReconnect || server.Status == gatewayServerNotConnected || server.reconnectsOutage()) {
 			server.ConnectClientID = server.cardIDs[0]
 		}
 	}
@@ -359,6 +368,9 @@ func cardServesMember(card remoteSessionCard, member metaMember) bool {
 
 // cardStatus is the status one service gives the servers it signs in to.
 func cardStatus(card remoteSessionCard) gatewayServerStatus {
+	if card.Unavailable {
+		return gatewayServerUnavailable
+	}
 	reconnect := card.Expired || card.Unroutable || card.IdentityReconnect || card.Rejected || card.Inactive
 	switch {
 	case card.Connected && !reconnect:

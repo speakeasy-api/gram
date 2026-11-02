@@ -46,6 +46,9 @@ var validationRate = ratelimit.PerMinute(6)
 // validationLimitedNotice is the fixed card copy for a rate-limited verify.
 const validationLimitedNotice = "Try again in a moment"
 
+// refreshUnavailableNotice follows a Refresh the provider didn't answer; it says nothing about now.
+const refreshUnavailableNotice = "Your last refresh didn't finish. Try again shortly."
+
 // newValidationLimiter builds the per-challenge verify limiter; nil without Redis.
 func newValidationLimiter(redisClient *redis.Client, meterProvider metric.MeterProvider) *ratelimit.Limiter {
 	if redisClient == nil {

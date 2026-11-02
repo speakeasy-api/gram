@@ -371,7 +371,11 @@
                   rather than hiding under it; a pending automatic verification
                   shows on it until the page refreshes with the verdict;
                   everything descriptive sits in the disclosure below. */}}
-                  {{if .Rejected}}
+                  {{if .Unavailable}}
+                  <span class="text-xs text-default-warning" data-validation="unavailable"
+                    >Unavailable · try again later</span
+                  >
+                  {{else if .Rejected}}
                   <span class="text-xs text-default-warning" data-validation="rejected"
                     >{{.ValidationReason}} — reconnect to continue</span
                   >
@@ -469,7 +473,7 @@
                 >
                   Refresh
                 </button>
-                {{end}} {{end}} {{if and .Connected .CanValidate (not (or .Rejected .Inactive))}}
+                {{end}} {{end}} {{if and .Connected .CanValidate (not (or .Rejected .Inactive .Unavailable))}}
                 <button
                   type="submit"
                   name="action"
@@ -479,7 +483,7 @@
                 >
                   Verify
                 </button>
-                {{end}} {{if or (not .Connected) .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}
+                {{end}} {{if or (not .Connected) (and .Unavailable (not .UnavailableTunnel)) .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}
                 {{if and .Chained (ne .ChainCheck "rejected")}}
                 <button
                   type="submit"
@@ -499,7 +503,7 @@
                   class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
                   data-connect-link
                 >
-                  {{if or .Expired .Unroutable .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}Reconnect{{else}}Connect{{end}}
+                  {{if or .Expired .Unavailable .Unroutable .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}Reconnect{{else}}Connect{{end}}
                 </button>
                 {{end}}
                 {{end}} {{if or .Connected .Expired .Unroutable}}

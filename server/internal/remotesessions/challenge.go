@@ -1014,6 +1014,22 @@ type RemoteSessionState struct {
 	ValidationReason string
 }
 
+// ConnectionOutage reads the outage on record for subject's grant on clientID, and
+// the tunnel its provider sits behind. It calls nothing upstream, for pages to render from.
+func (m *ChallengeManager) ConnectionOutage(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID) (RefreshOutageKind, uuid.NullUUID) {
+	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	queries := remotesessions_repo.New(m.db)
+	sess, err := queries.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID})
+	if err != nil {
+		return RefreshOutageNone, none
+	}
+	client, err := queries.GetRemoteSessionClientWithIssuerByID(ctx, clientID)
+	if err != nil {
+		return m.refresher.RecordedOutage(ctx, sess), none
+	}
+	return m.refresher.RecordedOutage(ctx, sess), client.TunneledMcpServerID
+}
+
 // RemoteSessionStatuses returns, per remote_session_client_id, the state of
 // `subject`'s remote_session on every client bound to the requesting
 // `userSessionIssuerID`. Clients with no non-deleted session are omitted
