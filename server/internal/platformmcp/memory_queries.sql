@@ -22,7 +22,9 @@ RETURNING id, created_at;
 -- personal-account session (an unclassified account is treated as personal).
 -- Memos saved from a chat that fails those checks are hidden with it. Text
 -- over 64 KiB is never returned. Digest periods are UTC dates, so they are
--- compared as UTC midnights whatever the session time zone is.
+-- compared as UTC midnights whatever the session time zone is. Ranks are
+-- normalized by document length so long digests do not crowd out short
+-- memos, and memos, which a person saved on purpose, count double.
 WITH q AS (SELECT websearch_to_tsquery('english', @query::text) AS query)
 SELECT hits.kind::text AS kind, hits.id, hits.chat_id, hits.body::text AS body,
        hits.author_user_id::text AS author_user_id, hits.level::text AS level, hits.period_start,
@@ -31,7 +33,7 @@ FROM (
   SELECT 'chat' AS kind, c.id, NULL::uuid AS chat_id,
          c.summary AS body, '' AS author_user_id, '' AS level, NULL::date AS period_start,
          COALESCE(c.summary_generated_at, c.updated_at) AS at,
-         ts_rank(to_tsvector('english', c.summary), q.query) AS rank
+         ts_rank(to_tsvector('english', c.summary), q.query, 1) AS rank
   FROM chats c
   CROSS JOIN q
   JOIN projects p ON p.id = c.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
@@ -45,7 +47,7 @@ FROM (
     AND to_tsvector('english', c.summary) @@ q.query
   UNION ALL
   SELECT 'memo', m.id, m.chat_id, m.content, COALESCE(m.author_user_id, ''), '', NULL::date,
-         m.created_at, ts_rank(m.search_vector, q.query)
+         m.created_at, 2 * ts_rank(m.search_vector, q.query, 1)
   FROM memory_memos m
   CROSS JOIN q
   JOIN projects p ON p.id = m.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
@@ -59,7 +61,7 @@ FROM (
          AND (mua.id IS NULL OR mua.account_type <> 'personal')))
   UNION ALL
   SELECT 'digest', d.id, NULL::uuid, d.content, '', d.level, d.period_start,
-         d.period_start::timestamp AT TIME ZONE 'UTC', ts_rank(d.search_vector, q.query)
+         d.period_start::timestamp AT TIME ZONE 'UTC', ts_rank(d.search_vector, q.query, 1)
   FROM memory_digests d
   CROSS JOIN q
   JOIN projects p ON p.id = d.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE

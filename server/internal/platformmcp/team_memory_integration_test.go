@@ -437,3 +437,28 @@ func TestSnippetAnchorFallsBackToStem(t *testing.T) {
 	_, ok = snippetAnchor("Nothing relevant.", queryTerms("kubernetes"))
 	require.False(t, ok)
 }
+
+func TestSearchTeamMemoryRanksShortMemosAboveLongDigests(t *testing.T) {
+	t.Parallel()
+	f := newTeamMemoryFixture(t)
+	ctx := f.writer(t.Context())
+	now := time.Now().UTC()
+	for i := range 3 {
+		day := now.Add(time.Duration(-24*(i+2)) * time.Hour).Truncate(24 * time.Hour)
+		_, err := testrepo.New(f.db).InsertMemoryDigestFixture(ctx, testrepo.InsertMemoryDigestFixtureParams{
+			OrganizationID: f.principal.OrganizationID, ProjectID: f.project.ID, Level: "day",
+			PeriodStart: pgtype.Date{Time: day, InfinityModifier: pgtype.Finite, Valid: true},
+			PeriodEnd:   pgtype.Date{Time: day.Add(24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+			Content:     strings.Repeat("The team reviewed the missing database index migration and other release work. ", 20),
+		})
+		require.NoError(t, err)
+	}
+	memo, err := f.service.Remember(ctx, f.principal, f.remember("The missing database index migration must run before the deploy."))
+	require.NoError(t, err)
+
+	input := f.search("missing database index migration")
+	input.Limit = 2
+	output, err := f.service.Search(ctx, f.principal, input)
+	require.NoError(t, err)
+	require.Contains(t, hitRefs(output.Hits), memo.Memo.Source.Ref())
+}
