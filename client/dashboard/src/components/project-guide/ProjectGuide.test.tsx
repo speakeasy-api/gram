@@ -228,10 +228,8 @@ afterEach(() => {
 resetMcpOperations();
 resetSecretOperations();
 
-it("omits unknown catalog tool counts", () => {
-  mcpOperations.current.catalogServers = [
-    { ...catalogServer, toolCount: undefined },
-  ];
+it("does not display registry tool counts", () => {
+  mcpOperations.current.catalogServers = [catalogServer];
   render(<ProjectGuide />);
   fireEvent.click(
     screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
@@ -495,7 +493,7 @@ describe("ProjectGuide", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: /Linear.*2 tools/,
+          name: "Linear",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -1527,7 +1525,7 @@ describe("ProjectGuide", () => {
       screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Linear.*2 tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Linear" }));
     expect(mcpOperations.current.selectServer).toHaveBeenCalledWith(
       catalogServer,
     );
