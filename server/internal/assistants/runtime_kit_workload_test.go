@@ -230,6 +230,23 @@ func TestKitWorkloadDBAuditLogAndAttribution(t *testing.T) {
 	require.Equal(t, configurationWithdrawals, withdrawals, "the runtime's withdrawal stays out of the configuration log")
 }
 
+// A runtime is withdrawn after its agent is deleted too, and the entry still
+// names the agent.
+func TestKitWorkloadDBWithdrawalNamesADeletedAgent(t *testing.T) {
+	t.Parallel()
+	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
+
+	binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
+	require.NoError(t, err)
+	agent, err := agentrepo.New(db).DeleteAgent(t.Context(), agentrepo.DeleteAgentParams{OrganizationID: identity.OrganizationID, ID: identity.AgentID})
+	require.NoError(t, err)
+
+	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, binding)))
+	withdraw, err := audittest.LatestSecurityAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Equal(t, agent.Name, withdraw.ActorDisplay)
+}
+
 func TestKitWorkloadDBLocalSubjectCannotBeReused(t *testing.T) {
 	t.Parallel()
 	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
