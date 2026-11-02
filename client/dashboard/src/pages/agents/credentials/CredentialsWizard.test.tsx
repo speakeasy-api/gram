@@ -2928,10 +2928,12 @@ describe("Servers that sign in as a person", () => {
       const open = vi
         .spyOn(window, "open")
         .mockReturnValue(popup as unknown as Window);
-      // The first row starts expanded.
-      screen.getByRole("button", {
-        name: /Linear.*(?:Expired|Requires connection)/,
-      });
+      // Rows start closed: open Linear's to reach its connection.
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: /Linear.*(?:Expired|Requires connection)/,
+        }),
+      );
       fireEvent.click(
         await screen.findByRole("button", {
           name: state === "expired" ? "Reauthenticate" : "Connect account",

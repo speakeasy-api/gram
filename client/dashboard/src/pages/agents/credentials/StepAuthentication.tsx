@@ -37,7 +37,7 @@ export function StepAuthentication({
   const oauth = useOAuthPopup(connections.refetch);
   // Controlled so the first row opens even when the server list arrives after
   // mount; until someone toggles a row, the default tracks the list.
-  const [openRows, setOpenRows] = useState<string[] | null>(null);
+  const [openRows, setOpenRows] = useState<string[]>([]);
   // Editing shows the agent's assigned connection, unless it no longer works
   // and the editor has a usable one: saving assigns that in its place,
   // exactly as creating does. Until the editor's own connection is known,
@@ -76,11 +76,11 @@ export function StepAuthentication({
           Allow popups, then try connecting again.
         </Text>
       )}
-      {/* The first row starts open, so the step shows what a connection
-          looks like without a click. */}
+      {/* Every row starts closed: its badge already says how Speakeasy signs
+          in, and a row opens only to manage that connection. */}
       <Accordion
         type="multiple"
-        value={openRows ?? (servers[0] ? [servers[0].id] : [])}
+        value={openRows}
         onValueChange={setOpenRows}
         className="border-border border"
       >
