@@ -16735,3 +16735,53 @@ ON memory_digests USING gin (search_vector);
 -- Finds the digests that cite a chat so they can be rebuilt when it changes.
 CREATE INDEX IF NOT EXISTS memory_digests_chat_ids_idx
 ON memory_digests USING gin (chat_ids);
+
+-- One team memory eval run started from the platform-admin dashboard. Runs
+-- are Speakeasy-internal: they score memory tools and models against the
+-- synthetic eval corpus loaded into the demo organization. organization_id
+-- has no foreign key on purpose, so a demo reseed never erases run history.
+CREATE TABLE IF NOT EXISTS memory_eval_runs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued',
+  config jsonb NOT NULL,
+  report jsonb,
+  error TEXT,
+  cost_usd numeric(12, 4),
+  requested_by TEXT NOT NULL,
+  started_at timestamptz,
+  finished_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT memory_eval_runs_pkey PRIMARY KEY (id)
+);
+
+COMMENT ON COLUMN memory_eval_runs.id IS '@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.organization_id IS 'Organization the eval corpus was loaded into, normally the demo organization.
+@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.status IS 'queued, running, succeeded or failed.
+@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.config IS 'Answer, judge, summary and digest models plus runs per arm, all Speakeasy-chosen.
+@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.report IS 'Scored results per model and arm over the synthetic corpus: counts, rates, token totals, costs and synthetic secret and canary names.
+@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.error IS 'Why a failed run stopped; may quote a model provider error.
+@access: restricted';
+COMMENT ON COLUMN memory_eval_runs.cost_usd IS 'Model spend the run reported across preparation, answers and grading.
+@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.requested_by IS 'User ID of the Speakeasy staff member who started the run.
+@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.started_at IS '@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.finished_at IS '@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.created_at IS '@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.updated_at IS '@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.deleted IS '@access: confidential';
+
+-- Lists runs newest first on the admin page.
+CREATE INDEX IF NOT EXISTS memory_eval_runs_created_at_idx
+ON memory_eval_runs (created_at DESC, id DESC)
+WHERE deleted IS FALSE;
