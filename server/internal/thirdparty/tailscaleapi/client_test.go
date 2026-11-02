@@ -193,3 +193,17 @@ func TestFakeRecordsCalls(t *testing.T) {
 	_, err = fake.CreateAuthKey(t.Context(), tailscaleapi.Credentials{ClientID: "", ClientSecret: ""}, tailscaleapi.AuthKeyRequest{Tag: "tag:speakeasy", Description: "", TTL: time.Hour})
 	require.ErrorIs(t, err, tailscaleapi.ErrUnauthorized)
 }
+
+func TestNewRequiresTLSOutsideLoopback(t *testing.T) {
+	t.Parallel()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	_, err = tailscaleapi.New(policy, "http://api.tailscale.com")
+	require.Error(t, err)
+	_, err = tailscaleapi.New(policy, "https://api.tailscale.com")
+	require.NoError(t, err)
+	_, err = tailscaleapi.New(policy, "http://127.0.0.1:8080")
+	require.NoError(t, err)
+	_, err = tailscaleapi.New(policy, "http://localhost:8080")
+	require.NoError(t, err)
+}
