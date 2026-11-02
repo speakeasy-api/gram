@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -194,16 +195,24 @@ func TestKitWorkloadDBAuditLogAndAttribution(t *testing.T) {
 	binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
 	require.NoError(t, err)
 
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, identity.AgentID.String())
+	agent, err := agents.ResolvePrincipal(t.Context(), db, identity.OrganizationID, agentPrincipal)
+	require.NoError(t, err)
+
+	// The project's shared issuer belongs to the runtime, not to whichever
+	// agent's start created it; that agent is kept as provenance.
 	issuerCreate, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionWorkloadIssuerCreate)
 	require.NoError(t, err)
-	require.Equal(t, string(urn.PrincipalTypeAgent), issuerCreate.ActorType)
-	require.Equal(t, identity.AgentID.String(), issuerCreate.ActorID)
+	require.Equal(t, string(urn.PrincipalTypeSystem), issuerCreate.ActorType)
+	require.Equal(t, "kit-runtime", issuerCreate.ActorID)
+	require.JSONEq(t, `{"triggered_by":"`+agentPrincipal.String()+`"}`, string(issuerCreate.Metadata))
 
 	admit, err := audittest.LatestSecurityAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
 	require.NoError(t, err)
 	require.Equal(t, binding.Subject, admit.SubjectDisplay)
 	require.Equal(t, string(urn.PrincipalTypeAgent), admit.ActorType)
 	require.Equal(t, identity.AgentID.String(), admit.ActorID)
+	require.Equal(t, agent.Name, admit.ActorDisplay, "the entry names the agent, so it stays readable after the agent is gone")
 
 	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, binding)))
 	withdraw, err := audittest.LatestSecurityAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
@@ -211,6 +220,7 @@ func TestKitWorkloadDBAuditLogAndAttribution(t *testing.T) {
 	require.Equal(t, binding.Subject, withdraw.SubjectDisplay)
 	require.Equal(t, string(urn.PrincipalTypeAgent), withdraw.ActorType)
 	require.Equal(t, identity.AgentID.String(), withdraw.ActorID)
+	require.Equal(t, agent.Name, withdraw.ActorDisplay)
 
 	admits, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
 	require.NoError(t, err)

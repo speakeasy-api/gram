@@ -558,6 +558,7 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 		IssuerURN:           urn.NewWorkloadIssuer(row.ID),
 		IssuerName:          row.Name,
 		IssuerSnapshotAfter: IssuerSnapshot(row),
+		Metadata:            nil,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording workload issuer registration").LogError(ctx, s.logger)
 	}
