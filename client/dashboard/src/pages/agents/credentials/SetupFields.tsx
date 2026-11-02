@@ -299,7 +299,8 @@ export function ShadowingIssuers({
         {one ? "its" : "their"} own, at the same issuer URL.{" "}
         {one ? "Its" : "Their"} MCP servers check a job against the
         project&apos;s own issuer instead of the rule saved here, so the job
-        reaches them as another identity, or not at all.
+        reaches them as another identity, or not at all. Projects you cannot
+        open were not checked.
       </p>
       {/* DNO-1477 tracks a dashboard control for withdrawing a project's
             own issuer; until it ships, the API is the only way. */}

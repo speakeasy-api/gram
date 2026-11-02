@@ -460,7 +460,8 @@ export function useWorkloadSetup({
                 Speakeasy could not check whether{" "}
                 {unchecked.map((project) => project.name).join(", ")} also{" "}
                 {unchecked.length === 1 ? "trusts" : "trust"} {platformName} on
-                {unchecked.length === 1 ? " its" : " their"} own.
+                {unchecked.length === 1 ? " its" : " their"} own, nor any
+                project you cannot open.
               </p>
             )}
             {step.phase === "create" && !isTrusted && (

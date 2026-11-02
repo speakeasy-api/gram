@@ -3569,7 +3569,7 @@ describe("Connecting a GitHub repository", () => {
       (await screen.findByText(/also trusts GitHub Actions on its own/))
         .textContent,
     ).toBe(
-      "The project Project one also trusts GitHub Actions on its own, at the same issuer URL. Its MCP servers check a job against the project's own issuer instead of the rule saved here, so the job reaches them as another identity, or not at all.",
+      "The project Project one also trusts GitHub Actions on its own, at the same issuer URL. Its MCP servers check a job against the project's own issuer instead of the rule saved here, so the job reaches them as another identity, or not at all. Projects you cannot open were not checked.",
     );
     // The remedy is withdrawing the project's own issuer, not an agent's
     // access, which would leave the issuer shadowing the rule. The call that
@@ -3645,7 +3645,7 @@ describe("Connecting a GitHub repository", () => {
     await reachRepositoryStep();
     expect(
       await screen.findByText(
-        "Speakeasy could not check whether Project two also trusts GitHub Actions on its own.",
+        "Speakeasy could not check whether Project two also trusts GitHub Actions on its own, nor any project you cannot open.",
       ),
     ).toBeTruthy();
     expect(
