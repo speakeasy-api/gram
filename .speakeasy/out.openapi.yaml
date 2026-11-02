@@ -117306,6 +117306,12 @@ components:
         account_type:
           type: string
           description: AI account classification ('team' or 'personal'); empty/absent when unclassified
+        auth_client_id:
+          type: string
+          description: Auth client that signed an agent's gateway call in to its upstream server
+        auth_client_type:
+          type: string
+          description: Type of the auth client that signed an agent's gateway call in to its upstream server, such as remote_session for a person's connection or service_account for a shared credential; absent for calls recorded before it was tracked
         authorizer_label:
           type: string
           description: Email of the authorizer when they resolve to a known user
@@ -117324,6 +117330,12 @@ components:
         client_version:
           type: string
           description: MCP client version when the client reported one alongside its name
+        connection_owner_label:
+          type: string
+          description: Display name, or email, of the connection owner when they resolve to a known user
+        connection_owner_user_id:
+          type: string
+          description: Person whose own connection signed an agent's gateway call in; absent for a shared credential
         event_source:
           type: string
           description: Telemetry event source
