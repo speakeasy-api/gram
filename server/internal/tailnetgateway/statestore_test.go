@@ -1,6 +1,7 @@
 package tailnetgateway_test
 
 import (
+	"encoding/base64"
 	"testing"
 
 	"github.com/google/uuid"
@@ -48,9 +49,9 @@ func TestPostgresStateStoreRoundTrip(t *testing.T) {
 	store, err := tailnetgateway.NewPostgresStateStore(db, enc, ingressID, orgID, 0)
 	require.NoError(t, err)
 
-	exists, err := store.HasState(ctx)
+	registered, err := store.Registered(ctx)
 	require.NoError(t, err)
-	require.False(t, exists)
+	require.False(t, registered)
 
 	_, err = store.ReadState(ipn.MachineKeyStateKey)
 	require.ErrorIs(t, err, ipn.ErrStateNotExist)
@@ -62,15 +63,20 @@ func TestPostgresStateStoreRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, value, got)
 
-	exists, err = store.HasState(ctx)
+	registered, err = store.Registered(ctx)
 	require.NoError(t, err)
-	require.True(t, exists)
+	require.False(t, registered, "a machine key alone is not a completed login")
 
 	row, err := repo.New(db).GetNetworkIngressNodeState(ctx, repo.GetNetworkIngressNodeStateParams{
 		NetworkIngressID: ingressID, OrganizationID: orgID, Slot: 0, StateKey: string(ipn.MachineKeyStateKey),
 	})
 	require.NoError(t, err)
-	require.NotContains(t, row, "privkey", "state must be stored encrypted")
+	require.NotEqual(t, base64.StdEncoding.EncodeToString(value), row, "state must not be stored as plain base64")
+	decrypted, err := enc.Decrypt(row)
+	require.NoError(t, err)
+	decoded, err := base64.StdEncoding.DecodeString(decrypted)
+	require.NoError(t, err)
+	require.Equal(t, value, decoded, "the column holds the application-encrypted value")
 
 	require.NoError(t, store.WriteState(ipn.MachineKeyStateKey, []byte("second")))
 	got, err = store.ReadState(ipn.MachineKeyStateKey)
@@ -98,9 +104,39 @@ func TestPostgresStateStoreIsolatedBySlot(t *testing.T) {
 	_, err = slot1.ReadState(ipn.CurrentProfileStateKey)
 	require.ErrorIs(t, err, ipn.ErrStateNotExist)
 
-	exists, err := slot1.HasState(t.Context())
+	registered, err := slot1.Registered(t.Context())
 	require.NoError(t, err)
-	require.False(t, exists)
+	require.False(t, registered)
+}
+
+func TestPostgresStateStoreRegisteredAndReset(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	db, err := infra.CloneTestDatabase(t, "tailnetstateregistered")
+	require.NoError(t, err)
+	enc := testenv.NewEncryptionClient(t)
+	ingressID, orgID := seedIngress(t, db, "state-registered")
+	store, err := tailnetgateway.NewPostgresStateStore(db, enc, ingressID, orgID, 0)
+	require.NoError(t, err)
+
+	// A failed login leaves a machine key and an empty profile list behind.
+	require.NoError(t, store.WriteState(ipn.MachineKeyStateKey, []byte("machine")))
+	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte("[]")))
+	registered, err := store.Registered(ctx)
+	require.NoError(t, err)
+	require.False(t, registered)
+
+	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte(`[{"ID":"p1","Name":"speakeasy-gw-0"}]`)))
+	registered, err = store.Registered(ctx)
+	require.NoError(t, err)
+	require.True(t, registered)
+
+	require.NoError(t, store.Reset(ctx))
+	registered, err = store.Registered(ctx)
+	require.NoError(t, err)
+	require.False(t, registered)
+	_, err = store.ReadState(ipn.MachineKeyStateKey)
+	require.ErrorIs(t, err, ipn.ErrStateNotExist)
 }
 
 func TestNewPostgresStateStoreRejectsIncompleteIdentity(t *testing.T) {

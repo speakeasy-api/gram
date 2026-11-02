@@ -33,6 +33,25 @@ func (q *Queries) ClearNetworkIngressNodeAuthKey(ctx context.Context, arg ClearN
 	return err
 }
 
+const deleteNetworkIngressNodeSlotStates = `-- name: DeleteNetworkIngressNodeSlotStates :exec
+DELETE FROM network_ingress_node_states
+WHERE network_ingress_id = $1
+  AND organization_id = $2
+  AND slot = $3
+`
+
+type DeleteNetworkIngressNodeSlotStatesParams struct {
+	NetworkIngressID uuid.UUID
+	OrganizationID   string
+	Slot             int32
+}
+
+// Hard delete of one slot's partial state after a failed first login.
+func (q *Queries) DeleteNetworkIngressNodeSlotStates(ctx context.Context, arg DeleteNetworkIngressNodeSlotStatesParams) error {
+	_, err := q.db.Exec(ctx, deleteNetworkIngressNodeSlotStates, arg.NetworkIngressID, arg.OrganizationID, arg.Slot)
+	return err
+}
+
 const deleteNetworkIngressNodeState = `-- name: DeleteNetworkIngressNodeState :exec
 DELETE FROM network_ingress_node_states
 WHERE network_ingress_id = $1
@@ -266,7 +285,7 @@ func (q *Queries) HeartbeatNetworkIngressNode(ctx context.Context, arg Heartbeat
 	return result.RowsAffected(), nil
 }
 
-const listDesiredGatewayIngresses = `-- name: ListDesiredGatewayIngresses :many
+const listDesiredGatewayIngressesForSlot = `-- name: ListDesiredGatewayIngressesForSlot :many
 SELECT
     i.id,
     i.organization_id,
@@ -276,14 +295,24 @@ SELECT
     i.updated_at
 FROM network_ingresses i
 JOIN organization_metadata om ON om.id = i.organization_id
+JOIN network_ingress_nodes n
+  ON n.organization_id = i.organization_id
+ AND n.network_ingress_id = i.id
+ AND n.slot = $1
+ AND n.retired_at IS NULL
 WHERE i.enabled IS TRUE
   AND i.deleted IS FALSE
   AND i.runtime = 'gateway'
-  AND i.gateway_shard = $1
+  AND i.gateway_shard = $2
 ORDER BY i.id
 `
 
-type ListDesiredGatewayIngressesRow struct {
+type ListDesiredGatewayIngressesForSlotParams struct {
+	Slot         int32
+	GatewayShard string
+}
+
+type ListDesiredGatewayIngressesForSlotRow struct {
 	ID               uuid.UUID
 	OrganizationID   string
 	OrganizationSlug string
@@ -292,17 +321,19 @@ type ListDesiredGatewayIngressesRow struct {
 	UpdatedAt        pgtype.Timestamptz
 }
 
-// Enabled ingresses served by the tsnet gateway for one shard. Gateway pods
-// poll this to decide which hosts to run.
-func (q *Queries) ListDesiredGatewayIngresses(ctx context.Context, gatewayShard string) ([]ListDesiredGatewayIngressesRow, error) {
-	rows, err := q.db.Query(ctx, listDesiredGatewayIngresses, gatewayShard)
+// Enabled ingresses the gateway pod with this ordinal must host: the ingress
+// is served by the gateway on this shard and its slot row exists and is not
+// retired. A retired or missing slot drops the ingress from the result, which
+// is how a running host learns to stop.
+func (q *Queries) ListDesiredGatewayIngressesForSlot(ctx context.Context, arg ListDesiredGatewayIngressesForSlotParams) ([]ListDesiredGatewayIngressesForSlotRow, error) {
+	rows, err := q.db.Query(ctx, listDesiredGatewayIngressesForSlot, arg.Slot, arg.GatewayShard)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListDesiredGatewayIngressesRow
+	var items []ListDesiredGatewayIngressesForSlotRow
 	for rows.Next() {
-		var i ListDesiredGatewayIngressesRow
+		var i ListDesiredGatewayIngressesForSlotRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrganizationID,
