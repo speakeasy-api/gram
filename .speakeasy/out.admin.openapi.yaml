@@ -870,6 +870,326 @@ paths:
       x-speakeasy-name-override: backfillMcpAuthGrants
       x-speakeasy-react-hook:
         name: AdminBackfillMcpAuthGrants
+  /admin/memoryEval.options:
+    get:
+      description: Default Organizational Memory eval config, the models a run may pick from, and the daily run budget.
+      operationId: adminGetMemoryEvalOptions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMemoryEvalOptions'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getMemoryEvalOptions admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getMemoryEvalOptions
+  /admin/memoryEval.run:
+    get:
+      description: One Organizational Memory eval run with its report.
+      operationId: adminGetMemoryEvalRun
+      parameters:
+        - allowEmptyValue: true
+          description: Run ID.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: Run ID.
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMemoryEvalRun'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getMemoryEvalRun admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getMemoryEvalRun
+  /admin/memoryEval.runs:
+    get:
+      description: Organizational Memory eval runs, newest first, without their reports.
+      operationId: adminListMemoryEvalRuns
+      parameters:
+        - allowEmptyValue: true
+          description: ID of the last run on the previous page.
+          in: query
+          name: cursor
+          schema:
+            description: ID of the last run on the previous page.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Runs per page.
+          in: query
+          name: limit
+          schema:
+            default: 25
+            description: Runs per page.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMemoryEvalRunsResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: listMemoryEvalRuns admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listMemoryEvalRuns
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+  /admin/memoryEval.start:
+    post:
+      description: Queue an Organizational Memory eval run against the demo organization's synthetic corpus. Spends model credits; one run at a time and a daily limit.
+      operationId: adminStartMemoryEvalRun
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartMemoryEvalRunRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMemoryEvalRun'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: startMemoryEvalRun admin
+      tags:
+        - admin
+      x-speakeasy-name-override: startMemoryEvalRun
   /admin/onboarding.playbooks:
     get:
       description: Read every playbook, or, when an organization is named, the shared ones and its own.
@@ -9776,6 +10096,108 @@ components:
       required:
         - slug
         - name
+    AdminMemoryEvalOptions:
+      type: object
+      properties:
+        allowed_models:
+          type: array
+          items:
+            type: string
+          description: Models a run may use.
+        daily_run_limit:
+          type: integer
+          description: Runs allowed per rolling 24 hours, across all staff.
+          format: int64
+        defaults:
+          $ref: '#/components/schemas/AdminMemoryEvalRunConfig'
+        runs_today:
+          type: integer
+          description: Runs started in the last 24 hours.
+          format: int64
+      description: What a new Organizational Memory eval run may use.
+      required:
+        - defaults
+        - allowed_models
+        - daily_run_limit
+        - runs_today
+    AdminMemoryEvalRun:
+      type: object
+      properties:
+        config:
+          $ref: '#/components/schemas/AdminMemoryEvalRunConfig'
+        cost_usd:
+          type: number
+          description: Model spend the run reported across preparation, answers and grading.
+          format: double
+        created_at:
+          type: string
+          format: date-time
+        error:
+          type: string
+          description: Why a failed run stopped.
+        finished_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          description: Run ID.
+          format: uuid
+        report_json:
+          type: string
+          description: 'The scored report as JSON: scores per answer model and arm, preparation spend, judge spend. Set on get only, once the run succeeded.'
+        requested_by:
+          type: string
+          description: Email of the staff member who started the run.
+        started_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          description: Where the run is.
+          enum:
+            - queued
+            - running
+            - succeeded
+            - failed
+      description: One Organizational Memory eval run and, once it succeeded, its scored report.
+      required:
+        - id
+        - status
+        - config
+        - requested_by
+        - created_at
+    AdminMemoryEvalRunConfig:
+      type: object
+      properties:
+        answer_models:
+          type: array
+          items:
+            type: string
+          description: Models that answer the eval questions; each is scored in every arm.
+          minItems: 1
+          maxItems: 4
+        digest_model:
+          type: string
+          description: Model that writes day, week and month digests.
+        judge_model:
+          type: string
+          description: Model that grades answers. Pick a different family from the answer models.
+        runs:
+          type: integer
+          description: Repeats per answer model and arm.
+          format: int64
+          minimum: 1
+          maximum: 3
+        summary_model:
+          type: string
+          description: Model that writes the masked chat summaries Organizational Memory reads.
+      description: The models and repeats one Organizational Memory eval run compares.
+      required:
+        - answer_models
+        - judge_model
+        - summary_model
+        - digest_model
+        - runs
     AdminMeterUsageBucket:
       type: object
       properties:
@@ -12143,6 +12565,18 @@ components:
       description: Result type for the platform-administrator convergence-candidate listing.
       required:
         - items
+    ListMemoryEvalRunsResponseBody:
+      type: object
+      properties:
+        next_cursor:
+          type: string
+          description: Pass as cursor for the next page; absent on the last page.
+        runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMemoryEvalRun'
+      required:
+        - runs
     ListSignupOffersResponseBody:
       type: object
       properties:
@@ -13055,6 +13489,13 @@ components:
         - rate_usd
         - cost_usd
         - buckets
+    StartMemoryEvalRunRequestBody:
+      type: object
+      properties:
+        config:
+          $ref: '#/components/schemas/AdminMemoryEvalRunConfig'
+      required:
+        - config
     StartTrialRequestBody:
       type: object
       properties:

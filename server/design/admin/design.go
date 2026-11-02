@@ -1475,4 +1475,5 @@ var _ = Service("admin", func() {
 
 	upstreamOAuthMigrationMethods()
 	mcpAuthBackfillMethods()
+	memoryEvalMethods()
 })
