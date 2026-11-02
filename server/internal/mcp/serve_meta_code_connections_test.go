@@ -280,3 +280,33 @@ func TestCodeServersVerifyProbesWithoutCallingBusinessTools(t *testing.T) {
 		require.NotEqual(t, "tools/call", request.rpcMethod)
 	}
 }
+
+func TestCodeServersVerifyFrozenConnection(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "verify-frozen-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+	upstream := newCatalogUpstream(t, 1)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Approved", "approved", 1, upstream.url)
+	mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{})
+	enableCodeMode(t, ctx, ti)
+	connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeCode, nil)
+	before := upstream.requests.Load()
+	ran := false
+	mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(runCtx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
+		ran = true
+		page, err := host.Servers(runCtx, codemode.PageArgs{Server: "approved", Verify: true})
+		require.NoError(t, err)
+		require.Len(t, page.Items, 1)
+		require.Equal(t, "connected", page.Items[0].Connection.Authentication)
+		require.Equal(t, "approved", page.Items[0].Connection.Consent)
+		return &codemode.ExecutionResult{}, nil
+	}})
+	response, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "verify", "tools": []string{}}}), connection.token, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.True(t, ran)
+	require.Greater(t, upstream.requests.Load(), before)
+}

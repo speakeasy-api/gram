@@ -136,7 +136,7 @@ type codeConnections struct {
 // VerifyConnection uses the consent page's live MCP probe, bypassing the frozen
 // tool catalogue while preserving the admitted identity and routing boundary.
 func (b *metaCodeBackend) VerifyConnection(ctx context.Context, server string) (*codemode.ConnectionState, error) {
-	ctx, gate, members, err := b.connectionMembers(ctx)
+	ctx, gate, members, err := b.currentState(ctx, true, true)
 	if err != nil {
 		return nil, err
 	}
