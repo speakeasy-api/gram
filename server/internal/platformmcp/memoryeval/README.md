@@ -3,8 +3,9 @@
 Synthetic corpus, questions and checks for team chat memory in the Platform MCP.
 
 - **Corpus** (`Build`): 4 users, 150 chats over 60 days in the main project
-  (25 decisions, 8 reversals, 8 timelines, 10 planted secrets, 3 private
-  sessions) plus a 12-chat second project. Chat IDs are derived from chat keys.
+  (25 decisions, 8 reversals, 22 timeline chats across 8 timelines, 10
+  planted secrets, 3 private sessions) plus a 12-chat second project. Chat
+  IDs are derived from chat keys.
 - **Questions**: 40, each with an answer key. Answerable questions also name
   their source chats and the evidence terms a source must contain; the 5
   negative questions expect "Not found" and have neither.
