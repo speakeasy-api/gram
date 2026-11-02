@@ -112,11 +112,22 @@ func (s *PostgresStateStore) Registered(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("decrypt tailnet login profiles: %w", err)
 	}
-	var profiles []json.RawMessage
-	if err := json.Unmarshal([]byte(raw), &profiles); err != nil {
+	return knownProfilesPresent([]byte(raw))
+}
+
+// knownProfilesPresent reports whether the persisted known-profiles document
+// names at least one login. tailscaled stores it as a map keyed by profile
+// id; older builds wrote a list, so both shapes are accepted.
+func knownProfilesPresent(raw []byte) (bool, error) {
+	var byID map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &byID); err == nil {
+		return len(byID) > 0, nil
+	}
+	var list []json.RawMessage
+	if err := json.Unmarshal(raw, &list); err != nil {
 		return false, fmt.Errorf("parse tailnet login profiles: %w", err)
 	}
-	return len(profiles) > 0, nil
+	return len(list) > 0, nil
 }
 
 // Reset deletes every persisted key so the next start registers afresh. It is
