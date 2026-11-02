@@ -83,11 +83,6 @@ WHERE s.user_session_issuer_id IS NOT NULL
     SELECT 1 FROM meta_mcp_servers AS other
     WHERE other.user_session_issuer_id = s.user_session_issuer_id
       AND other.deleted IS FALSE
-  )
-  AND NOT EXISTS (
-    SELECT 1 FROM toolsets AS other
-    WHERE other.user_session_issuer_id = s.user_session_issuer_id
-      AND other.deleted IS FALSE
   );
 
 CREATE TEMP TABLE journey_default_plugins ON COMMIT DROP AS
