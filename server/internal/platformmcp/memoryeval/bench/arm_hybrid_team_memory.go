@@ -273,7 +273,7 @@ func querySnippet(text, query string, n int) (string, bool) {
 	lower := []rune(strings.ToLower(text))
 	start := 0
 	best := -1
-	for _, word := range strings.FieldsFunc(strings.ToLower(query), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
+	for _, word := range strings.FieldsFunc(anchorTerms(query), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
 		if len([]rune(word)) < 4 {
 			continue
 		}
@@ -285,6 +285,19 @@ func querySnippet(text, query string, n int) (string, bool) {
 		start = max(0, min(best-n/8, len(runes)-n))
 	}
 	return string(runes[start : start+n]), true
+}
+
+// anchorTerms lowercases the query and drops the words it excludes with a
+// leading minus, web-search style, so a snippet never centers on them.
+func anchorTerms(query string) string {
+	fields := strings.Fields(strings.ToLower(query))
+	kept := fields[:0]
+	for _, field := range fields {
+		if !strings.HasPrefix(field, "-") {
+			kept = append(kept, field)
+		}
+	}
+	return strings.Join(kept, " ")
 }
 
 func runeIndex(haystack, needle []rune) int {

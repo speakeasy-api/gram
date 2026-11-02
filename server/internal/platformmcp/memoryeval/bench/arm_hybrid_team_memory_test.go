@@ -90,6 +90,11 @@ func TestQuerySnippetAnchorsOnQueryWords(t *testing.T) {
 	require.True(t, truncated)
 	require.True(t, strings.HasPrefix(snippet, "filler "))
 
+	// An excluded word is never an anchor.
+	snippet, truncated = querySnippet(text, "-cache -removed", 200)
+	require.True(t, truncated)
+	require.True(t, strings.HasPrefix(snippet, "filler "))
+
 	snippet, truncated = querySnippet("short text", "cache", 200)
 	require.False(t, truncated)
 	require.Equal(t, "short text", snippet)
