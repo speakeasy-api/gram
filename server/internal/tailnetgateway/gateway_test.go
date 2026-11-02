@@ -95,17 +95,29 @@ type fakeRuntime struct {
 	mu        sync.Mutex
 	nodes     []*fakeNode
 	failStart error
+	// writePartial makes a failing start leave a machine key behind, like a
+	// real login that timed out after tsnet persisted its keys.
+	writePartial bool
 }
 
 func (r *fakeRuntime) Start(_ context.Context, spec tailnetgateway.NodeSpec) (tailnetgateway.Node, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.failStart != nil {
+		if r.writePartial {
+			if err := spec.Store.WriteState(ipn.MachineKeyStateKey, []byte("machine-key")); err != nil {
+				return nil, fmt.Errorf("persist partial fake node state: %w", err)
+			}
+		}
 		return nil, r.failStart
 	}
-	// A real node writes its keys into the store during registration.
+	// A real node writes its machine key and then, once login completes, its
+	// profile list into the store.
 	if err := spec.Store.WriteState(ipn.MachineKeyStateKey, []byte("machine-key")); err != nil {
 		return nil, fmt.Errorf("persist fake node state: %w", err)
+	}
+	if err := spec.Store.WriteState(ipn.KnownProfilesStateKey, []byte(`[{"ID":"p1"}]`)); err != nil {
+		return nil, fmt.Errorf("persist fake node profile: %w", err)
 	}
 	node := &fakeNode{mu: sync.Mutex{}, spec: spec, online: false, fqdn: "speakeasy.example.ts.net", nodeID: "", handler: nil, closed: false, who: nil}
 	r.nodes = append(r.nodes, node)
@@ -162,7 +174,7 @@ func newGatewayFixture(t *testing.T, name string, ordinal int32) *gatewayFixture
 	tokenPath := filepath.Join(t.TempDir(), "token")
 	require.NoError(t, os.WriteFile(tokenPath, []byte("projected-token"), 0o600))
 
-	runtime := &fakeRuntime{mu: sync.Mutex{}, nodes: nil, failStart: nil}
+	runtime := &fakeRuntime{mu: sync.Mutex{}, nodes: nil, failStart: nil, writePartial: false}
 	gateway, err := tailnetgateway.New(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, enc, tailnetgateway.Config{
 		Ordinal: ordinal, PodName: "gram-tailnet-gateway-0", Shard: tailnetgateway.DefaultShard, StateDir: t.TempDir(),
 		Tag: tailnetgateway.DefaultTag, Upstream: upstreamURL, UpstreamTransport: transport, TokenPath: tokenPath,
@@ -268,6 +280,7 @@ func TestGatewayWaitsForAuthKeyAndReconnectsWithState(t *testing.T) {
 	store, err := tailnetgateway.NewPostgresStateStore(f.db, f.enc, ingressID, orgID, 0)
 	require.NoError(t, err)
 	require.NoError(t, store.WriteState(ipn.MachineKeyStateKey, []byte("existing")))
+	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte(`[{"ID":"p1"}]`)))
 
 	f.gateway.Poll(ctx)
 	f.waitForHosts(t, 1)
@@ -318,6 +331,49 @@ func TestGatewaySkipsRetiredSlotsAndForeignOrdinals(t *testing.T) {
 	f.gateway.Poll(ctx)
 	require.Never(t, func() bool { return len(f.gateway.Hosts()) > 0 }, 200*time.Millisecond, 20*time.Millisecond)
 	require.Empty(t, f.runtime.started(), "retired slots are never hosted")
+}
+
+func TestGatewayStopsRunningHostWhenSlotIsRetired(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newGatewayFixture(t, "tailnetgatewayretire", 0)
+	ingressID, orgID := seedIngress(t, f.db, "gateway-retire")
+	f.seedSlot(t, ingressID, orgID, 0, "tskey-auth-one-shot")
+
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 1)
+	node := f.runtime.started()[0]
+
+	require.NoError(t, repo.New(f.db).RetireNetworkIngressNodes(ctx, repo.RetireNetworkIngressNodesParams{NetworkIngressID: ingressID, OrganizationID: orgID, MinSlot: 0}))
+	f.gateway.Poll(ctx)
+	require.Empty(t, f.gateway.Hosts(), "a retired slot is no longer desired")
+	require.True(t, node.isClosed())
+	row := f.slotRow(t, ingressID, orgID, 0)
+	require.Equal(t, string(tailnetgateway.NodeStatusStopped), row.Status)
+}
+
+func TestGatewayResetsPartialStateAfterFailedRegistration(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newGatewayFixture(t, "tailnetgatewaypartial", 0)
+	f.runtime.failStart = errors.New("login timed out")
+	f.runtime.writePartial = true
+	ingressID, orgID := seedIngress(t, f.db, "gateway-partial")
+	f.seedSlot(t, ingressID, orgID, 0, "tskey-auth-one-shot")
+
+	f.gateway.Poll(ctx)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		row := f.slotRow(t, ingressID, orgID, 0)
+		assert.Equal(c, string(tailnetgateway.NodeStatusError), row.Status)
+		assert.False(c, row.AuthKeyEncrypted.Valid, "a consumed one-shot key is cleared so the reconciler mints another")
+	}, 5*time.Second, 20*time.Millisecond)
+	store, err := tailnetgateway.NewPostgresStateStore(f.db, f.enc, ingressID, orgID, 0)
+	require.NoError(t, err)
+	_, err = store.ReadState(ipn.MachineKeyStateKey)
+	require.ErrorIs(t, err, ipn.ErrStateNotExist, "partial state is reset")
+	messages, err := nirepo.New(f.db).ListNetworkIngressReconcileRequests(ctx, orgID)
+	require.NoError(t, err)
+	require.Len(t, messages, 1, "the reconciler is woken to mint a new key")
 }
 
 func TestGatewayRecordsStartFailures(t *testing.T) {
@@ -428,9 +484,13 @@ func TestConfigValidate(t *testing.T) {
 		"empty shard":      func(c *tailnetgateway.Config) { c.Shard = "" },
 		"bad tag":          func(c *tailnetgateway.Config) { c.Tag = "speakeasy" },
 		"http upstream":    func(c *tailnetgateway.Config) { c.Upstream = &url.URL{Scheme: "http", Host: "listener"} },
-		"no transport":     func(c *tailnetgateway.Config) { c.UpstreamTransport = nil },
-		"no token":         func(c *tailnetgateway.Config) { c.TokenPath = "" },
-		"zero hosts":       func(c *tailnetgateway.Config) { c.MaxHosts = 0 },
+		"upstream path":    func(c *tailnetgateway.Config) { c.Upstream = &url.URL{Scheme: "https", Host: "listener", Path: "/mcp"} },
+		"upstream query": func(c *tailnetgateway.Config) {
+			c.Upstream = &url.URL{Scheme: "https", Host: "listener", RawQuery: "x=1"}
+		},
+		"no transport": func(c *tailnetgateway.Config) { c.UpstreamTransport = nil },
+		"no token":     func(c *tailnetgateway.Config) { c.TokenPath = "" },
+		"zero hosts":   func(c *tailnetgateway.Config) { c.MaxHosts = 0 },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {

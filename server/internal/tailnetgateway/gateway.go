@@ -122,6 +122,9 @@ func (c Config) Validate() error {
 	if c.Upstream == nil || c.Upstream.Scheme != "https" || c.Upstream.Host == "" {
 		return errors.New("tailnet gateway upstream must be an https url")
 	}
+	if c.Upstream.User != nil || c.Upstream.Path != "" || c.Upstream.RawPath != "" || c.Upstream.RawQuery != "" || c.Upstream.ForceQuery || c.Upstream.Fragment != "" {
+		return errors.New("tailnet gateway upstream must not contain userinfo, path, query, or fragment")
+	}
 	if c.UpstreamTransport == nil {
 		return errors.New("tailnet gateway upstream transport is required")
 	}
@@ -143,6 +146,9 @@ type desiredIngress struct {
 }
 
 type host struct {
+	// mu guards every field below; heartbeats, stops, slug refreshes and
+	// Hosts run from different goroutines.
+	mu        sync.Mutex
 	ingress   desiredIngress
 	node      Node
 	status    NodeStatus
@@ -254,7 +260,7 @@ func (g *Gateway) Poll(ctx context.Context) {
 		g.metrics.Poll(ctx, g.now().Sub(started))
 	}()
 
-	rows, err := repo.New(g.db).ListDesiredGatewayIngresses(ctx, g.cfg.Shard)
+	rows, err := repo.New(g.db).ListDesiredGatewayIngressesForSlot(ctx, repo.ListDesiredGatewayIngressesForSlotParams{Slot: g.cfg.Ordinal, GatewayShard: g.cfg.Shard})
 	if err != nil {
 		g.logger.ErrorContext(ctx, "list desired tailnet ingresses", attr.SlogError(err))
 		g.heartbeatAll(ctx)
@@ -272,10 +278,15 @@ func (g *Gateway) Poll(ctx context.Context) {
 	var toStop []*host
 	for id, h := range g.hosts {
 		want, ok := desired[id]
+		h.mu.Lock()
 		if !ok || want.label != h.ingress.label {
 			toStop = append(toStop, h)
 			delete(g.hosts, id)
+		} else if want.organizationSlug != h.ingress.organizationSlug {
+			// Metrics stay keyed by the organization's current slug.
+			h.ingress.organizationSlug = want.organizationSlug
 		}
+		h.mu.Unlock()
 	}
 	var toStart []desiredIngress
 	for id, want := range desired {
@@ -337,8 +348,7 @@ func (g *Gateway) startHost(ctx context.Context, want desiredIngress) {
 		NetworkIngressID: want.id, OrganizationID: want.organizationID, Slot: g.cfg.Ordinal,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		// The reconciler has not provisioned this slot (or the pod ordinal is
-		// above the configured slot count); nothing to host.
+		// The slot was retired or removed between the poll and now.
 		return
 	}
 	if err != nil {
@@ -354,13 +364,13 @@ func (g *Gateway) startHost(ctx context.Context, want desiredIngress) {
 		logger.ErrorContext(ctx, "build tailnet state store", attr.SlogError(err))
 		return
 	}
-	hasState, err := store.HasState(ctx)
+	registered, err := store.Registered(ctx)
 	if err != nil {
-		logger.ErrorContext(ctx, "check tailnet node state", attr.SlogError(err))
+		logger.ErrorContext(ctx, "check tailnet node registration", attr.SlogError(err))
 		return
 	}
 	authKey := ""
-	if !hasState {
+	if !registered {
 		if !slotRow.AuthKeyEncrypted.Valid || slotRow.AuthKeyEncrypted.String == "" {
 			g.writeHeartbeat(ctx, want, NodeStatusPending, "", "", "awaiting auth key")
 			return
@@ -376,6 +386,25 @@ func (g *Gateway) startHost(ctx context.Context, want desiredIngress) {
 			return
 		}
 	}
+	// A first registration that fails may have consumed the one-shot key and
+	// left partial state behind. Clear both so the reconciler mints a fresh
+	// key and the next attempt starts clean.
+	failRegistration := func(message string) {
+		if !registered {
+			if err := store.Reset(ctx); err != nil {
+				logger.ErrorContext(ctx, "reset partial tailnet node state", attr.SlogError(err))
+			}
+			if err := repo.New(g.db).ClearNetworkIngressNodeAuthKey(ctx, repo.ClearNetworkIngressNodeAuthKeyParams{
+				NetworkIngressID: want.id, OrganizationID: want.organizationID, Slot: g.cfg.Ordinal,
+			}); err != nil {
+				logger.ErrorContext(ctx, "clear tailnet auth key after failed registration", attr.SlogError(err))
+			}
+		}
+		g.recordStartFailure(ctx, want, message)
+		if !registered {
+			g.wakeReconciler(ctx, want)
+		}
+	}
 
 	g.writeHeartbeat(ctx, want, NodeStatusStarting, "", "", "")
 	startedAt := g.now()
@@ -387,13 +416,13 @@ func (g *Gateway) startHost(ctx context.Context, want desiredIngress) {
 	})
 	if err != nil {
 		logger.ErrorContext(ctx, "start tailnet node", attr.SlogError(err))
-		g.recordStartFailure(ctx, want, err.Error())
+		failRegistration(err.Error())
 		return
 	}
 	state, err := node.Status(ctx)
 	if err != nil {
 		_ = node.Close(ctx)
-		g.recordStartFailure(ctx, want, err.Error())
+		failRegistration(err.Error())
 		return
 	}
 	handler, err := g.handler(want, node, state.FQDN)
@@ -408,9 +437,14 @@ func (g *Gateway) startHost(ctx context.Context, want desiredIngress) {
 		return
 	}
 	g.metrics.Lifecycle(ctx, want.organizationSlug, OperationStart, ResultOK)
-	g.metrics.StartDuration(ctx, want.organizationSlug, !hasState, g.now().Sub(startedAt))
+	g.metrics.StartDuration(ctx, want.organizationSlug, !registered, g.now().Sub(startedAt))
 
-	h := &host{ingress: want, node: node, status: NodeStatusStarting, lastError: "", nodeID: "", dnsName: state.FQDN, authKeyCleared: hasState}
+	h := &host{
+		mu: sync.Mutex{}, ingress: want, node: node, status: NodeStatusStarting, lastError: "", nodeID: "", dnsName: state.FQDN,
+		// The key row is the source of truth: a restart after a failed clear
+		// still removes it once the node is online.
+		authKeyCleared: !slotRow.AuthKeyEncrypted.Valid,
+	}
 	g.mu.Lock()
 	delete(g.attempts, want.id)
 	if _, exists := g.hosts[want.id]; exists {
@@ -444,6 +478,8 @@ func (g *Gateway) recordStartFailure(ctx context.Context, want desiredIngress, m
 // heartbeat refreshes one host's row from its live node state and wakes the
 // reconciler when the node crosses the online boundary.
 func (g *Gateway) heartbeat(ctx context.Context, h *host) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	state, err := h.node.Status(ctx)
 	next := NodeStatusStarting
 	message := ""
@@ -522,6 +558,8 @@ func (g *Gateway) wakeReconciler(ctx context.Context, ingress desiredIngress) {
 }
 
 func (g *Gateway) stopHost(ctx context.Context, h *host, final NodeStatus) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	g.writeHeartbeat(ctx, h.ingress, NodeStatusDraining, h.nodeID, h.dnsName, "")
 	closeCtx, cancel := context.WithTimeout(ctx, g.cfg.DrainTimeout)
 	defer cancel()
@@ -614,7 +652,9 @@ func (g *Gateway) Hosts() []HostSummary {
 	defer g.mu.Unlock()
 	out := make([]HostSummary, 0, len(g.hosts))
 	for _, h := range g.hosts {
+		h.mu.Lock()
 		out = append(out, HostSummary{IngressID: h.ingress.id, Status: h.status, DNSName: h.dnsName})
+		h.mu.Unlock()
 	}
 	return out
 }
