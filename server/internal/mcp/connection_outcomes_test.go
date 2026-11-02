@@ -487,3 +487,34 @@ func TestConnectionOutcome_AuthorizeSignInServiceDownEndsTheAttempt(t *testing.T
 	rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeIDPUnavailable)
 	rec.RequireOneAttempt()
 }
+
+func TestConnectionOutcome_AuthorizeClientMetadataFailures(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		mutate func(ds *cimdDocServer)
+		what   mcpconnectionattempts.Code
+	}{
+		"metadata invalid": {func(ds *cimdDocServer) { ds.doc["client_id"] = ds.srv.URL + "/oauth/other.json" }, mcpconnectionattempts.CodeCIMDMetadataInvalid},
+		"fetch failed":     {func(ds *cimdDocServer) { ds.status = http.StatusInternalServerError }, mcpconnectionattempts.CodeCIMDFetchFailed},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti, ds, toolset := newTestCIMDService(t)
+			rec := recordConnections(t, ti)
+			ds.set(t, tc.mutate)
+			router := goahttp.NewMuxer()
+			mcp.Attach(router, ti.service.Service, nil)
+			q := url.Values{"response_type": {"code"}, "client_id": {ds.clientID}, "redirect_uri": {ds.srv.URL + "/callback"}, "state": {"s"}, "code_challenge": {"challenge"}, "code_challenge_method": {"S256"}}
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, httptest.NewRequestWithContext(ctx, http.MethodGet, "/mcp/"+toolset.McpSlug.String+"/authorize?"+q.Encode(), nil))
+			require.Contains(t, []int{http.StatusBadRequest, http.StatusServiceUnavailable}, w.Code, w.Body.String())
+
+			row := rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, tc.what)
+			require.Equal(t, string(mcpconnectionattempts.WhoApp), row.WhoFixes)
+			require.Equal(t, mcpconnectionattempts.AppUnverified.String(), row.AppKey, "the client was never validated")
+			require.Len(t, rec.Rows(), 1)
+		})
+	}
+}
