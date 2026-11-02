@@ -61,11 +61,13 @@ func TestTextRedactsSensitiveJSONKeysAndKeepsTokenCounts(t *testing.T) {
 	t.Parallel()
 	r := chatredact.NewWithScanner(wordScanner{word: "zzz-unused"})
 
-	safe, changed, err := r.Text(t.Context(), `{"api_key":"abc","prompt_tokens":12,"nested":{"password":"p"},"note":"ok"}`)
+	safe, changed, err := r.Text(t.Context(), `{"api_key":"abc","prompt_tokens":12,"nested":{"password":"p","db_passwd":"q","aws_credentials":"c"},"note":"ok"}`)
 	require.NoError(t, err)
 	require.True(t, changed)
 	require.Contains(t, safe, `"api_key":"[REDACTED]"`)
 	require.Contains(t, safe, `"password":"[REDACTED]"`)
+	require.Contains(t, safe, `"db_passwd":"[REDACTED]"`)
+	require.Contains(t, safe, `"aws_credentials":"[REDACTED]"`)
 	require.Contains(t, safe, `"prompt_tokens":12`)
 	require.Contains(t, safe, `"note":"ok"`)
 }
