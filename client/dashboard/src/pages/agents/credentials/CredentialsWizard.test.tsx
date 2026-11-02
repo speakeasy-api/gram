@@ -11,6 +11,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { invalidateAgentPolicy } from "../agent-policy-grants";
 import { CredentialsWizard } from "./CredentialsWizard";
@@ -39,6 +40,7 @@ const mocks = vi.hoisted(() => ({
   renameAgent: vi.fn(),
   createGrant: vi.fn(),
   deleteGrant: vi.fn(),
+  extendAgentKeys: vi.fn(),
   agentList: vi.fn(),
   nameCheckFails: false,
   sessions: vi.fn(),
@@ -111,7 +113,11 @@ vi.mock("@/contexts/Sdk", () => ({
       listDelegableGrants: mocks.listDelegableGrants,
       checkPolicyGrants: mocks.checkPolicyGrants,
     },
-    keys: { create: mocks.createKey, list: mocks.listKeys },
+    keys: {
+      create: mocks.createKey,
+      list: mocks.listKeys,
+      extendAgentKeys: mocks.extendAgentKeys,
+    },
     authClients: {
       listMcpServerChoices: async () => ({ choices: [] }),
       // How each server signs in upstream, read from its own auth clients.
@@ -369,6 +375,7 @@ beforeEach(() => {
   mocks.renameAgent.mockResolvedValue({});
   mocks.createGrant.mockResolvedValue({});
   mocks.deleteGrant.mockResolvedValue({});
+  mocks.extendAgentKeys.mockResolvedValue({ keys: [] });
   mocks.registerIssuer.mockResolvedValue({});
   mocks.admitSubject.mockResolvedValue({});
   mocks.withdrawSubject.mockResolvedValue({});
@@ -1903,6 +1910,68 @@ describe("Editing an agent that already exists", () => {
       },
     });
     expect(mocks.deleteGrant).not.toHaveBeenCalled();
+  });
+
+  it("gives the agent's keys the servers it was just granted", async () => {
+    const { onDone } = editing({ grants: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(await authenticationSave());
+
+    await waitFor(() => expect(mocks.extendAgentKeys).toHaveBeenCalledTimes(1));
+    // A key stores what it was issued with, so the gateway its runtime calls
+    // lists a new server only once the key holds the grant too.
+    expect(mocks.extendAgentKeys.mock.calls[0]?.[0]).toEqual({
+      extendAgentKeysForm: {
+        agentId: "agent_one",
+        requestedGrants: [
+          {
+            effect: "allow",
+            scope: "mcp:connect",
+            selector: {
+              resourceKind: "mcp",
+              resourceId: "toolset_one",
+              projectId: "project_one",
+            },
+          },
+        ],
+        authClientChoices: [],
+      },
+    });
+    expect(mocks.createGrant).toHaveBeenCalledTimes(1);
+    expect(mocks.createGrant.mock.invocationCallOrder.at(-1) ?? 0).toBeLessThan(
+      mocks.extendAgentKeys.mock.invocationCallOrder[0] ?? 0,
+    );
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+  });
+
+  it("leaves the keys alone when no server was added", async () => {
+    const { onDone } = editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("checkbox", { name: "GitHub" });
+    fireEvent.click(await authenticationSave());
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+    expect(mocks.extendAgentKeys).not.toHaveBeenCalled();
+  });
+
+  it("still finishes the edit when the keys cannot follow", async () => {
+    mocks.extendAgentKeys.mockRejectedValue(new Error("forbidden"));
+    const warning = vi.spyOn(toast, "warning");
+    const { onDone } = editing({ grants: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(await authenticationSave());
+
+    // The grants are saved by then, so the edit is not undone over the keys.
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+    expect(mocks.createGrant).toHaveBeenCalled();
+    expect(warning).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "existing keys still reach only their old servers",
+      ),
+    );
+    warning.mockRestore();
   });
 
   it("leaves an unavailable assignment for an explicit detach when saving", async () => {

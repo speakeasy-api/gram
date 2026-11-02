@@ -2408,3 +2408,10 @@ WHERE id = @id AND organization_id = @organization_id;
 -- Returns a feature setting to never configured, removing even the
 -- soft-deleted row that records an explicit opt-in.
 DELETE FROM organization_features WHERE organization_id = @organization_id AND feature_name = @feature_name;
+
+-- name: SetAPIKeyCreatorFixture :exec
+-- Test-only fixture: an agent key issued by another member of the organization.
+UPDATE api_keys
+SET created_by_user_id = @created_by_user_id
+WHERE id = @id
+  AND organization_id = @organization_id;
