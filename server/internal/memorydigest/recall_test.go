@@ -156,3 +156,14 @@ func TestBudgetKeepsNothingWhenNewestEntryAloneIsTooBig(t *testing.T) {
 	require.Empty(t, kept)
 	require.Equal(t, 1, dropped)
 }
+
+func TestMemoSnippetIsCutWithMarker(t *testing.T) {
+	t.Parallel()
+
+	entries := memorydigest.Uncovered(nil, nil, []memorydigest.MemoNote{
+		{ID: uuid.New(), CreatedAt: time.Now(), Content: strings.Repeat("m", 2_000)},
+	})
+	require.Len(t, entries, 1)
+	require.Len(t, []rune(entries[0].Text), 600)
+	require.True(t, strings.HasSuffix(entries[0].Text, "…"))
+}

@@ -8,8 +8,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
-
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 const (
@@ -28,6 +26,10 @@ const (
 	// first paragraph is used, which the summary prompt requires to stand
 	// alone; the cap guards against a summary that ignores that.
 	maxChatSnippetRunes = 600
+
+	// maxMemoSnippetRunes caps a memo in the recall block. Memos are short
+	// by design (at most 4,000 runes); zoom returns the whole text.
+	maxMemoSnippetRunes = 600
 )
 
 // Digest is a stored digest as the recall block and zoom see it.
@@ -166,7 +168,7 @@ func Uncovered(digests []Digest, chats []ChatNote, memos []MemoNote) []Entry {
 			ID:      m.ID,
 			Heading: "Memo " + m.CreatedAt.UTC().Format(time.DateOnly),
 			At:      m.CreatedAt,
-			Text:    conv.TruncateString(strings.TrimSpace(m.Content), maxChatSnippetRunes),
+			Text:    snippet(strings.TrimSpace(m.Content), maxMemoSnippetRunes),
 		})
 	}
 
@@ -223,6 +225,12 @@ func firstParagraph(s string, maxRunes int) string {
 			break
 		}
 	}
+	return snippet(s, maxRunes)
+}
+
+// snippet cuts s to maxRunes, ending a cut text with "…" so a reader knows
+// it is not complete.
+func snippet(s string, maxRunes int) string {
 	if utf8.RuneCountInString(s) <= maxRunes {
 		return s
 	}
