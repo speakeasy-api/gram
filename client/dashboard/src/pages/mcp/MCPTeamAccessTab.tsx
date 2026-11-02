@@ -8,6 +8,9 @@ import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import type { ToolAnnotation } from "@/components/tool-selection/ToolSelectionPanel";
 import type { Tool } from "@/lib/toolTypes";
+import type { ServerTool } from "@/pages/access/serverMerge";
+import type { ToolSource } from "@/pages/access/useServerTools";
+import { Button } from "@/components/ui/Button";
 import { TriangleAlert } from "lucide-react";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
@@ -20,7 +23,7 @@ import { RoleLink } from "@/components/role-link";
 import { blockingRules } from "./access/serverAudience";
 
 /** The annotations a tool carries, in the vocabulary selectors store. */
-function toolAnnotations(tool: Tool): ToolAnnotation[] {
+function toolAnnotations(tool: Tool | ServerTool): ToolAnnotation[] {
   const annotations = "annotations" in tool ? tool.annotations : undefined;
   if (!annotations) return [];
   const carried: ToolAnnotation[] = [];
@@ -66,9 +69,11 @@ export function MCPTeamAccessTab({
   resourceId,
   serverName,
   tools,
+  toolSource,
   checkAccess = true,
 }: {
   resourceId: string;
+  toolSource?: ToolSource;
   serverName?: string;
   /** The server's tools, when the backend exposes a catalogue for it. */
   tools?: Tool[];
@@ -101,15 +106,17 @@ export function MCPTeamAccessTab({
     [audienceData?.entries],
   );
 
-  // Remote and gateway servers resolve their tools per caller, so the
-  // catalogue is optional: without it the picker still offers annotations.
+  // Remote servers share the role editor's tool source. Gateways can still
+  // omit the catalogue and narrow by annotations.
+  const catalogTools =
+    toolSource?.status === "ready" ? toolSource.tools : tools;
   const toolCatalog = useMemo(
     () =>
-      tools?.map((tool) => ({
+      catalogTools?.map((tool) => ({
         name: "name" in tool ? tool.name : "",
         annotations: toolAnnotations(tool),
       })),
-    [tools],
+    [catalogTools],
   );
 
   // The people two rules disagree about. Nothing they were given survives,
@@ -190,6 +197,43 @@ export function MCPTeamAccessTab({
         this server only.
       </Page.Section.Description>
       <Page.Section.Body>
+        {toolSource?.status === "loading" && (
+          <Text muted small>
+            Loading server tools…
+          </Text>
+        )}
+        {toolSource?.status === "error" && (
+          <div role="status">
+            <Text muted small>
+              Server tools could not be loaded.
+            </Text>
+            <Button variant="secondary" size="sm" onClick={toolSource.retry}>
+              <Button.Text>Retry loading tools</Button.Text>
+            </Button>
+          </div>
+        )}
+        {toolSource?.status === "needs-connect" && (
+          <div role="status">
+            <Text muted small>
+              Connect to this server to load its tools.
+            </Text>
+            {toolSource.connect && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={toolSource.connect}
+              >
+                <Button.Text>Connect to load tools</Button.Text>
+              </Button>
+            )}
+          </div>
+        )}
+        {toolSource?.status === "needs-write" && (
+          <Text muted small>
+            Someone with write access to this server must load its tools before
+            they can be selected here.
+          </Text>
+        )}
         {audienceFailed ? (
           <Text muted small>
             Access rules could not be loaded, so they cannot be changed here

@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -5,6 +6,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   server: undefined as unknown,
   error: null as unknown,
+  toolSource: {
+    status: "ready",
+    tools: [
+      {
+        id: "remote-tool",
+        name: "read_records",
+        type: "remotemcp",
+        annotations: { readOnlyHint: true },
+      },
+    ],
+  } as import("@/pages/access/useServerTools").ToolSource,
+  readTools: vi.fn(),
+  saveNarrowing: vi.fn(),
+  openNarrowing: true,
+  hostedToolset: undefined as unknown,
 }));
 
 vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
@@ -20,7 +36,7 @@ vi.mock("@gram/client/react-query/mcpEndpoints.js", () => ({
 }));
 vi.mock("./hosted/useHostedToolset", () => ({
   useHostedToolset: () => ({
-    toolset: undefined,
+    toolset: mocks.hostedToolset,
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -46,6 +62,11 @@ vi.mock("@/components/page-layout", () => {
   );
   Page.Header = Page;
   Page.Body = Page;
+  Page.Section = Object.assign(Page, {
+    Title: Page,
+    Description: Page,
+    Body: Page,
+  });
   (Page.Header as unknown as { Breadcrumbs: () => null }).Breadcrumbs = () =>
     null;
   return { Page };
@@ -71,6 +92,56 @@ vi.mock("@/routes", () => {
         },
       },
     }),
+  };
+});
+
+vi.mock("@/pages/access/useServerTools", () => ({
+  useServerTools: (entry: unknown) => {
+    mocks.readTools(entry);
+    return mocks.toolSource;
+  },
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasAnyScope: () => true }),
+}));
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+}));
+vi.mock("@/components/insights-context", () => ({
+  useHideInsightsDock: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/resourceAudience.js", () => ({
+  useResourceAudience: () => ({ data: { entries: [] }, isLoading: false }),
+}));
+vi.mock("@gram/client/react-query/members.js", () => ({
+  useMembers: () => ({ data: { members: [] } }),
+}));
+vi.mock("../access/CheckAccess", () => ({ CheckAccess: () => null }));
+// Keep the caller, Team access catalogue mapping, and actual narrowing picker
+// real; isolate only the audience editor that opens the dialog.
+vi.mock("../access/ManageAccess", async () => {
+  const { ToolNarrowingDialog } = await import("../access/ToolNarrowingDialog");
+  return {
+    ManageAccess: ({
+      resourceId,
+      toolCatalog,
+    }: {
+      resourceId: string;
+      toolCatalog?: import("@/components/tool-selection/ToolSelectionPanel").ToolSelectionTool[];
+    }) =>
+      mocks.openNarrowing ? (
+        <ToolNarrowingDialog
+          serverId={resourceId}
+          catalog={toolCatalog}
+          tools={[]}
+          dispositions={[]}
+          pending={false}
+          onSave={mocks.saveNarrowing}
+          onClose={vi.fn()}
+        />
+      ) : null,
   };
 });
 
@@ -111,11 +182,27 @@ const REMOTE_SERVER = {
   id: "server-1",
   slug: "my-server",
   remoteMcpServerId: "remote-1",
+  projectId: "project-1",
 };
 
 beforeEach(() => {
   mocks.server = REMOTE_SERVER;
   mocks.error = null;
+  mocks.readTools.mockClear();
+  mocks.saveNarrowing.mockClear();
+  mocks.openNarrowing = true;
+  mocks.hostedToolset = undefined;
+  mocks.toolSource = {
+    status: "ready",
+    tools: [
+      {
+        id: "remote-tool",
+        name: "read_records",
+        type: "remotemcp",
+        annotations: { readOnlyHint: true },
+      },
+    ],
+  };
 });
 afterEach(cleanup);
 
@@ -156,5 +243,99 @@ describe("MCPServerDetails path resolution", () => {
   ])("moves the retired %s tab to %s", (suffix, target) => {
     visit(`/acme/projects/default/mcp/my-server${suffix}`);
     expect(screen.getByTestId("landed").textContent).toBe(target);
+  });
+});
+
+describe("MCPServerDetails Team access tool narrowing", () => {
+  it("passes remote tools from the shared source through Team access to the picker", async () => {
+    const user = userEvent.setup();
+    visit("/acme/projects/default/mcp/my-server/team-access");
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "By tool" }));
+    await user.click(screen.getByRole("checkbox", { name: "read_records" }));
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    expect(mocks.saveNarrowing).toHaveBeenCalledWith({
+      tools: ["read_records"],
+      dispositions: [],
+    });
+    expect(mocks.readTools).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: "project-1",
+        server: expect.objectContaining({
+          id: "server-1",
+          remoteBacked: true,
+          dynamicTools: true,
+        }),
+      }),
+    );
+  });
+});
+
+describe("Team access remote tool source states", () => {
+  it("keeps hosted tools and does not open remote discovery", async () => {
+    mocks.server = {
+      id: "hosted-1",
+      slug: "my-server",
+      toolsetId: "toolset-1",
+      toolset: { hostingMcpServerId: "hosted-1" },
+    };
+    mocks.hostedToolset = { tools: [{ name: "hosted_read", annotations: {} }] };
+    visit("/acme/projects/default/mcp/my-server/team-access");
+    await userEvent.click(screen.getByRole("button", { name: "By tool" }));
+    expect(screen.getByRole("checkbox", { name: "hosted_read" })).toBeTruthy();
+    expect(mocks.readTools).not.toHaveBeenCalled();
+  });
+
+  it("keeps tunneled servers dynamic without opening remote discovery", async () => {
+    mocks.server = {
+      id: "tunnel-1",
+      slug: "my-server",
+      tunneledMcpServerId: "source-1",
+    };
+    visit("/acme/projects/default/mcp/my-server/team-access");
+    await userEvent.click(screen.getByRole("button", { name: "By tool" }));
+    expect(
+      screen.getByText("Tools are resolved when the server is called"),
+    ).toBeTruthy();
+    expect(mocks.readTools).not.toHaveBeenCalled();
+  });
+
+  it("shows loading instead of claiming the remote catalogue is empty", () => {
+    mocks.openNarrowing = false;
+    mocks.toolSource = { status: "loading" };
+    visit("/acme/projects/default/mcp/my-server/team-access");
+    expect(screen.getByText("Loading server tools…")).toBeTruthy();
+  });
+
+  it("offers retry when remote discovery fails", async () => {
+    const retry = vi.fn();
+    mocks.openNarrowing = false;
+    mocks.toolSource = { status: "error", retry };
+    visit("/acme/projects/default/mcp/my-server/team-access");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry loading tools" }),
+    );
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
+  it("offers the shared first-party connect action when needed", async () => {
+    const connect = vi.fn();
+    mocks.openNarrowing = false;
+    mocks.toolSource = { status: "needs-connect", connect };
+    visit("/acme/projects/default/mcp/my-server/team-access");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Connect to load tools" }),
+    );
+    expect(connect).toHaveBeenCalledOnce();
+  });
+
+  it("explains write-gated discovery without offering connect", () => {
+    mocks.openNarrowing = false;
+    mocks.toolSource = { status: "needs-write" };
+    visit("/acme/projects/default/mcp/my-server/team-access");
+    expect(screen.getByText(/Someone with write access/)).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Connect to load tools" }),
+    ).toBeNull();
   });
 });
