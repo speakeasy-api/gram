@@ -62,7 +62,10 @@ import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIco
 import { hasAgentProviderIcon } from "@/components/agent-providers/agent-provider-icon-kind";
 import { IdentityAvatar } from "@/components/identity-avatar";
 import { EditServerNameDialog } from "@/pages/hooks/EditServerNameDialog";
-import { LogDetailSheet } from "@/pages/logs/LogDetailSheet";
+import {
+  LogDetailSheet,
+  type ConnectionOwner,
+} from "@/pages/logs/LogDetailSheet";
 import { LogFilterBar } from "@/pages/logs/LogFilterBar";
 import {
   applyFilterAdd,
@@ -869,11 +872,21 @@ export function LogsTools({
 
   const [selectedHostedToolsetSlug, setSelectedHostedToolsetSlug] =
     useState<string>();
+  const [selectedConnectionOwner, setSelectedConnectionOwner] =
+    useState<ConnectionOwner>();
   const handleLogClick = useCallback(
     (log: TelemetryLogRecord, trace?: ToolUsageTraceSummary) => {
       setSelectedLog(log);
       setSelectedHostedToolsetSlug(
         trace?.targetType === "hosted_mcp_server" ? trace.targetId : undefined,
+      );
+      setSelectedConnectionOwner(
+        trace?.connectionOwnerUserId
+          ? {
+              userId: trace.connectionOwnerUserId,
+              label: trace.connectionOwnerLabel,
+            }
+          : undefined,
       );
     },
     [],
@@ -1011,6 +1024,7 @@ export function LogsTools({
             toggleExpand={toggleExpand}
             selectedLog={selectedLog}
             selectedHostedToolsetSlug={selectedHostedToolsetSlug}
+            selectedConnectionOwner={selectedConnectionOwner}
             handleLogClick={handleLogClick}
             setSelectedLog={setSelectedLog}
             containerRef={containerRef}
@@ -1210,6 +1224,7 @@ function LogsToolsContent({
   toggleExpand,
   selectedLog,
   selectedHostedToolsetSlug,
+  selectedConnectionOwner,
   handleLogClick,
   setSelectedLog,
   containerRef,
@@ -1263,6 +1278,7 @@ function LogsToolsContent({
   toggleExpand: (trace: ToolUsageTraceSummary) => Promise<void>;
   selectedLog: TelemetryLogRecord | null;
   selectedHostedToolsetSlug?: string;
+  selectedConnectionOwner?: ConnectionOwner | undefined;
   handleLogClick: (
     log: TelemetryLogRecord,
     trace?: ToolUsageTraceSummary,
@@ -1663,6 +1679,7 @@ function LogsToolsContent({
       <LogDetailSheet
         log={selectedLog}
         hostedToolsetSlug={selectedHostedToolsetSlug}
+        connectionOwner={selectedConnectionOwner}
         open={!!selectedLog}
         onOpenChange={(open) => {
           void (!open && setSelectedLog(null));
@@ -2078,6 +2095,16 @@ function LogsToolsTraceRow({
                   ? {
                       userId: trace.authorizerUserId,
                       label: trace.authorizerLabel,
+                    }
+                  : undefined
+              }
+              credential={
+                trace.authClientType
+                  ? {
+                      type: trace.authClientType,
+                      clientId: trace.authClientId,
+                      ownerUserId: trace.connectionOwnerUserId,
+                      ownerName: trace.connectionOwnerLabel,
                     }
                   : undefined
               }

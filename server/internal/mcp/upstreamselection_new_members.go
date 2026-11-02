@@ -104,18 +104,17 @@ func (s *Service) newMemberChoice(ctx context.Context, organizationID string, us
 	if len(rows) == 0 {
 		return none, false, nil
 	}
-	requires := rows[0].RequiresUpstreamAuth
 	var offered []upstreamclientsrepo.ListServerConsentAuthClientsRow
 	for _, row := range rows {
 		if row.AuthClientID.Valid {
 			offered = append(offered, row)
 		}
 	}
-	switch {
-	case requires.Valid && !requires.Bool, len(offered) == 0 && !requires.Valid:
-		return none, true, nil
-	case len(offered) == 0:
-		return none, false, nil
+	if len(offered) == 0 {
+		// A server offering no enabled client needs no upstream
+		// authentication, unless it has upstream credentials no auth client
+		// records yet; then nothing is decided.
+		return none, !rows[0].UpstreamAuthPending, nil
 	}
 
 	represented := subject.Kind == urn.SessionSubjectKindUser || subject.Kind == urn.SessionSubjectKindAgent

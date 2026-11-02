@@ -9559,18 +9559,18 @@ components:
             $ref: '#/components/schemas/AdminMcpServerHealthAuthClient'
         requires_upstream_auth:
           type: boolean
-          description: Whether the upstream needs authentication. Omitted while undecided.
+          description: 'Whether the upstream needs authentication: true when the server offers at least one enabled auth client.'
         status:
           type: string
-          description: configured, setup_incomplete (required with no enabled client), no_auth_required or undecided.
+          description: configured (at least one enabled auth client), setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet) or no_auth_required.
           enum:
             - configured
             - setup_incomplete
             - no_auth_required
-            - undecided
       description: Whether the server's upstream needs authentication and the auth clients it offers.
       required:
         - status
+        - requires_upstream_auth
         - auth_clients
     AdminMcpServerHealthUserSessionIssuer:
       type: object
@@ -10932,7 +10932,7 @@ components:
           format: int64
         complete:
           type: boolean
-          description: Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, no server offering one is left undecided, and no phase failed.
+          description: Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, and no phase failed.
         failed_phases:
           type: array
           items:
@@ -10964,7 +10964,7 @@ components:
           format: int64
         pending_marked_servers:
           type: integer
-          description: Servers offering a backfilled auth client whose need for upstream authentication is still undecided, not yet marked as needing it.
+          description: 'Deprecated: always 0. Whether a server needs upstream authentication follows from the auth clients it offers, so no server is marked.'
           format: int64
         pending_retirements:
           type: integer
@@ -11028,7 +11028,7 @@ components:
           description: user_backed for turns run for a user the event identified, userless for turns run as the trigger's workload.
         reason:
           type: string
-          description: 'Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client (no live, enabled auth client carries its upstream OAuth client), setup_incomplete (it needs upstream authentication and offers no auth client) or upstream_auth_undecided (it offers no auth client and an administrator has not decided whether it needs upstream authentication).'
+          description: 'Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client (no live, enabled auth client carries its upstream OAuth client) or setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet).'
         servers:
           type: integer
           description: Profile and server pairs with no choice for this reason.
@@ -11135,7 +11135,7 @@ components:
           format: int64
         servers_marked_requiring_upstream_auth:
           type: integer
-          description: Servers marked as needing upstream authentication because they offer a backfilled auth client.
+          description: 'Deprecated: always omitted. Whether a server needs upstream authentication follows from the auth clients it offers, so no server is marked.'
           format: int64
         status:
           $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'

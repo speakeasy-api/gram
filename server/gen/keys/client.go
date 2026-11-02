@@ -17,6 +17,7 @@ import (
 type Client struct {
 	CreateKeyEndpoint       goa.Endpoint
 	RotateKeyEndpoint       goa.Endpoint
+	ExtendAgentKeysEndpoint goa.Endpoint
 	ListKeysEndpoint        goa.Endpoint
 	RevokeKeyEndpoint       goa.Endpoint
 	UpdateKeyPolicyEndpoint goa.Endpoint
@@ -24,10 +25,11 @@ type Client struct {
 }
 
 // NewClient initializes a "keys" service client given the endpoints.
-func NewClient(createKey, rotateKey, listKeys, revokeKey, updateKeyPolicy, verifyKey goa.Endpoint) *Client {
+func NewClient(createKey, rotateKey, extendAgentKeys, listKeys, revokeKey, updateKeyPolicy, verifyKey goa.Endpoint) *Client {
 	return &Client{
 		CreateKeyEndpoint:       createKey,
 		RotateKeyEndpoint:       rotateKey,
+		ExtendAgentKeysEndpoint: extendAgentKeys,
 		ListKeysEndpoint:        listKeys,
 		RevokeKeyEndpoint:       revokeKey,
 		UpdateKeyPolicyEndpoint: updateKeyPolicy,
@@ -77,6 +79,28 @@ func (c *Client) RotateKey(ctx context.Context, p *RotateKeyPayload) (res *Key, 
 		return
 	}
 	return ires.(*Key), nil
+}
+
+// ExtendAgentKeys calls the "extendAgentKeys" endpoint of the "keys" service.
+// ExtendAgentKeys may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ExtendAgentKeys(ctx context.Context, p *ExtendAgentKeysPayload) (res *ListKeysResult, err error) {
+	var ires any
+	ires, err = c.ExtendAgentKeysEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListKeysResult), nil
 }
 
 // ListKeys calls the "listKeys" endpoint of the "keys" service.

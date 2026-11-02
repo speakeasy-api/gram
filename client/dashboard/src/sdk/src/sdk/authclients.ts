@@ -340,7 +340,11 @@ export class AuthClients extends ClientSDK {
    * setMcpServerUpstreamAuthRequirement authClients
    *
    * @remarks
-   * Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.
+   * Return how an MCP server authenticates to its upstream. The requested requirement is ignored: whether the upstream needs authentication follows from the enabled auth clients the server offers. Not available for hosted toolsets. Requires org:admin.
+   *
+   * Deprecated: read getMcpServerAuthentication, and attach, detach, enable or disable auth clients instead.
+   *
+   * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
    */
   async setMcpServerUpstreamAuthRequirement(
     request: SetMcpServerUpstreamAuthRequirementRequest,

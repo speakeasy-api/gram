@@ -2799,8 +2799,8 @@ type ExecutionProfileServerResponseBody struct {
 	// How the choice was made: admin, issuance, backfill, or automatic for one the
 	// next turn makes on its own.
 	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
-	// Whether the server was decided to need no upstream authentication, so
-	// no-auth can be chosen.
+	// Whether the server offers no enabled auth client and has no upstream
+	// credentials left to record as one, so no-auth can be chosen.
 	NoAuthAllowed bool `form:"no_auth_allowed" json:"no_auth_allowed" xml:"no_auth_allowed"`
 	// Why a server without a choice gets none on its own.
 	GapReason *string `form:"gap_reason,omitempty" json:"gap_reason,omitempty" xml:"gap_reason,omitempty"`

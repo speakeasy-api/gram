@@ -1,6 +1,8 @@
 import { useRoutes } from "@/routes";
 import { Link } from "react-router";
 import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
+import { signedInWithFor } from "@/components/ui/ActingPrincipal/credential";
+import { useUser } from "@/contexts/Auth";
 import { IdentityAvatar } from "@/components/identity-avatar";
 import { IdentityLink } from "@/components/identity-link";
 import { identityRefForKind } from "@/lib/identity-urn";
@@ -28,9 +30,17 @@ import {
 import { getNestedAttribute, httpStatusCode } from "./log-attributes";
 import { formatNanoTimestamp } from "./utils";
 
+/** The person whose own connection served a call, as the row named them. */
+export type ConnectionOwner = { userId: string; label?: string | undefined };
+
 interface LogDetailSheetProps {
   log: TelemetryLogRecord | null;
   hostedToolsetSlug?: string;
+  /**
+   * The connection owner the row this sheet was opened from resolved. The
+   * log carries only their id, so their name comes from the row.
+   */
+  connectionOwner?: ConnectionOwner | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAddFilter?: (path: string, op: Operator, value: string) => void;
@@ -39,6 +49,7 @@ interface LogDetailSheetProps {
 export function LogDetailSheet({
   log,
   hostedToolsetSlug,
+  connectionOwner,
   open,
   onOpenChange,
   onAddFilter,
@@ -53,6 +64,7 @@ export function LogDetailSheet({
           <LogDetailContent
             log={log}
             hostedToolsetSlug={hostedToolsetSlug}
+            connectionOwner={connectionOwner}
             onAddFilter={onAddFilter}
           />
         )}
@@ -107,13 +119,16 @@ function removeNestedKey(
 function LogDetailContent({
   log,
   hostedToolsetSlug,
+  connectionOwner,
   onAddFilter,
 }: {
   log: TelemetryLogRecord;
   hostedToolsetSlug?: string;
+  connectionOwner?: ConnectionOwner | undefined;
   onAddFilter?: (path: string, op: Operator, value: string) => void;
 }) {
   const routes = useRoutes();
+  const viewer = useUser();
   const resourceAttrs = log.resourceAttributes as
     | { gram?: { tool?: { urn?: string } } }
     | undefined;
@@ -188,6 +203,34 @@ function LogDetailContent({
   const authorizerUserID = attrs
     ? getNestedValue(attrs, "gram.authorization.authorizer_user_id")
     : "";
+  // How Speakeasy signed the call in upstream. It replaces "on behalf of" the
+  // key's authorizer: a shared credential acted for nobody. The raw values
+  // stay in the attributes below. Only a gateway tool-call row is trusted to
+  // name it: a hook row's attributes are self-reported by the client.
+  const signedInWith = (() => {
+    if (!attrs) return undefined;
+    if (getNestedValue(attrs, "gram.event.source") !== "tool_call") {
+      return undefined;
+    }
+    const type = getNestedValue(attrs, "gram.auth_client.type");
+    if (!type) return undefined;
+    const ownerUserId = getNestedValue(
+      attrs,
+      "gram.auth_client.connection_owner_user_id",
+    );
+    return signedInWithFor(
+      {
+        type,
+        clientId: getNestedValue(attrs, "gram.auth_client.id"),
+        ownerUserId,
+        ownerName:
+          ownerUserId && connectionOwner?.userId === ownerUserId
+            ? connectionOwner.label
+            : undefined,
+      },
+      viewer.id,
+    );
+  })();
 
   // The caller, by the same precedence the roster uses: an address first,
   // then the ids an agent or an external user is keyed on.
@@ -304,6 +347,7 @@ function LogDetailContent({
                       }
                     : undefined
                 }
+                signedInWith={signedInWith}
                 className="truncate"
               />
             </div>

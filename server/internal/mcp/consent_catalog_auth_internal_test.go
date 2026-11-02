@@ -7,7 +7,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -17,17 +16,16 @@ func TestCatalogNoAuthRejectsCredentialBearingProposals(t *testing.T) {
 	require.NoError(t, err)
 	for _, tc := range []struct {
 		name                                                   string
-		requires                                               pgtype.Bool
 		headerClient, uncovered, registration, oauth, accepted bool
 		tunneled                                               bool
 	}{
 		{name: "plain no auth", accepted: true},
 
-		{name: "required header credentials", tunneled: true, requires: pgtype.Bool{Bool: true, Valid: true}, headerClient: true},
-		{name: "undecided header credentials", headerClient: true},
-		{name: "uncovered header credentials", requires: pgtype.Bool{Bool: false, Valid: true}, headerClient: true, uncovered: true},
-		{name: "captured registration", requires: pgtype.Bool{Bool: false, Valid: true}, headerClient: true, registration: true},
-		{name: "oauth required", requires: pgtype.Bool{Bool: true, Valid: true}, oauth: true},
+		{name: "tunneled header credentials", tunneled: true, headerClient: true},
+		{name: "header credentials", headerClient: true},
+		{name: "uncovered header credentials", headerClient: true, uncovered: true},
+		{name: "captured registration", headerClient: true, registration: true},
+		{name: "oauth required", oauth: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -35,7 +33,6 @@ func TestCatalogNoAuthRejectsCredentialBearingProposals(t *testing.T) {
 			if tc.tunneled {
 				f.tunneled()
 			}
-			require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(t.Context(), authclientbackfill.SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: tc.requires, ID: f.serverID}))
 			if tc.headerClient {
 				f.client(authClientTypeStaticCredential, uuid.NullUUID{}, true)
 			}
